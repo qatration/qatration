@@ -348,6 +348,16 @@ def scan_files(files, reader, refusals):
                     break
 
 
+def _offset(iso_pair):
+    """The timezone offset of an iso-strict stamp, or "" if it has none."""
+    for part in iso_pair.split("|"):
+        tail = part.strip()[-6:]
+        if len(tail) == 6 and tail[0] in "+-" and tail[3] == ":":
+            if tail != "+00:00":
+                return tail
+    return ""
+
+
 def scan_history(rng, refusals):
     """Commits, not the working tree — the one place nobody looks.
 
@@ -360,6 +370,21 @@ def scan_history(rng, refusals):
                         and w.strip() != "QAtration <qatration@gmail.com>"})
     for w in strangers:
         refusals.append(f"a commit in {rng} is authored by {w}, not by the project identity")
+
+    # A TIMEZONE OFFSET IS NOT A TIME, IT IS A PLACE. `git commit` stamps the machine's local
+    # offset, and that field is as permanent as the diff: it survives a squash, it is in every
+    # fork and every mirror, and no later commit can take it back. Seven commits here carried
+    # one before anybody looked, because nothing looks — `git log` renders the local time by
+    # default and shows the author line, which was already correct.
+    #
+    # The fix is the same shape as the author check above and belongs beside it: every commit
+    # in this project is stamped UTC, so its history says when something changed and nothing
+    # else. Set `TZ=UTC` in the environment, or commit through `.githooks`.
+    stamps = _git("log", "--format=%ad|%cd", "--date=iso-strict", rng).stdout.splitlines()
+    offsets = sorted({o for line in stamps if (o := _offset(line))})
+    for o in offsets:
+        refusals.append(f"a commit in {rng} is stamped {o}, not UTC — an offset is a location, "
+                        f"and it is as permanent as the diff")
 
     # THROUGH `scan_files`, THE SAME FUNCTION EVERYTHING ELSE USES. This ran `git grep -E -i`
     # over the range instead, and two implementations of one rule gave two answers:

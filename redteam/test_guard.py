@@ -240,6 +240,58 @@ def main():
           all(got2.get(p) == got.get(p) for p in shas),
           f"{sum(1 for p in shas if got2.get(p) != got.get(p))} path(s) shifted")
 
+    # --- A COMMIT'S TIMEZONE, WHICH IS A PLACE AND NOT A TIME -------------------------------
+    #
+    # Seven commits here were stamped with a local offset before anybody looked, and nothing
+    # looked because nothing shows it: `git log` renders the local time by default, and the
+    # author line — the field people do check — was already correct. The offset is as permanent
+    # as the diff and no later commit can take it back.
+    #
+    # Built as a real repository rather than by parsing strings, because the claim is about what
+    # `git` records, not about what a formatter prints.
+    with tempfile.TemporaryDirectory() as d:
+        def g(*a, **env):
+            e = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                     GIT_CONFIG_SYSTEM=os.path.join(d, "none"), **env)
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=e)
+
+        g("init", "-q", "-b", "main")
+        g("config", "user.name", "QAtration")
+        g("config", "user.email", "qatration@gmail.com")
+        io.open(os.path.join(d, "a.txt"), "w").write("one")
+        g("add", "-A")
+        g("commit", "-qm", "utc", GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+          GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        io.open(os.path.join(d, "a.txt"), "w").write("two")
+        g("add", "-A")
+        g("commit", "-qm", "local", GIT_AUTHOR_DATE="2026-01-02T15:00:00+03:00",
+          GIT_COMMITTER_DATE="2026-01-02T15:00:00+03:00")
+
+        old_root = guard.ROOT
+        try:
+            guard.ROOT = d
+            def offsets_refused(rng):
+                found = []
+                guard.scan_history(rng, found)
+                return [f for f in found if "not UTC" in f]
+
+            hits = offsets_refused("HEAD~1..HEAD")
+            check("refused: a commit stamped with a local timezone offset", bool(hits),
+                  f"scan_history saw nothing; all refusals: {hits}")
+            check("...and the refusal names the offset it found",
+                  any("+03:00" in f for f in hits), str(hits))
+            check("allowed: a commit stamped UTC",
+                  not offsets_refused("HEAD~1"), str(offsets_refused("HEAD~1")))
+            # THE COMMITTER DATE ON ITS OWN. Rewriting only the author date is the easy half of
+            # a history fix and leaves the other field carrying the same offset.
+            g("commit", "-q", "--amend", "--no-edit", "--date=2026-01-03T09:00:00+00:00",
+              GIT_COMMITTER_DATE="2026-01-03T12:00:00+02:00")
+            check("...and a UTC author date does not excuse a local committer date",
+                  bool(offsets_refused("HEAD~1..HEAD")),
+                  "only the author date is being read")
+        finally:
+            guard.ROOT = old_root
+
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #
     # Every check above tests the scanner. None of them would notice if the hooks stopped
