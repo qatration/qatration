@@ -169,6 +169,46 @@ def _tree_files():
     return [p for p in r.stdout.splitlines() if p.strip()]
 
 
+def _read_blobs(sha_by_path):
+    """{path: text} for a set of git objects, in ONE subprocess.
+
+    `cat-file --batch` writes `<sha> <type> <size>\\n<size bytes>\\n` for an object it has, and
+    `<sha> missing\\n` — no size, no body — for one it does not. BOTH have to advance the read
+    position, and the first version of this only advanced past bodies it wanted: fed the output
+    of `rev-list --objects`, which names trees as well as blobs, it skipped each tree's header
+    and then read the tree's BYTES as the next path's contents. Every file after the first tree
+    came back as somebody else's data, and five artifacts were reported as unparseable JSON.
+
+    Bytes, not text: the size is a byte count, so decoding before slicing would make it useless.
+    """
+    if not sha_by_path:
+        return {}
+    order = list(sha_by_path)
+    proc = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"],
+                          input=("\n".join(sha_by_path[p] for p in order) + "\n").encode(),
+                          capture_output=True)
+    raw, pos, out = proc.stdout, 0, {}
+    for path in order:
+        nl = raw.find(b"\n", pos)
+        if nl < 0:
+            break
+        header = raw[pos:nl].split()
+        pos = nl + 1
+        if len(header) < 3:
+            continue                                  # `<sha> missing`: no body to step over
+        try:
+            size = int(header[2])
+        except ValueError:
+            # The stream is out of step: what should be a header is object bytes. Stop rather
+            # than raise, so the caller reports "fewer paths came back than were asked for" —
+            # a named failure a reader can act on instead of a traceback out of a git parser.
+            break
+        if header[1] == b"blob":
+            out[path] = raw[pos:pos + size].decode("utf-8", "replace")
+        pos += size + 1                               # ALWAYS, blob or not
+    return out
+
+
 def _staged_contents(paths):
     """{path: text} for what is IN THE INDEX, in one subprocess rather than one per file.
 
@@ -195,27 +235,7 @@ def _staged_contents(paths):
             blobs[path] = parts[1]
     if not blobs:
         return {}
-    order = list(blobs)
-    # BYTES, NOT TEXT. `cat-file --batch` writes `<sha> blob <size>\n<size bytes>\n`, and the
-    # size is a byte count — decoding first would make it useless for slicing, and searching the
-    # decoded stream for the next header instead would break on any blob containing a line that
-    # looks like one. Read exactly what the header says, then decode each blob on its own.
-    proc = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"],
-                          input=("\n".join(blobs[p] for p in order) + "\n").encode(),
-                          capture_output=True)
-    raw, pos, result = proc.stdout, 0, {}
-    for path in order:
-        nl = raw.find(b"\n", pos)
-        if nl < 0:
-            break
-        header = raw[pos:nl].split()
-        pos = nl + 1
-        if len(header) < 3 or header[1] != b"blob":
-            continue                                  # missing or not a blob; nothing to scan
-        size = int(header[2])
-        result[path] = raw[pos:pos + size].decode("utf-8", "replace")
-        pos += size + 1                               # the newline git writes after the blob
-    return result
+    return _read_blobs(blobs)
 
 
 def _read_tree(path):
@@ -316,17 +336,32 @@ def scan_history(rng, refusals):
     for w in strangers:
         refusals.append(f"a commit in {rng} is authored by {w}, not by the project identity")
 
-    literals = _local_literals() or []
-    patterns = [p for _, p, _ in CREDENTIALS] + [re.escape(x) for x in literals]
-    revs = _git("rev-list", rng).stdout.split()
-    if not revs:
+    # THROUGH `scan_files`, THE SAME FUNCTION EVERYTHING ELSE USES. This ran `git grep -E -i`
+    # over the range instead, and two implementations of one rule gave two answers:
+    #
+    #   * `-i` made every credential pattern case-insensitive, which `re.search` here is not.
+    #     `AC[0-9a-f]{32}` — a Twilio account SID, uppercase by construction — matched
+    #     `acd57cee…` inside an HMAC digest in `test_signing.py` and refused the push.
+    #   * the SELF exemption did not exist on this path, so the two files that DEFINE the
+    #     credential patterns were refused for containing them. Every commit adding them would
+    #     have been unpushable.
+    #
+    # Both were the same mistake: a second copy of a rule. `git rev-list --objects` names every
+    # blob the push would carry, they are read in one batch, and `scan_files` decides.
+    objs = _git("rev-list", "--objects", rng).stdout.splitlines()
+    blobs = {}
+    for line in objs:
+        sha, _, path = line.partition(" ")
+        if path and not path.lower().endswith(BINARY):
+            blobs.setdefault(path.strip(), sha)          # first blob seen for that path
+    if not blobs:
         return
-    for pat in patterns:
-        r = _git("grep", "-I", "-l", "-E", "-i", "-e", pat, *revs)
-        hits = r.stdout.splitlines()[:5]
-        if hits:
-            shown = pat if pat in [p for _, p, _ in CREDENTIALS] else "a string in .guard-local"
-            refusals.append(f"{shown} appears in history being pushed: {'; '.join(hits)}")
+    contents = _read_blobs(blobs)
+    order = list(blobs)
+    found = []
+    scan_files(order, lambda p: contents.get(p, ""), found)
+    for f in found[:12]:
+        refusals.append(f"in the history being pushed — {f}")
 
 
 def selftest():

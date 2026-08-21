@@ -162,6 +162,46 @@ def main():
         check("...and the refusal says where it was declared",
               found and "optional-dependencies.fixtures" in found[0], str(found))
 
+    # --- THE BLOB READER PAIRS CONTENTS TO PATHS --------------------------------------------
+    #
+    # Both the staged scan and the history scan read git objects in one `cat-file --batch`
+    # rather than one subprocess per file — measured, per-file `git show` was 2.4 seconds for
+    # 124 files against 0.29 for 424 read off the disk, and a hook that slow is one people pass
+    # `--no-verify` to.
+    #
+    # The parser desynchronised. `cat-file --batch` writes `<sha> <type> <size>\n<body>\n`, and
+    # the first version stepped over the body only for objects it wanted — so fed the output of
+    # `rev-list --objects`, which names TREES as well as blobs, it skipped a tree's header and
+    # then read the tree's bytes as the next path's contents. Every file after the first tree
+    # came back holding somebody else's data, and five artifacts were reported as unparseable.
+    # A reader that is nine times faster and returns the wrong bytes is worse than the slow one.
+    import subprocess as _sp
+    listing = _sp.run(["git", "-C", ROOT, "ls-files", "--stage"],
+                      capture_output=True, text=True).stdout.splitlines()
+    shas = {}
+    for line in listing[:60]:
+        head, _, path = line.partition("\t")
+        parts = head.split()
+        if len(parts) >= 2 and path.endswith(".py"):
+            shas[path] = parts[1]
+    got = guard._read_blobs(shas)
+    check("the blob reader returns something for every path it was given",
+          len(got) == len(shas), f"{len(got)} of {len(shas)}")
+    wrong = [p for p, text in got.items()
+             if text.splitlines()[:1] != io.open(os.path.join(ROOT, p), encoding="utf-8",
+                                                 errors="replace").read().splitlines()[:1]]
+    check("...and each one holds its OWN file, not the previous object's bytes",
+          not wrong, f"mismatched: {wrong[:4]}")
+    # A tree in the middle of the batch is the exact shape that desynchronised it.
+    tree = _sp.run(["git", "-C", ROOT, "rev-parse", "HEAD^{tree}"],
+                   capture_output=True, text=True).stdout.strip()
+    mixed = {"<a tree>": tree}
+    mixed.update(shas)
+    got2 = guard._read_blobs(mixed)
+    check("...even with a non-blob object in the middle of the batch",
+          all(got2.get(p) == got.get(p) for p in shas),
+          f"{sum(1 for p in shas if got2.get(p) != got.get(p))} path(s) shifted")
+
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #
     # Every check above tests the scanner. None of them would notice if the hooks stopped
