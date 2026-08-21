@@ -272,6 +272,25 @@ def _unresolved(target):
                   for k, path in declared.items() if path and not counts.get(k))
 
 
+def is_unmeasurable(attack, dead):
+    """True when every detector this attack declares is inert here, so a run would learn nothing.
+
+    AT MODULE LEVEL BECAUSE ITS TEST NEEDS IT. This was a closure inside `main()`, and
+    `test_arsenal` -- which asserts the headline breadth claim, "a plain chat endpoint receives a
+    broad run, not a token one" -- could not reach it, so it kept a second copy and asserted on
+    its own answer. Changing the shipped rule from `decl <= dead` to `decl & dead` takes a plain
+    endpoint from 318 attacks to 261 and leaves all 41 suites green.
+
+    `bool(decl)` matters: an attack declaring NO detector is judged by the general ones and is
+    perfectly measurable, while the empty set is a subset of everything.
+
+    An unmeasurable attack is SKIPPED and counted, never sent. Sent, it comes back DEFENDED, and
+    a customer reads "we tested authorization and you passed" about a boundary nobody measured.
+    """
+    decl = set(attack.get("success") or []) | set(attack.get("partial") or [])
+    return bool(decl) and decl <= set(dead)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=None,
@@ -537,13 +556,9 @@ def main():
     #
     # Skipped rather than failed, and counted, because not-run and defended are different
     # facts and the report already has a place that says which.
-    def _unmeasurable(a):
-        decl = set(a.get("success") or []) | set(a.get("partial") or [])
-        return bool(decl) and decl <= set(dead)
-
-    unmeasurable = [a for a in attacks if _unmeasurable(a)]
+    unmeasurable = [a for a in attacks if is_unmeasurable(a, dead)]
     if unmeasurable:
-        attacks = [a for a in attacks if not _unmeasurable(a)]
+        attacks = [a for a in attacks if not is_unmeasurable(a, dead)]
         skipped += len(unmeasurable)
         by_need = {}
         for a in unmeasurable:

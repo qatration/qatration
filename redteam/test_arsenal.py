@@ -119,16 +119,32 @@ def main():
         declared |= set(a.get("success") or []) | set(a.get("partial") or [])
     dead = set(inert_for(plain, declared))
 
+    # THE SHIPPED RULE, NOT A COPY OF IT. This was a local re-implementation, so the breadth
+    # claim below was a statement about this file rather than about what a sweep does. Proven:
+    # flipping `run_redteam.is_unmeasurable` from `decl <= dead` to `decl & dead` cuts a plain
+    # endpoint from 318 attacks to 261, and this check went on printing PASS.
+    from run_redteam import is_unmeasurable
+
     def sendable(a, caps):
-        d = set(a.get("success") or []) | set(a.get("partial") or [])
-        return a.get("delivery", "direct") in caps and not (d and d <= dead)
+        return a.get("delivery", "direct") in caps and not is_unmeasurable(a, dead)
 
     direct = [a for a in on_disk if sendable(a, {"direct"})]
     withhist = [a for a in on_disk
                 if sendable(a, {"direct", "chain", "forged_history", "sessions"})]
+    # A FLOOR AT THE MEASUREMENT, NOT WELL BELOW IT. This read `>= 100` while the truth was
+    # 253, so a regression of 153 attacks passed and the check printed PASS. It is the shape
+    # this project keeps finding: a threshold set once, far under the real value, that stops
+    # being a gate the moment the real value grows past it.
+    #
+    # Measured 2026-08-21: 253 direct in 46 categories, 318 with a transcript in 56. A DROP IS
+    # NOT AUTOMATICALLY A BUG -- retiring an attack is legitimate -- but it has to be looked at
+    # and the number moved deliberately, which is the whole job of this line.
+    SENT_DIRECT, CATS_DIRECT = 253, 46
+    _cats = len({a.get("category") for a in direct})
     check("a plain chat endpoint receives a broad run, not a token one",
-          len(direct) >= 100 and len({a.get("category") for a in direct}) >= 28,
-          f"{len(direct)} attacks, {len({a.get('category') for a in direct})} categories")
+          len(direct) >= SENT_DIRECT and _cats >= CATS_DIRECT,
+          f"{len(direct)} attacks in {_cats} categories, down from {SENT_DIRECT} in "
+          f"{CATS_DIRECT}. If that is deliberate, move the numbers in this check and say why")
     check("...and one that carries a transcript receives more",
           len(withhist) > len(direct),
           f"{len(withhist)} vs {len(direct)}")
