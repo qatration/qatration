@@ -111,8 +111,25 @@ ARTIFACT = re.compile(r"(^|/)out/.*\.json$")
 # `output`, and the exemption list is empty. Measured across every artifact in `out/`: exactly
 # one Cyrillic string exists, under `output`, in a NeMo reply that answered in Korean and
 # slipped four Cyrillic letters into the middle of it.
-MODEL_FIELDS = {"output", "full", "evidence", "reply", "observations", "answer", "text",
-                "response", "completion"}
+# DERIVED FROM THE ARTIFACTS, NOT LISTED FROM MEMORY. Counted across all 113 shipped
+# `out/*.json`, which is the only way this stays true:
+#
+#     output        4808   probe.output, turns[].output, sample.output
+#     observations  3719   probe.observations
+#     evidence      1490   rows[].evidence
+#     full          1490   rows[].full
+#     reply           60   refusal_vocab[].reply, transcript[].reply
+#
+#     text           742   OURS, every one: results[].attack.text (690), hints[].text (28),
+#                          payload.text (16), attack.seed.text (8). Never a reply.
+#     answer           0   \
+#     response         0    > exempted a field that does not exist in any artifact
+#     completion       0   /
+#
+# `text` was the expensive one. `recon.hints()` writes tool-authored English into it, so a
+# name in a generated hint sat in the one field the scan was told to ignore, and the guard
+# printed `ok`. An exemption has to be a property of the DATA, and the data says these five.
+MODEL_FIELDS = {"output", "observations", "evidence", "full", "reply"}
 
 UNPARSEABLE = "<unparseable>"
 
@@ -402,14 +419,22 @@ def _offset(iso_pair):
     return ""
 
 
-def scan_history(rng, refusals):
-    """Commits, not the working tree — the one place nobody looks.
+def _stamps(rng, refusals):
+    """Who wrote these commits, and what place their timestamps name.
 
-    This distinction is why the check exists at all: a `filter-branch --env-filter` once rewrote
-    every author line, `git log` read clean, and the real name sat untouched inside twelve
-    versions of a file. An `--env-filter` never touches a blob.
+    Split out of `scan_history` because it was reachable only from `--range`, and therefore
+    only from `pre-push`. Every mode calls this now, so CI enforces it too: see `main`.
+
+    A range git cannot resolve is refused here as well — an empty `git log` and a failed one
+    are the same bytes on stdout.
     """
-    who = _git("log", "--format=%an <%ae>%n%cn <%ce>", rng).stdout.splitlines()
+    proc = _git("log", "--format=%an <%ae>%n%cn <%ce>", rng)
+    if proc.returncode != 0:
+        why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
+        refusals.append(f"who wrote {rng} could not be read, so nothing about it was "
+                        f"checked — {why}")
+        return
+    who = proc.stdout.splitlines()
     strangers = sorted({w for w in who if w.strip()
                         and w.strip() != "QAtration <qatration@gmail.com>"})
     for w in strangers:
@@ -421,27 +446,30 @@ def scan_history(rng, refusals):
     # one before anybody looked, because nothing looks — `git log` renders the local time by
     # default and shows the author line, which was already correct.
     #
-    # The fix is the same shape as the author check above and belongs beside it: every commit
-    # in this project is stamped UTC, so its history says when something changed and nothing
-    # else. Set `TZ=UTC` in the environment, or commit through `.githooks`.
+    # Set `TZ=UTC` in the environment, or commit through `.githooks`.
     stamps = _git("log", "--format=%ad|%cd", "--date=iso-strict", rng).stdout.splitlines()
     offsets = sorted({o for line in stamps if (o := _offset(line))})
     for o in offsets:
         refusals.append(f"a commit in {rng} is stamped {o}, not UTC — an offset is a location, "
                         f"and it is as permanent as the diff")
 
-    # THROUGH `scan_files`, THE SAME FUNCTION EVERYTHING ELSE USES. This ran `git grep -E -i`
-    # over the range instead, and two implementations of one rule gave two answers:
-    #
-    #   * `-i` made every credential pattern case-insensitive, which `re.search` here is not.
-    #     `AC[0-9a-f]{32}` — a Twilio account SID, uppercase by construction — matched
-    #     `acd57cee…` inside an HMAC digest in `test_signing.py` and refused the push.
-    #   * the SELF exemption did not exist on this path, so the two files that DEFINE the
-    #     credential patterns were refused for containing them. Every commit adding them would
-    #     have been unpushable.
-    #
-    # Both were the same mistake: a second copy of a rule. `git rev-list --objects` names every
-    # blob the push would carry, they are read in one batch, and `scan_files` decides.
+
+def scan_history(rng, refusals):
+    """Commits, not the working tree — the one place nobody looks.
+
+    This distinction is why the check exists at all: a `filter-branch --env-filter` once rewrote
+    every author line, `git log` read clean, and the real name sat untouched inside twelve
+    versions of a file. An `--env-filter` never touches a blob.
+    """
+    _stamps(rng, refusals)
+
+    # AND THEN THE CONTENT, THROUGH `scan_files` — the same function every mode uses.
+    # This ran `git grep -E -i` over the range instead, and two implementations of one
+    # rule gave two answers: `-i` made every credential pattern case-insensitive, so a
+    # Twilio SID matched an HMAC digest in a test fixture, and the SELF exemption did not
+    # exist on this path, so the two files that DEFINE the patterns were refused for
+    # containing them. Both were the same mistake: a second copy of a rule.
+
     # A RANGE THAT COULD NOT BE READ IS NOT A CLEAN RANGE. `_git` hands back `.stdout` and
     # nothing else, so a `rev-list` that exited 128 — `origin/main..HEAD` on a clone with no
     # remote, a `remote_sha` the local repository has never fetched — looked exactly like a
@@ -546,6 +574,18 @@ def main(argv=None):
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import licences
     refusals += licences.problems(os.path.join(ROOT, "pyproject.toml"))
+
+    # WHO WROTE IT AND WHERE FROM, IN EVERY MODE. These two rules lived only in
+    # `scan_history`, which only `--range` reaches, which only `pre-push` runs — a hook that
+    # is opt-in, skippable and, until this pass, verified by grepping its own text. They are
+    # also the two rules whose subject a later commit cannot take back. A reviewer put a real
+    # name and a `+03:00` stamp on a commit and pushed it to a bare remote with `--staged`
+    # green, `--tree` green, and a gutted `pre-push`.
+    #
+    # `HEAD` rather than a range, because in `--staged` and `--tree` there is no range to
+    # speak of and the question is about the commits that exist. On a shallow CI checkout
+    # this sees only what was fetched, which is why `check.yml` asks for `fetch-depth: 0`.
+    _stamps("HEAD", refusals)
 
     if args.staged:
         staged = _staged_files()

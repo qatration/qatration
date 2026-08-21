@@ -132,27 +132,21 @@ def core_modules():
 
 
 def declared_dependencies():
-    """The `dependencies = [...]` names from pyproject.toml, lowercased and stripped of specs.
+    """The runtime `dependencies` names from pyproject.toml, lowercased and stripped of specs.
 
-    Parsed with tomllib where it exists and by hand where it does not, because requires-python
-    is 3.9 and tomllib arrived in 3.11. A test that only runs on the newest interpreter is a
-    check that is absent exactly where the support claim is widest.
+    THROUGH `tools/licences.py`, which is the parser. This function used to keep its own, with
+    its own tomllib fallback, and the fallback was the whole point: `requires-python` is 3.9 and
+    tomllib arrived in 3.11, so a check that only runs on the newest interpreter is absent
+    exactly where the support claim is widest. The copy that HAD the fallback was this one, and
+    the copy everything else called -- `guard.py`, in all three of its modes -- did not, so the
+    commit gate was a traceback on 3.9 and 3.10 and permanently red on the 3.9 leg of CI.
+
+    One rule, one implementation. The reasoning now lives beside the code that does the work.
     """
-    path = os.path.join(REPO, "pyproject.toml")
-    text = io.open(path, encoding="utf-8").read()
-    try:
-        import tomllib
-        block = tomllib.loads(text)["project"]["dependencies"]
-    except ImportError:
-        after = text.split("\ndependencies = [", 1)[1].split("]", 1)[0]
-        block = [line.strip().strip(",").strip('"').strip("'")
-                 for line in after.splitlines() if line.strip().startswith(('"', "'"))]
-    out = set()
-    for spec in block:
-        name = spec.split(">")[0].split("<")[0].split("=")[0].split("[")[0].strip()
-        if name:
-            out.add(name.lower())
-    return out
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import licences
+    return {name for name, where in licences.declared(
+        os.path.join(REPO, "pyproject.toml")).items() if where == "dependencies"}
 
 
 def test_every_subcommand_resolves():

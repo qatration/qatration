@@ -54,6 +54,7 @@ def main():
             fails.append(f"{label}: {detail}")
 
     guard = _load("qat_guard", os.path.join(ROOT, "tools", "guard.py"))
+    lic = _load("qat_licences", os.path.join(ROOT, "tools", "licences.py"))
 
     def scan(path, text):
         """Through the same function the hook calls, with the reader replaced. The reader is the
@@ -185,7 +186,6 @@ def main():
             guard.LOCAL = old
 
     # --- LICENCES, THROUGH THE SAME MODULE pyproject IS CHECKED WITH -------------------------
-    lic = _load("qat_licences", os.path.join(ROOT, "tools", "licences.py"))
     check("this project's own dependencies are all permissive",
           not lic.problems(os.path.join(ROOT, "pyproject.toml")),
           "; ".join(lic.problems(os.path.join(ROOT, "pyproject.toml"))))
@@ -430,6 +430,160 @@ def main():
               guard._offset("2026-01-05T09:00:00+03:00|2026-01-05T09:00:00+03:00") == "+03:00")
         check("_offset: a UTC author date does not hide a local committer date",
               guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T12:00:00+02:00") == "+02:00")
+
+    # --- THE TWO RULES THAT RAN IN ONE PLACE -------------------------------------------------
+    #
+    # Who wrote a commit, and what place its stamp names, were reachable only through
+    # `scan_history`, i.e. only through `--range`, i.e. only through `pre-push` — opt-in,
+    # skippable, and at the time verified by grepping its own text. CONTRIBUTING says CI is the
+    # part that cannot be skipped, and CI runs `--tree`. A reviewer put a real name and a
+    # `+03:00` stamp on a commit and walked it to a bare remote with everything else green.
+    #
+    # These two fields are also the ones a later commit cannot take back, which is what makes
+    # "enforced in the one place a person can turn off" the wrong number of places.
+    for mode in ("--tree", "--staged"):
+        with tempfile.TemporaryDirectory() as d:
+            genv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                        GIT_CONFIG_SYSTEM=os.path.join(d, "none"))
+
+            def gg(*a, **env):
+                return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                               env=dict(genv, **env))
+
+            gg("init", "-q", "-b", "main")
+            gg("config", "user.name", "QAtration")
+            gg("config", "user.email", "qatration@gmail.com")
+            io.open(os.path.join(d, "a.txt"), "w").write("x")
+            gg("add", "-A")
+            gg("commit", "-qm", "a stranger, from somewhere",
+               GIT_AUTHOR_NAME="A Person", GIT_AUTHOR_EMAIL="person@example.com",
+               GIT_AUTHOR_DATE="2026-08-22T10:00:00+03:00",
+               GIT_COMMITTER_DATE="2026-08-22T10:00:00+03:00")
+            # `getattr`, not a direct call: against a build where this rule does not exist yet
+            # the point is a red check with a reason, not an AttributeError that ends the run
+            # and takes every check after it down as collateral.
+            _fn = getattr(guard, "_stamps", None)
+            found = []
+            old_root = guard.ROOT
+            try:
+                guard.ROOT = d
+                if _fn:
+                    _fn("HEAD", found)
+                else:
+                    found.append("guard has no _stamps: the author and timezone rules are "
+                                 "reachable only from --range, i.e. only from pre-push")
+                    _fn = None
+            finally:
+                guard.ROOT = old_root
+            if not getattr(guard, "_stamps", None):
+                check(f"{mode} mode reaches the author rule (via _stamps, one implementation)",
+                      False, found[0])
+                check(f"{mode} mode reaches the timezone rule", False, found[0])
+                continue
+            check(f"{mode} mode reaches the author rule (via _stamps, one implementation)",
+                  any("not by the project identity" in f for f in found), str(found))
+            check(f"{mode} mode reaches the timezone rule",
+                  any("not UTC" in f for f in found), str(found))
+    # And the wiring: `main` must call it whatever the mode, or the two checks above test a
+    # function nothing runs. Read from the source, because that is the claim.
+    _main_src = io.open(os.path.join(ROOT, "tools", "guard.py"), encoding="utf-8").read()
+    _main_src = _main_src[_main_src.index("def main("):]
+    # `.find`, not `.index`: a build without the call must give a red check with a reason, not
+    # a ValueError out of the test harness that ends the run and hides everything after it.
+    _at, _branch = _main_src.find("_stamps("), _main_src.find("if args.staged:")
+    check("...and main() calls _stamps before it branches on the mode",
+          0 <= _at < _branch,
+          "main() never calls it" if _at < 0 else "the stamp rules are inside one branch")
+
+    # --- AN EXEMPTION MUST NOT BE WIDER THAN ITS DATA ----------------------------------------
+    #
+    # MODEL_FIELDS exempted `text`, and `recon.hints()` writes tool-authored English into it —
+    # 742 occurrences across the shipped artifacts, every one ours: an attack payload, a hint,
+    # a seed. It also exempted `answer`, `response` and `completion`, which occur zero times.
+    check("`text` is not exempt: it is our prose, not a reply",
+          "text" not in guard.MODEL_FIELDS)
+    for gone in ("answer", "response", "completion"):
+        check(f"`{gone}` is not exempt: no artifact has that field",
+              gone not in guard.MODEL_FIELDS)
+    check("refused: Cyrillic in a generated hint, which lives under `text`",
+          bool(scan("out/recon_x.json", json.dumps(
+              {"hints": [{"level": "warn", "text": "\u0414\u043e\u0431\u0440\u0435"}]},
+              ensure_ascii=False))))
+    check("allowed: the same characters in a model's reply",
+          not scan("out/results_x.json", json.dumps(
+              {"results": [{"attack": {"id": "a"},
+                            "trials": [{"probe": {"output": "\u0414\u043e\u0431\u0440\u0435"}}]}]},
+              ensure_ascii=False)))
+
+    # --- THE LICENCE PARSER, ON THE INTERPRETER THE PACKAGE CLAIMS ---------------------------
+    #
+    # `declared()` did a bare `import tomllib`, which arrived in 3.11, and `guard.py` calls
+    # `problems()` in every mode. On 3.9 the commit gate was a traceback, and the 3.9 leg of CI
+    # could only ever be red. The fallback existed in test_packaging.py and not in the copy
+    # everything called.
+    def _no_tomllib(fn, *a):
+        import builtins
+        real = builtins.__import__
+
+        def fake(name, *rest, **kw):
+            if name == "tomllib":
+                raise ImportError("tomllib arrived in 3.11")
+            return real(name, *rest, **kw)
+        builtins.__import__ = fake
+        try:
+            return fn(*a)
+        finally:
+            builtins.__import__ = real
+
+    # CAUGHT, not allowed to propagate. A parser that raises on 3.9 is the finding, and the
+    # finding has to render as a red check with the traceback in its detail — not as a crash
+    # that ends the suite and hides every check after it.
+    _pyproject = os.path.join(ROOT, "pyproject.toml")
+    _with = lic.declared(_pyproject)
+    try:
+        _without, _blew_up = _no_tomllib(lic.declared, _pyproject), None
+    except Exception as e:
+        _without, _blew_up = {}, f"{type(e).__name__}: {e}"
+    check("the licence parser runs without tomllib, as it must on 3.9",
+          bool(_without), _blew_up or "it returned nothing, so a 3.9 machine checks nothing")
+    check("...and gives the SAME answer as tomllib does",
+          _with == _without, f"tomllib={sorted(_with)} hand={sorted(_without)}")
+
+    with tempfile.TemporaryDirectory() as d:
+        def _proj(name, body):
+            p = os.path.join(d, name)
+            io.open(p, "w", encoding="utf-8", newline="\n").write(body)
+            return p
+
+        # `[build-system].requires` is installed by every sdist build, before anything else
+        # exists. It was never read, and this project's own setuptools sat in it unchecked.
+        p = _proj("build.toml", '[build-system]\nrequires = ["pymupdf>=1.24"]\n'
+                                '[project]\nname="x"\nversion="0"\ndependencies=[]\n')
+        found = lic.problems(p)
+        check("an AGPL package in [build-system].requires is refused",
+              any("AGPL" in f for f in found), str(found))
+        check("...and the refusal says it came from the build system",
+              any("build-system.requires" in f for f in found), str(found))
+
+        # PEP 735, the spelling a contributor reaches for next.
+        p = _proj("groups.toml", '[project]\nname="x"\nversion="0"\ndependencies=[]\n'
+                                 '[dependency-groups]\ndev = ["pymupdf>=1.24"]\n')
+        check("an AGPL package in [dependency-groups] is refused",
+              any("AGPL" in f for f in lic.problems(p)), str(lic.problems(p)))
+
+        # A list this file cannot see is not an empty list.
+        p = _proj("dyn.toml", '[project]\nname="x"\nversion="0"\ndynamic=["dependencies"]\n')
+        check("dynamic dependencies are refused, not reported as clean",
+              any("dynamic" in f for f in lic.problems(p)), str(lic.problems(p)))
+
+        # A traceback out of a hook is not a refusal.
+        p = _proj("empty.toml", '[build-system]\nrequires=["setuptools>=61"]\n')
+        try:
+            found, crashed = lic.problems(p), None
+        except Exception as e:
+            found, crashed = [], f"{type(e).__name__}: {e}"
+        check("a pyproject with no [project] table refuses rather than raising",
+              crashed is None and bool(found), crashed or "it returned clean")
 
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #
