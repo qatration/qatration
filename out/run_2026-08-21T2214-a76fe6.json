@@ -1,6 +1,6 @@
 {
   "run_id": "2026-08-21T2214-a76fe6",
-  "state": "started",
+  "state": "finished",
   "target": "httpbot",
   "scope": "full",
   "engine": "6ed56a2",
@@ -9,7 +9,7 @@
   "authorization": null,
   "budgets": {},
   "started_at": "2026-08-21 22:14:45",
-  "finished_at": null,
+  "finished_at": "2026-08-22 00:14:23",
   "spent": {},
   "note": null
 }

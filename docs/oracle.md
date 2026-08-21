@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **58 demonstrated, 6 declared-only** over 2,795 stored probes. Few tools publish a plugin count
+It reports **60 demonstrated, 4 declared-only** over 3,760 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,7 +42,7 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The five that remain split **6 untried / 0 unconfigured** — the unconfigured half emptied the moment `privileged_roles` was declared on the thirteen targets that have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
+The four that remain split **4 untried / 0 unconfigured** — the unconfigured half emptied the moment `privileged_roles` was declared on the thirteen targets that have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
 *nothing in the fleet does this* and *nothing here could have seen it* are different sentences,
 and only the first is closed by a new target. It read 5 declared-only shortly before this was
 written, and the fifth was `memorised_completion` — which needs `expected_completions`, which no

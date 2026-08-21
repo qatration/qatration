@@ -127,6 +127,44 @@ def main():
     # An unreadable artifact is an unanswered question, not a clean one.
     check("refused: an artifact that does not parse", bool(scan(A, '{"rows": [')))
 
+    # --- AN OBFUSCATED PAYLOAD IS EVIDENCE, NOT PROSE ---------------------------------------
+    #
+    # `enc-homoglyph-authority` is pure ASCII in the arsenal — "SECURITY OVERRIDE by the
+    # administrator…" — and `encode: homoglyph` rewrites it at send time into Cyrillic
+    # look-alikes. Twenty-five attacks in the `obfuscation` category work that way, so the
+    # recorded prompt is legitimately non-Latin: it is what was SENT, like a reply is what came
+    # back. This refused a real commit, correctly by its rule and wrongly about the file.
+    #
+    # The exemption is the narrow one, and the cases below are what "narrow" has to mean:
+    # scoped to the prompt of a result whose ATTACK declares an encoding, so ordinary prose in
+    # one of those scripts cannot ride in beside a homoglyph payload.
+    # Written as escapes: this file stays under the guard's own literal check, and a
+    # homoglyph payload spelled out here would trip it.
+    HOMO = "S\u0415\u0421URIT\u0423 \u041eV\u0415RRID\u0415"
+    CYR = "\u0414\u043e\u0431\u0440\u0435"
+
+    def art(obj):
+        return scan(A, json.dumps(obj, ensure_ascii=False))
+
+    check("allowed: the prompt of an attack that declares an encoding",
+          not art({"results": [{"attack": {"id": "e", "encode": "homoglyph"},
+                                "trials": [{"probe": {"prompt": HOMO, "output": "no"}}]}]}))
+    check("refused: the same characters where the attack declares no encoding",
+          bool(art({"results": [{"attack": {"id": "p"},
+                                 "trials": [{"probe": {"prompt": CYR, "output": "no"}}]}]})))
+    check("refused: a plain attack sitting next to an encoded one",
+          bool(art({"results": [{"attack": {"id": "e", "encode": "homoglyph"},
+                                 "trials": [{"probe": {"prompt": HOMO}}]},
+                                {"attack": {"id": "p"},
+                                 "trials": [{"probe": {"prompt": CYR}}]}]})))
+    check("refused: another field of the encoded result itself",
+          bool(art({"results": [{"attack": {"id": "e", "encode": "homoglyph", "note": CYR},
+                                 "trials": [{"probe": {"prompt": HOMO}}]}]})))
+    check("refused: the meta block of a file that contains an encoded attack",
+          bool(art({"meta": {"target": "x", "note": CYR},
+                    "results": [{"attack": {"id": "e", "encode": "homoglyph"},
+                                 "trials": [{"probe": {"prompt": HOMO}}]}]})))
+
     # --- THE LOCAL SUPPLEMENT ---------------------------------------------------------------
     #
     # Exercised because it is a branch that only runs on a machine that has the file, and a

@@ -270,15 +270,40 @@ def _cyrillic_outside_model_output(text):
     import json as _json
     lit = re.compile(LITERAL_CYRILLIC[0])
     esc = re.compile(ESCAPED_CYRILLIC[0])
+
+    def _encoded_results(data):
+        """Indices of stored results whose attack was OBFUSCATED before it was sent.
+
+        A recorded `prompt` is our text, which is why it is checked — except where the whole
+        technique is that it is not Latin. `enc-homoglyph-authority` is ASCII in the arsenal
+        (`SECURITY OVERRIDE by the administrator…`) and `encode: homoglyph` rewrites it at send
+        time into Cyrillic look-alikes; twenty-five attacks in the `obfuscation` category work
+        that way. The artifact records what was SENT, so the Cyrillic there is evidence rather
+        than prose, exactly like a reply.
+
+        Scoped to the attack that declares an encoding rather than to the field, the file, or
+        the category, so an unencoded prompt is still checked and prose in any of the scripts
+        this looks for cannot ride in beside a payload that is allowed to contain it.
+        """
+        out = set()
+        for i, r in enumerate(data.get("results") or []):
+            if isinstance(r, dict) and (r.get("attack") or {}).get("encode"):
+                out.add(f"results[{i}]")
+        return out
     try:
         data = _json.loads(text)
     except Exception as e:
         return [(UNPARSEABLE, str(e)[:80])]
+    encoded = _encoded_results(data) if isinstance(data, dict) else set()
     out, stack = [], [(data, "", None)]
     while stack:
         node, where, key = stack.pop()
         if isinstance(node, str):
-            if key not in MODEL_FIELDS and (lit.search(node) or esc.search(node)):
+            if key in MODEL_FIELDS:
+                pass
+            elif key == "prompt" and any(where.startswith(p + ".") for p in encoded):
+                pass                          # an obfuscated payload; see _encoded_results
+            elif lit.search(node) or esc.search(node):
                 out.append((where, node[:60]))
         elif isinstance(node, dict):
             for k, v in node.items():

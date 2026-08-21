@@ -84,7 +84,7 @@ check that renders green is the same defect as an inert detector.
 `--fail-on regression` needs the previous run to compare against, and CI starts from nothing
 every time. So the timeline has to survive, and **the best place for it is your own repository**.
 
-A timeline is one append-only JSONL file per target, one line per run, about **1 KB a run** — a
+A timeline is one append-only JSONL file per target, one line per run, about **1.5 KB a run** — a
 target swept daily for a year is a 400 KB text file. Commit `qatration-out/history/` and you get
 three things a cache cannot give you:
 
