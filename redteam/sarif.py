@@ -279,8 +279,17 @@ def main():
     if not os.path.isfile(args.results):
         print("no such results file: %s" % args.results)
         return 2
-    with open(args.results, encoding="utf-8") as f:
-        results = json.load(f)
+    # A REFUSAL, NOT A TRACEBACK. This file is named on the command line, so unlike the tools
+    # that scan the whole directory there is nothing to carry on with — but a decode error out
+    # of the json module tells a CI operator nothing about what to do, and an empty or missing
+    # SARIF upload reads to a code-scanning dashboard as a clean scan. Truncation is what an
+    # interrupted write leaves, which is the state a stopped sweep is in.
+    from workspace import read_artifact
+    results, why = read_artifact(args.results)
+    if why:
+        print("%s could not be read (%s). Nothing was exported: an absent SARIF upload reads "
+              "as a clean scan, so this fails rather than producing one." % (args.results, why))
+        return 2
 
     log = build(results, target_config=args.target_config,
                 out_dir=os.path.dirname(os.path.abspath(args.results)))

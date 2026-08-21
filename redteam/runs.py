@@ -116,7 +116,11 @@ def load(root, run_id):
     if not os.path.exists(p):
         return None
     try:
-        return json.load(open(p, encoding="utf-8"))
+        from workspace import read_artifact   # local: this module is imported by
+        _d, _why = read_artifact(p)           # the worker before the package is set up
+        if _why:
+            raise ValueError(_why)
+        return _d
     except Exception as e:
         # Unreadable is not absent, and saying which is the whole discipline of this repo.
         return {"run_id": run_id, "state": "unreadable", "note": f"{type(e).__name__}: {e}"}

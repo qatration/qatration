@@ -12,7 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from workspace import (OUT as WORKSPACE_OUT, results_files, target_of,
-                       fleet_names, fleet_filter)
+                       fleet_names, fleet_filter,
+                       read_artifact, read_artifacts, say_unreadable)
 from oracle import current_name
 
 OUT_DIR = Path(WORKSPACE_OUT)
@@ -699,17 +700,26 @@ def load_all(known=None):
     # Read every meta first, then ask which of them belong to the fleet — the decision needs
     # to see the whole directory, because "none of these resolve" means this is not the
     # fleet's directory rather than "the fleet is empty".
-    _metas = {}
-    for fp in results_files(OUT_DIR):
-        try:
-            _metas[fp] = json.load(open(fp, encoding="utf-8"))["meta"]
-        except Exception:
-            _metas[fp] = {}
+    # READ ONCE, AND AN UNREADABLE FILE IS NEITHER FATAL NOR INVISIBLE.
+    #
+    # This opened every artifact twice. The first pass caught the failure and substituted an
+    # EMPTY META — which then went into `fleet_filter`, the function deciding whether this is
+    # the fleet's directory by its contents, so a file nobody could read got a vote on the
+    # answer. The second pass over the same files had no handler and took the entire report
+    # down with a raw JSONDecodeError: no page, and nothing naming the file.
+    #
+    # A truncated artifact is what an interrupted write leaves. Stopping a sweep by hand
+    # produces one. Four other tools that read this directory died the same way, which is why
+    # the reader now lives in `workspace` and this is one of its callers.
+    _parsed, _unreadable = read_artifacts(results_files(OUT_DIR))
+    _metas = {fp: (d.get("meta") or {}) for fp, d in _parsed.items()}
     _keep, _drop = fleet_filter(list(_metas.values()), known)
     _keep_names = {(m or {}).get("target") for m in _keep}
-    for fp in results_files(OUT_DIR):
-        d = json.load(open(fp, encoding="utf-8"))
-        tgt = d["meta"]["target"]
+    for fp, d in _parsed.items():
+        tgt = (d.get("meta") or {}).get("target")
+        if not tgt:
+            _unreadable.append((fp, "no meta.target — not a results file"))
+            continue
         if tgt not in _keep_names:
             continue
         targets.add(tgt)
@@ -720,7 +730,7 @@ def load_all(known=None):
                 best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in ("EXPLOITED", "PARTIAL") else 1)[0]
                 findings.append((tgt, r["attack"], r["headline"], r["fired"],
                                  best.get("probe") or {}, r.get("rate", "")))
-    return findings, targets, dates
+    return findings, targets, dates, _unreadable
 
 
 def _timeline():
@@ -755,7 +765,7 @@ def _unresolved_paths():
     out = {}
     for fp in results_files(OUT_DIR):
         try:
-            m = json.load(open(fp, encoding="utf-8"))["meta"]
+            m = (read_artifact(fp)[0] or {})["meta"]
         except (ValueError, KeyError, OSError):
             continue
         bad = m.get("unresolved_paths") or []
@@ -778,8 +788,16 @@ def _unobservable():
         return {}
     out = {}
     for fp in results_files(OUT_DIR):
-        d = json.load(open(fp, encoding="utf-8"))
-        tgt = d["meta"]["target"]
+        # The last bare read in this file, and the one that survived the first pass: a
+        # truncated artifact raised here and took the whole report down after `load_all` had
+        # already been taught to carry on. `load_all` names it; this one carries on quietly
+        # rather than saying it twice.
+        d, _why = read_artifact(fp)
+        if _why:
+            continue
+        tgt = (d.get("meta") or {}).get("target")
+        if not tgt:
+            continue
         cfg = CTXS.get(tgt, {})
         for r in d["results"]:
             for tr in r.get("trials", []):
@@ -819,7 +837,7 @@ def ambient_rates():
     out = {}
     for fp in glob.glob(str(OUT_DIR / "benign_*.json")):
         try:
-            d = json.load(open(fp, encoding="utf-8"))
+            d = read_artifact(fp)[0] or {}
         except Exception:
             continue
         t = os.path.basename(fp)[len("benign_"):-len(".json")]
@@ -857,7 +875,7 @@ def arsenal_ran():
     for fp in results_files(OUT_DIR):
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         try:
-            m = (json.load(open(fp, encoding="utf-8")).get("meta") or {})
+            m = ((read_artifact(fp)[0] or {}).get("meta") or {})
         except Exception:
             continue
         sent, skipped = m.get("attacks_n"), m.get("skipped")
@@ -885,7 +903,7 @@ def controls_fired():
     for fp in results_files(OUT_DIR):
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         try:
-            rows = (json.load(open(fp, encoding="utf-8")).get("results") or [])
+            rows = ((read_artifact(fp)[0] or {}).get("results") or [])
         except Exception:
             continue
         for r in rows:
@@ -944,7 +962,7 @@ def attribution_index():
         canaries = (ctxs.get(tgt) or {}).get("canaries") or []
         c_rates = _bl.canary_rates(tgt, canaries, str(OUT_DIR))
         try:
-            rows = (json.load(open(fp, encoding="utf-8")).get("results") or [])
+            rows = ((read_artifact(fp)[0] or {}).get("results") or [])
         except Exception:
             continue
         for r in rows:
@@ -1008,7 +1026,7 @@ def delivered():
     seen = set()
     for fp in results_files(OUT_DIR):
         try:
-            d = json.load(open(fp, encoding="utf-8"))
+            d = read_artifact(fp)[0] or {}
         except (ValueError, OSError):
             continue
         for r in d.get("results", []):
@@ -1033,7 +1051,7 @@ def coverage():
     sent = skipped = 0
     for fp in results_files(OUT_DIR):
         try:
-            meta = json.load(open(fp, encoding="utf-8"))["meta"]
+            meta = (read_artifact(fp)[0] or {})["meta"]
         except (ValueError, KeyError, OSError):
             # A results file that cannot be read is not a run that sent nothing. Say nothing
             # about it rather than counting it as zero, which would understate coverage in
@@ -1061,7 +1079,10 @@ def main():
     # The fleet's own configs. `load_all` decides what to do with them via `fleet_filter`,
     # which identifies the directory BY ITS CONTENTS: if nothing in it belongs to this fleet,
     # it is a fixture's directory and nothing is dropped.
-    findings, all_targets, measured = load_all(known=fleet_names())
+    findings, all_targets, measured, unreadable = load_all(known=fleet_names())
+    # SAID, not counted. "3 files skipped" tells nobody which run to re-do, and a
+    # remediation page silently short of a target reads as a clean bill for it.
+    say_unreadable(unreadable, "this report")
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
     ages, regressed = _timeline()

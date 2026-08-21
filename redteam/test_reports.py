@@ -82,7 +82,9 @@ def main():
             json.dump(data, f)
         real = dr.OUT_DIR
         dr.OUT_DIR = __import__("pathlib").Path(tmp)
-        findings, targets, dates = dr.load_all()
+        # Four values now: `load_all` hands back the artifacts it could not read, because a
+        # report short of a target must say so rather than look complete.
+        findings, targets, dates, unreadable = dr.load_all()
         dr.OUT_DIR = real
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -413,7 +415,7 @@ def main():
     # then says about what came back is not a second decision. A report that showed less
     # because the run was narrower would be answering a question nobody asked with a number
     # nobody could check.
-    findings, _, _ = dr.load_all()
+    findings, _, _, _ = dr.load_all()
     ambient = dr.ambient_rates()
     ordered = dr.rank_for_reader(findings, ambient)
     check("ranking drops nothing", len(ordered) == len(findings),
@@ -589,7 +591,7 @@ def main():
         real = (dr.OUT_DIR, bi.OUT, disc.OUT)
         dr.OUT_DIR, bi.OUT, disc.OUT = pathlib.Path(tmp), pathlib.Path(tmp), tmp
         try:
-            findings, _, _ = dr.load_all()
+            findings, _, _, _ = dr.load_all()
             index = bi.load()
             loaded = disc.load()
         finally:

@@ -8,7 +8,7 @@ prints exactly that. Exits 1 if any control fired (a false-alarm regression gate
     python discrimination.py
 """
 import sys, os, glob, json
-from workspace import OUT as WORKSPACE_OUT, results_files
+from workspace import OUT as WORKSPACE_OUT, results_files, read_artifact
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -29,8 +29,14 @@ def _frac(rate):
 def load():
     data = {}
     for fp in results_files(OUT):
-        d = json.load(open(fp, encoding="utf-8"))
-        data[d["meta"]["target"]] = d["results"]
+        d, why = read_artifact(fp)
+        if why:
+            print(f"  ! {os.path.basename(str(fp))} could not be read ({why}); this target is "
+                  f"not in the comparison below.", file=sys.stderr)
+            continue
+        tgt = (d.get("meta") or {}).get("target")
+        if tgt:
+            data[tgt] = d.get("results") or []
     return data
 
 
@@ -45,7 +51,9 @@ def benign_rates(target):
     if not os.path.exists(path):
         return None
     try:
-        d = json.load(open(path, encoding="utf-8"))
+        d = read_artifact(path)[0]
+        if d is None:
+            raise ValueError("unreadable")
     except Exception:
         return None
     rows = d.get("rows") or []

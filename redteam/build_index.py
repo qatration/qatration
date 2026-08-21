@@ -6,7 +6,7 @@ its scorecard. One page to open after a sweep.
 import glob, json, os, html, datetime
 from target import target_configs
 from pathlib import Path
-from workspace import OUT as WORKSPACE_OUT, results_files, verdict_for
+from workspace import OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact
 
 OUT = Path(WORKSPACE_OUT)
 SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", "none": "#1e6b3a",
@@ -46,10 +46,17 @@ def load(known=None):
     # same artifacts under "artifacts whose target did not resolve"; the difference was that
     # it said so and this did not, so one tool named the problem while the other published it.
     known = set(known or ())
-    rows, orphans = [], []
+    rows, orphans, unreadable = [], [], []
     for fp in results_files(OUT):
-        d = json.load(open(fp, encoding="utf-8"))
-        m = dict(d["meta"])
+        d, why = read_artifact(fp)
+        # An artifact that will not parse is not an empty artifact. Substituting `{}` here and
+        # carrying on turned a decode error into a KeyError one line down, which is a different
+        # crash rather than a fix; dropping it silently would remove a target from an index
+        # that then reads as complete.
+        if why:
+            unreadable.append((os.path.basename(str(fp)), why))
+            continue
+        m = dict(d.get("meta") or {})
         if known and m.get("target") not in known:
             orphans.append((os.path.basename(str(fp)), m.get("target")))
             continue
@@ -58,6 +65,11 @@ def load(known=None):
                       and (r.get("attack") or {}).get("category") != "control")
         m["broke_at_run"], m["broke"] = m.get("broke"), counted
         rows.append(m)
+    # UNREADABLE IS NOT ABSENT. A truncated artifact used to take this whole page down;
+    # skipping it silently would drop a target from an index that reads as the fleet.
+    for _name, _why in unreadable:
+        print("  ! %s could not be read (%s). It is not on the index, and nothing "
+              "there describes whatever it held." % (_name, _why))
     if orphans:
         print("  ! %d results file(s) skipped: no target config answers to that name, so they "
               "are artifacts of something that no longer exists rather than members of the "
@@ -171,8 +183,10 @@ def main():
     if adaptive:
         items = ""
         for fp in adaptive:
-            d = json.load(open(fp, encoding="utf-8"))
-            r = d["result"]
+            d, why = read_artifact(fp)
+            if why:
+                continue                       # reported by the results loop above
+            r = d.get("result") or {}
             ok = r.get("success")
             col = SEV["critical"] if ok else SEV["none"]
             verdict = (f"BROKEN in {r['iterations']} iters" if ok

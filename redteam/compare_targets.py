@@ -3,10 +3,10 @@ Cross-target overview — the discrimination story in one page: which systems ar
 exploitable and which are hardened, across the same arsenal. Reads every
 out/results_<target>.json (skips per-model copies) -> out/compare_targets.html.
 """
-import json, glob, os, html, datetime, yaml
+import json, glob, os, sys, html, datetime, yaml
 from pathlib import Path
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
-                       fleet_names, fleet_filter)
+                       fleet_names, fleet_filter, read_artifact)
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
@@ -161,13 +161,21 @@ def benign_noise():
     misbehave — so it is the same arsenal's oracle judging traffic that should produce
     nothing, on the same target, the same day.
     """
-    out = {}
+    out, unreadable = {}, []
     for fp in glob.glob(str(OUT_DIR / "benign_*.json")):
-        try:
-            m = json.load(open(fp, encoding="utf-8"))["meta"]
-            out[m["target"]] = (m.get("clean", 0), m.get("probes", 0))
-        except Exception:
+        d, why = read_artifact(fp)
+        if why:
+            unreadable.append((os.path.basename(str(fp)), why))
             continue
+        m = d.get("meta") or {}
+        if m.get("target"):
+            out[m["target"]] = (m.get("clean", 0), m.get("probes", 0))
+    # A baseline nobody could read is not a baseline of zero. This was `except Exception:
+    # continue`, so a truncated file removed a target's ambient rate from the page and the
+    # page went on presenting the remaining rates as the whole picture.
+    for name, why in unreadable:
+        print(f"  ! {name} could not be read ({why}); this target has no ambient rate below.",
+              file=__import__("sys").stderr)
     return out
 
 
@@ -195,12 +203,20 @@ def main():
     # whatever ever ran, so this page counted "32 systems" for a fleet of 30. `fleet_filter`
     # identifies the directory by its contents rather than its path: where nothing resolves,
     # this is a fixture's fleet and nothing is dropped.
-    _all_metas = []
+    # AN UNREADABLE ARTIFACT GETS NO VOTE. `fleet_filter` decides whether this directory belongs
+    # to the fleet by looking at what is in it, and this loop used to swallow a parse failure
+    # with `except Exception: pass` — so a file nobody could read still influenced that answer
+    # by its absence, and nothing said it had been dropped.
+    _all_metas, _unreadable = [], []
     for fp in results_files(OUT_DIR):
-        try:
-            _all_metas.append(json.load(open(fp, encoding="utf-8"))["meta"])
-        except Exception:
-            pass
+        _d, _why = read_artifact(fp)
+        if _why:
+            _unreadable.append((os.path.basename(str(fp)), _why))
+            continue
+        _all_metas.append(_d.get("meta") or {})
+    for _name, _why in _unreadable:
+        print(f"  ! {_name} could not be read ({_why}). It is not counted on this page, and "
+              f"nothing here describes whatever it held.", file=sys.stderr)
     if not _all_metas:
         print("no results in %s — run a sweep first, then this page has something to compare."
               % OUT_DIR)
@@ -208,7 +224,9 @@ def main():
     _keep, _ = fleet_filter(_all_metas, fleet_names())
     _keep_names = {(m or {}).get("target") for m in _keep}
     for fp in results_files(OUT_DIR):
-        d = json.load(open(fp, encoding="utf-8"))
+        d, _why = read_artifact(fp)
+        if _why:
+            continue                           # named once, by the metas pass above
         meta = d["meta"]
         if meta.get("target") not in _keep_names:
             continue

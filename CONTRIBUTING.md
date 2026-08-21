@@ -9,7 +9,7 @@ pip install -e .
 python tools/check.py
 ```
 
-Forty offline suites, about two minutes: no model, no network, no practice fleet. That
+Forty-one offline suites, about two minutes: no model, no network, no practice fleet. That
 is deliberate and worth protecting — a check that needs a GPU is a check nobody runs. It is the
 same command CI runs, so green locally means green on the pull request.
 

@@ -32,7 +32,7 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT
+from workspace import OUT as WORKSPACE_OUT, read_artifact
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
 try:
@@ -452,7 +452,11 @@ def rejudge(path):
     pure function of stored evidence is the wrong trade every single time.
     """
     from target import Probe
-    d = json.load(open(path, encoding="utf-8"))
+    d, why = read_artifact(path)
+    if why:
+        # Named by the caller, so there is nothing else to re-judge — but a decode error out
+        # of the json module tells them nothing about which file or what to do.
+        raise SystemExit(f"{path} could not be read ({why}). Nothing was re-judged.")
     _, ctx = _ctx_for(d["meta"]["target"])
     changed = []
     for r in d["rows"]:
@@ -509,8 +513,14 @@ def roll_up():
     reached = collections.Counter()
     ages = {}
     for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
-        d = json.load(open(fp, encoding="utf-8"))
-        t = d["meta"]["target"]
+        d, why = read_artifact(fp)
+        if why:
+            print(f"  ! {os.path.basename(fp)} could not be read ({why}); its age is unknown.",
+                  file=sys.stderr)
+            continue
+        t = (d.get("meta") or {}).get("target")
+        if not t:
+            continue
         targets.append(t)
         # A roll-up with no age reads as "this is how things are", and it is not: these
         # files are written hours apart and an oracle fix lands between them. dvla's run

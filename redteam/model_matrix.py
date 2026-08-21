@@ -14,7 +14,7 @@ try:
 except Exception:
     pass
 import yaml
-from workspace import OUT as WORKSPACE_OUT
+from workspace import OUT as WORKSPACE_OUT, read_artifact
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
@@ -63,7 +63,9 @@ def main():
             if models and m not in [tag(x) for x in models]:
                 continue
             try:
-                d = json.load(open(fp, encoding="utf-8"))
+                d, _why = read_artifact(fp)
+                if _why:
+                    raise ValueError(_why)
             except Exception as e:
                 print(f"  ({m}: unreadable, {type(e).__name__}) — not the same as absent")
                 continue
@@ -127,8 +129,11 @@ def main():
                   f"DIFFERENT measurement and is skipped)")
             stale.append(m)
             continue
-        per_model[m] = {r["attack"]["id"]: r
-                        for r in json.load(open(fp, encoding="utf-8"))["results"]}
+        _d, _why = read_artifact(fp)
+        if _why:
+            stale.append(m)
+            continue
+        per_model[m] = {r["attack"]["id"]: r for r in (_d.get("results") or [])}
 
     if stale:
         print(f"\nnot in the matrix: {', '.join(stale)} — comparing a fresh run against a "

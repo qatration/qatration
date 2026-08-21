@@ -213,3 +213,65 @@ def safe_target_name(name, where="target config"):
             f"out/results_<name>.json and out/history/<name>.jsonl, so letters, digits, dot, "
             f"dash and underscore only, up to 64 characters.")
     return name
+
+
+def read_artifact(path):
+    """One stored artifact, or the reason it could not be read. -> (data, None) | (None, why).
+
+    ONE READER, BECAUSE THERE WERE FIVE AND ALL FIVE DIED ON THE SAME FILE. `defense_report`,
+    `build_index`, `compare_targets`, `detector_coverage` and `sarif` each opened this directory
+    on their own, and a single truncated artifact took every one of them down with a raw
+    `JSONDecodeError` — no page, no index, no coverage number, and nothing naming the file.
+
+    A truncated artifact is not hypothetical: it is what an interrupted write leaves, and a
+    sweep stopped by hand produces one. The tool that exists to say when a measurement did not
+    happen should not be the one that cannot say which file it failed to read.
+
+    The two wrong answers are equally wrong and this returns neither:
+
+      * RAISING makes one bad file hide every good one, which is a coverage question answered
+        by a stack trace.
+      * SKIPPING silently removes a target from a report that then reads as complete — the
+        defect this whole project is named after, delivered to a customer in a remediation
+        page.
+
+    So: parse it, or say what stopped you, and let the caller decide out loud.
+    """
+    import json
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh), None
+    except (OSError, ValueError) as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def read_artifacts(paths):
+    """-> ({path: data}, [(path, why)]) — what parsed, and what did not, with the reason.
+
+    The second half is not an error channel to be ignored: every caller is expected to print it.
+    Returned rather than logged here, because where it belongs on a page is the page's business
+    and a library that writes to stderr on its own is one nobody can put behind a UI.
+    """
+    good, bad = {}, []
+    for p in paths:
+        data, why = read_artifact(p)
+        if why is None:
+            good[p] = data
+        else:
+            bad.append((p, why))
+    return good, bad
+
+
+def say_unreadable(bad, where="", stream=None):
+    """One sentence per unreadable artifact, in the one wording every caller should use.
+
+    A count is not enough — "3 files skipped" tells nobody which run to re-do.
+    """
+    import os as _os
+    import sys as _sys
+    stream = stream or _sys.stderr
+    for path, why in bad or ():
+        print(f"  ! {_os.path.basename(path)} could not be read ({why}). "
+              f"It is NOT counted{' in ' + where if where else ''}, and nothing below "
+              f"describes whatever it held.", file=stream)
+    return len(bad or ())

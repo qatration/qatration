@@ -6,6 +6,39 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## One bad file used to cost every file (2026-08-21)
+
+**Ten modules read `out/` and fourteen of those reads were bare.** A single truncated artifact
+took five tools down with a raw `JSONDecodeError` — no client report, no index, no comparison
+page, no coverage number, no SARIF — and none of them named the file. Two more swallowed the
+failure instead and carried on, which is worse: a remediation page silently short of a target
+reads as a clean bill for a system nobody looked at.
+
+A truncated artifact is not a hypothetical input. It is what an interrupted write leaves, and a
+sweep stopped by hand produces one; this repository produced one on the day this was written.
+
+`defense_report.load_all` had both halves of the mistake eight lines apart. The first pass read
+every artifact inside a `try` and substituted an EMPTY META on failure — which then went into
+`fleet_filter`, the function that decides whether this is the fleet's directory BY ITS CONTENTS,
+so a file nobody could read cast a vote on the answer. The second pass read the same files again
+with no handler at all and killed the report.
+
+`workspace.read_artifact` is the one reader now: it returns the data or the reason, and every
+caller says which file it lost. `sarif` refuses rather than skipping, because it is handed one
+file by name and an absent SARIF upload reads to a code-scanning dashboard as a clean scan.
+
+**The check that found most of it was written last.** Five tools were fixed by testing them; the
+other nine reads, in five files nobody had thought to test, were found by a derived check that
+asks whether any module opens a stored artifact without going through the shared reader. A list
+of files to check would have covered the ones somebody remembered.
+
+Two mistakes on the way, both worth recording because both looked like progress: routing the
+reads through the new function and writing `or {}` turned a decode error into a `KeyError` one
+line down, which is a different crash rather than a fix; and a regex meant to extend a
+parenthesised import matched only its first line, twice.
+
+---
+
 ## A second pass over the same ground (2026-08-21)
 
 **A gate that runs after the thing it guards is a record, not a control.** The authorization

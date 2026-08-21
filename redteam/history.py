@@ -28,7 +28,7 @@ import sys, os, json, glob, argparse, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, results_files
+from workspace import OUT as WORKSPACE_OUT, results_files, read_artifact
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
 HIST = os.path.join(OUT, "history")
@@ -220,8 +220,16 @@ def backfill():
     """
     made = 0
     for fp in results_files(OUT):   # per-model copies are the same run, twice
-        d = json.load(open(fp, encoding="utf-8"))
-        target = d["meta"]["target"]
+        d, why = read_artifact(fp)
+        if why:
+            # A run that cannot be read is not a run with no findings. Recording it as one
+            # would put a false "everything fixed" step into the timeline.
+            print(f"  ! {os.path.basename(str(fp))} could not be read ({why}); no timeline "
+                  f"entry was written for it.", file=sys.stderr)
+            continue
+        target = (d.get("meta") or {}).get("target")
+        if not target:
+            continue
         when = datetime.datetime.fromtimestamp(
             os.path.getmtime(fp)).isoformat(" ", "seconds")
         if any(r["run"] == when for r in load(target)):

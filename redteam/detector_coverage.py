@@ -17,7 +17,7 @@ import sys, os, glob, json, argparse, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, target_of
+from workspace import OUT as WORKSPACE_OUT, target_of, read_artifact
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -56,7 +56,7 @@ def contexts(collisions=None):
     return out
 
 
-def replay(unresolved=None, engines=None, attacks=None):
+def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
 
     `unresolved` collects artifacts whose target could not be matched to any config. They
@@ -66,6 +66,10 @@ def replay(unresolved=None, engines=None, attacks=None):
     """
     ctxs = contexts()
     hits, where, n = collections.Counter(), collections.defaultdict(set), 0
+    # ARTIFACTS THAT WOULD NOT PARSE. Collected rather than skipped, because a replay
+    # missing a file it could not read publishes a coverage number over less evidence
+    # than it claims — and this tool's entire output is that number.
+    unreadable = []
     broke = collections.Counter()
     # WHAT KIND of evidence demonstrated each detector. A fire under attack and a fire on
     # traffic nobody attacked both prove the detector works, and they say opposite things
@@ -100,7 +104,10 @@ def replay(unresolved=None, engines=None, attacks=None):
                 broke[name] += 1
 
     for fp in glob.glob(os.path.join(OUT, "results_*.json")):
-        d = json.load(open(fp, encoding="utf-8"))
+        d, _why = read_artifact(fp)
+        if _why:
+            unreadable.append((os.path.basename(fp), _why))
+            continue
         tgt = d["meta"]["target"]
         ctx = ctx_for(tgt, os.path.basename(fp))
         before = n
@@ -135,7 +142,10 @@ def replay(unresolved=None, engines=None, attacks=None):
     # because one of them derived its bucket from a filtered set rather than from everything
     # that happened.
     for fp in glob.glob(os.path.join(OUT, "benign_*.json")):
-        d = json.load(open(fp, encoding="utf-8"))
+        d, _why = read_artifact(fp)
+        if _why:
+            unreadable.append((os.path.basename(fp), _why))
+            continue
         tgt = (d.get("meta") or {}).get("target") or os.path.basename(fp)[7:-5]
         ctx = ctx_for(tgt, os.path.basename(fp))
         before = n
@@ -171,6 +181,8 @@ def replay(unresolved=None, engines=None, attacks=None):
                            tool_calls=[tuple(x) for x in (s.get("tool_calls") or [])]),
                      ctx, tgt)
         note_engine({"meta": iso_meta}, os.path.basename(fp), n - before)
+    if unreadable_out is not None:
+        unreadable_out.extend(unreadable)
     return hits, where, n, broke, sources
 
 
@@ -214,7 +226,8 @@ def main():
     unresolved, collisions, engines = [], [], []
     contexts(collisions)
     sent = set()
-    hits, where, n, broke, sources = replay(unresolved, engines, sent)
+    _unreadable_seen = []
+    hits, where, n, broke, sources = replay(unresolved, engines, sent, _unreadable_seen)
     demo = sorted(k for k in DETECTORS if hits[k])
     # Demonstrated ONLY on traffic nobody attacked is a different claim from demonstrated by
     # an attack, and the difference is the interesting one: the detector works, and what it
@@ -223,6 +236,9 @@ def main():
     declared = sorted(k for k in DETECTORS if not hits[k])
     unconfigured, untried = buckets(declared, broke)
 
+    for _name, _why in _unreadable_seen:
+        print(f"  ! {_name} could not be read ({_why}). Its probes are NOT in the "
+              f"numbers below.", file=sys.stderr)
     print(f"{len(DETECTORS)} detectors · {len(demo)} demonstrated · {len(declared)} declared "
           f"only   (replayed {n} stored probes, no model calls)")
 
