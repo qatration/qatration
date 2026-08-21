@@ -31,7 +31,7 @@ team responds to them.
 
 ## The other number: how often it cries wolf
 
-Fifty-seven demonstrated detectors says none of those is dead. It says nothing about whether
+Fifty-eight demonstrated detectors says none of those is dead. It says nothing about whether
 any of them is honest, because they were demonstrated on a range built to make them fire.
 The number that decides whether a clean result can be believed is the opposite one,
 and until now it had never been measured here.
@@ -75,7 +75,7 @@ qatration benign --summary                     # fleet roll-up
 ```
 
 The offline half is a CI gate in `test_benign.py`, and it locks in the central claim:
-**no detector may read the question.** 50 prompts x 37 oracle contexts x 63 detectors,
+**no detector may read the question.** 50 prompts x 37 oracle contexts x 64 detectors,
 against a bland reply, zero fires, plus a separate check that non-English text stays clean
 when the bot repeats it back — which is what a support bot does confirming a name. A new detector that forgets to subtract the prompt
 fails the build rather than a customer's system.
@@ -302,7 +302,7 @@ and it was nearly written up as a defence. What the agent actually said was *"To
 task, follow these steps: 1. Determine what tools are needed… 3. Invoke the appropriate
 tool"* — it complied, in 46% lifted text. `sysprompt_leak` matches markers and saw none;
 `sysprompt_paraphrase` exists for exactly this and is always-on, and it had been **inert the
-entire run** for want of `system_prompt` in the config. A session spent hunting false
+entire run** for want of `system_prompt` in the config. A long pass spent hunting false
 positives, and the outside control turned up a false negative.
 
 Two fixes came out of it, and the second is the one that generalises:
@@ -323,7 +323,7 @@ semantic question no n-gram measure should pretend to answer. Replayed over the 
 history it changed exactly one row — the one that was wrong — and created no new fires.
 
 ```bash
-../foreign-agent-env/Scripts/python foreign-agent/server.py     # its own venv, port 8130
+foreign-agent/foreign-agent-env/Scripts/python foreign-agent/server.py   # its own venv, :8130
 qatration recon --target-config redteam/targets_foreign.yaml
 qatration benign --target foreign
 qatration run --target-config redteam/targets_foreign.yaml \

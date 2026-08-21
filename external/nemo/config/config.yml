@@ -1,3 +1,13 @@
+# `max_tokens` ON EVERY MODEL, because this config does not go through `redteam/llm.py` and
+# that file's own note predicted it: "a limit that has to be remembered nine times is a limit
+# that will be missing from the tenth". Five of the seven standalone practice servers were
+# missing it. Without a cap, a generating attack runs to the engine's 180-second watchdog,
+# which abandons the thread WITHOUT closing the socket — so the model keeps decoding and every
+# later probe queues behind a request nobody is reading. Measured on the one bot that had
+# neither limit: six times 180 seconds for a single attack.
+#
+# 1024 is the number `llm.py` uses, with its reasoning: a red-team reply longer than a page is
+# a loop rather than an answer, and the shapes this engine sends are the ones that induce one.
 models:
   - type: main
     engine: openai
@@ -5,6 +15,7 @@ models:
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
   # STRONGER GUARD: the self-check rails judge with a 24B model instead of the 12B bot
   - type: self_check_input
     engine: openai
@@ -12,12 +23,14 @@ models:
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
   - type: self_check_output
     engine: openai
     model: mistral-small
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
 
 instructions:
   - type: general

@@ -148,6 +148,50 @@ oracle_context:
         check("the sweep runs end to end against a configured target",
               run.returncode == 0, (run.stderr or run.stdout)[-300:])
 
+        # --- THE EXIT CODES, MEASURED -----------------------------------------------------
+        #
+        # `test_readme.py` checks that every `sys.exit(N)` literal is in the documented table.
+        # It cannot see a path that RETURNS instead, and two of them did: "NO applicable
+        # attacks" and "NOTHING MEASURABLE" both printed, returned, and exited 0 — the code
+        # documented as "ran, and the gate you asked for was not tripped". The two states the
+        # engine itself calls measuring nothing were the two that rendered green.
+        #
+        # Driven through cli.py rather than the module, because that is where a string
+        # SystemExit becomes exit 2, and the contract is about what a CI sees.
+        _empty = os.path.join(work, "empty_arsenal.yaml")
+        with open(_empty, "w", encoding="utf-8") as f:
+            f.write("[]\n")
+        _malformed = os.path.join(work, "malformed_arsenal.yaml")
+        with open(_malformed, "w", encoding="utf-8") as f:
+            # A mapping where a list belongs. Iterating it yields its keys, which are strings,
+            # and `a.get(...)` on a string used to raise straight past the exit table into 1.
+            f.write("attacks: []\n")
+
+        def _code(arsenal):
+            # ITS OWN WORKSPACE. These runs write run records too, and dropping them beside
+            # the fixture's made the "the run left a record of itself" check downstream read
+            # the wrong one — a test polluting the state of the test next to it.
+            _w = tempfile.mkdtemp()
+            _env = dict(env, QATRATION_OUT=_w)
+            try:
+                r = subprocess.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                     "--target-config", cfg_path, "--attacks", arsenal,
+                     "--trials", "1", "--fail-on", "exploited"], timeout=300,
+                    capture_output=True, text=True, env=_env, cwd=os.path.dirname(HERE))
+            finally:
+                shutil.rmtree(_w, ignore_errors=True)
+            return r.returncode, (r.stderr or r.stdout or "")[-160:]
+
+        _rc, _out = _code(_empty)
+        check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
+              f"exit {_rc}: {_out}")
+        _rc2, _out2 = _code(_malformed)
+        check("an arsenal that is not a list is refused with exit 2, not raised as exit 1",
+              _rc2 == 2, f"exit {_rc2}: {_out2}")
+        check("...and a run that measured something is still 0",
+              run.returncode == 0, str(run.returncode))
+
         # 1. THE WORKSPACE ISOLATES. Nothing landed in the repo's own out/.
         wrote = sorted(os.path.basename(p) for p in glob.glob(os.path.join(work, "*")))
         check("every artifact lands in the run's own workspace",

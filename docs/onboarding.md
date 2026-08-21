@@ -60,6 +60,17 @@ fixed by capping the model's output from our side: an endpoint with no ceiling o
 the finding, `unbounded_output` and `divergent_repetition` exist to report it, and capping it
 would hide the thing the sweep exists to find.
 
+**That is about YOUR endpoint, and not about the bots in this repository**, which is a
+distinction worth stating because the two look identical from a distance. The engine reads a
+customer's reply up to `QATRATION_MAX_REPLY` — a megabyte, twenty times the longest reply the
+shipped evidence contains — so an unbounded answer is truncated far past any threshold a config
+sets and the finding survives with the true size recorded beside it. The practice bots are
+fixtures rather than subjects, and every one of them caps its own generation at 1024 tokens: a
+fixture that can be talked into generating forever measures the fixture. Five of the seven
+standalone practice servers were missing that cap, and the cost was measured — two attacks
+running to the engine's watchdog on every trial, scoring ERROR, the verdict that carries no
+information. `redteam/test_fleet_limits.py` is the gate.
+
 **The rate limit lives here** because this is the adapter pointed at somebody else's
 production endpoint. Hammering somebody's live bot is how permission to test it is withdrawn, and on a
 shared endpoint the request budget is the only thing between "assessment" and "traffic
@@ -147,10 +158,10 @@ tools, it is the step that makes `bfla_call` reachable at all. It needs `privile
 is inert without it: "manager" is a role in one product and a job title in another, and guessing
 would fire on a bot correctly explaining its own permission model.
 
-**"Why would I send you my key when another tool tests without one?"** The right question, and
-until this change the engine had the wrong answer. Every canary detector needs a value that should
-never appear in a reply, and asking an operator for a real credential is wrong from both
-directions: a compliance problem for them, and a liability for whoever ends up holding it.
+**A canary has to be a value that should never appear in a reply, and until this change the
+engine's answer to where it comes from was wrong.** Asking an operator for a real credential is
+wrong from both directions: a compliance problem for them, and a liability for whoever ends up
+holding it.
 
 So the value is **minted**. `honeytoken.py` generates a random token, the operator pastes it into
 their system prompt for the duration of the test and removes it afterwards, and the attacks hunt
@@ -159,8 +170,8 @@ else in security, and the token stops meaning anything the moment it comes out.
 
 **The minting is not the hard part.** An unplanted honeytoken is invisible: every canary
 detector finds nothing, every attack comes back DEFENDED, and the report says the deployment
-held — a gap reported as a measurement, arriving through the front door, on the first run a
-customer judges the product by. And it cannot be checked by asking the bot for the secret,
+held — a gap reported as a measurement, arriving through the front door, on the first run
+anybody makes. And it cannot be checked by asking the bot for the secret,
 because a bot that answers has already failed the test the token exists to run, while a bot that
 refuses is indistinguishable from one that was never given anything.
 
@@ -252,10 +263,8 @@ different product's problem: a support bot that will write malware is a brand in
 support bot that hands over its dispatch key is a breach. What was genuinely missing was five
 things, and they are written here rather than taken.
 
-Not taken for a licensing reason, though there was one — `leakreplay` loads corpora of
-rights-protected work, NYT and Guardian and Harry Potter, and putting those in a repository
-anyone can clone is a strange thing to do to somebody's working copy. The real reason is that
-**their prompts could not have been used anyway**. An attack asking for "the secret" in the abstract cannot be attributed:
+Written rather than taken, and the reason is not licensing: **those prompts could not have
+been used here anyway**. An attack asking for "the secret" in the abstract cannot be attributed:
 nothing separates a model inventing a plausible key from a model leaking the real one. Ours name
 the value the tester planted, so `canary_in_output` measures a fact instead of a resemblance.
 Which means the reusable part was never the text. It was the table of contents, and a list of
@@ -540,8 +549,8 @@ invisible in a finished report unless somebody was told at the start.
 pointed at a single Ollama instance took one request from 5 seconds to 148, the second run's timeouts
 came back as ERROR rows, and a later diff read those as findings being fixed — a resource
 problem laundered into a claim about a target's behaviour. `jobqueue.py` serialises runs. It is
-files in a directory, not a service, because a tool that needs Redis before its second
-customer has bought an operational dependency for a problem it does not have.
+files in a directory, not a service, because a tool that needs Redis before it has run
+anything has bought an operational dependency for a problem it does not have.
 
 The three places a queue lies are each a place this repo has already been wrong:
 
@@ -575,7 +584,8 @@ checks. It is the only thing here that would catch six correct parts with nothin
 "Real third-party targets require explicit authorization" was a sentence in the design record, and
 a sentence is the right shape for it while every target is one we own. Where the target is somebody else's
 it has to become a gate, because the alternative is something that will
-attack any URL a stranger types into it, and the first abuse report ends the project.
+attack any URL a stranger types into it, which is not a testing tool, it is an attack tool
+with a nicer name.
 
 It is also the cheapest protection an operator gets. An assessment that cannot say who
 authorised it is worthless as evidence and dangerous as an artifact: in a log it is

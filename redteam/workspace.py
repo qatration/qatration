@@ -188,3 +188,28 @@ def fleet_filter(metas, known=None):
     if not keep:
         return list(metas), []
     return keep, [m for m in metas if (m or {}).get("target") not in known]
+
+
+def safe_target_name(name, where="target config"):
+    """A target name that can be part of a filename, or a refusal saying why not.
+
+    THE NAME BECOMES A FILENAME: `results_<name>.json`, `report_<name>.html`,
+    `history/<name>.jsonl`, and the last is opened in append mode. `targets_http` wrote this
+    rule and this reasoning for itself, and four callers then assigned the raw config value
+    onto the target AFTER construction, which reinstated the problem for every adapter that
+    does not happen to be the HTTP one.
+
+    Restricted rather than escaped, because a name is a label somebody chose and there is no
+    reason for a label to need escaping.
+    """
+    import re as _re
+    name = str(name or "").strip()
+    if not name:
+        raise SystemExit(f"{where}: `name` is required — it labels the target in every result "
+                         f"file and in the run record.")
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,64}", name) or name.strip(".") == "":
+        raise SystemExit(
+            f"{where}: name={name!r} is not usable as a filename. It is interpolated into "
+            f"out/results_<name>.json and out/history/<name>.jsonl, so letters, digits, dot, "
+            f"dash and underscore only, up to 64 characters.")
+    return name

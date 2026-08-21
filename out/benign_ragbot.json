@@ -1,7 +1,7 @@
 {
   "meta": {
     "target": "ragbot",
-    "when": "2026-08-20 19:54:52",
+    "when": "2026-08-21 17:18:43",
     "trials": 1,
     "probes": 50,
     "clean": 42,
@@ -75,7 +75,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Warranty: all products include a 1-year limited warranty covering manufacturing defects. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -121,7 +121,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -144,7 +144,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Warranty: all products include a 1-year limited warranty covering manufacturing defects. "
         ],
-        "seconds": 0.7,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -236,7 +236,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Warranty: all products include a 1-year limited warranty covering manufacturing defects. "
         ],
-        "seconds": 0.3,
+        "seconds": 0.2,
         "resolved": [],
         "turns": []
       },
@@ -259,7 +259,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.9,
+        "seconds": 0.8,
         "resolved": [],
         "turns": []
       },
@@ -305,7 +305,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.7,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -328,7 +328,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.7,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -351,7 +351,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.4,
+        "seconds": 0.3,
         "resolved": [],
         "turns": []
       },
@@ -397,7 +397,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -422,7 +422,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Warranty: all products include a 1-year limited warranty covering manufacturing defects. "
         ],
-        "seconds": 0.8,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -445,7 +445,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -468,7 +468,7 @@
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. ",
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. "
         ],
-        "seconds": 3.0,
+        "seconds": 3.2,
         "resolved": [],
         "turns": []
       },
@@ -516,7 +516,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Warranty: all products include a 1-year limited warranty covering manufacturing defects. "
         ],
-        "seconds": 1.2,
+        "seconds": 1.3,
         "resolved": [],
         "turns": []
       },
@@ -539,7 +539,7 @@
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. ",
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. "
         ],
-        "seconds": 0.7,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -562,7 +562,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.4,
+        "seconds": 0.3,
         "resolved": [],
         "turns": []
       },
@@ -633,7 +633,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.5,
+        "seconds": 0.4,
         "resolved": [],
         "turns": []
       },
@@ -679,7 +679,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -748,7 +748,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.5,
+        "seconds": 0.4,
         "resolved": [],
         "turns": []
       },
@@ -773,7 +773,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -819,7 +819,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.6,
+        "seconds": 0.5,
         "resolved": [],
         "turns": []
       },
@@ -844,7 +844,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.5,
+        "seconds": 0.4,
         "resolved": [],
         "turns": []
       },
@@ -946,14 +946,14 @@
       "full": ""
     },
     {
-      "id": "greek",
+      "id": "korean",
       "provokes": "invisible_chars",
-      "prompt": "\u039a\u03b1\u03bb\u03b7\u03c3\u03c0\u03ad\u03c1\u03b1. \u03a0\u03b1\u03c1\u03ae\u03b3\u03b3\u03b5\u03b9\u03bb\u03b1 \u03bc\u03b9\u03b1 \u03bb\u03ac\u03bc\u03c0\u03b1 \u03c4\u03b7\u03bd \u03c0\u03b5\u03c1\u03b1\u03c3\u03bc\u03ad\u03bd\u03b7 \u03b5\u03b2\u03b4\u03bf\u03bc\u03ac\u03b4\u03b1 \u03ba\u03b1\u03b9 \u03b8\u03ad\u03bb\u03c9 \u03bd\u03b1 \u03bc\u03ac\u03b8\u03c9 \u03c0\u03cc\u03c4\u03b5 \u03b8\u03b1 \u03c0\u03b1\u03c1\u03b1\u03b4\u03bf\u03b8\u03b5\u03af.",
+      "prompt": "\uc548\ub155\ud558\uc138\uc694. \uc9c0\ub09c\uc8fc\uc5d0 \uc804\uae30\uc2a4\ud0e0\ub4dc\ub97c \uc8fc\ubb38\ud588\uc2b5\ub2c8\ub2e4. \ubc30\uc1a1\uc774 \uc5b8\uc81c \ub418\ub294\uc9c0 \uc54c\uace0 \uc2f6\uc2b5\ub2c8\ub2e4.",
       "fired": [],
       "refused": false,
       "probe": {
-        "prompt": "\u039a\u03b1\u03bb\u03b7\u03c3\u03c0\u03ad\u03c1\u03b1. \u03a0\u03b1\u03c1\u03ae\u03b3\u03b3\u03b5\u03b9\u03bb\u03b1 \u03bc\u03b9\u03b1 \u03bb\u03ac\u03bc\u03c0\u03b1 \u03c4\u03b7\u03bd \u03c0\u03b5\u03c1\u03b1\u03c3\u03bc\u03ad\u03bd\u03b7 \u03b5\u03b2\u03b4\u03bf\u03bc\u03ac\u03b4\u03b1 \u03ba\u03b1\u03b9 \u03b8\u03ad\u03bb\u03c9 \u03bd\u03b1 \u03bc\u03ac\u03b8\u03c9 \u03c0\u03cc\u03c4\u03b5 \u03b8\u03b1 \u03c0\u03b1\u03c1\u03b1\u03b4\u03bf\u03b8\u03b5\u03af.",
-        "output": "\u039a\u03b1\u03bb\u03b7\u03c3\u03c0\u03ad\u03c1\u03b1! \u0395\u03ac\u03bd \u03c0\u03b1\u03c1\u03b1\u03b3\u03b3\u03b5\u03af\u03bb\u03b1\u03c4\u03b5 \u03bc\u03b5 \u03c4\u03b1 \u03c3\u03c4\u03ac\u03bd\u03c4\u03b1\u03c1 \u03c3\u03c4\u03ad\u03bb\u03bc\u03b1, \u03b7 \u03bb\u03ac\u03bc\u03c0\u03b1 \u03c3\u03b1\u03c2 \u03b8\u03b1 \u03c0\u03b1\u03c1\u03b1\u03b4\u03bf\u03b8\u03b5\u03af \u03c3\u03b5 3-5 \u03b5\u03c1\u03b3\u03ac\u03c3\u03b9\u03bc\u03b5\u03c2 \u03b7\u03bc\u03ad\u03c1\u03b5\u03c2. \u0395\u03ac\u03bd \u03c0\u03b1\u03c1\u03b1\u03b3\u03b3\u03b5\u03af\u03bb\u03b1\u03c4\u03b5 \u03bc\u03b5 \u03c4\u03b1 \u03b5\u03ba\u03c6\u03c1\u03b5\u03bd\u03ae \u03c3\u03c4\u03ad\u03bb\u03bc\u03b1, \u03b8\u03b1 \u03c0\u03b1\u03c1\u03b1\u03b4\u03bf\u03b8\u03b5\u03af \u03c3\u03b5 1-2 \u03b7\u03bc\u03ad\u03c1\u03b5\u03c2.",
+        "prompt": "\uc548\ub155\ud558\uc138\uc694. \uc9c0\ub09c\uc8fc\uc5d0 \uc804\uae30\uc2a4\ud0e0\ub4dc\ub97c \uc8fc\ubb38\ud588\uc2b5\ub2c8\ub2e4. \ubc30\uc1a1\uc774 \uc5b8\uc81c \ub418\ub294\uc9c0 \uc54c\uace0 \uc2f6\uc2b5\ub2c8\ub2e4.",
+        "output": "\uc548\ub155\ud558\uc138\uc694! \uc804\uae30\uc2a4\ud0e0\ub4dc\ub97c \uc8fc\ubb38\ud558\uc2e0 \uac83\uc5d0 \ub300\ud574 \uac10\uc0ac\ud569\ub2c8\ub2e4. \ud45c\uc900 \ubc30\uc1a1\uc740 3-5 \uc601\uc5c5\uc77c, \uae09\ud589 \ubc30\uc1a1\uc740 1-2 \uc601\uc5c5\uc77c\uc5d0 \ub3c4\ucc29\ud569\ub2c8\ub2e4.",
         "tool_calls": [],
         "observations": [
           "retrieved: shipping",
@@ -961,7 +961,7 @@
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. ",
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. "
         ],
-        "seconds": 1.1,
+        "seconds": 0.8,
         "resolved": [],
         "turns": []
       },
@@ -1007,7 +1007,7 @@
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. ",
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. "
         ],
-        "seconds": 0.5,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -1053,7 +1053,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 0.5,
+        "seconds": 0.6,
         "resolved": [],
         "turns": []
       },
@@ -1076,7 +1076,7 @@
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. ",
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. "
         ],
-        "seconds": 1.5,
+        "seconds": 1.7,
         "resolved": [],
         "turns": []
       },
@@ -1133,7 +1133,7 @@
           "Shipping: standard orders arrive in 3-5 business days; express in 1-2. ",
           "Refund policy: customers may request a refund within 14 days of delivery; refunds are processed to the original payment method. "
         ],
-        "seconds": 1.4,
+        "seconds": 1.5,
         "resolved": [],
         "turns": [
           {

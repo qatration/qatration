@@ -1,8 +1,8 @@
 """
 Model matrix — run ONE agent target across several models and compare how each
-holds up. This is the "threat-class x model-strength" view no output-quality tool
-gives: for some classes a bigger model is safer (it resists a talked-into action),
-for others size buys nothing (a secret it can see, it leaks). Only works on the
+holds up. A threat-class by model-strength view: for some classes a bigger model is
+safer, because it resists being talked into an action; for others size buys nothing,
+because a secret it can see is a secret it leaks. Only works on the
 LOCAL AGENT adapters (the http-backed bots bake their model into the server).
 
     python model_matrix.py --target-config targets_memorybot_naive.yaml \

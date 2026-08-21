@@ -2,9 +2,9 @@
 Which detectors have actually caught something, and which are only declared.
 
 A detector with a green unit test and no live hit is a claim, not a capability — the same
-thing this tool says about an untested guardrail, turned on itself. Other tools publish a
-plugin count; none of them publish how many of those plugins have ever fired. This is the
-number that matters more than the count.
+thing this tool says about an untested guardrail, turned on itself. A count of detectors
+says how many were written. This says how many have ever fired against a live target, which is
+the only one of the two that describes a capability.
 
 It replays every stored artifact (sweeps AND lock maps) through the current oracle, so it
 costs no GPU and stays honest as both sides change: a new detector starts as declared, and
@@ -56,11 +56,13 @@ def contexts(collisions=None):
     return out
 
 
-def replay(unresolved=None, engines=None):
+def replay(unresolved=None, engines=None, attacks=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
 
     `unresolved` collects artifacts whose target could not be matched to any config. They
     used to fall back to an empty context, which reads as a clean scan of real evidence.
+    `attacks` collects every attack id that has a stored trial, for the arsenal line — an
+    out-parameter like the other two, so the return shape stays what every caller expects.
     """
     ctxs = contexts()
     hits, where, n = collections.Counter(), collections.defaultdict(set), 0
@@ -103,6 +105,9 @@ def replay(unresolved=None, engines=None):
         ctx = ctx_for(tgt, os.path.basename(fp))
         before = n
         for r in d.get("results", []):
+            if attacks is not None:
+                _a = r.get("attack") or {}
+                attacks.add(_a.get("id") if isinstance(_a, dict) else _a)
             for t in r.get("trials", []):
                 pd = t.get("probe") or {}
                 if not pd:
@@ -208,7 +213,8 @@ def main():
 
     unresolved, collisions, engines = [], [], []
     contexts(collisions)
-    hits, where, n, broke, sources = replay(unresolved, engines)
+    sent = set()
+    hits, where, n, broke, sources = replay(unresolved, engines, sent)
     demo = sorted(k for k in DETECTORS if hits[k])
     # Demonstrated ONLY on traffic nobody attacked is a different claim from demonstrated by
     # an attack, and the difference is the interesting one: the detector works, and what it
@@ -218,7 +224,26 @@ def main():
     unconfigured, untried = buckets(declared, broke)
 
     print(f"{len(DETECTORS)} detectors · {len(demo)} demonstrated · {len(declared)} declared "
-          f"only   (replayed {n} stored probes, no model calls)\n")
+          f"only   (replayed {n} stored probes, no model calls)")
+
+    # THE SAME QUESTION ABOUT THE ARSENAL, and nothing was asking it. This tool has always
+    # separated a detector that has caught something from one that has only been written, on
+    # the grounds that the second is a claim rather than a capability. An attack that has never
+    # been SENT is the same claim, and the arsenal size is a number this project publishes.
+    #
+    # Free to compute here: the artifacts are already open and already indexed by attack id.
+    try:
+        import yaml as _yaml
+        _arsenal = {a["id"] for a in
+                    (_yaml.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
+                                          encoding="utf-8")) or [])}
+        _sent = sent & _arsenal
+        print(f"{len(_arsenal)} attacks in the portable arsenal · {len(_sent)} with a stored "
+              f"trial · {len(_arsenal - _sent)} never sent against anything")
+    except Exception as _e:
+        # Said, not swallowed: a count that failed to compute must not read as a count of zero.
+        print(f"(the arsenal count could not be computed: {type(_e).__name__}: {_e})")
+    print()
     print("DEMONSTRATED — caught something on a live target")
     for k in sorted(demo, key=lambda x: -hits[x]):
         tg = ", ".join(sorted(where[k])[:3])

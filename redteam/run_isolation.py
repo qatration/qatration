@@ -27,7 +27,7 @@ from compose import compose, format_compose
 
 
 from run_redteam import load_target as _build_target
-from workspace import OUT as WORKSPACE_OUT
+from workspace import OUT as WORKSPACE_OUT, safe_target_name
 
 
 def load_target(cfg_path, model=None):
@@ -35,11 +35,20 @@ def load_target(cfg_path, model=None):
     to add a target, both entry points get it."""
     with open(cfg_path, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    # AUTHORISATION FIRST, before a target is even built. Isolation sends real traffic — a
+    # separate probe per defence, several trials each — so it is exactly as much somebody
+    # else's system as a sweep is. The gate lived in the sweep and the benign run and not
+    # here, while the documentation said "any non-local target".
+    from authorization import gate as _auth_gate
+    _auth_gate(tcfg, "isolation")
     if model:
         tcfg["model"] = model
     target = _build_target(tcfg)
     if tcfg.get("name"):
-        target.name = tcfg["name"]
+        # Through the shared rule: this assignment used to hand the raw config
+        # value to an adapter that never validates it, and the name becomes a
+        # filename in six places, one of them an append.
+        target.name = safe_target_name(tcfg["name"], "target config")
     return target, tcfg.get("oracle_context", {})
 
 

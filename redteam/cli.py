@@ -2,8 +2,8 @@
 
 Until this existed the answer to "how do I run it" was: clone the repository, work out which
 interpreter has the dependencies, and invoke a module by path. That is not a tool, it is a
-checkout. Competing scanners are one `pip install` and one word, and somebody evaluating three
-of them in an evening never reaches the one that asks for a clone.
+checkout, and the difference is not cosmetic: an install has one failure mode and a checkout
+has as many as there are machines.
 
     pip install qatration
     qatration onboard --target-config mybot.yaml     # check the config against the live endpoint

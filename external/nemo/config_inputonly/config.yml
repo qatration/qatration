@@ -1,3 +1,6 @@
+# `max_tokens` on every model — see `../config/config.yml` for why. This build differs from
+# that one in its rails, not in its limits, and a cap missing from one of a matched pair is
+# a difference between two runs that is not the variable under test.
 models:
   - type: main
     engine: openai
@@ -5,6 +8,7 @@ models:
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
   # STRONGER GUARD: the self-check rails judge with a 24B model instead of the 12B bot
   - type: self_check_input
     engine: openai
@@ -12,12 +16,14 @@ models:
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
   - type: self_check_output
     engine: openai
     model: mistral-small
     parameters:
       base_url: http://localhost:11434/v1
       api_key: ollama
+      max_tokens: 1024
 
 instructions:
   - type: general

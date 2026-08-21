@@ -3,7 +3,7 @@
 Minting a random string is not the hard part. The hard part is that an UNPLANTED token is
 invisible: every canary detector finds nothing, every attack comes back DEFENDED, and the
 report says the deployment held. A gap reported as a measurement, arriving through the front
-door, on the run a customer judges the product by.
+door, on the first run anybody makes.
 
     python test_honeytoken.py       # exits 1 on any failure (CI gate)
 """

@@ -184,7 +184,8 @@ model version underneath you is the common one. Different questions, different b
 
 ### What it costs in money
 
-Time is the visible cost; the bill is the one that decides whether this survives a quarter.
+Time is the visible cost. The token bill is the one that decides whether a check keeps
+running after the first month, so it is measured here rather than waved at.
 
 The token volumes below are measured rather than estimated: attack payloads from the corpus
 itself, and reply lengths from **1,259 stored replies** in `out/`. Prices are Anthropic's, per
@@ -360,8 +361,8 @@ unfinished part of it.
 Everything this tool produces is a file next to whoever ran it: `results_<target>.json`, the HTML
 scorecard, `benign_<target>.json`, `history/<target>.jsonl`. All of it is a description of what
 can be made to go wrong in your deployment, which makes it the most sensitive artifact your
-security testing produces. A service that stored it would be asking you to hand exactly that to
-a third party, in exchange for holding a file you already have.
+security testing produces. Anything that stored it elsewhere would be holding a map of your
+exploitable surface on a machine you do not control.
 
 So the engine runs on your machine or in your CI, against your own endpoint, under your own key.
 Consequences worth stating plainly, because they are the point:

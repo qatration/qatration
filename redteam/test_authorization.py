@@ -2,8 +2,8 @@
 
 On an endpoint anyone can submit to, "real third-party targets require explicit
 authorization" stops being a sentence in a README and becomes the only thing between a
-security tool and something that will attack any URL a stranger types into it. The first
-abuse report ends the project.
+security tool and something that will attack any URL a stranger types into it. Nothing about
+the traffic distinguishes the two; only the gate does.
 
 So the checks below are about the ways a gate can look like a gate and not be one: a token
 that authorises a different target, a proof that expired, a checkbox standing in for
@@ -146,9 +146,85 @@ def main():
     # engine went into the sweep and not into benign.py, and the very next run used the other
     # door. A benign baseline is still traffic against somebody's production endpoint, and it
     # is what every attribution claim on that target is measured against.
-    for entry in ("run_redteam.py", "benign.py"):
-        src = open(os.path.join(HERE, entry), encoding="utf-8").read()
-        check(f"{entry} calls the authorization gate", "_auth_gate(" in src)
+    # DERIVED, not listed. The version above this one named two files, under this same comment
+    # saying EVERY, and while it watched those two the gate was missed by `run_recon.py`,
+    # `run_isolation.py`, `run_generate.py` and `run_adaptive.py` — four more commands that take
+    # a target config and send real traffic, one of which the documentation tells a reader to
+    # run first. A list covers the doors somebody remembered; this covers the ones that exist.
+    import glob as _glob
+    doors = []
+    for _p in sorted(_glob.glob(os.path.join(HERE, "*.py"))):
+        _name = os.path.basename(_p)
+        if _name.startswith("test_"):
+            continue
+        _src = open(_p, encoding="utf-8").read()
+        # A DOOR IS A MODULE THAT CAN SEND, not one that can be handed a config. Taking
+        # `--target-config` alone caught `sarif.py`, which reads a stored result and quotes the
+        # oracle context into a notification without ever opening a socket. What makes a door
+        # is BUILDING a target — that is the object with `.send()` on it — or spawning a sweep.
+        _takes_cfg = '"--target-config"' in _src or "'--target-config'" in _src
+        _builds = "_build_target(" in _src or "load_target(" in _src
+        _spawns = "run_redteam.py" in _src and "subprocess" in _src
+        if _takes_cfg and (_builds or _spawns):
+            doors.append((_name, _src))
+    check("more than one entry point was found to check", len(doors) > 1, str(len(doors)))
+    # A door is gated if it asks, OR if it hands the target to something that asks.
+    # `run_all.py` and `model_matrix.py` take a target config and send nothing themselves:
+    # they spawn `run_redteam.py`, which gates per target. Requiring a second gate in the
+    # parent would be a check nobody can satisfy honestly, and a check that cannot be
+    # satisfied is one somebody deletes.
+    for entry, src in doors:
+        asks = "_auth_gate(" in src or "authorization.gate(" in src
+        delegates = "run_redteam.py" in src and "subprocess" in src
+        check(f"{entry} gates the target, or hands it to something that does",
+              asks or delegates,
+              "neither calls authorization.gate nor spawns run_redteam.py")
+    # --- AND IT ASKS BEFORE IT BUILDS -------------------------------------------------------
+    #
+    # "Calls the gate" is not the property; "calls the gate before doing anything the gate is
+    # meant to prevent" is. In `run_redteam.py` the call sat twenty lines below the
+    # construction, and construction is not inert: the HTTP adapter expands `${VAR}` in its
+    # headers there, so an unauthorised config could already tell which of the operator's
+    # environment variables were set from the difference between "expanded" and "not set in this
+    # shell", and other adapters here open connections and start processes in their constructors.
+    #
+    # By line number from the parse tree, not by string position, so a paragraph like this one
+    # naming `_build_target(` cannot move the answer.
+    import ast as _ast
+    GATES = ("_auth_gate", "gate")
+    BUILDERS = ("_build_target", "load_target", "load_target_or_explain")
+
+    def _calls(node, names):
+        out = []
+        for n in _ast.walk(node):
+            if not isinstance(n, _ast.Call):
+                continue
+            f = n.func
+            nm = f.id if isinstance(f, _ast.Name) else getattr(f, "attr", None)
+            if nm in names:
+                out.append(n.lineno)
+        return sorted(out)
+
+    for entry, src in doors:
+        try:
+            tree = _ast.parse(src)
+        except SyntaxError:
+            continue
+        # SCOPED TO THE FUNCTION THAT GATES, because a module-wide minimum answers the wrong
+        # question: `load_target_or_explain` is itself defined in `run_redteam.py` and calls
+        # `load_target` inside its own body, at a line number far above `main`. That is the
+        # definition of the builder, not a use of it before the gate, and reporting it would
+        # be a false positive — which in a gate is not a small cost. It is the reason people
+        # stop reading one.
+        for fn in [n for n in _ast.walk(tree)
+                   if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]:
+            gates = _calls(fn, GATES)
+            if not gates:
+                continue
+            builds = [b for b in _calls(fn, BUILDERS) if b < gates[0]]
+            check(f"{entry}: {fn.name}() asks before it builds a target",
+                  not builds, f"builds at line(s) {builds}, gate at {gates[0]}")
+
     rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
     check("the sweep stores the authorization record beside the findings",
           '"authorization": _auth' in rr)
@@ -161,6 +237,23 @@ def main():
     # its own metadata endpoint, on request. The same predicate that waives the gate in
     # one mode has to refuse in the other, which is the kind of inversion that gets shipped
     # backwards, so it is gated here rather than reasoned about.
+    # A RESOLVER THAT ANSWERS OFFLINE. `.example` does not resolve anywhere — that is what the
+    # TLD is for — and a CI runner resolves nothing at all, so a suite that let the real
+    # resolver run here would fail on the runner and pass on a laptop, which is worse than not
+    # testing it. The seam is the resolver alone; every address still goes through the shipped
+    # policy, and the shipped default is pinned two checks below so a stub here cannot become
+    # the stub in production.
+    #
+    # 8.8.8.8 rather than a documentation address: 203.0.113.0/24 and 198.51.100.0/24 are both
+    # `is_private` to `ipaddress`, so a stub returning one would prove the opposite of what it
+    # was written to prove.
+    def resolves_to(*addrs):
+        def _r(host, port):
+            return [(2, 1, 6, "", (a, port)) for a in addrs]
+        return _r
+
+    PUBLIC = resolves_to("8.8.8.8")
+
     ALLOW = ("https://api.acme.example/chat", "http://172.15.0.1/ok",
              "https://11.0.0.1/v1/chat")
     REFUSE = ("http://localhost:8140/chat", "http://127.0.0.1/x", "http://[::1]:9/x",
@@ -169,9 +262,45 @@ def main():
               "http://db.cluster.local/q", "file:///etc/passwd", "ftp://h/x", "notaurl")
     for u in ALLOW:
         check(f"hosted: a customer endpoint is reachable — {u}",
-              az.unreachable_by_policy(u) is None, str(az.unreachable_by_policy(u)))
+              az.unreachable_by_policy(u, PUBLIC) is None,
+              str(az.unreachable_by_policy(u, PUBLIC)))
     for u in REFUSE:
-        check(f"hosted: refused — {u}", az.unreachable_by_policy(u) is not None)
+        check(f"hosted: refused — {u}", az.unreachable_by_policy(u, PUBLIC) is not None)
+
+    # --- A NAME IS AN ADDRESS SOMEBODY ELSE CHOOSES ----------------------------------------
+    #
+    # Every entry in REFUSE spells its address in the URL, and the gate used to check only what
+    # was spelled. `http://metadata.attacker.example/` with an A record of 169.254.169.254 is a
+    # one-line walk around that whole table — no timing, no second answer, nothing to race. The
+    # name resolves and every answer goes through the same address check.
+    check("hosted: a name resolving to the metadata address is refused",
+          az.unreachable_by_policy("https://metadata.attacker.example/x",
+                                   resolves_to("169.254.169.254")) is not None)
+    check("hosted: a name resolving into private space is refused",
+          az.unreachable_by_policy("https://vpn.acme.example/x",
+                                   resolves_to("10.1.2.3")) is not None)
+    # The half that a single-answer check misses: one good record and one bad one is still a
+    # request the service must not make, and `getaddrinfo` returns both.
+    check("hosted: one public answer does not excuse a private one",
+          az.unreachable_by_policy("https://split.acme.example/x",
+                                   resolves_to("8.8.8.8", "127.0.0.1")) is not None)
+    # ABSENT IS NOT CLEAN. A resolver that cannot answer has said nothing about where the name
+    # points, and "no answer" read as "no problem" is this project's own defect class.
+    def _dead(host, port):
+        raise OSError("no answer")
+    check("hosted: a name that does not resolve is refused, not waved through",
+          az.unreachable_by_policy("https://nowhere.acme.example/x", _dead) is not None)
+    check("hosted: ...and a name resolving to nothing at all is refused",
+          az.unreachable_by_policy("https://empty.acme.example/x", resolves_to()) is not None)
+
+    # THE STUB ABOVE MUST NOT BE THE PRODUCTION PATH. Every check in this section supplies its
+    # own resolver, so nothing here would notice if the shipped default were removed, made
+    # permissive, or left as a stub after a debugging session.
+    import socket as _socket
+    check("the shipped resolver is the real one",
+          az._resolve.__module__ == az.__name__
+          and _socket.getaddrinfo.__name__ in az._resolve.__code__.co_names,
+          f"_resolve calls {az._resolve.__code__.co_names}")
 
     # --- THE SPELLING IS GENERATED, NOT REMEMBERED ------------------------------------------
     #
@@ -209,7 +338,7 @@ def main():
     for label, quad in MUST_REFUSE.items():
         for host in spellings(*quad):
             tried += 1
-            if az.unreachable_by_policy(f"http://{host}/latest/meta-data/") is None:
+            if az.unreachable_by_policy(f"http://{host}/latest/meta-data/", PUBLIC) is None:
                 slipped.append(f"{label}: {host}")
     check(f"every spelling of an address that must never be reached is refused ({tried} forms)",
           not slipped, str(slipped[:6]))
@@ -217,7 +346,7 @@ def main():
     # IPv6 forms that have no dotted-quad equivalent, and are the same three addresses.
     V6 = ["[::1]", "[0:0:0:0:0:0:0:1]", "[0000:0000:0000:0000:0000:0000:0000:0001]",
           "[::]", "[fd00::1]", "[fe80::1]"]
-    v6_slipped = [h for h in V6 if az.unreachable_by_policy(f"http://{h}/x") is None]
+    v6_slipped = [h for h in V6 if az.unreachable_by_policy(f"http://{h}/x", PUBLIC) is None]
     check("...and the IPv6 spellings of loopback, unspecified, ULA and link-local",
           not v6_slipped, str(v6_slipped))
 
@@ -226,8 +355,12 @@ def main():
     REACHABLE = ["https://api.openai.com/v1/chat", "https://api.anthropic.com/v1/messages",
                  "https://bedrock-runtime.us-east-1.amazonaws.com/model/x/invoke",
                  "https://bot.acme.example/chat", "http://8.8.8.8/x", "https://1.1.1.1/x"]
-    wrongly = [(u, az.unreachable_by_policy(u)) for u in REACHABLE
-               if az.unreachable_by_policy(u) is not None]
+    # Through the stub, like every other check in this section. These are real names and this
+    # machine resolves them; a CI runner with no DNS does not, and a suite that passes on a
+    # laptop and fails on the runner is how a gate gets switched off. The names stay because
+    # they say what the check is about — these are the endpoints a customer actually points at.
+    wrongly = [(u, az.unreachable_by_policy(u, PUBLIC)) for u in REACHABLE
+               if az.unreachable_by_policy(u, PUBLIC) is not None]
     check("a real endpoint is still reachable", not wrongly, str(wrongly[:3]))
 
     # The one address that matters most, called out by name because a generic "link-local"

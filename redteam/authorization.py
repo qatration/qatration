@@ -3,8 +3,9 @@
 Everything in this repo so far has run against the practice targets it ships, and the README says so in the
 one place it matters: *real third-party targets require explicit authorization (bug-bounty
 scope or proof of ownership)*. That sentence is a promise made to a reader. In a tool
-anyone can point at anything, it has to become a gate, because the alternative is something that
-will attack any URL a stranger types into it — and the first abuse report ends the project.
+anyone can point at anything, it has to become a gate, because the alternative is something
+that will attack any URL a stranger types into it, which is not a testing tool but an attack
+tool with a nicer name.
 
 It is also the cheapest possible protection for the operator. An assessment that cannot show
 who authorised it is worthless as evidence and dangerous as an artifact: it is
@@ -26,10 +27,15 @@ of a claim is what every abusive scan already has.
 An expired proof is not a proof: the token carries the run it was issued for and the day it
 was issued, and a stale one is refused with the reason rather than accepted with a warning.
 """
-import datetime, hashlib, hmac, json, os, re, urllib.request
+import datetime, hashlib, hmac, json, os, re, urllib.error, urllib.request
 
 TOKEN_RE = re.compile(r"^qat-[0-9a-f]{32}$")
 WELL_KNOWN = "/.well-known/qatration-authorization"
+
+# The proof file holds one token of 36 characters. Anything past this is not the proof, and
+# reading to EOF would let the origin under test decide how much memory the gate uses — before
+# the gate has decided whether that origin may be touched at all.
+_MAX_WELL_KNOWN = 4096
 MAX_AGE_DAYS = 14
 
 
@@ -122,9 +128,40 @@ def check(cfg, secret, fetch=None):
     return False, f"unknown authorization.method: {method!r}"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect does not carry the proof, so following one cannot prove anything.
+
+    `urlopen` follows redirects by default, and `unreachable_by_policy` runs once, on the URL in
+    the config. A stranger who submits a hosted scan can therefore pass the gate with an address
+    that is genuinely public and have it answer `302 -> http://169.254.169.254/`, which the
+    fetch follows out of the operator's own network. Nothing comes back to the attacker — the
+    caller only reports whether the token was in the body — but the request is still made, from
+    inside, on request, which is the whole of a blind SSRF.
+
+    Re-checking the new URL and continuing would close that, and it would still be the wrong
+    thing to do here. The well-known probe asks ONE question: does whoever controls this origin
+    publish a token for it. A redirect means this origin does not serve that file, and a token
+    found at the end of a hop proves control of wherever the hop landed. So the refusal is not a
+    safety tax on a working check — following would make the check unsound.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"redirected to {newurl!r}; the well-known probe is not followed across hosts, "
+            f"because a token served by the redirect target proves control of that host and "
+            f"not of the origin under test — publish {WELL_KNOWN} on the origin itself",
+            headers, fp)
+
+
+# No redirects, no cookies, no proxy inherited from the environment — the last of those because
+# a proxy is a third party that gets to see the probe and choose what answers it.
+_OPENER = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
+
+
 def _http_get(url, timeout=10):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+    with _OPENER.open(url, timeout=timeout) as r:
+        return r.read(_MAX_WELL_KNOWN + 1)[:_MAX_WELL_KNOWN].decode("utf-8", "replace")
 
 
 def record(cfg, sentence, secret_id="local"):
@@ -230,7 +267,52 @@ def _as_address(host):
     return None
 
 
-def unreachable_by_policy(url):
+def _address_refused(ip):
+    """Why a hosted service must not connect to this address, or None.
+
+    One table, reached both by a URL that spells an address outright and by a name that resolves
+    to one. Two copies would be two things to update, and the stale copy is the one that gets
+    used.
+    """
+    if ip.is_loopback or ip.is_unspecified:
+        return "a loopback address is this machine, not the target endpoint"
+    if ip.is_link_local:
+        return ("link-local, and 169.254.169.254 is the cloud metadata service — the one "
+                "address a scanner must never be pointed at")
+    if ip.is_private or ip.is_reserved or ip.is_multicast:
+        return "a private address is inside somebody's network, not on it"
+    # Two ranges `ipaddress` does not call private and a scanner still must not reach:
+    # 100.64.0.0/10 is carrier-grade NAT, where the neighbours are other customers of the same
+    # ISP, and 198.18.0.0/15 is reserved for benchmarking. Both are somebody's inside.
+    import ipaddress as _ip
+    for net in ("100.64.0.0/10", "198.18.0.0/15"):
+        if ip.version == 4 and ip in _ip.ip_network(net):
+            return "a private address is inside somebody's network, not on it"
+    # An IPv4 address wearing an IPv6 coat: `::ffff:127.0.0.1` and `64:ff9b::7f00:1` are
+    # loopback with two extra colons, and neither is loopback to `ipaddress`.
+    mapped = getattr(ip, "ipv4_mapped", None) or getattr(ip, "sixtofour", None)
+    if mapped is not None:
+        return _address_refused(mapped)
+    return None
+
+
+def _resolve(host, port):
+    """The default resolver. Named so a deployment can pin the answer and a test can supply one.
+
+    Tests need it because the addresses reserved for documentation — `api.acme.example` — do not
+    resolve anywhere, which is the entire point of that TLD; and an offline CI runner resolves
+    nothing at all. A test suite that could only exercise this by reaching the network would
+    either be skipped or be a network test wearing a unit test's name.
+
+    The seam is at the resolver and not at the policy: every caller still goes through the same
+    address table, and `test_authorization` asserts that the shipped default is this function, so
+    a stub in a test cannot quietly become the stub in production.
+    """
+    import socket
+    return socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+
+
+def unreachable_by_policy(url, resolve=None):
     """Why a hosted service must refuse this URL, or None.
 
     THE LOCAL RULE INVERTS THE MOMENT THIS IS A SERVICE, and getting that backwards would be
@@ -245,11 +327,20 @@ def unreachable_by_policy(url):
     `[0:0:0:0:0:0:0:1]`. Twelve such URLs went through it and twelve were allowed. Spelling is
     the attacker's choice; the address is not, so the address is what is checked.
 
-    NAMES ARE NOT RESOLVED, and that is a real hole rather than a design. DNS can answer
-    differently the second time, so resolving here would be a check the network can invalidate
-    between this call and the connection. There is no socket-level defence in this repository
-    to fall back on: a name that resolves into private space is accepted. Say so in any config
-    review rather than implying the gate covers it.
+    NAMES ARE RESOLVED, AND THAT CHECK IS RACEABLE. The earlier version did not resolve at all,
+    on the argument that a check DNS can invalidate between this call and the connection is not
+    a check. The argument is half right and it produced the wrong behaviour: it left `http://
+    metadata.attacker.example/` — an ordinary name with an A record of 169.254.169.254 — a
+    one-line bypass of the entire address table above, needing no timing and no second answer.
+    Refusing what the name resolves to now costs an attacker a DNS server that answers
+    differently on the second query inside a few milliseconds. That is a real technique with a
+    name, and it is not the same as no gate.
+
+    So: every address the name resolves to must pass, and a name that resolves to nothing is
+    refused rather than allowed through on the strength of the failure. WHAT REMAINS is the
+    rebind: this repository has no socket-level check to pin the answer to the connection, and
+    a hosted deployment that cares should put one in front of it. Stated here rather than
+    implied, because "the gate resolves names" reads like a closed door.
     """
     from urllib.parse import urlparse
     try:
@@ -267,24 +358,36 @@ def unreachable_by_policy(url):
 
     ip = _as_address(host)
     if ip is not None:
-        if ip.is_loopback or ip.is_unspecified:
-            return "a loopback address is this machine, not the target endpoint"
-        if ip.is_link_local:
-            return ("link-local, and 169.254.169.254 is the cloud metadata service — the one "
-                    "address a scanner must never be pointed at")
-        if ip.is_private or ip.is_reserved or ip.is_multicast:
-            return "a private address is inside somebody's network, not on it"
-        # Two ranges `ipaddress` does not call private and a scanner still must not reach:
-        # 100.64.0.0/10 is carrier-grade NAT, where the neighbours are other customers of the
-        # same ISP, and 198.18.0.0/15 is reserved for benchmarking. Both are somebody's inside.
-        import ipaddress as _ip
-        for net in ("100.64.0.0/10", "198.18.0.0/15"):
-            if ip.version == 4 and ip in _ip.ip_network(net):
-                return "a private address is inside somebody's network, not on it"
-        return None
+        return _address_refused(ip)
 
     if host.rstrip(".").endswith(_BLOCKED_SUFFIX):
         return "an internal name resolves inside a network this service should not reach"
+
+    # THE NAME IS RESOLVED AND EVERY ANSWER IS CHECKED, through the same function the literal
+    # addresses go through — a second copy of the table would be a second thing to update, and
+    # the copy that is not updated is the one an attacker uses. `getaddrinfo` returns every
+    # record, so a name with one public and one link-local A record is refused on the second.
+    try:
+        answers = (resolve or _resolve)(host, u.port or (443 if u.scheme == "https" else 80))
+    except OSError as e:
+        # REFUSED, NOT ALLOWED. A resolver that cannot answer has told us nothing about where
+        # this name points, and treating "no answer" as "no problem" is the failure this whole
+        # project is named after: an absent measurement read as a clean one.
+        return f"{host} does not resolve here ({type(e).__name__}), so where it points is unknown"
+    seen = set()
+    for fam, _, _, _, sockaddr in answers:
+        try:
+            addr = _as_address(str(sockaddr[0]).split("%")[0])   # %scope on link-local v6
+        except Exception:
+            addr = None
+        if addr is None or str(addr) in seen:
+            continue
+        seen.add(str(addr))
+        why = _address_refused(addr)
+        if why:
+            return f"{host} resolves to {addr}, and {why}"
+    if not seen:
+        return f"{host} resolved to no usable address"
     return None
 
 

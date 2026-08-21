@@ -23,7 +23,7 @@ WHAT IS AND IS NOT SANDBOXED, stated plainly because this runs on a real machine
 Same split as before — their prompts (`prompts/code_agent.yaml`), their loop, their
 executor; the tools and the HTTP wrapper are mine.
 
-    ../foreign-agent-env/Scripts/python server_code.py       # serves on :8131
+    foreign-agent-env/Scripts/python server_code.py       # serves on :8131
 """
 import json, os, sys
 from http.server import ThreadingHTTPServer
@@ -43,8 +43,17 @@ PORT = int(os.environ.get("PORT", "8131"))
 
 def build_agent():
     """Their agent, their prompts, their executor. No extra imports authorised."""
+    # THE TWO LIMITS `redteam/llm.py` GIVES EVERY ADAPTER, which this server does not go
+    # through. Verified against smolagents 1.26.0 rather than assumed: `max_tokens` rides the
+    # `**kwargs` into the completion call and `client_kwargs={"timeout": ...}` reaches the
+    # OpenAI client. Without them a generating attack runs to the engine's 180-second watchdog,
+    # which abandons the thread WITHOUT closing the socket — so the model keeps decoding and
+    # the next probe queues behind a request nobody is reading. Measured on the one bot that
+    # was missing both: six times 180 seconds for a single attack, and a full sweep on course
+    # for about thirty-six hours.
     model = OpenAIServerModel(model_id=MODEL, api_base="http://localhost:11434/v1",
-                              api_key="ollama")
+                              api_key="ollama", max_tokens=1024,
+                              client_kwargs={"timeout": 120})
     return CodeAgent(tools=TOOLS, model=model, max_steps=4)
 
 

@@ -47,11 +47,27 @@ dependencies = [
 # Only for running the practice fleet that ships with the repository. A person testing their
 # own endpoint needs none of this, and the split exists so that the default install is not
 # asked to carry a model framework it will never import.
+#
+# WHAT THIS DOES NOT COVER, because "the practice fleet" reads like all of it: two of the
+# eleven bots run on frameworks that cannot share an environment with these or with each
+# other — `foreign-agent/` needs `smolagents` and `external/nemo/` needs `nemoguardrails` —
+# so `tools/fleet.sh` starts each from its own venv and names the interpreter per entry.
+# Adding them here would produce a resolver conflict on `pip install .[fleet]` rather than a
+# working fleet, so they are stated instead of listed. `fleet.sh` says NO PYTHON, out loud,
+# for any of them that is missing.
 fleet = [
     "langchain>=0.2",
     "langchain-core>=0.2",
     "langchain-ollama>=0.1",
 ]
+
+# NO EXTRA FOR `site/fixtures/gen_fixtures.py`, deliberately. That script needs pymupdf, which
+# is AGPL-3.0-or-commercial, and it regenerates four PDFs that are already committed — it is
+# not part of the distribution: the wheel contains `qatration` and nothing from `site/`. An
+# extra here would put an AGPL package name in this project's own metadata and let
+# `pip install qatration[...]` pull it into a user's environment for a file they will never
+# run. The requirement and its licence are stated in the script instead, where whoever runs it
+# will read them.
 
 [project.scripts]
 qatration = "qatration.cli:main"

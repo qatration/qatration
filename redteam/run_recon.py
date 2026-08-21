@@ -25,7 +25,7 @@ except Exception:
 
 import yaml
 from recon import fingerprint, format_profile, suggest_config
-from workspace import OUT as WORKSPACE_OUT
+from workspace import OUT as WORKSPACE_OUT, safe_target_name
 
 
 def main():
@@ -44,6 +44,14 @@ def main():
 
     with open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
+    # config names, so it is exactly as much somebody else's system as a sweep is. The gate
+    # was in the sweep and the benign run and not here, while the documentation said "any
+    # non-local target" and this is the command the documentation says to run first.
+    from authorization import gate as _auth_gate
+    _auth_gate(tcfg, "recon")
+
+
     if args.model:
         tcfg["model"] = args.model
     ctx = tcfg.get("oracle_context", {})
@@ -51,7 +59,10 @@ def main():
     from run_redteam import load_target        # one adapter registry, three entry points
     target = load_target(tcfg)                 # (this chdir's into the target)
     if tcfg.get("name"):
-        target.name = tcfg["name"]
+        # Through the shared rule: this assignment used to hand the raw config
+        # value to an adapter that never validates it, and the name becomes a
+        # filename in six places, one of them an append.
+        target.name = safe_target_name(tcfg["name"], "target config")
 
     print(f"recon → target='{target.name}' model='{tcfg.get('model', '')}' "
           f"(benign probes only)\n")

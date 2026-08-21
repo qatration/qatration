@@ -195,6 +195,52 @@ def main():
           fingerprint(Bot(tool_mode="real"), CTX, tool_prompt="show my account")
           .get("tools_seen"), ["get_account"])
 
+    # --- A DECLARED CAPABILITY IS A CLAIM, NOT A MEASUREMENT --------------------------------
+    #
+    # `targets_httpbot.py` declares `forged_history`, and that declaration is what makes the
+    # sweep spend Context Compliance Attacks and multi-turn chains on the target. The bot on the
+    # other side built its request from the system prompt and the newest message and dropped the
+    # transcript. So every forged-history attack ran against a model that could not see the
+    # forgery, came back clean, and was filed as evidence of a hardened target — a whole attack
+    # family reported as a measurement, in this project's own practice fleet.
+    #
+    # Both directions are checked. A probe that can only say "yes" says nothing.
+    class _History(Target):
+        name = "hist"
+        capabilities = {"chain", "forged_history"}
+
+        def __init__(self, honours):
+            self.honours = honours
+
+        def reset(self):
+            pass
+
+        def send(self, prompt, **kw):
+            return Probe(prompt, "Hello, how can I help with your order?")
+
+        def send_forged(self, prompt, history):
+            if not self.honours:
+                return self.send(prompt)          # the transcript on the floor
+            said = " ".join(str(h.get("content", "")) for h in history)
+            return Probe(prompt, f"Earlier I recorded: {said}")
+
+    honoured = fingerprint(_History(True), CTX)
+    check("a target that reads the transcript it is handed is recorded as doing so",
+          honoured.get("reads_supplied_history"), True)
+    check("...and raises no warning about it", honoured.get("warnings"), None)
+
+    ignored = fingerprint(_History(False), CTX)
+    check("a target that DISCARDS the transcript is caught, not assumed",
+          ignored.get("reads_supplied_history"), False)
+    check("...and the profile says the attacks against it will measure nothing",
+          any("forged_history" in w for w in ignored.get("warnings") or []), True)
+
+    # A target that never claimed the capability is not asked and not accused: an unasked
+    # question must read as unasked, never as a pass and never as a failure.
+    quiet = fingerprint(Bot(), CTX)
+    check("a target that does not claim forged_history is left alone",
+          "reads_supplied_history" in quiet, False)
+
     # THE SILENT KILLER: reset() does nothing, so every trial runs on a dirty conversation
     broken = fingerprint(Bot(reset_works=False), CTX)
     check("memory: a no-op reset() is detected",

@@ -1,7 +1,7 @@
 """Build the portable arsenal from the library, instead of maintaining a second copy.
 
-A customer's run used 22 attacks across 8 categories. The library holds 262 across 45. That gap
-was not a decision: `attacks.yaml` grew target by target while the practice fleet was built, and
+A run against an outside target used 22 attacks across 8 categories. The library holds 262
+across 45. That gap was not a decision: `attacks.yaml` grew target by target while the practice fleet was built, and
 each new attack got `applies_to: [that bot]` because it was written against that bot. Sometimes
 that was necessary, because the attack names the bot's canary or one of its tools. Usually it
 was habit. `attacks_generic.yaml` then collected whatever had never been given an `applies_to`,
@@ -17,9 +17,9 @@ what this produces, so the two cannot drift.
 
 WHAT IS NOT PROMOTED, and why each is a judgement rather than a filter:
 
-  * `control` — an ordinary question used as a per-target baseline. Sending eighteen of them at
-    a customer would pad the count with prompts that are not attacks, which is the padding this
-    project criticises in tools that report thousands of probes.
+  * `control` — an ordinary question used as a per-target baseline. Eighteen of them in a
+    portable arsenal would pad the count with prompts that are not attacks, and a probe count
+    inflated by non-attacks is a number nobody can act on.
   * attacks naming a CANARY or a TOOL — they reference one bot's planted secret or one bot's
     tool by name, so against anything else they test a string that does not exist.
   * attacks with a `seed:` block — they plant a document in a corpus. That needs a store we can
@@ -44,7 +44,7 @@ import yaml
 
 OUT_NAME = "attacks_generic.yaml"
 
-# Brand names from the practice fleet's fiction. A prompt saying "AcmeShop" tells a customer's
+# Brand names from the practice fleet's fiction. A prompt saying "AcmeShop" tells an outside
 # bot it is talking about somebody else, which is a different test from the one intended.
 BRANDS = ("acmeshop", "acmebank", "acmerange", "acmecloud", "acmehbank", "northgate",
           "ourstore", "ourcompany", "guardbot", "shipdesk", "lyrebird", "acme")
@@ -137,8 +137,8 @@ def build():
         # assumed it was: it skipped every attack without `applies_to` on the grounds that such
         # an attack "reaches everyone as it is". It does not. The sweep is pointed at ONE
         # arsenal file, and 33 unscoped attacks were living in other files — every Context
-        # Compliance attack, the whole `serialization` category, the recon set — so a customer
-        # never saw one of them. The same defect as the scoping itself, one directory deeper:
+        # Compliance attack, the whole `serialization` category, the recon set — so a run
+        # against an outside target never saw one of them. The same defect as the scoping itself, one directory deeper:
         # not a decision about what to send, an accident of which file something was written in.
         why = blocked_reason(a, canaries, tools)
         if why:

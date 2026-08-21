@@ -132,6 +132,10 @@ os.environ.setdefault("QAT_TEST_AWS_KEY", "AKIDEXAMPLE")
 os.environ.setdefault("QAT_TEST_AWS_SECRET", SECRET)
 t = targets_http.HttpConfiguredTarget(
     url="https://bedrock-runtime.us-east-1.amazonaws.com/model/m/invoke",
+    # `env:` is the list of variables this config may read. A config names a secret and a
+    # destination in the same file, so nothing expands unless the file says which names it
+    # is entitled to reach.
+    env=["QAT_TEST_AWS_KEY", "QAT_TEST_AWS_SECRET"],
     auth={"type": "sigv4", "service": "bedrock", "region": "us-east-1",
           "access_key": "${QAT_TEST_AWS_KEY}", "secret_key": "${QAT_TEST_AWS_SECRET}"})
 check("a sigv4 config expands its credentials from the environment",
@@ -142,12 +146,27 @@ check("...and a target starts having seen no success, so the first 401 is a conf
 try:
     targets_http.HttpConfiguredTarget(
         url="https://x.example/y",
+        env=["QAT_DEFINITELY_UNSET_KEY"],
         auth={"type": "sigv4", "service": "bedrock", "region": "us-east-1",
               "access_key": "${QAT_DEFINITELY_UNSET_KEY}", "secret_key": "x"})
     check("an unset credential variable is refused, not sent as a literal", False, "accepted")
 except SystemExit as e:
     check("an unset credential variable is refused, not sent as a literal",
-          "not set" in str(e))
+          "not set" in str(e) and "auth.access_key" in str(e))
+    # The refusal must say WHICH CONFIG KEY and not which variable: this text reaches whoever
+    # submitted the config, and naming an unset variable answers "is it set" for free.
+    check("...and the refusal names the config key rather than the environment",
+          "QAT_DEFINITELY_UNSET_KEY" not in str(e), str(e))
+
+try:
+    targets_http.HttpConfiguredTarget(
+        url="https://x.example/y",
+        auth={"type": "sigv4", "service": "bedrock", "region": "us-east-1",
+              "access_key": "${QAT_TEST_AWS_KEY}", "secret_key": "x"})
+    check("a credential variable the config did not declare is refused", False, "accepted")
+except SystemExit as e:
+    check("a credential variable the config did not declare is refused",
+          "does not declare" in str(e), str(e))
 
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:

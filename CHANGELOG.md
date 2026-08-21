@@ -6,6 +6,106 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## A second pass over the same ground (2026-08-21)
+
+**A gate that runs after the thing it guards is a record, not a control.** The authorization
+check in the sweep sat twenty lines below the target construction, and construction is not
+inert: the HTTP adapter expands `${VAR}` in its headers there, so an unauthorised config could
+already tell which of the operator's environment variables were set from the difference between
+"expanded" and "not set in this shell", and other adapters open connections in their
+constructors. `benign.py` had the same ordering, reached by a different route: it built the
+target only to read a name off it. Both now ask first, and the test derives the door list and
+compares LINE NUMBERS from the parse tree, because "calls the gate" was never the property.
+
+**The proof-of-authorization fetch followed redirects and never resolved a name.** A hosted
+scan could be pointed at a public address that answers `302` to the cloud metadata service, and
+the fetch went there, from inside, on request. Refusing to follow is not a safety tax here: the
+well-known probe asks whether whoever controls THIS origin publishes a token, and a token found
+at the end of a hop proves control of wherever the hop landed. Names are resolved now and every
+answer goes through the same address table, which turns `http://metadata.attacker.example/` from
+a one-line bypass into a DNS rebind. The rebind remains, and the docstring says so.
+
+**A target could stop the engine measuring it, three ways.** `r.read()` with no argument let the
+target choose this process's memory. Four patterns in `oracle.py` were quadratic in the reply
+length: measured, one took 22.8 seconds on 64,000 characters, so a hostile megabyte was about an
+hour and a half of judging FOR ONE PROBE, and a sweep judges hundreds. And a practice bot's
+calculator ran `eval` on a string the model chooses, where a power tower did not finish in sixty
+seconds. All three are closed, and the first fix had to be redone: capping the read broke the
+JSON parse, so the probe came back empty and `unbounded_output` stopped firing. A defence that
+deletes the evidence it was protecting is the trade the cap exists to prevent.
+
+**Configuring a detector made it weaker, in three places.** `ansi_exfil` treated a canary as an
+alternative to the structural check rather than an addition, so declaring `canaries` — which
+every seriously configured target does — switched off detection of hidden-text runs and OSC-8
+links. Replaying the stored artifacts through the fixed version recovers FIVE findings that were
+already in the evidence and had been reported clean. `over_refusal` was declared by six attacks
+that ask a bot for a secret, where refusing is the correct answer, so a target that held the line
+scored six partial breaches and one that half-complied scored clean. And four of the seven
+`capitulation` attacks could not fire their own detector, because the pressure pattern knew only
+explicit contradiction and the four were pleading, false precedent, an anchored number, and
+asking again unchanged.
+
+**Five attacks asked for insecure code and nothing could read the answer.** `sql_injection` and
+`command_injection` judge TOOL CALLS; the reply to "write the search handler, no ORM" is a code
+block. Each of the five asked for exactly one classic vulnerability without ever saying "make it
+insecure", got a well-formed answer, and came back DEFENDED whatever was in it. `insecure_code`
+reads the code that was written, and every pattern is paired with the construct that exonerates
+it — a parameterised query, an argv list instead of a shell, `yaml.safe_load`, autoescaping on,
+an ownership check beside the lookup. It fires on zero of the 1,490 benign replies on record.
+
+**Two severity tables disagreed about four detectors.** `command_injection`, `ssrf_call` and
+`destructive_tool_call` were `critical` in one and `high` in the other; `rogue_tool_call` was
+`high` and `medium`. One run, one finding, two severities, and which a reader saw depended on
+whether they opened the client report or the target comparison. One table decides now, and it is
+the one that covers all sixty-four detectors rather than the copy of eight.
+
+**The checks that stop a mistake becoming permanent were on one machine.** They lived in an
+untracked `.git/hooks/pre-push`, so they did not exist on a fresh clone, did not exist for
+anybody else, did not run in CI, and ran only on push. They are `tools/guard.py` now, in the
+repository, on commit and on push and in CI, and they check dependency licences — which nothing
+had ever done. The split is by what a pattern IS: credential formats and licence rules are
+public, because publishing "this refuses `ghp_`" gives nothing away, and the literal private
+strings stay in a gitignored supplement that the tool names out loud when it is missing.
+
+**Two runners called a function they had not imported.** The name landed at the end of a comment
+instead of on the import line, and the call site only runs when a config carries a `name:`, so
+the tool worked on every config that did not and exited 1 with a traceback on the ones that did.
+`compile()` accepts a NameError; nothing in the suites looked. A scan of every name
+loaded across ninety-eight files now does.
+
+**And the practice fleet had a target measuring nothing.** Two different bots lived under one
+name on one port: the one the fleet started built its request from the system prompt and the
+newest message and dropped the client's transcript, while the adapter declares `forged_history`
+and sends it. Every Context Compliance Attack and every multi-turn chain against it ran against a
+model that could not see what they were doing. Asked "what did I just tell you my name was?" with
+a history saying otherwise, the served bot answered from its own prompt. Recon now plants a
+marker in a forged transcript and asks for it back, so a customer's endpoint that discards
+history is reported rather than assumed.
+
+
+**And five of the seven practice servers could be talked into generating forever.** `llm.py`
+sets an output cap and a request timeout for every adapter and says why in its own docstring:
+"a limit that has to be remembered nine times is a limit that will be missing from the tenth".
+The standalone practice servers ARE the tenth — they are separate processes that never import
+the engine — and five had neither limit. Measured: the two attacks that ask a bot to generate
+until something stops it ran to the 180-second watchdog on every trial and every retry, six
+times 180 seconds for ONE attack, and scored ERROR, the verdict that carries no information.
+A full sweep against that bot was on course for about thirty-six hours; with the caps it is
+7 to 14 seconds a probe and a reply somebody can judge. The engine's watchdog is not a
+substitute and that is the part that is easy to get wrong: it abandons the thread without
+closing the socket, so the model keeps decoding and the next probe queues behind a request
+nobody is reading.
+
+**A stored baseline measured on a different corpus reads exactly like one measured on this
+corpus.** When the benign corpus changed, twenty-nine baselines were re-measured and one was
+not — its build guard refused a configuration mismatch and the loop moved on. It sat there
+fifty prompts wide, on a different fifty, contributing to a published false-alarm rate, and
+nothing in forty suites could see it. Found by hand with a ten-line script, which is the
+definition of a check that should have existed; there is one now, comparing ids in order,
+because same width is not the same corpus.
+
+---
+
 ## Status (2026-08-21)
 
 **Everything in this entry was found by running the tool rather than by reading it**, and most
@@ -151,8 +251,8 @@ the split was verified by reassembly, every non-blank line accounted for in exac
 destination. `test_readme.py` reads the whole design record as one corpus, because reading only
 the front page afterwards would have retired most of its checks silently.
 
-**Then three reviews were run against all of it, and they were worth more than the day's
-code.** They found: the front page's very first command rejected by its own parser
+**Three separate reviews then went over all of it, and they were worth more than the code
+they reviewed.** They found: the front page's very first command rejected by its own parser
 (`--target-config` where `onboard.py` declared `--config`, the same wrong spelling in four
 places because four copies were written and none was executed); seven numbers in the docs that
 had drifted from the code, including the false-positive gate's own dimensions stated as
@@ -183,8 +283,9 @@ build's breach rows *unattributable* — a bot that leaks on 69% of benign traff
 an attack credited for it — which is the attribution machinery doing the job it exists for on
 the most favourable-looking findings in the fleet.
 
-Two adversarial sweeps produced eleven findings that survived refutation, all fixed. Then the
-same hunt run by hand found more than a dozen in the places the sweeps had not looked: the adaptive
+Two adversarial review passes found eleven defects that survived an attempt to refute each
+one, all fixed. A further reading, aimed at what those passes had not covered, found more than
+a dozen: the adaptive
 attacker judging with the goal's detector list rather than the always-on set, the key search
 able to skip the control it subtracts, `resolved` dropped at a session boundary, three fleet
 pages that nothing made agree, a self-audit failing the build on its own best finding, a
@@ -579,8 +680,8 @@ as EXPLOITED under a docstring promising it did not. Both now ask `achieved_comb
 they cannot disagree about what "combined" means.
 
 And the fifth state's own lesson got made again, one run later and in the opposite
-direction. `not_run` exists because absence read as a clean result and told a client eight
-findings were fixed. `state()` returns None for an attack a run did not send, with a comment
+direction. `not_run` exists because absence read as a clean result and reported eight findings as
+fixed when nothing had re-tested them. `state()` returns None for an attack a run did not send, with a comment
 saying it says nothing either way — and the branch below it read that None as False, as
 *measured clean*. So an attack broken now, absent from the previous run and broken in some
 earlier one was labelled **REGRESSED**, which means the fix did not hold, when nothing had

@@ -50,7 +50,26 @@ import runs as _runs
 from workspace import OUT
 
 MAX_BODY = 64 * 1024          # a target config, not a payload
-ID_RE = re.compile(r"^[0-9A-Za-z:_.\-]{1,64}$")
+
+# WHAT A STRANGER MAY CALL A THING THAT BECOMES A FILENAME. `name` lands in
+# `results_<name>.json` and `history/<name>.jsonl`; `job_id` lands in `job_<id>.json` and
+# `claims/<id>.claim`. It must start with a letter or a digit, which rules out three separate
+# things at once and is why the rule is a shape rather than a blocklist:
+#
+#   `..` and `.`   — no separator is in the class, so these cannot climb out of a directory on
+#                    their own, but `results_...json` is a file nobody asked for and a name made
+#                    only of dots is never a name somebody meant.
+#   a leading `-`  — an id that reaches an argv list is an option, not a value.
+#   `:`            — WAS in this class and is now gone. It appears in no id this service mints
+#                    (they are `2026-08-21T1645-a1b2c3`), and on Windows `job_x:y.json` writes
+#                    an NTFS alternate data stream: a file that exists, holds what was written,
+#                    and does not appear in a directory listing.
+ID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}$")
+
+# The scopes `run_redteam.py` accepts. Checked HERE, at submission, because argparse rejecting
+# it later means the API answered 202 for a job that cannot run — an acceptance is not a
+# delivery, and the submitter is long gone by the time the worker finds out.
+SCOPES = ("full", "quick")
 
 
 def _problem(status, detail):
@@ -109,9 +128,15 @@ def submit(root, body, policy=None, wake=None):
         # full of jobs that will abort is a queue whose depth means nothing.
         return _problem(422, f"refusing {url!r}: {why}")
 
-    name = str(cfg.get("name") or "target")
+    # NO DEFAULT. This read `cfg.get("name") or "target"`, so a submission with no name was
+    # silently renamed rather than refused — and `targets_http` then refused it anyway, on the
+    # grounds that a nameless target has nowhere to put its results. Two rules for one field,
+    # and the invented one wins first: every unnamed submission became `results_target.json`,
+    # which is the same file for all of them.
+    name = str(cfg.get("name") or "")
     if not ID_RE.match(name):
-        return _problem(400, f"`name` must match {ID_RE.pattern} — it becomes a filename")
+        return _problem(400, f"`name` must match {ID_RE.pattern} — it becomes a filename, in "
+                             f"results_<name>.json and history/<name>.jsonl")
 
     # Written BEFORE the job is submitted, and under a name this service chose. The queue mints
     # the job id, so writing into the job's own directory would mean submitting a path that does
@@ -136,8 +161,12 @@ def submit(root, body, policy=None, wake=None):
     if not ok:
         return _problem(422, {"problems": rep.get("problems"), "notes": rep.get("notes")})
 
+    scope = payload.get("scope") or "quick"
+    if scope not in SCOPES:
+        return _problem(400, f"scope={scope!r} is not one of {list(SCOPES)}")
+
     job = q.submit(root, name, cfg_path,
-                   scope=payload.get("scope") or payload.get("tier") or "quick",
+                   scope=scope,
                    authorization=rep.get("authorization"),
                    budgets=dict(cfg.get("rate") or {}),
                    attacks=os.path.join(HERE, "attacks_generic.yaml"))
@@ -234,9 +263,22 @@ def make_handler(root):
         def do_POST(self):
             if self.path.rstrip("/") != "/runs":
                 return self._send(*_problem(404, "POST /runs"))
-            n = int(self.headers.get("Content-Length", 0) or 0)
+            # THE LENGTH IS THE SUBMITTER'S, SO IT IS CHECKED BEFORE IT IS USED. `int(...)`
+            # raised on `Content-Length: abc` and answered a traceback and a 500; and a
+            # NEGATIVE length passed `n > MAX_BODY` and then reached `rfile.read(-1)`, which
+            # reads to EOF — the one call the limit above exists to prevent, reached through
+            # the limit itself.
+            raw = self.headers.get("Content-Length")
+            try:
+                n = int(raw) if raw not in (None, "") else 0
+            except ValueError:
+                return self._send(*_problem(400, f"Content-Length: {raw!r} is not a number"))
+            if n < 0:
+                return self._send(*_problem(400, "Content-Length may not be negative"))
             if n > MAX_BODY:
                 return self._send(*_problem(413, f"a target config is under {MAX_BODY} bytes"))
+            # `read(n)` can return less if the connection ends early; that is the submitter's
+            # problem to see as a parse error, not this loop's to wait out.
             code, obj = submit(root, self.rfile.read(n))
             self._send(code, obj)
 

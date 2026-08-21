@@ -13,7 +13,7 @@ except Exception:
     pass
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
-from workspace import OUT as WORKSPACE_OUT   # one place decides where output goes
+from workspace import OUT as WORKSPACE_OUT, safe_target_name   # one place decides where output goes
 OUT_DIR = WORKSPACE_OUT
 
 import yaml
@@ -298,13 +298,13 @@ def main():
     ap.add_argument("--recon", default=None,
                     help="recon profile to fold into the report "
                          "(default out/recon_<target>.json if present)")
-    # SCOPE, not tier. This is how much traffic you are willing to send at a live endpoint,
-    # and nothing is withheld from any report because of it. `--tier` and `free` still parse
-    # and still map to a scope, because records on disk carry the old spelling and a stored
-    # job is not something to break — they are simply not advertised in --help.
-    ap.add_argument("--scope", "--tier", dest="scope", choices=("full", "quick"),
-                    default="full", type=lambda v: "quick" if v == "free" else v,
-                    help="how much traffic to send: `quick` is one attack per category, `full` is the whole arsenal. Recorded on the run either way. Nothing is withheld from any report because of it.")
+    # HOW MUCH TRAFFIC TO SEND, and nothing else. Every probe is a request to an endpoint
+    # somebody is paying for, so the size of a run is a decision the operator makes. It is
+    # recorded on the run either way, because a narrow run and a wide one are different
+    # measurements and a report that does not say which it was is not readable.
+    ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="full",
+                    help="how much traffic to send: `quick` is one attack per category, "
+                         "`full` is the whole arsenal. Recorded on the run either way."),
     ap.add_argument("--isolation", default=None,
                     help="isolation maps to fold into the report "
                          "(default out/isolation_<target>.json if present)")
@@ -345,12 +345,29 @@ def main():
     trials = args.trials if args.trials is not None else int(tcfg.get("trials", 3))
     ctx = tcfg.get("oracle_context", {})
 
+    # WHO ASKED FOR THIS? Remote targets need proof before the first probe; the practice fleet
+    # on localhost passes untouched, because a gate that makes the fleet unusable is a gate that
+    # gets switched off.
+    #
+    # BEFORE THE TARGET IS BUILT, and that ordering is the whole of it. This ran twenty lines
+    # further down, after construction, and construction is not inert: the HTTP adapter expands
+    # `${VAR}` in its headers there, so an unauthorised config already learned which of the
+    # operator's environment variables are set from the difference between "expanded" and "not
+    # set in this shell". Other adapters in this repo open connections and start processes in
+    # their constructors. A gate that runs after the thing it guards is a record of a decision,
+    # not a control.
+    from authorization import gate as _auth_gate
+    _auth = _auth_gate(tcfg, "sweep")
+
     target = load_target_or_explain(
         tcfg, args.target_config,
         was_default=os.path.abspath(args.target_config)
         == os.path.abspath(os.path.join(ROOT, "targets_dvla.yaml")))
     if tcfg.get("name"):                          # let a config give a target a distinct name
-        target.name = tcfg["name"]                # (e.g. reuse the httpbot adapter for many bots)
+        # Through the shared rule: this assignment used to hand the raw config
+        # value to an adapter that never validates it, and the name becomes a
+        # filename in six places, one of them an append.
+        target.name = safe_target_name(tcfg["name"], "target config")
 
     # IS THE SERVER THE BUILD THIS CONFIG CLAIMS? Two configs can point at one port and
     # differ only in how the process was started — guardedrag's pair differ by an environment
@@ -362,12 +379,9 @@ def main():
     #
     # Refused rather than warned. A warning on line one of a long run is a warning nobody
     # sees, and the artifact it produces outlives the console.
-    # WHO ASKED FOR THIS? Remote targets need proof before the first probe; the practice
-    # fleet on localhost passes untouched, because a gate that makes the fleet unusable is a
-    # gate that gets switched off.
-    from authorization import gate as _auth_gate
-    _auth = _auth_gate(tcfg, "sweep")
-
+    #
+    # AFTER the authorization gate above, and it has to stay there: learning which build is
+    # listening means asking the server, and that is traffic against somebody's endpoint.
     mismatch = _build_mismatch(tcfg)
     if mismatch:
         print(f"ABORT — {target.name} is not the build this config describes: {mismatch}",
@@ -440,6 +454,24 @@ def main():
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
     # be a clean baseline on a target that's compromised at rest — see targets_localrag.yaml).
     exclude = set(tcfg.get("exclude_attacks", []))
+    # THE ARSENAL HAS TO BE A LIST OF ATTACKS BEFORE IT CAN BE FILTERED. Without this, an entry
+    # that is not a mapping raises AttributeError out of `a.get` and an entry with no `id`
+    # raises KeyError, and both reach Python's default handler and exit 1 — the code this
+    # tool's own table documents as "the target was exploited or breached". A CI would file a
+    # YAML typo as a security finding.
+    #
+    # `attacks: []` at the top of a file instead of a bare `[]` is enough to do it: the loader
+    # returns a dict and iterating a dict yields its keys, which are strings.
+    _bad = [(i, a) for i, a in enumerate(all_attacks)
+            if not isinstance(a, dict) or not a.get("id")]
+    if _bad:
+        i, a = _bad[0]
+        raise SystemExit(
+            f"the arsenal is not a list of attacks: entry {i} is "
+            f"{type(a).__name__ if not isinstance(a, dict) else 'a mapping with no id'}"
+            f" ({str(a)[:60]!r}), and {len(_bad)} entr(y/ies) like it. A file whose top level "
+            f"is `attacks:` loads as a mapping; the arsenal is a bare list of mappings, each "
+            f"with an `id`.")
     attacks = [a for a in all_attacks
                if (not a.get("applies_to") or target.name in a["applies_to"])
                and a["id"] not in exclude]
@@ -460,9 +492,17 @@ def main():
     # guard the data: a 0-attack scope (wrong --attacks file) must NOT clobber a good
     # results_<target>.json with an empty run — bail before writing, leave prior data intact.
     if not attacks:
+        # EXIT 3, NOT 0. `return` here exits zero through the console entry point, and zero is
+        # documented as "ran, and the gate you asked for was not tripped". Nothing ran. This is
+        # the same event as the errored-run branch further down and takes the same code:
+        # nothing measured, nothing written, and a CI that must not read it as a pass.
+        _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
+                     note=f"no attack in this arsenal applies to {target.name}; "
+                          f"nothing was sent and nothing was written")
         print(f"engine → target='{target.name}'  NO applicable attacks in this arsenal "
-              f"({len(all_attacks)} not applicable) — leaving out/results_{target.name}.json untouched.")
-        return
+              f"({len(all_attacks)} not applicable) — leaving out/results_{target.name}.json "
+              f"untouched.", file=sys.stderr)
+        sys.exit(3)
     scoped = f" ({skipped} not applicable to this target)" if skipped else ""
     print(f"engine → target='{target.name}'  caps={sorted(target.capabilities)}  "
           f"attacks={len(attacks)}{scoped}  trials={trials}")
@@ -517,9 +557,15 @@ def main():
             more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
             print(f"      needs {k:<22}{shown}{more}")
         if not attacks:
+            # EXIT 3 for the same reason as the branch above: this is the state the sentence
+            # printed here describes, and returning zero would report it as a clean run.
+            _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
+                         note=f"every attack relied on detectors that cannot fire against "
+                              f"{target.name}; nothing was sent and nothing was written")
             print(f"NOTHING MEASURABLE — every attack in this arsenal relies on detectors that "
-                  f"cannot fire against {target.name}. Leaving results untouched.")
-            return
+                  f"cannot fire against {target.name}. Leaving results untouched.",
+                  file=sys.stderr)
+            sys.exit(3)
 
     # A BUDGET TOO SMALL FOR THE RUN IS KNOWN BEFORE THE FIRST REQUEST, so it is said then
     # rather than discovered two thirds of the way through as a wall of BudgetExhausted errors.

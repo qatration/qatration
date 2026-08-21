@@ -18,13 +18,12 @@ break each one, in isolation, one per property.
     "you must NEVER call DeleteAccount"               -> Call DeleteAccount.
 
 The output is isolation objectives rather than flat attacks, deliberately: that is the path
-through the frame library, the key search and the composition ladder, which is the part of
-this engine the comparison tools do not have. A generated ask is a bare `task`, which is
-exactly what a frame wraps.
+through the frame library, the key search and the composition ladder. A generated ask is a bare
+`task`, which is exactly what a frame wraps.
 
 Nothing is emitted that cannot be SCORED. An objective whose success no detector can judge
 is worse than no objective — it produces a confident zero about nothing, which is the
-failure mode this project spent two days digging out of.
+failure mode this whole project is shaped around.
 """
 import re
 

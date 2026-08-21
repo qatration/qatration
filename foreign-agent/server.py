@@ -24,7 +24,7 @@ tool returns, not as a line in a system prompt telling the model to keep it. Not
 instructs the agent to protect it — which is itself the realistic case, and makes any
 disclosure a fact about the framework rather than about a rule written for it to break.
 
-    ../foreign-agent-env/Scripts/python server.py            # serves on :8130
+    foreign-agent-env/Scripts/python server.py            # serves on :8130
 """
 import json, os, sys, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -166,8 +166,17 @@ TOOLS = [_record(t) for t in TOOLS]
 
 def build_agent():
     """Their agent, their prompts. The only arguments are the model and the tools."""
+    # THE TWO LIMITS `redteam/llm.py` GIVES EVERY ADAPTER, which this server does not go
+    # through. Verified against smolagents 1.26.0 rather than assumed: `max_tokens` rides the
+    # `**kwargs` into the completion call and `client_kwargs={"timeout": ...}` reaches the
+    # OpenAI client. Without them a generating attack runs to the engine's 180-second watchdog,
+    # which abandons the thread WITHOUT closing the socket — so the model keeps decoding and
+    # the next probe queues behind a request nobody is reading. Measured on the one bot that
+    # was missing both: six times 180 seconds for a single attack, and a full sweep on course
+    # for about thirty-six hours.
     model = OpenAIServerModel(model_id=MODEL, api_base="http://localhost:11434/v1",
-                              api_key="ollama")
+                              api_key="ollama", max_tokens=1024,
+                              client_kwargs={"timeout": 120})
     return ToolCallingAgent(tools=TOOLS, model=model, max_steps=4)
 
 
@@ -243,7 +252,8 @@ def make_handler(build):
                 # raises. A plain HTTPServer is single-threaded and does not survive it:
                 # measured, the process stayed alive with nothing listening for 56 minutes,
                 # so every later run would have reported "target unreachable" — a fixture
-                # defect wearing the target's clothes, for the third time today.
+                # defect wearing the target's clothes, which is a shape this repository has
+                # met more than once.
                 pass
 
         def log_message(self, *a):

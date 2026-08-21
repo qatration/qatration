@@ -106,8 +106,8 @@ def classify(rows):
 
     A function rather than two comprehensions in `main()` because the suite has to be able to
     call THIS, not a copy of it. The first version of that test recomputed the rule itself and
-    stayed green when the bug was put back — the same mistake as the roll-up arithmetic in
-    `benign.py`, made again four hours later, one file over.
+    stayed green when the bug was put back — the same mistake the roll-up arithmetic in
+    `benign.py` was extracted to avoid, repeated one file over.
     """
     held = [m for m in rows if verdict_for(m) == "Hardened"]
     never_attacked = [m for m in rows if verdict_for(m) == "Not measured"]

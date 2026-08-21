@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-21T1751-1334fa",
+  "state": "stopped",
+  "target": "httpbot",
+  "scope": "full",
+  "engine": "c5ff7dd+dirty",
+  "arsenal": "attacks_generic.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-21 17:51:52",
+  "finished_at": "2026-08-21 18:50:37",
+  "spent": {},
+  "note": "stopped by hand after 7 of 357 attacks in 42 minutes. The practice server on :8099 was the one bot talking to Ollama without the num_predict and request-timeout limits redteam/llm.py gives every adapter, so the two attacks that ask for unbounded generation ran to the 180s watchdog on every trial and every retry and scored ERROR. This run was on course for about thirty-six hours. The caps are in place now and redteam/test_fleet_limits.py is the gate; nothing here was measured."
+}

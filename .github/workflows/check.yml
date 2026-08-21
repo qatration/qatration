@@ -75,5 +75,18 @@ jobs:
           cd "$RUNNER_TEMP/elsewhere"
           qatration lint
 
+      - name: the commit guard, on the whole tree
+        # The same script `.githooks/pre-commit` runs. A hook is advice: it can be skipped with
+        # `--no-verify` and it does not exist until somebody runs `git config core.hooksPath
+        # .githooks`. This is the part that cannot be skipped — a credential, a copyleft
+        # dependency or text that must not be published reaching a pull request fails it here.
+        #
+        # `--selftest` first, and separately: it proves every pattern can still fire. A scanner
+        # whose pattern has been mangled reports a clean tree, and this project has believed
+        # three of those.
+        run: |
+          python tools/guard.py --selftest
+          python tools/guard.py --tree
+
       - name: suites
         run: python tools/check.py

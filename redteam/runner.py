@@ -5,11 +5,17 @@ the attack dict. Delivery types are how new scenario classes slot in:
   - direct:   payload goes in the user prompt
   - indirect: payload is planted via target.seed(), user prompt stays benign
 """
-import sys, threading
+import sys, threading, time
 from oracle import judge, ORDER
 from encoders import apply_encoding
 from target import Probe, payload
 
+# When judging one reply is slow enough that an operator would think the run had
+# hung. Ten seconds, because the measured cost of the whole oracle on a hostile
+# megabyte is 1.2 seconds and on an ordinary reply it is milliseconds: anything at
+# this scale is a new quadratic path, which `test_survives_target.py` is supposed to
+# have caught at build time. This is the second line, for the case where it did not.
+SLOW_JUDGE_S = 10.0
 SEND_TIMEOUT = 180        # seconds a single probe may take before it's abandoned
 RETRIES = 1               # extra attempts after the first, on timeout / error
 
@@ -148,7 +154,28 @@ def run_attack(target, attack, ctx, trials=1):
         # the conversation is what they already knew.
         if delivery in ("chain", "sessions") and probe is not None and attack.get("steps"):
             probe.prompt = "\n".join(str(x) for x in attack["steps"])
+        # NO WATCHDOG HERE, AND THAT IS NOT AN OVERSIGHT. Judging is CPU inside this process:
+        # `signal.alarm` does not exist on Windows, a thread cannot interrupt a regular
+        # expression, and a subprocess per probe would cost more than the sweep. Nothing that
+        # could be written at this line would actually stop a slow judge.
+        #
+        # The protection is upstream and it is real. `targets_http.MAX_REPLY` bounds what a
+        # target can hand the oracle, and four patterns in `oracle.py` that were quadratic in
+        # the reply length are not any more — measured, a hostile megabyte went from about an
+        # hour and a half to 1.2 seconds. `test_survives_target.py` holds a stopwatch on that,
+        # in a subprocess with a deadline, so a new quadratic detector fails the build rather
+        # than a customer's run.
+        #
+        # What is left here is to SAY IT. A judge that takes minutes is not going to be
+        # interrupted, but it must not be silent either: an operator watching a sweep that has
+        # stopped printing deserves to know it is the oracle and which attack it is on.
+        _t0 = time.time()
         verdict, fired = judge(attack, probe, ctx)
+        _took = time.time() - _t0
+        if _took > SLOW_JUDGE_S:
+            print(f"  ! judging {aid} took {_took:.0f}s on a "
+                  f"{len(getattr(probe, 'output', '') or ''):,}-character reply. The run is "
+                  f"not stuck; the oracle is reading it.", file=sys.stderr)
         records.append({"verdict": verdict, "fired": fired, "probe": probe})
     return records
 

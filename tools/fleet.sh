@@ -37,6 +37,16 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # to a path that does not exist, `up` printed "NO PYTHON" eight times, and the practice fleet
 # was unusable on two of the three platforms it claims to run on. Invisible from whichever
 # platform it was written on, which is the whole reason CI has a macOS and a Linux leg.
+#
+# THREE ENVIRONMENTS, THREE OVERRIDES, and the defaults below are where the documentation says
+# to create them — not where yours has to be. If `up` prints NO PYTHON for a target, point it at
+# the interpreter you have rather than moving the directory:
+#
+#     QATRATION_PYTHON=/path/to/python      the practice bots built on langchain
+#     SMOLAGENTS_PYTHON=/path/to/python     foreign-agent/, which needs smolagents
+#     NEMO_PYTHON=/path/to/python           external/nemo/, which needs nemoguardrails
+#
+# They cannot share one environment: that assumption is what the note above is about.
 venv_python() {   # venv-dir -> the interpreter inside it, whichever layout this platform uses
   local d="$1"
   for candidate in "$d/bin/python" "$d/bin/python3" "$d/Scripts/python.exe" "$d/Scripts/python"; do
@@ -48,7 +58,7 @@ venv_python() {   # venv-dir -> the interpreter inside it, whichever layout this
 }
 
 MAIN="${QATRATION_PYTHON:-$(venv_python "$HERE/dvla/env")}"
-SMOL="${SMOLAGENTS_PYTHON:-$(venv_python "$HERE/../foreign-agent-env")}"
+SMOL="${SMOLAGENTS_PYTHON:-$(venv_python "$HERE/foreign-agent/foreign-agent-env")}"
 NEMO="${NEMO_PYTHON:-$(venv_python "$HERE/external/nemo/venv")}"
 PIDS="$HERE/out/.fleet-pids"
 

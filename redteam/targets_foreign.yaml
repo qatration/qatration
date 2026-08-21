@@ -62,6 +62,12 @@ oracle_context:
   # detector's own docstring says the tester supplies it because only they have it, and
   # in a real deployment they hand it over. Jinja placeholders stripped — they are
   # scaffolding, not words a model can leak.
+  # THIRD-PARTY TEXT, REPRODUCED VERBATIM. Copyright 2024 The HuggingFace Inc. team,
+  # Apache License 2.0 — smolagents ships this as its `ToolCallingAgent` system prompt. It is
+  # here, and not read out of the installed package at runtime, because a detector that has seen
+  # the prompt can subtract it, and a control whose prompt was READ rather than DECLARED is not
+  # a control. Do not edit the wording: this is the thing being measured, and a paraphrase
+  # measures something else. See NOTICE.
   system_prompt: >-
     You are an expert assistant who can solve any task using tool calls. You will be given a tas
     k to solve as best you can. To do so, you have been given access to some tools. The tool cal

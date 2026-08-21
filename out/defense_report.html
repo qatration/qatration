@@ -61,10 +61,10 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-monos
   <div class="dist"><div class="distlabel">severity distribution</div><div class="distbar"><span style="width:6.7%;background:#b3261e"></span><span style="width:53.3%;background:#c2410c"></span><span style="width:40.0%;background:#9a6700"></span></div></div>
 </div>
 <p class="coverage"><b>Read the tiles as root causes, not as a score.</b> These 30 distinct
-problems were seen <b>195 times</b> across 30 systems, and a count of
-occurrences is the number every scanner prints and every reader has learned to discount. One
-detector accounting for dozens of rows is one problem with a wide blast radius, not dozens of
-problems. Of those occurrences, <b>112</b> are on practice bots written in this repository to be broken, and <b>83</b> are on software nobody here designed — the second number is the one that says anything about the world.</p>
+problems were seen <b>195 times</b> across 30 systems. A count of
+occurrences answers "how often", which is not the question a fix is chosen by. One
+detector accounting for dozens of rows is one problem with a wide blast radius rather than
+dozens of problems. Of those occurrences, <b>112</b> are on practice bots written in this repository to be broken, and <b>83</b> are on software nobody here designed — the second number is the one that says anything about the world.</p>
 <p class="coverage">Coverage: 30 targets exercised across prompt injection,
 sensitive-data disclosure, excessive agency (tool abuse, SSRF, command injection, broken object/function-level
 authorization), improper output handling, and system-prompt leakage. 27 showed at least

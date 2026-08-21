@@ -146,6 +146,107 @@ def main():
     check("...and none of them is inert once every key it names is supplied",
           not still, f"still inert with full config: {still}")
 
+    # --- AN ATTACK THAT HAS NEVER BEEN SENT IS A CLAIM, NOT A CAPABILITY ---------------------
+    #
+    # This tool has always separated a detector that has caught something from one that has only
+    # been written. The same question about the ARSENAL was not being asked, and the arsenal size
+    # is a number this project publishes: 357 attacks, 184 of them with a stored trial. Somebody
+    # counting the first and reading `out/` would assume the second.
+    #
+    # The check is that the count is DERIVED — `replay()` collecting real ids out of real
+    # artifacts — rather than a number somebody typed. A hardcoded 184 would pass any assertion
+    # about its value.
+    sent = set()
+    dc.replay(None, None, sent)
+    check("the replay collects the attack ids it has evidence for", len(sent) > 50,
+          f"only {len(sent)} distinct attack id(s) found in every stored sweep")
+    import yaml as _y
+    arsenal = {a["id"] for a in
+               _y.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
+                                 encoding="utf-8"))}
+    check("...and they are real ids from the arsenal, not strings from somewhere else",
+          len(sent & arsenal) > 50, f"{len(sent & arsenal)} of {len(sent)} are in the arsenal")
+    src = open(os.path.join(HERE, "detector_coverage.py"), encoding="utf-8").read()
+    check("...and the tool prints how many were never sent",
+          "never sent against anything" in src,
+          "the arsenal-coverage line is gone, so the gap is unreported again")
+
+    # --- AND THE OTHER DIRECTION: A DETECTOR MISSING FROM THE TABLE -------------------------
+    #
+    # Everything above asks whether the detectors ALREADY in NEEDS_CONFIG behave. Nothing asked
+    # the question the CONTRIBUTING rule actually states — a detector that needs configuration
+    # must be listed — and `inert_for` cannot be used to ask it, because `inert_for` is driven
+    # by NEEDS_CONFIG. It is the table interviewing itself. The eleven detectors that rule was
+    # written about were found by hand, once, by somebody who went looking.
+    #
+    # Reading the source was tried and produced noise in both directions: twelve detectors reach
+    # their keys through helpers, and `sysprompt_leak` keeps built-in phrases on purpose and
+    # degrades rather than going silent, so "reads ctx" is not the property.
+    #
+    # THE BEHAVIOURAL QUESTION IS: can this detector say anything at all with no configuration?
+    # `test_oracle.CASES` already holds, for every detector, a probe that makes it fire and the
+    # context it needs — so the firing cases of an undeclared detector get re-run against `{}`.
+    # If not one of them still fires, the detector is config-gated in fact and undeclared in the
+    # table, and its silence on an unconfigured target would be reported as a defence.
+    #
+    # It found one on the first run: `refusal_then_comply`, which returns whatever
+    # `canary_in_output`, `canary_transformed` or `forced_output` returns and so inherits all
+    # three gates while declaring none.
+    import test_oracle as _to
+    firing = {}
+    for case in _to.CASES:
+        if case[4]:                                   # (label, detector, probe, ctx, expected)
+            firing.setdefault(case[1], []).append((case[0], case[2]))
+
+    check("every detector has at least one case that makes it fire, or the question below "
+          "cannot be asked of it",
+          not sorted(set(DETECTORS) - set(firing)), str(sorted(set(DETECTORS) - set(firing))))
+
+    mute = []
+    for name in sorted(set(DETECTORS) - set(NEEDS_CONFIG)):
+        cases = firing.get(name) or []
+        if cases and not any(DETECTORS[name](probe, {}) for _label, probe in cases):
+            mute.append(name)
+    check("a detector that cannot fire without configuration is IN the table",
+          not mute, f"config-gated in fact, undeclared: {mute}")
+
+    # ...AND THE CHECK IS SHOWN FAILING, in this process, because one that passes by examining
+    # nothing looks identical to one that passes on the merits. A known-gated detector is
+    # removed from the table and the check above must find it.
+    _saved = NEEDS_CONFIG.pop("canary_in_output")
+    try:
+        replanted = [n for n in sorted(set(DETECTORS) - set(NEEDS_CONFIG))
+                     if (firing.get(n) or [])
+                     and not any(DETECTORS[n](p, {}) for _l, p in firing[n])]
+        check("...and that check catches a gated detector taken OUT of the table",
+              "canary_in_output" in replanted, f"it found {replanted}")
+    finally:
+        NEEDS_CONFIG["canary_in_output"] = _saved
+    check("...and the table is restored afterwards",
+          NEEDS_CONFIG.get("canary_in_output") == ["canaries"])
+
+    # THE REVERSE IS NOT A RULE, and asserting it was wrong. Three detectors are declared here
+    # and still fire on an empty context, because they are PARTLY gated: `lookalike_domain`
+    # catches punycode and mixed-script hosts structurally and needs `allowed_domains` only to
+    # judge whether a domain is one of yours; `unbounded_output` falls back to a 12,000-character
+    # default; `mass_assignment` carries built-in privileged field names. Declaring them is what
+    # lets `inert_for` tell an operator that half a check did not run.
+    #
+    # The declaration has a cost — `_unmeasurable` refuses to send an attack whose every
+    # detector is inert — so it was measured rather than assumed: on a config with no
+    # `oracle_context` at all, 76 of 357 attacks are held back, and ZERO of them rely only on
+    # these three. The cost is currently nil. This asserts that, so an arsenal change that makes
+    # it stop being nil is visible rather than silent.
+    _partly = {"lookalike_domain", "mass_assignment", "unbounded_output"}
+    import yaml as _yaml
+    _atk = _yaml.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"), encoding="utf-8"))
+    _dead = set(inert_for({}, DETECTORS))
+    _lost = [a["id"] for a in _atk
+             if (set(a.get("success") or []) | set(a.get("partial") or []))
+             and (set(a.get("success") or []) | set(a.get("partial") or [])) <= _partly]
+    check("no attack is held back solely by a detector that would have worked anyway",
+          not _lost, f"not sent, but every detector they name still fires unconfigured: {_lost}")
+
     # --- the bucket split routes it to *cannot*, not to *did not* -----------------------
     real_ctx = dc.contexts
     try:

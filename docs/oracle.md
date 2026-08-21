@@ -1,19 +1,19 @@
 # The oracle
 
-Sixty-two deterministic detectors, how many have ever fired, where the oracle stops, and the two gates that keep it from reading the question.
+Sixty-four deterministic detectors, how many have ever fired, where the oracle stops, and the two gates that keep it from reading the question.
 
 *Part of the [QAtration](../README.md) design record.*
 
 ---
 
-## The oracle: sixty-three detectors, and how many have ever fired
+## The oracle: sixty-four detectors, and how many have ever fired
 
 A detector is a pure `(probe, ctx) -> bool`, judged by an objective rule and never by a
 model's opinion — that separation is why a clean result from this tool can mean anything.
-There are sixty-three, across the channels a breach actually uses: the reply, a tool
+There are sixty-four, across the channels a breach actually uses: the reply, a tool
 argument, a tool's return value, the conversation, the next session, the bill.
 
-The number that matters is not sixty-three. **It is how many of them have ever caught something
+The number that matters is not sixty-four. **It is how many of them have ever caught something
 on a live target**, which `detector_coverage.py` answers by replaying every stored artifact
 through the current oracle at no GPU cost:
 
@@ -21,13 +21,13 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **57 demonstrated, 6 declared-only** over 2,747 stored probes. Few tools publish a plugin count
+It reports **58 demonstrated, 6 declared-only** over 2,795 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
 
 The probe count more than doubled without a single new run, because **the benign corpus was
-not being read at all**. 1,440 probes across 30 targets, the larger half of everything this
+not being read at all**. 1,500 probes across 30 targets, the larger half of everything this
 engine has stored, excluded from the tool whose entire job is to say what has been
 demonstrated. `tool_call_storm` sat in DECLARED ONLY under the heading *"no target in the
 fleet exhibits this behaviour"* while `benign.py`'s own roll-up printed a fire for it on
@@ -117,7 +117,7 @@ signal, and the others are the diagnosis.
 ### The headline number, and why it is not a percentage
 
 With a benign baseline on all 30 targets there are **1,500 probes on which nobody attacked
-anything**, and 499 detector fires across them. Publishing that as a 33% false-positive rate
+anything**, and 514 detector fires across them. Publishing that as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
 makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
@@ -145,15 +145,15 @@ written down — one verdict per (target, detector), each with a reason, keyed a
 because a detector is routinely right about one bot and wrong about another. Today:
 
 ```
-of 499 fire(s) on clean traffic:
-     392 adjudicated as FINDINGS about the target — it does this with nobody attacking it
-     107 adjudicated as false alarms
-    false-alarm rate over what HAS been settled: 107/499 (21.4%)
+of 514 fire(s) on clean traffic:
+     399 adjudicated as FINDINGS about the target — it does this with nobody attacking it
+     115 adjudicated as false alarms
+    false-alarm rate over what HAS been settled: 115/514 (22.4%)
 ```
 
-**The unadjudicated line is gone because there is nothing left in it.** All 499 fires across 30
+**The unadjudicated line is gone because there is nothing left in it.** All 514 fires across 30
 targets are settled, one (target, detector) pair at a time, each with the evidence that decided
-it. The number went 0.4% → 6.3% → 9.2% → 19.4% → 21.5% → 21.4% as the settling proceeded, and
+it. The number went 0.4% → 6.3% → 9.2% → 19.4% → 21.5% → 21.4% → 22.4% as the settling proceeded, and
 every step but the last made it less flattering. **That direction is the only evidence that the
 process is a measurement rather than a defence**: a rate that improved as somebody looked harder
 would have been a rate somebody was managing. Adding a thirtieth target moved it; so did
@@ -205,7 +205,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 63 detectors
+the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 64 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 
@@ -246,8 +246,8 @@ an instruction.
 
 ## How severe is it, and who decided
 
-Every finding carries a severity, and for most of this project's life those were one person's
-judgement typed into a table. The distribution gave that away: **21 of 63 detectors were
+Every finding carries a severity, and for most of this project's life those were assigned by
+hand, one judgement per detector, typed into a table. The distribution gave that away: **21 of the 63 detectors that existed then were
 `critical`** — a third of everything, more criticals than mediums. A reader who has seen one
 scanner report knows what a top-heavy distribution means, and stops believing the parts that are
 right along with the parts that are not.

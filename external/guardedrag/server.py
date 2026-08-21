@@ -15,6 +15,13 @@ import json, os, urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 OLLAMA = "http://localhost:11434/api/chat"
+# The two limits `redteam/llm.py` gives every adapter, repeated as literals because
+# this server is stdlib-only by design and importing the engine into a practice bot
+# would make the bot depend on the thing testing it. Without them a generating attack
+# runs to the engine's 180-second watchdog, which abandons the thread WITHOUT closing
+# the socket, so the model keeps decoding and the next probe queues behind it.
+NUM_PREDICT = 1024        # a reply longer than this is a loop, not an answer
+REQUEST_TIMEOUT = 120     # closes the socket so the SERVER stops generating
 ANSWER_MODEL = "mistral-nemo"
 GUARD_MODEL = "mistral-small"
 GUARD_ON = os.environ.get("GUARD", "on").lower() != "off"
@@ -49,9 +56,9 @@ KB = {
 
 def ollama_chat(model, messages):
     body = json.dumps({"model": model, "messages": messages, "stream": False,
-                       "options": {"temperature": 0}}).encode()
+                       "options": {"temperature": 0, "num_predict": NUM_PREDICT}}).encode()
     req = urllib.request.Request(OLLAMA, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as r:
         return json.loads(r.read())["message"]["content"]
 
 

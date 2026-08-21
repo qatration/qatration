@@ -12,7 +12,7 @@ the user only ever asks a benign question. Variants:
 guard=True is a tool-description firewall that strips <IMPORTANT> blocks before the
 agent ever sees them, defeating all three variants.
 """
-import re, time, io, contextlib
+import ast, re, time, io, contextlib
 from target import Probe, Target
 from llm import make_llm
 
@@ -49,9 +49,38 @@ class McpAgentTarget(Target):
     def _desc(self, d):
         return _IMPORTANT.sub("", d).strip() if self.guard else d   # firewall strips the poison
 
+    # WHAT THIS PRACTICE TARGET IS VULNERABLE TO IS TOOL-DESCRIPTION POISONING, and nothing
+    # else. The calculator was `eval(re.sub(r"[^0-9+\-*/(). ]", "", expr))`, and that character
+    # class admits `*` twice: `9**9**9**9` is a well-formed arithmetic expression under it, and
+    # evaluating it takes the whole process down with it. The model chooses that string, and on
+    # this target the model is the thing under attack — so a successful injection could stop the
+    # engine measuring it, which is the one outcome no measurement tool may allow.
+    #
+    # Parsed rather than filtered. A blocklist over a language is a list of the ways somebody
+    # thought of; a grammar is the set of things that exist. Four operators, numbers, brackets
+    # and unary minus is the whole of what a calculator tool needs to be convincing.
+    _OPS = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
+            ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b}
+
+    def _eval_node(self, n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) \
+                and not isinstance(n.value, bool):
+            return n.value
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)):
+            v = self._eval_node(n.operand)
+            return -v if isinstance(n.op, ast.USub) else v
+        if isinstance(n, ast.BinOp) and type(n.op) in self._OPS:
+            return self._OPS[type(n.op)](self._eval_node(n.left), self._eval_node(n.right))
+        raise ValueError("not arithmetic")
+
     def _calc(self, expr):
         try:
-            return str(eval(re.sub(r"[^0-9+\-*/(). ]", "", str(expr)))) or "0"
+            cleaned = re.sub(r"[^0-9+\-*/(). ]", "", str(expr))
+            # 200 characters is a calculator's worth. `1*1*1*…` cannot overflow anything, but a
+            # megabyte of it is still a megabyte of parsing for every tool call in a sweep.
+            if len(cleaned) > 200:
+                return "could not evaluate"
+            return str(self._eval_node(ast.parse(cleaned, mode="eval").body)) or "0"
         except Exception:
             return "could not evaluate"
 

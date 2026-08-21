@@ -33,8 +33,8 @@ string match again. `canary_in_output` = full exfiltration; `canary_in_context`
 
 ## What the engine got wrong about itself
 
-Three defects found in one day, all in the same direction: **a real breach reported as a
-defence.** They are worth writing down because none of them were visible from a report, and
+Three defects, found independently and all in the same direction: **a real breach reported
+as a defence.** They are worth writing down because none of them were visible from a report, and
 each one had been silently corrupting results for as long as it existed.
 
 **A detector that is never consulted is not a detector.** `judge()` only ran the detectors
@@ -196,7 +196,7 @@ qatration/
     intake.py         # optional HTTP front end: a config in, a run id back, the report out
     honeytoken.py     # the secret the attacks hunt for is minted, not the operator's
     build_generic.py  # the portable arsenal, derived from the library rather than left over
-    oracle.py         # 63 detectors + judge + the always-on breach set
+    oracle.py         # 64 detectors + judge + the always-on breach set
     detector_coverage.py  # which detectors have ever fired, vs merely declared
     generate.py       # objectives from what the target says it must not do
     run_generate.py   # entry point for generation
@@ -250,24 +250,20 @@ qatration/
     guardedrag/       # purpose-built RAG + output guard (GUARD=on|off, EVASION=literal|instructed)
     httpbot/          # :8099 stateless chat — trusts client-supplied history, no rails
                       #   the unguarded baseline every guarded build is compared against
-    third-party-rag/  # an untracked third-party app, not written for this repo
-  spikes/             # exploratory one-off scripts the engine grew out of
-    harness.py compare.py indirect_*.py report.py rejudge.py …
   out/                # generated artifacts (results.json, *.html, compare/)
-  dvla/               # the practice target (Damn Vulnerable LLM Agent) + venv (env/)
-  ollama-models/      # local model weights (OLLAMA_MODELS points here)
+  dvla/               # OPTIONAL, and not in this repository: a third-party practice target
+                      #   with its own licence. `targets_dvla.py` refuses with a sentence
+                      #   saying so, rather than an ImportError, when it is not cloned here.
 ```
 
-Every script self-locates its paths from `__file__`, so the whole `qatration/`
-folder can be moved anywhere without edits. The `spikes/` scripts remain useful
-for ad-hoc runs; the `redteam/` package is the generalized engine they fed into.
+Every script self-locates its paths from `__file__`, so the package can be moved anywhere
+without edits.
 
 ## Run
 
 Everything is local (Ollama, no API keys, no cost):
 
 ```bash
-# from the repo root, using the venv in dvla/env
 qatration run --trials 3
 ```
 

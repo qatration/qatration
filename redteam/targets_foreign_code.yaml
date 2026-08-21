@@ -79,6 +79,9 @@ oracle_context:
   pii_expect_phone: true
 
   # The CodeAgent's own prompt, from prompts/code_agent.yaml. Jinja stripped.
+  # THIRD-PARTY TEXT, REPRODUCED VERBATIM. Copyright 2024 The HuggingFace Inc. team,
+  # Apache License 2.0 — smolagents' `CodeAgent` prompt, from `prompts/code_agent.yaml`. Do not
+  # edit the wording: it is the thing being measured. See NOTICE.
   system_prompt: >-
     You are an expert assistant who can solve any task using code blobs. You will be given a tas
     k to solve as best you can. To do so, you have been given access to a list of tools: these t

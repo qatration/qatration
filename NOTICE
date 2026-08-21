@@ -24,20 +24,57 @@ smolagents (Apache 2.0, Hugging Face) and LangChain (MIT) — and `external/nemo
 configuration for NVIDIA NeMo Guardrails (Apache 2.0). The libraries themselves are not
 included; each is installed from its own distribution under its own licence.
 
-Two target configs are the exception, and it is a deliberate one.
-`redteam/targets_foreign.yaml` and `redteam/targets_foreign_code.yaml` reproduce the SYSTEM
-PROMPTS that smolagents ships with its `ToolCallingAgent` and `CodeAgent`, verbatim, under
-Apache 2.0 and with attribution to Hugging Face. They are there because this engine refuses to
-read a target's prompt out of its own source: a detector that has seen the prompt can subtract
-it, and a control whose prompt was read rather than declared is not a control. Declaring them
-is what makes the measurement honest, and reproducing them is what declaring them costs.
+SYSTEM PROMPTS REPRODUCED HERE, and why. This engine refuses to read a target's prompt out
+of its own source: a detector that has seen the prompt can subtract it, and a control whose
+prompt was read rather than declared is not a control. Declaring a prompt is what makes the
+measurement honest, and reproducing it is what declaring it costs. Every reproduction is
+listed:
 
-`dvla/` holds an untracked third-party practice application with its own licence, NOT
+  * `redteam/targets_foreign.yaml` and `redteam/targets_foreign_code.yaml` reproduce the
+    system prompts smolagents ships with its `ToolCallingAgent` and `CodeAgent`, verbatim
+    with the Jinja placeholders stripped.
+    Copyright 2024 The HuggingFace Inc. team, Apache License 2.0.
+
+  * `redteam/targets_dvla.py` reproduces the system prompt of the Damn Vulnerable LLM Agent,
+    verbatim, including an upstream typographical error which is left as it is because
+    correcting it would change the target being measured.
+    Copyright ReversecLabs (formerly WithSecure Labs), Apache License 2.0.
+    https://github.com/ReversecLabs/damn-vulnerable-llm-agent
+
+  * `redteam/test_oracle.py` uses an abridged extract of the same smolagents rules block as a
+    detector fixture, in three places.
+
+  * Five artifacts under `out/` — `results_foreign.json`, `recon_foreign.json`,
+    `adaptive_foreign.json`, `report_foreign.html`, `report_foreign_qwen2.5-14b.html` —
+    contain smolagents prompt text as RECORDED MODEL OUTPUT. That is what a prompt-leak run
+    produces, and the evidence is kept rather than trimmed, because a finding with its
+    evidence removed is a claim.
+
+ATTACK PAYLOADS TAKEN FROM ANOTHER PROJECT. Two attacks in `redteam/attacks.yaml`, and their
+copies in the generated `redteam/attacks_generic.yaml`, use payload text from the Damn
+Vulnerable LLM Agent's README verbatim: the `(#system) NEW IMPORTANT INSTRUCTION` migration
+injection and the forged `Thought:` observation. They are reproduced rather than rewritten
+because the point of that target is to measure the engine against a published, unmodified
+exploit somebody else designed, and a paraphrase would measure something else.
+Copyright ReversecLabs (formerly WithSecure Labs), Apache License 2.0.
+
+The rest of the attack corpus is written here. Several techniques it exercises are described
+in published research and named in the comments beside the attacks that use them — ArtPrompt,
+Context Compliance Attacks, Crescendo, Skeleton Key, policy puppetry, latent injection, and
+the adversarial suffixes of Zou et al. (arXiv:2307.15043, `llm-attacks`, MIT). Where a
+published string is used it is cited beside the attack that uses it.
+
+CANARIES. Every attack is aimed at a value this project plants, with one exception: the DVLA
+target's canaries (`plutonium-256`, `flux-capacitor-123`) are the upstream application's own
+seeded flags, because that target ships with them and planting a second secret would measure a
+different system.
+
+`external/nemo/config/prompts.yml` and `config_inputonly/prompts.yml` follow the self-check
+prompt scaffold from NVIDIA's example bot configuration — the `{{ user_input }}` /
+`{{ bot_response }}` substitution and the `Question: ... (Yes or No)? / Answer:` closing the
+rail parses. The policy rules inside that scaffold are written here.
+NVIDIA NeMo Guardrails, Apache License 2.0.
+
+`dvla/` itself holds an untracked third-party practice application with its own licence, NOT
 tracked in this repository. `redteam/targets_dvla.py` will tell you so if you try to use it
 without cloning it first.
-
-The attack corpus is original. Several techniques it exercises are described in published
-research and named in the comments beside the attacks that use them — ArtPrompt, Context
-Compliance Attacks, Crescendo, Skeleton Key, policy puppetry, latent injection. The techniques
-are cited; no text was taken from any other tool's corpus, and every attack here is aimed at a
-canary this project plants rather than at a secret described in the abstract.

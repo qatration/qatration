@@ -109,6 +109,30 @@ def main():
         check("a misspelled config key is reported rather than queued",
               code in (400, 422) and "respones" in json.dumps(obj), f"{code} {obj}")
 
+        # The name becomes a filename.
+        # Through the stub policy like everything else here: this check is about the NAME, and
+        # the real policy now resolves the host, which makes `.example` — a TLD that resolves
+        # nowhere by design — refuse the submission before the name is ever looked at. A check
+        # that passes for the wrong reason is not a check.
+        code, obj = intake.submit(root, body(cfg={"name": "../../etc/passwd",
+                                                  "url": "https://api.acme.example/c"}),
+                                  policy=allow_loopback)
+        check("a name that is a path is refused", code == 400, f"{code} {obj}")
+        for bad in ("..", ".", "-rf", ".hidden", "a:b", "x" * 65, ""):
+            code, obj = intake.submit(root, body(cfg={"name": bad,
+                                                      "url": "http://127.0.0.1:9/c"}),
+                                      policy=allow_loopback)
+            check(f"a name of {bad!r} is refused", code == 400, f"{code} {obj}")
+        # `a:b` above is the one that reads as harmless. On Windows `results_a:b.json` is an NTFS
+        # alternate data stream on `results_a` — a file that exists and holds what was written
+        # to it, and does not appear in a directory listing.
+
+        for bad_scope in ("everything", "quick; rm -rf /", "--fail-on=none", 7):
+            code, obj = intake.submit(root, body(scope=bad_scope),
+                                      policy=allow_loopback)
+            check(f"scope {bad_scope!r} is refused at submission, not by the worker later",
+                  code == 400, f"{code} {obj}")
+
         code, obj = intake.status(root, job_id)
         check("a submitted job can be looked up", code == 200 and obj["state"] == "queued",
               f"{code} {obj}")
@@ -162,11 +186,6 @@ def main():
                                       policy=allow_loopback, wake=lambda r: True)
             check(f"adapter {adapter!r} is refused", code == 400, f"{code} {obj}")
 
-        # The name becomes a filename.
-        code, obj = intake.submit(root, body(cfg={"name": "../../etc/passwd",
-                                                  "url": "https://api.acme.example/c"}))
-        check("a name that is a path is refused", code == 400, f"{code} {obj}")
-
         # --- and the service refuses to START in the dangerous configuration --------------
         src = open(os.path.join(HERE, "intake.py"), encoding="utf-8").read()
         check("the intake refuses to start without the hosted flag",
@@ -176,9 +195,9 @@ def main():
         # Two properties, and the second one is why this check exists in this shape. The path
         # must be built from the validated job id and nothing the caller sent — and the
         # FILENAME must be the one the report writer actually produces. Asserting only the
-        # string let the route point at `defense_report_free.html` for as long as it took
-        # somebody to notice that nothing had written that name since the rename: a 404 no
-        # test could see, because the test was checking that the wrong name was spelled right.
+        # string let the route point at a filename nothing had written since a rename, for
+        # as long as it took somebody to notice: a 404 no test could see, because the test was
+        # checking that the wrong name was spelled right.
         dr_src = open(os.path.join(HERE, "defense_report.py"), encoding="utf-8").read()
         written = re.search('OUT_DIR / "(defense_report[^"]*[.]html)"', dr_src)
         check("the report writer has one output name", written is not None)
@@ -189,8 +208,9 @@ def main():
               written.group(1) if written else "no match")
         check("responses carry a content-type-options header, since one of them is HTML",
               "X-Content-Type-Options" in src)
-        # Nothing in the service asks the queue on a timer. A cost property, not a style
-        # one: with scale-to-zero billing a scheduled check IS the bill.
+        # Nothing in the service asks the queue on a timer. A resource property rather than
+        # a style one: a poll runs whether or not there is anything to do, so it spends on
+        # every idle interval, and idle is what a queue mostly is.
         for mod in ("intake.py", "worker.py", "jobqueue.py"):
             src2 = open(os.path.join(HERE, mod), encoding="utf-8").read()
             check(f"{mod} does not poll on a timer", "time.sleep" not in src2, mod)

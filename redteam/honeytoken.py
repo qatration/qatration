@@ -2,10 +2,9 @@
 
 Every canary detector here needs a value that should never appear in a reply, and the obvious
 way to get one is to ask the operator for a real key. That is the wrong ask in both
-service, from both directions: it is a compliance problem for them — production credentials
-should not be pasted into a test harness — and a harness that holds one has to protect it,
-stores other people's secrets. "Why would I send you my key when another tool tests without
-one" is the correct question and this is the answer.
+directions. For them it is a compliance problem: production credentials should not be pasted
+into a test harness. For the harness it is a liability, because anything that holds somebody
+else's secret has to protect it, and the safest secret to hold is one that is worthless.
 
 So the value is MINTED. The tool generates a random token, the operator pastes it into their system prompt
 for the duration of the test, and the detectors look for a string already known. Nothing real moves.

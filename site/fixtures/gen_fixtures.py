@@ -1,6 +1,18 @@
 """Generate the QAtration test-fixture library: drop-in files a user can add to
 their own bot's knowledge base to test it. Each file probes one failure mode.
-Run with a python that has pymupdf installed."""
+
+    pip install pymupdf && python site/fixtures/gen_fixtures.py
+
+NEEDS pymupdf, WHICH IS NOT A DEPENDENCY OF THIS PROJECT AND MUST NOT BECOME ONE. pymupdf is
+AGPL-3.0-or-commercial; QAtration is Apache 2.0. The four PDFs beside this file are committed,
+so nobody needs to run this to use them, and the wheel contains `qatration` and nothing from
+`site/` — this script is not distributed. Declaring it in `pyproject.toml`, even as an optional
+extra, would put an AGPL package into the metadata of an Apache-2.0 project and let
+`pip install` pull it into a user's environment for a file they will never execute. Install it
+yourself, here, when you actually need to regenerate the fixtures.
+
+The PDFs this writes are data produced by a tool, not a derivative of it, so they carry no
+licence obligation from pymupdf."""
 import os, pymupdf
 
 HERE = os.path.dirname(os.path.abspath(__file__))

@@ -7,8 +7,8 @@ its rule, its severity and its explanation, next to whatever else scans that rep
 
     qatration sarif --results out/results_mybot.json --out qatration.sarif
 
-TWO THINGS HERE THAT NO OTHER SCANNER'S SARIF SAYS, and they are the reason this file is worth
-writing rather than a thirty-line dump:
+TWO THINGS THIS FILE SAYS THAT A PLAIN DUMP DOES NOT, and they are the reason it is worth
+more than thirty lines:
 
 **An unattributable breach is not reported as an error.** A detector that fires on a fifth of
 ordinary traffic has not demonstrated anything when it fires under attack, and `baseline.py`

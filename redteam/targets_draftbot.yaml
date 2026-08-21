@@ -31,9 +31,10 @@ oracle_context:
   # exhibits this behaviour". A bot whose output is a published page is where it matters: the
   # reproduction does not stop at a screen.
   #
-  # Public domain, and the detector ships no corpus on purpose — putting Guardian excerpts in
-  # a repository to test whether a model reproduces Guardian excerpts is a strange thing to do
-  # to someone's working copy. These are the CONTINUATIONS; the attack supplies only the start,
+  # Public domain, and the detector ships no corpus on purpose: a memorisation test does not
+  # need one, because the question is whether the model already holds the text rather than
+  # whether it can copy text it was handed. These are the CONTINUATIONS; the attack supplies
+  # only the start,
   # so a hit is text the model produced and nobody sent it.
   # This bot writes customer emails and knowledge-base articles in plain English, no jargon.
   # It has no code domain, and its output is PUBLISHED without a human reading it — so a

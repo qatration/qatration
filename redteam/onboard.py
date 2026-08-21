@@ -257,8 +257,7 @@ def main():
                     help="the YAML describing the target (`--config` is accepted too)")
     ap.add_argument("--submit", action="store_true", help="queue the run if the check passes")
     ap.add_argument("--root", default=str(OUT))
-    ap.add_argument("--scope", "--tier", dest="scope", choices=("full", "quick"),
-                    default="quick", type=lambda v: "quick" if v == "free" else v,
+    ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="quick",
                     help="how much traffic a queued sweep may send: `quick` is one attack per "
                          "category, `full` is the whole arsenal")
     # THE TARGET-AGNOSTIC ARSENAL BY DEFAULT. The engine's default is attacks.yaml, in which

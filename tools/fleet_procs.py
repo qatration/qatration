@@ -75,7 +75,7 @@ def _norm(path):
 
     Three ways the same interpreter fails to match itself, all of them seen here: fleet.sh
     builds paths with forward slashes from a bash `pwd` while Windows reports backslashes; the
-    case differs; and `$HERE/../foreign-agent-env/...` keeps its `..`, which no running process
+    case differs; and a path built with a `..` in it keeps that `..`, which no running process
     ever has in its command line. That last one hid two servers on the first run — reported as
     not ours and left alive, which is this file's own failure mode turning up inside the fix for
     it. Collapse the path before comparing, never after.

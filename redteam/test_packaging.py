@@ -204,6 +204,56 @@ def test_requirements_txt_agrees_with_pyproject():
           % sorted(listed))
 
 
+def _licences():
+    """`tools/licences.py`, the one place that decides. Imported rather than copied: the commit
+    hook reads the same module, and a second list here would be the one left un-updated."""
+    import importlib.util
+    path = os.path.join(REPO, "tools", "licences.py")
+    spec = importlib.util.spec_from_file_location("qat_licences", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_no_dependency_carries_a_copyleft_licence():
+    """Every name in pyproject.toml, runtime and extras alike, is a package we may hand on."""
+    lic = _licences()
+    found = lic.problems(os.path.join(REPO, "pyproject.toml"))
+    assert not found, "; ".join(found)
+    named = lic.declared(os.path.join(REPO, "pyproject.toml"))
+    print("  ok  every declared dependency is a known permissive licence: %s"
+          % sorted(f"{n} ({lic.ALLOWED[n]})" for n in named))
+
+
+def test_the_licence_gate_would_catch_a_copyleft_package():
+    """The gate above, shown failing on the package that actually got past it.
+
+    A review said "pymupdf AGPL-3.0 undeclared", and the fix applied was to DECLARE it as an
+    optional extra — putting an AGPL-3.0-or-commercial package into an Apache-2.0 project's own
+    metadata. It was caught by a question, not by a check. A list nothing is measured against is
+    a list, so the refusal is exercised here rather than trusted.
+    """
+    import tempfile
+    lic = _licences()
+    assert "pymupdf" not in lic.ALLOWED, \
+        "pymupdf is AGPL-3.0-or-commercial and must never be on the allowed list"
+    for spec in ("pymupdf>=1.24", "PyMuPDF", "pymupdf[extra]>=1.0", "PyMuPDF ; sys_platform"):
+        assert lic.dist_name(spec) == "pymupdf", \
+            "the name reader would not recognise %r, so the gate would pass it" % spec
+
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "pyproject.toml")
+        io.open(p, "w", encoding="utf-8").write(
+            '[project]\nname = "x"\nversion = "0"\ndependencies = ["PyYAML>=5.4"]\n'
+            '[project.optional-dependencies]\nfixtures = ["pymupdf>=1.24"]\n')
+        found = lic.problems(p)
+        assert found and "pymupdf" in found[0] and "AGPL" in found[0], \
+            "the gate did not refuse a planted AGPL extra: %s" % found
+        assert "optional-dependencies.fixtures" in found[0], \
+            "the refusal does not say WHERE the package was declared: %s" % found
+    print("  ok  the licence gate refuses the package that got past it once, and says where")
+
+
 def test_declared_dependencies_match_the_code():
     """The list in pyproject.toml is re-derived, not trusted."""
     needed = set()

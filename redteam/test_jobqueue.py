@@ -7,7 +7,7 @@ about whether it can hold items.
 
 The one that matters most is `claim()` returning nothing. That has two opposite meanings —
 there is no work, or there is work and something else holds it — and a worker that cannot tell
-them apart reports an idle queue while a customer's run sits blocked. That is a gap reported as
+them apart reports an idle queue while a real run sits blocked. That is a gap reported as
 a measurement, which is the defect this whole repo is organised around.
 
     python test_jobqueue.py      # exits 1 on any failure (CI gate)
@@ -161,9 +161,9 @@ def main():
     # seconds to 148. It also means the fallback is the ONLY path those checks exercise, so
     # the hosted behaviour needs its own fixtures or it ships untested.
     #
-    # Hosted, that shared resource is gone: a run is about eleven minutes of wall clock and
-    # 0.08 seconds of local CPU, because all of it is waiting on somebody else's bot. A global
-    # lock stopped every other customer during time this machine spent doing nothing.
+    # Against an outside target that shared resource is gone: a run is about eleven minutes of
+    # wall clock and 0.08 seconds of local CPU, because all of it is waiting on somebody else's
+    # bot. A global lock stopped every other job during time this machine spent doing nothing.
     import tempfile as _tf, yaml as _yaml
     root2 = _tf.mkdtemp()
     try:
@@ -241,10 +241,10 @@ def main():
 
         # STARVATION, which the first version of this shipped. The selection took "every queued
         # job whose endpoint is free", so an in-process job was skipped for as long as ANY
-        # remote job was queued — and it needs an empty queue to start, while a queue with
-        # customers in it is never empty. The practice fleet would have waited behind paying
-        # work forever, and nothing would have said so. An exclusive job at the head of the
-        # queue holds the line instead.
+        # remote job was queued — and it needs an EMPTY queue to start, which a queue doing
+        # any work never is. The practice fleet would have waited behind remote jobs forever
+        # and nothing would have said so. An exclusive job at the head of the queue holds the
+        # line instead.
         q.release(root2, jr2, "done")
         for i in range(3):
             q.submit(root2, f"late{i}", cfg_for(f"https://api.late{i}.example/chat"),

@@ -10,12 +10,28 @@ from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
-SEVERITY = {  # detector -> severity, to compute a target's worst finding
-    "command_injection": "critical", "ssrf_call": "critical",
-    "destructive_tool_call": "critical", "canary_in_output": "critical",
-    "rogue_tool_call": "high", "canary_in_context": "high", "exfil_via_url": "high",
-    "sysprompt_leak": "medium",
-}
+def _severity_table():
+    """detector -> severity, from the ONE place that assigns it.
+
+    This file used to keep its own map of eight detectors, and the two disagreed. Measured:
+    `command_injection`, `ssrf_call` and `destructive_tool_call` were `critical` here and `high`
+    in `defense_report.REMEDIATION`; `rogue_tool_call` was `high` here and `medium` there. Same
+    run, same finding, two severities — whichever artifact the reader opened decided. The client
+    HTML said high and the target comparison said critical about the same row.
+
+    `REMEDIATION` wins because it is not a shorter list, it is the complete one: sixty-three of
+    the sixty-four detectors, each with the OWASP category and the remediation text that goes to
+    a customer, assigned by the banded scheme `docs/oracle.md` sets out. Eight entries kept
+    beside it were a copy nobody re-derived.
+
+    A detector with no entry has no severity here, exactly as before — `.get()` returns None and
+    `SEV_RANK` already has a bucket for it.
+    """
+    from defense_report import REMEDIATION
+    return {d: spec.get("sev") for d, spec in REMEDIATION.items() if isinstance(spec, dict)}
+
+
+SEVERITY = _severity_table()
 SEV_RANK = {"critical": 0, "high": 1, "medium": 2, None: 3}
 SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", None: "#1e9d63"}
 # Grey for the third verdict, because it is not a result: a run that sent no attacks

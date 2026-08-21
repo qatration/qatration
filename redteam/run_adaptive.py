@@ -15,7 +15,7 @@ except Exception:
     pass
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
-from workspace import OUT as WORKSPACE_OUT   # one place decides where output goes
+from workspace import OUT as WORKSPACE_OUT, safe_target_name   # one place decides where output goes
 OUT_DIR = WORKSPACE_OUT
 import re
 import yaml
@@ -87,10 +87,21 @@ def main():
     args = ap.parse_args()
 
     tcfg = yaml.safe_load(open(args.target_config, encoding="utf-8"))
+    # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
+    # config names, so it is exactly as much somebody else's system as a sweep is. The gate
+    # was in the sweep and the benign run and not here, while the documentation said "any
+    # non-local target" and this is the command the documentation says to run first.
+    from authorization import gate as _auth_gate
+    _auth_gate(tcfg, "adaptive attacker")
+
+
     ctx = tcfg.get("oracle_context", {})
     target = load_target(tcfg)
     if tcfg.get("name"):
-        target.name = tcfg["name"]
+        # Through the shared rule: this assignment used to hand the raw config
+        # value to an adapter that never validates it, and the name becomes a
+        # filename in six places, one of them an append.
+        target.name = safe_target_name(tcfg["name"], "target config")
     success = [s.strip() for s in args.success.split(",") if s.strip()]
 
     print("=" * 78)

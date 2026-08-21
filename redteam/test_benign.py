@@ -29,6 +29,7 @@ import yaml
 from target import Probe, payload, target_configs
 from oracle import DETECTORS
 from benign import CORPUS, SECURITY_TALK, CONVERSATIONS, fires_on, summary, excerpt
+from workspace import OUT as ARTIFACTS   # one place decides where evidence lives
 
 # Every prompt the gate has to clear: the single sends, plus each conversation flattened
 # the way runner.py assembles it, because the whole user side is what echo subtraction sees.
@@ -108,7 +109,17 @@ def main():
     # likely to mistake a language for one: Arabic contains right-to-left runs by nature and
     # Cyrillic normalises onto Latin. Checked against a reply that ECHOES the user, which is
     # what a support bot does when it confirms a name or an address back.
-    intl = [t for cid, t in ALL_PROMPTS if cid in ("greek", "hebrew-rtl", "japanese", "arabic-rtl", "accented-name")]
+    #
+    # DERIVED FROM THE CORPUS, not listed. This named five ids and one of them was `greek`,
+    # which the corpus replaced with `korean` — so the check quietly ran over four languages
+    # and would have passed just as happily over one. A test holding a copy of a list the code
+    # owns is the same defect this file exists to catch, aimed at the test instead.
+    from benign import INTERNATIONAL
+    _intl_ids = {c[0] for c in INTERNATIONAL}
+    intl = [t for cid, t in ALL_PROMPTS if cid in _intl_ids]
+    check("the international section is still there to check",
+          len(intl) == len(INTERNATIONAL) and len(intl) >= 5,
+          f"{len(intl)} prompt(s) matched {len(INTERNATIONAL)} international entries")
     check("non-English text is clean even when the bot repeats it back",
           not [f for ctx in ctxs.values() for t in intl
                for f in fires_on(Probe(prompt=payload(t), output=t, tool_calls=[],
@@ -311,6 +322,42 @@ def main():
     impossible = sorted(t for t, n in sizes.items()
                         if not isinstance(n, int) or n <= 0 or n > now + 50)
     check("no baseline claims a corpus size that never existed", not impossible, str(impossible))
+
+    # --- EVERY STORED BASELINE WAS MEASURED ON THE CORPUS THAT EXISTS NOW -------------------
+    #
+    # A rate averaged over two corpora reads exactly like a rate from one. When the corpus
+    # changed — one international prompt replaced with another — twenty-nine baselines were
+    # re-measured and one was not, because its build guard refused a config mismatch and the
+    # loop moved on. It sat there fifty prompts wide, on a different fifty, contributing to a
+    # headline false-alarm rate, and nothing in thirty-nine suites could see it. It took a
+    # ten-line script written by hand to find, which is the definition of a check that should
+    # exist.
+    #
+    # By ID and IN ORDER: same width is not the same corpus, and that is the whole failure.
+    import glob as _glob
+    import json as _json
+    want = [c[0] for c in CORPUS] + [c[0] for c in CONVERSATIONS]
+    drifted, found = [], 0
+    for path in sorted(_glob.glob(os.path.join(ARTIFACTS, "benign_*.json"))):
+        try:
+            data = _json.load(open(path, encoding="utf-8"))
+        except Exception as e:
+            drifted.append(f"{os.path.basename(path)} does not parse: {e}")
+            continue
+        found += 1
+        got = [r.get("id") for r in (data.get("rows") or [])]
+        if got != want:
+            name = os.path.basename(path)[len("benign_"):-len(".json")]
+            missing = sorted(set(want) - set(got))
+            extra = sorted(set(got) - set(want))
+            drifted.append(f"{name} (measured {data.get('meta', {}).get('when')}): "
+                           f"missing {missing}, has {extra}")
+    check("every stored baseline was measured on the corpus that exists now",
+          not drifted, "; ".join(drifted))
+    # ...and the walk found baselines at all. An empty `out/` would pass the check above by
+    # examining nothing, which is the shape this suite is named after.
+    check("...and there were baselines to check", found >= 20,
+          f"only {found} benign_*.json found under {ARTIFACTS}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

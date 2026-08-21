@@ -15,7 +15,7 @@ sentence claiming there was only one.
 
     python test_reports.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, json, tempfile, shutil, datetime, glob
+import sys, os, re, json, tempfile, shutil, datetime, glob
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -406,13 +406,13 @@ def main():
 
     # --- what a quick run reports: all of it ----------------------------------------------
     # SCOPE IS ABOUT TRAFFIC, NOT ABOUT DISCLOSURE. `--scope quick` sends one attack from each
-    # category instead of the whole arsenal, and then reports everything that came back. It
-    # used to also keep three findings and hold the rest, which made a run's scope decide what
-    # a reader was allowed to see — and the flag's own help text promised the opposite.
+    # category instead of the whole arsenal, and then reports everything that came back.
     #
-    # These checks are the inverse of the ones they replace. The old suite proved no held-back
-    # id reached the page; this one proves every id does. Both are checkable, and only one of
-    # them is a property worth having.
+    # The distinction is the whole reason the flag exists. Every probe is a request to an
+    # endpoint somebody is paying for, so how much to send is theirs to decide; what the page
+    # then says about what came back is not a second decision. A report that showed less
+    # because the run was narrower would be answering a question nobody asked with a number
+    # nobody could check.
     findings, _, _ = dr.load_all()
     ambient = dr.ambient_rates()
     ordered = dr.rank_for_reader(findings, ambient)
@@ -436,7 +436,7 @@ def main():
               [dr._rate_frac(f[5]) for f in ordered if noise(f) == noise(ordered[0])] or [0]),
           str(ordered[0][5]))
 
-    # THE PROPERTY THAT REPLACED THE GATE: a quick render withholds nothing.
+    # THE PROPERTY ITSELF: a quick render withholds nothing.
     import pathlib as _pl
     real = dr.OUT_DIR
     tmp = tempfile.mkdtemp()
@@ -470,11 +470,14 @@ def main():
           "argparse.SUPPRESS" in open(os.path.join(HERE, "defense_report.py"),
                                       encoding="utf-8").read())
 
-    # The mechanism cannot come back quietly: these are the names it had.
+    # A REPORT THAT TRUNCATES IS CAUGHT BY WHAT IT DOES, not by what it is called. An earlier
+    # version of this checked a list of symbol names, which catches a return under those names
+    # and misses one under any other. The behavioural checks below — every finding the run
+    # produced appears on the page, at every scope — catch it whatever it is called.
     dr_src = open(os.path.join(HERE, "defense_report.py"), encoding="utf-8").read()
-    for gone in ("SLICE_SHOWN", "FREE_SHOWN", "scope_split", "free_split",
-                 "unreported_summary", "held_back_summary"):
-        check("no truncation symbol survives: %s" % gone, gone not in dr_src)
+    check("nothing in the report builder counts what it is not showing",
+          not re.search(r"\b(?:withheld|held_back|not_shown|hidden|truncat\w*)\s*=", dr_src),
+          "a variable holding a count of unshown findings implies a page that shows fewer")
 
     # --- a template config is not a member of the fleet ---------------------------------
     # The generic adapter ships one, and a fleet sweep that ran it would put a second copy of
@@ -856,6 +859,37 @@ def main():
           filtered == ["in-the-fleet"], str(filtered))
     check("...and a caller that names no fleet still gets every row",
           unfiltered == ["in-the-fleet", "long-gone"], str(unfiltered))
+
+    # --- ONE SEVERITY PER DETECTOR, ACROSS EVERY ARTIFACT THAT PRINTS ONE -------------------
+    #
+    # Two tables assigned severity and they disagreed on four detectors: `command_injection`,
+    # `ssrf_call` and `destructive_tool_call` were `critical` in `compare_targets` and `high` in
+    # the remediation catalogue; `rogue_tool_call` was `high` and `medium`. One run, one finding,
+    # two severities — and which one a reader saw depended on whether they opened the client HTML
+    # or the target comparison.
+    #
+    # `compare_targets` now derives its table from the catalogue rather than keeping a copy of
+    # eight entries. This is what says so, and it also catches the other half: a NEW detector
+    # with no catalogue entry has no severity, no OWASP category and no remediation text, so it
+    # fires into a report with nothing to say about it.
+    from oracle import DETECTORS
+    import compare_targets as _ct
+    import defense_report as _dr
+
+    unclassified = sorted(set(DETECTORS) - set(_dr.REMEDIATION))
+    check("every detector has a remediation entry, so a finding has something to tell a reader",
+          not unclassified, f"no entry: {unclassified}")
+
+    clashes = sorted((d, _ct.SEVERITY.get(d), _dr.REMEDIATION[d].get("sev"))
+                     for d in _dr.REMEDIATION
+                     if _ct.SEVERITY.get(d) != _dr.REMEDIATION[d].get("sev"))
+    check("...and the comparison page and the client report agree on its severity",
+          not clashes, f"disagreements (detector, compare, report): {clashes[:6]}")
+
+    bad_sev = sorted(d for d, spec in _dr.REMEDIATION.items()
+                     if spec.get("sev") not in ("critical", "high", "medium"))
+    check("...and every severity is one of the three the reports know how to render",
+          not bad_sev, f"unrenderable severity on: {bad_sev}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

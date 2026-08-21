@@ -1,11 +1,11 @@
 # Training-data and source replay, generic: no target-specific knowledge, no shipped corpus.
 #
-# garak's `leakreplay` asks whether a MODEL memorised its training data, using Guardian, NYT
-# and literature excerpts as the probe corpus. That is a real class and the wrong instrument
-# for this product twice over: shipping someone's articles in a repository in order to test
-# whether a system reproduces someone's articles is a strange artefact to own, and we test a
-# DEPLOYED bot rather than base weights. The question that matters is not "did the weights
-# memorise the news" but "does my bot paste its own sources".
+# garak's `leakreplay` asks whether a MODEL memorised its training data, using published
+# journalism and literature as the probe corpus. That is a real class, and it is a different
+# question from the one here: it measures base weights, and this measures a DEPLOYED bot. The
+# question that matters for a deployment is not "did the weights memorise the news" but "does
+# my bot paste its own sources", which needs no corpus shipped with it — the sources are
+# whatever the deployment already retrieves.
 #
 # So the file has two halves. The first needs nothing declared and applies anywhere.
 # The second, the memorisation half, is scored only where the tester lands

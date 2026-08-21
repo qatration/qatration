@@ -1,8 +1,8 @@
 """The generic HTTP adapter, against a scripted server — no model, a socket on localhost only.
 
-This is the adapter a customer is onboarded with, so its failure modes are the product's
-failure modes, and every one of them is a way to make somebody else's system look better than
-it is:
+This is the adapter every outside target is reached through, so its failure modes are the
+engine's failure modes, and every one of them is a way to make somebody else's system look
+better than it is:
 
   * a wrong extraction path yields empty replies, which reads as a bot that refuses
     everything — the most flattering possible misreading of a customer's deployment;
@@ -214,18 +214,46 @@ def main():
         # A config that silently sends the literal ${ACME_TOKEN} produces a run of 401s that
         # reads as a hardened target, and the config file must never hold the key itself.
         os.environ["QAT_TEST_TOKEN"] = "s3cret"
+        os.environ["QAT_TEST_OTHER"] = "not-yours"
         try:
-            check("an env var is expanded into the header",
-                  expand_env("Bearer ${QAT_TEST_TOKEN}", "h") == "Bearer s3cret")
+            check("a declared env var is expanded into the header",
+                  expand_env("Bearer ${QAT_TEST_TOKEN}", "h", ["QAT_TEST_TOKEN"])
+                  == "Bearer s3cret")
+
+            # --- SCOPE. A config names a secret and a destination in the same file, so an
+            # unrestricted ${VAR} is both halves of a way out: a header reading the signing
+            # key and a `url:` pointing at a collector delivers it to whoever submitted the
+            # config — and that key mints an authorization token for any origin.
+            try:
+                expand_env("${QAT_TEST_OTHER}", "headers.X", ["QAT_TEST_TOKEN"])
+                check("a config cannot read a variable it did not declare", False, "expanded")
+            except SystemExit as e:
+                check("a config cannot read a variable it did not declare",
+                      "QAT_TEST_OTHER" not in str(e), f"and the refusal names it: {e}")
+            try:
+                expand_env("${QAT_TEST_OTHER}", "headers.X", [])
+                check("...and an empty declaration expands nothing", False, "expanded")
+            except SystemExit:
+                check("...and an empty declaration expands nothing", True)
         finally:
             os.environ.pop("QAT_TEST_TOKEN", None)
+            os.environ.pop("QAT_TEST_OTHER", None)
+
+        # --- THE FAILURE MUST NOT NAME THE ENVIRONMENT. This check used to assert the
+        # opposite — that the message contains the variable name — and that assertion was the
+        # oracle: `intake` returns this text to whoever submitted the config, so set means
+        # silence and unset means named, and an environment can be enumerated without a single
+        # probe being sent.
         try:
-            expand_env("Bearer ${QAT_TEST_MISSING}", "headers.Authorization")
+            expand_env("Bearer ${QAT_TEST_MISSING}", "headers.Authorization",
+                       ["QAT_TEST_MISSING"])
             check("a missing env var fails loudly rather than sending the literal", False,
                   "it returned instead of exiting")
         except SystemExit as e:
             check("a missing env var fails loudly rather than sending the literal",
-                  "QAT_TEST_MISSING" in str(e), str(e))
+                  "Authorization" in str(e), str(e))
+            check("...without naming anything from the environment",
+                  "QAT_TEST_MISSING" not in str(e), str(e))
 
         # --- and it refuses what it should not touch --------------------------------------
         for bad in ("file:///etc/passwd", "ftp://example.com/x", ""):

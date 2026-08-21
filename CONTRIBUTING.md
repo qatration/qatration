@@ -9,12 +9,32 @@ pip install -e .
 python tools/check.py
 ```
 
-Thirty-six offline suites, about two minutes: no model, no network, no practice fleet. That
+Forty offline suites, about two minutes: no model, no network, no practice fleet. That
 is deliberate and worth protecting — a check that needs a GPU is a check nobody runs. It is the
 same command CI runs, so green locally means green on the pull request.
 
 `python tools/check.py oracle benign` runs a subset by name; a name matching nothing is refused
 rather than quietly running zero suites.
+
+## Turn on the commit hooks
+
+```
+git config core.hooksPath .githooks
+```
+
+One command, once per clone. It puts `tools/guard.py` in front of every commit and every push:
+it refuses a credential shape, a dependency whose licence this project cannot hand to an
+installer, and text that has no business being published. Run it by hand any time with
+`python tools/guard.py --tree`, and `--selftest` to watch every pattern catch something.
+
+CI runs `--tree` regardless, because a hook is advice — it can be skipped with `--no-verify`,
+and it does not exist at all until somebody runs the command above. The hook is for hearing
+about it now instead of after a push; CI is the part that cannot be skipped.
+
+If it refuses something it should not, say so in `tools/guard.py` with the reason. A gate people
+work around by passing `--no-verify` is a gate that has already stopped working — and the four
+credential patterns deliberately left out of that file, each named with the fixture it fired on,
+are what that principle looks like in practice.
 
 ## The three things you can add without touching the engine
 
@@ -60,15 +80,29 @@ def my_check(probe, ctx):
 Two rules, both enforced by the build rather than by review:
 
 **A detector may not read the question.** `test_benign.py` runs every detector over 50 ordinary
-prompts × 37 oracle contexts × 63 detectors against a bland reply and requires zero fires. The corpus is full of
+prompts × 37 oracle contexts × 64 detectors against a bland reply and requires zero fires. The corpus is full of
 things that look dangerous in the *user's* words — a failing query with `OR '1'='1'`, a stack
 trace, a `../../` path, a look-alike domain — because a detector that fires on those is reporting
 the user's text as the target's answer.
 
-**A detector that needs configuration must be listed in `NEEDS_CONFIG`.** If it reads
-`ctx["canaries"]` or `ctx["privileged_tools"]`, say so there. Otherwise it runs on every probe of
-every target, finds nothing because the key is absent, and that silence is reported as a clean
-result. Eleven detectors were doing exactly this before anyone measured it.
+**A detector that needs configuration must be listed in `NEEDS_CONFIG`.** If it cannot fire
+without `ctx["canaries"]` or `ctx["privileged_tools"]`, say so there. Otherwise it runs on every
+probe of every target, finds nothing because the key is absent, and that silence is reported as a
+clean result. Eleven detectors were doing exactly this before anyone measured it.
+
+Enforced behaviourally rather than by reading your code: `test_coverage.py` takes every detector
+NOT in the table, replays the `test_oracle.py` cases that make it fire, and runs them against an
+empty context. A detector that cannot say anything at all without configuration and is missing
+from the table fails the build. Reading the source was tried first and produced noise in both
+directions — a dozen detectors reach their keys through helpers, and `sysprompt_leak` keeps
+built-in phrases on purpose so that it degrades rather than going silent. What matters is not
+whether a detector touches `ctx`; it is whether it can still speak when nobody configured it.
+
+The reverse is deliberately not a rule. `lookalike_domain`, `unbounded_output` and
+`mass_assignment` are all in the table and all still fire unconfigured, because they are partly
+gated — a punycode host is a homograph whatever your allowlist says, and `allowed_domains` only
+decides whether the domain is one of *yours*. Listing them is how `inert_for` tells an operator
+that half a check did not run.
 
 ### Adding a target
 

@@ -21,6 +21,17 @@
 #
 # Read AUTHORISED-USE.md.
 
+# EVERY ENVIRONMENT VARIABLE THIS CONFIG MAY READ. Nothing expands unless it is named here.
+#
+# A config names a secret and a destination in the same file, so an unrestricted `${VAR}` is
+# both halves of a way out: a header reading one variable and a `url:` pointing anywhere sends
+# whatever that variable holds to whoever wrote the config. Declaring the list keeps the reach
+# reviewable by whoever runs it, in the file that does the reaching.
+env:
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - AWS_SESSION_TOKEN
+
 adapter: http
 name: bedrock
 

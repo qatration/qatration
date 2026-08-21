@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# What is about to become permanent, checked before it does.
+#
+# TRACKED, so it exists on a fresh clone and for anybody else. The version of this that lived in
+# `.git/hooks/` existed on one machine, ran only on push, and was invisible to CI — so a working
+# tree could carry a credential through any number of commits and hear about it at the end, or
+# never, if it was pushed from somewhere else.
+#
+# Install once per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# CI runs `python tools/guard.py --tree` regardless, because a hook is advice: it can be skipped
+# with `--no-verify`, and it does not exist at all until somebody runs that command. The hook is
+# for speed — hearing it now instead of after a push — and CI is the part that cannot be skipped.
+set -u
+
+root=$(git rev-parse --show-toplevel)
+. "$root/.githooks/_python.sh"
+py=$(find_python) || {
+    echo "  guard: no working python was found, so NOTHING WAS CHECKED. This is not a pass." >&2
+    echo "  Install python, or run the checks yourself: python tools/guard.py --staged" >&2
+    exit 1
+}
+# shellcheck disable=SC2086
+exec $py "$root/tools/guard.py" --staged

@@ -40,6 +40,14 @@ def main():
 
     with open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
+    # config names, so it is exactly as much somebody else's system as a sweep is. The gate
+    # was in the sweep and the benign run and not here, while the documentation said "any
+    # non-local target" and this is the command the documentation says to run first.
+    from authorization import gate as _auth_gate
+    _auth_gate(tcfg, "generate")
+
+
     name = tcfg.get("name") or os.path.basename(args.target_config)[len("targets_"):-len(".yaml")]
     ctx = tcfg.get("oracle_context", {})
 

@@ -49,13 +49,13 @@ def run_dir(root, job):
 
 
 def _scope_of(job):
-    """The scope to run a job at. Reads the old `tier` spelling as well as the new one.
+    """How wide to run this job.
 
     Defaults to a RUNNABLE value rather than to "?", because this one is passed to a
-    subprocess: a job written before the rename must still run, at the same scope it asked
-    for, rather than dying on an invalid choice.
+    subprocess: a job that did not name a scope must still run rather than die on an
+    invalid choice.
     """
-    return job.get("scope") or job.get("tier") or "quick"
+    return job.get("scope") or "quick"
 
 
 class _Timeout:

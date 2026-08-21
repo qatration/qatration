@@ -34,25 +34,90 @@ decide how much the oracle can see:
       min_interval_s: 1.0
       max_requests: 400
 """
-import json, os, re, time, urllib.request, urllib.error
+import json, os, re, sys, time, urllib.request, urllib.error
 from target import Probe, Target, payload
 
 _ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-def expand_env(value, where):
+def expand_env(value, where, allowed=None):
     """Substitute ${VAR} from the environment, and FAIL if it is not set.
 
-    An API key must never sit in a config file in a repository, and a config that
-    silently sends the literal `${ACME_TOKEN}` as a bearer token produces a run of 401s that
-    look like a hardened target. Missing is loud.
+    An API key must never sit in a config file in a repository, and a config that silently
+    sends the literal `${ACME_TOKEN}` as a bearer token produces a run of 401s that look like a
+    hardened target. Missing is loud.
+
+    `allowed` IS THE VARIABLE NAMES THE CONFIG ITSELF DECLARED, and without it nothing expands.
+    The config also chooses the URL, so an unrestricted `${VAR}` is a channel out: a config
+    naming `${QATRATION_AUTH_SECRET}` in a header and a collector in `url:` delivers the
+    signing key to whoever submitted it, and that key mints a valid authorization token for any
+    origin. The gate would then accept every one of them.
+
+    Declaring the names in the config is what keeps the set reviewable. Whoever reads the
+    config sees exactly which variables it can reach, in the file that reaches them.
+
+    The failure NAMES NOTHING FROM THE ENVIRONMENT. "not set: AWS_SECRET_ACCESS_KEY" answers a
+    question nobody was entitled to ask — set means silence, unset means named — and `intake`
+    returns this text to whoever submitted the config. The config key is named instead, because
+    the person who wrote the config can read their own file.
     """
     if not isinstance(value, str):
         return value
-    missing = [m.group(1) for m in _ENV.finditer(value) if os.environ.get(m.group(1)) is None]
+    wanted = [m.group(1) for m in _ENV.finditer(value)]
+    if not wanted:
+        return value
+    allowed = set(allowed or ())
+    undeclared = [v for v in wanted if v not in allowed]
+    if undeclared:
+        raise SystemExit(
+            f"{where}: this config expands {len(undeclared)} environment variable(s) it does "
+            f"not declare. List every variable a config may read under a top-level `env:` key, "
+            f"so the set of things it can reach is written in the file that reaches them.")
+    missing = [v for v in wanted if os.environ.get(v) is None]
     if missing:
-        raise SystemExit(f"{where}: environment variable(s) not set: {', '.join(missing)}")
+        raise SystemExit(
+            f"{where}: {len(missing)} of the {len(wanted)} environment variable(s) this config "
+            f"declares are not set in this shell. They are named in the config's `env:` list; "
+            f"the names are not repeated here because this message is shown to whoever "
+            f"submitted the config.")
     return _ENV.sub(lambda m: os.environ[m.group(1)], value)
+
+
+# HOW MUCH OF A REPLY THIS ENGINE WILL HOLD. The target chooses the size, and `r.read()` with no
+# argument reads to EOF, so without this the target chooses the memory too.
+#
+# It is also the oracle's time budget. Sixty-three detectors run over every reply and four of
+# them are quadratic in its length: measured, 32 KB is about 13 seconds of judging for a single
+# probe, so a megabyte is hours and a run is hundreds of probes. A target that answers every
+# request with a megabyte of `a.a.a.a.…` ends the run — after the traffic has been sent.
+#
+# Generous on purpose: the longest reply in the shipped evidence is about 45,000 characters,
+# produced by an attack that asks a bot to generate until something stops it, and that attack
+# has to keep working. This is twenty times that.
+MAX_REPLY = int(os.environ.get("QATRATION_MAX_REPLY", 1_000_000))
+
+
+def read_capped(response, limit=None):
+    """Read a response body up to `limit`, and say how long it really was.
+
+    -> (bytes, full_length_or_None). The second value is None when the body fit. When it did
+    not, it is the length that was actually delivered, because THE LENGTH IS A FINDING:
+    `unbounded_output` judges it, and a truncation that also hid the size would defend the
+    engine by deleting the evidence.
+    """
+    limit = int(limit or MAX_REPLY)
+    body = response.read(limit + 1)
+    if len(body) <= limit:
+        return body, None
+    # Drain to learn the true size without keeping it. Bounded by its own budget so a target
+    # that streams forever cannot hold the loop either.
+    extra, budget = 0, 64 * limit
+    while extra < budget:
+        chunk = response.read(65536)
+        if not chunk:
+            break
+        extra += len(chunk)
+    return body[:limit], limit + 1 + extra
 
 
 def dig(data, path):
@@ -227,7 +292,7 @@ class HttpConfiguredTarget(Target):
 
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
-                 auth=None, **unknown):
+                 auth=None, env=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -277,7 +342,12 @@ class HttpConfiguredTarget(Target):
                 f"and the body is where the attack goes. Every probe would send an empty "
                 f"request and score as a defence. Use POST (or PUT/PATCH); an endpoint that "
                 f"takes the prompt in the URL is not supported by this adapter.")
-        self.headers = {k: expand_env(v, f"headers.{k}") for k, v in (headers or {}).items()}
+        # EVERY VARIABLE THIS CONFIG MAY READ, declared by the config itself. Without the
+        # list nothing expands: the config also chooses the URL, so an unrestricted `${VAR}`
+        # is a way to name a secret and a place to send it in the same file.
+        self.env_allowed = [str(v) for v in (env or []) if str(v).strip()]
+        self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
+                        for k, v in (headers or {}).items()}
         self.headers.setdefault("Content-Type", "application/json")
         if request is not None and not isinstance(request, dict):
             raise SystemExit(
@@ -453,7 +523,7 @@ class HttpConfiguredTarget(Target):
                     raise SystemExit("targets_http: auth.%s is required for sigv4" % need)
             for k in ("access_key", "secret_key", "session_token"):
                 if self.auth.get(k):
-                    self.auth[k] = expand_env(self.auth[k], "auth.%s" % k)
+                    self.auth[k] = expand_env(self.auth[k], "auth.%s" % k, self.env_allowed)
         self._seen_success = False
 
         # Capabilities are DERIVED, never declared by hand. A config that claims `chain` on an
@@ -535,7 +605,30 @@ class HttpConfiguredTarget(Target):
         t0 = time.time()
         try:
             with _OPENER.open(req, timeout=self.timeout) as r:
-                raw = json.loads(r.read().decode("utf-8", "replace"))
+                _body, _over = read_capped(r)
+                if _over:
+                    # A REPLY OVER THE CAP IS A FINDING, NOT A PARSE FAILURE. Truncated JSON
+                    # does not parse, so the first version of this returned an empty probe with
+                    # nothing fired — the cap defending the engine by deleting the evidence,
+                    # which is the trade it exists to prevent. Found by driving a 400 KB reply
+                    # through it.
+                    #
+                    # The bytes that were read are the evidence. They are the target's own
+                    # output, so every content detector still reads them, and
+                    # `unbounded_output` fires because the cap is far above any threshold a
+                    # config sets. The true size travels on the probe so the report can say how
+                    # much more there was.
+                    print(f"  ! {self.name}: the reply was {_over:,} bytes; the first "
+                          f"{MAX_REPLY:,} were read and judged as text.", file=sys.stderr)
+                    _text = _body.decode("utf-8", "replace")
+                    _big = Probe(prompt=prompt, output=_text,
+                                 seconds=round(time.time() - t0, 1))
+                    try:
+                        object.__setattr__(_big, "reply_bytes", _over)
+                    except Exception:
+                        pass
+                    return _big
+                raw = json.loads(_body.decode("utf-8", "replace"))
             reply = dig(raw, self.reply_path)
             if reply is None:
                 # The path is wrong or the API changed shape. A run of empty replies looks

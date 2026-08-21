@@ -3,7 +3,6 @@
 # frames, target configs) and the docs; everything else is regenerated.
 
 # model weights (OLLAMA_MODELS points here)
-ollama-models/
 downloads/
 
 # virtualenvs
@@ -58,10 +57,6 @@ desktop.ini
 # `report.py`, a `harness.py` that predates the oracle. Kept locally because they are the
 # project's own history, excluded because two files named `rejudge.py` in one clone is a trap:
 # somebody edits the wrong one and it works, right up until nothing reads it.
-#
-# Named here rather than left to chance, because the WORKING copy and this one are about to
-# become the same directory, and until now `spikes/` was excluded only by living somewhere else.
-spikes/
 
 # Editor and rerun debris. `results_<t>.json.pre-rerun` was tracked for a while: 152 KB of a
 # superseded run that nothing reads, because `results_files()` globs `results_*.json` and that
@@ -109,3 +104,11 @@ out/run_2026-08-20T2010-223a36.json
 out/run_2026-08-20T2012-629f4b.json
 out/run_2026-08-20T2012-fe63fc.json
 out/run_2026-08-21T0110-665c21.json
+
+# THE LOCAL HALF OF tools/guard.py: exact strings that must never be published — a person's
+# name, a machine path, a former client. The formats and rules live in `tools/guard.py`, in the
+# repository, because publishing "this refuses AWS session tokens and AGPL dependencies" gives
+# nothing away. A list of literal private strings is the one part that would, so it stays here,
+# on the machine, and `guard.py` says out loud when it is running without one rather than
+# implying the check was complete.
+.guard-local

@@ -170,12 +170,12 @@ def engine_version():
     """Which build of this engine produced an artifact. Cheap, cached, never fatal.
 
     A stored result is read as a statement about the current engine, and it is not: it is a
-    statement about the engine that WROTE it. `tool_call_storm` spent a day in the published
+    statement about the engine that WROTE it. `tool_call_storm` held a place in the published
     "demonstrated" count on one probe holding eleven tool calls, and the eleven were each
     concrete call recorded twice — written by the adapter version that kept boundary records
-    and raw calls in one list, before that was split into `probe.resolved`. The code was fixed
-    the same day. The file it had already written stayed on disk and went on propping up the
-    headline, because nothing about the file said which engine it came from.
+    and raw calls in one list, before that was split into `probe.resolved`. Fixing the adapter
+    did not fix the file it had already written: that stayed on disk and went on propping up
+    the headline, because nothing about it said which engine it came from.
 
     So every result carries the commit that produced it, and a reader can say "this evidence
     predates the fix" instead of discovering it by hand a day later. Best-effort on purpose:

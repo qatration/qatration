@@ -172,8 +172,14 @@ def build_executor():
     # runs long. Deliberately generous: `unbounded_output` exists to REPORT a deployment with
     # no ceiling of its own, and a cap tight enough to hide that would be measuring my fixture
     # instead of the target.
+    #
+    # AND THE SOCKET TIMEOUT AS WELL, which this was missing and `redteam/llm.py` has had all
+    # along. The two are not alternatives: `num_predict` bounds a normal generation, and the
+    # request timeout is what stops a SERVER that has stopped respecting it. The engine's own
+    # watchdog cannot — `runner._invoke_with_timeout` abandons the thread and leaves the socket
+    # open, so the model carries on decoding with the next probe queued behind it.
     llm = ChatOllama(model=MODEL, base_url="http://localhost:11434", temperature=0,
-                     num_predict=1024)
+                     num_predict=1024, client_kwargs={"timeout": 120})
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
         ("placeholder", "{chat_history}"),

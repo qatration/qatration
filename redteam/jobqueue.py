@@ -123,12 +123,13 @@ def contended_resource(config_path, target):
 
 
 def scope_of(rec):
-    """The scope a record was made at. Reads the old `tier` spelling as well as the new one.
+    """How wide a run this record was made at, or "?" when it does not say.
 
-    Not a default of "?" on the old key: a record written before the rename says `tier`, and
-    printing "?" beside it would report a rename as missing data.
+    "?" rather than a guess: a record that does not name its scope was written by something
+    that did not record one, and printing a plausible value would make the record say
+    something nobody measured.
     """
-    return rec.get("scope") or rec.get("tier") or "?"
+    return rec.get("scope") or "?"
 
 
 def submit(root, target, config_path, scope="quick", authorization=None, budgets=None,
