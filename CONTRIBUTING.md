@@ -63,10 +63,36 @@ movement short of the objective.
 because of a specific failure: an attack naming a detector that does not exist runs, finds
 nothing, and reports DEFENDED — a typo rendered as a defence.
 
-**An attack aimed at a bot in this repository must say so** with `applies_to:`. Without it the
-attack joins the portable arsenal, which is what runs against a stranger's own endpoint, and an
-attack hunting a canary that exists only on `httpbot` will fail there for a reason that has
-nothing to do with their security.
+**An attack aimed at a bot in this repository should say so** with `applies_to:`. That is what
+scopes a run: without it, a sweep against any target sends the attack, and one hunting a canary
+that exists only on `httpbot` fails elsewhere for a reason that has nothing to do with the
+target's security.
+
+**`applies_to` does NOT keep an attack out of the portable arsenal, and relying on it to would
+be a mistake.** The portable arsenal is what runs against a stranger's endpoint, and
+`build_generic.py` builds it from the library while deliberately ignoring `applies_to` — that
+field was "usually habit" rather than a decision, and honouring it left an outside target
+receiving 22 attacks out of a library of several hundred. Measured today: **173 of the 207
+attacks that carry `applies_to` are in the portable arsenal**, and attacks whose success
+condition is a canary are promoted at almost the same rate whether they are scoped or not.
+
+The scope is **stripped** on the way in, which is why you will not find `applies_to` anywhere in
+`attacks_generic.yaml` and why a check asserts it is not there. Keeping it would be worse than
+dropping it: a customer would receive an attack scoped to a bot they have never heard of, and it
+would be skipped without explanation — a probe that reads as sent and was not.
+
+What actually keeps an attack out is what is IN it, which is a property nobody has to remember:
+
+| blocked because it… | why |
+|---|---|
+| is a `control` | an ordinary question used as a per-target baseline, not an attack |
+| names a canary planted in one practice bot | tests a string that does not exist anywhere else |
+| names one bot's tool | same |
+| carries a `seed:` block | plants a document, which needs a store a chat endpoint does not expose |
+| names a brand | reads as a different company's bot, which changes what is being tested — promotable with a text edit, and `build_generic.py --blocked` lists these so the work stays visible |
+
+So write the payload so it says what it means without naming our furniture, and it travels. Name
+a canary and it stays home whether or not you scoped it.
 
 ### Adding a detector
 

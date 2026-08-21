@@ -240,6 +240,75 @@ def main():
     check("...and a control still declares it, so the check is measuring something",
           len(declares) >= 1, str(declares))
 
+    # --- WHAT KEEPS AN ATTACK OUT OF THE PORTABLE ARSENAL, SAID CORRECTLY -------------------
+    #
+    # CONTRIBUTING told a contributor that `applies_to:` is what keeps a target-specific attack
+    # away from a stranger's endpoint. It is not, and `build_generic.py` says so in its own
+    # docstring — it ignores that field on purpose, because honouring it had left an outside
+    # target receiving 22 attacks out of a library of several hundred. Measured: 173 of the 207
+    # scoped attacks are in the portable arsenal, and canary-success attacks are promoted at
+    # almost the same rate scoped (70/80) as unscoped (68/71).
+    #
+    # A document describing a mechanism that does not exist is worse than one that says nothing:
+    # somebody writes a target-specific attack, adds `applies_to`, believes it stays home, and
+    # it ships. So both halves are checked — the behaviour, and that the page describes it.
+    import ast as _ast
+    _lib, _hand_only = bg.library()      # (library by id, hand-written-only by id)
+    scoped = {i for i, a in _lib.items() if a.get("applies_to")}
+    portable = {a["id"] for a in on_disk}
+    check("applies_to is measured, not assumed, to be no barrier to promotion",
+          len(scoped & portable) > 50,
+          f"only {len(scoped & portable)} of {len(scoped)} scoped attacks are portable — if "
+          f"this is now zero, build_generic changed and CONTRIBUTING needs rewriting again")
+
+    # PINNED, NOT PATTERN-MATCHED. Every reason `blocked_reason` can return is listed here with
+    # the word that must appear on the page, and the SET is asserted — so a reason nobody
+    # anticipated fails the build until it is recorded in both places.
+    #
+    # The first version of this held a map of the five reasons it already knew and asked whether
+    # each was documented. A sixth, worded differently, matched nothing in the map and the check
+    # passed: the drift it exists to catch, reproduced inside it. Measured by planting
+    # `return "names a mascot nobody documented"` and watching 29 of 29 pass.
+    KNOWN_REASONS = {
+        "control: a per-target baseline, not an attack": "control",
+        "seeds a document: needs a corpus we can write to": "seed",
+        "names a canary planted in one practice bot": "canary",
+        "names the tool ": "tool",
+        "names the brand  (promotable with a text edit)": "brand",
+    }
+    src = open(os.path.join(HERE, "build_generic.py"), encoding="utf-8").read()
+    fn = next(n for n in _ast.walk(_ast.parse(src))
+              if isinstance(n, _ast.FunctionDef) and n.name == "blocked_reason")
+    reasons = set()
+    for n in _ast.walk(fn):
+        if not isinstance(n, _ast.Return):
+            continue
+        if isinstance(n.value, _ast.Constant) and isinstance(n.value.value, str):
+            reasons.add(n.value.value)
+        elif isinstance(n.value, _ast.JoinedStr):
+            # An f-string: the literal parts are the shape, the interpolation is the tool or
+            # brand name it found.
+            reasons.add("".join(p.value for p in n.value.values
+                                if isinstance(p, _ast.Constant)))
+
+    check("...and the reasons were actually read out of the function",
+          len(reasons) >= 4, f"only {len(reasons)} return literal(s) found in blocked_reason")
+    new_reasons = sorted(reasons - set(KNOWN_REASONS))
+    check("no reason for blocking an attack has appeared without being written down",
+          not new_reasons,
+          f"build_generic can now block for {new_reasons} — add it to KNOWN_REASONS here and "
+          f"describe it in CONTRIBUTING, or a contributor cannot know why their attack "
+          f"stayed home")
+    gone = sorted(set(KNOWN_REASONS) - reasons)
+    check("...and none of the documented reasons has quietly disappeared", not gone,
+          f"CONTRIBUTING describes reasons the code no longer has: {gone}")
+
+    contributing = open(os.path.join(os.path.dirname(HERE), "CONTRIBUTING.md"),
+                        encoding="utf-8").read().lower()
+    undocumented = sorted(w for r, w in KNOWN_REASONS.items() if w not in contributing)
+    check("every reason build_generic can block on is described in CONTRIBUTING",
+          not undocumented, f"blocked for reasons the page never mentions: {undocumented}")
+
     # --- every attack is still well formed --------------------------------------------------
     bad_det = sorted({d for a in on_disk
                       for d in (set(a.get("success") or []) | set(a.get("partial") or []))
