@@ -181,24 +181,43 @@ def _read_blobs(sha_by_path):
 
     Bytes, not text: the size is a byte count, so decoding before slicing would make it useless.
     """
+    return _read_blobs_report(sha_by_path)[0]
+
+
+def _read_blobs_report(sha_by_path):
+    """-> ({label: text}, [label]). The second list is what git could NOT hand back.
+
+    NOT-A-BLOB AND NOT-READABLE ARE DIFFERENT THINGS, and this is the only code that can
+    tell them apart, because it is the only code that sees git's `<sha> <type> <size>`
+    line. `rev-list --objects` names trees as well as blobs, so a caller that infers the
+    shortfall by subtracting keys reports every directory in the repository as an
+    unreadable file — 30 of them here, on the first run. A gate that says that is a gate
+    somebody stops reading.
+
+    A tree is simply not returned and not complained about. `missing`, and a desynchronised
+    stream, are named.
+    """
     if not sha_by_path:
-        return {}
+        return {}, []
     order = list(sha_by_path)
     proc = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"],
                           input=("\n".join(sha_by_path[p] for p in order) + "\n").encode(),
                           capture_output=True)
-    raw, pos, out = proc.stdout, 0, {}
-    for path in order:
+    raw, pos, out, lost = proc.stdout, 0, {}, []
+    for i, path in enumerate(order):
         nl = raw.find(b"\n", pos)
         if nl < 0:
+            lost.extend(order[i:])          # the stream ended early: everything after is unread
             break
         header = raw[pos:nl].split()
         pos = nl + 1
         if len(header) < 3:
-            continue                                  # `<sha> missing`: no body to step over
+            lost.append(path)                         # `<sha> missing`: no body to step over
+            continue
         try:
             size = int(header[2])
         except ValueError:
+            lost.extend(order[i:])
             # The stream is out of step: what should be a header is object bytes. Stop rather
             # than raise, so the caller reports "fewer paths came back than were asked for" —
             # a named failure a reader can act on instead of a traceback out of a git parser.
@@ -206,7 +225,7 @@ def _read_blobs(sha_by_path):
         if header[1] == b"blob":
             out[path] = raw[pos:pos + size].decode("utf-8", "replace")
         pos += size + 1                               # ALWAYS, blob or not
-    return out
+    return out, lost
 
 
 def _staged_contents(paths):
@@ -314,46 +333,71 @@ def _cyrillic_outside_model_output(text):
     return out[:3]
 
 
-def scan_files(files, reader, refusals):
+def scan_files(items, reader, refusals, path_of=None):
+    """Every rule, over every item. `items` are LABELS, not necessarily paths.
+
+    A label is usually just the path. From `scan_history` it is `path@sha`, because one
+    path has many versions and every one of them is in the push — see there for what that
+    cost. `path_of` maps a label back to the path, and only three things key on the path:
+    which kind of file it is, whether it is one of the two that DEFINE the patterns, and
+    the binary suffix. The refusal itself names the label, so a reader is told which
+    version.
+
+    ONLY THE CYRILLIC RULE VARIES BY KIND OF FILE, and that is the whole of the difference.
+    An artifact used to `continue` here after its own Cyrillic check, which skipped the
+    credential scan and the local-supplement scan for all 113 tracked `out/*.json` files.
+    A stored artifact holds MODEL OUTPUT — it is the likeliest place in this repository for
+    a pasted key to come to rest, not the least. The module docstring says the supplement
+    is "where a real leak of the kind this repository actually risks would show up", and
+    it was the one scan an artifact never got.
+
+    A planted `ghp_…` inside `out/results_x.json` returned exit 0 and the word `ok`; the
+    same string in `redteam/x.py` was refused.
+    """
+    to_path = path_of or (lambda label: label)
     literals = _local_literals()
     lit = re.compile(LITERAL_CYRILLIC[0])
-    for path in files:
+    for item in items:
+        path = to_path(item)
         if path.lower().endswith(BINARY):
             continue
-        text = reader(path)
+        text = reader(item)
         if not text:
             continue
         if ARTIFACT.search(path):
             for where, sample in _cyrillic_outside_model_output(text):
                 refusals.append(
-                    f"{path}: does not parse as JSON ({sample}), so what it holds is unknown"
+                    f"{item}: does not parse as JSON ({sample}), so what it holds is unknown"
                     if where == UNPARSEABLE else
-                    f"{path}: Cyrillic under `{where}`, which is not a model's reply: {sample!r}")
-            continue
-        m = lit.search(text)
-        if m:
-            line = text[:m.start()].count("\n") + 1
-            refusals.append(f"{path}:{line}: a Cyrillic character in a tracked file "
-                            f"({m.group(0)})")
+                    f"{item}: Cyrillic under `{where}`, which is not a model's reply: {sample!r}")
+        else:
+            m = lit.search(text)
+            if m:
+                line = text[:m.start()].count("\n") + 1
+                refusals.append(f"{item}:{line}: a Cyrillic character in a tracked file "
+                                f"({m.group(0)})")
         if path.replace("\\", "/") not in SELF:      # see SELF: these files ARE the patterns
             for label, pattern, _sample in CREDENTIALS:
                 m = re.search(pattern, text)
                 if m:
-                    refusals.append(f"{path}: looks like a {label} ({m.group(0)[:12]}…)")
+                    refusals.append(f"{item}: looks like a {label} ({m.group(0)[:12]}…)")
         if literals:
             low = text.lower()
             for literal in literals:
                 if literal.lower() in low:
-                    refusals.append(f"{path}: contains a string listed in .guard-local")
+                    refusals.append(f"{item}: contains a string listed in .guard-local")
                     break
 
 
 def _offset(iso_pair):
     """The timezone offset of an iso-strict stamp, or "" if it has none."""
+    # `-00:00` IS UTC AND MUST PASS. git writes `-0000` for "timezone unknown" — what a
+    # mail-imported patch carries — and that says even less about where a machine is than
+    # `+00:00` does. Refusing it would be this check inventing a location out of an absence.
     for part in iso_pair.split("|"):
         tail = part.strip()[-6:]
         if len(tail) == 6 and tail[0] in "+-" and tail[3] == ":":
-            if tail != "+00:00":
+            if tail not in ("+00:00", "-00:00"):
                 return tail
     return ""
 
@@ -398,20 +442,57 @@ def scan_history(rng, refusals):
     #
     # Both were the same mistake: a second copy of a rule. `git rev-list --objects` names every
     # blob the push would carry, they are read in one batch, and `scan_files` decides.
-    objs = _git("rev-list", "--objects", rng).stdout.splitlines()
+    # A RANGE THAT COULD NOT BE READ IS NOT A CLEAN RANGE. `_git` hands back `.stdout` and
+    # nothing else, so a `rev-list` that exited 128 — `origin/main..HEAD` on a clone with no
+    # remote, a `remote_sha` the local repository has never fetched — looked exactly like a
+    # history with nothing in it. Measured: git exit 128, guard exit 0, the word `ok`. That
+    # is this project's own defect class sitting in the gate against it: a check that did
+    # not run, reported as a check that passed.
+    proc = _git("rev-list", "--objects", rng)
+    if proc.returncode != 0:
+        why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
+        refusals.append(f"the range {rng} could not be read, so nothing about it was "
+                        f"checked — {why}")
+        return
+
+    # EVERY VERSION OF EVERY FILE, not one per path. This was `blobs.setdefault(path, sha)`,
+    # and `rev-list` walks newest-first, so exactly one blob per path was read: the tip's —
+    # the same bytes `--tree` had already scanned. The whole reason this function exists is
+    # the version that is NO LONGER at the tip. Proven with a three-commit history (clean,
+    # credential, credential removed, file kept): both blobs present, `--range` exit 0.
+    #
+    # Keyed `path@sha` so a refusal names the version a reader has to go and rewrite, and
+    # so two paths sharing one blob are still two findings. `path_of` strips it back for the
+    # rules that key on the path.
     blobs = {}
-    for line in objs:
+    for line in proc.stdout.splitlines():
         sha, _, path = line.partition(" ")
+        path = path.strip()
         if path and not path.lower().endswith(BINARY):
-            blobs.setdefault(path.strip(), sha)          # first blob seen for that path
+            blobs[f"{path}@{sha}"] = sha
     if not blobs:
         return
-    contents = _read_blobs(blobs)
-    order = list(blobs)
+    contents, missing = _read_blobs_report(blobs)
+
+    # WHAT DID NOT COME BACK IS NOT WHAT IS CLEAN. `_read_blobs` stops on a desynchronised
+    # stream rather than raising, and its docstring says the caller reports the shortfall.
+    # No caller did: `scan_files` read a missing label as an empty file and moved on.
+    #
+    # Asked for by the reader rather than inferred by subtracting keys. The subtracting
+    # version named all 30 trees in the repository as unreadable files on its first run.
+    for k in missing[:6]:
+        refusals.append(f"{k} is in {rng} but could not be read back from git, so it was "
+                        f"not checked")
+    if len(missing) > 6:
+        refusals.append(f"...and {len(missing) - 6} more objects in {rng} were unreadable")
+
     found = []
-    scan_files(order, lambda p: contents.get(p, ""), found)
+    scan_files(list(blobs), lambda k: contents.get(k, ""), found,
+               path_of=lambda k: k.rsplit("@", 1)[0])
     for f in found[:12]:
         refusals.append(f"in the history being pushed — {f}")
+    if len(found) > 12:
+        refusals.append(f"...and {len(found) - 12} more in the history being pushed")
 
 
 def selftest():

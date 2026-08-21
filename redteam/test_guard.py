@@ -292,6 +292,145 @@ def main():
         finally:
             guard.ROOT = old_root
 
+    # --- THE THREE HOLES A REVIEW OPENED IN THIS GATE ----------------------------------------
+    #
+    # Every one of them reported the word `ok` and exit 0 with a live credential in front of it.
+    # They are here as one repository because the point is not three separate bugs: it is that
+    # the module written against "a check that did not run, read as a pass" had three of them.
+    #
+    # Read the REASON, never the exit code. Twice while proving these, an exit of 1 was taken
+    # for a catch — once it was a crash from a missing import in the harness, once it was the
+    # timezone check firing because `git commit --date` sets only the AUTHOR date. Hence the
+    # explicit UTC stamps below, and hence `refused_for`.
+    with tempfile.TemporaryDirectory() as d:
+        genv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
+                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+
+        def g(*a):
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=genv)
+
+        def put(name, text):
+            p = os.path.join(d, name)
+            if os.path.dirname(name):
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+            io.open(p, "w", encoding="utf-8", newline="\n").write(text)
+
+        def snap(msg):
+            g("add", "-A")
+            g("commit", "-qm", msg)
+
+        def refused_for(want, *args):
+            """True only if the guard refused FOR `want` — not merely that it exited non-zero."""
+            found = []
+            old_root = guard.ROOT
+            try:
+                guard.ROOT = d
+                if args[0] == "--range":
+                    guard.scan_history(args[1], found)
+                else:
+                    guard.scan_files(sorted(_tracked()), _disk_reader, found)
+            finally:
+                guard.ROOT = old_root
+            return [f for f in found if want in f]
+
+        def _tracked():
+            out = g("ls-files").stdout.split()
+            return [p for p in out if p]
+
+        def _disk_reader(path):
+            try:
+                return io.open(os.path.join(d, path), encoding="utf-8", errors="replace").read()
+            except OSError:
+                return ""
+
+        TOKEN = "ghp_" + "a" * 20          # built, so this file stays under its own scan
+
+        g("init", "-q", "-b", "main")
+        g("config", "user.name", "QAtration")
+        g("config", "user.email", "qatration@gmail.com")
+        put("keep.txt", "nothing here")
+        snap("scaffold")
+
+        # 1. THE VERSION THAT IS NO LONGER AT THE TIP — the only case this function exists for.
+        #    `blobs.setdefault(path, sha)` plus a newest-first walk read exactly one blob per
+        #    path: the tip's, which `--tree` had already scanned.
+        put("cfg.py", "TOKEN = os.environ['T']")
+        snap("clean")
+        put("cfg.py", "TOKEN = '%s'" % TOKEN)
+        snap("credential goes in")
+        put("cfg.py", "TOKEN = os.environ['T']")
+        snap("credential taken out, FILE KEPT")
+        root = g("rev-list", "--max-parents=0", "HEAD").stdout.strip()
+        hits = refused_for("GitHub personal token", "--range", root + "..HEAD")
+        check("refused: a credential in an older version of a file that still exists",
+              bool(hits), "the push gate read only the tip's bytes")
+        check("...and the refusal names the version, not just the path",
+              any("cfg.py@" in h for h in hits), str(hits[:1]))
+
+        # 2. A RANGE GIT COULD NOT READ. `_git` handed back `.stdout` and ignored the exit
+        #    status, so `origin/main..HEAD` on a clone with no remote was an empty history.
+        for bad in ("origin/main..HEAD", "v9.9.9..HEAD"):
+            check(f"refused: {bad}, which git cannot resolve",
+                  bool(refused_for("could not be read", "--range", bad)),
+                  "an unreadable range reported clean")
+
+        # 3. A TREE IS NOT AN UNREADABLE FILE. The shortfall report above fired on all 30
+        #    directories in the repository the first time, because it inferred what was missing
+        #    by subtracting keys instead of asking the reader.
+        check("...and a directory is not reported as an unreadable file",
+              not refused_for("could not be read back", "--range", root + "..HEAD"),
+              "trees are being counted as unreadable blobs")
+
+        # 4. AN ARTIFACT IS WHERE A PASTED KEY WOULD ACTUALLY LAND. `out/*.json` returned after
+        #    its own Cyrillic check, skipping the credential scan and the local-supplement scan
+        #    for all 113 tracked ones.
+        put("out/results_x.json", '{"meta": {"note": "%s"}}' % TOKEN)
+        snap("a token inside an artifact")
+        check("refused: a credential inside a stored artifact",
+              bool(refused_for("GitHub personal token", "--tree")),
+              "out/*.json was scanned for one rule out of three")
+
+        old_local = guard.LOCAL
+        try:
+            guard.LOCAL = os.path.join(d, ".guard-local")
+            io.open(guard.LOCAL, "w", encoding="utf-8").write("SecretName\n")
+            put("out/results_y.json", '{"meta": {"note": "written by secretname"}}')
+            snap("a private literal inside an artifact")
+            # NAMED, not merely counted. `git add -A` tracks `.guard-local` itself in a
+            # throwaway repository with no ignore file, so the supplement matches its own
+            # contents and this check passed against the BROKEN guard until it was made to
+            # say which file it caught.
+            _lit = refused_for(".guard-local", "--tree")
+            check("refused: a .guard-local literal inside a stored artifact",
+                  any("out/results_y.json" in f for f in _lit),
+                  f"the supplement is the check an artifact never got; refusals were {_lit}")
+        finally:
+            guard.LOCAL = old_local
+
+        # 5. `-0000` IS UTC. git writes it for "timezone unknown", which says less than +00:00.
+        # `-0000` IS TESTED ON THE FUNCTION, NOT THROUGH A COMMIT, because git's own
+        # formatter normalises it away and the fixture cannot be built. Measured three ways:
+        # `--date=...-00:00`, `GIT_AUTHOR_DATE="<epoch> -0000"`, and a commit object written by
+        # hand with `hash-object -t commit` — `git log --date=iso-strict` printed `Z` for all
+        # three. So an end-to-end check here would assert nothing, which is how the first
+        # version of it passed against a guard that did refuse `-00:00`.
+        #
+        # The tolerance stays, because `_offset` is a string function and its contract is about
+        # what an offset MEANS: git writes `-0000` for "timezone unknown", which says less about
+        # a machine's location than `+00:00` does. Refusing it would be the check inventing a
+        # place out of an absence.
+        check("_offset: -00:00 is UTC, not a location",
+              guard._offset("2026-01-05T09:00:00-00:00|2026-01-05T09:00:00-00:00") == "",
+              f"got {guard._offset('2026-01-05T09:00:00-00:00|x')!r}")
+        check("_offset: +00:00 is UTC",
+              guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T09:00:00+00:00") == "")
+        check("_offset: a real offset is reported",
+              guard._offset("2026-01-05T09:00:00+03:00|2026-01-05T09:00:00+03:00") == "+03:00")
+        check("_offset: a UTC author date does not hide a local committer date",
+              guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T12:00:00+02:00") == "+02:00")
+
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #
     # Every check above tests the scanner. None of them would notice if the hooks stopped
