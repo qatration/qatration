@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-20T1753-905e9f",
+  "state": "finished",
+  "target": "httpbot",
+  "scope": "full",
+  "engine": "bb388a0",
+  "arsenal": "attacks_nemo_focus.yaml",
+  "trials": 1,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-20 17:53:46",
+  "finished_at": "2026-08-20 17:53:51",
+  "spent": {},
+  "note": null
+}

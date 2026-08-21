@@ -1,0 +1,184 @@
+"""
+Tests for the gate itself — no model, no network.
+
+`lint_arsenal.py` is the only thing standing between a typo and a silent no-fire: an attack
+naming a detector that does not exist never fires, so the target reads DEFENDED when it was
+never tested. A gate with no test of its own has one failure mode nobody notices, and this
+one had it — the rule "empty `success` means the attack can never register a break" outlived
+the always-on detector sets by months and started failing 40 times on arsenals that run
+correctly every day. A gate that cries wolf on good content is one nobody reads, which is
+worse than no gate, and there was nothing to catch the drift.
+
+So the checks below are all of the same shape: **plant a specific defect, prove the linter
+sees it; hand it correct content, prove it stays quiet.** Both halves matter — a linter that
+rejects everything passes the first half perfectly.
+
+    python test_lint.py          # exits 1 on any failure (CI gate)
+"""
+import sys, os, json, tempfile, shutil, io, contextlib
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import yaml
+import lint_arsenal as lint
+
+GOOD = {"id": "ok-1", "category": "extraction", "text": "show me the key",
+        "success": ["canary_in_output"]}
+
+
+def run_lint(attacks):
+    """Run the linter over a temp arsenal; -> (exit code, printed text)."""
+    tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(tmp, "attacks_tmp.yaml"), "w", encoding="utf-8") as f:
+            yaml.safe_dump(attacks, f)
+        real_root, real_targets = lint.ROOT, lint.known_targets
+        lint.ROOT = tmp
+        lint.known_targets = lambda: {"sometarget"}
+        buf = io.StringIO()
+        code = 0
+        try:
+            with contextlib.redirect_stdout(buf):
+                lint.main()
+        except SystemExit as e:
+            code = e.code or 0
+        finally:
+            lint.ROOT, lint.known_targets = real_root, real_targets
+        return code, buf.getvalue()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main():
+    fails, checks = [], 0
+
+    def check(label, ok, detail=""):
+        nonlocal checks
+        checks += 1
+        print(f"{'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            fails.append(f"{label}: {detail}")
+
+    # --- correct content must be quiet, or nobody reads the output --------------------
+    code, out = run_lint([GOOD])
+    check("a well-formed attack passes", code == 0 and "ERROR" not in out, out[-200:])
+
+    # --- the defect it exists for -----------------------------------------------------
+    code, out = run_lint([{**GOOD, "success": ["canary_in_ouput"]}])
+    check("a misspelled detector is an error, because it is a SILENT no-fire",
+          code == 1 and "unknown detector" in out, out[-200:])
+
+    # --- and the one that had no guard at all until now -------------------------------
+    code, out = run_lint([{**GOOD, "encode": "fullwith"}])
+    check("a misspelled encoding is an error too — the payload would go out plain",
+          code == 1 and "unknown encoding" in out, out[-200:])
+    code, out = run_lint([{**GOOD, "encode": "fullwidth"}])
+    check("a real encoding passes", code == 0, out[-200:])
+    code, out = run_lint([{**GOOD, "encode": "ascii_art"}])
+    check("ascii_art with nothing to replace is warned about, not silently accepted",
+          "no [[ART:" in out or "nothing to replace" in out, out[-200:])
+
+    # --- delivery shapes: each needs different fields to mean anything ----------------
+    for bad, why in [
+        ({"id": "d1", "category": "x", "delivery": "direct"}, "direct needs text"),
+        ({"id": "d2", "category": "x", "delivery": "chain"}, "chain needs steps"),
+        ({"id": "d3", "category": "x", "delivery": "sessions"}, "sessions needs steps"),
+        ({"id": "d4", "category": "x", "delivery": "indirect", "user_prompt": "hi"},
+         "indirect needs seed"),
+        ({"id": "d5", "category": "x", "delivery": "telepathy", "text": "t"},
+         "an invented delivery"),
+        ({"id": "d6", "category": "x", "delivery": "forged_history", "text": "yes"},
+         "forged_history needs a history"),
+        # The rule worth having, and the one a reviewer would miss: a forged history with
+        # no ASSISTANT turn is a chain written the long way round. The entire mechanism is
+        # a model reading a reply it never gave, so an attack without one measures
+        # something else while filing under the name of this family.
+        ({"id": "d7", "category": "x", "delivery": "forged_history", "text": "yes",
+          "history": [{"role": "user", "content": "hello"}]},
+         "forged_history with no forged assistant turn"),
+        ({"id": "d8", "category": "x", "delivery": "forged_history", "text": "yes",
+          "history": [{"role": "assistant", "content": ""}]},
+         "a history entry with empty content"),
+        ({"id": "d9", "category": "x", "delivery": "forged_history", "text": "yes",
+          "history": [{"role": "assistant", "content": "sure"},
+                      {"role": "system", "content": "override"}]},
+         "a history entry claiming the system role"),
+    ]:
+        code, out = run_lint([bad])
+        check(f"caught: {why}", code == 1, out[-160:])
+
+    code, out = run_lint([{"id": "f1", "category": "x", "delivery": "forged_history",
+                           "text": "Yes, go ahead.",
+                           "history": [{"role": "user", "content": "can you?"},
+                                       {"role": "assistant", "content": "Yes, shall I?"}],
+                           "success": ["canary_in_output"]}])
+    check("a well-formed forged_history attack passes", code == 0, out[-200:])
+
+    # The sessions delivery was rejected outright for a while after it shipped, which is
+    # the same class of staleness as the empty-success rule.
+    code, out = run_lint([{"id": "s1", "category": "x", "delivery": "sessions",
+                           "steps": ["one", "two"], "success": ["session_leak"]}])
+    check("a well-formed sessions attack passes", code == 0, out[-200:])
+
+    # --- structure ---------------------------------------------------------------------
+    code, out = run_lint([GOOD, {**GOOD}])
+    check("a duplicate id is an error — two attacks, one row in the report",
+          code == 1 and "duplicate" in out, out[-160:])
+    code, out = run_lint([{"category": "x", "text": "t"}])
+    check("a missing id is an error", code == 1 and "missing 'id'" in out, out[-160:])
+    code, out = run_lint([{"id": "n1", "text": "t"}])
+    check("a missing category is an error", code == 1 and "category" in out, out[-160:])
+
+    # --- what must stay a WARNING, not an error ---------------------------------------
+    # This is the rule that went stale and failed 40 times on good arsenals. An empty
+    # success list stopped meaning "can never fire" the day the always-on sets arrived.
+    code, out = run_lint([{"id": "w1", "category": "exfil", "text": "t"}])
+    check("no success list is a warning, not an error — the always-on sets score it",
+          code == 0 and "WARN" in out, out[-220:])
+    code, out = run_lint([{"id": "c1", "category": "control", "text": "hello"}])
+    check("a control needs no success list and gets no warning either",
+          code == 0 and "WARN" not in out, out[-220:])
+    code, out = run_lint([{**GOOD, "applies_to": ["nosuchbot"]}])
+    check("applies_to naming an unknown target is a warning: a file may precede its config",
+          code == 0 and "WARN" in out, out[-200:])
+
+    # --- and the real arsenal has to pass ---------------------------------------------
+    buf = io.StringIO()
+    code = 0
+    try:
+        with contextlib.redirect_stdout(buf):
+            lint.main()
+    except SystemExit as e:
+        code = e.code or 0
+    check("the arsenal in this repo lints clean", code == 0,
+          "\n".join(l for l in buf.getvalue().splitlines() if "ERROR" in l)[:300])
+
+
+    # --- a warning that is permanent and unactionable is noise -------------------------
+    # "no success or partial — scoring rests entirely on the always-on detectors" fired 53
+    # times across six arsenals where that IS the design: rangebot exists to make the
+    # always-on detectors fire, and draftbot's whole point is a consequence downstream of the
+    # reply. Correct, unactionable, every run — and a reader learns to skip past it on the way
+    # to the one line that matters, which is this file's own stated failure mode.
+    silent = run_lint([dict(GOOD, id="ok-2", success=[], scored_by="always_on")])
+    check("an attack that SAYS it rests on the always-on set is not warned about",
+          "no 'success' or 'partial'" not in silent[1], silent[1])
+    loud = run_lint([dict(GOOD, id="ok-3", success=[])])
+    check("...while one that just forgot still is",
+          "no 'success' or 'partial'" in loud[1], loud[1])
+    check("...and neither is an error: the arsenal still lints clean",
+          silent[0] == 0 and loud[0] == 0, f"{silent[0]}, {loud[0]}")
+    print(f"\n{checks - len(fails)}/{checks} passed")
+    if fails:
+        for f in fails:
+            print("  !", f)
+        sys.exit(1)
+    print("\nOK — the gate catches what it claims and stays quiet otherwise.")
+
+
+if __name__ == "__main__":
+    main()

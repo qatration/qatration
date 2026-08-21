@@ -1,0 +1,73 @@
+# Packaging, so the tool can be installed rather than cloned.
+#
+# The dependency list is short on purpose, and it is short because it was MEASURED rather than
+# guessed: every import across the engine was resolved against the standard library and against
+# the directory's own modules, and what survived is what is listed here. PyYAML is the only
+# thing the portable path needs. langchain and friends appear nowhere in it — they belong to the
+# practice bots under `foreign-agent/`, `external/` and `dvla/`, which are targets to attack,
+# not parts of the attacker. Shipping them as requirements would put a large model-framework
+# stack into every install to support code the installer will never run.
+#
+# pyfiglet IS a core requirement rather than an extra, and that is a deliberate cost. Without it
+# the `ascii_art` attacks refuse to send — correctly, since a stripped marker would be a weaker
+# attack reported as a real one — but a default install that silently covers less than the
+# corpus claims is the same defect wearing a smaller number.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qatration"
+version = "0.1.0"
+description = "Adversarial testing for deployed LLM features: attacks, deterministic detectors, and evidence you can recount"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "QAtration", email = "qatration@gmail.com" }]
+keywords = [
+    "llm", "security", "red-team", "prompt-injection", "ai-safety",
+    "agent-security", "guardrails", "testing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "PyYAML>=5.4",
+    "pyfiglet>=0.8",
+]
+
+[project.optional-dependencies]
+# Only for running the practice fleet that ships with the repository. A person testing their
+# own endpoint needs none of this, and the split exists so that the default install is not
+# asked to carry a model framework it will never import.
+fleet = [
+    "langchain>=0.2",
+    "langchain-core>=0.2",
+    "langchain-ollama>=0.1",
+]
+
+[project.scripts]
+qatration = "qatration.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/qatration/qatration"
+Source = "https://github.com/qatration/qatration"
+
+[tool.setuptools]
+# The directory is called `redteam/` in the repository and `qatration/` once installed. The
+# rename is what `workspace.in_checkout()` detects to decide where evidence goes, so changing
+# either half means changing that function too.
+package-dir = { qatration = "redteam" }
+packages = ["qatration"]
+
+[tool.setuptools.package-data]
+# The corpus IS the product. An install without the YAML is a runner with nothing to run, and
+# it would fail at the first sweep rather than at install time.
+qatration = ["*.yaml", "*.md", "*.txt"]

@@ -1,0 +1,68 @@
+name: A result the tool did not earn
+description: It said defended, clean, or nothing-found — about something it never actually measured
+labels: ["unearned-result"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This is the report this project most wants.**
+
+        A scanner's worst failure is not a crash. It is a clean result nobody earned: a detector
+        that could not fire, a check that never ran, an attack that was never sent — all
+        rendered as a target that held. Somebody ships on that.
+
+        Use this even if nothing crashed. Especially if nothing crashed.
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What did it report that it had not measured?
+      options:
+        - A detector stayed silent because its config was missing, and nothing said so
+        - An attack was skipped or errored, and the report still read as complete
+        - A breach was reported at full confidence when the detector also fires on benign traffic
+        - A number in the README, the docs or the site is no longer true
+        - A misconfiguration produced empty replies that scored as a refusal
+        - Something else of this shape
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should it have said instead?
+      description: >
+        The useful version of this is usually one sentence: "it should have reported this as a
+        gap rather than as a defence, because X was never measured."
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: The stored artifact, if you have one
+      description: >
+        `out/results_<target>.json` is the evidence, and `qatration rejudge` replays it against
+        the current oracle with no model and no network — so a finding handed over as JSON is one
+        anybody can reproduce in seconds. Paste it, or attach it.
+      render: json
+
+  - type: textarea
+    id: config
+    attributes:
+      label: The target config
+      description: >
+        Keep the auth header as `${VAR}`. **Never paste a real key**, and if one has already been
+        pasted anywhere, rotate it before doing anything else.
+      render: yaml
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        Output of `qatration --version`, plus the `engine` field from the result's `meta` if you
+        have a stored one — a stored result is a statement about the engine that wrote it, not
+        about the one you are running.
+    validations:
+      required: true

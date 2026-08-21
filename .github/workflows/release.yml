@@ -1,0 +1,131 @@
+# Publishing to PyPI, with no credential anywhere.
+#
+# Trusted Publishing: PyPI trusts THIS workflow, in THIS repository, running in THIS
+# environment, and verifies it through a short-lived OIDC token GitHub mints per run. There is
+# no API token in a secret, on a laptop, or in anyone's password manager — which matters more
+# for a security tool than for most packages, since the credential that publishes it is exactly
+# the one worth stealing.
+#
+# THE TAG IS A CLAIM AND IT IS CHECKED. Tagging `v0.2.0` while `pyproject.toml` still says
+# 0.1.0 would publish 0.1.0 under a release announced as 0.2.0, and nothing downstream would
+# say so — a version is a number somebody trusts without re-reading. The job below refuses when
+# they disagree, which is the same rule this repository applies to every other published count.
+#
+# The suites run first, on the artifact that is about to ship. A release that fails its own
+# checks is the worst thing this project could put on PyPI: the tool exists to say when a
+# system is quietly broken.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # --- 1. does the thing that is about to ship actually pass? --------------------------------
+  suites:
+    runs-on: ubuntu-latest
+    # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
+    # its own deadline and names it; this catches what that cannot reach — a wedged
+    # runner, an install that never returns — instead of letting the job sit for the
+    # six hours GitHub allows by default and report as 'cancelled', which names nothing.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: install
+        run: python -m pip install --upgrade pip && pip install .
+      - name: run every offline suite
+        run: python tools/check.py
+
+  # --- 2. build, and refuse a tag that disagrees with the package ----------------------------
+  build:
+    needs: suites
+    runs-on: ubuntu-latest
+    # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
+    # its own deadline and names it; this catches what that cannot reach — a wedged
+    # runner, an install that never returns — instead of letting the job sit for the
+    # six hours GitHub allows by default and report as 'cancelled', which names nothing.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Read the version from the package itself rather than from the tag, then compare. The
+      # comparison is the point: either side alone is a claim, and the pair is a check.
+      #
+      # NO `if:` ON THIS STEP. It had one — `startsWith(github.ref, 'refs/tags/v')` — which made
+      # the check SKIP on a `workflow_dispatch` run rather than fail, so the one guard against
+      # publishing a version nobody announced was bypassable by a button in the web interface.
+      # A condition that turns a check off is not a condition, it is an exemption, and this is
+      # the same shape the rest of this repository exists to catch: an absent check reported as
+      # a passing one. The step now always runs and decides for itself.
+      - name: the tag must be the version
+        run: |
+          set -euo pipefail
+          pip install --quiet tomli
+          pkg=$(python -c "import tomli;print(tomli.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "pyproject: $pkg"
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              tag="${GITHUB_REF_NAME#v}"
+              echo "tag:       $tag"
+              if [ "$pkg" != "$tag" ]; then
+                echo "REFUSED: tag v$tag would publish version $pkg." >&2
+                echo "A release announced as one version and shipping another is a number nobody re-reads." >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "not a tag: this run builds and tests but must not publish." >&2
+              ;;
+          esac
+
+      - name: build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      # `twine check` reads the metadata the way PyPI will render it. A README that fails to
+      # render leaves the project page blank, which is discovered by whoever was deciding
+      # whether to trust the package.
+      - name: check the metadata renders
+        run: python -m pip install --quiet twine && python -m twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # --- 3. publish, from an environment that can be gated ------------------------------------
+  publish:
+    needs: build
+    # A TAG OR NOTHING. `workflow_dispatch` exists so the pipeline can be exercised without
+    # releasing, and that is only true if this job cannot run from it. Belt and braces with the
+    # version check above: that one refuses a tag that disagrees with the package, this one
+    # refuses anything that is not a tag at all.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
+    # its own deadline and names it; this catches what that cannot reach — a wedged
+    # runner, an install that never returns — instead of letting the job sit for the
+    # six hours GitHub allows by default and report as 'cancelled', which names nothing.
+    timeout-minutes: 30
+    # Named on the PyPI side as well, so a workflow added to this repository under a different
+    # environment cannot publish even if it is called release.yml.
+    environment: release
+    permissions:
+      id-token: write      # the OIDC token, and nothing else
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,0 +1,79 @@
+# Every suite in this repository is offline: no model, no network, no practice fleet. That is
+# what makes CI possible at all — the interesting half of this project needs a GPU, and none of
+# the checks do. A suite that starts needing one will fail here first, which is the right place
+# to find out.
+#
+# The install is tested, not assumed. `pip install .` on a clean runner is the same path a
+# stranger takes, and it is the path most likely to be broken by a change nobody thought was
+# about packaging: a new dependency, a data file that stops shipping, a module that only
+# imported because the repository happened to be the working directory.
+
+name: check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suites:
+    runs-on: ${{ matrix.os }}
+    # A ceiling, not a schedule. `tools/check.py` kills any single suite at its own
+    # deadline and names it; this catches what that cannot reach — a wedged runner, an
+    # install that never returns — instead of the job sitting for the six hours GitHub
+    # allows by default and reporting as 'cancelled', which names nothing at all.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # THREE OPERATING SYSTEMS, because a portability assumption is invisible from whichever
+        # one a change was written on. `Scripts/` versus `bin/`, a case-insensitive filesystem
+        # forgiving a wrong import, a CRLF in a shell script — each of them works perfectly on
+        # the machine it was typed on.
+        #
+        # And two interpreters: the oldest the package claims and the newest. The oldest is the
+        # one that matters, because `requires-python = ">=3.9"` is a promise and the only way it
+        # stays true is if something runs there. Paired down to one job per extra platform
+        # rather than a full grid, since the OS risk and the version risk are different risks
+        # and neither needs the other multiplied through it.
+        include:
+          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.13" }
+
+    # BASH ON ALL THREE, or the Windows leg is a different script. GitHub's default shell there
+    # is PowerShell, where `mkdir -p` and `$RUNNER_TEMP` do not mean what they mean below — so
+    # the platform this job was added to test would be the one running something else.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: install as a stranger would
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: the command exists and knows itself
+        run: |
+          qatration --version
+          qatration
+
+      - name: the installed copy finds its own corpus
+        # From a directory that is NOT the checkout, because the failure this catches is a
+        # package that only works when the repository happens to be the working directory.
+        run: |
+          mkdir -p "$RUNNER_TEMP/elsewhere"
+          cd "$RUNNER_TEMP/elsewhere"
+          qatration lint
+
+      - name: suites
+        run: python tools/check.py

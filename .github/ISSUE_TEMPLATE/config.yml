@@ -1,0 +1,14 @@
+# A blank issue stays available on purpose. A template that does not fit is a reason people
+# file nothing, and a badly-shaped report about a real defect beats a well-shaped absence.
+blank_issues_enabled: true
+contact_links:
+  - name: Something that should not be public first
+    url: mailto:qatration@gmail.com
+    about: >
+      A vulnerability in QAtration itself, or anything you would rather not open in the tracker.
+      Not a monitored inbox, so please allow time. See SECURITY.md.
+  - name: Before pointing this at anything
+    url: https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md
+    about: >
+      This sends real attacks at whatever it is aimed at. Point it only at something you own or
+      have written permission to test.

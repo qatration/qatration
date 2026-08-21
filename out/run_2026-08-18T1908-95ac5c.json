@@ -1,0 +1,21 @@
+{
+  "run_id": "2026-08-18T1908-95ac5c",
+  "state": "finished",
+  "target": "draftbot-generic",
+  "scope": "quick",
+  "engine": "48c1887+dirty",
+  "arsenal": "attacks_fingerprint.yaml",
+  "trials": 1,
+  "authorization": null,
+  "budgets": {
+    "min_interval_s": 0.0,
+    "max_requests": 200
+  },
+  "started_at": "2026-08-18 19:08:34",
+  "finished_at": "2026-08-18 19:09:09",
+  "spent": {
+    "requests": 6,
+    "seconds": 35.0
+  },
+  "note": null
+}

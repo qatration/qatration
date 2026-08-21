@@ -1,0 +1,338 @@
+"""
+Tests for the number this project rests on — no model, no network.
+
+`detector_coverage.py` produces the one figure that makes a detector count mean anything:
+how many of them have ever caught something on a live target. A defect here does not
+produce a wrong log line, it produces a wrong CLAIM, and it had three:
+
+  * the prompt was reconstructed from `attack["text"]`, so a chain or session attack —
+    whose turns live in `steps` — replayed with an EMPTY prompt and echo subtraction
+    switched off, inflating the very number the tool exists to publish. The same defect
+    rejudge had, in a second file;
+  * a detector that RAISED on real data was swallowed and landed in "declared only", which
+    reads as "no target does this" when the truth is "this one is broken";
+  * "never fired" was reported as a single cause, under a sentence claiming no target in
+    the fleet exhibits the behaviour — false for any detector whose config is missing
+    everywhere.
+
+  * and then the split into causes had the defect it was written to prevent: it asked
+    `inert_for(ctx)` without `declared`, which walks only the always-on sets, so the "cannot
+    fire as configured" bucket was reachable by nothing that was not always-on. It computed
+    to the empty set on the whole fleet. `memorised_completion` — config-gated, supplied by
+    no target, declared by no attack — was filed under "no target exhibits this behaviour",
+    an assertion about the targets sourced from a detector that could not speak.
+
+    python test_coverage.py      # exits 1 on any failure (CI gate)
+"""
+import sys, os, json, tempfile, shutil
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import detector_coverage as dc
+from oracle import DETECTORS, inert_for, NEEDS_CONFIG
+from target import Probe
+
+CANARY = "COV-CANARY-7712"
+
+
+def main():
+    fails, checks = [], 0
+
+    def check(label, ok, detail=""):
+        nonlocal checks
+        checks += 1
+        print(f"{'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            fails.append(f"{label}: {detail}")
+
+    # --- the inflation: a multi-turn attack must replay with its whole attacker side ---
+    # The attacker typed the canary in turn one. Counting that as a catch would credit
+    # every echo-subtracting detector with a hit it never earned.
+    tmp = tempfile.mkdtemp()
+    try:
+        chain = {"meta": {"target": "cov-fake"},
+                 "results": [{"attack": {"id": "c1", "category": "x", "delivery": "chain",
+                                         "steps": [f"remember {CANARY}", "what is it?"]},
+                              "trials": [{"probe": {"output": f"you said {CANARY}",
+                                                    "tool_calls": [], "observations": [],
+                                                    "seconds": 0, "turns": []}}]}]}
+        with open(os.path.join(tmp, "results_cov-fake.json"), "w", encoding="utf-8") as f:
+            json.dump(chain, f)
+
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp
+        dc.contexts = lambda: {"cov-fake": {"canaries": [CANARY]}}
+        hits, where, n, broke, sources = dc.replay()
+        dc.OUT, dc.contexts = real_out, real_ctx
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("a multi-step attack replays with every turn the attacker typed", n == 1)
+    check("the attacker's own canary is not credited as a catch",
+          not hits.get("canary_transformed") and not hits.get("canary_in_tool_call"),
+          f"hits: {dict(hits)}")
+    # ...but the canary really being in the reply is still a catch: canary_in_output does
+    # not subtract the prompt, because a secret shown to the user has left either way.
+    check("a canary in the visible reply is still counted",
+          hits.get("canary_in_output") == 1, f"hits: {dict(hits)}")
+
+    # --- a detector that throws must be reported, not filed as 'never fired' -----------
+    tmp = tempfile.mkdtemp()
+    try:
+        data = {"meta": {"target": "cov-fake"},
+                "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                             "trials": [{"probe": {"output": "ok", "tool_calls": [],
+                                                   "observations": [], "seconds": 0,
+                                                   "turns": []}}]}]}
+        with open(os.path.join(tmp, "results_cov-fake.json"), "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        def boom(probe, ctx):
+            raise RuntimeError("this detector is broken")
+
+        DETECTORS["_cov_boom"] = boom
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp
+        dc.contexts = lambda: {"cov-fake": {}}
+        try:
+            hits2, _, n2, broke2, _s2 = dc.replay()
+        finally:
+            dc.OUT, dc.contexts = real_out, real_ctx
+            del DETECTORS["_cov_boom"]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("a throwing detector does not take the replay down", n2 == 1)
+    check("a throwing detector is counted, not silently filed as never-fired",
+          broke2.get("_cov_boom") == 1, str(dict(broke2)))
+    check("...and it is not counted as a hit either", not hits2.get("_cov_boom"))
+
+    # --- 'never fired' has three causes, and only one is closed by a new target --------
+    # A detector needing config that no target supplies is untested, not exonerated.
+    empty = inert_for({}, DETECTORS)
+    check("a detector needing config is reported as inert on an empty context",
+          "sysprompt_paraphrase" in empty, str(sorted(empty)[:4]))
+    check("the same detector is not inert once the config exists",
+          "sysprompt_paraphrase" not in inert_for({"system_prompt": "x" * 200}, DETECTORS))
+
+    # The question has to be asked over the same set the replay RUNS, which is all of
+    # DETECTORS — not the always-on sets `inert_for` walks by default. Asked over the smaller
+    # set, every config-gated detector that is not always-on answers "not inert" and lands in
+    # the bucket that claims the fleet does not exhibit the behaviour. `memorised_completion`
+    # is that case in the shipping oracle and this is the check that would have caught it.
+    missed = sorted(k for k in NEEDS_CONFIG if k not in inert_for({}, DETECTORS))
+    check("EVERY config-gated detector is inert on an empty context, always-on or not",
+          not missed, f"not reported inert: {missed}")
+
+    # ...and both directions, because a check that passes by calling everything inert is
+    # indistinguishable from one that passes on the merits.
+    # An entry may be a tuple meaning "any one of these", so flatten before building the
+    # fully-configured ctx — a key that is a tuple satisfies nothing.
+    def _keys(spec):
+        for entry in spec:
+            if isinstance(entry, (tuple, list)):
+                yield from entry
+            else:
+                yield entry
+
+    full = {k: (["x" * 40] if k not in ("system_prompt",) else "x" * 200)
+            for spec in NEEDS_CONFIG.values() for k in _keys(spec)}
+    full["max_output_chars"] = 12000
+    still = sorted(k for k in NEEDS_CONFIG if k in inert_for(full, DETECTORS))
+    check("...and none of them is inert once every key it names is supplied",
+          not still, f"still inert with full config: {still}")
+
+    # --- the bucket split routes it to *cannot*, not to *did not* -----------------------
+    real_ctx = dc.contexts
+    try:
+        dc.contexts = lambda: {"a": {"canaries": ["X"]}, "b": {"canaries": ["Y"]}}
+        unconf, untried = dc.buckets(["memorised_completion"], {})
+        check("a detector no target configures is reported as unconfigured",
+              unconf == ["memorised_completion"] and not untried,
+              f"unconfigured={unconf} untried={untried}")
+
+        dc.contexts = lambda: {"a": {"canaries": ["X"]},
+                               "b": {"expected_completions": ["some text"]}}
+        unconf2, untried2 = dc.buckets(["memorised_completion"], {})
+        check("...and as untried the moment one target could have exercised it",
+              untried2 == ["memorised_completion"] and not unconf2,
+              f"unconfigured={unconf2} untried={untried2}")
+
+        # a detector that THREW is neither: a defect is not an absence.
+        dc.contexts = lambda: {"a": {"canaries": ["X"]}}
+        unconf3, untried3 = dc.buckets(["ansi_exfil"], {"ansi_exfil": 3})
+        check("a detector that raised is filed under neither absence bucket",
+              not unconf3 and not untried3, f"unconfigured={unconf3} untried={untried3}")
+    finally:
+        dc.contexts = real_ctx
+
+    # --- which target wrote an artifact is resolved, not guessed -----------------------
+    # `stem.split("_")[0]` assumed a target name has no underscore and that whatever follows
+    # the first one is a tag. True on this fleet, a property of nothing: a name with an
+    # underscore resolves to a prefix of itself, misses the context dict and scans with `{}`
+    # — every canary detector inert, on evidence that is sitting right there, and the report
+    # reads clean. Longest known name wins instead, and no match is reported rather than
+    # silently becoming an empty context.
+    names = ["nemo", "nemo-inputonly", "portalagent", "with_underscore"]
+    check("a plain target name resolves to itself",
+          dc.target_of("portalagent", names) == "portalagent")
+    check("a per-model tag is stripped",
+          dc.target_of("portalagent_mistral-nemo", names) == "portalagent")
+    check("a hyphenated name is not cut at the hyphen",
+          dc.target_of("nemo-inputonly", names) == "nemo-inputonly")
+    check("the longest matching name wins over its own prefix",
+          dc.target_of("nemo-inputonly_qwen", names) == "nemo-inputonly")
+    check("a name containing an underscore resolves to itself, not to its prefix",
+          dc.target_of("with_underscore", names) == "with_underscore",
+          repr(dc.target_of("with_underscore", names)))
+    check("an unknown artifact resolves to nothing, so the caller can say so",
+          dc.target_of("somebody-elses-bot", names) is None)
+
+    # --- two configs sharing a name is reported, not silently resolved ------------------
+    collisions = []
+    real_ctxs = dc.contexts(collisions)
+    check("the real fleet's context map is built without error", bool(real_ctxs))
+    check("a duplicate target name is collected rather than dropped in silence",
+          all(isinstance(c, tuple) and len(c) == 2 for c in collisions), str(collisions))
+    check("...and the survivor is still in the map",
+          all(name in real_ctxs for name, _ in collisions), str(collisions))
+
+    # --- an artifact whose target does not resolve is named, not scanned as clean -------
+    tmp = tempfile.mkdtemp()
+    try:
+        orphan = {"meta": {"target": "a-bot-with-no-config"},
+                  "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                               "trials": [{"probe": {"output": f"key is {CANARY}",
+                                                     "tool_calls": [], "observations": [],
+                                                     "seconds": 0, "turns": []}}]}]}
+        with open(os.path.join(tmp, "results_orphan.json"), "w", encoding="utf-8") as f:
+            json.dump(orphan, f)
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp
+        dc.contexts = lambda *a, **k: {"cov-fake": {"canaries": [CANARY]}}
+        seen = []
+        hits4, _, n4, _, _src = dc.replay(seen)
+        dc.OUT, dc.contexts = real_out, real_ctx
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("an artifact with no matching target config is reported", len(seen) == 1, str(seen))
+    check("...and it is not silently credited as a clean scan",
+          n4 == 1 and not hits4.get("canary_in_output"),
+          f"n={n4} hits={dict(hits4)}")
+
+    # --- an artifact says which build wrote it ------------------------------------------
+    # A stored result gets read as a statement about the engine NOW, and it is a statement
+    # about the engine that wrote it. `tool_call_storm` held a place in the published
+    # "demonstrated" count on one probe whose eleven tool calls were each concrete call
+    # recorded twice — written by the adapter version that kept boundary records and raw
+    # calls in one list, before that was split into `probe.resolved`. The code was fixed the
+    # same day; the file it had already written stayed on disk and went on propping up the
+    # headline, and nothing about the file said where it came from.
+    from target import engine_version
+    ev = engine_version()
+    check("the engine reports a version and the same one twice",
+          isinstance(ev, str) and ev and ev == engine_version(), repr(ev))
+
+    def _engines(meta_extra):
+        tmp = tempfile.mkdtemp()
+        try:
+            data = {"meta": dict({"target": "cov-fake"}, **meta_extra),
+                    "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                                 "trials": [{"probe": {"output": "ok", "tool_calls": [],
+                                                       "observations": [], "seconds": 0,
+                                                       "turns": []}}]}]}
+            with open(os.path.join(tmp, "results_cov-fake.json"), "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            real_out, real_ctx = dc.OUT, dc.contexts
+            dc.OUT = tmp
+            dc.contexts = lambda *a, **k: {"cov-fake": {}}
+            seen = []
+            try:
+                dc.replay(None, seen)
+            finally:
+                dc.OUT, dc.contexts = real_out, real_ctx
+            return seen
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    got = _engines({})
+    check("an artifact with no stamp is reported as unstamped, not as the current build",
+          got == [("results_cov-fake.json", "unstamped", 1)], str(got))
+    got = _engines({"engine": "deadbee"})
+    check("a stamped artifact reports the build that wrote it",
+          got == [("results_cov-fake.json", "deadbee", 1)], str(got))
+
+    # --- lock maps are inside the provenance audit too -----------------------------------
+    # note_engine was called in the results loop only, and a lock map was a bare JSON list
+    # that could not carry a stamp anyway — so the artifact family that alone demonstrates
+    # forced_output, unknown_tool_call and refusal_then_comply sat outside the check written
+    # to say which evidence predates the build. The printed line then divided by the FULL
+    # probe count, which read as though the remainder had known provenance.
+    from isolation import read_maps, write_maps
+    tmp = tempfile.mkdtemp()
+    try:
+        sample = {"output": f"leaked {CANARY}", "tool_calls": []}
+        maps = [{"objective": "o", "verdict": "PARTIAL", "coupling": [],
+                 "combined": {"status": "open", "sample": sample},
+                 "properties": [{"name": "p", "status": "open", "sample": sample}]}]
+        write_maps(os.path.join(tmp, "isolation_cov-fake.json"), maps, {"target": "cov-fake"})
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp
+        dc.contexts = lambda *a, **k: {"cov-fake": {"canaries": [CANARY]}}
+        seen = []
+        try:
+            hits5, _, n5, _, _src = dc.replay(None, seen)
+        finally:
+            dc.OUT, dc.contexts = real_out, real_ctx
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("a lock map's probes are replayed", n5 == 2 and hits5.get("canary_in_output") == 2,
+          f"n={n5} hits={dict(hits5)}")
+    check("...and the map reports the build that wrote it",
+          len(seen) == 1 and seen[0][1] not in ("unstamped", None) and seen[0][2] == 2,
+          str(seen))
+
+    # a legacy bare-list map still reads, and reports itself as unstamped rather than vanishing
+    tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(tmp, "isolation_cov-fake.json"), "w", encoding="utf-8") as f:
+            json.dump(maps, f)
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp
+        dc.contexts = lambda *a, **k: {"cov-fake": {"canaries": [CANARY]}}
+        seen2 = []
+        try:
+            dc.replay(None, seen2)
+        finally:
+            dc.OUT, dc.contexts = real_out, real_ctx
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    check("a lock map written before stamps existed still reads, and says it has none",
+          seen2 == [("isolation_cov-fake.json", "unstamped", 2)], str(seen2))
+
+    # --- the headline itself ------------------------------------------------------------
+    hits3, where3, n3, broke3, _src = dc.replay()
+    check("the real replay reads a meaningful number of stored probes", n3 > 100, str(n3))
+    check("nothing in the real fleet raises", not broke3, str(dict(broke3)))
+    demo = [k for k in DETECTORS if hits3[k]]
+    check("every demonstrated detector names the target it fired on",
+          all(where3[k] for k in demo))
+    check("demonstrated + declared accounts for every detector",
+          len(demo) + len([k for k in DETECTORS if not hits3[k]]) == len(DETECTORS))
+
+    print(f"\n{checks - len(fails)}/{checks} passed")
+    if fails:
+        for f in fails:
+            print("  !", f)
+        sys.exit(1)
+    print("\nOK — the headline number is earned.")
+
+
+if __name__ == "__main__":
+    main()

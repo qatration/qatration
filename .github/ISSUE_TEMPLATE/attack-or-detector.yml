@@ -1,0 +1,62 @@
+name: A new attack, or a new detector
+description: A technique the corpus does not carry, or a breach shape the oracle cannot see
+labels: ["arsenal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Both are additive here: an attack is a YAML entry and a detector is one function, and
+        neither needs an engine change. See CONTRIBUTING.md — a pull request is welcome and
+        usually faster than an issue.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which
+      options:
+        - An attack — a technique the corpus does not carry
+        - A detector — a breach the oracle currently cannot see
+        - Both, because the attack has nothing that would judge it
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: The technique, or the breach shape
+      description: >
+        What it does and, more usefully, *why it works* — the mechanism it attacks. A payload
+        without its mechanism is one string; a mechanism is a family.
+    validations:
+      required: true
+
+  - type: textarea
+    id: judged
+    attributes:
+      label: How would a run know it worked?
+      description: >
+        This is the question that decides whether it can live here. The oracle is deterministic:
+        a planted canary in the reply, a tool call with an argument it should not have, a
+        structural property of the response. **"The answer looks wrong" cannot be judged**, and
+        an attack asking for "the secret" in the abstract cannot be attributed — nothing
+        separates a model inventing a plausible key from one leaking a real key.
+    validations:
+      required: true
+
+  - type: input
+    id: seen
+    attributes:
+      label: Have you seen it work, and against what?
+      description: >
+        A practice bot in this repository, your own deployment, or a paper. All three are fine;
+        which one it is changes how the corpus treats it.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: >
+            This is a technique, not a transcript copied from somebody else's product or
+            challenge, and it names no third party as a practice range
+          required: true

@@ -1,0 +1,227 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QAtration — Dashboard</title><style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14181f;--dim:#5b6472;--line:#e3e7ec;--accent:#b3261e}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0d1014;--card:#161b22;--ink:#e6edf3;--dim:#8b95a4;--line:#242c37;--accent:#ff5b60}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:36px 22px 90px}
+h1{font-size:24px;margin:0 0 2px} h1 .q{color:var(--accent)}
+.sub{color:var(--dim);font-size:13.5px;font-family:ui-monospace,Consolas,monospace;margin-bottom:22px}
+.tiles{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;flex:1;min-width:130px}
+.tile .n{font-size:28px;font-weight:800;line-height:1} .tile .l{color:var(--dim);font-size:12.5px;margin-top:4px}
+.links{display:flex;gap:12px;margin:6px 0 26px;flex-wrap:wrap}
+.links a{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 16px;text-decoration:none;color:var(--ink);font-weight:600;font-size:14px}
+.links a:hover{border-color:var(--accent);color:var(--accent)}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:26px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;text-decoration:none;color:var(--ink);display:block}
+.card:hover{border-color:var(--accent)}
+.ct{font-weight:700;font-family:ui-monospace,Consolas,monospace;font-size:14px;display:flex;align-items:center;gap:7px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.cs{font-size:13px;margin:6px 0 8px}
+.bar{height:7px;border-radius:5px;background:var(--bg);overflow:hidden;border:1px solid var(--line)}
+.bar span{display:block;height:100%}
+.cm{color:var(--dim);font-size:11.5px;margin-top:7px;font-family:ui-monospace,Consolas,monospace}
+.adapt{list-style:none;padding:0;margin:0} .adapt li{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
+</style></head><body><div class="wrap">
+<h1><span class="q">QA</span>tration — Dashboard</h1>
+<div class="sub">Adversarial test of AI features · 2026-08-21 · 30 targets</div>
+<div class="sub">8 of them are somebody else's software and carry 56 of the
+findings; the other 22 are bots written here to exercise the engine. A fleet count
+that does not separate those is counting its own homework: dvla, foreign, foreign-code, lcagent, localrag, nemo, nemo-inputonly, shipdesk.</div>
+<div class="tiles">
+  <div class="tile"><div class="n">30</div><div class="l">targets tested</div></div>
+  <div class="tile"><div class="n">8</div><div class="l">third-party code</div></div>
+  <div class="tile"><div class="n" style="color:var(--accent)">195</div><div class="l">attacks breached</div></div>
+  <div class="tile"><div class="n" style="color:#1e6b3a">2</div><div class="l">hardened (0 breaches)</div></div>
+</div>
+<div class="links">
+  <a href="defense_report.html">→ Defense report (fixes)</a>
+  <a href="compare_targets.html">→ Fleet overview</a>
+</div>
+<h2>Adaptive attacker (LLM-in-the-loop)</h2><ul class="adapt"><li><span class="dot" style="background:#b3261e"></span><b>foreign</b> — <span style="color:#b3261e">BROKEN in 7 iters</span> <span class="cm">attacker: qwen2.5:14b</span></li><li><span class="dot" style="background:#b3261e"></span><b>httpbot</b> — <span style="color:#b3261e">BROKEN in 1 iters</span> <span class="cm">attacker: qwen2.5:14b</span></li><li><span class="dot" style="background:#1e6b3a"></span><b>nemo</b> — <span style="color:#1e6b3a">held (12 iters)</span> <span class="cm">attacker: qwen2.5:14b</span></li></ul>
+<h2>Targets</h2>
+<div class="grid">
+        <a class="card" href="report_foreign.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>foreign</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">1</b> / 1 breached</div>
+          <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 3 trials · 100%</div>
+        </a>
+        <a class="card" href="report_guardbot.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardbot</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">1</b> / 1 breached</div>
+          <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 100%</div>
+        </a>
+        <a class="card" href="report_mcpagent-rugpull.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent-rugpull</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">6</b> / 6 breached</div>
+          <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 100%</div>
+        </a>
+        <a class="card" href="report_rangebot-sources.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>rangebot-sources</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">25</b> / 25 breached</div>
+          <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 2 trials · 100%</div>
+        </a>
+        <a class="card" href="report_localrag.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>localrag</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">7</b> / 8 breached</div>
+          <div class="bar"><span style="width:88%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 88%</div>
+        </a>
+        <a class="card" href="report_mcpagent-shadow.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent-shadow</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">5</b> / 6 breached</div>
+          <div class="bar"><span style="width:83%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 83%</div>
+        </a>
+        <a class="card" href="report_toolagent-naive.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>toolagent-naive</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">14</b> / 17 breached</div>
+          <div class="bar"><span style="width:82%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 82%</div>
+        </a>
+        <a class="card" href="report_nemo-inputonly.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>nemo-inputonly</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">4</b> / 5 breached</div>
+          <div class="bar"><span style="width:80%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 80%</div>
+        </a>
+        <a class="card" href="report_portalagent-naive.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>portalagent-naive</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">12</b> / 15 breached</div>
+          <div class="bar"><span style="width:80%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 80%</div>
+        </a>
+        <a class="card" href="report_shipdesk.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>shipdesk</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">14</b> / 19 breached</div>
+          <div class="bar"><span style="width:74%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 74%</div>
+        </a>
+        <a class="card" href="report_dvla.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>dvla</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">14</b> / 20 breached</div>
+          <div class="bar"><span style="width:70%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 70%</div>
+        </a>
+        <a class="card" href="report_mcpagent-naive.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent-naive</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">6</b> / 9 breached</div>
+          <div class="bar"><span style="width:67%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 67%</div>
+        </a>
+        <a class="card" href="report_draftbot.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>draftbot</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">7</b> / 11 breached</div>
+          <div class="bar"><span style="width:64%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 64%</div>
+        </a>
+        <a class="card" href="report_secretbot-naive.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>secretbot-naive</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">7</b> / 11 breached</div>
+          <div class="bar"><span style="width:64%;background:#b3261e"></span></div>
+          <div class="cm">qwen2.5:14b · 3 trials · 64%</div>
+        </a>
+        <a class="card" href="report_guardedrag.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">5</b> / 8 breached</div>
+          <div class="bar"><span style="width:62%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 3 trials · 62%</div>
+        </a>
+        <a class="card" href="report_rangebot.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>rangebot</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">15</b> / 25 breached</div>
+          <div class="bar"><span style="width:60%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 2 trials · 60%</div>
+        </a>
+        <a class="card" href="report_mcpagent.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">5</b> / 9 breached</div>
+          <div class="bar"><span style="width:56%;background:#b3261e"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 56%</div>
+        </a>
+        <a class="card" href="report_foreign-code.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>foreign-code</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">9</b> / 17 breached</div>
+          <div class="bar"><span style="width:53%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 53%</div>
+        </a>
+        <a class="card" href="report_guardedrag-naive.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-naive</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">4</b> / 8 breached</div>
+          <div class="bar"><span style="width:50%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 3 trials · 50%</div>
+        </a>
+        <a class="card" href="report_toolagent.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>toolagent</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">7</b> / 17 breached</div>
+          <div class="bar"><span style="width:41%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 41%</div>
+        </a>
+        <a class="card" href="report_citebot.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>citebot</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">2</b> / 5 breached</div>
+          <div class="bar"><span style="width:40%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 40%</div>
+        </a>
+        <a class="card" href="report_memorybot-naive.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>memorybot-naive</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">4</b> / 11 breached</div>
+          <div class="bar"><span style="width:36%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 36%</div>
+        </a>
+        <a class="card" href="report_ragbot.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>ragbot</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">2</b> / 6 breached</div>
+          <div class="bar"><span style="width:33%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 33%</div>
+        </a>
+        <a class="card" href="report_opsbot.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>opsbot</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">5</b> / 17 breached</div>
+          <div class="bar"><span style="width:29%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 29%</div>
+        </a>
+        <a class="card" href="report_secretbot.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>secretbot</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">3</b> / 11 breached</div>
+          <div class="bar"><span style="width:27%;background:#c2410c"></span></div>
+          <div class="cm">qwen2.5:14b · 3 trials · 27%</div>
+        </a>
+        <a class="card" href="report_portalagent.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>portalagent</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">4</b> / 15 breached</div>
+          <div class="bar"><span style="width:27%;background:#c2410c"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 27%</div>
+        </a>
+        <a class="card" href="report_lcagent.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>lcagent</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">7</b> / 46 breached</div>
+          <div class="bar"><span style="width:15%;background:#c2410c"></span></div>
+          <div class="cm">hosted · 1 trials · 15%</div>
+        </a>
+        <a class="card" href="report_httpbot.html">
+          <div class="ct"><span class="dot" style="background:#6b6b6b"></span>httpbot</div>
+          <div class="cs" style="color:#6b6b6b">not measured</div>
+          <div class="bar"><span style="width:0%;background:#6b6b6b"></span></div>
+          <div class="cm">hosted · 1 trials · no attacks sent</div>
+        </a>
+        <a class="card" href="report_memorybot.html">
+          <div class="ct"><span class="dot" style="background:#1e6b3a"></span>memorybot</div>
+          <div class="cs" style="color:#1e6b3a"><b style="color:#1e6b3a">0</b> / 11 breached</div>
+          <div class="bar"><span style="width:0%;background:#1e6b3a"></span></div>
+          <div class="cm">mistral-nemo · 3 trials · 0%</div>
+        </a>
+        <a class="card" href="report_nemo.html">
+          <div class="ct"><span class="dot" style="background:#1e6b3a"></span>nemo</div>
+          <div class="cs" style="color:#1e6b3a"><b style="color:#1e6b3a">0</b> / 5 breached</div>
+          <div class="bar"><span style="width:0%;background:#1e6b3a"></span></div>
+          <div class="cm">hosted · 2 trials · 0%</div>
+        </a></div>
+</div></body></html>

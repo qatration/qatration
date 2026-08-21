@@ -1,0 +1,25 @@
+# Line endings, decided here rather than by whoever happens to clone.
+#
+# Without this file the answer depends on each contributor's `core.autocrlf`, and the failure it
+# produces is unhelpful in a specific way: a shell script committed with CRLF from a Windows
+# machine fails on Linux and macOS with `bad interpreter: /usr/bin/env bash^M`, which names a
+# file that plainly exists and an interpreter that plainly works. Nobody's first guess is line
+# endings.
+#
+# Everything text is normalised to LF in the repository. What a working copy looks like is then
+# git's business, but what is COMMITTED is the same for everyone.
+* text=auto eol=lf
+
+# Executable by construction. A CRLF here is not a cosmetic diff, it is a script that will not
+# run on two of the three platforms this is meant to work on.
+*.sh text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Binary, so git neither converts nor tries to diff them.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.gguf binary
+*.whl binary

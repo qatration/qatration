@@ -1,0 +1,17 @@
+# What the engine itself needs. Two things.
+#
+# This list is generated from what the code imports, not from what was once installed while
+# developing it: every import across redteam/ was resolved against the standard library and
+# against the directory's own modules, and only these survived. test_packaging.py re-derives it
+# and fails if the two disagree, so a new dependency cannot arrive unlisted.
+#
+# `pip install -e .` is the better route and reads the same list from pyproject.toml. This file
+# is here because it is the first thing people look for.
+
+PyYAML>=5.4
+pyfiglet>=0.8
+
+# The practice fleet under foreign-agent/, external/ and dvla/ needs a model framework as well.
+# Those are TARGETS, not parts of the engine, and testing your own endpoint needs none of them:
+#
+#     pip install -e ".[fleet]"

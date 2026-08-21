@@ -1,0 +1,111 @@
+# Weights, environments and clones — everything reproducible from a command, and
+# collectively ~31 GB. What is tracked is the engine, the content (attacks, objectives,
+# frames, target configs) and the docs; everything else is regenerated.
+
+# model weights (OLLAMA_MODELS points here)
+ollama-models/
+downloads/
+
+# virtualenvs
+**/venv/
+**/env/
+dvla/env/
+
+# cloned / third-party targets, kept locally but not vendored into this repo
+dvla/
+external/local-rag-chat/
+external/nemo/config*/kb/
+external/nemo/venv/
+# NeMo embedding cache, rebuilt on first run (a trailing comment on a
+# pattern line is part of the pattern, not a comment)
+external/nemo/.cache/
+
+# generated artifacts: every run rewrites these, and results_*.json is a record of an
+# expensive run rather than source — kept out so a diff is about the engine, not the day
+# out/ IS TRACKED HERE, and that is the difference between this repository and a working one.
+#
+# In a working copy `out/` is the product of an expensive run, and keeping it out means a diff
+# is about the engine rather than about the day. Here it is the EVIDENCE: 2,749 stored probes
+# across 30 targets, which is what makes every number in the README recountable rather than
+# believable. A claim about how many detectors have ever fired is worth nothing if the reader
+# cannot replay it, and replaying it takes about two seconds and no model at all.
+#
+# It is a snapshot. Run anything and it changes, and the working tree will say so. That is
+# correct: the new evidence is yours rather than ours.
+out/_*.log
+# Working scratch from developing the engine, not evidence about any target.
+out/_audit_scratch/
+out/_*/
+out/.fleet-pids
+out/queue/
+out/runs/
+out/configs/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# The early throwaway prototypes this engine grew out of — an older `rejudge.py`, an older
+# `report.py`, a `harness.py` that predates the oracle. Kept locally because they are the
+# project's own history, excluded because two files named `rejudge.py` in one clone is a trap:
+# somebody edits the wrong one and it works, right up until nothing reads it.
+#
+# Named here rather than left to chance, because the WORKING copy and this one are about to
+# become the same directory, and until now `spikes/` was excluded only by living somewhere else.
+spikes/
+
+# Editor and rerun debris. `results_<t>.json.pre-rerun` was tracked for a while: 152 KB of a
+# superseded run that nothing reads, because `results_files()` globs `results_*.json` and that
+# name does not match it. Invisible to the code and visible to everyone who clones.
+*.bak
+*.orig
+*.rej
+*.pre-rerun
+
+# setuptools leaves a COMPLETE COPY of the package here, arsenal included. It is untracked but
+# was not ignored, so one `git add -A` would have committed build/lib/qatration/attacks_e2e_*
+# _tmp.yaml — the throwaway fixtures the end-to-end tests write — as shipped attack files.
+build/
+dist/
+
+# The end-to-end suites write these beside the real configs and delete them when they finish —
+# unless a run dies, and then they sit in `git status` waiting for a careless `git add -A`. The
+# dead one is a DELIBERATELY unreachable target; committed, it becomes a config a sweep will
+# pick up and fail on for a reason nobody planted. Same suffix `target_configs()` skips.
+*_tmp.yaml
+*.tmp.yaml
+
+# Artifacts of TARGETS THAT ONLY EXISTED WHILE SOMETHING WAS BEING DEBUGGED — a deliberately
+# unreachable endpoint, a honeytoken reproduction, a config broken on purpose. `out/` is tracked
+# because the baselines and real run records in it are evidence; these are not. Left on disk and
+# hidden from git, because they were offered up by every `git add -A` and would eventually be
+# taken: a published out/ carrying results for "e2e-dead-probe2" says the fleet has a target
+# nobody can find.
+out/results_e2e-*.json
+out/report_e2e-*.html
+out/history/e2e-*.jsonl
+out/history/repro-*.jsonl
+out/results_repro-*.json
+out/results_acme-support-broken.json
+out/report_acme-support-broken.html
+out/history/acme-support-broken.jsonl
+out/history/htrepro.jsonl
+out/history/htprod.jsonl
+out/run_2026-08-20T1932-7ba546.json
+out/run_2026-08-20T1934-c9108a.json
+out/run_2026-08-20T1935-9e7433.json
+out/run_2026-08-20T1935-de3206.json
+out/run_2026-08-20T2009-36adb6.json
+out/run_2026-08-20T2010-223a36.json
+out/run_2026-08-20T2012-629f4b.json
+out/run_2026-08-20T2012-fe63fc.json
+out/run_2026-08-21T0110-665c21.json

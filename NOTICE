@@ -1,0 +1,43 @@
+QAtration
+Copyright 2026 QAtration
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+---
+
+Apache 2.0 rather than a copyleft licence, and the reason is the shape of the
+project rather than a preference about licences. The engine is meant to be run by whoever owns
+the system being tested — on their machine, in their CI, against their own deployment — so
+there is nothing here that a network-use clause would protect.
+
+The one thing worth saying plainly, because it is the whole ethic of the codebase: nothing in
+this repository is a claim you have to take on trust. `out/` ships with it, and every number in
+the README is recounted from those artifacts by a test that fails when the two disagree.
+
+---
+
+THIRD-PARTY MATERIAL
+
+No third-party LIBRARY is vendored here. The practice targets under `foreign-agent/` and
+`foreign-langchain/` are wrappers this project wrote around libraries installed separately —
+smolagents (Apache 2.0, Hugging Face) and LangChain (MIT) — and `external/nemo/` is a
+configuration for NVIDIA NeMo Guardrails (Apache 2.0). The libraries themselves are not
+included; each is installed from its own distribution under its own licence.
+
+Two target configs are the exception, and it is a deliberate one.
+`redteam/targets_foreign.yaml` and `redteam/targets_foreign_code.yaml` reproduce the SYSTEM
+PROMPTS that smolagents ships with its `ToolCallingAgent` and `CodeAgent`, verbatim, under
+Apache 2.0 and with attribution to Hugging Face. They are there because this engine refuses to
+read a target's prompt out of its own source: a detector that has seen the prompt can subtract
+it, and a control whose prompt was read rather than declared is not a control. Declaring them
+is what makes the measurement honest, and reproducing them is what declaring them costs.
+
+`dvla/` holds an untracked third-party practice application with its own licence, NOT
+tracked in this repository. `redteam/targets_dvla.py` will tell you so if you try to use it
+without cloning it first.
+
+The attack corpus is original. Several techniques it exercises are described in published
+research and named in the comments beside the attacks that use them — ArtPrompt, Context
+Compliance Attacks, Crescendo, Skeleton Key, policy puppetry, latent injection. The techniques
+are cited; no text was taken from any other tool's corpus, and every attack here is aimed at a
+canary this project plants rather than at a secret described in the abstract.

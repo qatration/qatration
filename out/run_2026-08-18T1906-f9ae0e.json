@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-18T1906-f9ae0e",
+  "state": "aborted",
+  "target": "draftbot",
+  "scope": "full",
+  "engine": "48c1887+dirty",
+  "arsenal": "attacks_draftbot.yaml",
+  "trials": 1,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-18 19:06:33",
+  "finished_at": "2026-08-18 19:08:11",
+  "spent": {},
+  "note": "every trial errored; nothing was measured and nothing was written"
+}

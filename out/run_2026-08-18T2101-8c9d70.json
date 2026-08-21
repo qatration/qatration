@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-18T2101-8c9d70",
+  "state": "finished",
+  "target": "foreign",
+  "scope": "full",
+  "engine": "619b78f+dirty",
+  "arsenal": "attacks_generic.yaml",
+  "trials": 2,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-18 21:01:48",
+  "finished_at": "2026-08-18 21:08:26",
+  "spent": {},
+  "note": null
+}

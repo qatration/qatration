@@ -1,0 +1,18 @@
+{
+  "run_id": "2026-08-19T0010-3d3660",
+  "state": "started",
+  "target": "lcagent",
+  "scope": "full",
+  "engine": "791ae50+dirty",
+  "arsenal": "attacks_generic.yaml",
+  "trials": 1,
+  "authorization": null,
+  "budgets": {
+    "max_requests": 400,
+    "max_seconds": 3600
+  },
+  "started_at": "2026-08-19 00:10:53",
+  "finished_at": null,
+  "spent": {},
+  "note": null
+}

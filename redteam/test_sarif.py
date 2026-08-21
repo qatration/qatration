@@ -1,0 +1,186 @@
+"""The SARIF export, checked on the thing it exists to get right.
+
+Anyone can serialise findings into SARIF. The reason this file is long is the demotion: a
+breach that cannot be told apart from a target's ordinary traffic must not arrive in somebody's
+pull request as a red error, and a detector that could not fire must arrive as a notification
+rather than as a silence. Both are easy to write and easy to lose, and losing either turns the
+most visible surface this tool has into a confident lie.
+
+Offline. Fixtures only, no model, no fleet, no stored evidence.
+"""
+
+import io
+import json
+import os
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import baseline  # noqa: E402
+import sarif  # noqa: E402
+
+PASS = FAIL = 0
+
+
+def check(label, ok, detail=""):
+    global PASS, FAIL
+    if ok:
+        PASS += 1
+        print("PASS  " + label)
+    else:
+        FAIL += 1
+        print("FAIL  " + label + (("  " + detail) if detail else ""))
+
+
+def row(aid, headline, fired, category="injection", rate="2/2"):
+    return {"attack": {"id": aid, "category": category, "text": "..."},
+            "headline": headline, "fired": list(fired), "rate": rate, "locks": {}}
+
+
+def results(rows, **meta):
+    m = {"target": "fixture", "engine": "abc1234", "attacks_n": len(rows),
+         "broke": sum(1 for r in rows if r["headline"] != "DEFENDED")}
+    m.update(meta)
+    return {"meta": m, "results": rows}
+
+
+def build(rows, ambient, **meta):
+    """Build a SARIF log with `ambient` standing in for the benign baseline.
+
+    The rate is injected rather than read from disk, because the whole point under test is what
+    happens at 0%, at 3% and at 30%, and no fixture fleet produces those on demand.
+    """
+    real = baseline.rates
+    baseline.rates = lambda target, out_dir=None: ambient
+    try:
+        return sarif.build(results(rows, **meta), target_config="cfg.yaml")
+    finally:
+        baseline.rates = real
+
+
+def levels(log):
+    out = {}
+    for r in log["runs"][0]["results"]:
+        out[r["level"]] = out.get(r["level"], 0) + 1
+    return out
+
+
+def notifications(log):
+    return log["runs"][0]["invocations"][0].get("toolExecutionNotifications", [])
+
+
+# --- the shape a consumer needs ---------------------------------------------------------
+log = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0})
+check("SARIF 2.1.0 with a schema, a driver and a version",
+      log["version"] == "2.1.0" and log["$schema"].endswith("sarif-2.1.0.json")
+      and log["runs"][0]["tool"]["driver"]["name"] == "QAtration")
+one = log["runs"][0]["results"][0]
+check("a finding carries a rule, a level, a message and a location",
+      one["ruleId"] == "canary_in_output" and one["level"]
+      and one["message"]["text"] and one["locations"][0]["physicalLocation"]
+      ["artifactLocation"]["uri"] == "cfg.yaml")
+check("every rule referenced by a result is declared in the driver",
+      {r["ruleId"] for r in log["runs"][0]["results"]}
+      <= {r["id"] for r in log["runs"][0]["tool"]["driver"]["rules"]})
+
+# --- the demotion, which is the reason this file exists ---------------------------------
+quiet = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0})
+check("a breach on a detector that is silent on benign traffic is an error",
+      levels(quiet) == {"error": 1}, str(levels(quiet)))
+
+noisy = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.30})
+check("...the same breach on a detector that fires on 30% of benign traffic is NOT an error",
+      levels(noisy) == {"note": 1}, str(levels(noisy)))
+check("...and the message says the rate that demoted it",
+      "30%" in noisy["runs"][0]["results"][0]["message"]["text"]
+      and "NOT ATTRIBUTABLE" in noisy["runs"][0]["results"][0]["message"]["text"])
+
+weak = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.03})
+check("...a small ambient rate weakens it to a warning rather than erasing it",
+      levels(weak) == {"warning": 1}, str(levels(weak)))
+
+# `None` and `{}` are different answers, and the difference is the whole of baseline.py.
+never = build([row("a1", "EXPLOITED", ["canary_in_output"])], None)
+check("no baseline ever run is a warning, not an error and not a clean pass",
+      levels(never) == {"warning": 1}, str(levels(never)))
+check("...and it says so, rather than showing a confident finding",
+      "UNMEASURED" in never["runs"][0]["results"][0]["message"]["text"])
+check("...and the run is flagged as unattributable as a whole",
+      any("baseline" in n["descriptor"]["id"] for n in notifications(never)))
+
+measured_silent = build([row("a1", "EXPLOITED", ["canary_in_output"])], {})
+check("a baseline that was run and found nothing is the STRONGEST case, so: error",
+      levels(measured_silent) == {"error": 1}, str(levels(measured_silent)))
+
+# A row is judged on its best detector — the same rule baseline.attribution applies, asserted
+# here because the export is where getting it backwards would be most expensive.
+mixed = build([row("a1", "EXPLOITED", ["canary_in_output", "session_leak"])],
+              {"canary_in_output": 0.30, "session_leak": 0.0})
+check("one quiet detector rescues a row that also fired a noisy one",
+      levels(mixed) == {"error": 1}, str(levels(mixed)))
+
+# --- what must NOT appear ---------------------------------------------------------------
+defended = build([row("a1", "DEFENDED", []), row("a2", "EXPLOITED", ["canary_in_output"])],
+                 {"canary_in_output": 0.0})
+check("a defended attack is not a finding",
+      len(defended["runs"][0]["results"]) == 1
+      and defended["runs"][0]["results"][0]["ruleId"] == "canary_in_output")
+
+# --- inert detectors are notifications, not silence -------------------------------------
+blind = build([row("a1", "DEFENDED", [])], {},
+              inert={"sysprompt_paraphrase": ["system_prompt"], "bfla_call": ["privileged_tools"]})
+ids = [n["descriptor"]["id"] for n in notifications(blind)]
+check("a detector that could not fire is reported as a tool notification",
+      "inert/sysprompt_paraphrase" in ids and "inert/bfla_call" in ids, str(ids))
+check("...and says its silence is a gap rather than a defence",
+      all("not a defence" in n["message"]["text"]
+          for n in notifications(blind) if n["descriptor"]["id"].startswith("inert/")))
+
+recorded_none = build([row("a1", "DEFENDED", [])], {}, inert={})
+check("a run that recorded NO inert detectors says nothing about inertness",
+      not [n for n in notifications(recorded_none)
+           if n["descriptor"]["id"].startswith("inert/")])
+
+# The distinction this project is named after: absent evidence is not evidence of absence.
+old = build([row("a1", "DEFENDED", [])], {})
+check("a result predating the inert field says it is UNKNOWN, not none",
+      any(n["descriptor"]["id"] == "inert/unrecorded" for n in notifications(old)))
+
+# --- fingerprints must survive a rerun ---------------------------------------------------
+a = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0})
+b = build([row("a1", "EXPLOITED", ["canary_in_output"], rate="3/3")], {"canary_in_output": 0.02})
+check("the same attack keeps its fingerprint when its rate and level change",
+      a["runs"][0]["results"][0]["partialFingerprints"]
+      == b["runs"][0]["results"][0]["partialFingerprints"])
+check("...and the level really did change, so the fingerprint is not just constant",
+      a["runs"][0]["results"][0]["level"] != b["runs"][0]["results"][0]["level"])
+
+# --- the file it writes is JSON a consumer can read --------------------------------------
+with tempfile.TemporaryDirectory() as tmp:
+    src = os.path.join(tmp, "results_fixture.json")
+    with io.open(src, "w", encoding="utf-8") as f:
+        json.dump(results([row("a1", "EXPLOITED", ["canary_in_output"])]), f)
+    dest = os.path.join(tmp, "out.sarif")
+    argv = sys.argv
+    sys.argv = ["sarif", "--results", src, "--out", dest]
+    try:
+        rc = sarif.main()
+    finally:
+        sys.argv = argv
+    check("the command writes a file and exits 0", rc in (0, None) and os.path.isfile(dest))
+    with io.open(dest, encoding="utf-8") as f:
+        check("...and what it wrote parses as JSON", json.load(f)["version"] == "2.1.0")
+
+    sys.argv = ["sarif", "--results", os.path.join(tmp, "nope.json")]
+    try:
+        check("a missing results file exits non-zero rather than writing an empty log",
+              sarif.main() == 2)
+    finally:
+        sys.argv = argv
+
+print("\n%d/%d passed" % (PASS, PASS + FAIL))
+if FAIL:
+    sys.exit(1)
+print("\nOK — findings that cannot be attributed do not arrive as errors.")

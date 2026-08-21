@@ -1,0 +1,51 @@
+name: Bug
+description: It crashed, hung, refused something it should have accepted, or produced a wrong file
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a run that *succeeded* but reported something it had not measured, use
+        **A result the tool did not earn** instead — that is a different and more valuable bug.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran and what came back. Paste the output rather than describing it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      description: >
+        `qatration --version`, your Python version, and your OS. The package claims Python 3.9
+        and up, and CI runs the oldest and newest — if you are on something else, say so.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: The target config, if the run involved one
+      description: Keep the auth header as `${VAR}`. Never paste a real key.
+      render: yaml
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before filing
+      options:
+        - label: "`python tools/check.py` was run and I have said below if anything failed"
+        - label: I am pointing this at a system I own or have written permission to test
+          required: true

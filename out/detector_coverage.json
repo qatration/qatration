@@ -1,0 +1,295 @@
+{
+  "probes": 1384,
+  "demonstrated": {
+    "ansi_exfil": 7,
+    "bfla_call": 36,
+    "bidi_override": 6,
+    "bola_access": 54,
+    "canary_encoded": 4,
+    "canary_in_context": 33,
+    "canary_in_output": 247,
+    "canary_in_tool_call": 39,
+    "canary_normalized": 4,
+    "canary_transformed": 31,
+    "command_injection": 15,
+    "credential_in_output": 14,
+    "credential_in_tool_call": 12,
+    "cross_tool_taint": 6,
+    "data_uri_output": 2,
+    "debug_disclosure": 4,
+    "degenerate_output": 6,
+    "destructive_tool_call": 4,
+    "exfil_via_hostname": 15,
+    "exfil_via_url": 27,
+    "forced_output": 2,
+    "idor_enumeration": 2,
+    "instruction_in_output": 9,
+    "invisible_chars": 2,
+    "lookalike_domain": 6,
+    "malicious_link": 9,
+    "markdown_beacon": 5,
+    "mass_assignment": 6,
+    "memory_poison": 50,
+    "nosql_injection": 4,
+    "over_refusal": 185,
+    "path_traversal": 15,
+    "pii_in_output": 37,
+    "pii_in_tool_call": 6,
+    "refusal_then_comply": 1,
+    "repeated_tool_call": 2,
+    "rogue_tool_call": 481,
+    "session_leak": 4,
+    "slow_response": 6,
+    "sql_injection": 6,
+    "ssrf_call": 33,
+    "sysprompt_leak": 113,
+    "sysprompt_paraphrase": 2,
+    "template_injection": 6,
+    "tool_call_storm": 2,
+    "tool_enum": 34,
+    "unbounded_output": 2,
+    "unknown_tool_call": 1,
+    "xss_in_output": 6,
+    "xxe_payload": 6
+  },
+  "declared_only": [],
+  "targets": {
+    "canary_in_output": [
+      "dvla",
+      "httpbot",
+      "localrag",
+      "mcpagent",
+      "mcpagent-naive",
+      "mcpagent-rugpull",
+      "mcpagent-shadow",
+      "memorybot",
+      "memorybot-naive",
+      "nemo",
+      "nemo-inputonly",
+      "ragbot",
+      "rangebot",
+      "rangebot-sources",
+      "secretbot-naive"
+    ],
+    "canary_in_context": [
+      "dvla",
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "rogue_tool_call": [
+      "dvla",
+      "mcpagent",
+      "mcpagent-naive",
+      "mcpagent-rugpull",
+      "mcpagent-shadow",
+      "opsbot",
+      "portalagent",
+      "portalagent-naive",
+      "rangebot",
+      "rangebot-sources",
+      "toolagent",
+      "toolagent-naive"
+    ],
+    "sql_injection": [
+      "dvla"
+    ],
+    "sysprompt_leak": [
+      "dvla",
+      "guardbot",
+      "mcpagent",
+      "mcpagent-naive",
+      "mcpagent-rugpull",
+      "mcpagent-shadow",
+      "opsbot",
+      "portalagent",
+      "portalagent-naive",
+      "ragbot",
+      "secretbot",
+      "toolagent",
+      "toolagent-naive"
+    ],
+    "over_refusal": [
+      "dvla",
+      "guardbot",
+      "guardedrag",
+      "guardedrag-naive",
+      "nemo",
+      "nemo-inputonly",
+      "opsbot",
+      "portalagent"
+    ],
+    "canary_transformed": [
+      "guardedrag",
+      "guardedrag-naive",
+      "httpbot"
+    ],
+    "exfil_via_url": [
+      "guardedrag",
+      "guardedrag-naive",
+      "httpbot"
+    ],
+    "markdown_beacon": [
+      "httpbot"
+    ],
+    "ansi_exfil": [
+      "httpbot"
+    ],
+    "pii_in_output": [
+      "localrag",
+      "nemo",
+      "nemo-inputonly",
+      "portalagent",
+      "portalagent-naive",
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "exfil_via_hostname": [
+      "localrag"
+    ],
+    "canary_in_tool_call": [
+      "mcpagent-naive",
+      "mcpagent-rugpull",
+      "mcpagent-shadow",
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "instruction_in_output": [
+      "mcpagent-naive",
+      "mcpagent-shadow"
+    ],
+    "memory_poison": [
+      "memorybot-naive",
+      "rangebot",
+      "rangebot-sources",
+      "secretbot-naive"
+    ],
+    "destructive_tool_call": [
+      "opsbot"
+    ],
+    "bola_access": [
+      "portalagent",
+      "portalagent-naive"
+    ],
+    "bfla_call": [
+      "portalagent",
+      "portalagent-naive"
+    ],
+    "malicious_link": [
+      "ragbot"
+    ],
+    "xss_in_output": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "data_uri_output": [
+      "rangebot-sources"
+    ],
+    "bidi_override": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "invisible_chars": [
+      "rangebot-sources"
+    ],
+    "lookalike_domain": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "debug_disclosure": [
+      "rangebot-sources"
+    ],
+    "canary_encoded": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "canary_normalized": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "credential_in_output": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "unbounded_output": [
+      "rangebot-sources"
+    ],
+    "degenerate_output": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "slow_response": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "mass_assignment": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "nosql_injection": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "template_injection": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "path_traversal": [
+      "rangebot",
+      "rangebot-sources",
+      "toolagent-naive"
+    ],
+    "xxe_payload": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "credential_in_tool_call": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "pii_in_tool_call": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "cross_tool_taint": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "session_leak": [
+      "rangebot",
+      "rangebot-sources"
+    ],
+    "idor_enumeration": [
+      "rangebot-sources"
+    ],
+    "tool_call_storm": [
+      "rangebot"
+    ],
+    "repeated_tool_call": [
+      "rangebot"
+    ],
+    "sysprompt_paraphrase": [
+      "rangebot"
+    ],
+    "ssrf_call": [
+      "toolagent",
+      "toolagent-naive"
+    ],
+    "tool_enum": [
+      "toolagent",
+      "toolagent-naive"
+    ],
+    "command_injection": [
+      "toolagent",
+      "toolagent-naive"
+    ],
+    "forced_output": [
+      "guardbot"
+    ],
+    "refusal_then_comply": [
+      "guardbot"
+    ],
+    "unknown_tool_call": [
+      "toolagent"
+    ]
+  }
+}

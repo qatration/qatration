@@ -1,0 +1,21 @@
+{
+  "run_id": "2026-08-19T1313-823f66",
+  "state": "finished",
+  "target": "lcagent",
+  "scope": "full",
+  "engine": "d4ba8ba+dirty",
+  "arsenal": "attacks_slice_tmp.yaml",
+  "trials": 1,
+  "authorization": null,
+  "budgets": {
+    "max_requests": 400,
+    "max_seconds": 3600
+  },
+  "started_at": "2026-08-19 13:13:16",
+  "finished_at": "2026-08-19 13:21:11",
+  "spent": {
+    "requests": 70,
+    "seconds": 475.8
+  },
+  "note": null
+}
