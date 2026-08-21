@@ -64,6 +64,20 @@ Context Compliance Attacks, Crescendo, Skeleton Key, policy puppetry, latent inj
 the adversarial suffixes of Zou et al. (arXiv:2307.15043, `llm-attacks`, MIT). Where a
 published string is used it is cited beside the attack that uses it.
 
+`redteam/attacks_defended.yaml` holds five attacks whose framings were worked out against a
+commercial red-team range — a hosted CTF whose levels are graded by which guard sits in front of
+the model, which made it possible to say WHICH defence each framing defeats rather than only
+that it worked. That characterisation is the value and it is recorded in the file: obfuscation
+beats a keyword filter and backfires against an anomaly detector; semantic legitimacy beats an
+intent classifier; a well-tuned input guard resists even that.
+
+NO TEXT FROM THAT RANGE IS REPRODUCED HERE, and the distinction matters. The payloads were ours
+to begin with — the range presents a target, not a script — and the versions in this repository
+are generalised further still, because the originals named one product's tool, one company's
+domain and one application's field names, and the promotion filter in `build_generic.py` would
+have refused every one of them for it. What is taken is the knowledge of which guard falls to
+which framing, which is what an exercise like that is for.
+
 CANARIES. Every attack is aimed at a value this project plants, with one exception: the DVLA
 target's canaries (`plutonium-256`, `flux-capacitor-123`) are the upstream application's own
 seeded flags, because that target ships with them and planting a second secret would measure a

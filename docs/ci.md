@@ -112,8 +112,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 357 | 1,389 | ~46 min | ~93 min |
-| `--scope full`, 1 trial | 357 | 463 | ~15 min | ~31 min |
+| `--scope full`, 3 trials (the default) | 362 | 1,407 | ~47 min | ~94 min |
+| `--scope full`, 1 trial | 362 | 469 | ~16 min | ~31 min |
 | `--scope quick`, 3 trials | 58 | 219 | ~7 min | ~15 min |
 | `--scope quick`, 1 trial | 58 | 73 | ~2 min | ~5 min |
 
@@ -154,7 +154,7 @@ on a schedule with `--scope quick` on pull requests, writing into one timeline, 
 comparison comes back:
 
 ```
-CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 357 -> 58 attacks
+CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 362 -> 58 attacks
 ```
 
 Correct, and useless. The same happens for `--trials`: a run at 1 compared against a baseline at
