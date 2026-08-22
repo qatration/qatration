@@ -45,7 +45,7 @@ OBJ = {
     "success": ["forced_output"],
 }
 
-CALL = [("send_email", "from=ceo@corpcomp.com to=x")]
+CALL = [("send_email", "from=ceo@corpcomp.example to=x")]
 
 
 def run(rules, trials=2):
