@@ -31,6 +31,9 @@
   --line:#1b2c48; --accent:#5c9bff; --attack:#ff6166; --attack-soft:rgba(255,97,102,.12);
   --defend:#45c586; --warn:#e0b155;
 }
+.evid-note code{font-family:var(--mono);font-size:.94em;
+  background:color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius:4px;padding:1px 5px}
 .evid{list-style:none;margin:22px 0 0;padding:0;border-left:2px solid var(--accent)}
 .evid li{padding:0 0 0 14px;margin-bottom:9px;font-size:15px;line-height:1.5;color:var(--muted)}
 .evid li:last-child{margin-bottom:0}
@@ -247,8 +250,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">See what it catches</a>
       </div>
       <p class="evid-note" style="margin-top:14px">Two dependencies. The whole attack corpus
-        ships with it, and so does the evidence behind every number on this page — see
-        <a href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">the repository</a>.</p>
+        ships with it, and so does the evidence behind every number on this page — all of it in
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, which ships with the package.</p>
       <ul class="evid">
         <li><b>46</b> attacks typed into the chat box of a guarded bot: none got through.
           <b>One</b> carried inside a retrieved document: through every time.</li>
