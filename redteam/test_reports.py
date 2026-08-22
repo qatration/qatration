@@ -642,10 +642,19 @@ def main():
                                                     "probe": {"output": "ok"}}]}]}, f)
             if benign_fires is None:
                 return
+            # TEN ROWS THAT WERE SENT, of which `benign_fires` fired. This used to write only
+            # the firing rows and lean on `meta["probes"]` for the denominator, which encoded
+            # the bug: `benign.py` writes `probes = len(rows)` INCLUDING rows it skipped and
+            # never sent, and three modules divided by it. The rate is now counted from rows
+            # that carry a probe, so the fixture has to look like a real artifact and carry one.
             with open(os.path.join(tmp, f"benign_{target}.json"), "w", encoding="utf-8") as f:
                 json.dump({"meta": {"target": target, "probes": 10},
-                           "rows": [{"id": str(i), "fired": ["canary_in_tool_call"]}
-                                    for i in range(benign_fires)]}, f)
+                           "rows": [{"id": str(i),
+                                     "probe": {"prompt": "an ordinary question",
+                                               "output": "an ordinary answer"},
+                                     "fired": (["canary_in_tool_call"] if i < benign_fires
+                                               else [])}
+                                    for i in range(10)]}, f)
 
         write("at-rest", 8)     # the target does it with no attacker
         write("crying-wolf", 0)  # measured quiet, so the control firing is ours

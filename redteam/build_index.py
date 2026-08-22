@@ -45,8 +45,16 @@ def load(known=None):
     # Skipped WITH A LINE SAYING SO, not silently. `detector_coverage.py` already reports the
     # same artifacts under "artifacts whose target did not resolve"; the difference was that
     # it said so and this did not, so one tool named the problem while the other published it.
-    known = set(known or ())
-    rows, orphans, unreadable = [], [], []
+    # THROUGH `workspace.fleet_filter`, WHICH CARRIES THE DEGRADATION RULE THIS LOOP LACKED.
+    # The rule is "if NOTHING here belongs to the fleet, this is not the fleet's directory and
+    # nothing is filtered", and it exists because the alternative fails silently: in the normal
+    # installed case — `qatration run --target-config mybot.yaml`, a config outside the package
+    # — every row was an orphan, `rows` came back empty, and `main()` printed "no results in
+    # out/ — run a sweep first" and wrote no page at all. `run_all.py` runs the three builders
+    # together, so one sweep produced a defense report and a fleet page carrying the finding,
+    # beside a landing page saying nothing had been run.
+    from workspace import fleet_filter
+    rows, unreadable, metas = [], [], []
     for fp in results_files(OUT):
         d, why = read_artifact(fp)
         # An artifact that will not parse is not an empty artifact. Substituting `{}` here and
@@ -57,13 +65,17 @@ def load(known=None):
             unreadable.append((os.path.basename(str(fp)), why))
             continue
         m = dict(d.get("meta") or {})
-        if known and m.get("target") not in known:
-            orphans.append((os.path.basename(str(fp)), m.get("target")))
-            continue
-        counted = sum(1 for r in d.get("results", [])
-                      if r.get("headline") in BROKE
-                      and (r.get("attack") or {}).get("category") != "control")
-        m["broke_at_run"], m["broke"] = m.get("broke"), counted
+        m["_counted"] = sum(1 for r in d.get("results", [])
+                            if r.get("headline") in BROKE
+                            and (r.get("attack") or {}).get("category") != "control")
+        m["_file"] = os.path.basename(str(fp))
+        metas.append(m)
+
+    kept, dropped = fleet_filter(metas, known)
+    orphans = [(m.get("_file"), m.get("target")) for m in dropped]
+    for m in kept:
+        m["broke_at_run"], m["broke"] = m.get("broke"), m.pop("_counted")
+        m.pop("_file", None)
         rows.append(m)
     # UNREADABLE IS NOT ABSENT. A truncated artifact used to take this whole page down;
     # skipping it silently would drop a target from an index that reads as the fleet.
@@ -89,7 +101,7 @@ def provenance():
     Guardrails in four configurations, two cloned practice apps, and endpoints whose wire
     format was not designed here. The counts are computed below rather than written here,
     because a number in a docstring is a claim nothing keeps true. A
-    headline of "197 findings across 30 targets" invites a reader to assume the first number
+    headline of "279 findings across 30 targets" invites a reader to assume the first number
     is about software in the world, and most of it is not.
     """
     import glob, yaml, os

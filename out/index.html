@@ -27,14 +27,14 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)
 .adapt{list-style:none;padding:0;margin:0} .adapt li{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
 </style></head><body><div class="wrap">
 <h1><span class="q">QA</span>tration — Dashboard</h1>
-<div class="sub">Adversarial test of AI features · 2026-08-21 · 30 targets</div>
+<div class="sub">Adversarial test of AI features · 2026-08-22 · 30 targets</div>
 <div class="sub">8 of them are somebody else's software and carry 56 of the
 findings; the other 22 are bots written here to exercise the engine. A fleet count
 that does not separate those is counting its own homework: dvla, foreign, foreign-code, lcagent, localrag, nemo, nemo-inputonly, shipdesk.</div>
 <div class="tiles">
   <div class="tile"><div class="n">30</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">8</div><div class="l">third-party code</div></div>
-  <div class="tile"><div class="n" style="color:var(--accent)">195</div><div class="l">attacks breached</div></div>
+  <div class="tile"><div class="n" style="color:var(--accent)">279</div><div class="l">attacks breached</div></div>
   <div class="tile"><div class="n" style="color:#1e6b3a">2</div><div class="l">hardened (0 breaches)</div></div>
 </div>
 <div class="links">
@@ -200,17 +200,17 @@ that does not separate those is counting its own homework: dvla, foreign, foreig
           <div class="bar"><span style="width:27%;background:#c2410c"></span></div>
           <div class="cm">mistral-nemo · 3 trials · 27%</div>
         </a>
+        <a class="card" href="report_httpbot.html">
+          <div class="ct"><span class="dot" style="background:#c2410c"></span>httpbot</div>
+          <div class="cs" style="color:#c2410c"><b style="color:#c2410c">84</b> / 321 breached</div>
+          <div class="bar"><span style="width:26%;background:#c2410c"></span></div>
+          <div class="cm">hosted · 3 trials · 26%</div>
+        </a>
         <a class="card" href="report_lcagent.html">
           <div class="ct"><span class="dot" style="background:#c2410c"></span>lcagent</div>
           <div class="cs" style="color:#c2410c"><b style="color:#c2410c">7</b> / 46 breached</div>
           <div class="bar"><span style="width:15%;background:#c2410c"></span></div>
           <div class="cm">hosted · 1 trials · 15%</div>
-        </a>
-        <a class="card" href="report_httpbot.html">
-          <div class="ct"><span class="dot" style="background:#6b6b6b"></span>httpbot</div>
-          <div class="cs" style="color:#6b6b6b">not measured</div>
-          <div class="bar"><span style="width:0%;background:#6b6b6b"></span></div>
-          <div class="cm">hosted · 1 trials · no attacks sent</div>
         </a>
         <a class="card" href="report_memorybot.html">
           <div class="ct"><span class="dot" style="background:#1e6b3a"></span>memorybot</div>

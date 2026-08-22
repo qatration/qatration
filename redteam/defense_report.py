@@ -834,22 +834,22 @@ def ambient_rates():
     reader does is try it WITHOUT the attack — and then the whole report is worth nothing to
     them, however good the rest of it is.
     """
+    # THROUGH `baseline.rates`, WHICH IS THE NOISE FLOOR. This kept its own, dividing by
+    # `meta["probes"] or len(rows)` -- and `benign.py` writes `probes = len(rows)`,
+    # counting rows it also marked `skipped` and never sent. `baseline` divides by the
+    # rows that carry a probe. On `benign_localrag.json` that is 48 against 50 today.
+    #
+    # It mattered here more than anywhere: this function ORDERS the findings and
+    # `attribution_index` LABELS the same rows through `baseline.rates`, so one page
+    # could lead with a row it then stamped UNATTRIBUTED. Both directions of the error
+    # understate noise, which flatters every finding on the page.
+    from baseline import rates as _rates
     out = {}
     for fp in glob.glob(str(OUT_DIR / "benign_*.json")):
-        try:
-            d = read_artifact(fp)[0] or {}
-        except Exception:
-            continue
         t = os.path.basename(fp)[len("benign_"):-len(".json")]
-        rows = d.get("rows") or []
-        n = (d.get("meta") or {}).get("probes") or len(rows)
-        if not n:
-            continue
-        counts = {}
-        for r in rows:
-            for f in r.get("fired") or []:
-                counts[f] = counts.get(f, 0) + 1
-        out[t] = {k: v / n for k, v in counts.items()}
+        r = _rates(t, str(OUT_DIR))
+        if r is not None:
+            out[t] = r
     return out
 
 
@@ -1352,18 +1352,30 @@ def main():
     # run that sent everything it had but never exercised a whole delivery family said nothing
     # about the family — the statement was hostage to an unrelated count. Absence has two
     # shapes here and both belong on the page.
+    # `coverage()` RETURNS None FOR "I CANNOT SAY", and this turned it into "0 not sent",
+    # which is the strongest coverage claim the page can make. Its docstring, three hundred
+    # lines up, forbids exactly this: "a results file that cannot be read is not a run that
+    # sent nothing. Say nothing about it rather than counting it as zero, which would
+    # understate coverage in exactly the direction that flatters the report." One unreadable
+    # artifact in the directory -- a truncated file from an interrupted sweep, the case
+    # `read_artifact` exists for -- and the client's deliverable claimed total coverage.
     if (_cov and _cov[1]) or _absent_fams:
-        _sent, _skipped = _cov if _cov else (0, 0)
+        _sent, _skipped = _cov if _cov else (None, None)
         held_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
-          <h2>{_sent} attack(s) sent, {_skipped} not sent</h2>
+          <h2>{"how much of the arsenal ran could not be determined"
+               if _sent is None else
+               f"{_sent} attack(s) sent, {_skipped} not sent"}</h2>
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about
-            these systems: {_skipped} attack(s) in the arsenal were not sent, either because
-            they do not apply to the target or because the run was scoped to send one attack
-            from each category rather than all of them. A category that was covered once was
+            these systems: {"an artifact in this workspace could not be read, so how much of "
+            "the arsenal ran cannot be stated here at all — that is a gap in this page, not a "
+            "clean bill" if _skipped is None else
+            f"{_skipped} attack(s) in the arsenal were not sent, either because "
+            "they do not apply to the target or because the run was scoped to send one attack "
+            "from each category rather than all of them"}. A category that was covered once was
             covered once. Re-run at <span class="mono">--scope full</span> before reading a
             quiet category as a closed one.</div>{_families}
         </section>"""

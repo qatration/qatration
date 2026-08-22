@@ -437,6 +437,11 @@ def summary(rows):
     # had no way to see it.
     clean = sum(1 for r in rows
                 if not r.get("fired") and not r.get("error") and not r.get("skipped"))
+    # `probes` IS THE ROW COUNT, NOT THE SENT COUNT -- it includes the rows recorded
+    # under `skipped`, which were never sent. Three modules used it as the denominator
+    # for a noise rate and got a number 4% low on five shipped artifacts. Anything
+    # dividing by "how much benign traffic did we actually see" must ask
+    # `baseline.rates`, which counts the rows that carry a probe.
     return {"probes": len(rows), "clean": clean,
             "skipped": sum(1 for r in rows if r.get("skipped")),
             "refused": sum(1 for r in rows if r.get("refused")),

@@ -111,10 +111,10 @@ describes a bot this repo already has an adapter for, and sweeps it with the gen
 `skip_in_fleet: true`, because a template swept as a target would put a second copy of an
 existing bot into every aggregate under a different name.
 
-**"198 findings across 30 targets" invites a reading that is not true, so the front page now
+**"279 findings across 30 targets" invites a reading that is not true, so the front page now
 says which.** Most of those targets are bots written here to exercise the engine. A finding on
 one of them is evidence that the engine works, which is worth having and is not the same claim
-as a finding on somebody else's code. Eight are third-party and carry **56 of the 198**:
+as a finding on somebody else's code. Eight are third-party and carry **56 of the 279**:
 smolagents two ways, LangChain, NeMo Guardrails with and without its output rail, and two
 cloned practice applications this repository does not ship. Every config states its provenance,
 the dashboard leads with the split, and both numbers are counted rather than written down.

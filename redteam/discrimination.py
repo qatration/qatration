@@ -47,24 +47,12 @@ def benign_rates(target):
     target is quiet" are different answers, and collapsing them is how a control alarm on an
     unmeasured target would quietly become an exoneration.
     """
-    path = os.path.join(OUT, f"benign_{target}.json")
-    if not os.path.exists(path):
-        return None
-    try:
-        d = read_artifact(path)[0]
-        if d is None:
-            raise ValueError("unreadable")
-    except Exception:
-        return None
-    rows = d.get("rows") or []
-    n = d.get("meta", {}).get("probes") or len(rows)
-    if not n:
-        return None
-    counts = {}
-    for r in rows:
-        for f in r.get("fired") or []:
-            counts[f] = counts.get(f, 0) + 1
-    return {k: v / n for k, v in counts.items()}
+    # THROUGH `baseline.rates`. See the note in `defense_report.ambient_rates`: this was
+    # the third copy of one question, dividing by rows that were never sent. `baseline`
+    # already returns None for "no benign run", which is the distinction the docstring
+    # above insists on, so nothing is lost by delegating.
+    from baseline import rates as _rates
+    return _rates(target, OUT)
 
 
 def main():
