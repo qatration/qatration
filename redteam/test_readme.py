@@ -674,6 +674,58 @@ def main():
     check("...and declares it inside the first 1024 bytes, where a browser still looks",
           not _late, f"declared too late in: {_late[:5]}")
 
+    # --- THE ICON STILL MATCHES ITS GENERATOR ------------------------------------------------
+    #
+    # `tools/favicon.py` exists so the mark is coordinates rather than three binary blobs
+    # nobody can diff. That only holds while the checked-in files agree with it, and the two
+    # ways they stop agreeing are both silent.
+    #
+    # ONE: the writer lies. Pillow's ICO save took `sizes=[16,32,48,64]` and `append_images`,
+    # raised nothing, and wrote the 16px frame by itself. The script reported a byte count.
+    # Every size a browser actually asks for would have been upscaled from sixteen pixels.
+    #
+    # TWO: the palette moves. Change `--accent` and re-run nothing, and the tab icon keeps the
+    # old brand colour indefinitely, because nobody looks at their own favicon.
+    #
+    # Read with `struct`, not Pillow: this suite must not go red on a runner that lacks a
+    # library the site does not need at runtime.
+    import struct as _struct
+    _site = io.open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8").read()
+    _ico = os.path.join(ROOT, "site", "favicon.ico")
+    check("the favicon.ico referenced by the page exists", os.path.exists(_ico), _ico)
+    if os.path.exists(_ico):
+        _raw = open(_ico, "rb").read()
+        _res, _kind, _n = _struct.unpack("<HHH", _raw[:6])
+        check("favicon.ico is a well-formed icon directory", _res == 0 and _kind == 1 and _n > 0,
+              f"reserved={_res} type={_kind} count={_n}")
+        _sizes = sorted((_raw[6 + i * 16] or 256) for i in range(_n))
+        check("...and carries every size the generator writes, not just the first",
+              _sizes == [16, 32, 48, 64],
+              f"the ico holds {_sizes} — re-run: python tools/favicon.py")
+
+    # The tile colour is the light theme's --accent. White on the dark theme's accent is about
+    # 2.2:1 and unreadable, so this is the darker of the two on purpose; what is checked is
+    # that the two have not drifted apart.
+    _fav_src = io.open(os.path.join(ROOT, "tools", "favicon.py"), encoding="utf-8").read()
+    _tile = re.search(r'^TILE\s*=\s*"(#[0-9a-fA-F]{6})"', _fav_src, re.M)
+    check("the generator names its tile colour where it can be read", bool(_tile),
+          "TILE is not a module-level literal any more")
+    _accents = re.findall(r"--accent:\s*(#[0-9a-fA-F]{6})", _site)
+    check("the stylesheet still defines an accent", bool(_accents), "no --accent found")
+    if _tile and _accents:
+        check("the icon's blue is one the stylesheet actually uses",
+              _tile.group(1).lower() in {a.lower() for a in _accents},
+              f"icon tile {_tile.group(1)} is not among {sorted(set(_accents))} — "
+              f"re-run: python tools/favicon.py")
+
+    # And the page has to point at what was generated, or none of the above is reachable.
+    for _rel, _attr in (("favicon.svg", 'href="/favicon.svg"'),
+                        ("favicon.ico", 'href="/favicon.ico"'),
+                        ("apple-touch-icon.png", 'href="/apple-touch-icon.png"')):
+        check(f"the page links {_rel}", _attr in _site, f"{_attr} is not in index.html")
+        check(f"...and {_rel} is actually shipped",
+              os.path.exists(os.path.join(ROOT, "site", _rel)), "referenced but missing")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:

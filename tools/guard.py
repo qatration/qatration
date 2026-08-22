@@ -578,10 +578,14 @@ def _pending_stamp(refusals):
         if len(offset) == 5 and offset[0] in "+-" and offset[1:].isdigit():
             o = _offset(f"{offset[:3]}:{offset[3:]}")
             if o:
-                refusals.append(f"this machine would stamp the commit {o}, not UTC \u2014 an "
-                                f"offset is a location, and once committed it is as permanent "
-                                f"as the diff. Set TZ=UTC, or export GIT_AUTHOR_DATE and "
-                                f"GIT_COMMITTER_DATE in UTC")
+                # NAME WHICH OF THE TWO. They are set separately and they diverge in practice:
+                # `git commit --date=...` moves the author date and leaves the committer date
+                # on local time, so a run that looks fixed is half fixed. Printing the same
+                # sentence twice with nothing to tell the two apart is how that gets missed.
+                refusals.append(f"this machine would stamp the {kind.lower()} date {o}, not "
+                                f"UTC \u2014 an offset is a location, and once committed it is "
+                                f"as permanent as the diff. Set TZ=UTC, or export "
+                                f"GIT_AUTHOR_DATE and GIT_COMMITTER_DATE in UTC")
 
 
 def _stamps(rng, refusals):
