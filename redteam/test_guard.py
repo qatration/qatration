@@ -83,7 +83,7 @@ def main():
         ("a Stripe live key", "x.py", "sk_live_" + "e" * 16),
         ("a JWT", "site/x.js", "t='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig'"),
         ("an OpenSSH private key header", "x.pem", "-----BEGIN OPENSSH PRIVATE KEY-----"),
-        ("a Cyrillic character in source", "redteam/x.py", "# \u0414\u043e\u0431\u0440\u0435"),
+        ("a Cyrillic character in source", "redteam/x.py", "# \u0416\u0429\u04ae\u0424"),
     ]
     for label, path, text in MUST_CATCH:
         check(f"refused: {label}", bool(scan(path, text)))
@@ -111,17 +111,17 @@ def main():
     # --- STORED ARTIFACTS: THE FIELD DECIDES, AND EVERY LAYER OF ESCAPING IS SEEN ------------
     A = "out/results_x.json"
     check("refused: Cyrillic in a prompt, unescaped",
-          bool(scan(A, json.dumps({"rows": [{"prompt": "\u0414\u043e\u0431"}]},
+          bool(scan(A, json.dumps({"rows": [{"prompt": "\u0416\u043e\u0431"}]},
                                   ensure_ascii=False))))
     check("refused: Cyrillic in a prompt, one escape layer",
-          bool(scan(A, json.dumps({"rows": [{"prompt": "\u0414\u043e\u0431"}]}))))
+          bool(scan(A, json.dumps({"rows": [{"prompt": "\u0416\u043e\u0431"}]}))))
     # TWO LAYERS: what `json.dumps` writes when handed a string that already holds the escape.
     # The parsed value contains no Cyrillic character, so only the escaped pattern sees it — and
     # the first version of this check, which trusted parsing alone, let it straight through.
     check("refused: Cyrillic in a prompt, DOUBLE-escaped",
-          bool(scan(A, json.dumps({"rows": [{"prompt": "\\u0414\\u043e\\u0431"}]}))))
+          bool(scan(A, json.dumps({"rows": [{"prompt": "\\u0416\\u043e\\u0431"}]}))))
     check("allowed: the same Cyrillic under `output`, which is a model's own reply",
-          not scan(A, json.dumps({"rows": [{"probe": {"output": "\u0414\u043e\u0431"}}]},
+          not scan(A, json.dumps({"rows": [{"probe": {"output": "\u0416\u043e\u0431"}}]},
                                  ensure_ascii=False)))
     check("allowed: Korean, Hebrew and Arabic in a prompt — the corpus is multilingual",
           not scan(A, json.dumps({"rows": [{"prompt": "\uc548\ub155 \u05e9\u05dc\u05d5\u05dd \u0645\u0631\u062d\u0628\u0627"}]},
@@ -143,7 +143,7 @@ def main():
     # Written as escapes: this file stays under the guard's own literal check, and a
     # homoglyph payload spelled out here would trip it.
     HOMO = "S\u0415\u0421URIT\u0423 \u041eV\u0415RRID\u0415"
-    CYR = "\u0414\u043e\u0431\u0440\u0435"
+    CYR = "\u0416\u0429\u04ae\u0424"
 
     def art(obj):
         return scan(A, json.dumps(obj, ensure_ascii=False))
@@ -265,8 +265,8 @@ def main():
           GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
         io.open(os.path.join(d, "a.txt"), "w").write("two")
         g("add", "-A")
-        g("commit", "-qm", "local", GIT_AUTHOR_DATE="2026-01-02T15:00:00+03:00",
-          GIT_COMMITTER_DATE="2026-01-02T15:00:00+03:00")
+        g("commit", "-qm", "local", GIT_AUTHOR_DATE="2026-01-02T15:00:00+05:45",
+          GIT_COMMITTER_DATE="2026-01-02T15:00:00+05:45")
 
         old_root = guard.ROOT
         try:
@@ -280,13 +280,13 @@ def main():
             check("refused: a commit stamped with a local timezone offset", bool(hits),
                   f"scan_history saw nothing; all refusals: {hits}")
             check("...and the refusal names the offset it found",
-                  any("+03:00" in f for f in hits), str(hits))
+                  any("+05:45" in f for f in hits), str(hits))
             check("allowed: a commit stamped UTC",
                   not offsets_refused("HEAD~1"), str(offsets_refused("HEAD~1")))
             # THE COMMITTER DATE ON ITS OWN. Rewriting only the author date is the easy half of
             # a history fix and leaves the other field carrying the same offset.
             g("commit", "-q", "--amend", "--no-edit", "--date=2026-01-03T09:00:00+00:00",
-              GIT_COMMITTER_DATE="2026-01-03T12:00:00+02:00")
+              GIT_COMMITTER_DATE="2026-01-03T12:00:00+05:45")
             check("...and a UTC author date does not excuse a local committer date",
                   bool(offsets_refused("HEAD~1..HEAD")),
                   "only the author date is being read")
@@ -428,9 +428,9 @@ def main():
         check("_offset: +00:00 is UTC",
               guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T09:00:00+00:00") == "")
         check("_offset: a real offset is reported",
-              guard._offset("2026-01-05T09:00:00+03:00|2026-01-05T09:00:00+03:00") == "+03:00")
+              guard._offset("2026-01-05T09:00:00+05:45|2026-01-05T09:00:00+05:45") == "+05:45")
         check("_offset: a UTC author date does not hide a local committer date",
-              guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T12:00:00+02:00") == "+02:00")
+              guard._offset("2026-01-05T09:00:00+00:00|2026-01-05T12:00:00+05:45") == "+05:45")
 
     # --- THE TWO RULES THAT RAN IN ONE PLACE -------------------------------------------------
     #
@@ -438,7 +438,7 @@ def main():
     # `scan_history`, i.e. only through `--range`, i.e. only through `pre-push` — opt-in,
     # skippable, and at the time verified by grepping its own text. CONTRIBUTING says CI is the
     # part that cannot be skipped, and CI runs `--tree`. A reviewer put a real name and a
-    # `+03:00` stamp on a commit and walked it to a bare remote with everything else green.
+    # `+05:45` stamp on a commit and walked it to a bare remote with everything else green.
     #
     # These two fields are also the ones a later commit cannot take back, which is what makes
     # "enforced in the one place a person can turn off" the wrong number of places.
@@ -458,8 +458,8 @@ def main():
             gg("add", "-A")
             gg("commit", "-qm", "a stranger, from somewhere",
                GIT_AUTHOR_NAME="A Person", GIT_AUTHOR_EMAIL="person@example.com",
-               GIT_AUTHOR_DATE="2026-08-22T10:00:00+03:00",
-               GIT_COMMITTER_DATE="2026-08-22T10:00:00+03:00")
+               GIT_AUTHOR_DATE="2026-08-22T10:00:00+05:45",
+               GIT_COMMITTER_DATE="2026-08-22T10:00:00+05:45")
             # `getattr`, not a direct call: against a build where this rule does not exist yet
             # the point is a red check with a reason, not an AttributeError that ends the run
             # and takes every check after it down as collateral.
@@ -508,12 +508,12 @@ def main():
               gone not in guard.MODEL_FIELDS)
     check("refused: Cyrillic in a generated hint, which lives under `text`",
           bool(scan("out/recon_x.json", json.dumps(
-              {"hints": [{"level": "warn", "text": "\u0414\u043e\u0431\u0440\u0435"}]},
+              {"hints": [{"level": "warn", "text": "\u0416\u0429\u04ae\u0424"}]},
               ensure_ascii=False))))
     check("allowed: the same characters in a model's reply",
           not scan("out/results_x.json", json.dumps(
               {"results": [{"attack": {"id": "a"},
-                            "trials": [{"probe": {"output": "\u0414\u043e\u0431\u0440\u0435"}}]}]},
+                            "trials": [{"probe": {"output": "\u0416\u0429\u04ae\u0424"}}]}]},
               ensure_ascii=False)))
 
     # --- THE LICENCE PARSER, ON THE INTERPRETER THE PACKAGE CLAIMS ---------------------------

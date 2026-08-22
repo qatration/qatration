@@ -55,7 +55,8 @@ jobs:
       # FULL HISTORY, because the guard now checks WHO wrote each commit and whether its
         # stamp names a place, and `actions/checkout` fetches one commit by default. Those two
         # rules used to live only on `--range`, i.e. only in an optional local hook, which is
-        # how a real name and a `+03:00` offset reached a remote in a review. A shallow clone
+        # how an unrelated name and a local offset walked past every
+        # gate in a review. A shallow clone
         # would make the check present and blind.
         with:
           fetch-depth: 0

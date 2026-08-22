@@ -4,6 +4,7 @@ Consumes the structured results built by run_redteam.py (verdicts, fired
 detectors, and each attack's probe) — target-agnostic, works for any adapter.
 """
 import html
+import re
 from recon import memory_phrase
 
 VERDICT = {
@@ -16,8 +17,33 @@ VERDICT = {
 ORDER = {"EXPLOITED": 0, "PARTIAL": 1, "DEFENDED": 2, "ERROR": 3, "SKIP": 4}
 
 
+# CONTROL CHARACTERS THE PAYLOADS USE AS THE ATTACK. Escaping `<`, `>` and `&` stops a browser
+# EXECUTING attacker text; it does nothing to stop a browser OBEYING it. These characters carry
+# no glyph and change how everything around them is drawn:
+#
+#   U+202A..U+202E, U+2066..U+2069   bidirectional overrides and isolates. `invoice\u202egnp.exe`
+#                                    renders as `invoiceexe.png` — the Trojan-Source class.
+#   U+200B..U+200D, U+2060, U+FEFF   zero-width. The payload is present and invisible.
+#   U+00AD                           a soft hyphen, invisible until it is not.
+#
+# Three shipped reports carried an UNTERMINATED U+202E: no U+202C anywhere, so the override ran
+# to the end of the block and the evidence pane displayed the spoofed filename the attack exists
+# to produce. A report about a disguise, showing the disguise.
+_CONTROL = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2069\u00ad\ufeff]")
+
+
 def esc(s):
-    return html.escape(str(s))
+    """HTML-escape, and make invisible control characters visible as their codepoint.
+
+    Every model-content interpolation in this file goes through here, which is why the fix
+    belongs here rather than at the call sites: there are forty-two of them and the next one
+    would not know.
+
+    Shown rather than stripped. Stripping would make the report disagree with the payload it
+    claims to be quoting, and the presence of the character IS the finding.
+    """
+    return _CONTROL.sub(lambda m: "&lt;U+%04X&gt;" % ord(m.group(0)),
+                        html.escape(str(s)))
 
 
 def _reliability(rate, head):

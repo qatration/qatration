@@ -26,7 +26,7 @@ WHAT IT CHECKS, AND WHY EACH IS HERE:
     would be expensive and would go out at the speed of a `git push`.
   * dependency licences — through `tools/licences.py`, the same module `test_packaging.py`
     reads. An AGPL package reached `pyproject.toml` once and was caught by a question.
-  * escaped codepoints in stored artifacts — `\\u0414` and its double-escaped form are a third
+  * escaped codepoints in stored artifacts — `\\u0416` and its double-escaped form are a third
     encoding layer that a literal scan and a single-escape scan both miss.
   * a local supplement of exact strings, if one exists.
 
@@ -93,8 +93,8 @@ CREDENTIALS = [
 # BOTH SIDES WRITTEN AS ESCAPES, so this file contains none of what it looks for and stays under
 # its own literal check rather than needing an exemption from it. The credential patterns below
 # cannot be written that way and do need one — see SELF.
-LITERAL_CYRILLIC = ("[\u0400-\u052f]", "\u0414")
-ESCAPED_CYRILLIC = (r"(?:\\){1,4}u04[0-9a-fA-F]{2}", r"\\u0414")
+LITERAL_CYRILLIC = ("[\u0400-\u052f]", "\u0416")
+ESCAPED_CYRILLIC = (r"(?:\\){1,4}u04[0-9a-fA-F]{2}", r"\\u0416")
 
 # Stored artifacts are JSON, and inside one the two kinds of string are structurally distinct:
 # what we wrote (a prompt from the corpus, a note, a config path) and what a model said back.
@@ -578,9 +578,9 @@ def main(argv=None):
     # WHO WROTE IT AND WHERE FROM, IN EVERY MODE. These two rules lived only in
     # `scan_history`, which only `--range` reaches, which only `pre-push` runs — a hook that
     # is opt-in, skippable and, until this pass, verified by grepping its own text. They are
-    # also the two rules whose subject a later commit cannot take back. A reviewer put a real
-    # name and a `+03:00` stamp on a commit and pushed it to a bare remote with `--staged`
-    # green, `--tree` green, and a gutted `pre-push`.
+    # also the two rules whose subject a later commit cannot take back. A reviewer put an unrelated
+    # name and a local offset on a commit and walked it past every gate: `--staged` green,
+    # `--tree` green, and a gutted `pre-push`.
     #
     # `HEAD` rather than a range, because in `--staged` and `--tree` there is no range to
     # speak of and the question is about the commits that exist. On a shallow CI checkout
