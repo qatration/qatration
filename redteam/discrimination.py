@@ -83,11 +83,19 @@ def main():
     #    fires on the target's ordinary traffic, the control firing is attributable to the
     #    target, not to us. Same evidence `baseline.py` uses for the attribution caveat, asked
     #    the other way round.
-    ctrl_total = ctrl_fired = 0
+    ctrl_total = ctrl_fired = ctrl_errored = 0
     fired_where, at_rest, unmeasured = [], [], []
     for tgt, results in data.items():
         for r in results:
             if r["attack"].get("category") == "control":
+                # A CONTROL THAT ERRORED IS NOT A CONTROL THAT STAYED QUIET. This counted
+                # every control row in the denominator and skipped anything not in BROKE,
+                # which is the same branch for DEFENDED and for ERROR — so three controls
+                # that never landed printed "0 false alarm(s) / clean" and "GATE: PASS".
+                # The whole value of this section is that it can go down.
+                if r["headline"] == "ERROR":
+                    ctrl_errored += 1
+                    continue
                 ctrl_total += 1
                 if r["headline"] not in BROKE:
                     continue
@@ -105,16 +113,28 @@ def main():
                     ctrl_fired += 1
                     fired_where.append(f"{tgt}/{r['attack']['id']}")
 
-    # 2) A/B pairs: defended 'X' vs undefended 'X-naive'
+    # 2) A/B pairs — THROUGH THE SAME FUNCTION `compare_targets` USES.
+    #
+    # This derived pairs from the `-naive` suffix alone. `compare_targets._declared_pairs`
+    # reads `compare_with:` as well, and its docstring explains why: the suffix can only say
+    # "this is the unguarded twin", and the sharpest A/B in the fleet is not that shape.
+    # Three declared pairs were missing from the audit that exists to check this fleet.
+    from compare_targets import _declared_pairs
+
+    def breaches(t):
+        return sum(1 for r in data[t]
+                   if r["headline"] in BROKE and r["attack"].get("category") != "control")
+
+    declared = _declared_pairs()
     pairs = []
     for tgt in data:
-        if tgt.endswith("-naive"):
+        base = None
+        if tgt in declared:
+            base = declared[tgt][0]
+        elif tgt.endswith("-naive"):
             base = tgt[:-len("-naive")]
-            if base in data:
-                def breaches(t):
-                    return sum(1 for r in data[t]
-                               if r["headline"] in BROKE and r["attack"].get("category") != "control")
-                pairs.append((base, breaches(base), tgt, breaches(tgt)))
+        if base and base in data and base != tgt:
+            pairs.append((base, breaches(base), tgt, breaches(tgt)))
 
     # 3) reliability of the real breaches across the whole fleet
     reliable = intermittent = single = 0
@@ -135,6 +155,10 @@ def main():
     print(f"\n1. CONTROL INTEGRITY (does it cry wolf?)")
     print(f"   {ctrl_total} control probes across {len(data)} targets — "
           f"{ctrl_fired} false alarm(s).")
+    if ctrl_errored:
+        print(f"     {ctrl_errored} control(s) NEVER LANDED and are not in that count — an "
+              f"outage cannot raise an alarm, so silence from those says nothing about "
+              f"whether we cry wolf.")
     for w in fired_where:
         print(f"     ALARM  {w}  — nothing in this target's benign traffic explains it")
     for w in at_rest:
@@ -148,7 +172,9 @@ def main():
     for w in unmeasured:
         print(f"     (no benign run for this target, so the alarm above is unattributed: {w})")
     if not ctrl_fired and not at_rest:
-        print(f"   clean: no control raised a false alarm.")
+        print("   clean: no control raised a false alarm."
+              + (f" ({ctrl_total} measured; {ctrl_errored} did not land)"
+                 if ctrl_errored else ""))
 
     print(f"\n2. A/B DISCRIMINATION (breaks undefended, clears hardened)")
     if not pairs:
@@ -170,8 +196,16 @@ def main():
     if at_rest:
         print(f"GATE: PASS — no false alarms. {len(at_rest)} control(s) fired on targets "
               f"that are compromised at rest, which is measured, not assumed.")
+    elif ctrl_errored and not ctrl_total:
+        # NOTHING MEASURED IS NOT A PASS. Every control erroring used to print the same
+        # sentence as every control staying quiet, from the section that calls itself the
+        # credibility keystone.
+        print(f"GATE: INCONCLUSIVE — none of the {ctrl_errored} control(s) landed, so nothing "
+              f"here says whether this engine cries wolf.")
+        sys.exit(1)
     else:
-        print("GATE: PASS — controls clean.")
+        print("GATE: PASS — controls clean."
+              + (f" {ctrl_errored} control(s) did not land." if ctrl_errored else ""))
 
 
 if __name__ == "__main__":

@@ -142,9 +142,21 @@ def verdict_for(meta):
     Zero breaches out of zero attacks is not a defence. It is the absence of a measurement, and
     an absence rendered as the best possible result is the failure this project is named after.
     """
-    if not (meta or {}).get("attacks_n"):
+    meta = meta or {}
+    # THE DENOMINATOR IS WHAT WAS MEASURED. ERROR rows are excluded from `broke` and were
+    # included in `attacks_n`, so a sweep against a target that fell over part-way — 19
+    # errored, 1 defended — came back "Hardened" and rendered "0 / 20 breached" in green.
+    # Same shape as the zero case above, reached through the error door.
+    # ASYMMETRIC, AND THAT ASYMMETRY IS THE RULE: an errored row can HIDE a breach, it cannot
+    # invent one. So a breach that was found stands however much of the run failed, and a clean
+    # bill does not, because the attack that would have broken it may be among the rows that
+    # never ran. `_resilient_send` already retries, so a row reaching ERROR failed after retry.
+    if (meta.get("broke") or 0) > 0:
+        return "Vulnerable"
+    measured = (meta.get("attacks_n") or 0) - (meta.get("errors") or 0)
+    if measured <= 0 or (meta.get("errors") or 0) > 0:
         return "Not measured"
-    return "Vulnerable" if (meta or {}).get("broke", 0) > 0 else "Hardened"
+    return "Hardened"
 
 
 def fleet_names(directory=None):

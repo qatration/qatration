@@ -722,6 +722,11 @@ def main():
             # them judged an empty list and found nothing.
             "unresolved_paths": _unresolved(target),
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
+            # HOW MANY ROWS NEVER LANDED. Without this a reader cannot tell 20 attacks
+            # that were defended from 1 defended and 19 that errored, and both used to
+            # render as "0 / 20 breached" in green. `run_redteam` aborts only when EVERY
+            # trial errored, so one surviving row is enough to write the file.
+            "errors": sum(1 for r in results if r.get("headline") == "ERROR"),
             # WHICH arsenal, because "5 sent, 132 scoped out" is reassuring or alarming
             # depending entirely on whether the file was written for a target like this
             # one, and the page cannot tell the reader without the name.

@@ -161,6 +161,11 @@ def main():
     cards = ""
     for m in rows:
         tgt, atk, broke = m["target"], m.get("attacks_n", 0), m.get("broke", 0)
+        # AGAINST WHAT WAS MEASURED, not against what was attempted. An errored row is
+        # neither a breach nor a defence, and counting it in the denominator only makes
+        # the target look better.
+        errs = m.get("errors") or 0
+        atk = max(0, atk - errs)
         rate = broke / max(1, atk)
         # Grey, and the words rather than the numbers: "0 / 0 breached" reads as a score, and
         # the reader has no way to tell it from a score that was earned.
@@ -170,7 +175,9 @@ def main():
             col = SEV["none"] if broke == 0 else (SEV["critical"] if rate >= .5 else SEV["high"])
             headline = f'<b style="color:{col}">{broke}</b> / {atk} breached'
             bar = 100 * rate
-        pct = "no attacks sent" if not atk else f"{100*rate:.0f}%"
+        pct = ("no attacks sent" if not atk else f"{100*rate:.0f}%")
+        if errs:
+            pct += f" \u00b7 {errs} never landed"
         cards += f"""
         <a class="card" href="report_{esc(tgt)}.html">
           <div class="ct"><span class="dot" style="background:{col}"></span>{esc(tgt)}</div>

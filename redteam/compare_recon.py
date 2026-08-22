@@ -49,7 +49,10 @@ def _row(profile, name, when):
     warns = [h["text"] for h in profile.get("hints", [])
              if isinstance(h, dict) and h.get("level") == "warn"]
     lock = profile.get("token_lock") or {}
+    # COUNTED OUT OF WHAT WAS ASKED, not out of what was listed. An unmeasured token used to
+    # arrive here as "blocked" and inflate the column that reads as the target's defence.
     blocked = sum(1 for v in lock.values() if v == "blocked")
+    unmeasured = sum(1 for v in lock.values() if v == "unmeasured")
     disc = profile.get("disclosure_open")
     return {
         "target": name,
@@ -59,7 +62,11 @@ def _row(profile, name, when):
         "memory": mem,
         # None is a real third state: no markers configured, so the question was not asked
         "disclosure": "leaks" if disc else ("held" if disc is False else "unscored"),
-        "content_lock": f"{blocked}/{len(lock)}" if lock else "—",
+        # DENOMINATOR IS WHAT WAS ASKED. `blocked/len(lock)` counted tokens whose probe never
+        # landed as part of the total, so a half-dead run read as a partial lock instead of a
+        # partial measurement. The unmeasured ones are named rather than folded into either side.
+        "content_lock": (f"{blocked}/{len(lock) - unmeasured}"
+                         + (f" (+{unmeasured} unmeasured)" if unmeasured else "")) if lock else "—",
         "unlabelled": sum(len(v) for v in (profile.get("new_patterns") or {}).values()),
         "warnings": warns,
     }
