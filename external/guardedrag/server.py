@@ -12,7 +12,7 @@ Question: does the output guard catch a phishing/secret that arrived via a docum
 Stdlib only; talks to Ollama /api/chat. Listens on :8200.
 """
 import json, os, urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 OLLAMA = "http://localhost:11434/api/chat"
 # The two limits `redteam/llm.py` gives every adapter, repeated as literals because
@@ -132,4 +132,8 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     print(f"Guarded RAG bot on http://127.0.0.1:8200/chat  "
           f"(GUARD={'on' if GUARD_ON else 'off'}, EVASION={EVASION})")
-    HTTPServer(("127.0.0.1", 8200), Handler).serve_forever()
+    # ThreadingHTTPServer, not HTTPServer: the sweep opens a new connection per probe and a
+    # single-threaded server serialises them behind whichever one the model is still
+    # thinking about. Four servers here were changed for that reason and these two were
+    # missed, which is what a fix applied by file rather than by rule looks like.
+    ThreadingHTTPServer(("127.0.0.1", 8200), Handler).serve_forever()

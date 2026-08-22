@@ -78,6 +78,10 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;
   padding:74px 0 64px}
 .hero h1{font-size:clamp(34px,5vw,52px);font-weight:800;letter-spacing:-.02em;margin:16px 0 18px}
+.warnbox{font-size:16px;line-height:1.5;color:var(--fg);max-width:54ch;margin:0 0 26px;
+  border:1px solid var(--attack);border-left:5px solid var(--attack);border-radius:8px;
+  background:var(--attack-soft);padding:14px 16px}
+.warnbox b{color:var(--attack);text-transform:uppercase;letter-spacing:.02em}
 .hero p.sub{font-size:19px;color:var(--muted);max-width:46ch;margin:0 0 28px}
 .cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:14px;
@@ -203,13 +207,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         you a plain-English report of everything it leaked or did, before someone else finds
         it. <b>You run it.</b> On your machine or in your CI, against your own deployment —
         no account, no endpoint handed over, nothing sent anywhere.</p>
-      <p class="sub" style="color:var(--fg);max-width:52ch;margin:0 0 24px;
-        border-left:3px solid var(--accent);padding-left:14px">
-        <b>Authorized targets only.</b> This sends real attacks at whatever you point it at.
-        Point it only at a system you own, or one whose owner has given you written permission
-        to test &mdash; <a
-        href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md">read
-        AUTHORISED-USE.md</a> before the first run.</p>
+      <p class="warnbox">
+        <b>Do not point this at a system you do not own.</b> It sends real attacks &mdash;
+        prompt injection, data exfiltration, tool abuse &mdash; at whatever URL you give it.
+        Your own deployment, or one whose owner gave you written permission in advance.
+        Not a public chatbot you find interesting. Not a vendor&rsquo;s demo.
+        <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md">Read
+        AUTHORISED-USE.md</a> first.</p>
       <div class="cta-row">
         <span class="install"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">See what it catches</a>

@@ -12,7 +12,7 @@ an INPUT-rail-only config, proves the input rail is blind to data-borne injectio
     python server.py [config_dir] [port]      # defaults: ./config  8100
 """
 import os, sys, json
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from nemoguardrails import RailsConfig, LLMRails
 
 # Relative to THIS file, not to the machine it was written on and not to the caller's working
@@ -88,4 +88,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"NeMo-guarded RAG bot on http://127.0.0.1:{PORT}/chat  (config={CONFIG_DIR})")
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    # ThreadingHTTPServer, not HTTPServer: the sweep opens a new connection per probe and a
+    # single-threaded server serialises them behind whichever one the model is still
+    # thinking about. Four servers here were changed for that reason and these two were
+    # missed, which is what a fix applied by file rather than by rule looks like.
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

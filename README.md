@@ -1,9 +1,15 @@
 # QAtration
 
-*QA + [pene]tration* — adversarial testing for LLM features and agents.
+> [!CAUTION]
+> **Do not point this at a system you do not own.**
+> It sends real attacks — prompt injection, data exfiltration, tool abuse — at whatever URL you
+> give it. Use it on your own deployment, or on one whose owner has given you written permission
+> in advance. **Not** a public chatbot you find interesting. **Not** a vendor's demo. **Not** to
+> "just check" somebody else's product.
+> [AUTHORISED-USE.md](AUTHORISED-USE.md) says what that means in practice, and what to do if you
+> find something in a system that is not yours.
 
-**Read [AUTHORISED-USE.md](AUTHORISED-USE.md) first.** This sends real attacks at whatever it
-is pointed at. Point it only at something you own or have written permission to test.
+*QA + [pene]tration* — adversarial testing for LLM features and agents.
 
 Point it at a bot, fire a library of attacks (prompt injection, system-prompt leak, agent
 tool-abuse, SQL-injection-via-agent), and get an **objective** verdict per attack, because the

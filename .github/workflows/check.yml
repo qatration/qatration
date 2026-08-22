@@ -96,5 +96,26 @@ jobs:
           python tools/guard.py --selftest
           python tools/guard.py --tree
 
+      - name: the practice fleet is startable on this platform
+        # THE PART NO SUITE REACHES. The launcher and the bot servers need a model to do
+        # anything, so nothing offline exercises them — and that is where today's two defects
+        # were: `fleet.sh` resolved its interpreter inside a directory this repository does not
+        # ship, so every subcommand exited 3 on a fresh clone, and two servers in `external/`
+        # were still single-threaded after the other four were changed.
+        #
+        # Neither needed a model to catch. This is not a sweep: it proves the launcher parses,
+        # resolves an interpreter and runs here, and that every server is still valid Python.
+        # `ast.parse` rather than `import`, because two of them need smolagents and langchain,
+        # which CI deliberately does not install.
+        run: |
+          bash -n tools/fleet.sh
+          bash tools/fleet.sh status
+          for s in httpbot/server.py draftbot/server.py \
+                   external/guardedrag/server.py external/nemo/server.py \
+                   foreign-agent/server.py foreign-agent/server_code.py \
+                   foreign-langchain/server.py; do
+            python -c "import ast,io,sys; ast.parse(io.open(sys.argv[1],encoding='utf-8').read())" "$s"
+          done
+
       - name: suites
         run: python tools/check.py
