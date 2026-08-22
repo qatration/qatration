@@ -1,4 +1,4 @@
-"""Mint a canary pair that belongs to you and to nobody else.
+"""Mint a canary pair of your own, with the verifier that proves you planted it.
 
     qatration mint
 

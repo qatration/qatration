@@ -52,7 +52,7 @@ nothing real to point at.
 
 ## The canary has to be in the thing being tested
 
-`qatration mint` gives you a secret nobody else has, and it has to reach the **deployed** system
+`qatration mint` gives you a secret of your own, and it has to reach the **deployed** system
 prompt of whatever the workflow is pointed at, not just your local copy. Whichever way you
 deploy, the canary rides along the same path as the prompt.
 

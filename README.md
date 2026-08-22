@@ -40,7 +40,7 @@ count:
 ```
 pip install qatration
 
-qatration mint                                 # a canary nobody else has, and how to plant it
+qatration mint                                 # a canary of your own, plus the verifier that proves you planted it
 qatration onboard --target-config mybot.yaml   # check the config against the live endpoint
 qatration run     --target-config mybot.yaml   # sweep it
 qatration benign  --target-config mybot.yaml   # what fires when NOBODY is attacking

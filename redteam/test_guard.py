@@ -603,47 +603,68 @@ def main():
     # So: a real repository, `core.hooksPath` set the way CONTRIBUTING says to set it, a real
     # credential staged, and a real `git commit`. What is under test is whether the commit
     # HAPPENS, which no amount of grepping the hook can tell you.
-    if _sp.run(["bash", "-c", "exit 0"], capture_output=True).returncode == 0:
-        with tempfile.TemporaryDirectory() as d:
-            henv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                        GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
-                        GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
-                        GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+    #
+    # ATTEMPTED RATHER THAN PRE-CHECKED, and that distinction cost a red build. This began by
+    # asking `bash -c "exit 0"` and failing when the answer was no, which turned a property of
+    # the runner into a failure: the windows-latest leg has git on PATH and not bash, and it was
+    # the only one of four to fail while the same claim passed on both ubuntu legs and on macOS.
+    # CI does not use hooks — `guard.py --tree` is the step that cannot be skipped, and it runs
+    # on its own.
+    #
+    # It must not become silence either. Measured on a PATH with every bash stripped out: git
+    # does not skip a hook it cannot run, it dies with `cannot spawn .githooks/pre-commit` and
+    # the commit fails outright. A machine without a shell does not get weaker hooks, it gets no
+    # commits — which is why CONTRIBUTING says so beside the install line.
+    #
+    # Three outcomes, and only the last is a failure: it ran and passed, it could not start
+    # here and said so, or it ran and gave the wrong answer.
+    with tempfile.TemporaryDirectory() as d:
+        henv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
+                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
 
-            def hg(*a):
-                return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
-                               env=henv)
+        def hg(*a):
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=henv)
 
-            shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(d, ".githooks"))
-            os.makedirs(os.path.join(d, "tools"), exist_ok=True)
-            for f in ("guard.py", "licences.py"):
-                shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(d, "tools", f))
-            io.open(os.path.join(d, "pyproject.toml"), "w", encoding="utf-8").write(
-                "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
-            hg("init", "-q", "-b", "main")
-            hg("config", "user.name", "QAtration")
-            hg("config", "user.email", "qatration@gmail.com")
-            hg("config", "core.hooksPath", ".githooks")
-            for f in ("pre-commit", "pre-push"):
-                p = os.path.join(d, ".githooks", f)
-                os.chmod(p, 0o755)
+        shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(d, ".githooks"))
+        os.makedirs(os.path.join(d, "tools"), exist_ok=True)
+        for f in ("guard.py", "licences.py"):
+            shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(d, "tools", f))
+        io.open(os.path.join(d, "pyproject.toml"), "w", encoding="utf-8").write(
+            "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
+        hg("init", "-q", "-b", "main")
+        hg("config", "user.name", "QAtration")
+        hg("config", "user.email", "qatration@gmail.com")
+        hg("config", "core.hooksPath", ".githooks")
+        for f in ("pre-commit", "pre-push"):
+            os.chmod(os.path.join(d, ".githooks", f), 0o755)
 
-            io.open(os.path.join(d, "ok.txt"), "w", encoding="utf-8").write("nothing here")
-            hg("add", "-A")
-            r = hg("commit", "-qm", "ordinary work")
+        io.open(os.path.join(d, "ok.txt"), "w", encoding="utf-8").write("nothing here")
+        hg("add", "-A")
+        first = hg("commit", "-qm", "ordinary work")
+        said = (first.stdout + first.stderr).lower()
+
+        if first.returncode != 0 and "cannot spawn" in said:
+            print("SKIP  the hooks, end to end: no shell on this machine, so git cannot start "
+                  "a hook at all.")
+            print("      Verified on every platform in the matrix that has one. NOT verified "
+                  "here, and this")
+            print("      line exists so a green run on this platform is never read as having "
+                  "checked it.")
+        else:
             check("the pre-commit hook lets ordinary work through",
-                  r.returncode == 0, (r.stdout + r.stderr)[:200])
+                  first.returncode == 0, (first.stdout + first.stderr)[:200])
 
             TOKEN = "ghp_" + "a" * 20
             io.open(os.path.join(d, "leak.py"), "w", encoding="utf-8").write(
                 "KEY = '%s'" % TOKEN)
             hg("add", "-A")
             r = hg("commit", "-qm", "a credential")
-            head = hg("rev-parse", "HEAD").stdout.strip()
             listed = hg("show", "--name-only", "--format=", "HEAD").stdout
             check("...and REFUSES a commit carrying a credential",
                   r.returncode != 0 and "leak.py" not in listed,
-                  f"exit {r.returncode}; HEAD {head[:8]} contains {listed.split()}")
+                  f"exit {r.returncode}; HEAD lists {listed.split()}")
 
             # AND THE SAME HOOK, GUTTED. If this passes, the check above proved nothing about
             # the hook — only that the guard works when something calls it.
@@ -658,9 +679,6 @@ def main():
             check("...and this check would notice if the hook were gutted to `exit 0`",
                   r.returncode == 0,
                   "the gutted hook still refused, so the check above is not testing the hook")
-    else:
-        check("bash is available to run the hooks end to end", False,
-              "no bash on PATH: the hook checks below are text-only and prove little")
 
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #

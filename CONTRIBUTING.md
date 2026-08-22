@@ -22,6 +22,12 @@ rather than quietly running zero suites.
 git config core.hooksPath .githooks
 ```
 
+**On Windows this needs Git's `bash` on your PATH,** and the failure mode is worth knowing before
+you meet it: git does not skip a hook it cannot start, it dies with `cannot spawn
+.githooks/pre-commit` and the commit fails. So a shell that is missing does not give you weaker
+hooks, it gives you no commits. Git for Windows ships bash; if `bash --version` works in the
+shell you commit from, you are fine.
+
 One command, once per clone. It puts `tools/guard.py` in front of every commit and every push:
 it refuses a credential shape, a dependency whose licence this project cannot hand to an
 installer, and text that has no business being published. Run it by hand any time with

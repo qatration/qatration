@@ -37,7 +37,7 @@ import sys
 # commands that raise AttributeError on the first Enter.
 COMMANDS = {
     "run":      ("run_redteam",     "run the arsenal against one target"),
-    "mint":     ("mint",            "generate a canary that is yours alone, and how to plant it"),
+    "mint":     ("mint",            "generate a canary of your own, and the verifier that proves you planted it"),
     "onboard":  ("onboard",         "check a target config against its live endpoint"),
     "benign":   ("benign",          "ordinary traffic through every detector: the false-positive rate"),
     "history":  ("history",         "what changed since the last run, and whether it can be believed"),
