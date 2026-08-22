@@ -70,7 +70,12 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 .muted{color:var(--muted)}
 
 /* top bar */
-.top{display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--line)}
+/* `gap`, because `.ghlink` carries `margin-left:auto` and swallows every pixel of free
+   space into ONE gap: measured on the deployed page, brand->lede was 0, lede->ghlink was
+   399, ghlink->theme was 0. The auto margin is right — it pins the buttons to the right
+   edge — but with nothing else spacing them, `QAtration` ran straight into the tagline
+   and the two buttons touched. `space-between` cannot help once one item takes it all. */
+.top{display:flex;align-items:center;gap:16px;padding:22px 0;border-bottom:1px solid var(--line)}
 .brand{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:-.01em}
 .brand b{color:var(--accent)}
 .top .lede{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
@@ -134,6 +139,11 @@ section{padding:60px 0;border-top:1px solid var(--line)}
 .sec-head p{color:var(--muted);margin:0}
 
 /* what it finds */
+/* A LAST CARD WITH NO PARTNER SPANS BOTH COLUMNS. One of these grids holds seven cards,
+   so the seventh sat alone and left a lit rectangle of background beside it that reads
+   as a card somebody forgot to write. Written as a rule rather than a class on that one
+   card, so it stays true when a card is added or removed. */
+.finds > .find:last-child:nth-child(odd){grid-column:1/-1}
 .finds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:11px;overflow:hidden}
 .find{background:var(--surface);padding:22px 22px}
