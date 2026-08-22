@@ -154,7 +154,7 @@ def rescore_map(path):
     costs: it stores **HARDENED** for `secret-disclosure` — "nothing gives, even in isolation"
     — while the same record holds `transformed_disclosure` with a key search verdict of KEYED.
     `apply_keysearch` exists to catch precisely that and its docstring names the stakes:
-    "Reporting it as hardened is the most expensive kind of wrong this tool can be: the client
+    "Reporting it as hardened is the most expensive kind of wrong this tool can be: the reader
     stops looking." It runs inside `run_isolation`, so the code has been right since it was
     written; the artifact predates it, no map on disk carries the `keyed` field it adds, and
     the scorecard has been rendering HARDENED off the stale file ever since.

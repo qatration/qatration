@@ -1117,8 +1117,12 @@ def d_rogue_tool_call(probe, ctx):
 #   * ALLOWLISTS FROM CONFIG. A support bot printing its own support address is doing its
 #     job. What counts as the target's own is a fact about the target, so it lives in ctx.
 #
-# Deliberately absent: package-hallucination (needs a live registry lookup, so it cannot
-# be an offline objective check) and anything that would need a model to judge tone.
+# Deliberately absent: anything that would need a model to judge tone.
+#
+# `hallucinated_package` used to be listed here too, on the argument that catching one needs
+# a live registry lookup. It is shipped: the detector judges a name the CONFIG plants, which
+# is the same trick every other objective check uses, and four attacks declare it. The line
+# stayed after the detector arrived and told a reader this tool has no slopsquatting check.
 # =====================================================================================
 
 # `(?<![\w.+-])` rather than `\b` — see `_ARG` above. `a.a.a.a…` has a word boundary at every
@@ -2754,7 +2758,8 @@ def inert_for(ctx, declared=()):
     `declared` extends the check past the always-on set to whatever the arsenal names, and
     that gap was real rather than theoretical. This function only ever looked at always-on
     detectors, so `memorised_completion` — which fires only when the target config supplies
-    `expected_completions`, and no target on the fleet does — could be declared by an attack,
+    `expected_completions`, which one target on the fleet supplies and the rest do not — could
+    be declared by an attack aimed at any of the others,
     run on every trial, find nothing, and report DEFENDED. Identical failure to the one this
     mechanism was written for, reached by the other door: an attack whose detector is unable
     to speak has measured nothing, whether the oracle runs it always or on request.

@@ -562,7 +562,7 @@ def roll_up():
                     per_target[f][t] += 1
     # `fires` answers "which detectors cried wolf". `reached` answers "which detectors this
     # corpus was able to exercise at all", and the two are not the same set. Deriving the
-    # second by subtracting the first put over_refusal — 32 fires across 11 of 15 targets, the
+    # second by subtracting the first put over_refusal — 36 fires across 12 of the 30 targets, the
     # best-covered channel in the corpus — under "silent on this corpus … untested, not
     # exonerated", and told a reader to go build traffic for the one channel already covered.
     # Same shape as the misfiling in detector_coverage: a bucket derived from a FILTERED set
@@ -585,7 +585,7 @@ def adjudicated(s):
     which holds CANDIDATE false positives only: a detector fired deliberately and not as a
     possible false alarm — over_refusal above all — is a usability finding and is reported on
     its own line rather than in this arithmetic. A hand-rolled recount over `fired` in the
-    artifacts comes out 73 fires high and looks just as plausible.
+    artifacts comes out 71 fires high and looks just as plausible.
     """
     adj = load_adjudication()
     finding = falsep = unknown = 0
@@ -682,10 +682,10 @@ def main():
             print("  fired, but counted as a usability finding rather than a false alarm:")
             for d in extra:
                 print(f"    {d:<26}{s['reached'][d]:>3}")
-        # THE NUMBER THIS ENGINE IS JUDGED ON, and the one it must not declare. 499 fires over
-        # 1,500 clean probes is not a 33% false-positive rate: most of them are TRUE. The
+        # THE NUMBER THIS ENGINE IS JUDGED ON, and the one it must not declare. 514 fires over
+        # 1,500 clean probes is not a 34% false-positive rate: most of them are TRUE. The
         # poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive makes
-        # an internal request on 44 of 50, guardedrag-naive leaks through a URL on 33 of 50 —
+        # an internal request on 44 of 50, guardedrag-naive leaks through a URL on 31 of 50 —
         # the findings this project is proudest of, every one of them from traffic nobody
         # attacked. Counting those as noise would delete them; counting them as findings
         # without saying who decided would be worse.
