@@ -1,0 +1,15 @@
+# Crawl the page. It is the point of publishing it.
+User-agent: *
+Allow: /
+
+# NOT THE FIXTURES, and the reason is worth writing down rather than leaving as a bare rule.
+# `/fixtures/` holds drop-in PDFs for testing your own bot's knowledge base, and one of them
+# carries a prompt injection on purpose -- benign by design, its whole payload is asking the
+# bot to echo a marker, but a search engine surfacing a "refund policy" PDF that contains
+# hidden instructions serves nobody and invites an automated reputation flag on the domain.
+#
+# This blocks CRAWLING, not access. The files stay downloadable, which is what they are for;
+# they are simply not search results.
+Disallow: /fixtures/
+
+Sitemap: https://qatration.com/sitemap.xml

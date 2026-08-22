@@ -796,6 +796,66 @@ def main():
         check(f"...and {_rel} is actually shipped",
               os.path.exists(os.path.join(ROOT, "site", _rel)), "referenced but missing")
 
+    # --- WHAT A LINK TO THIS PAGE PROMISES ---------------------------------------------------
+    #
+    # The preview card is a PNG. Nothing about it changes when the page is edited, so a headline
+    # rewritten here leaves an image promising the old one to every reader on every platform
+    # that ever cached it. The words are read out of the generator and required to still be on
+    # the page -- which is the same rule this whole suite exists for, applied to a picture.
+    _og = os.path.join(ROOT, "tools", "og_card.py")
+    check("the preview card is generated, not a loose binary", os.path.exists(_og),
+          "tools/og_card.py is missing but site/og-card.png would still be shipped")
+    if os.path.exists(_og):
+        _og_src = io.open(_og, encoding="utf-8").read()
+        _page_text = re.sub(r"<[^>]+>", " ", _site)
+        _page_text = (_page_text.replace("&amp;", "&").replace("&mdash;", "—")
+                      .replace("&rsquo;", "\u2019").replace("&nbsp;", " "))
+        _page_text = re.sub(r"\s+", " ", _page_text)
+        _claims = []
+        for _name in ("HEADLINE", "SUB"):
+            _m = re.search(_name + r'\s*=\s*\(?\s*"([^"]+)"(?:\s*"([^"]+)")?', _og_src)
+            if _m:
+                _claims.append((_name, "".join(p for p in _m.groups() if p)))
+        check("the card's sentences can be read out of the generator",
+              len(_claims) == 2, f"found {[c[0] for c in _claims]}")
+        for _name, _text in _claims:
+            check(f"the card's {_name} is a sentence the page actually says",
+                  re.sub(r"\s+", " ", _text) in _page_text,
+                  f"the card claims {_text!r}, which is not on the page any more")
+
+    # THE TAGS, and that the file each absolute URL names is really shipped. `og:image` can 404
+    # while the page renders perfectly; the failure only shows up in somebody else's chat window.
+    for _prop in ("og:title", "og:description", "og:image", "og:url", "og:type",
+                  "twitter:card", "twitter:image"):
+        check(f"the page declares {_prop}", f'"{_prop}"' in _site, "missing")
+    check("the page has a meta description",
+          'name="description"' in _site, "search results would show scraped text")
+    check("...and a canonical url", 'rel="canonical"' in _site, "missing")
+
+    _abs = set(re.findall(r'content="https://qatration\.com/([A-Za-z0-9._/-]+)"', _site))
+    _gone = sorted(f for f in _abs if not os.path.exists(os.path.join(ROOT, "site", f)))
+    check("every absolute site url in a meta tag points at a shipped file",
+          not _gone, f"declared but not in site/: {_gone}")
+
+    # robots.txt and the sitemap must not contradict each other.
+    _rob_p = os.path.join(ROOT, "site", "robots.txt")
+    _map_p = os.path.join(ROOT, "site", "sitemap.xml")
+    check("robots.txt is shipped", os.path.exists(_rob_p), "crawlers get no guidance")
+    check("a sitemap is shipped", os.path.exists(_map_p), "missing")
+    if os.path.exists(_rob_p) and os.path.exists(_map_p):
+        _rob = io.open(_rob_p, encoding="utf-8").read()
+        _map = io.open(_map_p, encoding="utf-8").read()
+        _sitemap_line = re.search(r"(?im)^\s*Sitemap:\s*(\S+)", _rob)
+        check("robots.txt points at the sitemap", bool(_sitemap_line), "no Sitemap: line")
+        _disallowed = [d.strip() for d in re.findall(r"(?im)^\s*Disallow:\s*(\S+)", _rob)]
+        _locs = re.findall(r"<loc>\s*([^<]+?)\s*</loc>", _map)
+        check("the sitemap lists at least the home page",
+              any(l.rstrip("/") == "https://qatration.com" for l in _locs), str(_locs))
+        _contra = [l for l in _locs for d in _disallowed
+                   if d != "/" and l.startswith("https://qatration.com" + d)]
+        check("...and lists nothing robots.txt tells crawlers to skip",
+              not _contra, f"the sitemap offers {_contra}, robots.txt disallows {_disallowed}")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:

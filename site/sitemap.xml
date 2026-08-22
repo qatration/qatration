@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ONE PAGE, AND THAT IS THE HONEST SIZE OF THIS SITE. A sitemap listing anchors within a single
+  document, or the fixture PDFs robots.txt asks crawlers to leave alone, would be padding: it
+  does not help a crawler and it contradicts the file next to it.
+
+  NO <lastmod>. A date here has to be maintained by hand or it lies, and a stale lastmod is
+  worse than none -- it tells a crawler nothing changed when something did. The site deploys
+  from git on every push; the HTTP response carries the truth.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://qatration.com/</loc>
+  </url>
+</urlset>

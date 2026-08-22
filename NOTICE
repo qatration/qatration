@@ -41,8 +41,14 @@ credited as such.
     Roboto Black, Version 2.137. Copyright 2011 Google Inc.
     Apache License 2.0, per the licence URL in the font's own name table.
 
+`tools/og_card.py` uses the same typeface differently: it RENDERS the link-preview image with
+Roboto at generation time, reading the font from wherever the machine keeps it. So that script
+needs the font installed and the icon generator does not, and the output committed here is a
+raster carrying those letterforms.
+
 Nothing else of the font is included: no font file is redistributed here, and the site links no
-webfont. Only the two glyphs are present, and only as the numbers that describe their curves.
+webfont. Of the icon, only two glyphs are present, and only as the numbers that describe their
+curves.
 
 SYSTEM PROMPTS REPRODUCED HERE, and why. This engine refuses to read a target's prompt out
 of its own source: a detector that has seen the prompt can subtract it, and a control whose
