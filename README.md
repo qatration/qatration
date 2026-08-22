@@ -11,6 +11,8 @@
 
 *QA + [pene]tration* — adversarial testing for LLM features and agents.
 
+**[qatration.com](https://qatration.com)** · [what it catches](https://qatration.com/#finds) · [the evidence](out/)
+
 Point it at a bot, fire a library of attacks (prompt injection, system-prompt leak, agent
 tool-abuse, SQL-injection-via-agent), and get an **objective** verdict per attack, because the
 oracle checks planted canaries and tool-call arguments rather than vibes. Built to answer the

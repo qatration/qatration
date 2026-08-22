@@ -73,8 +73,13 @@ fleet = [
 qatration = "qatration.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/qatration/qatration"
+# `Homepage` IS WHAT PyPI PUTS FIRST in the sidebar, and it pointed at the repository —
+# the same place `Source` already went, so the package offered one destination twice and
+# never named the page that explains it.
+Homepage = "https://qatration.com"
 Source = "https://github.com/qatration/qatration"
+Documentation = "https://github.com/qatration/qatration/tree/main/docs"
+Issues = "https://github.com/qatration/qatration/issues"
 
 [tool.setuptools]
 # The directory is called `redteam/` in the repository and `qatration/` once installed. The
