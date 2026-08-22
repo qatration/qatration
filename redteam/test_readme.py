@@ -32,7 +32,7 @@ dishonest direction only: the README may understate the evidence it has, never o
 
     python test_readme.py        # exits 1 on any failure (CI gate)
 """
-import sys, os, re, glob, json
+import sys, os, re, glob, json, io
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -641,6 +641,38 @@ def main():
                          f"summary was printed at line {shown[-1] + 1}")
     check("no suite counts itself before its last check has run",
           not early, "; ".join(early))
+
+    # --- EVERY SHIPPED PAGE DECLARES ITS ENCODING --------------------------------------------
+    #
+    # `site/index.html` went live without `<meta charset>`. Cloudflare serves `text/html` with
+    # no charset parameter, so the browser fell back to windows-1252 and every em dash, middle
+    # dot and curly quote on the landing page rendered as mojibake. Measured on the deployed
+    # page: `document.characterSet` was `windows-1252`.
+    #
+    # All 46 generated reports had it, because `report_engine.py` prints it into every one. The
+    # hand-written page did not, and nothing opened it in a browser — the same shape as the
+    # rest of this project's findings, where what a machine produces is consistent and what a
+    # person typed once is the gap.
+    #
+    # Within the first 1024 bytes, which is the window a browser scans before it commits to a
+    # guess. A declaration further down is a declaration that arrives too late.
+    import subprocess as _sp2
+    _pages = [p for p in _sp2.run(["git", "-C", ROOT, "ls-files", "*.html"],
+                                  capture_output=True, text=True).stdout.split() if p]
+    check("there are shipped HTML pages to check", bool(_pages), "git ls-files found none")
+    _late, _missing = [], []
+    for _rel in _pages:
+        _head = io.open(os.path.join(ROOT, _rel), encoding="utf-8",
+                        errors="replace").read(4096)
+        _at = _head.lower().find("charset")
+        if _at < 0:
+            _missing.append(_rel)
+        elif len(_head[:_at].encode("utf-8")) > 1024:
+            _late.append(_rel)
+    check("every shipped HTML page declares a charset",
+          not _missing, f"no <meta charset> in: {_missing[:5]}")
+    check("...and declares it inside the first 1024 bytes, where a browser still looks",
+          not _late, f"declared too late in: {_late[:5]}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
