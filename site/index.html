@@ -203,6 +203,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         you a plain-English report of everything it leaked or did, before someone else finds
         it. <b>You run it.</b> On your machine or in your CI, against your own deployment —
         no account, no endpoint handed over, nothing sent anywhere.</p>
+      <p class="sub" style="color:var(--fg);max-width:52ch;margin:0 0 24px;
+        border-left:3px solid var(--accent);padding-left:14px">
+        <b>Authorized targets only.</b> This sends real attacks at whatever you point it at.
+        Point it only at a system you own, or one whose owner has given you written permission
+        to test &mdash; <a
+        href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md">read
+        AUTHORISED-USE.md</a> before the first run.</p>
       <div class="cta-row">
         <span class="install"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">See what it catches</a>

@@ -2,6 +2,9 @@
 
 *QA + [pene]tration* — adversarial testing for LLM features and agents.
 
+**Read [AUTHORISED-USE.md](AUTHORISED-USE.md) first.** This sends real attacks at whatever it
+is pointed at. Point it only at something you own or have written permission to test.
+
 Point it at a bot, fire a library of attacks (prompt injection, system-prompt leak, agent
 tool-abuse, SQL-injection-via-agent), and get an **objective** verdict per attack, because the
 oracle checks planted canaries and tool-call arguments rather than vibes. Built to answer the
@@ -12,9 +15,6 @@ doing?*
 your machine, in your CI, against your own deployment. Nothing here needs a service, and `out/`
 ships with the repository, so every number in these pages can be recounted rather than believed
 — `test_readme.py` recounts them and fails when a claim and the code disagree.
-
-**Read [AUTHORISED-USE.md](AUTHORISED-USE.md) first.** This sends real attacks at whatever it
-is pointed at. Point it only at something you own or have written permission to test.
 
 ## Why this and not "another eval tool"
 
