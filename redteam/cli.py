@@ -36,6 +36,10 @@ import sys
 # imports every one of them and fails if it does not, so this table cannot rot into a list of
 # commands that raise AttributeError on the first Enter.
 COMMANDS = {
+    # FIRST, BECAUSE IT IS FIRST. This table is printed in order by `_usage`, and the order was
+    # a history of what got written when. A stranger reading `qatration --help` needs the
+    # command that produces the file every other command wants, at the top.
+    "init":     ("init_config",     "write a starting target config, with a canary of your own"),
     "run":      ("run_redteam",     "run the arsenal against one target"),
     "mint":     ("mint",            "generate a canary of your own, and the verifier that proves you planted it"),
     "onboard":  ("onboard",         "check a target config against its live endpoint"),

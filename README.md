@@ -48,10 +48,10 @@ count:
 ```
 pip install qatration
 
-qatration mint                                 # a canary of your own, plus the verifier that proves you planted it
-qatration onboard --target-config mybot.yaml   # check the config against the live endpoint
-qatration run     --target-config mybot.yaml   # sweep it
-qatration benign  --target-config mybot.yaml   # what fires when NOBODY is attacking
+qatration init --url https://your-bot.example.com/chat   # writes mybot.yaml, canary and all
+qatration onboard --target-config mybot.yaml            # one real request: is the mapping right
+qatration run     --target-config mybot.yaml            # sweep it
+qatration benign  --target-config mybot.yaml            # what fires when NOBODY is attacking
 ```
 
 PyYAML and pyfiglet, nothing else. The model frameworks belong to the practice bots in this
@@ -61,7 +61,11 @@ their own environment because those two cannot share one — see the note in
 `pyproject.toml`. Evidence goes to `./qatration-out` unless `$QATRATION_OUT`
 says otherwise.
 
-**Mint first, and the reason is not tidiness.** A canary is worth exactly the fact that nothing
+`init` writes the config so you do not have to invent one, and it mints the canary for you
+rather than leaving it as a step to remember. `qatration mint` still exists on its own, for a
+config you already have.
+
+**And the canary is not tidiness.** It is worth exactly the fact that nothing
 else in the world knows it. The example configs ship one so they run out of the box, and that
 value is published here — it can be trained on, blocklisted, or matched by a guardrail that
 knows nothing about the deployment behind it. A target that fails to leak a published string
