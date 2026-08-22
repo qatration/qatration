@@ -112,3 +112,6 @@ out/run_2026-08-21T0110-665c21.json
 # on the machine, and `guard.py` says out loud when it is running without one rather than
 # implying the check was complete.
 .guard-local
+
+# Cloudflare wrangler's local state, created by a deploy from a workstation.
+.wrangler/

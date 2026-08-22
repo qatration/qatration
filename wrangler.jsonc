@@ -1,0 +1,22 @@
+// Cloudflare Workers, serving `site/` as static assets and nothing else.
+//
+// WHY THIS FILE EXISTS RATHER THAN A SETTING IN A DASHBOARD. Cloudflare merged Workers and
+// Pages, and the current flow has no "output directory" field: it runs `npx wrangler deploy`
+// and reads the configuration from here. So the deploy settings live beside the code, show up
+// in a diff, and are reviewable — which is the same argument this repository makes for its
+// hooks and its CI being tracked files rather than machine state.
+//
+// NO `main`. A Worker with `assets` and no entry script is a pure static site: Cloudflare
+// serves the directory and never runs code. Nothing in `site/` is generated, so there is no
+// build command either — `index.html` is hand-written and the four PDFs under `site/fixtures/`
+// are committed rather than produced at deploy time.
+//
+// THE DIRECTORY MATTERS. The repository root is the engine, not the page; pointing this at `.`
+// would publish the entire source tree, `out/` included, to a public domain.
+{
+  "name": "qatration",
+  "compatibility_date": "2026-08-22",
+  "assets": {
+    "directory": "./site"
+  }
+}
