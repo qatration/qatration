@@ -68,7 +68,17 @@
 .evid li{padding:0 0 0 14px;margin-bottom:9px;font-size:15px;line-height:1.5;color:var(--muted)}
 .evid li:last-child{margin-bottom:0}
 .evid b{color:var(--ink);font-family:var(--mono);font-weight:700}
-.evid-note{margin:12px 0 0;font-size:13px;color:var(--muted);max-width:52ch}
+/* NO WORD ALONE ON A LINE. One of these read "...with no attack at" / "all." -- a last
+   line 3% of the block. Widening cannot help: the block already spans the column.
+   `text-wrap:pretty` moved it to 6%, which is not a fix; `balance` evens the lines and
+   gives 55/44. Only here: measured on the headline, the intro and the warning block it
+   changed nothing, so there is nothing there for it to earn. */
+.evid > *{text-wrap:balance}
+/* The small print goes to the same edge as everything above it. It is the widest measure
+   on the page at about 83 characters, past the 75 usually recommended -- accepted because
+   these are two lines of caption, and the alternative is the one block on the page that
+   stops 80px short of every other. */
+.evid-note{margin:12px 0 0;font-size:13px;color:var(--muted);max-width:100%}
 /* Sits at the far right of the terminal bar and never grows or wraps, so it cannot crowd
    the window name. Hidden on narrow screens, where the bar is tight and the note under the
    call to action carries the same point in words. */
@@ -82,7 +92,8 @@
 .grp{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--accent);font-weight:600;margin:40px 0 9px}
 .sec-head + .grp{margin-top:0}
-.grp-note{max-width:62ch;margin:0 0 18px;font-size:15px;color:var(--muted)}
+.grp-note{max-width:max(62ch, var(--text-col));margin:0 0 18px;font-size:15px;
+  color:var(--muted)}
 /* Same look as the theme button, its OWN class. Sharing `.theme` put this anchor first in
    the DOM, so `querySelector('.theme')` found the link instead of the button and relabelled
    it "Light" — two identical buttons and no way to reach the source. */
@@ -106,7 +117,13 @@
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
   font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+/* ONE RIGHT EDGE FOR EVERY BLOCK OF TEXT, derived from the grid rather than chosen. The
+   hero's left column is 1.05 of 1.05+0.95 after the 48px gutter, so this is exactly where
+   that column ends -- and it stays there at any container width. Before this the page had
+   seven different right edges (388, 490, 495, 501, 525, 595, 604) because each block kept
+   a `ch` cap chosen when the container was 1000px wide. */
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px;
+  --text-col:calc((100% - 48px) * 0.525)}
 /* ROOM ON A BIG SCREEN, and only there. At 1000px the two-column hero squeezed the
    transcript panel until a canary token broke across lines, while a 2560px display had
    about 1500px of nothing on either side. The prose blocks keep their own `ch` limits,
@@ -156,11 +173,11 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
    panel is never squeezed into one short row. */
 .term{grid-column:2;grid-row:4 / span 5;align-self:start}
 .hero h1{font-size:clamp(34px,5vw,52px);font-weight:800;letter-spacing:-.02em;margin:16px 0 18px}
-.warnbox{font-size:16px;line-height:1.5;color:var(--fg);max-width:54ch;margin:0 0 26px;
+.warnbox{font-size:16px;line-height:1.5;color:var(--fg);max-width:100%;margin:0 0 26px;
   border:1px solid var(--attack);border-left:5px solid var(--attack);border-radius:8px;
   background:var(--attack-soft);padding:14px 16px}
 .warnbox b{color:var(--attack);text-transform:uppercase;letter-spacing:.02em}
-.hero p.sub{font-size:19px;color:var(--muted);max-width:46ch;margin:0 0 28px}
+.hero p.sub{font-size:19px;color:var(--muted);max-width:100%;margin:0 0 28px}
 .cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .btn{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:14px;
   font-weight:600;padding:13px 20px;border-radius:7px;text-decoration:none;border:1px solid transparent;
@@ -208,7 +225,11 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 
 /* sections */
 section{padding:76px 0;border-top:1px solid var(--line)}
-.sec-head{max-width:52ch;margin-bottom:36px}
+/* `max()`, so a wider container widens these and a narrower one never squeezes them below
+   what they already had. A single shared floor was tried first and took 34px off
+   `.grp-note` at 1000px: a change that improved the big screen by making a smaller one
+   worse, which is why both were measured. */
+.sec-head{max-width:max(52ch, var(--text-col));margin-bottom:36px}
 .sec-head h2{font-size:clamp(25px,3.4vw,33px);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
 .sec-head p{color:var(--muted);margin:0}
 
@@ -237,7 +258,7 @@ section{padding:76px 0;border-top:1px solid var(--line)}
 .thesis .big{font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.01em;text-wrap:balance;
   max-width:30ch}
 .thesis .big .u{color:var(--attack)}
-.thesis p{color:var(--muted);max-width:58ch;margin:18px 0 0}
+.thesis p{color:var(--muted);max-width:max(58ch, var(--text-col));margin:18px 0 0}
 .ab{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;font-family:var(--mono);font-size:13px}
 .ab span{display:inline-flex;gap:8px;align-items:center;padding:7px 12px;border:1px solid var(--line);border-radius:7px}
 
