@@ -25,6 +25,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -584,6 +585,81 @@ def main():
             found, crashed = [], f"{type(e).__name__}: {e}"
         check("a pyproject with no [project] table refuses rather than raising",
               crashed is None and bool(found), crashed or "it returned clean")
+
+    # --- THE HOOKS ARE EXECUTED, NOT GREPPED -------------------------------------------------
+    #
+    # Everything below this point used to be substring checks on the hooks' TEXT, and a reviewer
+    # showed what that is worth: replace `.githooks/pre-commit` with
+    #
+    #     #!/usr/bin/env bash
+    #     # Runs tools/guard.py via find_python. A missing interpreter is not a pass; we exit 1.
+    #     exit 0
+    #
+    # and every check passed — the strings `tools/guard.py`, `find_python` and `not a pass` are
+    # all still in the file, in a comment — while a staged `ghp_` committed cleanly. The mode
+    # check passed too, because the mode was untouched.
+    #
+    # So: a real repository, `core.hooksPath` set the way CONTRIBUTING says to set it, a real
+    # credential staged, and a real `git commit`. What is under test is whether the commit
+    # HAPPENS, which no amount of grepping the hook can tell you.
+    if _sp.run(["bash", "-c", "exit 0"], capture_output=True).returncode == 0:
+        with tempfile.TemporaryDirectory() as d:
+            henv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                        GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
+                        GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                        GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+
+            def hg(*a):
+                return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                               env=henv)
+
+            shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(d, ".githooks"))
+            os.makedirs(os.path.join(d, "tools"), exist_ok=True)
+            for f in ("guard.py", "licences.py"):
+                shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(d, "tools", f))
+            io.open(os.path.join(d, "pyproject.toml"), "w", encoding="utf-8").write(
+                "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
+            hg("init", "-q", "-b", "main")
+            hg("config", "user.name", "QAtration")
+            hg("config", "user.email", "qatration@gmail.com")
+            hg("config", "core.hooksPath", ".githooks")
+            for f in ("pre-commit", "pre-push"):
+                p = os.path.join(d, ".githooks", f)
+                os.chmod(p, 0o755)
+
+            io.open(os.path.join(d, "ok.txt"), "w", encoding="utf-8").write("nothing here")
+            hg("add", "-A")
+            r = hg("commit", "-qm", "ordinary work")
+            check("the pre-commit hook lets ordinary work through",
+                  r.returncode == 0, (r.stdout + r.stderr)[:200])
+
+            TOKEN = "ghp_" + "a" * 20
+            io.open(os.path.join(d, "leak.py"), "w", encoding="utf-8").write(
+                "KEY = '%s'" % TOKEN)
+            hg("add", "-A")
+            r = hg("commit", "-qm", "a credential")
+            head = hg("rev-parse", "HEAD").stdout.strip()
+            listed = hg("show", "--name-only", "--format=", "HEAD").stdout
+            check("...and REFUSES a commit carrying a credential",
+                  r.returncode != 0 and "leak.py" not in listed,
+                  f"exit {r.returncode}; HEAD {head[:8]} contains {listed.split()}")
+
+            # AND THE SAME HOOK, GUTTED. If this passes, the check above proved nothing about
+            # the hook — only that the guard works when something calls it.
+            io.open(os.path.join(d, ".githooks", "pre-commit"), "w", encoding="utf-8",
+                    newline="\n").write(
+                "#!/usr/bin/env bash\n"
+                "# Runs tools/guard.py via find_python. A missing interpreter is not a pass.\n"
+                "exit 0\n")
+            os.chmod(os.path.join(d, ".githooks", "pre-commit"), 0o755)
+            hg("add", "-A")
+            r = hg("commit", "-qm", "the same credential, hook gutted")
+            check("...and this check would notice if the hook were gutted to `exit 0`",
+                  r.returncode == 0,
+                  "the gutted hook still refused, so the check above is not testing the hook")
+    else:
+        check("bash is available to run the hooks end to end", False,
+              "no bash on PATH: the hook checks below are text-only and prove little")
 
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #

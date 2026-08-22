@@ -54,6 +54,18 @@ def main():
     errors, warns = [], []
     total = 0
 
+    # AN EMPTY CORPUS IS THE FAILURE THIS IS RUN TO CATCH, and it used to be the surest
+    # way to pass: no files means no errors means "OK — arsenal clean", exit 0. The CI
+    # step that invokes this from outside the checkout is the ONLY check on
+    # `[tool.setuptools.package-data]`, whose own comment reads "an install without the
+    # YAML is a runner with nothing to run". Measured on an installed layout with the
+    # YAML stripped: "linted 0 attacks across 0 file(s) · OK — arsenal clean".
+    if not files:
+        print(f"REFUSED: no attacks*.yaml beside {ROOT} — an arsenal that is not there\n"
+              f"cannot be linted, and this is what a packaging mistake looks like from\n"
+              f"inside an installed copy. Check [tool.setuptools.package-data].")
+        return 1
+
     for path in files:
         fname = os.path.basename(path)
         attacks = yaml.safe_load(open(path, encoding="utf-8")) or []
@@ -169,4 +181,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # `sys.exit(main())`, not a bare call. The return value was discarded, so an early refusal
+    # inside `main` printed its reason and exited 0 — a gate that says REFUSED and lets the
+    # build through. The deeper failures reached `sys.exit(1)` directly and worked, which is
+    # what kept this invisible: one function, two ways of failing, only one of them wired up.
+    sys.exit(main())

@@ -585,7 +585,14 @@ def main(argv=None):
     # `HEAD` rather than a range, because in `--staged` and `--tree` there is no range to
     # speak of and the question is about the commits that exist. On a shallow CI checkout
     # this sees only what was fetched, which is why `check.yml` asks for `fetch-depth: 0`.
-    _stamps("HEAD", refusals)
+    # ONLY IF THERE ARE COMMITS. `--staged` on a repository whose first commit is the one being
+    # made has no HEAD, and `git log HEAD` exits 128 there — which the rule above reads as "a
+    # range that could not be read", correctly for an explicit `--range` and wrongly here. It
+    # refused the first commit of every fresh clone, caught by running the hook rather than
+    # reading it. An explicit range must still resolve; this implicit one is over whatever
+    # commits exist, and an empty repository has none.
+    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
+        _stamps("HEAD", refusals)
 
     if args.staged:
         staged = _staged_files()

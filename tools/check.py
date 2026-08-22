@@ -112,8 +112,23 @@ def main(argv):
         secs = time.time() - t0
         if secs > slowest[0]:
             slowest = (secs, name[5:-3])
-        if proc.returncode == 0:
+        # A SUITE THAT PRINTS FAILURES AND EXITS 0 IS NOT A PASS. The exit code was the
+        # only signal, and `capture_output=True` discards the output on success, so
+        # nobody would ever see it. Every suite here exits correctly today; nothing made
+        # that true of the next one. `0/0 passed` is caught by the same rule: a suite
+        # that ran no checks is indistinguishable from one that ran sixty-six.
+        text = (proc.stdout or "") + (proc.stderr or "")
+        lied = [ln for ln in text.splitlines()
+                if ln.strip().startswith("FAIL") or ln.strip().startswith("0/0 passed")]
+        if proc.returncode == 0 and not lied:
             print("  ok   %-28s %5.1fs" % (name[5:-3], secs))
+            continue
+        if proc.returncode == 0:
+            failed.append(name)
+            print("  LIED %-28s %5.1fs  exited 0 while reporting failures"
+                  % (name[5:-3], secs))
+            for line in lied[:TAIL]:
+                print("       | " + line)
             continue
         failed.append(name)
         print("  FAIL %-28s %5.1fs" % (name[5:-3], secs))
