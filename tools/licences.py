@@ -31,6 +31,15 @@ ALLOWED = {
     # argument for reading every declaration site rather than the one everybody thinks of.
     "setuptools": "MIT",
     "pyyaml": "MIT",
+    # pyfiglet WAS GPLv2+ AND THE FLOOR IS LOAD-BEARING. Verified against PyPI's JSON API on
+    # 2026-08-22: 0.7.6 declares `GPLv2+`, 0.8.post1 declares `MIT`. The relicense is at 0.8, so
+    # `pyfiglet>=0.8` in pyproject.toml is correct and must not be lowered. (0.8.0 is an empty
+    # release carrying no files, so pip's effective floor is 0.8.post0, also MIT.)
+    #
+    # This is the one entry in this table where the NAME is not enough to answer the question,
+    # which is the gap `dist_name()` cannot see: it strips the version specifier before
+    # deciding, so `pyfiglet>=0.8` and `pyfiglet==0.7.6` are the same input to this check.
+    # Anything added here whose licence changed at a version needs the same note.
     "pyfiglet": "MIT",
     "langchain": "MIT",
     "langchain-core": "MIT",

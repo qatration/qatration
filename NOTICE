@@ -18,6 +18,15 @@ the README is recounted from those artifacts by a test that fails when the two d
 
 THIRD-PARTY MATERIAL
 
+UPSTREAM NOTICE FILES. Apache License 2.0 section 4(d) obliges anyone redistributing a portion
+of an Apache-licensed work to carry forward the attribution notices from that work's own NOTICE
+file. Checked on 2026-08-22 against the GitHub contents API: none of the three Apache-licensed
+projects whose text is reproduced here ships a NOTICE file — not huggingface/smolagents, not
+NVIDIA-NeMo/Guardrails, not ReversecLabs/damn-vulnerable-llm-agent. Neither does
+llm-attacks/llm-attacks, which is MIT. So there is nothing to carry forward, and this paragraph
+exists because "we looked and there was nothing" and "we never looked" are indistinguishable
+from outside, and only one of them is a defence.
+
 No third-party LIBRARY is vendored here. The practice targets under `foreign-agent/` and
 `foreign-langchain/` are wrappers this project wrote around libraries installed separately —
 smolagents (Apache 2.0, Hugging Face) and LangChain (MIT) — and `external/nemo/` is a
@@ -86,7 +95,8 @@ can check.
 
     "Universal and Transferable Adversarial Attacks on Aligned Language Models",
     Zou, Wang, Kolter and Fredrikson, arXiv:2307.15043.
-    https://github.com/llm-attacks/llm-attacks, MIT License.
+    https://github.com/llm-attacks/llm-attacks
+    MIT License, Copyright (c) 2023 Andy Zou.
 
 This was listed among techniques merely DESCRIBED in research until a pre-publication review
 read the payloads. Whether an optimiser's OUTPUT is covered by the licence on the code that
