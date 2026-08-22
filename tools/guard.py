@@ -146,30 +146,28 @@ MODEL_FIELDS = {"output", "observations", "evidence", "full", "reply"}
 # prevent — hence digests. The words were read out of the artifact, hashed and never typed, the
 # same reasoning that writes the Cyrillic patterns as escapes.
 #
+# FIVE ENTRIES, NOT THE WHOLE LIST. The first redaction took every masked word the model
+# wrote -- 21 of them -- and that was wrong twice over: it was a judgement that belonged to
+# the repository's owner, and it removed ordinary profanity that this project publishes
+# deliberately elsewhere (`fuck` appears 38 times across 21 tracked files as moderation
+# probes, `damn` 11 times as a forbidden token). Sixteen were restored.
+#
+# What stays is the five that attack people for what they are. The distinction is not
+# rudeness -- it is that a content filter or a corporate DLP trips on these and not on a
+# swear word, so they are what makes a clone a problem for somebody else.
+#
+# This prevents nothing on its own: the attack that elicits them ships in the corpus, so
+# anyone running the tool produces the same output in their own `out/`. It keeps them out
+# of OUR copy, which is the only thing a repository can decide.
+#
 # A digest matches a token lowercased, and again with `*` stripped, so a masked `x*yz` and its
 # unmasked form are one entry. Adding to this list means hashing, never pasting.
 BANNED_TOKENS = {
-    "06d46c0ccf7698a9db8bcfdaee4e481fb713d9915a3f6a16c8bfdb33b4917c4b",
     "0dbf1746e0d281bf9b9b46b11201263830cc8d494c2770d3a1caf8a81ff550f8",
-    "2aafeadc739af4ccda598a0aa8483576e9ce30a383a239327f60820b8d8c1c7f",
-    "3ae80d6f98a96fd3d4dd28504d3c3f36214f1fe1d4ee8a2e724212c78027f80e",
-    "3e649683ca81d503ffaeb264e5a93306e89a691851a6dc4e209dbb1f251db5b1",
-    "4aa8dcb0bf2399092fbdd24c6b6cc4f050471e6798a417f911f3b12520d676a3",
-    "4ffb5c96b8ead7c71728ab7ad6dbc66fca32dafd0b0ae41aaf0a43d0b48660aa",
-    "54e1bc0f4a9b5e4e0bb4ff343081fd259e369ac1ff785f6865e7173398078701",
-    "59334e1a3a71187d31028eef95f448af9466645c2ccabdc4877161728907a389",
-    "62df2d63b0a375c28219acd4df82c4b500e5d938a62b6fbba5ca183392bc6aa3",
-    "64e2c78275b1e09f3544b7d6aa47af141329c8f321185c477fd20970a6323b03",
     "7532c7443ccd779f2c60e8418fcbd2b6a91cd8d365ad1506b7b5cb009ede22b1",
-    "7a5c294a17ed6cd86ef366ef606f84a255cf1aa34a828cca5fa5de6b3a683b0a",
-    "7c2af0c64959a56efc3aeef91a51f17f6d55c1a2cc788f080d9ff5b299b84632",
-    "87723a1c84df2ea403b3a54921cb506edfd7724d36c670908c1b49cded753b26",
-    "8c37b08b05501bcb14edba294a16d69bd91b3aa11332f582ded30b09aa6df1a7",
     "8c9b28599efda058875200b8fae018ed8360ccb6590187e1ac2abea7c89def88",
     "9e07c190630afced455e991548fa97d8d3b27346554c2299a330acc86e81329e",
-    "ae615858fb9479fce168525e655c135981067640fcf5f2b85f907810069b7281",
-    "e761ef5418ab0cfc933905cbddea72fe34c958dd6e22f59e2963bd375f991e27",
-    "efee521d96e979166790c4b971dc0186292f86e5c61cd0d2a77355da0dba257b"
+    "efee521d96e979166790c4b971dc0186292f86e5c61cd0d2a77355da0dba257b",
 }
 
 # Only inside stored artifacts. Our own prose is written by a person and reviewed as a diff; this
