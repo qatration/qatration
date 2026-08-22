@@ -890,6 +890,91 @@ def main():
                   f"pyproject says {_clause!r}; this surface does not. Also check the GitHub "
                   f"About field by hand -- it is dashboard state and no test can see it.")
 
+    # --- THE PANEL SITS ON THE WARNING BLOCK'S ROW -------------------------------------------
+    #
+    # `.term{grid-row:4}` reads as "beside the red warning block", and it is, for as long as the
+    # warning block is the fourth child of the hero's left column. That is a position and not a
+    # name: add a badge above the headline and the panel moves to whatever lands in row 4, on a
+    # published page that nobody rebuilds locally to notice.
+    #
+    # The row is read from the CSS and the position is counted from the markup, so a change to
+    # either one alone fails here. A constant `4` written in this test would just be a third
+    # place to keep in step.
+    from html.parser import HTMLParser as _HP
+
+    class _Kids(_HP):
+        """Direct element children of the hero's first div, in order, by class."""
+
+        def __init__(self):
+            _HP.__init__(self)
+            # 0 before the hero, 1 inside it looking for the column, 2 inside the column,
+            # 3 done. The first version had no state 3: it stopped decrementing at the column's
+            # closing tag and went on collecting the panel, the sections after it and the
+            # footer -- fifteen "children" of a div with eight. The check it feeds only ever
+            # reads the fourth, so it passed; a helper whose name does not describe what it
+            # returns is the next person's wrong answer.
+            self.state = 0
+            self.d = 0
+            self.kids = []
+
+        VOID = ("br", "img", "input", "hr", "meta", "link", "source", "wbr")
+
+        def handle_starttag(self, tag, attrs):
+            cls = dict(attrs).get("class", "")
+            if self.state == 0:
+                if "hero" in cls.split():
+                    self.state = 1
+                return
+            if self.state == 1:
+                if tag == "div":
+                    self.state = 2
+                return
+            if self.state == 2:
+                if self.d == 0:
+                    self.kids.append(cls.split()[0] if cls else tag)
+                if tag not in self.VOID:
+                    self.d += 1
+
+        def handle_startendtag(self, tag, attrs):
+            if self.state == 2 and self.d == 0:
+                cls = dict(attrs).get("class", "")
+                self.kids.append(cls.split()[0] if cls else tag)
+
+        def handle_endtag(self, tag):
+            if self.state != 2:
+                return
+            if self.d == 0:
+                self.state = 3          # the column itself closed
+            else:
+                self.d -= 1
+
+    _k = _Kids()
+    _k.feed(_site)
+    check("the hero's left column can be read", len(_k.kids) >= 4,
+          f"parsed {_k.kids} — the markup moved and this check is blind")
+
+    _m = re.search(r"\.term\{[^}]*grid-row:\s*(\d+)", _site)
+    check("the panel declares which row it sits on", bool(_m),
+          ".term has no grid-row; the alignment is not expressed in the CSS any more")
+
+    if _m and len(_k.kids) >= 4:
+        _row = int(_m.group(1))
+        _at = _k.kids[_row - 1] if 0 < _row <= len(_k.kids) else "(out of range)"
+        check("...and that row is the warning block, counted in the markup",
+              _at == "warnbox",
+              f"grid-row:{_row} is child #{_row}, which is {_at!r}, not the warnbox. "
+              f"Order is {_k.kids}. The panel would line up with the wrong thing.")
+
+    # And the single-column layout must undo the placement, or below 820px the panel is put in
+    # a column that does not exist.
+    _mobile = _site[_site.find("@media (max-width:820px)"):][:700]
+    check("the narrow layout puts the panel back in the one column it has",
+          "grid-column:1" in _mobile and "grid-row:auto" in _mobile,
+          "below 820px `.term` keeps grid-column:2 and lands outside the grid")
+    check("...and restores the row gap the wide rule zeroes",
+          "row-gap:34px" in _mobile,
+          "row-gap:0 leaks into the narrow layout and the panel touches the column above it")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:

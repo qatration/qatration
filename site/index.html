@@ -136,8 +136,25 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
   padding-left:16px;border-left:1px solid var(--line);align-self:center}
 
 /* hero */
-.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;
-  padding:74px 0 64px}
+/* THE PANEL IS LEVEL WITH THE WARNING BLOCK, and that needs the left column to be real
+   grid rows rather than one div. Centred, the panel was aligned to nothing: its top sat
+   122px above the red block, mid-paragraph, and its bottom in the gap between the buttons
+   and a note. `display:contents` promotes the column's children to grid items without
+   changing the markup, so `.term` can be placed on the warning block's row and stays there
+   at any width -- a pixel offset would drift the moment the text wrapped differently.
+
+   `row-gap:0` IS NOT TIDINESS. Once those children are rows, the 48px gap applies between
+   every one of them: measured, that grew the section by 470px. Zeroing it gives their own
+   margins back. See the 820px block for the other half of that. */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;column-gap:48px;row-gap:0;
+  align-items:start;padding:74px 0 64px}
+.hero > div:first-child{display:contents}
+.hero > div:first-child > *{grid-column:1}
+/* Row 4 is the warning block. That is a position, not a name, so `test_readme.py` reads
+   this file and fails if it stops being the fourth child -- otherwise inserting anything
+   above it would move the panel silently. `span 5` covers the rest of the column so the
+   panel is never squeezed into one short row. */
+.term{grid-column:2;grid-row:4 / span 5;align-self:start}
 .hero h1{font-size:clamp(34px,5vw,52px);font-weight:800;letter-spacing:-.02em;margin:16px 0 18px}
 .warnbox{font-size:16px;line-height:1.5;color:var(--fg);max-width:54ch;margin:0 0 26px;
   border:1px solid var(--attack);border-left:5px solid var(--attack);border-radius:8px;
@@ -238,7 +255,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 .auth b{color:var(--ink)}
 
 @media (max-width:820px){
-  .hero{grid-template-columns:1fr;gap:34px;padding:48px 0}
+  /* ONE COLUMN AGAIN, so the promotion above has to be undone or `grid-column:2` puts the
+     panel in a column that no longer exists. And `row-gap` has to come back by name: the
+     rule above sets it to 0, which silently ate the 34px between the column and the panel
+     here and shortened the section. Caught by measuring this width, not that one. */
+  .hero{grid-template-columns:1fr;row-gap:34px;padding:48px 0}
+  .hero > div:first-child{display:block}
+  .hero > div:first-child > *{grid-column:auto}
+  .term{grid-column:1;grid-row:auto}
   .finds{grid-template-columns:1fr}
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
