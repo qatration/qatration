@@ -55,6 +55,32 @@ def main():
             fails.append(f"{label}: {detail}")
 
     guard = _load("qat_guard", os.path.join(ROOT, "tools", "guard.py"))
+
+    def git_env(tmp, **extra):
+        """A git environment that says nothing about the machine running the tests.
+
+        CI failed on all four platforms while every suite passed locally, and the whole of the
+        difference was this: the checks around `_pending_stamp` inherited `os.environ`, so they
+        inherited whoever the machine thinks you are. A fresh CI checkout has no configured
+        identity, git guesses one from the host, and three checks went red for a property of
+        the runner. A build must never fail for that, and this file is where it started.
+
+        So the identity is pinned rather than borrowed, and taken from `guard.IDENTITY` because
+        a literal copied here would be a second definition of the rule under test. The config
+        files are pointed at a path that does not exist, so nothing on the developer's machine
+        reaches the temporary repository either -- a global `commit.gpgsign` or a hooks path
+        would otherwise walk straight in.
+        """
+        name, _, email = guard.IDENTITY.partition(" <")
+        env = dict(os.environ,
+                   GIT_CONFIG_GLOBAL=os.path.join(tmp, "none"),
+                   GIT_CONFIG_SYSTEM=os.path.join(tmp, "none"),
+                   GIT_AUTHOR_NAME=name, GIT_AUTHOR_EMAIL=email.rstrip(">"),
+                   GIT_COMMITTER_NAME=name, GIT_COMMITTER_EMAIL=email.rstrip(">"),
+                   GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                   GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        env.update(extra)
+        return env
     lic = _load("qat_licences", os.path.join(ROOT, "tools", "licences.py"))
 
     def scan(path, text):
@@ -252,9 +278,8 @@ def main():
     # `git` records, not about what a formatter prints.
     with tempfile.TemporaryDirectory() as d:
         def g(*a, **env):
-            e = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                     GIT_CONFIG_SYSTEM=os.path.join(d, "none"), **env)
-            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=e)
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                           env=git_env(d, **env))
 
         g("init", "-q", "-b", "main")
         g("config", "user.name", "QAtration")
@@ -304,10 +329,7 @@ def main():
     # timezone check firing because `git commit --date` sets only the AUTHOR date. Hence the
     # explicit UTC stamps below, and hence `refused_for`.
     with tempfile.TemporaryDirectory() as d:
-        genv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
-                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
-                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        genv = git_env(d)
 
         def g(*a):
             return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=genv)
@@ -445,8 +467,7 @@ def main():
     # "enforced in the one place a person can turn off" the wrong number of places.
     for mode in ("--tree", "--staged"):
         with tempfile.TemporaryDirectory() as d:
-            genv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                        GIT_CONFIG_SYSTEM=os.path.join(d, "none"))
+            genv = git_env(d)
 
             def gg(*a, **env):
                 return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
@@ -645,10 +666,7 @@ def main():
     # Three outcomes, and only the last is a failure: it ran and passed, it could not start
     # here and said so, or it ran and gave the wrong answer.
     with tempfile.TemporaryDirectory() as d:
-        henv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
-                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
-                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        henv = git_env(d)
 
         def hg(*a):
             return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=henv)
@@ -706,6 +724,22 @@ def main():
                   r.returncode == 0,
                   "the gutted hook still refused, so the check above is not testing the hook")
 
+    # ONE GIT ENVIRONMENT, AND THE REASON IS A RED MATRIX. This file built the environment for
+    # its throwaway repositories five separate times. Some copies pinned the dates, none pinned
+    # the identity, and the checks that ask git who it would record therefore asked the machine
+    # instead -- green here, red on every CI runner. The helper is the fix; a sixth copy would
+    # undo it quietly, so the count is checked rather than trusted.
+    # ASSEMBLED, NOT WRITTEN OUT: spelling the needle here would make this check count itself,
+    # which it duly did on the first run and reported three constructions where there was one.
+    _self_src = io.open(os.path.join(HERE, "test_guard.py"), encoding="utf-8").read()
+    _needle = "GIT_CONFIG_" + "GLOBAL="
+    check("the git environment is built in exactly one place",
+          _self_src.count(_needle) == 1,
+          f"{_self_src.count(_needle)} constructions — build it with git_env()")
+    check("...and it pins the identity rather than inheriting it",
+          "GIT_AUTHOR_NAME=name" in _self_src and "guard.IDENTITY.partition" in _self_src,
+          "git_env borrows whoever the machine says you are")
+
     # --- THE STAMP THIS COMMIT WOULD CARRY ---------------------------------------------------
     #
     # `_stamps("HEAD")` ran in every mode, and at pre-commit the only commit in reach is the
@@ -735,9 +769,14 @@ def main():
                 else:
                     os.environ[k] = v
 
+    # PINNED, NOT BORROWED. These left the name and email unset so git would fall back to
+    # configuration -- which is the project identity on the machine this was written on and
+    # something host-shaped on a CI runner. That is what turned the whole matrix red.
+    _who, _, _mail = guard.IDENTITY.partition(" <")
     _utc = dict(GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
                 GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00",
-                GIT_AUTHOR_NAME=None, GIT_AUTHOR_EMAIL=None)
+                GIT_AUTHOR_NAME=_who, GIT_AUTHOR_EMAIL=_mail.rstrip(">"),
+                GIT_COMMITTER_NAME=_who, GIT_COMMITTER_EMAIL=_mail.rstrip(">"))
 
     _local = dict(_utc, GIT_AUTHOR_DATE="2026-01-01T12:00:00+05:45",
                   GIT_COMMITTER_DATE="2026-01-01T12:00:00+05:45")
@@ -799,10 +838,7 @@ def main():
     # is still changeable is what has not left yet, so this runs on `--range`, which is exactly
     # the set `git push` is about to hand the remote.
     with tempfile.TemporaryDirectory() as d:
-        menv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
-                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
-                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
-                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        menv = git_env(d)
 
         def mg(*a):
             return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=menv)
