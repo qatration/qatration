@@ -680,6 +680,97 @@ def main():
                   r.returncode == 0,
                   "the gutted hook still refused, so the check above is not testing the hook")
 
+    # --- WHAT THE COMMITS SAY ----------------------------------------------------------------
+    #
+    # The gate read every blob, the author line and the timezone stamp, and never a word of the
+    # messages. Sixty-seven thousand characters of prose, written faster than anything they
+    # describe and reviewed by nobody, on the repository's front page and in every clone.
+    #
+    # It cost one: a `+03:00` survives in the message of the commit that removed that same
+    # offset from the code comments, because the sentence explaining the removal quoted the
+    # thing being removed. Already pushed by the time anyone looked.
+    #
+    # THE SCOPE IS THE DESIGN. A message does not exist at `--staged` time, and checking all of
+    # HEAD on `--tree` would fail every CI run forever over a sentence nobody can rewrite. What
+    # is still changeable is what has not left yet, so this runs on `--range`, which is exactly
+    # the set `git push` is about to hand the remote.
+    with tempfile.TemporaryDirectory() as d:
+        menv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                    GIT_CONFIG_SYSTEM=os.path.join(d, "none"),
+                    GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                    GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+
+        def mg(*a):
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True, env=menv)
+
+        mg("init", "-q", "-b", "main")
+        mg("config", "user.name", "QAtration")
+        mg("config", "user.email", "qatration@gmail.com")
+
+        def commit(msg, body="x"):
+            io.open(os.path.join(d, "f.txt"), "w", encoding="utf-8").write(body)
+            mg("add", "-A")
+            return mg("commit", "-qm", msg)
+
+        def refused_for(want, rng):
+            found = []
+            old_root = guard.ROOT
+            try:
+                guard.ROOT = d
+                guard.scan_messages(rng, found)
+            finally:
+                guard.ROOT = old_root
+            return [f for f in found if want in f]
+
+        commit("a first commit that says nothing at all", "one")
+        base = mg("rev-parse", "HEAD").stdout.strip()
+
+        # THE ONE THAT GOT OUT. An offset in prose is as permanent as one in a header.
+        commit("explain a fix\n\nthe machine stamped `+03:00` and nothing showed it", "two")
+        check("refused: a timezone offset quoted in a commit message",
+              bool(refused_for("+03:00", f"{base}..HEAD")),
+              "an offset in prose went unread")
+        check("...and the refusal says why an offset in a sentence still counts",
+              any("location" in f for f in refused_for("+03:00", f"{base}..HEAD")),
+              "the message does not explain itself")
+
+        base2 = mg("rev-parse", "HEAD").stdout.strip()
+        TOKEN = "ghp_" + "a" * 20
+        commit("paste the key that leaked: %s" % TOKEN, "three")
+        check("refused: a credential pasted into a commit message",
+              bool(refused_for("GitHub personal token", f"{base2}..HEAD")),
+              "a credential in a message went unread")
+
+        base3 = mg("rev-parse", "HEAD").stdout.strip()
+        commit("a message with \u0414\u043e\u0431\u0440\u0435 in it", "four")
+        check("refused: a Cyrillic character in a commit message",
+              bool(refused_for("Cyrillic", f"{base3}..HEAD")),
+              "our own prose in another script went unread")
+
+        base4 = mg("rev-parse", "HEAD").stdout.strip()
+        commit("an ordinary message about an ordinary change", "five")
+        check("allowed: a message that says nothing it should not",
+              not refused_for("commit", f"{base4}..HEAD"),
+              str(refused_for("commit", f"{base4}..HEAD")))
+
+        # SCOPE. The offset above is still in this throwaway history, and a range that excludes
+        # it must come back clean — otherwise every future push re-litigates a commit that
+        # cannot be changed, which is how a gate gets switched off.
+        check("a range that excludes an old bad message is clean",
+              not refused_for("+03:00", f"{base4}..HEAD"),
+              "the check re-reports history outside the range being pushed")
+
+    # And the wiring: read from the source, because the claim is that it runs on the push path
+    # and NOT on the other two.
+    _src = io.open(os.path.join(ROOT, "tools", "guard.py"), encoding="utf-8").read()
+    _main = _src[_src.index("def main("):]
+    check("scan_messages is called on the --range path",
+          "scan_messages(args.range" in _main,
+          "the push path does not check what the commits say")
+    check("...and not on --tree or --staged, which cannot fix what they would report",
+          'scan_messages("HEAD"' not in _main,
+          "checking all of HEAD would fail CI forever over an unrewritable commit")
+
     # --- AND THE HOOKS ACTUALLY CALL IT ------------------------------------------------------
     #
     # Every check above tests the scanner. None of them would notice if the hooks stopped

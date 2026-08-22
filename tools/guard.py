@@ -479,6 +479,62 @@ def _offset(iso_pair):
     return ""
 
 
+def scan_messages(rng, refusals):
+    """What the commits SAY, which nothing here read for the first thirty-eight of them.
+
+    A commit message is published text: it is on the repository's front page, in every clone,
+    in the Atom feed and in the API. It is also written faster and reviewed less than anything
+    it describes, which is the combination that gets things published by accident.
+
+    Measured when this was added: 67,581 characters across the history, and one of them was a
+    `+03:00` — the offset that had been removed from the code comments that same day, quoted
+    inside the message explaining the removal. Already pushed by then. A force-push would not
+    have helped: GitHub keeps the orphan reachable by its sha, and a clone keeps everything.
+
+    Held to the same rules as the files, because there is no argument for holding published
+    prose to less than published code.
+    """
+    proc = _git("log", "--format=%H%x00%B%x01", rng)
+    if proc.returncode != 0:
+        why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
+        refusals.append(f"the messages in {rng} could not be read, so nothing about them was "
+                        f"checked \u2014 {why}")
+        return
+
+    literals = _local_literals()
+    lit = re.compile(LITERAL_CYRILLIC[0])
+    # A timezone offset in prose is as permanent as one in a header, and quoting the thing you
+    # just removed is the way it comes back.
+    tz = re.compile(r"(?<![\d])[+-](?:0[1-9]|1[0-4]):[03]0\b")
+
+    for record in proc.stdout.split("\x01"):
+        if not record.strip():
+            continue
+        sha, _, body = record.strip().partition("\x00")
+        where = f"commit {sha[:8]}'s message"
+
+        m = lit.search(body)
+        if m:
+            refusals.append(f"{where}: a Cyrillic character ({m.group(0)})")
+
+        for label, pattern, _sample in CREDENTIALS:
+            m = re.search(pattern, body)
+            if m:
+                refusals.append(f"{where}: looks like a {label} ({m.group(0)[:12]}\u2026)")
+
+        m = tz.search(body)
+        if m:
+            refusals.append(f"{where}: quotes the timezone offset {m.group(0)}, and an offset "
+                            f"is a location whether it sits in a header or in a sentence")
+
+        if literals:
+            low = body.lower()
+            for literal in literals:
+                if literal.lower() in low:
+                    refusals.append(f"{where}: contains a string listed in .guard-local")
+                    break
+
+
 def _stamps(rng, refusals):
     """Who wrote these commits, and what place their timestamps name.
 
@@ -661,6 +717,12 @@ def main(argv=None):
     elif args.tree:
         scan_files(_tree_files(), _read_tree, refusals)
     else:
+        # MESSAGES ONLY ON THE PUSH PATH, and the scope is the point. A message does not
+        # exist yet at `--staged` time, and scanning all of HEAD on `--tree` would fail
+        # every CI run forever over a sentence in a commit nobody can rewrite. What can
+        # still be changed is what has not left yet, so the range is the right question:
+        # `git push` hands us exactly the commits the remote is about to receive.
+        scan_messages(args.range, refusals)
         scan_history(args.range, refusals)
         scan_files(_tree_files(), _read_tree, refusals)
 
