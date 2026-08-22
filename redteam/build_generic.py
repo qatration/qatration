@@ -1,6 +1,6 @@
 """Build the portable arsenal from the library, instead of maintaining a second copy.
 
-A run against an outside target used 22 attacks across 8 categories. The library holds 262
+A run against an outside target used 22 attacks across 8 categories. The library holds 383
 across 45. That gap was not a decision: `attacks.yaml` grew target by target while the practice fleet was built, and
 each new attack got `applies_to: [that bot]` because it was written against that bot. Sometimes
 that was necessary, because the attack names the bot's canary or one of its tools. Usually it

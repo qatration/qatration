@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from nemoguardrails import RailsConfig, LLMRails
 
 # Relative to THIS file, not to the machine it was written on and not to the caller's working
-# directory. The default used to be an absolute path on the machine it was written on, which is
+# directory. An absolute path here would only ever be right on one machine, which is
 # fine right up until somebody clones the repository, and then it is a config that cannot be
 # found by anyone else. A relative argument still resolves against the working directory, which
 # is what tools/fleet.sh relies on when it starts this from its own folder.

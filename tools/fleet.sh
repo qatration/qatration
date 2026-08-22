@@ -57,7 +57,22 @@ venv_python() {   # venv-dir -> the interpreter inside it, whichever layout this
   if [ -d "$d/Scripts" ]; then echo "$d/Scripts/python"; else echo "$d/bin/python"; fi
 }
 
-MAIN="${QATRATION_PYTHON:-$(venv_python "$HERE/dvla/env")}"
+# THE INTERPRETER THAT EXISTS, not one belonging to something this repository does not ship.
+# This defaulted to `dvla/env`, a virtualenv inside an untracked third-party practice app, so
+# `up`, `status` and `down` all exited 3 on every fresh clone -- and `AUTHORISED-USE.md` sends
+# newcomers here first, as the alternative to pointing the tool at a system they do not own.
+#
+# `httpbot` and `draftbot`, the two servers this drives, are pure standard library. Any python
+# runs them, so the honest default is the one already on the path.
+if [ -n "${QATRATION_PYTHON:-}" ]; then
+  MAIN="$QATRATION_PYTHON"
+elif [ -d "$HERE/dvla/env" ]; then
+  MAIN="$(venv_python "$HERE/dvla/env")"      # a local clone of the practice app, if present
+elif command -v python3 >/dev/null 2>&1 && python3 -c "pass" >/dev/null 2>&1; then
+  MAIN="python3"
+else
+  MAIN="python"
+fi
 SMOL="${SMOLAGENTS_PYTHON:-$(venv_python "$HERE/foreign-agent/foreign-agent-env")}"
 NEMO="${NEMO_PYTHON:-$(venv_python "$HERE/external/nemo/venv")}"
 PIDS="$HERE/out/.fleet-pids"
@@ -93,7 +108,7 @@ require_python() {
   if "$MAIN" -c "pass" >/dev/null 2>&1; then return 0; fi
   echo "  CANNOT CHECK: no usable interpreter at $MAIN" >&2
   echo "  Nothing below would be a measurement, so nothing is printed. Set \$QATRATION_PYTHON" >&2
-  echo "  to a python that exists, or create the environment this repo's README describes." >&2
+  echo "  to a python that runs. The servers this drives need only the standard library." >&2
   exit 3
 }
 

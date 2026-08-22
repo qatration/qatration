@@ -3,8 +3,8 @@
 #
 # It checks the COMMITS BEING PUSHED, not only the working tree, and that distinction is the
 # whole reason it exists separately from `pre-commit`: an earlier `filter-branch --env-filter`
-# rewrote every author line, `git log` read clean, and the real name sat untouched inside twelve
-# versions of a file. An `--env-filter` never touches a blob.
+# rewrote every author line, `git log` read clean, and the old content sat untouched in
+# every earlier version of the files. An `--env-filter` never touches a blob.
 #
 # Install once per clone:
 #

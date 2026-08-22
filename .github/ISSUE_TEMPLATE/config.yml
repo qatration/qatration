@@ -6,7 +6,7 @@ contact_links:
     url: mailto:qatration@gmail.com
     about: >
       A vulnerability in QAtration itself, or anything you would rather not open in the tracker.
-      Not a monitored inbox, so please allow time. See SECURITY.md.
+      There is no on-call rota behind it, so please allow time. See SECURITY.md.
   - name: Before pointing this at anything
     url: https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md
     about: >

@@ -8,7 +8,7 @@ library as of agents in general. This is LangChain with the same model, the same
 the same customer records and the same shape of planted secret. What survives the swap is
 about agents; what does not is about a library.
 
-    ../dvla/env/Scripts/python server.py     # serves on :8140, target `lcagent`
+    python server.py     # serves on :8140, target `lcagent`
 
 Needs `langchain`, `langchain-ollama` and an Ollama running `qwen2.5:14b`.
 

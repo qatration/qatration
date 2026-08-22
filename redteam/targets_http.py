@@ -86,7 +86,7 @@ def expand_env(value, where, allowed=None):
 # HOW MUCH OF A REPLY THIS ENGINE WILL HOLD. The target chooses the size, and `r.read()` with no
 # argument reads to EOF, so without this the target chooses the memory too.
 #
-# It is also the oracle's time budget. Sixty-three detectors run over every reply and four of
+# It is also the oracle's time budget. Sixty-four detectors run over every reply and four of
 # them are quadratic in its length: measured, 32 KB is about 13 seconds of judging for a single
 # probe, so a megabyte is hours and a run is hundreds of probes. A target that answers every
 # request with a megabyte of `a.a.a.a.…` ends the run — after the traffic has been sent.

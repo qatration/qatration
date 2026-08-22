@@ -47,8 +47,10 @@ qatration benign  --target-config mybot.yaml   # what fires when NOBODY is attac
 ```
 
 PyYAML and pyfiglet, nothing else. The model frameworks belong to the practice bots in this
-repository rather than to the engine, and install separately as
-`pip install "qatration[fleet]"`. Evidence goes to `./qatration-out` unless `$QATRATION_OUT`
+repository rather than to the engine, and install separately: `pip install "qatration[fleet]"`
+covers LangChain, and the two bots that need smolagents and nemoguardrails each want
+their own environment because those two cannot share one — see the note in
+`pyproject.toml`. Evidence goes to `./qatration-out` unless `$QATRATION_OUT`
 says otherwise.
 
 **Mint first, and the reason is not tidiness.** A canary is worth exactly the fact that nothing

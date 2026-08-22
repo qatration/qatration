@@ -115,13 +115,15 @@ credit that lives only in a comment is credit a packaged copy does not carry.
 WHERE A CITATION LIVES. In the hand-written arsenal files it sits in a comment beside the
 attack. It cannot in `redteam/attacks_generic.yaml`, which is generated: `build_generic.py`
 writes it with `yaml.safe_dump` and that drops every comment, and it is 362 of the 824 shipped
-attacks — the larger half, and the half a `pip install` user reads. So this file, not the
+attacks, and the portion a `pip install` user reads. So this file, not the
 comment, is the authoritative record of provenance, and `redteam/test_notice.py` checks it
 against the tree.
 
 `redteam/attacks_defended.yaml` holds five attacks whose framings were worked out against
-defended systems this project did not build, and where the defence in front of the model was
-known. That is what makes them worth having: each is recorded against the defence it defeats
+systems built to be attacked — a published exercise whose whole purpose is that people try
+to break it — where the defence in front of the model was known. `AUTHORISED-USE.md` says
+to point this tool only at something you own or have written permission to test, and that
+rule was not bent to produce these: a range that invites the attempt is the permission. That is what makes them worth having: each is recorded against the defence it defeats
 rather than as a payload that happened to work once. The characterisation is the value —
 obfuscation beats a keyword filter and backfires against an anomaly detector; semantic
 legitimacy beats an intent classifier; a well-tuned input guard resists even that.

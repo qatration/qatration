@@ -84,7 +84,7 @@ CREDENTIALS = [
 # a Cyrillic character and the six-character text of its escape are different bytes, and neither
 # pattern sees the other.
 #
-#   LITERAL — the character itself. Zero across all 414 tracked files today, which is the only
+#   LITERAL — the character itself. Zero across all 429 tracked files today, which is the only
 #   reason it is worth asserting; a check that starts life with exemptions never gets any.
 #
 #   ESCAPED — the same character written `\\uXXXX`, and the same thing at more layers.
@@ -502,9 +502,9 @@ def _stamps(rng, refusals):
 
     # A TIMEZONE OFFSET IS NOT A TIME, IT IS A PLACE. `git commit` stamps the machine's local
     # offset, and that field is as permanent as the diff: it survives a squash, it is in every
-    # fork and every mirror, and no later commit can take it back. Seven commits here carried
-    # one before anybody looked, because nothing looks — `git log` renders the local time by
-    # default and shows the author line, which was already correct.
+    # fork and every mirror, and no later commit can take it back. A commit carries one
+    # before anybody looks, because nothing looks — `git log` renders the local time by
+    # default and shows the author line, which is usually already correct.
     #
     # Set `TZ=UTC` in the environment, or commit through `.githooks`.
     stamps = _git("log", "--format=%ad|%cd", "--date=iso-strict", rng).stdout.splitlines()
@@ -518,8 +518,8 @@ def scan_history(rng, refusals):
     """Commits, not the working tree — the one place nobody looks.
 
     This distinction is why the check exists at all: a `filter-branch --env-filter` once rewrote
-    every author line, `git log` read clean, and the real name sat untouched inside twelve
-    versions of a file. An `--env-filter` never touches a blob.
+    every author line, `git log` read clean, and the old content sat untouched in every
+    earlier version of the files. An `--env-filter` never touches a blob.
     """
     _stamps(rng, refusals)
 
@@ -638,9 +638,9 @@ def main(argv=None):
     # WHO WROTE IT AND WHERE FROM, IN EVERY MODE. These two rules lived only in
     # `scan_history`, which only `--range` reaches, which only `pre-push` runs — a hook that
     # is opt-in, skippable and, until this pass, verified by grepping its own text. They are
-    # also the two rules whose subject a later commit cannot take back. A reviewer put an unrelated
-    # name and a local offset on a commit and walked it past every gate: `--staged` green,
-    # `--tree` green, and a gutted `pre-push`.
+    # also the two rules whose subject a later commit cannot take back. A commit carrying an unrelated author and
+    # a local offset walks past `--staged`, past `--tree`, and past a `pre-push` that has
+    # been emptied.
     #
     # `HEAD` rather than a range, because in `--staged` and `--tree` there is no range to
     # speak of and the question is about the commits that exist. On a shallow CI checkout

@@ -100,7 +100,7 @@ class Probe:
         63 detectors raise on a non-string `output`, and a detector that raises reports nothing,
         which is indistinguishable from a target that did nothing wrong.
 
-        Coercing here rather than defending in 63 detectors: the assumption belongs to the
+        Coercing here rather than defending in 64 detectors: the assumption belongs to the
         contract, so the contract is where it should be true.
 
         `None` becomes `""` and not `"None"`. The four characters of that word are evidence

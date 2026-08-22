@@ -19,8 +19,8 @@ def _severity_table():
     run, same finding, two severities — whichever artifact the reader opened decided. The client
     HTML said high and the target comparison said critical about the same row.
 
-    `REMEDIATION` wins because it is not a shorter list, it is the complete one: sixty-three of
-    the sixty-four detectors, each with the OWASP category and the remediation text that goes to
+    `REMEDIATION` wins because it is not a shorter list, it is the complete one: all sixty-four
+    detectors, each with the OWASP category and the remediation text that goes to
     a customer, assigned by the banded scheme `docs/oracle.md` sets out. Eight entries kept
     beside it were a copy nobody re-derived.
 

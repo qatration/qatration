@@ -201,7 +201,7 @@ million tokens, as of August 2026.
 
 **The dominant cost is your own system prompt, not the attacks.** An attack payload averages 43
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,389 requests that is 1.4M input tokens of your own instructions — about
+single request. At 1,407 requests that is 1.4M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
 
 Two consequences worth acting on:

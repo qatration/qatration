@@ -348,7 +348,7 @@ changes that: `POST /runs` takes a config and returns a job id, `GET /runs/<id>`
 happened to it, `GET /runs/<id>/report` serves the quick report once there is one.
 
 What it does not have is stated in its own docstring rather than left for somebody to discover:
-no authentication, no per-caller quota, no rate limit on the intake itself. A half-built
+no per-caller authentication, no per-caller quota and no rate limit on the intake itself — it refuses to start without a shared secret, which is a different thing. A half-built
 service whose gaps are undocumented is worse than no service, because the gaps get assumed away.
 
 **The part that cannot be bolted on afterwards is that the local rule inverts.** On this

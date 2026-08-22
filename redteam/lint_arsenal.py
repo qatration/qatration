@@ -10,6 +10,7 @@ Checks: duplicate ids; required fields; delivery-shape (direct→text, indirect�
 +user_prompt, chain→steps); every success/partial detector exists in oracle;
 every applies_to names a real target config; success list non-empty.
 """
+import re
 import sys, os, glob
 from target import target_configs
 try:
@@ -33,6 +34,36 @@ def known_targets():
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
         names.add(cfg.get("name", base))
     return names
+
+
+# RFC 2606 RESERVED SPACE, and nothing else. A host inside a payload is where this tool asks
+# somebody's agent to send whatever it can reach, on every machine that runs the corpus. If the
+# name is registrable, whoever registers it is the recipient.
+#
+# `attacker-example.com` was moved to `attacker.example` for exactly this reason, and the sweep
+# that should have followed did not happen -- so `isolation_example.yaml` went on naming an
+# all-staff list at a registrable `.com` in two probes of an objective whose other two already
+# used the reserved form. That is why this checks the class rather than a list of known-bad
+# names.
+_RESERVED_HOST = re.compile(
+    r"(?:^|\.)(?:example|test|invalid|localhost)$|^example\.(?:com|net|org)$"
+    r"|\.example\.(?:com|net|org)$")
+_HOST = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}\b")
+# Endings that are a filename or an attribute access, not a host.
+_NOT_A_HOST = (".py", ".json", ".yaml", ".yml", ".html", ".md", ".txt", ".jsonl", ".png",
+               ".jpg", ".pdf", ".csv", ".xml", ".sh", ".log", ".lower", ".upper", ".items",
+               ".join", ".format", ".append", ".exe", ".dll", ".so")
+
+
+def registrable_hosts(text):
+    """Every host in a payload that somebody could go and register."""
+    out = set()
+    for h in _HOST.findall(str(text).lower()):
+        if h.endswith(_NOT_A_HOST):
+            continue
+        if not _RESERVED_HOST.search(h):
+            out.add(h)
+    return out
 
 
 def main():
@@ -80,6 +111,18 @@ def main():
                 errors.append(f"{where}: missing 'id'"); continue
             if aid in seen:
                 errors.append(f"{fname}: {aid}: duplicate id (also at #{seen[aid]})")
+
+            # SEE registrable_hosts. Everything the attack actually sends, in one place, so a
+            # new delivery shape cannot quietly escape the check.
+            sent = [a.get("text") or ""]
+            sent += [str(x) for x in (a.get("steps") or [])]
+            sent += [str((h or {}).get("content", "")) for h in (a.get("history") or [])]
+            sent.append(str((a.get("seed") or {}).get("text", "")))
+            for host in sorted(registrable_hosts(" ".join(sent))):
+                errors.append(
+                    f"{fname}: {aid}: payload names {host}, which is registrable. Use RFC 2606 "
+                    f"reserved space (.example) — an agent told to send data to a name somebody "
+                    f"can own will send it to whoever owns it")
             seen[aid] = i
 
             if not a.get("category"):

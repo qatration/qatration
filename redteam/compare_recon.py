@@ -1,7 +1,7 @@
 """
 Fleet hygiene — every target's recon profile in one table.
 
-An operator rarely has one bot. Nine profiles read one at a time are nine separate errands;
+An operator rarely has one bot. Ten profiles read one at a time are nine separate errands;
 side by side they answer the question a reader actually has, which is not "is this bot
 vulnerable" but "which of my bots should I look at first, and what is wrong with them that
 I could have found without an attack".

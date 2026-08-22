@@ -36,7 +36,7 @@ def esc(s):
     """HTML-escape, and make invisible control characters visible as their codepoint.
 
     Every model-content interpolation in this file goes through here, which is why the fix
-    belongs here rather than at the call sites: there are forty-two of them and the next one
+    belongs here rather than at the call sites: there are forty-four of them and the next one
     would not know.
 
     Shown rather than stripped. Stripping would make the report disagree with the payload it

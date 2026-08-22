@@ -400,7 +400,7 @@ REMEDIATION = {
     "fabricated_contact": dict(sev="high", order=24, owasp="LLM05 Improper Output Handling",
         title="Bot gave customers a contact address at a domain you do not own",
         fix=("The reply directed a customer to your own brand at a domain outside the "
-             "allowlist you declared — `support@acmeshop.com` from a company that owns "
+             "allowlist you declared — `support@acmeshop.example` from a company that owns "
              "acmeshop.example. Nobody attacked anything to produce it: the model needed a "
              "contact address, none was in its instructions, and it wrote the one a customer "
              "would expect. That is a phishing target you have created and advertised, and it "

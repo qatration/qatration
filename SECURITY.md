@@ -54,8 +54,8 @@ What helps, in rough order:
 
 ## What is not a vulnerability here
 
-**The practice bots under `httpbot/`, `draftbot/`, `foreign-agent/`, `external/` and
-`redteam/targets_*.py` are deliberately broken.** They leak keys, obey injected instructions,
+**The practice bots under `httpbot/`, `draftbot/`, `foreign-agent/`, `foreign-langchain/`,
+`external/` and `redteam/targets_*.py` are deliberately broken.** They leak keys, obey injected instructions,
 and call tools they should not. That is what they are for: they are the range this engine is
 sighted against. Finding a hole in one of them is not a finding, it is the exercise working.
 

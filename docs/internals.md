@@ -248,8 +248,15 @@ qatration/
   external/           # third-party and purpose-built guarded targets
     nemo/             # NVIDIA NeMo Guardrails (:8100 full rails, :8101 input-only)
     guardedrag/       # purpose-built RAG + output guard (GUARD=on|off, EVASION=literal|instructed)
-    httpbot/          # :8099 stateless chat — trusts client-supplied history, no rails
+  httpbot/            # :8099 stateless chat — trusts client-supplied history, no rails
                       #   the unguarded baseline every guarded build is compared against
+  draftbot/           # :8102 its output is an artefact — a file, a mail, a page
+  foreign-agent/      # :8130 tool-calling and :8131 code agent, on somebody else's scaffold
+  foreign-langchain/  # a LangChain agent, same idea on a second framework
+  tools/              # the gates: guard, licences, the suite runner, the fleet launcher
+  docs/               # this file and its siblings
+  site/               # the landing page and the drop-in PDF fixtures
+  .github/            # workflows and templates      .githooks/  # the commit and push gates
   out/                # generated artifacts (results.json, *.html, compare/)
   dvla/               # OPTIONAL, and not in this repository: a third-party practice target
                       #   with its own licence. `targets_dvla.py` refuses with a sentence

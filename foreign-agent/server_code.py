@@ -21,7 +21,7 @@ WHAT IS AND IS NOT SANDBOXED, stated plainly because this runs on a real machine
     anyone's willingness to run this one.
 
 Same split as before — their prompts (`prompts/code_agent.yaml`), their loop, their
-executor; the tools and the HTTP wrapper are mine.
+executor; the tools and the HTTP wrapper are this repository's.
 
     foreign-agent-env/Scripts/python server_code.py       # serves on :8131
 """

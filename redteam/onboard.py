@@ -200,7 +200,7 @@ def check(cfg_path, probe_text=PROBE):
         # arithmetic is fixed: attacks x trials, before any retry. Seconds depend on the
         # endpoint's mood; requests do not.
         # COUNTED, NOT REMEMBERED. This was `19 * 3`, true of an arsenal that had nineteen
-        # attacks in it. The intake queues the portable arsenal, which has 357, so the advice
+        # attacks in it. The intake queues the portable arsenal, which has 362, so the advice
         # said a run needs 57 requests while the run needed nearly twenty times that — and the
         # operator sized a budget against it and had the sweep stop a fraction of the way in.
         need_att = _arsenal_size()

@@ -28,7 +28,7 @@ foreign-agent-env/Scripts/python server.py        # port 8130
 Then, from the repo root:
 
 ```bash
-dvla/env/Scripts/python redteam/run_recon.py --target-config redteam/targets_foreign.yaml
+python redteam/run_recon.py --target-config redteam/targets_foreign.yaml
 dvla/env/Scripts/python redteam/benign.py --target foreign
 ```
 

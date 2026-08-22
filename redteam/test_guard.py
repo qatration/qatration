@@ -243,10 +243,10 @@ def main():
 
     # --- A COMMIT'S TIMEZONE, WHICH IS A PLACE AND NOT A TIME -------------------------------
     #
-    # Seven commits here were stamped with a local offset before anybody looked, and nothing
-    # looked because nothing shows it: `git log` renders the local time by default, and the
-    # author line — the field people do check — was already correct. The offset is as permanent
-    # as the diff and no later commit can take it back.
+    # `git commit` stamps the machine's local offset, and nothing surfaces it: `git log`
+    # renders local time by default, and the field people do check — the author line — is
+    # usually already correct. So the one part of a commit that says WHERE it was made is the
+    # part nobody reads, and it is as permanent as the diff.
     #
     # Built as a real repository rather than by parsing strings, because the claim is about what
     # `git` records, not about what a formatter prints.
@@ -437,8 +437,9 @@ def main():
     # Who wrote a commit, and what place its stamp names, were reachable only through
     # `scan_history`, i.e. only through `--range`, i.e. only through `pre-push` — opt-in,
     # skippable, and at the time verified by grepping its own text. CONTRIBUTING says CI is the
-    # part that cannot be skipped, and CI runs `--tree`. A reviewer put a real name and a
-    # `+05:45` stamp on a commit and walked it to a bare remote with everything else green.
+    # part that cannot be skipped, and CI runs `--tree`. A commit carrying an unrelated author
+    # and a local offset walks past `--staged`, past `--tree`, and past a `pre-push` that has
+    # been emptied — shown on a throwaway repository, which is the only place to show it.
     #
     # These two fields are also the ones a later commit cannot take back, which is what makes
     # "enforced in the one place a person can turn off" the wrong number of places.

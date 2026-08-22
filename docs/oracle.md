@@ -307,8 +307,13 @@ data surfacing.
 
 ### Why this catalogue is not shaped like a scanner's
 
-The result is roughly **4 critical, 24 high, 20 medium**, and the middle is the widest band
-rather than the bottom. That is not a distribution to be corrected.
+The result is **9 critical, 28 high, 27 medium** across all 64 detectors, and the middle two
+bands carry it: `high` and `medium` are within one of each other, and neither is the bottom
+of a pyramid. That is not a distribution to be corrected.
+
+Recounted from `defense_report.REMEDIATION`, the single table `compare_targets` reads for a
+severity. It said 4 / 24 / 20 for long enough to stop summing to the detector count the same
+page states twice, which is the drift this section is otherwise arguing against.
 
 A general scanner's pyramid is wide at the base because most of what it reports is advisory: a
 missing header, a weak cipher suite, a deviation from a best practice. **There is no advisory

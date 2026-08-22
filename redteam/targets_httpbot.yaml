@@ -48,7 +48,7 @@ oracle_context:
 
   # The bot's own support address is the company's, not a customer's.
   allowed_domains:
-    # AcmeShop, not ourstore.com — this list was copied from citebot and never corrected,
-    # so the one target whose bot invents `support@acmeshop.com` had an allowlist that
+    # AcmeShop, not ourstore.example — this list was copied from citebot and never corrected,
+    # so the one target whose bot invents `support@acmeshop.example` had an allowlist that
     # could not recognise its own name.
     - acmeshop.example
