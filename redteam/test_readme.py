@@ -703,20 +703,90 @@ def main():
               _sizes == [16, 32, 48, 64],
               f"the ico holds {_sizes} — re-run: python tools/favicon.py")
 
-    # The tile colour is the light theme's --accent. White on the dark theme's accent is about
-    # 2.2:1 and unreadable, so this is the darker of the two on purpose; what is checked is
-    # that the two have not drifted apart.
+    # THE LETTERS carry the brand colour, not the tile: the mark is the dark theme's --accent on
+    # a ground dark enough to hold it. So the tie to the stylesheet is on INK. The tile is only
+    # required to be readable from the source, because it is what the counters are punched with
+    # and a change to it that nothing re-rendered would leave the holes the wrong colour.
     _fav_src = io.open(os.path.join(ROOT, "tools", "favicon.py"), encoding="utf-8").read()
     _tile = re.search(r'^TILE\s*=\s*"(#[0-9a-fA-F]{6})"', _fav_src, re.M)
-    check("the generator names its tile colour where it can be read", bool(_tile),
-          "TILE is not a module-level literal any more")
+    _ink = re.search(r'^INK\s*=\s*"(#[0-9a-fA-F]{6})"', _fav_src, re.M)
+    check("the generator names its two colours where they can be read", bool(_tile and _ink),
+          "TILE and INK must stay module-level literals")
     _accents = re.findall(r"--accent:\s*(#[0-9a-fA-F]{6})", _site)
     check("the stylesheet still defines an accent", bool(_accents), "no --accent found")
-    if _tile and _accents:
+    if _ink and _accents:
         check("the icon's blue is one the stylesheet actually uses",
-              _tile.group(1).lower() in {a.lower() for a in _accents},
-              f"icon tile {_tile.group(1)} is not among {sorted(set(_accents))} — "
+              _ink.group(1).lower() in {a.lower() for a in _accents},
+              f"icon ink {_ink.group(1)} is not among {sorted(set(_accents))} — "
               f"re-run: python tools/favicon.py")
+    if _tile and _ink:
+        # A mark the tile cannot carry is a mark nobody sees. WCAG's own formula, because
+        # "looks fine on my monitor" is the reasoning that picks a pairing nobody measured.
+        def _lum(h):
+            def c(v):
+                v /= 255.0
+                return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+            r, g, b = (int(h[i:i + 2], 16) for i in (1, 3, 5))
+            return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b)
+        _a, _b = sorted((_lum(_tile.group(1)), _lum(_ink.group(1))))
+        _ratio = (_b + 0.05) / (_a + 0.05)
+        check("the letters are readable on the tile they sit on",
+              _ratio >= 4.5, f"contrast is {_ratio:.1f}:1, below 4.5:1")
+
+    # ONE SOURCE, TWO OUTPUTS -- checked, not asserted. The first icon drew the vector and the
+    # raster through separate code and they disagreed: SVG centres a stroke on its path, Pillow
+    # draws an ellipse outline inward from the bounding box, so the .svg and the .ico shipped
+    # different-sized letters. Nothing caught it because nothing compared them; it surfaced as
+    # somebody asking why one letter looked bigger than the other.
+    #
+    # So the shipped .svg is parsed back and its numbers matched against the generator's data,
+    # in order. Every coordinate or the check is worthless -- a subset would pass a file that
+    # had lost a contour.
+    import xml.etree.ElementTree as _ET
+    import importlib.util as _ilu
+    # Imported rather than re-parsed, and safe to import: the module defines constants at top
+    # level and pulls Pillow only inside the functions that raster, so this costs no dependency.
+    _spec = _ilu.spec_from_file_location("qat_favicon",
+                                         os.path.join(ROOT, "tools", "favicon.py"))
+    _favmod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_favmod)
+    _glyphs = _favmod.GLYPHS
+    check("the generator still carries the glyph outlines as data",
+          bool(_glyphs) and all(c for c in _glyphs), "GLYPHS is empty")
+
+    _svg_path = os.path.join(ROOT, "site", "favicon.svg")
+    if os.path.exists(_svg_path):
+        _svg = io.open(_svg_path, encoding="utf-8").read()
+        try:
+            _root = _ET.fromstring(_svg)
+        except _ET.ParseError as e:
+            _root = None
+            check("the shipped favicon.svg is well-formed", False, str(e))
+        if _root is not None:
+            check("the shipped favicon.svg is well-formed", True)
+            _ns = "{http://www.w3.org/2000/svg}"
+            _p = _root.find(_ns + "path")
+            _r = _root.find(_ns + "rect")
+            check("...and it has the tile and the letters", _p is not None and _r is not None,
+                  "expected one <rect> and one <path>")
+            if _p is not None and _r is not None:
+                check("the svg paints the same two colours the generator names",
+                      _r.get("fill") == (_tile.group(1) if _tile else None)
+                      and _p.get("fill") == (_ink.group(1) if _ink else None),
+                      f"svg has tile={_r.get('fill')} ink={_p.get('fill')}")
+                # evenodd is what makes the counters holes; nonzero would fill the Q solid.
+                check("...with the fill rule that punches the counters",
+                      _p.get("fill-rule") == "evenodd", f"fill-rule={_p.get('fill-rule')}")
+                _want = [round(v, 2) for c in _glyphs for seg in c
+                         for pt in seg[1:] for v in pt]
+                _got = [float(x) for x in re.findall(r"-?\d+\.\d+", _p.get("d") or "")]
+                check("the vector and the raster are drawn from the same coordinates",
+                      _got == _want,
+                      f"svg carries {len(_got)} numbers, the glyph data {len(_want)}"
+                      if len(_got) != len(_want) else "same count, different values")
+                check("...and every contour is closed",
+                      (_p.get("d") or "").count("Z") == len(_glyphs),
+                      f"{(_p.get('d') or '').count('Z')} subpaths for {len(_glyphs)} contours")
 
     # And the page has to point at what was generated, or none of the above is reachable.
     for _rel, _attr in (("favicon.svg", 'href="/favicon.svg"'),

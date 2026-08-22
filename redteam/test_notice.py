@@ -78,6 +78,11 @@ REPRODUCTIONS = [
       "external/nemo/config_inputonly/prompts.yml", "redteam/isolation_nemo.yaml"}),
     ("AKIDEXAMPLE", "AWS published SigV4 test vectors",
      {"redteam/test_signing.py"}),
+    # NOT TEXT THIS TIME, but the same obligation and the same failure mode. The icon's letters
+    # are outlines lifted from a typeface; the credit is worth nothing if the generator can be
+    # redrawn from another font, or dropped entirely, without this noticing.
+    ("Roboto Black, Version 2.137", "Roboto glyph outlines, Google",
+     {"tools/favicon.py"}),
     # ASSEMBLED FROM SPLIT LITERALS, so only the half-string is greppable and only in the
     # detector. The attacks name the markers without carrying them, which is the point: a
     # literal EICAR in a repository gets the clone quarantined.
