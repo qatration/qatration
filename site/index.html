@@ -68,12 +68,12 @@
 .evid li{padding:0 0 0 14px;margin-bottom:9px;font-size:15px;line-height:1.5;color:var(--muted)}
 .evid li:last-child{margin-bottom:0}
 .evid b{color:var(--ink);font-family:var(--mono);font-weight:700}
-/* NO WORD ALONE ON A LINE. One of these read "...with no attack at" / "all." -- a last
-   line 3% of the block. Widening cannot help: the block already spans the column.
-   `text-wrap:pretty` moved it to 6%, which is not a fix; `balance` evens the lines and
-   gives 55/44. Only here: measured on the headline, the intro and the warning block it
-   changed nothing, so there is nothing there for it to earn. */
-.evid > *{text-wrap:balance}
+/* THE BREAK GOES WHERE THE SENTENCE BREAKS. `text-wrap:balance` removed the orphan -- one
+   line was 97% and the next 3%, the word "all." alone -- but it evened the lines by
+   cutting mid-clause, after "instructions". Breaking at the comma reads better, and that
+   is not something balance can be asked for: it is achieved by making the phrase after the
+   comma unsplittable, which the markup does. Measured: 97/3 plain, 55/44 balanced, 77/23
+   with the tail held together. The other two lines have no orphan either way. */
 /* The small print goes to the same edge as everything above it. It is the widest measure
    on the page at about 83 characters, past the 75 usually recommended -- accepted because
    these are two lines of caption, and the alternative is the one block on the page that
@@ -211,6 +211,8 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 /* A SECRET DOES NOT WRAP. Split across two lines the token stops reading as one value,
    which is the whole point of the panel: this exact string came back out of the bot. */
 .leak{color:var(--attack);font-weight:700;white-space:nowrap}
+/* Holds a phrase together so a line breaks before it rather than inside it. */
+.keep{white-space:nowrap}
 .cursor{display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;
   margin-left:2px;animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
@@ -229,7 +231,16 @@ section{padding:76px 0;border-top:1px solid var(--line)}
    what they already had. A single shared floor was tried first and took 34px off
    `.grp-note` at 1000px: a change that improved the big screen by making a smaller one
    worse, which is why both were measured. */
-.sec-head{max-width:max(52ch, var(--text-col));margin-bottom:36px}
+/* A HEADLINE WANTS ITS OWN MEASURE. This block used to cap the heading and its paragraph
+   together at the shared text edge, and at 33px that is about 35 characters -- three short
+   lines in a wide box, which reads as cramped even though the box is the right width. The
+   container stops constraining; the two children take their own.
+
+   40ch measured against 44 and 47: above 40 one heading collapses onto a single 861px
+   line, about 51 characters of display type. At 40 every heading is one or two lines. */
+.sec-head{max-width:none;margin-bottom:36px}
+.sec-head h2{max-width:40ch}
+.sec-head p{max-width:max(52ch, var(--text-col))}
 .sec-head h2{font-size:clamp(25px,3.4vw,33px);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
 .sec-head p{color:var(--muted);margin:0}
 
@@ -337,8 +348,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <ul class="evid">
         <li><b>46</b> attacks typed into the chat box of a guarded bot: none got through.
           <b>One</b> carried inside a retrieved document: through every time.</li>
-        <li><b>5 of 9</b> bots handed over their own instructions to a plain request, with
-          no attack at all.</li>
+        <li><b>5 of 9</b> bots handed over their own instructions to a plain request, <span class="keep">with no attack at all.</span></li>
         <li><b>Two</b> reported a database restarted. Neither had a tool that could restart
           anything.</li>
       </ul>
