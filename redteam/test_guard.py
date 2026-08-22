@@ -477,25 +477,51 @@ def main():
                     _fn = None
             finally:
                 guard.ROOT = old_root
+            # THE LABEL USED TO SAY `{mode} mode reaches ...` and this calls `_stamps`
+            # directly, so it never touched the dispatch: it passed under the old wiring, it
+            # passes under the new one, and it would pass with no wiring at all. What it does
+            # prove is that the history rule itself refuses a stranger and a local offset.
+            # Which mode asks which question is checked against the source, below.
             if not getattr(guard, "_stamps", None):
-                check(f"{mode} mode reaches the author rule (via _stamps, one implementation)",
-                      False, found[0])
-                check(f"{mode} mode reaches the timezone rule", False, found[0])
+                check(f"[{mode}] the history author rule exists at all", False, found[0])
+                check(f"[{mode}] the history timezone rule exists at all", False, found[0])
                 continue
-            check(f"{mode} mode reaches the author rule (via _stamps, one implementation)",
+            check(f"[{mode}] the history rule refuses an unrelated author",
                   any("not by the project identity" in f for f in found), str(found))
-            check(f"{mode} mode reaches the timezone rule",
+            check(f"[{mode}] the history rule refuses a local offset",
                   any("not UTC" in f for f in found), str(found))
-    # And the wiring: `main` must call it whatever the mode, or the two checks above test a
-    # function nothing runs. Read from the source, because that is the claim.
+    # AND THE WIRING, which is the claim the two checks above do not make. This used to read
+    # `main() calls _stamps before it branches on the mode`, and that arrangement is what put
+    # one retrospective check in front of every mode -- so a single commit with a local offset
+    # refused every commit after it, the amend that fixes it included. The rule is not "one
+    # call in front"; it is that NO ARM IS WITHOUT A STAMP RULE, each asking what it can act on.
     _main_src = io.open(os.path.join(ROOT, "tools", "guard.py"), encoding="utf-8").read()
+    _guard_src = _main_src
     _main_src = _main_src[_main_src.index("def main("):]
-    # `.find`, not `.index`: a build without the call must give a red check with a reason, not
-    # a ValueError out of the test harness that ends the run and hides everything after it.
-    _at, _branch = _main_src.find("_stamps("), _main_src.find("if args.staged:")
-    check("...and main() calls _stamps before it branches on the mode",
-          0 <= _at < _branch,
-          "main() never calls it" if _at < 0 else "the stamp rules are inside one branch")
+    # `.find`, not `.index`: a build with an arm missing must give a red check with a reason,
+    # not a ValueError out of the harness that ends the run and hides everything after it.
+    _cuts = [_main_src.find(m) for m in ("if args.staged:", "elif args.tree:", "\n    else:")]
+    check("main() still branches three ways on the mode", all(c > 0 for c in _cuts)
+          and _cuts == sorted(_cuts), f"could not locate the arms: {_cuts}")
+    if all(c > 0 for c in _cuts) and _cuts == sorted(_cuts):
+        _end = _main_src.find("if refusals:", _cuts[2])
+        _arms = {"--staged": _main_src[_cuts[0]:_cuts[1]],
+                 "--tree": _main_src[_cuts[1]:_cuts[2]],
+                 "--range": _main_src[_cuts[2]:_end if _end > 0 else len(_main_src)]}
+        check("--staged reaches a stamp rule",
+              "_pending_stamp(" in _arms["--staged"],
+              "pre-commit would write a commit nothing had looked at")
+        check("--tree reaches a stamp rule",
+              "_stamps(" in _arms["--tree"],
+              "CI, the part CONTRIBUTING says cannot be skipped, stopped checking")
+        check("--range reaches a stamp rule",
+              "_stamps(" in _arms["--range"] or "scan_history(" in _arms["--range"],
+              "pre-push stopped checking who wrote the range")
+        # ...and the indirect one is really indirect: `scan_history` must still call it.
+        _sh = _guard_src[_guard_src.index("def scan_history("):]
+        check("...and --range's route to it, scan_history, still calls _stamps",
+              "_stamps(rng, refusals)" in _sh[:_sh.find("\ndef ", 1)],
+              "scan_history no longer runs the stamp rules")
 
     # --- AN EXEMPTION MUST NOT BE WIDER THAN ITS DATA ----------------------------------------
     #
@@ -679,6 +705,84 @@ def main():
             check("...and this check would notice if the hook were gutted to `exit 0`",
                   r.returncode == 0,
                   "the gutted hook still refused, so the check above is not testing the hook")
+
+    # --- THE STAMP THIS COMMIT WOULD CARRY ---------------------------------------------------
+    #
+    # `_stamps("HEAD")` ran in every mode, and at pre-commit the only commit in reach is the
+    # previous one. So one commit with a local offset refused every commit after it, INCLUDING
+    # the amend that fixes it, and the only way out was the `--no-verify` the refusal text tells
+    # you never to pass. Found by making that commit.
+    #
+    # It now reads forward at `--staged`: `git var` resolves the identity and date exactly as
+    # the commit will record them, which catches a local offset one commit EARLIER than the
+    # rule it replaces -- before the object exists.
+    #
+    # `git var` reads config and environment only, so this needs no repository of its own.
+    def _pending(**env):
+        keep = {k: os.environ.get(k) for k in env}
+        os.environ.update({k: v for k, v in env.items() if v is not None})
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+        try:
+            found = []
+            guard._pending_stamp(found)
+            return found
+        finally:
+            for k, v in keep.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    _utc = dict(GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+                GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00",
+                GIT_AUTHOR_NAME=None, GIT_AUTHOR_EMAIL=None)
+
+    _local = dict(_utc, GIT_AUTHOR_DATE="2026-01-01T12:00:00+05:45",
+                  GIT_COMMITTER_DATE="2026-01-01T12:00:00+05:45")
+    check("refused: the machine would stamp the commit with a local offset",
+          any("+05:45" in f for f in _pending(**_local)),
+          "a local offset is only caught after the commit exists")
+    check("...and the refusal says how to fix it before the object is written",
+          any("TZ=UTC" in f for f in _pending(**_local)),
+          "the refusal does not say what to do")
+
+    check("allowed: a UTC stamp", not _pending(**_utc), str(_pending(**_utc)))
+
+    # `-0000` is git's "timezone unknown" and says less about a location than `+00:00` does.
+    # The judgement lives in `_offset` and must not be re-decided here.
+    check("allowed: -0000, which is an absence and not a place",
+          not _pending(**dict(_utc, GIT_AUTHOR_DATE="2026-01-01T12:00:00-00:00",
+                              GIT_COMMITTER_DATE="2026-01-01T12:00:00-00:00")),
+          "a missing timezone was read as a location")
+
+    check("refused: the commit would carry someone else's name",
+          any("not by the project identity" in f
+              for f in _pending(**dict(_utc, GIT_AUTHOR_NAME="Someone Else",
+                                       GIT_AUTHOR_EMAIL="someone@example.com"))),
+          "an unrelated author walks past pre-commit")
+
+    # And the wiring, because the claim is about WHICH mode asks WHICH question.
+    _g = io.open(os.path.join(ROOT, "tools", "guard.py"), encoding="utf-8").read()
+    _m = _g[_g.index("def main("):]
+    _staged_arm = _m[_m.index("if args.staged:"):_m.index("elif args.tree:")]
+    _tree_arm = _m[_m.index("elif args.tree:"):_m.index("    else:")]
+    check("--staged asks what the commit WOULD carry",
+          "_pending_stamp(refusals)" in _staged_arm,
+          "pre-commit does not check the stamp it is about to write")
+    check("...and does not ask about history it cannot let you fix",
+          "_stamps(" not in _staged_arm,
+          "a bad commit would lock pre-commit against its own repair")
+    check("--tree still reads history, as the force-push backstop",
+          '_stamps("HEAD"' in _tree_arm,
+          "CI stopped checking who wrote the history")
+
+    # One identity, named once. Writing the literal a second time is the copy this project
+    # keeps finding in its own code.
+    check("the project identity is a constant, not a repeated literal",
+          _g.count('"QAtration <qatration@gmail.com>"') == 1,
+          f"the identity literal appears {_g.count(chr(34) + 'QAtration <qatration@gmail.com>' + chr(34))} times")
 
     # --- WHAT THE COMMITS SAY ----------------------------------------------------------------
     #

@@ -56,6 +56,11 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL = os.path.join(ROOT, ".guard-local")
 
+# The one identity allowed to author a commit here. A constant because the check that reads
+# history and the check that reads the pending stamp both need it, and a second literal is
+# a second rule that drifts.
+IDENTITY = "QAtration <qatration@gmail.com>"
+
 # (name, pattern, a string the pattern MUST match). The third element is not documentation: it
 # is fed to the pattern by `--selftest`, in this process, every run. A scanner nobody has seen
 # catch anything is a scanner that reports clean because it is broken.
@@ -535,6 +540,50 @@ def scan_messages(rng, refusals):
                     break
 
 
+def _pending_stamp(refusals):
+    """The stamp git is about to write, rather than the one it already wrote.
+
+    `_stamps("HEAD")` ran here before, and it was retrospective in a place where nothing
+    retrospective can be acted on: at `pre-commit` the only commit it can see is the previous
+    one. So a single commit with a local offset refused every commit after it, the amend that
+    would have fixed it included, and the only way out was the `--no-verify` its own refusal
+    text tells you never to pass. A check that cannot be satisfied is a check that gets removed.
+
+    What `pre-commit` CAN act on is the commit it is about to make, and that is knowable:
+    `git var` resolves the identity and the date exactly as the commit will record them,
+    GIT_AUTHOR_DATE and TZ included. So this catches a local offset one commit EARLIER than
+    the rule it replaces -- before the object exists, when setting TZ=UTC still costs nothing.
+    """
+    for kind in ("AUTHOR", "COMMITTER"):
+        proc = _git("var", f"GIT_{kind}_IDENT")
+        if proc.returncode != 0 or not proc.stdout.strip():
+            why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
+            refusals.append(f"the {kind.lower()} stamp this commit would carry could not be "
+                            f"read, so nothing about it was checked \u2014 {why}")
+            continue
+
+        ident = proc.stdout.strip()
+        # "Name <email> 1787428595 +0300" -- identity, epoch, offset.
+        _, _, offset = ident.rpartition(" ")
+        who = ident[:ident.rindex(">") + 1] if ">" in ident else ident
+
+        if who != IDENTITY:
+            refusals.append(f"this commit would be authored by {who}, not by the project "
+                            f"identity")
+
+        # THE SAME JUDGE THE HISTORY CHECK USES. `git var` writes `+0300`; `_offset` reads
+        # `+03:00`. Reshaping the input is right, writing a second opinion on what counts as
+        # UTC is not -- `-0000` means "unknown" and must pass, and that reasoning lives in
+        # exactly one place.
+        if len(offset) == 5 and offset[0] in "+-" and offset[1:].isdigit():
+            o = _offset(f"{offset[:3]}:{offset[3:]}")
+            if o:
+                refusals.append(f"this machine would stamp the commit {o}, not UTC \u2014 an "
+                                f"offset is a location, and once committed it is as permanent "
+                                f"as the diff. Set TZ=UTC, or export GIT_AUTHOR_DATE and "
+                                f"GIT_COMMITTER_DATE in UTC")
+
+
 def _stamps(rng, refusals):
     """Who wrote these commits, and what place their timestamps name.
 
@@ -552,7 +601,7 @@ def _stamps(rng, refusals):
         return
     who = proc.stdout.splitlines()
     strangers = sorted({w for w in who if w.strip()
-                        and w.strip() != "QAtration <qatration@gmail.com>"})
+                        and w.strip() != IDENTITY})
     for w in strangers:
         refusals.append(f"a commit in {rng} is authored by {w}, not by the project identity")
 
@@ -707,14 +756,20 @@ def main(argv=None):
     # refused the first commit of every fresh clone, caught by running the hook rather than
     # reading it. An explicit range must still resolve; this implicit one is over whatever
     # commits exist, and an empty repository has none.
-    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
-        _stamps("HEAD", refusals)
-
     if args.staged:
+        # FORWARD, NOT BACKWARD. See `_pending_stamp`: at pre-commit the only history in reach
+        # is history this hook cannot let you fix.
+        _pending_stamp(refusals)
         staged = _staged_files()
         blobs = _staged_contents(staged)
         scan_files(staged, lambda p: blobs.get(p, ""), refusals)
     elif args.tree:
+        # THE BACKSTOP. CI is not making a commit, so here the question is what the history
+        # already holds -- this is what catches a rewritten or force-pushed branch. On a
+        # shallow checkout it sees only what was fetched, which is why `check.yml` asks for
+        # `fetch-depth: 0`. Guarded because an empty repository has no HEAD.
+        if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
+            _stamps("HEAD", refusals)
         scan_files(_tree_files(), _read_tree, refusals)
     else:
         # MESSAGES ONLY ON THE PUSH PATH, and the scope is the point. A message does not
