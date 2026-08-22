@@ -107,6 +107,11 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
   font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+/* ROOM ON A BIG SCREEN, and only there. At 1000px the two-column hero squeezed the
+   transcript panel until a canary token broke across lines, while a 2560px display had
+   about 1500px of nothing on either side. The prose blocks keep their own `ch` limits,
+   so nothing here lengthens a line of text -- only the columns get their space back. */
+@media (min-width:1500px){.wrap{max-width:1200px}}
 a{color:inherit}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--accent);font-weight:600}
@@ -169,7 +174,9 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 .turn.attacker .who{color:var(--attack)}
 .bubble{background:var(--panel);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word}
 .turn.attacker .bubble{background:var(--attack-soft);border:1px solid color-mix(in srgb,var(--attack) 30%,transparent)}
-.leak{color:var(--attack);font-weight:700}
+/* A SECRET DOES NOT WRAP. Split across two lines the token stops reading as one value,
+   which is the whole point of the panel: this exact string came back out of the bot. */
+.leak{color:var(--attack);font-weight:700;white-space:nowrap}
 .cursor{display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;
   margin-left:2px;animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
