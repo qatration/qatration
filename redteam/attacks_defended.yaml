@@ -2,12 +2,12 @@
 #
 # Every other file in this arsenal was written against the practice fleet, which is the easy
 # case in one specific way: the bots here are undefended or defended by something we chose. These
-# five were developed against a commercial red-team range whose levels are literally graded by
-# which guard is in front of the model, and each one is recorded here WITH THE DEFENCE IT
-# DEFEATED — which is the part worth having. An attack with no named defence is a payload; one
-# that says "this is what gets past an intent classifier" is a measurement.
+# five were developed against defended systems nobody here built, where the guard in front of the
+# model was known — so each is recorded WITH THE DEFENCE IT DEFEATED, which is the part worth
+# having. An attack with no named defence is a payload; one that says "this is what gets past an
+# intent classifier" is a measurement.
 #
-# WHAT THE RANGE ESTABLISHED, and it cuts both ways:
+# WHAT THAT ESTABLISHED, and it cuts both ways:
 #
 #   * obfuscation — homoglyphs, base64, chat-template tokens — beats a regex or keyword filter
 #     and BACKFIRES against an anomaly detector, which is looking for exactly that. A lesson
@@ -27,8 +27,8 @@
 # correctly, since against anyone else they test a string that does not exist. What survives
 # generalisation is the FRAMING, which is the part that did the work.
 #
-# See NOTICE for provenance. No third-party text is reproduced here: the wording is ours, the
-# techniques are what the exercise taught.
+# See NOTICE for provenance. No third-party text is reproduced here: the wording is ours, and
+# what carried over is which guard falls to which framing.
 
 # A CATEGORY NAMES THE OBJECTIVE, NOT THE TECHNIQUE. The first version of this file gave each
 # of these its own category — `tool-poisoning`, `link-injection`, `self-judge-bypass` — and
