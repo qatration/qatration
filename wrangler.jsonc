@@ -13,9 +13,28 @@
 //
 // THE DIRECTORY MATTERS. The repository root is the engine, not the page; pointing this at `.`
 // would publish the entire source tree, `out/` included, to a public domain.
+// ONE PUBLIC ADDRESS, NOT THREE. Cloudflare enables `workers_dev` by default, so
+// `qatration.qatration.workers.dev` served this identical page — verified byte for byte, same
+// md5, same 33002 bytes — beside the domain it is supposed to live at. And `preview_urls`
+// defaults to whatever `workers_dev` is, which meant a per-version hostname for every deploy
+// ever made: publish something by mistake, fix it, and the mistaken build stays reachable at
+// its own URL. That is the same shape as a bad commit surviving in history, and it is worth
+// closing for the same reason.
+//
+// HERE RATHER THAN THE DASHBOARD TOGGLE, and the distinction matters. The default is `true`
+// and Workers Builds deploys from this file on every push, so a toggle flipped in the UI and
+// not written down is a setting the next deploy can quietly restore. In the file it survives
+// every deploy and shows up in a diff.
+//
+// The custom domain is unaffected: it is a Custom Domain on the zone, listed separately from
+// the Worker URL, and nothing here declares or removes it. What is lost is a diagnostic — when
+// the site is down, the `workers.dev` URL used to answer "is it the Worker or is it the
+// domain". That is a once-a-year question; two live addresses for one site is a daily one.
 {
   "name": "qatration",
   "compatibility_date": "2026-08-22",
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./site"
   }
