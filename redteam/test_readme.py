@@ -856,6 +856,40 @@ def main():
         check("...and lists nothing robots.txt tells crawlers to skip",
               not _contra, f"the sitemap offers {_contra}, robots.txt disallows {_disallowed}")
 
+    # --- ONE PROJECT, ONE SENTENCE -----------------------------------------------------------
+    #
+    # See the note at the top of this block's history: four surfaces, four different
+    # introductions, none of them wrong and no two the same. The packaging description is the
+    # source here because it is the one a release publishes and the one that cannot be edited
+    # in a dashboard afterwards.
+    def _norm(t):
+        t = t.replace("&amp;", "and").replace("&", "and").replace("\u2019", "'")
+        return re.sub(r"\s+", " ", t).strip().lower()
+
+    _pyproj = io.open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
+    _m = re.search(r'(?m)^description\s*=\s*"([^"]+)"', _pyproj)
+    check("the packaging description is readable", bool(_m),
+          "no description in [project] of pyproject.toml")
+    if _m:
+        # First clause only. The rest of the line qualifies the claim and is allowed to differ
+        # between a package index and a landing page; what must not differ is what the thing is.
+        _clause = _norm(re.split(r"[.:;]", _m.group(1))[0])
+        check("...and its first clause is a real sentence, not a fragment",
+              len(_clause.split()) >= 4, f"{_clause!r} is too short to be a description")
+
+        _init = io.open(os.path.join(ROOT, "redteam", "__init__.py"), encoding="utf-8").read()
+        # VISIBLE TEXT, NOT THE MARKUP. Searching the raw HTML made this pass for the wrong
+        # reason: the phrase also sits in the `og:title` attribute, so rewriting the headline a
+        # reader actually sees left the check green. Caught by mutating the tagline and getting
+        # nothing. Tags are stripped first, which takes every attribute with them.
+        _visible = _norm(re.sub(r"<[^>]+>", " ", _site))
+        for _label, _hay in (("the package docstring", _norm(_init[:400])),
+                             ("the landing page", _visible)):
+            check(f"{_label} introduces the project the same way",
+                  _clause in _hay,
+                  f"pyproject says {_clause!r}; this surface does not. Also check the GitHub "
+                  f"About field by hand -- it is dashboard state and no test can see it.")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:

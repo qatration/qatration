@@ -1,4 +1,4 @@
-"""QAtration: adversarial testing for deployed LLM features.
+"""QAtration: adversarial testing for AI chatbots and agents.
 
 This directory is a flat set of modules that import each other by bare name — `from target
 import Probe`, `from oracle import DETECTORS`. That is what you get when a tool grows from a
