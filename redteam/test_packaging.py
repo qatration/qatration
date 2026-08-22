@@ -306,6 +306,54 @@ def test_package_rename_and_out_dir_agree():
     print("  ok  the rename and the evidence location are checked against each other")
 
 
+def test_the_build_tree_holds_nothing_the_source_does_not():
+    """A wheel is permanent, and `build/lib` is where a file goes to outlive its source.
+
+    setuptools reuses `build/lib` between builds and does not prune it, so anything that was in
+    the source when SOME earlier build ran is still there. The end-to-end suites write
+    `attacks_e2e_*_tmp.yaml` and `targets_e2e_*_tmp.yaml` into `redteam/` while they run;
+    `.gitignore` covers them, so git never sees them and no reviewer of a diff ever will --
+    and `[tool.setuptools.package-data]` ships `*.yaml`, so a build during a suite run copies
+    them in and they stay.
+
+    Measured on this machine before the gate existed: ten `*_tmp.yaml` files in `build/lib`,
+    which `python -m build` would have packaged. A stranger installing that wheel gets phantom
+    targets that `target_configs()` enumerates.
+
+    CI never sees this -- `actions/checkout` gives a clean tree with no `build/` -- which is
+    exactly why it needs a check that runs where the risk is. An absent `build/` passes.
+
+    Not a list of known-bad names: anything in the build tree with no counterpart in the source
+    fails, whatever it is.
+    """
+    lib = os.path.join(REPO, "build", "lib")
+    if not os.path.isdir(lib):
+        print("  ok  no build/ tree on this machine, so nothing stale can be packaged")
+        return
+
+    stale = []
+    for root, _dirs, files in os.walk(lib):
+        for name in files:
+            if name.endswith(".pyc") or "__pycache__" in root:
+                continue
+            built = os.path.join(root, name)
+            rel = os.path.relpath(built, lib).replace("\\", "/")
+            # build/lib/qatration/x -> redteam/x, the rename `pyproject.toml` declares
+            src = rel.split("/", 1)[1] if rel.startswith("qatration/") else rel
+            if not os.path.exists(os.path.join(REPO, "redteam", src)) and \
+               not os.path.exists(os.path.join(REPO, src)):
+                stale.append(rel)
+
+    assert not stale, (
+        "%d file(s) in build/lib have no counterpart in the source and would be packaged by "
+        "`python -m build` on this machine: %s%s\n"
+        "Delete the build/ directory before building. CI is unaffected -- it checks out clean -- "
+        "so this only bites a local release, and a wheel on PyPI can be yanked but not "
+        "unpublished." % (len(stale), ", ".join(sorted(stale)[:6]),
+                          " ..." if len(stale) > 6 else ""))
+    print("  ok  build/lib holds nothing the source does not")
+
+
 def test_one_version_number():
     """pyproject.toml and __init__.py must agree, because pip believes one and the artifact
     header prints the other, and a bug report that quotes a version nobody shipped is worse

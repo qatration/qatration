@@ -86,6 +86,12 @@ def main():
     _tag = "%d" % os.getpid()
     cfg_path = os.path.join(HERE, f"targets_e2e_{_tag}_tmp.yaml")
     atk_path = os.path.join(HERE, f"attacks_e2e_{_tag}_tmp.yaml")
+    # NAMED BEFORE THE `try`, so the `finally` can remove it however the run ends. It was
+    # written deep inside the body and deleted on the last line of the same body, so any
+    # failure between the two left it behind — and a leftover here is not inert: setuptools
+    # copies it into `build/lib`, where it survives every later build and would be packaged
+    # into a wheel. Ten of these were sitting in the build tree when a gate finally looked.
+    dead_cfg = os.path.join(HERE, f"targets_e2e_dead_{_tag}_tmp.yaml")
     try:
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(f"""adapter: http
@@ -240,7 +246,6 @@ oracle_context:
         # written down as the target's behaviour.
         import jobqueue as jq, worker
         qroot = os.path.join(work, "queue")
-        dead_cfg = os.path.join(HERE, f"targets_e2e_dead_{_tag}_tmp.yaml")
         with open(dead_cfg, "w", encoding="utf-8") as f:
             f.write(open(cfg_path, encoding="utf-8").read()
                     .replace(f"127.0.0.1:{port}", "127.0.0.1:1")
@@ -329,11 +334,9 @@ oracle_context:
               "e2e-bot" in page2)
         check("...and never renders the target's markup live, on this page either",
               "<script>alert(" not in page2)
-        if os.path.exists(dead_cfg):
-            os.remove(dead_cfg)
     finally:
         srv.shutdown()
-        for p in (cfg_path, atk_path):
+        for p in (cfg_path, atk_path, dead_cfg):
             if os.path.exists(p):
                 os.remove(p)
         shutil.rmtree(work, ignore_errors=True)
