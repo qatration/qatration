@@ -42,16 +42,28 @@
 .illus{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px;
   margin-left:auto;flex:0 0 auto;white-space:nowrap}
+/* SPACE ABOVE A GROUP HEADING, AS A RULE. This had `margin-bottom:6px` and nothing above,
+   so the gap over it was whatever inline `style="margin-top"` the author last remembered —
+   which meant the second group in a section sat flush against the bottom of the previous
+   card grid. A first-child reset keeps the top of a section tight. */
 .grp{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--accent);font-weight:600;margin-bottom:6px}
-.grp-note{max-width:62ch;margin:0 0 14px;font-size:15px;color:var(--muted)}
+  color:var(--accent);font-weight:600;margin:40px 0 9px}
+.sec-head + .grp{margin-top:0}
+.grp-note{max-width:62ch;margin:0 0 18px;font-size:15px;color:var(--muted)}
 /* Same look as the theme button, its OWN class. Sharing `.theme` put this anchor first in
    the DOM, so `querySelector('.theme')` found the link instead of the button and relabelled
    it "Light" — two identical buttons and no way to reach the source. */
+/* THE ONE LINK TO THE SOURCE, and it read as a label: `--muted` on a `--line` border is the
+   same weight as the theme toggle beside it, so nothing said it was clickable. Accent
+   colour and a tinted ground. Not a third call to action — the page already has two — just
+   visibly a link. */
 .ghlink{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:6px;
-  padding:7px 11px;margin-left:auto}
-.ghlink:hover{color:var(--ink)}
+  color:var(--accent);font-weight:600;text-decoration:none;
+  border:1px solid var(--accent);border-radius:6px;
+  background:color-mix(in srgb, var(--accent) 12%, transparent);
+  padding:7px 12px;margin-left:auto;transition:background .15s,color .15s}
+.ghlink:hover{background:var(--accent);color:var(--bg)}
+.ghlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .theme{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;
   padding:6px 13px;cursor:pointer;transition:color .15s,border-color .15s}
@@ -76,9 +88,14 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
    edge — but with nothing else spacing them, `QAtration` ran straight into the tagline
    and the two buttons touched. `space-between` cannot help once one item takes it all. */
 .top{display:flex;align-items:center;gap:16px;padding:22px 0;border-bottom:1px solid var(--line)}
-.brand{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:-.01em}
+/* THE WORDMARK, at twice what it was. 18px put it level with the tagline beside it, so
+   the name of the project and a description of it read as one run-on line. It is the
+   first thing on the page and it should look like it. */
+.brand{font-family:var(--mono);font-weight:700;font-size:34px;letter-spacing:-.02em;
+  line-height:1}
 .brand b{color:var(--accent)}
-.top .lede{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.top .lede{font-family:var(--mono);font-size:13px;color:var(--muted);
+  padding-left:16px;border-left:1px solid var(--line);align-self:center}
 
 /* hero */
 .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;
@@ -133,7 +150,7 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
 .chip.partial{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
 
 /* sections */
-section{padding:60px 0;border-top:1px solid var(--line)}
+section{padding:76px 0;border-top:1px solid var(--line)}
 .sec-head{max-width:52ch;margin-bottom:36px}
 .sec-head h2{font-size:clamp(25px,3.4vw,33px);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
 .sec-head p{color:var(--muted);margin:0}
@@ -146,7 +163,7 @@ section{padding:60px 0;border-top:1px solid var(--line)}
 .finds > .find:last-child:nth-child(odd){grid-column:1/-1}
 .finds{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:11px;overflow:hidden}
-.find{background:var(--surface);padding:22px 22px}
+.find{background:var(--surface);padding:24px 24px}
 .find .top-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
 .find h3{font-size:16px;font-weight:700}
 .find p{margin:0;font-size:14.5px;color:var(--muted)}
@@ -204,7 +221,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <div class="top">
     <div class="brand"><b>QA</b>tration</div>
     <div class="lede">adversarial testing for AI chatbots &amp; agents</div>
-    <a class="ghlink" href="https://github.com/qatration/qatration">GitHub</a>
+    <a class="ghlink" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">GitHub</a>
     <button class="theme" type="button" aria-pressed="false"
             aria-label="Switch to the light theme">Light</button>
   </div>
@@ -223,7 +240,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         prompt injection, data exfiltration, tool abuse &mdash; at whatever URL you give it.
         Your own deployment, or one whose owner gave you written permission in advance.
         Not a public chatbot you find interesting. Not a vendor&rsquo;s demo.
-        <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md">Read
+        <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read
         AUTHORISED-USE.md</a> first.</p>
       <div class="cta-row">
         <span class="install"><span class="pmt">$</span>pip install qatration</span>
@@ -231,7 +248,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <p class="evid-note" style="margin-top:14px">Two dependencies. The whole attack corpus
         ships with it, and so does the evidence behind every number on this page — see
-        <a href="https://github.com/qatration/qatration">the repository</a>.</p>
+        <a href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">the repository</a>.</p>
       <ul class="evid">
         <li><b>46</b> attacks typed into the chat box of a guarded bot: none got through.
           <b>One</b> carried inside a retrieved document: through every time.</li>
@@ -281,7 +298,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         blurred, because a scanner that claims to cover what it cannot observe is exactly the
         thing you are trying to avoid.</p>
     </div>
-    <div class="grp" style="margin-top:26px">Visible from your endpoint alone</div>
+    <div class="grp">Visible from your endpoint alone</div>
     <p class="grp-note">A chat endpoint is enough: these are testable as-is, including
       across turns.</p>
     <div class="finds">
@@ -482,7 +499,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <p>Apache 2.0. Install it, point it at your own deployment, keep the evidence.</p>
     <div class="cta-row" style="justify-content:center">
       <span class="install"><span class="pmt">$</span>pip install qatration</span>
-      <a class="btn btn-ghost" href="https://github.com/qatration/qatration">Read the source →</a>
+      <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Read the source →</a>
     </div>
     <div class="note">runs on your machine · nothing leaves it · authorized targets only</div>
   </div>
@@ -498,11 +515,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       the bot itself returns — and the run refuses without that rather than asking you to
       remember. Testing systems you do not own or are not permitted to test is illegal, and
       that is on the operator, not the tool.
-      <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md">Read
+      <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read
       AUTHORISED-USE.md</a> before the first run.
       <br><br>
       Found a bug, or a way this tool reports something it did not measure?
-      <a href="https://github.com/qatration/qatration/issues">Open an issue</a>, or write to
+      <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">Open an issue</a>, or write to
       <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> for
       anything that should not be public first.
     </div>
