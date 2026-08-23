@@ -35,8 +35,11 @@ import json
 import os
 import re
 
+import yaml
+
 import baseline
 import workspace
+from target import target_configs
 
 SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 INFO_URI = "https://github.com/qatration/qatration"
@@ -121,7 +124,27 @@ def build(results, target_config=None, out_dir=None):
     # describes the thing under test — not a source line, because no line of the operator's
     # code is what failed. Anchoring at a made-up source location would be a fabricated fact in
     # the one field a reviewer trusts most.
-    uri = _uri(target_config or ("redteam/targets_%s.yaml" % target))
+    #
+    # AND THE LINE BELOW USED TO DO EXACTLY THAT. Without `--target-config` it emitted
+    # `redteam/targets_<name>.yaml`, a path assembled from a naming convention rather than
+    # found on a disk. Measured on an export from a config `qatration init` wrote: 88 findings,
+    # every one anchored at a file that exists nowhere. A reviewer who follows a wrong link
+    # concludes the tool is broken; one who finds no link goes and looks.
+    #
+    # So: the named config, else a config of that name that actually exists — `target_configs`
+    # reads QATRATION_CONFIGS, so one kept outside this package resolves too — else nothing.
+    def _config_for(name):
+        for fp in target_configs():
+            try:
+                cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
+            except Exception:
+                continue
+            if (cfg.get("name") or "") == name:
+                return fp
+        return None
+
+    anchor = target_config or _config_for(target)
+    uri = _uri(anchor) if anchor else None
 
     ambient = baseline.rates(target, out_dir=out_dir or workspace.OUT)
 
@@ -163,9 +186,12 @@ def build(results, target_config=None, out_dir=None):
             "ruleId": rule_id,
             "level": level,
             "message": {"text": _message(row, verdict, noisy)},
-            "locations": [{"physicalLocation": {
+            # NO LOCATION RATHER THAN A FALSE ONE. SARIF 2.1.0 allows a result with no
+            # physical location, and that is the honest shape when the config this run was
+            # pointed at cannot be found from here.
+            "locations": ([{"physicalLocation": {
                 "artifactLocation": {"uri": uri},
-                "region": {"startLine": 1}}}],
+                "region": {"startLine": 1}}}] if uri else []),
             # Stable across runs so a code-scanning tab can tell a finding that persists from
             # one that is new. Keyed on the attack rather than on the message, because the
             # message carries rates that move between runs and a fingerprint that moves with

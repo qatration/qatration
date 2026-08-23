@@ -46,7 +46,7 @@ def results(rows, **meta):
     return {"meta": m, "results": rows}
 
 
-def build(rows, ambient, **meta):
+def build(rows, ambient, config="cfg.yaml", **meta):
     """Build a SARIF log with `ambient` standing in for the benign baseline.
 
     The rate is injected rather than read from disk, because the whole point under test is what
@@ -55,7 +55,9 @@ def build(rows, ambient, **meta):
     real = baseline.rates
     baseline.rates = lambda target, out_dir=None: ambient
     try:
-        return sarif.build(results(rows, **meta), target_config="cfg.yaml")
+        # `config` is a parameter because one check needs there to be none: a finding must
+        # carry no location rather than a location assembled from the target's name.
+        return sarif.build(results(rows, **meta), target_config=config)
     finally:
         baseline.rates = real
 
@@ -81,6 +83,26 @@ check("a finding carries a rule, a level, a message and a location",
       one["ruleId"] == "canary_in_output" and one["level"]
       and one["message"]["text"] and one["locations"][0]["physicalLocation"]
       ["artifactLocation"]["uri"] == "cfg.yaml")
+# --- AND NEVER AT A FILE THAT DOES NOT EXIST ---------------------------------------------
+#
+# This module's comment says a made-up source location would be "a fabricated fact in the one
+# field a reviewer trusts most", and the line under it made one up: `redteam/targets_<name>.yaml`
+# assembled from a naming convention whenever no config was passed. On a real export that was 88
+# findings anchored at a path on no disk.
+_no_cfg = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0},
+                config=None)
+check("with no config to point at, a finding carries no location rather than a false one",
+      _no_cfg["runs"][0]["results"][0].get("locations") == [],
+      "a location was invented for a config nobody named")
+check("...and the finding is still emitted, not dropped",
+      len(_no_cfg["runs"][0]["results"]) == 1,
+      "losing the finding is not the fix; losing the false anchor is")
+
+_src = io.open(os.path.join(HERE, "sarif.py"), encoding="utf-8").read()
+check("no path is assembled from the target's name",
+      'targets_%s.yaml' not in _src,
+      "a uri is still being built from a naming convention rather than found on a disk")
+
 check("every rule referenced by a result is declared in the driver",
       {r["ruleId"] for r in log["runs"][0]["results"]}
       <= {r["id"] for r in log["runs"][0]["tool"]["driver"]["rules"]})
