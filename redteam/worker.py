@@ -133,8 +133,21 @@ def execute(job, root, python=None):
         # read as a crash and send somebody looking for a traceback that does not exist.
         state, note = "failed", proc.stderr
     else:
-        state, note = EXITS.get(proc.returncode,
-                                ("failed", f"the sweep exited {proc.returncode}"))
+        # AN UNMAPPED CODE MEANS THE SWEEP DIED WITHOUT NAMING A REASON, and the only thing
+        # that knows one is the stderr already captured here. Dropping it left a queue entry
+        # reading "the sweep exited 3221225794" -- 0xC0000142 on Windows -- which is a dead end
+        # for whoever reads the queue, and a failure nobody can diagnose is a failure that gets
+        # retried until somebody walks to the machine.
+        if proc.returncode in EXITS:
+            state, note = EXITS[proc.returncode]
+        else:
+            tail = " ".join((proc.stderr or "").split())[-300:]
+            state = "failed"
+            note = (f"the sweep exited {proc.returncode}, which is not a code this engine "
+                    f"produces deliberately, so it died before it could say why"
+                    + (f" — it last said: {tail}" if tail else
+                       " — and it wrote nothing to stderr, which usually means the process "
+                       "never started"))
 
     # Join the job to the run it produced. The run record is the thing that knows what it cost
     # and how it ended; without the link, the queue can only say a job "finished" and the
