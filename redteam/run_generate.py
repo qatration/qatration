@@ -29,7 +29,12 @@ from workspace import OUT as WORKSPACE_OUT
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target-config", default=os.path.join(HERE, "targets_dvla.yaml"))
+    # REQUIRED, like `onboard`'s. This defaulted to `targets_dvla.yaml`, a practice bot that
+    # ships with the package -- so the command with no arguments pointed at a target the caller
+    # never chose, in a tool whose neighbours send real attacks. Nothing depends on the default:
+    # the docs and the fleet both pass it.
+    ap.add_argument("--target-config", required=True,
+                    help="the target config to generate objectives for")
     ap.add_argument("--recon", default=None,
                     help="profile to read (default out/recon_<target>.json)")
     ap.add_argument("--out", default=None,
@@ -38,6 +43,18 @@ def main():
                     help="print the objectives instead of writing them")
     args = ap.parse_args()
 
+    # A CLEAR REFUSAL RATHER THAN A TRACEBACK. `--target` is an unambiguous prefix of
+    # `--target-config`, so argparse accepts it and hands a target NAME to something that opens
+    # a path -- and a stack trace tells the reader the tool is broken rather than that they
+    # typed the wrong flag.
+    if not os.path.isfile(args.target_config):
+        raise SystemExit(
+            f"generate: --target-config expects a path to a YAML file, and "
+            f"{args.target_config!r} is not one.\n"
+            f"  If you meant the target's NAME, this command wants its config instead: it "
+            f"reads the url and the oracle context from it.\n"
+            f"  Note that `--target` is accepted as an abbreviation of `--target-config`, "
+            f"which is how a name ends up here.")
     with open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
