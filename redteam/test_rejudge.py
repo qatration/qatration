@@ -14,7 +14,7 @@ the run did.** Anything the detectors consult has to survive the round trip.
 
     python test_rejudge.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, json, tempfile
+import sys, os, io, json, tempfile
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -275,6 +275,53 @@ def main():
           maps2[0]["verdict"] == "HARDENED" and not changed2, str(changed2))
     check("a corrected map rebuilds its page, or the fix stops at the JSON",
           "rebuilt " in body and "build_html" in body)
+
+    # --- A CONFIG THAT DOES NOT LIVE HERE ---------------------------------------------
+    #
+    # `contexts()` read only the bundled `targets_*.yaml`. Every config `qatration init`
+    # writes lives somewhere else, so for its owner rejudge matched nothing, re-scored
+    # nothing, and said so in a line that reads like a note rather than a refusal to do the
+    # one thing the command is for. Found by walking the newcomer's path end to end.
+    import rejudge as _rj          # tempfile is already imported at module level
+
+    with tempfile.TemporaryDirectory() as _d:
+        _p = os.path.join(_d, "mybot.yaml")
+        io.open(_p, "w", encoding="utf-8").write(
+            "name: a-target-that-is-not-bundled\n"
+            "oracle_context:\n"
+            "  canaries: ['QAT-CANARY-OUTSIDE']\n")
+
+        _base = _rj.contexts()
+        check("a config outside the repository is invisible by default",
+              "a-target-that-is-not-bundled" not in _base,
+              "the fixture name collides with a bundled config; rename it")
+        check("...and reaches the context map when it is passed",
+              "a-target-that-is-not-bundled" in _rj.contexts([_p]),
+              "rejudge still cannot score results from a config `init` wrote")
+        check("...carrying the canaries re-scoring needs",
+              (_rj.contexts([_p]).get("a-target-that-is-not-bundled") or {}).get("canaries")
+              == ["QAT-CANARY-OUTSIDE"],
+              "the context arrived empty, so every canary detector would be inert")
+
+        # A PASSED CONFIG WINS over a bundled one of the same name: the caller named theirs.
+        _bundled = sorted(_base)
+        check("there are bundled configs to collide with", bool(_bundled),
+              "no targets_*.yaml found, so the precedence check below cannot run")
+        if _bundled:
+            _clash = os.path.join(_d, "clash.yaml")
+            io.open(_clash, "w", encoding="utf-8").write(
+                "name: %s\noracle_context:\n  canaries: ['QAT-CANARY-MINE']\n" % _bundled[0])
+            check("a passed config wins over a bundled one of the same name",
+                  (_rj.contexts([_clash]).get(_bundled[0]) or {}).get("canaries")
+                  == ["QAT-CANARY-MINE"],
+                  "the bundled config shadowed the one named on the command line")
+
+    # And the wiring, or the checks above test a function nothing on the command line calls.
+    _src = io.open(os.path.join(HERE, "rejudge.py"), encoding="utf-8").read()
+    check("rejudge accepts --target-config", '"--target-config"' in _src,
+          "contexts(extra) exists but nothing reaches it from the command line")
+    check("...and hands it to contexts()", "contexts(getattr(args" in _src,
+          "the flag is parsed and dropped")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

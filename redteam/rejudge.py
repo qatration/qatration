@@ -40,18 +40,32 @@ from isolation import apply_keysearch, _verdict, read_maps, write_maps
 from baseline import note as _baseline_note
 
 
-def contexts():
+def contexts(extra=()):
     """target name -> oracle_context, read from the configs rather than the results.
 
     The results file does not store ctx (canaries, forbidden tokens, markers), and it is
     the ctx that decides what counts as a leak — so re-scoring has to go back to the config
     the run was pointed at.
+
+    `extra` IS THE WHOLE POINT FOR ANYBODY WHO IS NOT THIS REPOSITORY. Only the bundled
+    `targets_*.yaml` were read here, so a config written by `qatration init` and kept where its
+    owner keeps things was invisible: rejudge walked their results, matched nothing, and
+    reported it as a note rather than as a refusal to do its job. Passed configs win over
+    bundled ones of the same name, because the one named on the command line is the one the
+    caller means.
     """
     out = {}
     for fp in target_configs(HERE):
         cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
         name = cfg.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
         out.setdefault(name, cfg.get("oracle_context", {}))
+    for fp in extra or ():
+        cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
+        name = cfg.get("name")
+        if not name:
+            raise SystemExit(f"rejudge: {fp} has no `name`, so there is no way to tell which "
+                             f"results it scores.")
+        out[name] = cfg.get("oracle_context", {})
     return out
 
 
@@ -184,9 +198,14 @@ def main():
                     help="apply the re-scoring and rebuild each HTML report "
                          "(default: preview only)")
     ap.add_argument("--target", default=None, help="restrict to one target name")
+    ap.add_argument("--target-config", "--config", dest="configs", action="append",
+                    metavar="PATH", default=[],
+                    help="a target config whose results should be re-scored. Repeatable. "
+                         "Needed for any config that does not live in this repository, "
+                         "which is every config `qatration init` writes.")
     args = ap.parse_args()
 
-    ctxs = contexts()
+    ctxs = contexts(getattr(args, "configs", None))
     total_changed, files_touched, skipped = 0, 0, []
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
         name = os.path.basename(path)[len("results_"):-len(".json")]
@@ -278,7 +297,11 @@ def main():
                 print(f"  rebuilt {os.path.basename(html)}")
 
     if skipped:
-        print(f"\nno config found, left alone: {', '.join(skipped)}")
+        # NOT A NOTE. Nothing was re-scored for these targets, which is the whole command.
+        print(f"\nNOT RE-SCORED — no config found for: {', '.join(skipped)}.\n"
+              f"  Re-scoring reads the canaries and markers from the config, and results "
+              f"files do not carry them.\n"
+              f"  Point at it: qatration rejudge --target-config <your.yaml>")
     verb = "rescored" if args.write else "would change"
     print(f"\n{verb} {total_changed} attack row(s) across {files_touched} file(s)"
           f"{' (some of them only their attribution caveat)' if files_touched and not total_changed else ''}.")
