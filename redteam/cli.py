@@ -48,6 +48,15 @@ COMMANDS = {
     "compare":  ("compare_targets", "one page across every target that has evidence"),
     "rejudge":  ("rejudge",         "re-score stored results with the current oracle, no model calls"),
     "sarif":    ("sarif",           "stored results as SARIF 2.1.0, for a code-scanning tab"),
+    # THE THREE THAT HAD NO DOOR. Each ran from the day it was written, reachable only by
+    # invoking a module inside an installed package, which nobody discovers. `fixes` is the
+    # answer to "what do I change on Monday"; `discrimination` is what a sceptic asks for
+    # before believing any of the rest; `index` ties a run together and the generated page
+    # already linked to it.
+    "fixes":    ("defense_report",  "breaches turned into a prioritised fix list, by root cause"),
+    "discrimination": ("discrimination",
+                       "the tool's own credibility: controls clean, breaches reliable not lucky"),
+    "index":    ("build_index",     "one page tying a run's reports together"),
     "recon":    ("run_recon",       "profile a target with benign probes before attacking it"),
     "generate": ("run_generate",    "turn a recon profile into objectives for that target"),
     "isolation": ("run_isolation",  "map which of a target's defences are separable, one at a time"),
