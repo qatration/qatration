@@ -4,9 +4,14 @@
   document, or the fixture PDFs robots.txt asks crawlers to leave alone, would be padding: it
   does not help a crawler and it contradicts the file next to it.
 
-  NO <lastmod>. A date here has to be maintained by hand or it lies, and a stale lastmod is
-  worse than none -- it tells a crawler nothing changed when something did. The site deploys
+  NO lastmod. A date here has to be maintained by hand or it lies, and a stale one is worse
+  than none, because it tells a crawler nothing changed when something did. The site deploys
   from git on every push; the HTTP response carries the truth.
+
+  And no double hyphen anywhere in this comment, nor an angle bracket around a tag name:
+  XML forbids the first outright. This file shipped invalid for a day because of one, and
+  the check that was supposed to cover it matched loc elements with a regex, which is happy
+  to read a document no parser will accept.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>

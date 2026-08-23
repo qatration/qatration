@@ -848,7 +848,19 @@ def main():
         _sitemap_line = re.search(r"(?im)^\s*Sitemap:\s*(\S+)", _rob)
         check("robots.txt points at the sitemap", bool(_sitemap_line), "no Sitemap: line")
         _disallowed = [d.strip() for d in re.findall(r"(?im)^\s*Disallow:\s*(\S+)", _rob)]
-        _locs = re.findall(r"<loc>\s*([^<]+?)\s*</loc>", _map)
+        # PARSED, NOT MATCHED. This was a regex over the text, and a regex is happy to find
+        # `<loc>` in a document no parser will accept -- which is what happened: the file
+        # shipped for a day with a double hyphen inside an XML comment, illegal in XML, and
+        # this check reported it fine. Google would have rejected the sitemap outright.
+        import xml.etree.ElementTree as _EX
+        try:
+            _root = _EX.fromstring(_map)
+            _locs = [e.text.strip() for e in _root.iter() if e.tag.endswith("loc") and e.text]
+            check("the sitemap is well-formed XML", True)
+        except _EX.ParseError as _e:
+            _locs = []
+            check("the sitemap is well-formed XML", False,
+                  f"{_e} — a crawler will refuse the whole file")
         check("the sitemap lists at least the home page",
               any(l.rstrip("/") == "https://qatration.com" for l in _locs), str(_locs))
         _contra = [l for l in _locs for d in _disallowed
