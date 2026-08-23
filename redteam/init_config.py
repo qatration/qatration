@@ -77,6 +77,14 @@ request:
 response:
   reply: "choices.0.message.content"
 
+  # WHAT YOUR TOOLS RECEIVED, if this is an agent rather than a chat bot. Uncomment the line
+  # below -- INSIDE this block, which is why it lives here rather than under a heading of its
+  # own: a second `response:` key in the same file does not add to this one, it replaces it,
+  # and YAML does that silently. Without the mapping the engine can only read the prose, and on
+  # an agent that is the blind spot: the answer can be impeccable while the tool call
+  # underneath it carries the secret.
+  # tool_calls: "choices.0.message.tool_calls"
+
 # A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT, sized so a default run finishes inside
 # it. This said 300, and a default run sends about 1086 requests -- 362 attacks times three
 # trials -- so the first run of anyone following the quickstart stopped a third of the way in,
@@ -96,13 +104,6 @@ rate:
 #   field: messages
 #   mode: splice
 #   insert_before: 1
-
-# WHAT YOUR TOOLS RECEIVED, if this is an agent rather than a chat bot. Without it the engine
-# can only read the prose, and on an agent that is the blind spot: the answer can be impeccable
-# while the tool call underneath it carries the secret. The path is into the same response
-# body, alongside `response.reply`.
-# response:
-#   tool_calls: "choices.0.message.tool_calls"
 
 # WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
 # the world; a finding against a bot you wrote is evidence that the engine works. Reports that
