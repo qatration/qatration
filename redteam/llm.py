@@ -26,6 +26,35 @@ NUM_PREDICT = 1024        # a reply longer than this is a loop, not an answer
 REQUEST_TIMEOUT = 120     # seconds; closes the socket so the SERVER stops generating
 
 
+def chat_ollama():
+    """`ChatOllama`, or a refusal that names the install rather than the import.
+
+    `langchain-ollama` is optional by design: it belongs to the practice fleet and the adaptive
+    attacker, and somebody testing their own endpoint never imports it. Optional by design has
+    to fail by design too — eight modules imported it bare, so the answer to installing the
+    base package and reaching for a practice bot was
+
+        ModuleNotFoundError: No module named 'langchain_ollama'
+
+    which names an import when the reader needs an install. It is declared in the `[fleet]`
+    extra and the README says so; a traceback does not.
+
+    Imported HERE and not at module scope, for the reason `make_llm` gives about itself: the
+    adapters chdir into their target before touching langchain, so this module has to stay
+    cheap to import. Calling it is what pays.
+    """
+    try:
+        from langchain_ollama import ChatOllama
+    except ImportError as e:
+        raise SystemExit(
+            "this needs langchain-ollama, which the base install deliberately leaves out: it "
+            "belongs to the practice fleet and the adaptive attacker, and testing your own "
+            "endpoint never touches it.\n"
+            "    pip install \"qatration[fleet]\"\n"
+            f"  (the import said: {e})")
+    return ChatOllama
+
+
 def make_llm(ChatOllama, model, temperature=0, num_predict=NUM_PREDICT,
              timeout=REQUEST_TIMEOUT, **kw):
     """Build a capped ChatOllama.

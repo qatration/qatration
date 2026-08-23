@@ -85,7 +85,8 @@ class DvlaTarget(Target):
         self.db = DVLA_DB
         from langchain.agents import ConversationalChatAgent, AgentExecutor
         from langchain.memory import ConversationBufferMemory
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         _bind_db_to_an_absolute_path()
         import tools as dvla_tools
         self._cls = (ConversationalChatAgent, AgentExecutor, ConversationBufferMemory, ChatOllama)

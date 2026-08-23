@@ -33,7 +33,8 @@ class OpsBotTarget(Target):
         from langchain.agents import ConversationalChatAgent, AgentExecutor
         from langchain.agents import Tool
         from langchain.memory import ConversationBufferMemory
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         self._cls = (ConversationalChatAgent, AgentExecutor, ConversationBufferMemory, ChatOllama)
         self._Tool = Tool
 

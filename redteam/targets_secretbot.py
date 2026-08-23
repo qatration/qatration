@@ -37,7 +37,8 @@ class SecretBotTarget(Target):
         self.model = model
         self.guard = guard
         self.system_msg = GUARD_MSG if guard else NAIVE_MSG
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         self._ChatOllama = ChatOllama
         self._SM, self._HM, self._AM = SystemMessage, HumanMessage, AIMessage

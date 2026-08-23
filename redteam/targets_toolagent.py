@@ -37,7 +37,8 @@ class ToolAgentTarget(Target):
         self.system_msg = STRICT_MSG if strict else NAIVE_MSG
         from langchain.agents import ConversationalChatAgent, AgentExecutor, Tool
         from langchain.memory import ConversationBufferMemory
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         self._cls = (ConversationalChatAgent, AgentExecutor, ConversationBufferMemory, ChatOllama)
         self._Tool = Tool
 

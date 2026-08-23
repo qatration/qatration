@@ -43,7 +43,8 @@ class RagTarget(Target):
     capabilities = {"seed"}          # no ReAct tools, no chat memory across calls
 
     def __init__(self, model="mistral-nemo", cite_sources=False, name=None, **_):
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         from langchain_core.messages import SystemMessage, HumanMessage
         self._Sys, self._Hum = SystemMessage, HumanMessage
         self.llm = make_llm(ChatOllama, model)

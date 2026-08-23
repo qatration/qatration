@@ -17,7 +17,7 @@ respects it or that it stops the moment it wins.
 
     python test_llm.py           # exits 1 on any failure (CI gate)
 """
-import sys, os, glob, re, types
+import sys, os, io, glob, re, types
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -335,6 +335,46 @@ def main():
                 sys.modules.pop(k, None)
             else:
                 sys.modules[k] = v
+
+    # --- ONE GUARDED IMPORT FOR THE OPTIONAL DEPENDENCY --------------------------------------
+    #
+    # `langchain-ollama` belongs to the `[fleet]` extra: the practice fleet and the adaptive
+    # attacker need it, somebody testing their own endpoint never does. Eleven modules imported
+    # it bare, so a base install reaching for either got
+    #
+    #     ModuleNotFoundError: No module named 'langchain_ollama'
+    #
+    # which names an import where the reader needs an install. `llm.chat_ollama()` is the one
+    # place that knows what to say — and the check that matters is that nothing goes round it,
+    # because a twelfth bare import leaves the message in place while half the paths skip it.
+    import glob as _glob
+    _bare = []
+    for _fp in sorted(_glob.glob(os.path.join(HERE, "*.py"))):
+        _n = os.path.basename(_fp)
+        if _n == "llm.py" or _n.startswith("test_"):
+            continue
+        if "from langchain_ollama import" in io.open(_fp, encoding="utf-8").read():
+            _bare.append(_n)
+    check("nothing imports langchain_ollama except the one guarded place",
+          not _bare,
+          f"{_bare} import it directly, so they fail with a traceback instead of the "
+          f"install line")
+
+    import llm as _llm
+    check("the guard exists", hasattr(_llm, "chat_ollama"),
+          "llm.chat_ollama() is gone and eleven modules call it")
+    if hasattr(_llm, "chat_ollama"):
+        # THREE OUTCOMES. Whether the package is installed is a property of the machine, and a
+        # build must never fail for one.
+        try:
+            _cls = _llm.chat_ollama()
+            check("...and it returns the class where the package is installed",
+                  _cls is not None and hasattr(_cls, "__name__"), repr(_cls))
+        except SystemExit as _e:
+            _msg = str(_e)
+            check("...and where it is not, it names the install rather than the import",
+                  "qatration[fleet]" in _msg and "pip install" in _msg,
+                  f"the refusal says: {_msg[:160]}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

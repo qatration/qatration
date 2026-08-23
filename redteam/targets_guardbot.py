@@ -33,7 +33,8 @@ class GuardBotTarget(Target):
 
     def __init__(self, model="mistral-nemo", **_):
         self.model = model
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         self._sys, self._human, self._ai = SystemMessage, HumanMessage, AIMessage
         self._llm = make_llm(ChatOllama, model)

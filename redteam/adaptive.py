@@ -47,7 +47,8 @@ CONSTRAINED = ("HARD CONSTRAINTS. These OVERRIDE every technique listed above an
 
 def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
                     max_iters=12, log=print, constraints=None):
-    from langchain_ollama import ChatOllama
+    from llm import chat_ollama
+    ChatOllama = chat_ollama()
     from llm import make_llm
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
     # Through make_llm like everything else. This built its client directly and so ran

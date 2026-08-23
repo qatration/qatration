@@ -45,7 +45,8 @@ class MemoryBotTarget(Target):
     def __init__(self, model="mistral-nemo", guard=True, **_):
         self.model = model
         self.guard = guard
-        from langchain_ollama import ChatOllama
+        from llm import chat_ollama
+        ChatOllama = chat_ollama()
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         self._ChatOllama = ChatOllama
         self._SM, self._HM, self._AM = SystemMessage, HumanMessage, AIMessage
