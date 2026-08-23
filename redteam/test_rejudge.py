@@ -295,33 +295,56 @@ def main():
         check("a config outside the repository is invisible by default",
               "a-target-that-is-not-bundled" not in _base,
               "the fixture name collides with a bundled config; rename it")
-        check("...and reaches the context map when it is passed",
-              "a-target-that-is-not-bundled" in _rj.contexts([_p]),
-              "rejudge still cannot score results from a config `init` wrote")
+
+        _keep = os.environ.get("QATRATION_CONFIGS")
+        try:
+            os.environ["QATRATION_CONFIGS"] = _p
+            _got = _rj.contexts()
+        finally:
+            if _keep is None:
+                os.environ.pop("QATRATION_CONFIGS", None)
+            else:
+                os.environ["QATRATION_CONFIGS"] = _keep
+        check("...and reaches the context map through QATRATION_CONFIGS",
+              "a-target-that-is-not-bundled" in _got,
+              "the shared enumeration does not read the variable")
         check("...carrying the canaries re-scoring needs",
-              (_rj.contexts([_p]).get("a-target-that-is-not-bundled") or {}).get("canaries")
+              (_got.get("a-target-that-is-not-bundled") or {}).get("canaries")
               == ["QAT-CANARY-OUTSIDE"],
               "the context arrived empty, so every canary detector would be inert")
 
         # A PASSED CONFIG WINS over a bundled one of the same name: the caller named theirs.
-        _bundled = sorted(_base)
-        check("there are bundled configs to collide with", bool(_bundled),
-              "no targets_*.yaml found, so the precedence check below cannot run")
-        if _bundled:
-            _clash = os.path.join(_d, "clash.yaml")
-            io.open(_clash, "w", encoding="utf-8").write(
-                "name: %s\noracle_context:\n  canaries: ['QAT-CANARY-MINE']\n" % _bundled[0])
-            check("a passed config wins over a bundled one of the same name",
-                  (_rj.contexts([_clash]).get(_bundled[0]) or {}).get("canaries")
-                  == ["QAT-CANARY-MINE"],
-                  "the bundled config shadowed the one named on the command line")
+        # A PATH THAT DOES NOT EXIST IS REFUSED, rather than quietly read as less than
+        # asked for -- the failure mode would be a context silently missing its canaries.
+        _keep = os.environ.get("QATRATION_CONFIGS")
+        try:
+            os.environ["QATRATION_CONFIGS"] = os.path.join(_d, "not-here.yaml")
+            _raised = False
+            try:
+                _rj.contexts()
+            except SystemExit:
+                _raised = True
+        finally:
+            if _keep is None:
+                os.environ.pop("QATRATION_CONFIGS", None)
+            else:
+                os.environ["QATRATION_CONFIGS"] = _keep
+        check("a path that is not a file is refused, not skipped", _raised,
+              "a typo in QATRATION_CONFIGS would read as an empty context")
 
-    # And the wiring, or the checks above test a function nothing on the command line calls.
+    # ONE MECHANISM, AND NO SECOND ONE. A flag here was tried and refused by `test_llm`,
+    # because implementing it meant writing the environment from inside a module. If either
+    # comes back there are two answers to one question, and the next fix lands on one of them.
     _src = io.open(os.path.join(HERE, "rejudge.py"), encoding="utf-8").read()
-    check("rejudge accepts --target-config", '"--target-config"' in _src,
-          "contexts(extra) exists but nothing reaches it from the command line")
-    check("...and hands it to contexts()", "contexts(getattr(args" in _src,
-          "the flag is parsed and dropped")
+    check("rejudge resolves configs through the shared enumeration only",
+          "def contexts():" in _src and "contexts(extra" not in _src,
+          "rejudge grew its own config resolution again")
+    check("...and does not write the environment to get there",
+          'os.environ["QATRATION_CONFIGS"]' not in _src,
+          "a module editing the environment moves the ground under whatever runs next")
+    check("...and the unresolved message names how to fix it",
+          "QATRATION_CONFIGS" in _src,
+          "the message describes the state without saying what to do about it")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

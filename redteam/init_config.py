@@ -179,6 +179,17 @@ def main():
     print()
     print("    qatration onboard --target-config %s --verify-honeytoken %s"
           % (args.out, verify))
+    # WITHOUT THIS, HALF THE TOOL CANNOT SEE THE FILE IT JUST WROTE. `rejudge`, `coverage`
+    # and the report builders look up a target's canaries and markers by enumerating
+    # configs, and that enumeration used to look only inside the package. A config kept
+    # anywhere else resolved to an empty context: every canary detector inert, and each
+    # command said so in its own quiet way. Naming the variable here is what makes the fix
+    # reachable by somebody who did not read the source.
+    here = os.path.abspath(args.out)
+    print("\nSo that `rejudge`, `coverage` and the reports can find this config's "
+          "canaries, export it once:\n")
+    print("    export QATRATION_CONFIGS=%s" % here)
+    print("    $env:QATRATION_CONFIGS=\"%s\"      # PowerShell" % here)
     return 0
 
 

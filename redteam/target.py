@@ -221,5 +221,29 @@ def target_configs(directory=None):
     reason `test_end_to_end.py` puts its process id BEFORE `_tmp` rather than after.
     """
     directory = directory or os.path.dirname(os.path.abspath(__file__))
-    return sorted(p for p in glob.glob(os.path.join(directory, "targets_*.yaml"))
-                  if not os.path.basename(p).endswith(("_tmp.yaml", ".tmp.yaml")))
+    found = sorted(p for p in glob.glob(os.path.join(directory, "targets_*.yaml"))
+                   if not os.path.basename(p).endswith(("_tmp.yaml", ".tmp.yaml")))
+
+    # AND THE ONES THAT DO NOT LIVE HERE, which is every config `qatration init` writes. This
+    # enumeration is what `rejudge`, `coverage` and the report builders use to find the oracle
+    # context for a set of results -- the canaries and markers that decide whether a stored
+    # reply is a leak. Looking only in this directory meant that for anybody who is not this
+    # repository, rejudge re-scored nothing and coverage scanned with an empty context, with
+    # every canary detector inert. Both said so; neither could be pointed anywhere.
+    #
+    # Fixed here rather than as a flag per command, because a flag per command is a flag the
+    # next command arrives without. Same shape as QATRATION_OUT: paths, separated by the
+    # platform's path separator.
+    #
+    # A named path is used as named. The `_tmp` exclusion above exists because the end-to-end
+    # suites write throwaway configs into THIS directory; somebody who spells out a path means
+    # the file they spelled out.
+    extra = os.environ.get("QATRATION_CONFIGS", "")
+    for p in extra.split(os.pathsep):
+        p = p.strip()
+        if p and p not in found:
+            if not os.path.isfile(p):
+                raise SystemExit(f"QATRATION_CONFIGS names {p!r}, which is not a file. "
+                                 f"Nothing was read, rather than reading less than asked.")
+            found.append(p)
+    return found
