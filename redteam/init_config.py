@@ -77,11 +77,32 @@ request:
 response:
   reply: "choices.0.message.content"
 
-# Optional: a ceiling on what this run may do to your endpoint. Delete it and the defaults apply.
+# A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT, sized so a default run finishes inside
+# it. This said 300, and a default run sends about 1086 requests -- 362 attacks times three
+# trials -- so the first run of anyone following the quickstart stopped a third of the way in,
+# and the attacks it never sent look identical to attacks that held. `qatration onboard` does
+# this arithmetic against the corpus you actually have and says so if these numbers stop
+# fitting. Remove the block entirely and there is no ceiling at all.
 rate:
   min_interval_s: 0.0
-  max_requests: 300
-  max_seconds: 1800
+  max_requests: 1200
+  max_seconds: 5400
+
+# MULTI-TURN, and leaving this out costs about a third of the arsenal. Without it the attacks
+# that need more than one turn -- a rule planted early that changes a later answer, a forged
+# conversation history -- are SKIPPED, and a skipped attack is not a defence. `field` is the
+# key in `request:` holding the conversation, `insert_before` counts from the end.
+# history:
+#   field: messages
+#   mode: splice
+#   insert_before: 1
+
+# WHAT YOUR TOOLS RECEIVED, if this is an agent rather than a chat bot. Without it the engine
+# can only read the prose, and on an agent that is the blind spot: the answer can be impeccable
+# while the tool call underneath it carries the secret. The path is into the same response
+# body, alongside `response.reply`.
+# response:
+#   tool_calls: "choices.0.message.tool_calls"
 
 # WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
 # the world; a finding against a bot you wrote is evidence that the engine works. Reports that

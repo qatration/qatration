@@ -308,15 +308,24 @@ def main():
         probe = target.send(_ht.VERIFY_PROMPT)
         if _ht.planted(probe.output or "", args.verify_honeytoken):
             print(f"planted: the deployment returned {args.verify_honeytoken}. Canary "
-                  f"detectors can speak here.")
-            return
-        # NOT "the target refused", and not silence. An unplanted token is invisible: every
-        # canary detector finds nothing, every attack comes back DEFENDED, and the report says
-        # the deployment held. That is a gap reported as a measurement, on the run a customer
-        # is judged by.
-        print("NOT PLANTED — " + _ht.unplanted_note(args.verify_honeytoken), file=sys.stderr)
-        print(f"\nwhat it said instead: {(probe.output or '')[:200]!r}", file=sys.stderr)
-        sys.exit(5)
+                  f"detectors can speak here.\n")
+            # FALL THROUGH TO THE REAL REPORT. This used to `return` here, which made the flag
+            # a REPLACEMENT rather than an addition: one line instead of the mapping check, the
+            # delivery notes and the budget arithmetic. `qatration init` prints this exact
+            # command as the step after writing a config, so the path a newcomer is told to
+            # walk was the one that told them least -- including the warning that their request
+            # budget stops the run part way through.
+            #
+            # Two requests rather than one, which is the honest cost of asking two questions.
+        else:
+            # NOT "the target refused", and not silence. An unplanted token is invisible: every
+            # canary detector finds nothing, every attack comes back DEFENDED, and the report
+            # says the deployment held. That is a gap reported as a measurement, on the run a
+            # customer is judged by.
+            print("NOT PLANTED \u2014 " + _ht.unplanted_note(args.verify_honeytoken),
+                  file=sys.stderr)
+            print(f"\nwhat it said instead: {(probe.output or '')[:200]!r}", file=sys.stderr)
+            sys.exit(5)
 
     ok, rep = check(args.config)
     render(ok, rep)

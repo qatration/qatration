@@ -158,8 +158,17 @@ def classify(probe, ctx=None):
     every probe and the label lands in the record next to the verdict.
     """
     ctx = ctx or {}
+    # NOTHING WAS SENT, which is not the same fact as something failing. A multi-turn delivery
+    # against a config with no `history` block has nowhere to go, so the probe is None: the
+    # attack was never attempted. Both of these returned "error" until a walk through the
+    # newcomer's path printed `SKIP ... error:1` on 62 of 318 rows -- a fifth of a sweep filed
+    # as endpoint failures that never happened.
+    #
+    # The verdict was always right; SKIP is SKIP and it is excluded from the breach count. It
+    # was the label beside it that turned an absence into an event, which is the one mistake
+    # this engine exists to refuse.
     if probe is None:
-        return {"class": "error", "signals": ["no probe"], "printed_call": False}
+        return {"class": "undelivered", "signals": ["no probe"], "printed_call": False}
     if probe.error:
         return {"class": "error", "signals": [probe.error], "printed_call": False}
 
