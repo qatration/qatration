@@ -422,7 +422,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="grp">Needs access to the thing being attacked</div>
     <p class="grp-note">You cannot plant a document in a knowledge base you cannot write to,
       and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the
-      corpus, the tool definitions, or visibility of the calls.</p>
+      corpus, the tool definitions, or visibility of the calls.
+      <b>Measured on the evidence shipped with this tool: 61 of 138 findings on targets
+      that report tool calls do not appear at all when only the reply is read.</b> The bot
+      answers politely and puts the secret in an argument.</p>
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Agent tool abuse</h3><span class="chip exploited">Exploited</span></div>

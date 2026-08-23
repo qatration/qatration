@@ -44,6 +44,7 @@ ROOT = os.path.dirname(HERE)
 import yaml
 from oracle import DETECTORS
 import detector_coverage as dc
+from target import target_configs
 
 README = os.path.join(ROOT, "README.md")
 
@@ -986,6 +987,82 @@ def main():
     check("...and restores the row gap the wide rule zeroes",
           "row-gap:34px" in _mobile,
           "row-gap:0 leaks into the narrow layout and the panel touches the column above it")
+
+    # --- WHAT THE TOOL CHANNEL IS WORTH, RECOUNTED -------------------------------------------
+    #
+    # The page says a number about agents: how many findings vanish when the engine can only
+    # read the reply. It is the sharpest claim this project makes about agent targets, so it is
+    # derived here from the artifacts rather than trusted.
+    #
+    # Judge every stored trial twice with the CURRENT oracle: once as recorded, once with the
+    # tool channel blanked. Blanking is exactly what a config with no `response.tool_calls`
+    # produces, so the difference is what mapping it buys. Same method the NEEDS_CONFIG entries
+    # were measured with -- replay, remove one thing, count.
+    from oracle import judge as _judge
+    from target import Probe as _Probe
+
+    _ctxs = {}
+    for _fp in target_configs(HERE):
+        _c = yaml.safe_load(open(_fp, encoding="utf-8")) or {}
+        if _c.get("name"):
+            _ctxs[_c["name"]] = _c.get("oracle_context") or {}
+
+    _BREACH = ("EXPLOITED", "PARTIAL")
+    _with = _blind = 0
+    for _path in sorted(glob.glob(os.path.join(ROOT, "out", "results_*.json"))):
+        try:
+            _data = json.load(open(_path, encoding="utf-8"))
+        except Exception:
+            continue
+        _name = os.path.basename(_path)[len("results_"):-len(".json")]
+        _ctx = _ctxs.get(_name) or next((v for k, v in _ctxs.items()
+                                         if _name.startswith(k)), None)
+        if _ctx is None:
+            continue
+        _has_calls = False
+        _rows = []
+        for _r in _data.get("results", []):
+            if (_r.get("attack") or {}).get("category") == "control":
+                continue
+            _a = _b = False
+            for _t in _r.get("trials", []):
+                _p = _t.get("probe")
+                if not _p:
+                    continue
+                _calls = [tuple(c) for c in (_p.get("tool_calls") or [])]
+                _res = [tuple(c) for c in (_p.get("resolved") or [])]
+                if _calls or _res:
+                    _has_calls = True
+                _kw = dict(prompt=_p.get("prompt") or "", output=_p.get("output") or "",
+                           observations=_p.get("observations") or [],
+                           seconds=float(_p.get("seconds") or 0))
+                if _judge(_r["attack"], _Probe(tool_calls=_calls, resolved=_res, **_kw),
+                          _ctx)[0] in _BREACH:
+                    _a = True
+                if _judge(_r["attack"], _Probe(tool_calls=[], resolved=[], **_kw),
+                          _ctx)[0] in _BREACH:
+                    _b = True
+            _rows.append((_a, _b))
+        if _has_calls:
+            _with += sum(1 for a, _ in _rows if a)
+            _blind += sum(1 for _, b in _rows if b)
+
+    _only = _with - _blind
+    check("there is agent evidence to count", _with > 0,
+          "no stored run reports tool calls, so this claim has nothing behind it")
+    if _with:
+        # The page may say the number is smaller than it is; it may never say it is larger.
+        # Same asymmetry the probe-count claim uses: understating the evidence is harmless,
+        # overstating it is the thing this file exists to stop.
+        _m = re.search(r"(\d+)\s+of\s+(\d+)\s+findings[^.]*only the reply", _site)
+        check("the page states the tool-channel number", bool(_m),
+              f"recounted {_only} of {_with}; the page says nothing, so the check is blind")
+        if _m:
+            _claim_only, _claim_all = int(_m.group(1)), int(_m.group(2))
+            check("...and it matches the artifacts",
+                  (_claim_only, _claim_all) == (_only, _with),
+                  f"the page says {_claim_only} of {_claim_all}; the evidence says "
+                  f"{_only} of {_with}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
