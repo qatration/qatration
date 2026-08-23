@@ -9,7 +9,7 @@ a control that is only correct in one mode is a control shipped backwards half t
 
     python test_intake.py        # exits 1 on any failure (CI gate)
 """
-import sys, os, re, json, shutil, tempfile, threading, importlib
+import sys, os, io, re, json, shutil, tempfile, threading, importlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
@@ -62,6 +62,7 @@ def main():
         os.environ.pop("QATRATION_HOSTED", None)
         import authorization
         importlib.reload(authorization)
+        import jobqueue as q
         import intake
         importlib.reload(intake)
 
@@ -142,7 +143,44 @@ def main():
         check("a job id shaped like a path is refused before any lookup",
               intake.status(root, "../../etc/passwd")[0] == 400)
         check("...and so is one at the report route",
-              intake.report(root, "../../../secrets") is None)
+              intake.report(root, "../../../secrets")[0] is None)
+
+        # --- A REPORT IS FOR A JOB THAT FINISHED --------------------------------------------
+        #
+        # `status` already refuses to hand out the link unless the state is `done`, and
+        # `report` served the file to anybody who typed the URL — four characters of guessing.
+        # A sweep that stopped early renders the same shape of page as one that finished:
+        # findings, counts, a fix list. What differs is the attacks that never ran, and those
+        # read exactly like attacks that held.
+        _jid = None
+        for _j in q.listing(root):
+            _jid = _j.get("job_id")
+            break
+        check("there is a job to ask about", bool(_jid), "the fixture queued nothing")
+        if _jid:
+            _d = os.path.join(str(root), "runs", _jid)
+            os.makedirs(_d, exist_ok=True)
+            io.open(os.path.join(_d, "defense_report.html"), "w", encoding="utf-8").write(
+                "<html><body>partial</body></html>")
+
+            _html, _why = intake.report(root, _jid)
+            check("a report is NOT served while the job is unfinished", _html is None,
+                  "a partial sweep was handed over as a finished one")
+            check("...and the refusal names the state rather than pretending there is no file",
+                  bool(_why) and "not done" in _why, str(_why))
+
+            # ...and it IS served once the job is done, or the check above is just a wall.
+            _lst = q.listing(root)
+            for _j in _lst:
+                if _j.get("job_id") == _jid:
+                    _j["state"] = "done"
+            _saved = getattr(q, "listing")
+            try:
+                q.listing = lambda _root, _l=_lst: _l
+                _html2, _why2 = intake.report(root, _jid)
+            finally:
+                q.listing = _saved
+            check("...and a finished job's report is served", _html2 is not None, str(_why2))
 
         # --- HOSTED: the same target is now OUR machine and must be refused ---------------
         os.environ["QATRATION_HOSTED"] = "1"

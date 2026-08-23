@@ -230,13 +230,34 @@ def status(root, job_id):
 
 
 def report(root, job_id):
+    """The report, and only for a job that finished.
+
+    Returns the HTML, or (None, reason) when there is nothing this caller should be handed.
+
+    THE STATE CHECK IS THE POINT. `status()` withholds the report link unless the job is
+    `done`, on purpose — and this served the file to anyone who typed the URL, which is four
+    characters of guessing. A sweep that stopped early renders the same shape of page as one
+    that finished: findings, counts, a fix list. What differs is the attacks that never ran,
+    and those look exactly like attacks that held. Handing that over as a plain 200 is this
+    engine's own defect in the one endpoint whose entire job is giving somebody a conclusion.
+    """
     if not ID_RE.match(job_id or ""):
-        return None
+        return None, "bad job id"
     # Derived from the id, never from anything the caller sent.
     p = os.path.join(str(root), "runs", job_id, "defense_report.html")
     if not os.path.exists(p):
-        return None
-    return open(p, encoding="utf-8").read()
+        return None, "no report for that job yet"
+
+    state = None
+    for j in q.listing(root):
+        if j.get("job_id") == job_id:
+            state = j.get("state")
+            break
+    if state != "done":
+        return None, (f"this job is {state or 'unknown'}, not done, so its report covers "
+                      f"however much of the sweep ran. Attacks that were never sent read the "
+                      f"same as attacks that held, which is why this is not served.")
+    return open(p, encoding="utf-8").read(), None
 
 
 def make_handler(root):
@@ -291,9 +312,12 @@ def make_handler(root):
             if len(parts) == 2 and parts[0] == "runs":
                 return self._send(*status(root, parts[1]))
             if len(parts) == 3 and parts[0] == "runs" and parts[2] == "report":
-                html = report(root, parts[1])
+                html, why = report(root, parts[1])
                 if html is None:
-                    return self._send(*_problem(404, "no report for that job yet"))
+                    # 409 when the job exists and is not done: the request is well formed and
+                    # the answer is "not yet, and here is why", which a 404 would not say.
+                    code = 404 if (why or "").startswith(("no report", "bad job")) else 409
+                    return self._send(*_problem(code, why or "no report for that job yet"))
                 return self._send(200, html, "text/html")
             self._send(*_problem(404, "GET /runs, /runs/<id>, /runs/<id>/report"))
 
