@@ -164,7 +164,7 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
    every one of them: measured, that grew the section by 470px. Zeroing it gives their own
    margins back. See the 820px block for the other half of that. */
 .hero{display:grid;grid-template-columns:1.05fr .95fr;column-gap:48px;row-gap:0;
-  align-items:start;padding:74px 0 64px}
+  align-items:start;padding:40px 0 64px}
 .hero > div:first-child{display:contents}
 .hero > div:first-child > *{grid-column:1}
 /* Row 4 is the warning block. That is a position, not a name, so `test_readme.py` reads
@@ -238,9 +238,12 @@ section{padding:76px 0;border-top:1px solid var(--line)}
 
    40ch measured against 44 and 47: above 40 one heading collapses onto a single 861px
    line, about 51 characters of display type. At 40 every heading is one or two lines. */
-.sec-head{max-width:none;margin-bottom:36px}
-.sec-head h2{max-width:40ch}
-.sec-head p{max-width:max(52ch, var(--text-col))}
+.sec-head{max-width:max(52ch, var(--text-col));margin-bottom:36px}
+/* FILL THE LINE, do not even it out. `h1,h2,h3` are balanced above, which is right for
+   the hero but wrong here: it made "A clean result is only worth something if you know
+   what made it clean." into three short even lines with "worth" pushed down, inside a
+   box wide enough to hold it. */
+.sec-head h2{text-wrap:auto}
 .sec-head h2{font-size:clamp(25px,3.4vw,33px);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
 .sec-head p{color:var(--muted);margin:0}
 
