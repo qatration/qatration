@@ -118,13 +118,29 @@ jobs:
         # resolves an interpreter and runs here, and that every server is still valid Python.
         # `ast.parse` rather than `import`, because two of them need smolagents and langchain,
         # which CI deliberately does not install.
+        #
+        # THE LIST IS DERIVED, because a typed-out list of which servers exist is a second
+        # copy of that fact, and drift inside this family is exactly what the paragraph above
+        # is about. `git ls-files` and not a shell glob: `dvla/`, `external/nemo/venv/` and
+        # `external/local-rag-chat/` are gitignored clones, and a glob would walk into
+        # whichever of them the runner happens to have and check files this repository does
+        # not ship. The floor is there because a derived list that comes back empty passes a
+        # `for` loop in silence -- the same defect as the constant, by a quieter route. It
+        # refuses ZERO and not "fewer than seven": a specific count is the same second copy
+        # of how many servers exist that this change just removed, and it would fail the
+        # build the day one is legitimately retired.
         run: |
           bash -n tools/fleet.sh
           bash tools/fleet.sh status
-          for s in httpbot/server.py draftbot/server.py \
-                   external/guardedrag/server.py external/nemo/server.py \
-                   foreign-agent/server.py foreign-agent/server_code.py \
-                   foreign-langchain/server.py; do
+          servers=$(git ls-files | grep -E 'server[^/]*\.py$')
+          n=$(printf '%s\n' "$servers" | grep -c . || true)
+          if [ "$n" -eq 0 ]; then
+            echo "no practice server found; this repository ships several, so the search is"
+            echo "looking in the wrong place rather than passing"
+            exit 1
+          fi
+          echo "$n practice server(s) to parse"
+          for s in $servers; do
             python -c "import ast,io,sys; ast.parse(io.open(sys.argv[1],encoding='utf-8').read())" "$s"
           done
 
