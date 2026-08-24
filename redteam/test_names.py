@@ -26,7 +26,7 @@ this process, every time.
 
     python test_names.py           # exits 1 on any failure (CI gate)
 """
-import ast, builtins, io, os, sys
+import ast, builtins, glob, io, os, sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -223,6 +223,98 @@ def main():
     # arriving through the suite itself.
     check("...and there was source to scan at all", files > 40,
           f"only {files} .py files found under {SCANNED} — the walk found nothing to check")
+
+    # --- NO ASSERTION MAY BE TRUE NO MATTER WHAT THE CODE DOES -------------------------
+    #
+    # THE TAUTOLOGY GATE. This suite exists because a property the compiler accepts can still
+    # be one no run reaches; an assertion that cannot fail is the same defect from the other
+    # side, and it is worse, because it reports itself as a pass.
+    #
+    # Not hypothetical, and not only in old code. Two gates written the same day this was
+    # added passed under mutation -- one because the delivery family it needed was never
+    # exercised in its fixture, one because the longest attack id in its fixture was ten
+    # characters and the constant it was checking was twenty-two. Two more in the shipped
+    # suite were `... or True`: a detector-throws check whose fixture had stopped making
+    # anything throw, and a per-target-key check whose author hedged on data that in fact
+    # supports the stronger claim.
+    #
+    # The two-armed idiom is exempt, and the exemption is derived rather than listed:
+    #
+    #     try:
+    #         thing_that_should_raise()
+    #         check("X is refused", False, "it was accepted")
+    #     except ValueError:
+    #         check("X is refused", True)
+    #
+    # That `True` fails whenever the wrong arm runs, so a label carrying BOTH a constant-true
+    # and a constant-false assertion is one assertion with two arms. A lone `or True` has no
+    # such partner and cannot borrow one.
+    #
+    # It cannot see a fixture too small to reach a property -- only mutation shows that -- so
+    # passing here is not proof of anything. Failing is proof of the opposite.
+    def _fixed_truth(node):
+        """-> True/False if this expression's value is fixed, else None."""
+        if isinstance(node, ast.Constant):
+            return bool(node.value)
+        if isinstance(node, ast.BoolOp):
+            vals = [_fixed_truth(v) for v in node.values]
+            if isinstance(node.op, ast.Or):
+                return True if any(v is True for v in vals) else (
+                    False if all(v is False for v in vals) else None)
+            return False if any(v is False for v in vals) else (
+                True if all(v is True for v in vals) else None)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            inner = _fixed_truth(node.operand)
+            return None if inner is None else (not inner)
+        if (isinstance(node, ast.Compare) and len(node.ops) == 1
+                and isinstance(node.ops[0], (ast.Eq, ast.Is))
+                and ast.dump(node.left) == ast.dump(node.comparators[0])):
+            return True                      # `x == x`
+        return None
+
+    _by_label, _n_checks, _unparsed = {}, 0, []
+    _suites = sorted(glob.glob(os.path.join(HERE, "test_*.py")))
+    for _sp in _suites:
+        try:
+            _tree = ast.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError as e:
+            _unparsed.append(f"{os.path.basename(_sp)}: {e}")
+            continue
+        for _n in ast.walk(_tree):
+            # A BARE ASSERT COUNTS TOO. The suites carry 42 of them, and a gate that reads
+            # one assertion form and not the other is the defect it exists to catch. There
+            # is no two-armed exemption here: that idiom pairs on a label and an assert has
+            # none, so it is keyed by its own line and stands alone.
+            if isinstance(_n, ast.Assert):
+                _n_checks += 1
+                _by_label[(os.path.basename(_sp), f"<assert line {_n.lineno}>")] = [
+                    (_n.lineno, _fixed_truth(_n.test))]
+                continue
+            if not (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+                    and _n.func.id == "check" and len(_n.args) >= 2):
+                continue
+            _n_checks += 1
+            _lab = _n.args[0]
+            _key = (os.path.basename(_sp),
+                    _lab.value if isinstance(_lab, ast.Constant) else ast.dump(_lab))
+            _by_label.setdefault(_key, []).append((_n.lineno, _fixed_truth(_n.args[1])))
+
+    _tauto = []
+    for (_f, _label), _calls in sorted(_by_label.items()):
+        _vals = {v for _, v in _calls}
+        if True in _vals and False in _vals:
+            continue                          # the two-armed idiom
+        _tauto += [f"{_f}:{ln}  {str(_label)[:70]}" for ln, v in _calls if v is True]
+
+    check("every suite in this directory parses", not _unparsed, "; ".join(_unparsed))
+    check(f"none of the {_n_checks} assertions across {len(_suites)} suites is true no matter "
+          f"what the code does — `check(...)` calls and bare asserts alike",
+          not _tauto, "; ".join(_tauto[:4]))
+    # A scan that found nothing because it walked nothing is the failure this whole file is
+    # about, so the reach is asserted rather than assumed -- same as the line above about
+    # having source to scan at all.
+    check("...and there were assertions to scan", _n_checks > 500 and len(_suites) > 20,
+          f"{_n_checks} check() calls in {len(_suites)} suites")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

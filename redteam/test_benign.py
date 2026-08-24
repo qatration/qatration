@@ -130,11 +130,25 @@ def main():
     # leading '!' rather than letting the exception end the run.
     class Boom:
         pass
+    # THE FIXTURE HAS TO REACH THE PROPERTY. This read `... or True`, with a note saying the
+    # result was tolerated either way -- so the assertion was true whatever `fires_on` did,
+    # and the mechanism it names had never been exercised. `{"canaries": [None]}` used to
+    # make a detector throw; the detectors were hardened and it stopped, and the check was
+    # neutered rather than re-aimed. A detector that raises on purpose cannot be hardened
+    # out from under it.
+    def _boom(probe, ctx):
+        raise RuntimeError("this detector is broken")
+
+    _DET = __import__("oracle").DETECTORS
+    _DET["_test_throwing_detector"] = _boom
+    try:
+        _out = fires_on(Probe(prompt="x", output="y", tool_calls=[], observations=[]), {})
+    finally:
+        _DET.pop("_test_throwing_detector", None)
     check("a detector that throws is reported, not fatal",
-          any(x.startswith("!") for x in
-              fires_on(Probe(prompt="x", output="y", tool_calls=[("T", None)],
-                             observations=[]), {"canaries": [None]}))
-          or True)   # tolerated either way: what matters is that it did not raise
+          "!_test_throwing_detector:RuntimeError" in _out, str(_out[:6]))
+    check("...and the working detectors beside it still answer",
+          all(not x.startswith("!") for x in _out if "_test_throwing" not in x), str(_out[:6]))
 
     # --- the summary counts what it claims --------------------------------------------
     rows = [{"fired": ["over_refusal"], "refused": True},
@@ -233,9 +247,17 @@ def main():
           all(isinstance(k, tuple) and len(k) == 2 for k in adj))
     # A detector right on one bot and wrong on another is the normal case, so the same
     # detector must be able to hold different verdicts on different targets.
-    dets = [d for (_, d) in adj]
+    # `or True` here was unnecessary caution, and it made the check say nothing. The shipped
+    # adjudication has 124 pairs over 29 targets and `pii_in_output` is a finding on two of
+    # them and a false positive on twenty-six, so the claim the comment above makes is not
+    # only true, it is the sharper one: the same detector holding DIFFERENT verdicts.
+    _verdicts = {}
+    for (_t, _d), _r in adj.items():
+        _verdicts.setdefault(_d, set()).add(_r.get("verdict"))
+    _split = sorted(d for d, vs in _verdicts.items() if len(vs) > 1)
     check("...which lets one detector be a finding on one target and not on another",
-          len(dets) > len(set(dets)) or True)
+          bool(_split), f"no detector is adjudicated differently on two targets: "
+                        f"{sorted(_verdicts)[:6]}")
     fd, empty = _tf.mkstemp(suffix=".yaml")
     _os.close(fd)
     _os.unlink(empty)
