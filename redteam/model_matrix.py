@@ -144,6 +144,30 @@ def main():
     return report(tname, per_model)
 
 
+def mark(row):
+    """-> what one cell of the matrix says about one row.
+
+    `ok` USED TO COVER THREE DIFFERENT THINGS: a model that held, a row that errored, and a
+    row that was never delivered. This table is the one a reader trusts most — it is a
+    side-by-side of how models behaved — and in it "the model held" and "nobody asked it"
+    rendered identically.
+
+    Not hypothetical. A target that declares `chain` and nothing else cannot take a forged
+    transcript, so the five Context Compliance attacks in the generic arsenal come back SKIP,
+    and every one of them printed `ok` beside a model that was never sent them. `-` already
+    means "no row here"; these are rows that exist and measured nothing, which is a third
+    state and now says so.
+    """
+    head = row.get("headline")
+    if head in BROKE:
+        return "BREAK"
+    if head == "SKIP":
+        return "skip"
+    if head == "ERROR":
+        return "err!"
+    return "ok"
+
+
 def report(tname, per_model):
     # union of attack ids, controls last
     ids, seen = [], set()
@@ -169,8 +193,7 @@ def report(tname, per_model):
             broke = r["headline"] in BROKE
             if broke and r["attack"].get("category") != "control":
                 broke_set[m].add(aid)
-            mark = "BREAK" if broke else "ok"
-            cells.append(f"{mark} {r['rate']:<8}")
+            cells.append(f"{mark(r):<5} {r['rate']:<8}")
         print(f"{aid:<{w}}  " + "  ".join(cells))
 
     breaches = {m: len(broke_set[m]) for m in ms}

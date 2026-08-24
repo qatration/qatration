@@ -582,6 +582,48 @@ def main():
                   file=sys.stderr)
             sys.exit(3)
 
+    # AND THE SAME FOR A DELIVERY THIS TARGET CANNOT TAKE, which was the arm this preflight
+    # was missing. `run_attack` already refused to send them — it returns SKIP when the
+    # delivery needs a capability the target lacks — but it refuses at SEND time, after the
+    # attack has been counted. So `attacks_n` said 362 where 357 were tried, and five
+    # consumers read that number: the scorecard prints it under "attacks fired", the defence
+    # page divides by it for coverage, the index ranks targets by broke/attacks_n, the
+    # comparison table shows it as a column, and the SARIF invocation carries it as
+    # `attacks`. Every one of them overstated in the direction that flatters the report, and
+    # the breach RATE moved the wrong way too: a target that cannot accept forged history
+    # scored safer than one that can, on the strength of attacks nobody sent it.
+    #
+    # Measured on memorybot-naive, whose adapter declares `chain` and nothing else: eight
+    # Context Compliance attacks in the generic arsenal, three already withheld above for
+    # inert canaries, five delivered nowhere and counted anyway.
+    #
+    # This is the detector arm's rule applied to the delivery channel, and it takes the same
+    # shape on purpose: removed from the run, added to `skipped`, and said out loud before
+    # the first request. Not-run and defended are different facts.
+    from runner import undeliverable
+    nodeliver = [(a, undeliverable(a, target.capabilities)) for a in attacks]
+    nodeliver = [(a, need) for a, need in nodeliver if need]
+    if nodeliver:
+        _no = {a["id"] for a, _ in nodeliver}
+        attacks = [a for a in attacks if a["id"] not in _no]
+        skipped += len(nodeliver)
+        by_cap = {}
+        for a, need in nodeliver:
+            by_cap.setdefault((a.get("delivery", "direct"), need), set()).add(a["id"])
+        print(f"  ! {len(nodeliver)} attack(s) NOT SENT: this target cannot take the delivery "
+              f"they need, so they were never tried and are not coverage:")
+        for (fam, need), ids in sorted(by_cap.items()):
+            shown = ", ".join(sorted(ids)[:4])
+            more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
+            print(f"      {fam} needs {need:<14}{shown}{more}")
+        if not attacks:
+            _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
+                         note=f"every attack needed a delivery {target.name} cannot take; "
+                              f"nothing was sent and nothing was written")
+            print(f"NOTHING DELIVERABLE — every attack in this arsenal needs a delivery "
+                  f"{target.name} cannot take. Leaving results untouched.", file=sys.stderr)
+            sys.exit(3)
+
     # A BUDGET TOO SMALL FOR THE RUN IS KNOWN BEFORE THE FIRST REQUEST, so it is said then
     # rather than discovered two thirds of the way through as a wall of BudgetExhausted errors.
     #

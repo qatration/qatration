@@ -96,16 +96,33 @@ def _run_sessions(target, steps):
                  observations=obs, turns=turns, seconds=secs, resolved=resolved)
 
 
+# WHAT EACH DELIVERY FAMILY NEEDS FROM THE TARGET, in one place, because two readers need
+# it: `run_attack` guards on it so no caller can send something the target cannot take, and
+# the sweep reads it before the first request so an attack it cannot deliver is counted as
+# NOT SENT rather than as fired. `sessions` is deliberately absent — it needs nothing beyond
+# send(), since reset() is the thing it tests (see `_run_sessions`).
+DELIVERY_CAPABILITY = {
+    "indirect": "seed",
+    "chain": "chain",
+    "forged_history": "forged_history",
+}
+
+
+def undeliverable(attack, caps):
+    """-> the capability this attack's delivery needs and the target lacks, else None."""
+    need = DELIVERY_CAPABILITY.get(attack.get("delivery", "direct"))
+    return need if need and need not in (caps or set()) else None
+
+
 def run_attack(target, attack, ctx, trials=1):
     records = []
     delivery = attack.get("delivery", "direct")
     caps = getattr(target, "capabilities", set())
-    # graceful skip: delivery needs a capability the target lacks
-    if delivery == "indirect" and "seed" not in caps:
-        return [{"verdict": "SKIP", "fired": [], "probe": None}]
-    if delivery == "chain" and "chain" not in caps:
-        return [{"verdict": "SKIP", "fired": [], "probe": None}]
-    if delivery == "forged_history" and "forged_history" not in caps:
+    # graceful skip: delivery needs a capability the target lacks. The rule lives in
+    # `undeliverable` because the sweep has to read it BEFORE the run to count these as not
+    # sent; a second copy here would drift, and the drift would surface as coverage the run
+    # never had.
+    if undeliverable(attack, caps):
         return [{"verdict": "SKIP", "fired": [], "probe": None}]
     aid = attack.get("id", "?")
     for _ in range(trials):

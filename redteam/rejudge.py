@@ -143,7 +143,10 @@ def rescore(path, ctx):
     # the headline counters in meta are derived, so they have to move too
     real = [r for r in data.get("results", []) if r["attack"].get("category") != "control"]
     data["meta"]["broke"] = sum(1 for r in real if r["headline"] in ("EXPLOITED", "PARTIAL"))
-    data["meta"]["attacks_n"] = len(real)
+    # A SKIP ROW IS NOT AN ATTACK THAT FIRED. Older artifacts can carry them — the sweep only
+    # started withholding an undeliverable attack up front — and counting them here would put
+    # the overstatement back into a file that had been rescored to remove it.
+    data["meta"]["attacks_n"] = sum(1 for r in real if r["headline"] != "SKIP")
     return data, changed
 
 
