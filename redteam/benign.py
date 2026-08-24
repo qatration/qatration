@@ -357,6 +357,10 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
     rows = []
     items = ([(cid, pr, "direct", [t]) for cid, pr, t in corpus]
              + [tuple(c) for c in conversations])
+    # From the ids about to be printed, not a constant. The same defect as the sweep's own
+    # table: `{cid:<26}` was written when the longest id fitted, and thirteen attack ids in
+    # the shipped arsenals have since grown past it.
+    _wid = max([26] + [len(i[0]) for i in items]) + 2
     for cid, provokes, delivery, steps in items:
         steps = [fill(x, ctx) for x in steps]     # fill ONCE: the stored prompt has to be
         text = "\n".join(steps)                   # what was sent, placeholders and all
@@ -369,7 +373,7 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
                 rows.append({"id": cid, "provokes": provokes, "prompt": text,
                              "skipped": f"needs {delivery}", "fired": []})
                 if echo:
-                    print(f"  s {cid:<26}(no {delivery} capability)")
+                    print(f"  s {cid:<{_wid}}(no {delivery} capability)")
                 continue
             if probe is None or probe.error:
                 rows.append({"id": cid, "provokes": provokes, "prompt": text,
@@ -421,7 +425,7 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
                          "full": (probe.output or "") if noisy else ""})
             if echo:
                 mark = "!" if noisy else ("r" if "over_refusal" in fired else ".")
-                print(f"  {mark} {cid:<26}{','.join(noisy) or '-'}")
+                print(f"  {mark} {cid:<{_wid}}{','.join(noisy) or '-'}")
     return rows
 
 

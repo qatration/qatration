@@ -193,6 +193,10 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
                 f"nothing has measured what this target does when nobody attacks it.\n"
                 f"      qatration benign {how}")
     c_rates = canary_rates(target, canaries, out_dir)
+    # Sized from the ids that will be printed. `{id:<28}` ran four shipped attack names into
+    # the verdict beside them, and the note this builds is the one that tells a reader a
+    # finding is not attributable -- the last line that should be hard to read.
+    _wid = max([28] + [len((r.get("attack") or {}).get("id") or "") for r in results]) + 2
     lines, rescued = [], []
     for r in results:
         if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
@@ -203,12 +207,12 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
         loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
         quiet = quiet_canary_in(r, c_rates, loudest)
         if quiet:
-            rescued.append(f"      {r['attack'].get('id', '?'):<28}"
+            rescued.append(f"      {r['attack'].get('id', '?'):<{_wid}}"
                            f"stands: it produced {quiet[0]}, which appears on "
                            f"{quiet[1]:.0%} of benign traffic against the {loudest:.0%} of the "
                            f"detector that flagged it — so the noise is some other string")
             continue
-        lines.append(f"      {r['attack'].get('id', '?'):<28}{verdict:<16}"
+        lines.append(f"      {r['attack'].get('id', '?'):<{_wid}}{verdict:<16}"
                      + ", ".join(f"{d} fires on {p:.0%} of benign traffic"
                                  for d, p in detail[:2]))
     if not lines and not rescued:

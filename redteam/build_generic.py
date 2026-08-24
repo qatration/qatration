@@ -166,8 +166,12 @@ def main():
           f"({len(cats_after)} categories)")
     if args.blocked:
         print()
+        # From the ids being listed. Four shipped attack names are already longer than the
+        # constant this used to be, and this listing exists to be read by hand.
+        _wid = max([28] + [len(b[0]) for b in blocked]) + 2
+        _wcat = max([18] + [len(str(b[1])) for b in blocked]) + 2
         for aid, cat, why in sorted(blocked, key=lambda x: (x[2], x[0])):
-            print(f"  {aid:<28}{str(cat):<18}{why}")
+            print(f"  {aid:<{_wid}}{str(cat):<{_wcat}}{why}")
 
     if not args.write:
         print("\nnothing written — re-run with --write")

@@ -541,8 +541,9 @@ def main():
     if dead:
         print(f"  ! {len(dead)} detector(s) cannot fire on this target — "
               f"missing config, not a clean result:")
+        _wn = max(26, *(len(n) for n in dead)) + 2
         for name, keys in sorted(dead.items()):
-            print(f"      {name:<26}needs {', '.join(keys)}")
+            print(f"      {name:<{_wn}}needs {', '.join(keys)}")
 
     # AN ATTACK WHOSE EVERY DECLARED DETECTOR IS INERT MUST NOT RUN. It used to: the console
     # said which detectors could not fire and the sweep sent the attacks anyway, so each came
@@ -567,10 +568,11 @@ def main():
                     by_need.setdefault(k, set()).add(a["id"])
         print(f"  ! {len(unmeasurable)} attack(s) NOT SENT: every detector they rely on is "
               f"inert here, so a verdict would say defended about something unmeasured:")
+        _wk = max(22, *(len(k) for k in by_need)) + 2
         for k, ids in sorted(by_need.items()):
             shown = ", ".join(sorted(ids)[:4])
             more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
-            print(f"      needs {k:<22}{shown}{more}")
+            print(f"      needs {k:<{_wk}}{shown}{more}")
         if not attacks:
             # EXIT 3 for the same reason as the branch above: this is the state the sentence
             # printed here describes, and returning zero would report it as a clean run.
@@ -612,10 +614,11 @@ def main():
             by_cap.setdefault((a.get("delivery", "direct"), need), set()).add(a["id"])
         print(f"  ! {len(nodeliver)} attack(s) NOT SENT: this target cannot take the delivery "
               f"they need, so they were never tried and are not coverage:")
+        _wc = max(14, *(len(f"{f} needs {n}") for f, n in by_cap)) + 2
         for (fam, need), ids in sorted(by_cap.items()):
             shown = ", ".join(sorted(ids)[:4])
             more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
-            print(f"      {fam} needs {need:<14}{shown}{more}")
+            print(f"      {f'{fam} needs {need}':<{_wc}}{shown}{more}")
         if not attacks:
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                          note=f"every attack needed a delivery {target.name} cannot take; "
@@ -663,9 +666,15 @@ def main():
             {str(x) for x in (ctx.get("baseline_tool_inputs") or [])} | clean)
         print(f"baseline probe → clean tool inputs = {ctx['baseline_tool_inputs']}")
     print()
-    print(f"{'id':<22}{'delivery':<10}{'verdict':<11}{'rate':<7}{'blocked by':<20}"
+    # COLUMN WIDTHS FROM THE DATA. `{id:<22}` ran the id straight into the delivery on any
+    # attack named longer than 21 characters — 74 of 362 rows in a full generic sweep, so a
+    # fifth of every run's output read as `ca-terminal-output-injectiondirect`. The arsenal
+    # grew past the number and nothing said so, which is what a hard-coded width does.
+    _wid = max([len("id")] + [len(a["id"]) for a in attacks]) + 2
+    _wdel = max([len("delivery")] + [len(a.get("delivery", "direct")) for a in attacks]) + 2
+    print(f"{'id':<{_wid}}{'delivery':<{_wdel}}{'verdict':<11}{'rate':<7}{'blocked by':<20}"
           f"{'fired detectors'}")
-    print("-" * 100)
+    print("-" * (_wid + _wdel + 11 + 7 + 20 + len("fired detectors")))
 
     broke = 0
     exploited_n = 0
@@ -681,7 +690,7 @@ def main():
         # which lock stopped it — a DEFENDED row is useless without this
         locks = summarize(recs, ctx)
         lock_str = ",".join(f"{k}:{v}" for k, v in locks.items() if k != "compliance")
-        print(f"{a['id']:<22}{a.get('delivery','direct'):<10}{head:<11}{rate:<7}"
+        print(f"{a['id']:<{_wid}}{a.get('delivery','direct'):<{_wdel}}{head:<11}{rate:<7}"
               f"{(lock_str or '-'):<20}{','.join(fired_list) or '-'}")
         # serialize trials (probe dataclass -> plain dict) for the report/JSON
         trials_ser = [{
