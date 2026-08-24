@@ -1064,6 +1064,38 @@ def main():
                   f"the page says {_claim_only} of {_claim_all}; the evidence says "
                   f"{_only} of {_with}")
 
+    # --- WHAT A DETECTOR DOES WHEN NOBODY IS ATTACKING ---------------------------------------
+    #
+    # The page names a rate: how often the noisiest detector on any target here fires on
+    # ordinary traffic. It is the number behind the whole attribution argument -- a breach is
+    # only a breach if the attack caused it -- so it is recounted from `out/` rather than
+    # trusted, like every other number on that page.
+    import baseline as _baseline
+    _worst = 0.0
+    for _f in sorted(glob.glob(os.path.join(ROOT, "out", "benign_*.json"))):
+        _t = os.path.basename(_f)[len("benign_"):-len(".json")]
+        for _rate in (_baseline.rates(_t, out_dir=os.path.join(ROOT, "out")) or {}).values():
+            if _rate and _rate > _worst:
+                _worst = _rate
+    _worst_pct = int(_worst * 100)
+
+    check("there is benign evidence to count", _worst > 0,
+          "no stored benign run shows a detector firing, so this claim has nothing behind it")
+    if _worst > 0:
+        _m = re.search(r"fires on (\d+)% of that ordinary traffic", _site)
+        check("the page states the benign-noise rate", bool(_m),
+              f"recounted {_worst_pct}%; the page says nothing, so the check is blind")
+        if _m:
+            # UNDERSTATING IS FINE, OVERSTATING IS NOT. Same asymmetry the probe count uses:
+            # the page may be behind the evidence, never ahead of it.
+            _claim = int(_m.group(1))
+            check("...and does not claim more noise than the artifacts show",
+                  _claim <= _worst_pct,
+                  f"the page says {_claim}%; the worst rate in out/ is {_worst_pct}%")
+            check("...and is not stale by more than a little",
+                  _worst_pct - _claim <= 10,
+                  f"the page says {_claim}% and the evidence now shows {_worst_pct}%")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:

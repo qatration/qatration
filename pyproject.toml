@@ -55,10 +55,27 @@ dependencies = [
 # Adding them here would produce a resolver conflict on `pip install .[fleet]` rather than a
 # working fleet, so they are stated instead of listed. `fleet.sh` says NO PYTHON, out loud,
 # for any of them that is missing.
+# PINNED BELOW 1.0, and it is not caution. `langchain>=0.2` resolves to 1.3.x today, and 1.x
+# removed the API six of these bots are written against: `ConversationalChatAgent` and
+# `AgentExecutor` are gone from `langchain.agents`, and `langchain.memory` does not exist. So
+# the extra installed cleanly and left a fleet that could not be constructed -- dvla, mcpagent,
+# opsbot, portalagent, rangebot, toolagent.
+#
+# Nothing here had ever installed it. CI takes the base package deliberately, "the same path a
+# stranger takes", so a constraint that nothing resolves is a constraint nobody checks. It was
+# found by installing the extra to walk the adaptive attacker.
+#
+# A cap rather than a port: these bots are the practice fleet, not the engine, and moving six
+# of them to the 1.x agent API is a separate piece of work. What could not stand was a
+# published constraint that resolves to something broken.
 fleet = [
-    "langchain>=0.2",
-    "langchain-core>=0.2",
-    "langchain-ollama>=0.1",
+    "langchain>=0.2,<1",
+    "langchain-core>=0.2,<1",
+    # AND THIS ONE TOO, or the cap above is worse than none. `langchain-ollama` 1.x needs
+    # `langchain_core.messages.content`, which exists only in core 1.x — so capping
+    # langchain and core while leaving this open produced three constraints that cannot
+    # all hold, and an install that imports nothing. A partial cap is still broken.
+    "langchain-ollama>=0.1,<1",
 ]
 
 # NO EXTRA FOR `site/fixtures/gen_fixtures.py`, deliberately. That script needs pymupdf, which

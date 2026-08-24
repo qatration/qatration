@@ -68,6 +68,48 @@ def dist_name(spec):
     return spec.strip().lower()
 
 
+def _split_items(body):
+    """Split a TOML array body on its own commas, not on commas inside a quoted string."""
+    out, cur, q = [], [], None
+    for ch in body:
+        if q:
+            cur.append(ch)
+            if ch == q:
+                q = None
+        elif ch in "\"'":
+            q = ch
+            cur.append(ch)
+        elif ch == ",":
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    out.append("".join(cur))
+    return out
+
+
+def _decomment(block):
+    """Drop `#` comments from a block of TOML, without cutting a quoted string.
+
+    Quote-aware because PEP 508 allows a direct reference — `pkg @ https://host/x.zip#egg=pkg`
+    — and a naive split on `#` would take half the URL with it.
+    """
+    out = []
+    for raw in block.splitlines():
+        q = None
+        for i, ch in enumerate(raw):
+            if q:
+                if ch == q:
+                    q = None
+            elif ch in "\"'":
+                q = ch
+            elif ch == "#":
+                raw = raw[:i]
+                break
+        out.append(raw)
+    return "\n".join(out)
+
+
 def parse(pyproject_path):
     """-> the parsed pyproject as a dict. The ONE parser, so 3.9 is not a second implementation.
 
@@ -101,11 +143,20 @@ def parse(pyproject_path):
             continue
         body = rest[1:]
         if "]" not in body:                       # a multi-line array: read to the closing ]
-            body = text.split(line, 1)[1].split("]", 1)[0]
+            # THE RAW TEXT, so the per-line `#` strip above never reached it. A comment inside
+            # the array came back as packages — `#`, `and`, `or`, `which` — and this fallback
+            # is what runs on Python 3.9, one of the four legs in CI. Feeding invented names to
+            # the thing that decides whether a copyleft dependency was declared is worse than a
+            # cosmetic bug.
+            body = _decomment(text.split(line, 1)[1].split("]", 1)[0])
         else:
             body = body.split("]", 1)[0]
+        # SPLIT OUTSIDE THE QUOTES. `"langchain>=0.2,<1"` is ONE dependency, and splitting on
+        # every comma turned it into `langchain>=0.2` and `<1` — the second of which becomes a
+        # package named "". `>=x,<y` is the ordinary way to pin a range, so this fallback could
+        # never read the commonest constraint there is, on the interpreter it exists for.
         items = [p.strip().strip(",").strip().strip('"').strip("'")
-                 for p in body.replace("\n", " ").split(",")]
+                 for p in _split_items(body.replace("\n", " "))]
         node = out
         for part in (table.split(".") if table else []):
             node = node.setdefault(part, {})

@@ -490,7 +490,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p>An attack that failed reports a zero. So does a check that could not run, and so
         does a genuinely hardened bot, and that is where testing stalls: three different
         facts arrive looking identical, and nobody knows what to try next. These are
-        measurements from real runs, not projections.</p>
+        measurements from real runs, not projections.
+        <b>And a breach is only a breach if the attack caused it.</b> Every target gets a
+        benign run first: ordinary questions, nobody attacking. On one of the bots here
+        <code>canary_in_tool_call</code> fires on 88% of that ordinary traffic, so every
+        finding resting on it is marked weakened instead of counted.</p>
     </div>
     <div class="finds">
       <div class="find">
