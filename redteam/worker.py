@@ -33,6 +33,12 @@ import jobqueue as q
 import runs as _runs
 from workspace import OUT
 
+# NO CLI DOOR, ON PURPOSE, and said here rather than in the gate: a list of exempt
+# modules living in the check is a second copy of this judgement, and the next module
+# added would join it by whoever happened to be editing the check.
+NO_CLI_DOOR = "spawned by the queue rather than typed by a person"
+
+
 # What the sweep's exit codes mean, kept here because the worker is the only thing that turns
 # them into a job state anybody reads. run_redteam exits 3 when nothing was measured and 4 when
 # the target was not authorised; both are failures, and they are failures of different people.
