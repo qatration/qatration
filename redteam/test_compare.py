@@ -109,42 +109,12 @@ def main():
     check("esc escapes markup so a target name cannot inject into the page",
           esc("<b>&") == "&lt;b&gt;&amp;", esc("<b>&"))
 
-    # --- EVERY SUBCOMMAND CAN DESCRIBE ITSELF, FROM A DIRECTORY WITH NOTHING IN IT ---------
-    #
-    # `qatration compare --help` used to crash with a FileNotFoundError naming an output path:
-    # it parsed no arguments at all, so --help fell through into building a report, into a
-    # workspace that does not exist until something has been run. Eleven of the twelve
-    # subcommands were fine, and nothing here looked, because every suite runs from inside a
-    # checkout where out/ is already full.
-    #
-    # A subprocess and a temp workspace, because that is the only way to be somebody who has
-    # just installed this. `--help` must print and exit 0 without touching the disk.
-    import subprocess, tempfile, shutil
-    COMMANDS = ["run", "mint", "onboard", "benign", "history", "compare",
-                "rejudge", "sarif", "recon", "generate", "isolation", "lint"]
-    work = tempfile.mkdtemp()
-    ghost = os.path.join(work, "not-created-yet")
-    broke, silent, wrote = [], [], []
-    try:
-        env = dict(os.environ, QATRATION_OUT=ghost, PYTHONIOENCODING="utf-8")
-        for c in COMMANDS:
-            r = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), c, "--help"],
-                               capture_output=True, text=True, env=env, timeout=90)
-            if r.returncode != 0:
-                broke.append(f"{c}: exit {r.returncode} — {(r.stderr or '').strip()[-90:]}")
-            elif "usage" not in (r.stdout or "").lower():
-                silent.append(c)
-            if os.path.exists(ghost):
-                wrote.append(c)
-                shutil.rmtree(ghost, ignore_errors=True)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-
-    check("every subcommand answers --help instead of crashing", not broke, "; ".join(broke))
-    check("...and what it prints is a usage message", not silent, str(silent))
-    check("...and --help creates nothing on disk", not wrote,
-          f"these built their workspace before reading their arguments: {wrote}")
-
+    # THE --help CHECK THAT USED TO LIVE HERE IS NOW IN `test_packaging.py`, over
+    # `cli.COMMANDS` rather than over a list of twelve command names typed out when there
+    # were twelve. `init`, `fixes`, `discrimination`, `index`, `coverage`, `matrix` and
+    # `profiles` all joined the CLI without joining that list, and three of them shipped
+    # with the very defect this checked for while it stayed green. A copy is deleted, not
+    # synced; what survives is the one that covers a command by virtue of it existing.
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

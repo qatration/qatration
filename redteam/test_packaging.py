@@ -404,20 +404,26 @@ def test_every_command_answers_help_without_doing_the_work():
     import tempfile, shutil
     for name in cli.COMMANDS:
         work = tempfile.mkdtemp()
+        # A WORKSPACE THAT DOES NOT EXIST YET, not an empty one. "The directory stayed empty"
+        # misses a command that creates its output directory and has not written into it, and
+        # that is exactly how the original failure looked: `qatration compare --help` built a
+        # report into a workspace that does not exist until something has been run.
+        ghost = os.path.join(work, "not-created-yet")
         try:
             p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name, "--help"],
                                capture_output=True, text=True, timeout=120,
-                               env=dict(os.environ, QATRATION_OUT=work,
+                               env=dict(os.environ, QATRATION_OUT=ghost,
                                         PYTHONIOENCODING="utf-8"))
             assert p.returncode == 0, \
                 "qatration %s --help exited %d: %s" % (name, p.returncode,
                                                        (p.stderr or p.stdout)[-200:])
             assert "usage:" in (p.stdout + p.stderr).lower(), \
                 "qatration %s --help printed no usage: %s" % (name, p.stdout[:200])
-            left = os.listdir(work)
-            assert not left, \
-                "qatration %s --help wrote %s -- it did the work instead of describing it" \
-                % (name, left)
+            assert not os.path.exists(ghost), \
+                ("qatration %s --help built its workspace before reading its arguments -- it "
+                 "did the work instead of describing it" % name)
+            assert not os.listdir(work), \
+                "qatration %s --help wrote %s" % (name, os.listdir(work))
         finally:
             shutil.rmtree(work, ignore_errors=True)
     print("  ok  %d commands describe themselves without running" % len(cli.COMMANDS))
