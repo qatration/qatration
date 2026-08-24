@@ -1064,6 +1064,82 @@ def main():
                   f"the page says {_claim_only} of {_claim_all}; the evidence says "
                   f"{_only} of {_with}")
 
+    # --- WHETHER A BIGGER MODEL IS THE FIX, RECOUNTED ----------------------------------------
+    #
+    # MODEL CHOICE IS THE FIRST THING ANYBODY REACHES FOR, and the page says it does not close
+    # the hole. That is the claim on this page most likely to be read as an opinion, so it is
+    # derived from the artifacts here rather than trusted -- same as the tool-channel number
+    # above and the benign rate below.
+    #
+    # Derived rather than listed: a target with two per-model results files IS a pair, so a
+    # third model or a second target changes what this measures with nobody editing the check.
+    # Counted over attacks present in BOTH files, because one the other run never sent says
+    # nothing about the difference between them, and over rows that measured something, because
+    # a SKIP on one side is not a model holding.
+    _pairs = {}
+    for _p in sorted(glob.glob(os.path.join(ROOT, "out", "results_*.json"))):
+        _b = os.path.basename(_p)[len("results_"):-len(".json")]
+        if _b.count("_") != 1:
+            continue
+        _t, _mdl = _b.rsplit("_", 1)
+        _pairs.setdefault(_t, {})[_mdl] = _p
+
+    _best = None                     # the pair with the most attacks behind it
+    for _t, _ms in sorted(_pairs.items()):
+        if len(_ms) != 2:
+            continue
+        _names = sorted(_ms)
+        _rows = {}
+        for _mdl in _names:
+            try:
+                _d = json.load(open(_ms[_mdl], encoding="utf-8"))
+            except Exception:
+                _rows = None
+                break
+            _rows[_mdl] = {r["attack"]["id"]: r for r in _d.get("results", [])
+                           if (r.get("attack") or {}).get("category") != "control"
+                           and r.get("headline") not in ("SKIP", "ERROR")}
+        if not _rows:
+            continue
+        _a, _b2 = _names
+        _ids = set(_rows[_a]) & set(_rows[_b2])
+        _ka = {i for i in _ids if _rows[_a][i]["headline"] in _BREACH}
+        _kb = {i for i in _ids if _rows[_b2][i]["headline"] in _BREACH}
+        _shared = _ka & _kb
+        _always = {i for i in _shared
+                   if _rows[_a][i].get("rate") == _rows[_b2][i].get("rate")
+                   and (_rows[_a][i].get("rate") or "0/0").split("/")[0]
+                   == (_rows[_a][i].get("rate") or "0/1").split("/")[1]}
+        if _best is None or len(_ids) > _best[0]:
+            _best = (len(_ids), len(_ka), len(_kb), len(_shared), len(_always), _t, _names)
+
+    check("there is a two-model pair to compare", _best is not None,
+          "no target in out/ has results for two models, so this claim has nothing behind it")
+    if _best:
+        _n, _ka_n, _kb_n, _sh, _al, _tname, _mnames = _best
+        # Ordered so the page can name them either way round without the check caring which
+        # model is which -- what it must not do is print a pair of numbers the runs do not
+        # support.
+        # `[\s\S]*?` and not `[^.]*?`: the sentence has a full stop in the middle of it, so
+        # the first version of this pattern matched nothing and reported the page as silent.
+        _mm = re.search(r"(\d+)\s+attacks each[\s\S]*?broke on\s+(\d+),"
+                        r"[\s\S]*?the larger on\s+(\d+)"
+                        r"[\s\S]*?(\d+)\s+of those are the same attacks,\s*(\d+)\s+of them",
+                        _site, re.S)
+        check("the page states the model-comparison numbers", bool(_mm),
+              f"recounted {_n} attacks, {_ka_n} vs {_kb_n} breaches, {_sh} shared, {_al} on "
+              f"every try; the page says nothing, so the check is blind")
+        if _mm:
+            _c = tuple(int(g) for g in _mm.groups())
+            check("...and they match the artifacts",
+                  _c == (_n, _ka_n, _kb_n, _sh, _al)
+                  or _c == (_n, _kb_n, _ka_n, _sh, _al),
+                  f"the page says {_c}; the evidence for {_tname} "
+                  f"({', '.join(_mnames)}) says {(_n, _ka_n, _kb_n, _sh, _al)}")
+            check("...and the shared count is not larger than either side",
+                  _sh <= min(_ka_n, _kb_n),
+                  f"{_sh} shared cannot exceed {_ka_n} and {_kb_n}")
+
     # --- WHAT A DETECTOR DOES WHEN NOBODY IS ATTACKING ---------------------------------------
     #
     # The page names a rate: how often the noisiest detector on any target here fires on

@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **60 demonstrated, 4 declared-only** over 3,760 stored probes. Few tools publish a plugin count
+It reports **61 demonstrated, 3 declared-only** over 5,422 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,9 +42,12 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The four that remain split **4 untried / 0 unconfigured** — the unconfigured half emptied the moment `privileged_roles` was declared on the thirteen targets that have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
+The three that remain split **3 untried / 0 unconfigured** — the unconfigured half emptied the moment `privileged_roles` was declared on the thirteen targets that have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
 *nothing in the fleet does this* and *nothing here could have seen it* are different sentences,
-and only the first is closed by a new target. It read 5 declared-only shortly before this was
+and only the first is closed by a new target — or, as `model_identification` turned out to be, by
+sending MORE at a target already in the fleet. It went to demonstrated on nothing newer than a
+full sweep of one bot across two models, which is a third way that bucket empties and one this
+paragraph did not have. It read 5 declared-only shortly before this was
 written, and the fifth was `memorised_completion` — which needs `expected_completions`, which no
 target supplied and no attack declared, so its silence across every stored probe was a missing
 config key rather than a fact about any bot.

@@ -65,7 +65,12 @@ IDENTITY = "QAtration <qatration@gmail.com>"
 # is fed to the pattern by `--selftest`, in this process, every run. A scanner nobody has seen
 # catch anything is a scanner that reports clean because it is broken.
 CREDENTIALS = [
-    ("AWS session token", r"ASIA[0-9A-Z]{16}", "ASIA" + "Q" * 16),
+    # NARROWED, NOT DROPPED. It fires on a stored finding: `ca-credential-files` asks a bot
+    # to dump its credential files and one obliged with `ASIAIOSFODNN7EXAMPLE`, which is
+    # AWS's own published placeholder and which the artifact keeps because it IS the finding.
+    # The answer taken for `AKIA` above was to drop the pattern; that costs a real check, and
+    # a real temporary access key ID does not spell EXAMPLE in the middle of itself.
+    ("AWS session token", r"ASIA(?![0-9A-Z]*EXAMPLE)[0-9A-Z]{16}", "ASIA" + "Q" * 16),
     ("OpenAI project key", r"sk-proj-", "sk-proj-abc123"),
     ("GitHub personal token", r"ghp_[0-9A-Za-z]{20}", "ghp_" + "a" * 20),
     ("GitHub OAuth token", r"gho_[0-9A-Za-z]{20}", "gho_" + "a" * 20),
@@ -692,6 +697,15 @@ def scan_history(rng, refusals):
         refusals.append(f"...and {len(found) - 12} more in the history being pushed")
 
 
+# What each pattern must NOT match. A carve-out nobody has seen swallow anything is the same
+# defect as a scanner nobody has seen catch anything, pointed the other way -- and this file
+# already refuses to trust the second. Run by `--selftest`, in the same breath as the samples.
+MUST_NOT_MATCH = [
+    ("AWS session token", "ASIAIOSFODNN7EXAMPLE",
+     "AWS's published placeholder, which a stored finding quotes back"),
+]
+
+
 def selftest():
     """Every pattern, shown catching something, before any of them reports clean.
 
@@ -703,6 +717,13 @@ def selftest():
     for label, pattern, sample in CREDENTIALS:
         if not re.search(pattern, sample):
             bad.append(f"{label}: pattern does not match its own sample {sample!r}")
+    _by_label = {label: pattern for label, pattern, _ in CREDENTIALS}
+    for label, sample, why in MUST_NOT_MATCH:
+        pattern = _by_label.get(label)
+        if pattern is None:
+            bad.append(f"{label}: MUST_NOT_MATCH names a pattern that no longer exists")
+        elif re.search(pattern, sample):
+            bad.append(f"{label}: fires on {sample!r}, which is {why}")
     # Every layer of escaping, and NOT the literal character — that is the other pattern's job,
     # and asserting it here is what broke the first version of this self-test.
     for layers in (1, 2, 3, 4):

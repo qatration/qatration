@@ -31,7 +31,7 @@ team responds to them.
 
 ## The other number: how often it cries wolf
 
-Sixty demonstrated detectors says none of those is dead. It says nothing about whether
+Sixty-one demonstrated detectors says none of those is dead. It says nothing about whether
 any of them is honest, because they were demonstrated on a range built to make them fire.
 The number that decides whether a clean result can be believed is the opposite one,
 and until now it had never been measured here.
