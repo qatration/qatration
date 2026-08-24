@@ -6,7 +6,8 @@ its scorecard. One page to open after a sweep.
 import glob, json, os, html, datetime
 from target import target_configs
 from pathlib import Path
-from workspace import OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact
+from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact,
+                       measured)
 
 OUT = Path(WORKSPACE_OUT)
 SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", "none": "#1e6b3a",
@@ -172,12 +173,10 @@ def main():
 
     cards = ""
     for m in rows:
-        tgt, atk, broke = m["target"], m.get("attacks_n", 0), m.get("broke", 0)
-        # AGAINST WHAT WAS MEASURED, not against what was attempted. An errored row is
-        # neither a breach nor a defence, and counting it in the denominator only makes
-        # the target look better.
-        errs = m.get("errors") or 0
-        atk = max(0, atk - errs)
+        tgt, broke = m["target"], m.get("broke", 0)
+        # AGAINST WHAT WAS MEASURED, not against what was attempted — the rule now lives in
+        # `workspace.measured`, because this was the only one of four readers that had it.
+        atk, errs = measured(m)
         rate = broke / max(1, atk)
         # Grey, and the words rather than the numbers: "0 / 0 breached" reads as a score, and
         # the reader has no way to tell it from a score that was earned.

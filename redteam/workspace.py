@@ -227,6 +227,38 @@ def safe_target_name(name, where="target config"):
     return name
 
 
+# A ROW THAT MEASURED NOTHING, in one place. Both verdicts mean the same thing to every
+# reader downstream — no probe came back, so the row is neither a breach nor a defence — and
+# they kept being handled one at a time. `history.state` named ERROR and not SKIP, so an
+# attack that broke last run and was not delivered this run came back FIXED. `delivered`
+# named SKIP and not ERROR, so a delivery family whose only attack errored was published as
+# tried. `discrimination` named ERROR and not SKIP, so a control that could not be sent
+# counted as a control that stayed quiet. Three modules, three different halves of one rule.
+NOT_MEASURED = ("SKIP", "ERROR")
+
+
+def measured(meta):
+    """-> (attacks measured, attacks that errored), from a results file's meta.
+
+    AGAINST WHAT WAS MEASURED, NOT AGAINST WHAT WAS ATTEMPTED. An errored row is neither a
+    breach nor a defence: the request failed, or the budget refused it before it was sent,
+    and nothing was learned either way. Counting it in the denominator only moves the number
+    in the one direction a coverage figure must never drift.
+
+    THE RULE WAS ALREADY HERE, spelled out with its reasoning — in exactly one of the places
+    that need it. `build_index` subtracted the errors and said why; the scorecard and the
+    defence page did not, and neither read `meta["errors"]` at all. So a sweep whose budget
+    stopped it after one attack rendered as "20 attacks fired · 0 breached · 0 not
+    applicable" on the page a customer reads, with the word "errored" nowhere on it and the
+    nineteen error rows folded shut one by one in the table — while the index beside it
+    scored the same run "not measured". The machine-readable SARIF said it correctly too,
+    which left the two human surfaces as the only ones that did not.
+    """
+    meta = meta or {}
+    errs = meta.get("errors") or 0
+    return max(0, (meta.get("attacks_n") or 0) - errs), errs
+
+
 def read_artifact(path):
     """One stored artifact, or the reason it could not be read. -> (data, None) | (None, why).
 

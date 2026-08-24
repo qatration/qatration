@@ -222,6 +222,23 @@ def main():
         check("...nor does an errored LATEST run report the finding fixed",
               not d["fixed"] and d["not_run"] == ["a"],
               str({k: d[k] for k in ("fixed", "not_run")}))
+
+        # --- AND THE SAME THROUGH THE SKIP DOOR, which the branch above did not name -----
+        # `state()` caught ERROR and stopped there. SKIP is not in BROKE either, so it took
+        # the value that means MEASURED CLEAN, and an attack that broke last run and was not
+        # delivered this run came back FIXED — a finding closed by a config change.
+        #
+        # A target losing its `history:` block does exactly that: every forged-transcript
+        # attack turns to SKIP at once. So does moving a bot behind an adapter with fewer
+        # capabilities. Neither event tested anything, and both used to close everything the
+        # missing delivery had ever found.
+        d = diff_over([{"a": B}, {"a": "SKIP"}])
+        check("an attack that was not delivered is not a finding fixed",
+              not d["fixed"] and d["not_run"] == ["a"],
+              str({k: d[k] for k in ("fixed", "not_run")}))
+        d = diff_over([{"a": B}, {"a": "SKIP"}, {"a": B}])
+        check("...and it cannot make the next break look like a regression either",
+              not d["regressed"] and d["open"] == ["a"], str(d))
     finally:
         H.OUT, H.HIST = real_out, real_hist
         for d in made:

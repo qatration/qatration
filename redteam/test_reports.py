@@ -15,7 +15,7 @@ sentence claiming there was only one.
 
     python test_reports.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, re, json, tempfile, shutil, datetime, glob
+import sys, os, re, json, tempfile, shutil, datetime, glob, subprocess
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -762,6 +762,165 @@ def main():
     check("PARTIAL counts as broken, or a boundary breach reads as a defence",
           "PARTIAL" in disc.BROKE and "EXPLOITED" in disc.BROKE
           and "DEFENDED" not in disc.BROKE)
+
+    # --- one run, one answer to "how much of this was measured" -------------------------
+    # `meta["errors"]` is written by the sweep so a reader can tell twenty attacks defended
+    # from one defended and nineteen that never got a reply. FOUR SURFACES STATE A COVERAGE
+    # NUMBER AND ONE OF THEM READ IT. `build_index` subtracted the errors and wrote out why;
+    # the scorecard printed `attacks_n` under "attacks fired" and the defence page divided by
+    # it, so a run stopped by its budget after one probe rendered as "20 attacks fired · 0
+    # breached · 0 not applicable" on the two pages a human reads — with the word "errored"
+    # nowhere on either, and the nineteen failures reachable only by opening nineteen
+    # collapsed panels. The SARIF export had it right, which left the machine-readable
+    # artifact as the honest one.
+    #
+    # Driven through the real renderers over one artifact, not grepped for a shared import:
+    # the point is that they AGREE, and three modules can import the same helper and still
+    # disagree about what they do with it.
+    tmp = tempfile.mkdtemp()
+    try:
+        _tr = [{"verdict": "ERROR", "fired": [], "refusal": {"class": "undelivered"},
+                "probe": {"output": "", "error": "budget spent (requests)", "tool_calls": [],
+                          "observations": [], "prompt": "x", "seconds": 0.0,
+                          "resolved": [], "turns": []}}]
+        _ok = [{"verdict": "DEFENDED", "fired": [], "refusal": {"class": "none"},
+                "probe": {"output": "no", "error": None, "tool_calls": [], "observations": [],
+                          "prompt": "x", "seconds": 0.1, "resolved": [], "turns": []}}]
+        # EVERY DELIVERY FAMILY EXERCISED, deliberately. The coverage section renders on
+        # three conditions and a family nobody tried is one of them — so a fixture missing a
+        # family makes this check pass for a reason that has nothing to do with errors, and
+        # mutating the condition away leaves it green. It did, the first time it was written.
+        _rows = [{"attack": {"id": f"m{i}", "category": "extraction", "text": "x",
+                             "delivery": fam},
+                  "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                  "trials": _ok}
+                 for i, fam in enumerate(dr.DELIVERY_NEEDS)]
+        _rows += [{"attack": {"id": f"x{i}", "category": "extraction", "text": "x"},
+                   "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {},
+                   "trials": _tr} for i in range(19)]
+        _meta = {"target": "stopped-bot", "model": "m", "caps": [], "trials": 1,
+                 "attacks_n": 24, "broke": 0, "skipped": 0, "errors": 19,
+                 "arsenal": "attacks_generic.yaml"}
+        with open(os.path.join(tmp, "results_stopped-bot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": _meta, "results": _rows}, f)
+
+        import pathlib, workspace, report_engine
+        _card = report_engine.build_html(_meta, _rows)
+        _real = dr.OUT_DIR
+        dr.OUT_DIR = pathlib.Path(tmp)
+        try:
+            _cov = dr.coverage()
+        finally:
+            dr.OUT_DIR = _real
+        # THE SECTION HAS TO RENDER, not merely be computable. Its condition was
+        # `_cov and _cov[1]` — skipped alone — so a run that skipped nothing, exercised every
+        # delivery family and measured one attack in twenty produced no coverage section at
+        # all, and the short list of findings above it read as a quiet result. Rendered
+        # through the real command, because that condition lives in `main()`.
+        subprocess.run([sys.executable, os.path.join(HERE, "defense_report.py")],
+                       env=dict(os.environ, QATRATION_OUT=tmp, PYTHONIOENCODING="utf-8"),
+                       capture_output=True, text=True, timeout=120,
+                       cwd=os.path.dirname(HERE))
+        _pp = os.path.join(tmp, "defense_report.html")
+        _page = open(_pp, encoding="utf-8").read() if os.path.exists(_pp) else ""
+
+        # `delivered()` dropped SKIP rows and kept ERROR ones, so a delivery family whose only
+        # attack errored was published as a family that had been tried. Its own docstring
+        # rules that out — an attack that never applied is not coverage — and an errored one
+        # applied exactly as little as a skipped one.
+        with open(os.path.join(tmp, "results_stopped-bot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": dict(_meta, attacks_n=2, errors=1), "results": [
+                {"attack": {"id": "d1", "category": "extraction", "text": "x",
+                            "delivery": "direct"},
+                 "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                 "trials": _ok},
+                {"attack": {"id": "c1", "category": "extraction", "text": "x",
+                            "delivery": "chain"},
+                 "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {},
+                 "trials": _tr}]}, f)
+        dr.OUT_DIR = pathlib.Path(tmp)
+        try:
+            _absent_after_error = dr.delivered()[1]
+        finally:
+            dr.OUT_DIR = _real
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("the shared rule subtracts what errored from what was measured",
+          workspace.measured(_meta) == (5, 19), str(workspace.measured(_meta)))
+    check("...and never goes negative on a malformed meta",
+          workspace.measured({"attacks_n": 1, "errors": 9}) == (0, 9)
+          and workspace.measured({}) == (0, 0) and workspace.measured(None) == (0, 0))
+    # The needle is assembled rather than written out, because the markup it looks for
+    # contains the same quote character the check is written in.
+    _needle = ">5</div><div class=" + chr(34) + "l" + chr(34) + ">attacks measured<"
+    check("the scorecard counts what was measured, not what was attempted",
+          _needle in " ".join(_card.split()).replace("> <", "><"),
+          _card[_card.find("cards"):_card.find("cards") + 420])
+    check("...and says how many errored, on the page rather than inside nineteen panels",
+          "errored" in _card and ">19</div>" in _card)
+    check("the defence page agrees with it, from the same artifact",
+          _cov is not None and _cov[0] == 5 and _cov[2] == 19, str(_cov))
+    check("...and a family whose only attack errored reports as NOT tried",
+          "chain" in _absent_after_error, str(_absent_after_error))
+    check("...and renders the coverage section on errors alone, with nothing skipped",
+          "COVERAGE" in _page and "19 errored" in _page, _page[:200] or "no page written")
+
+    # --- the false-alarm gate may not pass on an empty denominator ----------------------
+    # Two halves of one rule, both missing. `ERROR` was named as "did not land" and `SKIP`
+    # was not — and skip is the commoner of the two here: seven controls in the shipped
+    # arsenals use a non-direct delivery, and `cca-control` needs a forged transcript that
+    # twelve of the fifteen adapters cannot take. On every one of those, a control that could
+    # not be sent counted as a control that stayed quiet, in the section this file calls the
+    # credibility keystone.
+    #
+    # And the guard against an empty denominator asked for a CAUSE — `ctrl_errored and not
+    # ctrl_total` — so it covered controls that failed and not the case where there were
+    # none, which is what the fix above produces: a control withheld before the run leaves no
+    # row at all. "GATE: PASS — controls clean" over zero controls.
+    def _gate(rows):
+        """-> (exit code, what it printed). Drives the real gate over a real workspace."""
+        _t = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(_t, "results_disc-fake.json"), "w", encoding="utf-8") as f:
+                json.dump({"meta": {"target": "disc-fake", "model": "", "trials": 1,
+                                    "attacks_n": len(rows), "broke": 0, "skipped": 0},
+                           "results": rows}, f)
+            _r, disc.OUT = disc.OUT, _t
+            buf = io.StringIO()
+            code = 0
+            try:
+                with contextlib.redirect_stdout(buf):
+                    disc.main()
+            except SystemExit as e:
+                code = e.code or 0
+            finally:
+                disc.OUT = _r
+            return code, buf.getvalue()
+        finally:
+            shutil.rmtree(_t, ignore_errors=True)
+
+    _ctl = lambda head: {"attack": {"id": "cca-control", "category": "control", "text": "hi",
+                                    "delivery": "forged_history"},
+                         "headline": head, "fired": [], "rate": "0/1",
+                         "trials": [{"verdict": head, "probe": None if head == "SKIP" else
+                                     {"output": "hello"}}]}
+    _atk = {"attack": {"id": "a1", "category": "exfil", "text": "give it"},
+            "headline": "DEFENDED", "fired": [], "rate": "0/3",
+            "trials": [{"verdict": "DEFENDED", "probe": {"output": "no"}}]}
+
+    _c_skip, _o_skip = _gate([_ctl("SKIP"), _atk])
+    check("a control that was never delivered does not read as a control that stayed quiet",
+          "INCONCLUSIVE" in _o_skip and _c_skip == 1, _o_skip[-220:])
+    _c_none, _o_none = _gate([_atk])
+    check("...and a run with no control at all is inconclusive, not clean",
+          "INCONCLUSIVE" in _o_none and _c_none == 1, _o_none[-220:])
+    check("...naming which of the two it is, since the fix differs",
+          "none at all" in _o_none and "did not land" not in _o_none.split("GATE:")[-1],
+          _o_none[-220:])
+    _c_ok, _o_ok = _gate([_ctl("DEFENDED"), _atk])
+    check("...and a control that really was measured quiet still passes",
+          "GATE: PASS" in _o_ok and _c_ok == 0, _o_ok[-220:])
 
     # --- every fleet aggregate skips per-model copies -----------------------------------
     # A `--model` override writes results_<target>_<model>.json BESIDE the canonical file, so

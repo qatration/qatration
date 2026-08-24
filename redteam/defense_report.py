@@ -13,7 +13,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from workspace import (OUT as WORKSPACE_OUT, results_files, target_of,
                        fleet_names, fleet_filter,
-                       read_artifact, read_artifacts, say_unreadable)
+                       read_artifact, read_artifacts, say_unreadable, measured,
+                       NOT_MEASURED)
 from oracle import current_name
 
 OUT_DIR = Path(WORKSPACE_OUT)
@@ -1030,14 +1031,20 @@ def delivered():
         except (ValueError, OSError):
             continue
         for r in d.get("results", []):
-            if r.get("headline") == "SKIP":
+            # NEITHER A SKIP NOR AN ERROR EXERCISED THE FAMILY. This dropped SKIP and kept
+            # ERROR, so a delivery family whose only attack errored — a target that went
+            # down, or a budget that ran out before the multi-turn attacks at the end of the
+            # arsenal — was published on this page as a family that had been tried. The
+            # docstring above already rules it out: an attack that never applied is not
+            # coverage, and an errored one applied exactly as little as a skipped one.
+            if r.get("headline") in NOT_MEASURED:
                 continue
             seen.add((r.get("attack", {}) or {}).get("delivery") or "direct")
     return sorted(seen), sorted(set(DELIVERY_NEEDS) - seen)
 
 
 def coverage():
-    """-> (sent, skipped) across every run on the page, from what each run recorded.
+    """-> (measured, skipped, errored) across every run on the page, from what each recorded.
 
     A page that lists findings promises coverage it may not have had, and the number that
     qualifies it already exists: `run_redteam` writes `attacks_n` and `skipped` into the meta
@@ -1048,7 +1055,7 @@ def coverage():
     Counted from the files rather than from a flag, because the page can aggregate runs made
     at different scopes and the flag only knows about this invocation.
     """
-    sent = skipped = 0
+    sent = skipped = errored = 0
     for fp in results_files(OUT_DIR):
         try:
             meta = (read_artifact(fp)[0] or {})["meta"]
@@ -1060,9 +1067,14 @@ def coverage():
         n, sk = meta.get("attacks_n"), meta.get("skipped")
         if not isinstance(n, int) or not isinstance(sk, int):
             return None
-        sent += n
+        # AN ERRORED ROW IS NOT A SENT ATTACK. `measured` carries the reasoning; what it
+        # means here is that a run whose budget stopped it after one probe can no longer
+        # tell this page it sent the whole arsenal.
+        _m, _e = measured(meta)
+        sent += _m
+        errored += _e
         skipped += sk
-    return (sent, skipped) if sent or skipped else None
+    return (sent, skipped, errored) if sent or skipped or errored else None
 
 
 
@@ -1359,14 +1371,25 @@ def main():
     # understate coverage in exactly the direction that flatters the report." One unreadable
     # artifact in the directory -- a truncated file from an interrupted sweep, the case
     # `read_artifact` exists for -- and the client's deliverable claimed total coverage.
-    if (_cov and _cov[1]) or _absent_fams:
-        _sent, _skipped = _cov if _cov else (None, None)
+    # ERRORED IS A THIRD REASON THIS SECTION HAS TO RENDER. A run stopped by its budget can
+    # have skipped nothing and exercised every delivery family, and still have measured one
+    # attack in twenty — and on those two conditions alone the page said nothing at all,
+    # while the short list of findings above it read as a quiet result.
+    if (_cov and (_cov[1] or _cov[2])) or _absent_fams:
+        _sent, _skipped, _errored = _cov if _cov else (None, None, None)
+        # Built here rather than inline, because the sentence it joins is already a nested
+        # conditional inside an f-string and a fourth level in there is unreadable.
+        _err_note = (f". A further {_errored} produced no measurement at all — the request "
+                     f"failed, or the budget refused it before it was sent — so they are "
+                     f"neither a breach nor a defence and are counted as neither"
+                     if _errored else "")
         held_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
           <h2>{"how much of the arsenal ran could not be determined"
                if _sent is None else
-               f"{_sent} attack(s) sent, {_skipped} not sent"}</h2>
+               f"{_sent} attack(s) measured, {_skipped} not sent"
+               + (f", {_errored} errored" if _errored else "")}</h2>
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about
@@ -1375,7 +1398,7 @@ def main():
             "clean bill" if _skipped is None else
             f"{_skipped} attack(s) in the arsenal were not sent, either because "
             "they do not apply to the target or because the run was scoped to send one attack "
-            "from each category rather than all of them"}. A category that was covered once was
+            "from each category rather than all of them"}{_err_note}. A category that was covered once was
             covered once. Re-run at <span class="mono">--scope full</span> before reading a
             quiet category as a closed one.</div>{_families}
         </section>"""

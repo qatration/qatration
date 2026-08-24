@@ -28,7 +28,8 @@ import sys, os, json, glob, argparse, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, results_files, read_artifact
+from workspace import (OUT as WORKSPACE_OUT, results_files, read_artifact,
+                       NOT_MEASURED)
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
 HIST = os.path.join(OUT, "history")
@@ -137,8 +138,17 @@ def diff(target):
         row = run["rows"].get(aid)
         if row is None:
             return None                    # not attempted: says nothing either way
-        if row.get("v") == "ERROR":
-            return None                    # attempted, measured nothing: also either way
+        if row.get("v") in NOT_MEASURED:
+            # ATTEMPTED OR NOT, MEASURED NOTHING — either way. SKIP was missing, and it is
+            # the worse of the two: `"SKIP" in BROKE` is False, which is the value that means
+            # MEASURED CLEAN, so an attack that broke last week and was not delivered this
+            # week came back as FIXED. That is the one direction the docstring above calls
+            # out as the reason this whole function exists, reached through a verdict the
+            # branch simply did not name.
+            #
+            # A target losing `history:` from its config is enough to do it: every forged
+            # transcript attack turns to SKIP, and the diff closes each one it had open.
+            return None
         return row["v"] in BROKE
 
     ids = sorted(set(cur["rows"]) | set(prev["rows"]))

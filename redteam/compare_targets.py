@@ -6,7 +6,10 @@ out/results_<target>.json (skips per-model copies) -> out/compare_targets.html.
 import json, glob, os, sys, html, datetime, yaml
 from pathlib import Path
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
-                       fleet_names, fleet_filter, read_artifact)
+                       fleet_names, fleet_filter, read_artifact,
+                       # aliased: `measured` is already a local here, and it holds the
+                       # timestamp of the run rather than a count of it
+                       measured as measured_counts)
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
@@ -259,7 +262,11 @@ def main():
             os.path.getmtime(fp)).strftime("%Y-%m-%d %H:%M")
         rows.append(dict(measured=measured,
                          target=meta["target"], caps=meta.get("caps") or [],
-                         model=meta.get("model", ""), attacks_n=meta.get("attacks_n", 0),
+                         # WHAT WAS MEASURED, not what was attempted — the same rule the
+                         # index and the scorecard read, so the three columns a reader puts
+                         # side by side cannot disagree about one run.
+                         model=meta.get("model", ""), attacks_n=measured_counts(meta)[0],
+                         errored=measured_counts(meta)[1],
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -317,7 +324,7 @@ def main():
         tbody += f"""<tr>
           <td class="tname">{esc(r['target'])}<div class="dim when">{esc(r['measured'])}</div></td>
           <td class="dim">{esc(caps_label(r['caps']))}</td>
-          <td class="num">{r['attacks_n']}</td>
+          <td class="num">{r['attacks_n']}{f"<div class='dim when'>{r['errored']} errored</div>" if r['errored'] else ""}</td>
           <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}</td>
           <td class="num">{benign_html}</td>
           <td class="num">{move_html}</td>

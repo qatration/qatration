@@ -14,7 +14,7 @@ try:
 except Exception:
     pass
 import yaml
-from workspace import OUT as WORKSPACE_OUT, read_artifact
+from workspace import OUT as WORKSPACE_OUT, read_artifact, NOT_MEASURED
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
@@ -161,10 +161,8 @@ def mark(row):
     head = row.get("headline")
     if head in BROKE:
         return "BREAK"
-    if head == "SKIP":
-        return "skip"
-    if head == "ERROR":
-        return "err!"
+    if head in NOT_MEASURED:
+        return "skip" if head == "SKIP" else "err!"
     return "ok"
 
 

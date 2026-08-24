@@ -6,6 +6,7 @@ detectors, and each attack's probe) — target-agnostic, works for any adapter.
 import html
 import re
 from recon import memory_phrase
+from workspace import measured
 
 VERDICT = {
     "EXPLOITED": ("#b3261e", "#fdeceb"),
@@ -235,6 +236,16 @@ def _isolation_panel(iso):
 
 
 def build_html(meta, results, recon=None, isolation=None):
+    # WHAT WAS MEASURED, and what errored said beside it. The big number on this page was
+    # `attacks_n` under the label "attacks fired", and `meta["errors"]` — written by the
+    # sweep for exactly this reader — was not on the page anywhere. A run whose budget
+    # stopped it after one probe rendered as "20 attacks fired · 0 breached · 0 not
+    # applicable", with the nineteen failures visible only by opening nineteen collapsed
+    # evidence panels one at a time. The rule and its reasoning live in `workspace.measured`.
+    _measured_n, _errored_n = measured(meta)
+    _errored_card = (f'<div class="stat"><div class="n">{_errored_n}</div>'
+                     f'<div class="l">errored — nothing measured</div></div>'
+                     if _errored_n else "")
     rows = []
     for r in results:
         a = r["attack"]
@@ -331,9 +342,10 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 <h1><span class="q">QA</span>tration — scorecard</h1>
 <p class="sub">target <b>{esc(meta.get('target',''))}</b> · {esc(meta.get('model',''))} · caps: {esc(caps)} · {meta.get('trials',1)} trials/attack · objective oracle</p>
 <div class="cards">
-  <div class="stat"><div class="n">{meta.get('attacks_n',0)}</div><div class="l">attacks fired</div></div>
+  <div class="stat"><div class="n">{_measured_n}</div><div class="l">attacks measured</div></div>
   <div class="stat red"><div class="n">{meta.get('broke',0)}</div><div class="l">breached (exploited+partial)</div></div>
   <div class="stat"><div class="n">{meta.get('skipped',0)}</div><div class="l">not applicable / skipped</div></div>
+  {_errored_card}
 </div>
 {baseline_html}
 {attribution_html}
