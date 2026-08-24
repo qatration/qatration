@@ -22,6 +22,16 @@ import yaml
 from run_redteam import load_target
 from adaptive import adaptive_attack
 
+# NO CLI DOOR, and the reason is a real constraint rather than an oversight. The attacker
+# that rewrites its own prompts is an LLM, reached through `langchain_core`, which lives in
+# the `[fleet]` extra and not in the default install. A door was opened for this and
+# `test_declared_dependencies_match_the_code` refused it on the spot: a base command that
+# cannot run on a base install is worse than no command, because it fails at the moment
+# somebody is trying to use it. Giving it one means answering how a command declares that it
+# needs an extra, and that is a question about packaging, not a line in a table.
+NO_CLI_DOOR = ("needs an LLM attacker through the [fleet] extra, so a base install could "
+               "not run it")
+
 
 LEARNED = os.path.join(ROOT, "attacks_learned.yaml")
 HEADER = """# Payloads DISCOVERED by the adaptive attacker, not written by hand.

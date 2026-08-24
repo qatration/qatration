@@ -57,6 +57,12 @@ def benign_rates(target):
 
 
 def main():
+    # PARSED, EVEN THOUGH THERE IS NOTHING TO PARSE. Without this the command answered
+    # `--help` by doing its work -- printing the report and writing the page -- and accepted
+    # any mistyped flag in silence. A reader who asks what a command does should not have to
+    # find out by watching it happen.
+    import argparse
+    argparse.ArgumentParser(prog="qatration discrimination", description="the tool's own credibility: are the controls clean and the breaches reliable").parse_args()
     data = load()
     if not data:
         print("no results in out/ — run a sweep first"); return

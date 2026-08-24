@@ -140,6 +140,12 @@ actually asked.</p>
 
 
 def main():
+    # PARSED, EVEN THOUGH THERE IS NOTHING TO PARSE. Without this the command answered
+    # `--help` by doing its work -- printing the report and writing the page -- and accepted
+    # any mistyped flag in silence. A reader who asks what a command does should not have to
+    # find out by watching it happen.
+    import argparse
+    argparse.ArgumentParser(prog="qatration profiles", description='every profiled target in one table, worst first').parse_args()
     rows = collect()
     if not rows:
         print(f"no recon_*.json in {OUT_DIR} — run run_recon.py first")

@@ -57,6 +57,12 @@ COMMANDS = {
     "discrimination": ("discrimination",
                        "the tool's own credibility: controls clean, breaches reliable not lucky"),
     "index":    ("build_index",     "one page tying a run's reports together"),
+    # AND THREE MORE THE SAME WALK FOUND, in the other direction: not "does every command
+    # reach a module" -- `test_packaging` already asks that -- but "does every module a
+    # person would want reach a command". All three were documented only in the source map,
+    # so `pip install qatration` gave you no way to run them at all.
+    "matrix":   ("model_matrix",   "one target across several models, the same attacks on each"),
+    "profiles": ("compare_recon",  "every profiled target in one table, worst first"),
     "recon":    ("run_recon",       "profile a target with benign probes before attacking it"),
     "generate": ("run_generate",    "turn a recon profile into objectives for that target"),
     "isolation": ("run_isolation",  "map which of a target's defences are separable, one at a time"),

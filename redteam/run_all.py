@@ -19,6 +19,12 @@ except Exception:
     pass
 import yaml
 
+# NO CLI DOOR, ON PURPOSE, and said here rather than in the gate: a list of exempt
+# modules living in the check is a second copy of this judgement, and the next module
+# added would join it by whoever happened to be editing the check.
+NO_CLI_DOOR = "sweeps the practice fleet, which only exists inside this repository"
+
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable                      # same interpreter/venv that launched us
 

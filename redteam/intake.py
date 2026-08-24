@@ -49,6 +49,12 @@ import jobqueue as q
 import runs as _runs
 from workspace import OUT
 
+# NO CLI DOOR, ON PURPOSE, and said here rather than in the gate: a list of exempt
+# modules living in the check is a second copy of this judgement, and the next module
+# added would join it by whoever happened to be editing the check.
+NO_CLI_DOOR = "the HTTP door itself; a server runs it, a person does not"
+
+
 MAX_BODY = 64 * 1024          # a target config, not a payload
 
 # WHAT A STRANGER MAY CALL A THING THAT BECOMES A FILENAME. `name` lands in

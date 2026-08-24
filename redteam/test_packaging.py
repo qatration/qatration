@@ -15,8 +15,10 @@ Offline. No model, no network, no fleet.
 """
 
 import ast
+import glob
 import io
 import os
+import re
 import subprocess
 import sys
 
@@ -384,6 +386,79 @@ def test_out_dir_honours_the_env_var():
 def _cli(args):
     return subprocess.run([sys.executable, os.path.join(HERE, "cli.py")] + args,
                           capture_output=True, text=True, timeout=120)
+
+
+def test_every_command_answers_help_without_doing_the_work():
+    """`--help` must describe the command, not run it.
+
+    Three commands answered `--help` by doing their work: `profiles` printed the whole fleet
+    table and wrote `recon_fleet.html`, and `discrimination` and `index` did the same, because
+    their modules never parsed an argument at all. A mistyped flag was accepted in silence for
+    the same reason.
+
+    Checked as a property rather than as a grep for `argparse`. A module can import it and
+    never call `parse_args`, and this file calls source-grepping a spellcheck elsewhere for
+    exactly that reason. So: exit 0, a usage line, and nothing written into a workspace of its
+    own -- that last one is the half that fails on a command which quietly did the job.
+    """
+    import tempfile, shutil
+    for name in cli.COMMANDS:
+        work = tempfile.mkdtemp()
+        try:
+            p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name, "--help"],
+                               capture_output=True, text=True, timeout=120,
+                               env=dict(os.environ, QATRATION_OUT=work,
+                                        PYTHONIOENCODING="utf-8"))
+            assert p.returncode == 0, \
+                "qatration %s --help exited %d: %s" % (name, p.returncode,
+                                                       (p.stderr or p.stdout)[-200:])
+            assert "usage:" in (p.stdout + p.stderr).lower(), \
+                "qatration %s --help printed no usage: %s" % (name, p.stdout[:200])
+            left = os.listdir(work)
+            assert not left, \
+                "qatration %s --help wrote %s -- it did the work instead of describing it" \
+                % (name, left)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    print("  ok  %d commands describe themselves without running" % len(cli.COMMANDS))
+
+
+def test_every_tool_with_a_main_has_a_door_or_says_why():
+    """The direction nothing walked: a module with a `main()` that no command reaches.
+
+    `test_subcommands_all_import` asks whether every command reaches a module. The defect
+    travels the other way, and it has travelled it six times now -- `fixes`, `discrimination`
+    and `index`, then `adaptive`, `matrix` and `profiles`. Each was finished, each worked from
+    the day it was written, and each was reachable only by invoking a module inside an
+    installed package, which nobody discovers. All six were found by walking the tool as a
+    stranger; none by a check.
+
+    A module may keep its `main()` without a door by declaring `NO_CLI_DOOR` with the reason.
+    That lives in the module, not here: a list of exemptions inside the gate is a second copy
+    of a judgement about modules, and the next one added joins it by whoever is editing the
+    gate that day.
+    """
+    import importlib
+    reached = {m for m, _ in cli.COMMANDS.values()}
+    orphans = []
+    for path in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+        mod = os.path.basename(path)[:-3]
+        if mod.startswith("test_") or mod == "cli" or mod in reached:
+            continue
+        src = io.open(path, encoding="utf-8").read()
+        if '__name__ == "__main__"' not in src or not re.search(r"^def main\(", src, re.M):
+            continue
+        if re.search(r"^NO_CLI_DOOR\s*=", src, re.M):
+            m = importlib.import_module(mod)
+            assert (getattr(m, "NO_CLI_DOOR", "") or "").strip(), \
+                "%s declares NO_CLI_DOOR with no reason in it" % mod
+            continue
+        orphans.append(mod)
+    assert not orphans, (
+        "these modules have a main() and `if __name__ == '__main__'`, and no command reaches "
+        "them: %s. Add them to cli.COMMANDS, or set NO_CLI_DOOR in the module with the reason."
+        % ", ".join(orphans))
+    print("  ok  every runnable module has a door or says why not")
 
 
 def test_cli_help_version_and_unknown_command():

@@ -42,6 +42,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import yaml
 
+# NO CLI DOOR, ON PURPOSE, and said here rather than in the gate: a list of exempt
+# modules living in the check is a second copy of this judgement, and the next module
+# added would join it by whoever happened to be editing the check.
+NO_CLI_DOOR = "rebuilds the shipped arsenal; a maintainer tool, not a user command"
+
+
 OUT_NAME = "attacks_generic.yaml"
 
 # Brand names from the practice fleet's fiction. A prompt saying "AcmeShop" tells an outside
