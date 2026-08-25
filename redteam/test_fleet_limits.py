@@ -196,11 +196,38 @@ def main():
                                             capture_output=True).returncode == 0:
             name = candidate
             break
-    have_bash = bool(_sh.which("bash"))
-    if not name or not have_bash:
+
+    # A BASH THAT CAN REACH THE DIRECTORY, proven by making it go there.
+    #
+    # `shutil.which("bash")` on a Windows runner finds `C:/Windows/System32/bash.exe` -- the WSL
+    # launcher -- before it finds Git Bash. With no distribution installed it answers "Windows
+    # Subsystem for Linux has no installed distributions" and exits, so the launcher under test
+    # never ran. With a distribution installed it would be worse: it starts, in a filesystem
+    # where a Windows path is not a path, and fails somewhere further along.
+    #
+    # `bash --version` accepts both, so that is not the question. The question is whether this
+    # shell can enter the directory the launcher is about to be handed, and the temporary
+    # directory below is created inside the one probed here.
+    sh = None
+    _probe = _tf.gettempdir().replace(chr(92), "/")
+    for _cand in (os.environ.get("QATRATION_BASH"), _sh.which("bash"),
+                  "C:/Program Files/Git/bin/bash.exe", "/bin/bash"):
+        if not _cand or not os.path.isfile(_cand):
+            continue
+        try:
+            _r = _sp.run([_cand, "-c", 'cd "%s" && echo qat-ok' % _probe],
+                         capture_output=True, text=True, timeout=60)
+        except Exception:
+            continue
+        if _r.returncode == 0 and "qat-ok" in _r.stdout:
+            sh = _cand
+            break
+
+    if not name or sh is None:
         # Never silence. A platform that cannot run this says so rather than passing.
         print("SKIP  the launcher, end to end: no %s here, so it was NOT checked"
-              % ("bash" if name else "interpreter on PATH by name"))
+              % ("shell that can reach the working directory" if name
+                 else "interpreter on PATH by name"))
     else:
         with _tf.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, "tools"))
@@ -227,19 +254,29 @@ def main():
                 "open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pid'), 'w')"
                 ".write(str(os.getpid()))\n"
                 # A backstop, so a failed assertion never leaves a process behind.
-                "time.sleep(30)\n")
+                "time.sleep(120)\n")
 
             env = dict(os.environ, QATRATION_PYTHON=name)
-            r = _sp.run(["bash", os.path.join(d, "tools", "fleet.sh"), "up"],
+            r = _sp.run([sh, os.path.join(d, "tools", "fleet.sh"), "up"],
                         capture_output=True, text=True, env=env, timeout=120)
             said = r.stdout + r.stderr
-            check("the launcher accepts an interpreter named the way its own default names it",
-                  "NO PYTHON" not in said, said.strip()[:200])
-            check("...and says it is starting the server", "starting" in said,
-                  said.strip()[:200])
+            # THE POSITIVE CLAIM FIRST, and the order is the finding rather than a style.
+            # These two were written the other way round -- `"NO PYTHON" not in said` first --
+            # and on the runner where the shell itself refused to start there was no output at
+            # all, so the check reported the launcher as fixed while nothing had run. An absent
+            # failure is not a success. That is the sentence this whole repository is about,
+            # and it went in as part of a gate against exactly that.
+            check("the launcher ran and says it is starting the server",
+                  r.returncode == 0 and "starting" in said, said.strip()[:300])
+            check("...and does not refuse the interpreter its own default picks",
+                  "starting" in said and "NO PYTHON" not in said, said.strip()[:300])
 
+            # SIXTY SECONDS, NOT FIFTEEN, and it costs nothing when the machine is healthy:
+            # the loop leaves on the first successful connect. A runner that stalls for twenty
+            # seconds under load would otherwise report the launcher as broken, and a gate that
+            # goes red for a property of the runner is one people learn to re-run until green.
             opened = False
-            for _ in range(60):
+            for _ in range(240):
                 with socket.socket() as probe:
                     probe.settimeout(0.4)
                     if probe.connect_ex(("127.0.0.1", port)) == 0:
@@ -247,7 +284,8 @@ def main():
                         break
                 time.sleep(0.25)
             check("...and the port really opens, so this is a start and not a message", opened,
-                  f"nothing answered on {port} within 15s")
+                  f"nothing answered on {port} within 60s; the launcher said "
+                  f"{said.strip()[:200]!r}")
 
             pidfile = os.path.join(d, "mybot", "pid")
             if os.path.isfile(pidfile):
