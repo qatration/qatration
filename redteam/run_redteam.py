@@ -555,9 +555,18 @@ def main():
     # and reports DEFENDED exactly like a real defence.
     from oracle import inert_for
     declared = set()
+    plants = []
     for a in attacks:
         declared |= set(a.get("success") or []) | set(a.get("partial") or [])
-    dead = inert_for(ctx, declared)
+        plants += [str(m) for m in (a.get("plants") or []) if str(m).strip()]
+    # AN ARSENAL CAN ARM A DETECTOR TOO. `planted_markers` used to come only from the target
+    # config, so a detector reading it was inert unless the tester had planted something in
+    # advance. Attacks that carry their own marker arm it for themselves, and reporting those
+    # as "cannot fire" would be the mirror of the mistake this block exists to prevent: a check
+    # that DID run, announced as one that could not.
+    inert_ctx = dict(ctx, planted_markers=list(ctx.get("planted_markers") or []) + plants) \
+        if plants else ctx
+    dead = inert_for(inert_ctx, declared)
     if dead:
         print(f"  ! {len(dead)} detector(s) cannot fire on this target — "
               f"missing config, not a clean result:")

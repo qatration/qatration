@@ -196,7 +196,7 @@ qatration/
     intake.py         # optional HTTP front end: a config in, a run id back, the report out
     honeytoken.py     # the secret the attacks hunt for is minted, not the operator's
     build_generic.py  # the portable arsenal, derived from the library rather than left over
-    oracle.py         # 64 detectors + judge + the always-on breach set
+    oracle.py         # 65 detectors + judge + the always-on breach set
     detector_coverage.py  # which detectors have ever fired, vs merely declared
     generate.py       # objectives from what the target says it must not do
     run_generate.py   # entry point for generation

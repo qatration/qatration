@@ -114,6 +114,38 @@ def undeliverable(attack, caps):
     return need if need and need not in (caps or set()) else None
 
 
+def judged_ctx(attack, ctx):
+    """The context this attack is judged against, plus anything the ATTACK itself planted.
+
+    WHY AN ATTACK NEEDS TO BRING ITS OWN MARKER. `planted_markers` comes from the target
+    config, which means a marker has to be arranged with the operator before the run: it is
+    something already sitting in the target. That works for the memory bots, where the plant
+    is a standing rule the tester typed in earlier, and it does not work at all for the case
+    a benchmark made obvious.
+
+    Measured against a third-party RAG app: every finding rested on a canary planted in the
+    corpus BEFORE the run, so none of them could be attributed to the attack that found it —
+    the same string comes back on an ordinary question about refunds. A tool that carries its
+    own payload into the prompt does not have that problem: the string exists nowhere but in
+    the attack, so the target repeating it is caused by the attack, by construction.
+
+    So an attack may declare `plants:` and those values join `planted_markers` FOR ITS OWN
+    JUDGEMENT ONLY. Not merged into the shared context: two attacks planting different
+    markers must not make each other's findings possible, and a marker must not survive into
+    the judgement of an attack that never sent it.
+
+    `canaries` are deliberately untouched. A value the TARGET holds and a value the ATTACKER
+    supplied are different findings at different severities, and `oracle._markers` exists to
+    keep them apart.
+    """
+    plants = [str(m) for m in (attack.get("plants") or []) if str(m).strip()]
+    if not plants:
+        return ctx
+    merged = dict(ctx)
+    merged["planted_markers"] = list(ctx.get("planted_markers") or []) + plants
+    return merged
+
+
 def run_attack(target, attack, ctx, trials=1):
     records = []
     delivery = attack.get("delivery", "direct")
@@ -187,7 +219,7 @@ def run_attack(target, attack, ctx, trials=1):
         # interrupted, but it must not be silent either: an operator watching a sweep that has
         # stopped printing deserves to know it is the oracle and which attack it is on.
         _t0 = time.time()
-        verdict, fired = judge(attack, probe, ctx)
+        verdict, fired = judge(attack, probe, judged_ctx(attack, ctx))
         _took = time.time() - _t0
         if _took > SLOW_JUDGE_S:
             print(f"  ! judging {aid} took {_took:.0f}s on a "

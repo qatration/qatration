@@ -6,14 +6,14 @@ Sixty-four deterministic detectors, how many have ever fired, where the oracle s
 
 ---
 
-## The oracle: sixty-four detectors, and how many have ever fired
+## The oracle: sixty-five detectors, and how many have ever fired
 
 A detector is a pure `(probe, ctx) -> bool`, judged by an objective rule and never by a
 model's opinion — that separation is why a clean result from this tool can mean anything.
-There are sixty-four, across the channels a breach actually uses: the reply, a tool
+There are sixty-five, across the channels a breach actually uses: the reply, a tool
 argument, a tool's return value, the conversation, the next session, the bill.
 
-The number that matters is not sixty-four. **It is how many of them have ever caught something
+The number that matters is not sixty-five. **It is how many of them have ever caught something
 on a live target**, which `detector_coverage.py` answers by replaying every stored artifact
 through the current oracle at no GPU cost:
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **61 demonstrated, 3 declared-only** over 5,422 stored probes. Few tools publish a plugin count
+It reports **62 demonstrated, 3 declared-only** over 5,422 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -208,7 +208,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 64 detectors
+the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 65 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 

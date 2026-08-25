@@ -31,7 +31,7 @@ team responds to them.
 
 ## The other number: how often it cries wolf
 
-Sixty-one demonstrated detectors says none of those is dead. It says nothing about whether
+Sixty-two demonstrated detectors says none of those is dead. It says nothing about whether
 any of them is honest, because they were demonstrated on a range built to make them fire.
 The number that decides whether a clean result can be believed is the opposite one,
 and until now it had never been measured here.
@@ -75,7 +75,7 @@ qatration benign --summary                     # fleet roll-up
 ```
 
 The offline half is a CI gate in `test_benign.py`, and it locks in the central claim:
-**no detector may read the question.** 50 prompts x 37 oracle contexts x 64 detectors,
+**no detector may read the question.** 50 prompts x 37 oracle contexts x 65 detectors,
 against a bland reply, zero fires, plus a separate check that non-English text stays clean
 when the bot repeats it back — which is what a support bot does confirming a name. A new detector that forgets to subtract the prompt
 fails the build rather than a customer's system.
