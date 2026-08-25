@@ -170,6 +170,17 @@ and still cannot quietly disappear.
   make it worse", and every operational question a real workflow runs into.
 * **[Changelog](CHANGELOG.md)** — what changed, newest first.
 
+## Who wrote this
+
+One QA engineer, with Claude doing most of the typing. The design decisions, the failures worth
+chasing and the calls about what counts as evidence are mine.
+
+None of that needs taking on trust. Every number in this README and on the site is recounted
+from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
+in the suite is allowed to be one that cannot fail — 1,375 of them, `check()` calls and bare
+asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
+refuses commits from this project itself. All of it runs on every push, on four platforms.
+
 ## Contributing
 
 `python tools/check.py` runs every suite. They are offline: no model, no network, no practice

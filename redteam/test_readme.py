@@ -32,7 +32,7 @@ dishonest direction only: the README may understate the evidence it has, never o
 
     python test_readme.py        # exits 1 on any failure (CI gate)
 """
-import sys, os, re, glob, json, io
+import sys, os, re, ast, glob, json, io
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -1139,6 +1139,46 @@ def main():
             check("...and the shared count is not larger than either side",
                   _sh <= min(_ka_n, _kb_n),
                   f"{_sh} shared cannot exceed {_ka_n} and {_kb_n}")
+
+    # --- HOW MANY ASSERTIONS THE SUITE CARRIES, RECOUNTED -------------------------------
+    #
+    # The README says one QA engineer wrote this with Claude, and in the next breath that no
+    # number here needs taking on trust because a test recounts it. That paragraph states a
+    # number itself, so without this it would be the one claim on the page that is false about
+    # itself.
+    #
+    # It moved inside a single evening -- written as 1,358, typed into the README as 1,372,
+    # because the same evening added assertions. A number that drifts that fast is a number
+    # that has to be derived rather than remembered.
+    #
+    # Counted the way `test_names.py` counts it: `check()` calls and bare asserts across every
+    # suite in this directory. Understating is allowed and overstating is not, like the other
+    # claims here.
+    _readme_txt = io.open(README, encoding="utf-8").read()
+    _n_assert = 0
+    for _sp in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
+        try:
+            _tree = ast.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        for _n in ast.walk(_tree):
+            if isinstance(_n, ast.Assert):
+                _n_assert += 1
+            elif (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+                  and _n.func.id == "check" and len(_n.args) >= 2):
+                _n_assert += 1
+
+    _am = re.search(r"([\d,]+)\s+of them, `check\(\)` calls and bare\s+asserts", _readme_txt, re.S)
+    check("the README states how many assertions the suite carries", bool(_am),
+          f"recounted {_n_assert}; the README says nothing, so the check is blind")
+    if _am:
+        _claim = int(_am.group(1).replace(",", ""))
+        check("...and it is not more than the suite actually has",
+              _claim <= _n_assert,
+              f"the README says {_claim}; the suites carry {_n_assert}")
+        check("...and it has not fallen far behind either",
+              _n_assert - _claim <= 25,
+              f"the README says {_claim}; the suites carry {_n_assert}")
 
     # --- WHAT A DETECTOR DOES WHEN NOBODY IS ATTACKING ---------------------------------------
     #
