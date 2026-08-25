@@ -6,6 +6,59 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## The release a stranger can start from (0.2.0, 2026-08-25)
+
+**The published 0.1.0 had thirteen commands and no `init`.** Three days of work later the tool
+has nineteen, and the six that arrived are the ones a newcomer meets first: `init` writes a
+target config with a canary nobody else has, `fixes` turns breaches into a prioritised list by
+root cause, `discrimination` asks whether the tool's own verdicts are reliable rather than
+lucky, `index` ties a run's reports together, `matrix` puts one target across several models,
+and `profiles` puts every profiled target in one table. Only one of the six is new code:
+`init`. The other five were finished modules under different names — `defense_report`,
+`discrimination`, `build_index`, `model_matrix`, `compare_recon` — sitting in the package with
+no way to reach them. A deliverable behind no door is a deliverable nobody has.
+
+**Most of what changed was found by walking the path a stranger walks**, not by reading the
+code. Installing the wheel into an empty virtualenv and using it as somebody who has never seen
+this repository produced, in order: a SARIF export anchoring every finding at a file that does
+not exist, so the code-scanning tab showed nothing; `rejudge` unable to see a config that lives
+outside this checkout, which is where every real config lives; an intake that wrote a report
+for a job that had not finished; a worker exit code that said nothing about what the process
+actually said; and a first run that refused a dead port with the sentence for an unpasted
+canary — sending the reader to re-read the one file that was fine. None of these is visible
+from the tests, because every offline suite has a server to talk to.
+
+**The `[fleet]` extra installed a LangChain the fleet cannot run on.** `langchain>=0.2` resolves
+to 1.3.x today, and 1.x removed the API six of the practice bots are written against:
+`ConversationalChatAgent` and `AgentExecutor` are gone from `langchain.agents`, and
+`langchain.memory` does not exist. The extra installed cleanly and left a fleet that could not
+be constructed. Nothing had ever installed it — CI takes the base package deliberately, the
+same path a stranger takes — so a constraint that resolves to something broken is a constraint
+nobody checks. Capped below 1.0, `langchain-ollama` included, since a partial cap is still
+broken.
+
+**Two more things stopped counting as measurements.** A row that measured nothing is no longer
+a row that measured clean, and an attack the target cannot be sent is no longer coverage. Both
+are the same defect the whole project exists to refuse, found inside the modules that report
+it.
+
+**And no assertion may now be true no matter what the code does.** Every check in every suite
+is examined for the shapes that cannot fail — a tautology, an `or True`, a fixture that never
+reaches the property it claims to test. Four green assertions in one evening had asserted
+nothing.
+
+The rest, briefly: the Python classifiers PyPI filters on, derived from `requires-python` and
+the interpreters CI actually starts rather than typed; a hand-written TOML fallback that read
+arrays only, so `requires-python` came back absent on the two interpreters the fallback exists
+for; the site made findable, given a favicon drawn from geometry and one public address instead
+of three; a third measured claim on the front page, that a bigger model is not the fix (282
+attacks, two models, 28 breaches against 25, eighteen of them the same attacks); and the commit
+guard now reads who wrote each commit and whether its stamp names a place.
+
+As of this release: 824 attacks across 38 files, 64 detectors, 37 target configs.
+
+---
+
 ## The forged-history family measured something (2026-08-22)
 
 The portable arsenal, 362 attacks at 3 trials, against the bot that now reads the transcript it

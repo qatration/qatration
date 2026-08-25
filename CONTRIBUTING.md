@@ -174,18 +174,28 @@ A maintainer tags; nothing else publishes. There is no PyPI token in this reposi
 is not meant to be: `publish` authenticates to PyPI with a short-lived OIDC identity issued to
 the workflow run itself, so there is no long-lived secret to leak, rotate or forget.
 
-**The version lives in `pyproject.toml` and nowhere else.** While this is 0.x, a minor bump may
-change behaviour: the number says which release you have, not what it promises. What is
-promised is that a published version is the code its tag names, and that is enforced rather
-than trusted.
+**The version is stated in two files and a test refuses a disagreement.** `pyproject.toml` is
+what pip resolves; `redteam/__init__.py` is what `qatration --version` prints and what a bug
+report quotes. `test_packaging.test_one_version_number` fails when they differ, because a
+report quoting a version nobody shipped is worse than one quoting none. Bump both.
 
-To cut a release: update `CHANGELOG.md`, bump `version` in `pyproject.toml`, run
-`python tools/check.py`, commit, then
+Neither of them is the ENGINE version: `target.engine_version()` reports the commit that wrote
+a piece of evidence, and two installs of the same release can be different commits.
+
+While this is 0.x, a minor bump may change behaviour: the number says which release you have,
+not what it promises. What is promised is that a published version is the code its tag names,
+and that is enforced rather than trusted.
+
+To cut a release: update `CHANGELOG.md`, bump `version` in both files, run
+`python tools/check.py`, commit, then tag with the same number the package now says
 
 ```
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
+
+The tag is the publish. `build` refuses a tag that disagrees with `pyproject.toml`, so a
+mistyped number fails there rather than on PyPI, where a version cannot be taken back.
 
 **The one thing that is not automatic** is a GitHub environment named `release`, created once in
 the repository settings. Without it the publish job does not start. That is deliberate: it is
