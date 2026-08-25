@@ -495,6 +495,100 @@ def test_the_support_claim_survives_without_tomllib():
     print("  ok  requires-python and the classifiers read the same with and without tomllib")
 
 
+def _workflow(name):
+    """One workflow file, parsed. `on:` is the catch: YAML 1.1 reads a bare `on` as the boolean
+    True, so a check that looks for the string key finds nothing and passes on an empty dict."""
+    import yaml
+    path = os.path.join(REPO, ".github", "workflows", name)
+    assert os.path.isfile(path), "%s is gone" % path
+    doc = yaml.safe_load(io.open(path, encoding="utf-8").read())
+    triggers = doc.get("on", doc.get(True))
+    assert triggers, "%s declares no triggers, or `on:` was read as a boolean" % name
+    return doc, triggers
+
+
+def test_release_notes_come_from_the_changelog():
+    """A release page that says nothing still claims to describe a release.
+
+    The notes are extracted rather than typed, so the newest account of a change is the one
+    already written down with its reasoning, instead of a second one produced in the least
+    careful minute of the process.
+    """
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import release_notes as rn
+
+    text = io.open(os.path.join(REPO, "CHANGELOG.md"), encoding="utf-8").read()
+    found = rn.entries(text)
+    assert len(found) >= 3, "only %d changelog entries were parsed" % len(found)
+    assert all(h and b.strip() for h, b in found), \
+        "an entry came back with no heading or no body: %r" % [h for h, b in found if not b.strip()]
+
+    # THE ENTRY THAT NAMES THE VERSION, not simply the newest one. A tag cut after later work
+    # was written down would otherwise ship somebody else's paragraph as its release note.
+    sample = ("## The one that names it (0.2.0, 2026-08-25)\n\nsecond entry body\n\n---\n\n"
+              "## An older entry (2026-08-22)\n\nolder body\n")
+    assert "second entry body" in rn.notes_for("v0.2.0", sample)
+    newest_first = ("## Newest, unnamed (2026-08-26)\n\nnewest body\n\n---\n\n"
+                    "## The one that names it (0.2.0)\n\nnamed body\n")
+    got = rn.notes_for("v0.2.0", newest_first)
+    assert "named body" in got and "newest body" not in got, got[:200]
+
+    # A version must not answer for a longer one that starts with it.
+    only_ten = rn.notes_for("v0.2.10", "## Names 0.2.0 only\n\nbody\n")
+    assert "No changelog entry names 0.2.10" in only_ten, only_ten[:200]
+
+    # No entry at all is a refusal, not an empty page.
+    try:
+        rn.notes_for("v9.9.9", "# Changelog\n\nnothing here\n")
+        raise AssertionError("an empty changelog produced release notes instead of refusing")
+    except ValueError:
+        pass
+
+    # And the real one, for the tag that exists.
+    real = rn.notes_for("v0.2.0", text)
+    assert "0.2.0" in real and len(real) > 400, real[:200]
+    print("  ok  release notes derive from the changelog, %d entries parsed" % len(found))
+
+
+def test_the_release_page_waits_for_the_artifact():
+    """A GitHub Release announcing a version that never reached PyPI is a claim nobody checked.
+
+    Read structurally rather than grepped: a substring check passes on a condition that has been
+    commented out, and this file has been caught by that before.
+    """
+    doc, triggers = _workflow("github-release.yml")
+    assert "workflow_run" in triggers, \
+        "the Release is no longer ordered after the publish; it can now announce a version " \
+        "that failed its own suites"
+    assert triggers["workflow_run"].get("workflows") == ["release"], triggers["workflow_run"]
+    assert "workflow_dispatch" in triggers, \
+        "the manual entry is gone, so this workflow can only ever run during a real release " \
+        "and cannot be exercised on purpose"
+
+    assert doc.get("permissions") == {}, \
+        "the workflow-level default must grant nothing: %r" % (doc.get("permissions"),)
+    job = list(doc["jobs"].values())[0]
+    assert job.get("permissions") == {"contents": "write"}, \
+        "the job needs exactly contents: write, not %r" % (job.get("permissions"),)
+
+    guard = " ".join((job.get("if") or "").split())
+    assert "workflow_run.conclusion == 'success'" in guard, \
+        "a failed release run would still produce a Release: %r" % guard
+    assert "head_branch, 'v'" in guard, \
+        "a non-tag run would produce a Release for a branch: %r" % guard
+
+    steps = job["steps"]
+    ref = [st for st in steps if st.get("uses", "").startswith("actions/checkout")]
+    assert ref and "tag" in str(ref[0].get("with", {}).get("ref")), \
+        "the notes must be read from the tag's own checkout, not from main: %r" % (ref[0:1],)
+    body = "\n".join(str(st.get("run", "")) for st in steps)
+    assert "release_notes.py" in body, "the notes are no longer derived from the changelog"
+    assert "--clobber" not in body, \
+        "a Release a human may have edited must not be silently overwritten"
+    assert "gh release view" in body, "re-running this must not fail on an existing Release"
+    print("  ok  the Release follows a successful publish, and grants one permission to do it")
+
+
 def test_out_dir_honours_the_env_var():
     old = os.environ.get(workspace.ENV_VAR)
     try:

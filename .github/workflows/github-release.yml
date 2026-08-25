@@ -1,0 +1,109 @@
+# The Releases page, which this repository did not have.
+#
+# Two tags existed and no releases, so the sidebar said "0 releases" about a project that had
+# shipped twice. A tag and a Release are different objects: the first is a pointer in git, the
+# second is the page people are sent to, the entry in the releases Atom feed, and the thing a
+# packager or a list curator looks for to decide whether a project is alive.
+#
+# AFTER THE ARTIFACT SHIPPED, NOT BESIDE IT. This waits for `release.yml` to finish and refuses
+# unless it succeeded, because a Release announcing a version that never reached PyPI is exactly
+# the kind of claim this project exists to catch. `workflow_run` is what makes that orderable;
+# triggering on the tag push directly would race the publish and announce a version that might
+# still fail its own suites.
+#
+# It is a SEPARATE FILE rather than a job inside `release.yml`, and that is not tidiness. The
+# manual entry point below can be pointed at an old tag, and `workflow_dispatch` on a tag ref
+# makes `github.ref` a tag ref — which is precisely the condition `release.yml` uses to decide
+# to publish. Backfilling a Release for v0.1.0 from inside that file would have tried to upload
+# 0.1.0 to PyPI a second time. Here there is no publish job to reach.
+
+name: github release
+
+on:
+  workflow_run:
+    workflows: ["release"]
+    types: [completed]
+  # The manual entry, for a tag that was pushed before this existed. Nothing happens to those
+  # tags until somebody runs this and names one; the tag is not moved, nothing is rebuilt, and
+  # nothing is republished. It creates the page and no more.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "an existing tag to write a Release for, e.g. v0.1.0"
+        required: true
+        type: string
+
+# The default for everything, so a job that needs a permission has to say so.
+permissions: {}
+
+jobs:
+  page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A dispatch always runs; a workflow_run only when the release it followed passed and was
+    # for a tag. `head_branch` on a tag push is the tag name, and on a branch push it is the
+    # branch — so the `v` test is what keeps a `workflow_dispatch` run of `release.yml`, which
+    # deliberately publishes nothing, from producing a Release for `main`.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    permissions:
+      contents: write        # create a release, and nothing else
+    steps:
+      - name: the tag this is about
+        id: which
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.event.workflow_run.head_branch }}"
+          case "$tag" in
+            v*) ;;
+            *) echo "REFUSED: '$tag' is not a version tag." >&2; exit 1 ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          # THE TAG'S OWN CHECKOUT, so the notes are the record as it stood when the tag was
+          # cut. Reading the changelog from `main` would describe a release with entries
+          # written after it.
+          ref: ${{ steps.which.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: the tag must exist, and must be the version the package states
+        # The same rule `release.yml` applies before publishing, applied again here because
+        # this entry point can be reached without going through that one.
+        run: |
+          set -euo pipefail
+          tag="${{ steps.which.outputs.tag }}"
+          git rev-parse -q --verify "refs/tags/$tag" >/dev/null || {
+            echo "REFUSED: no tag $tag in this repository." >&2; exit 1; }
+          pip install --quiet tomli
+          pkg=$(python -c "import tomli;print(tomli.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$pkg" != "${tag#v}" ]; then
+            echo "REFUSED: $tag names a tree whose package says $pkg." >&2
+            exit 1
+          fi
+
+      - name: the notes come from the changelog
+        run: python tools/release_notes.py "${{ steps.which.outputs.tag }}" > "$RUNNER_TEMP/notes.md"
+
+      - name: create it, or say it is already there
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # NOT `--clobber`, and no overwrite. A Release that already exists may have been edited
+        # by a human, and silently replacing that text with a regenerated copy is a change
+        # nobody asked for. Existing is not a failure either: this workflow can legitimately be
+        # re-run.
+        run: |
+          set -euo pipefail
+          tag="${{ steps.which.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag already has a Release; leaving it alone."
+            exit 0
+          fi
+          gh release create "$tag" --title "$tag" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
