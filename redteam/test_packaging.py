@@ -550,6 +550,29 @@ def test_release_notes_come_from_the_changelog():
     print("  ok  release notes derive from the changelog, %d entries parsed" % len(found))
 
 
+def test_a_skip_does_not_hide_inside_a_green_suite():
+    """`check.py` throws away the output of a suite that passes, and several suites here skip
+    on purpose -- no shell, no interpreter under that name. A skip that only exists in a
+    discarded buffer is a check nobody knows was not run, which is the thing this repository
+    is about, one level up: not a claim that is wrong, a claim about coverage that is."""
+    import importlib.util
+    path = os.path.join(REPO, "tools", "check.py")
+    spec = importlib.util.spec_from_file_location("qat_check", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    text = ("PASS  something real\n"
+            "SKIP  the launcher, end to end: no shell on this machine, NOT checked\n"
+            "  SKIP  indented, because a suite may print inside a block\n"
+            "8/8 passed\n")
+    got = mod.skipped(text)
+    assert len(got) == 2, "expected both skip lines, got %r" % got
+    assert all("SKIP" in g for g in got), got
+    assert not mod.skipped("PASS  everything\n42/42 passed\n"), \
+        "a suite that skipped nothing must add no lines"
+    print("  ok  a suite's SKIP lines survive a green run")
+
+
 def test_the_release_page_waits_for_the_artifact():
     """A GitHub Release announcing a version that never reached PyPI is a claim nobody checked.
 

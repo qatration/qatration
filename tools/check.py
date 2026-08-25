@@ -44,6 +44,16 @@ TAIL = 25
 DEADLINE = int(os.environ.get("QATRATION_SUITE_TIMEOUT", "600"))
 
 
+def skipped(text):
+    """-> the SKIP lines a suite printed, so a green run still says what it did not check.
+
+    A convention rather than a mechanism: a suite that steps over something prints a line
+    beginning with SKIP and explains itself. This surfaces those lines and nothing else,
+    because a passing suite's ordinary output is noise and its refusals are not.
+    """
+    return [ln.rstrip() for ln in text.splitlines() if ln.strip().startswith("SKIP")]
+
+
 def suites(patterns):
     names = sorted(f for f in os.listdir(SUITES)
                    if f.startswith("test_") and f.endswith(".py"))
@@ -122,6 +132,16 @@ def main(argv):
                 if ln.strip().startswith("FAIL") or ln.strip().startswith("0/0 passed")]
         if proc.returncode == 0 and not lied:
             print("  ok   %-28s %5.1fs" % (name[5:-3], secs))
+            # AND WHAT IT DID NOT CHECK. Output from a passing suite is discarded, so a suite
+            # that skipped half of itself and passed the rest reported exactly like one that
+            # ran everything. Several suites here skip on purpose -- no shell on this machine,
+            # no interpreter by that name -- and they say so, into a buffer nobody reads.
+            #
+            # Found by asking whether the Windows leg had really run a launcher check or
+            # quietly stepped over it. The answer took a stopwatch and a local comparison to
+            # infer, which is the wrong way to learn what a green build covered.
+            for line in skipped(text):
+                print("       | " + line)
             continue
         if proc.returncode == 0:
             failed.append(name)
