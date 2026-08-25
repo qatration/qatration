@@ -1,0 +1,33 @@
+# The same probe family, against the DEFENDED half of the pair.
+#
+# Everything here is identical to the RAG app's config except the endpoint and the reply
+# mapping, because the comparison is between targets rather than between configurations.
+#
+# THE REPLY IS JSON HERE. The guarded bot answers `{"reply": "..."}` while the RAG app streams
+# a text body, so `response_json` is on and the field is named. Getting this wrong would not
+# error: garak would score the JSON envelope as the model's answer, every detector would read
+# the same braces on every attempt, and the run would come back clean for a reason that has
+# nothing to do with the rails.
+
+run:
+  generations: 1
+
+plugins:
+  probe_spec: latentinjection.LatentInjectionFactSnippetEiffel
+  model_type: rest
+  generators:
+    rest:
+      RestGenerator:
+        name: nemo
+        uri: http://localhost:8100/chat
+        method: post
+        headers:
+          Content-Type: application/json
+        req_template_json_object:
+          message: $INPUT
+        response_json: true
+        response_json_field: reply
+        request_timeout: 300
+
+reporting:
+  report_prefix: bench-nemo-injection

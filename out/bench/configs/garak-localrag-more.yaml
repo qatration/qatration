@@ -1,0 +1,37 @@
+# Four more garak families against the undefended target, so "where the other tools were
+# better" rests on more than one probe module out of forty-two.
+#
+# CHOSEN FOR THIS TARGET, not for size. `encoding` delivers a payload the input never shows in
+# plain text, `dan` is the jailbreak corpus garak is known for, `goodside` is the classic
+# injection trick set, and `leakreplay` asks whether the model reproduces text it memorised.
+# Together they are 553 prompts, about an hour at the rate this target answers, and they cover
+# four different ways of being wrong rather than four sizes of the same way.
+#
+# NOT RUN AGAINST THE GUARDED TARGET, deliberately. That one refuses 96% of attacks and 79% of
+# ordinary questions; another thousand probes would buy a more precise estimate of a number we
+# already have, at the same hour's cost. The page says so rather than implying the pair was
+# symmetric.
+
+run:
+  generations: 1
+
+plugins:
+  probe_spec: encoding.InjectBase64,dan.DanInTheWild,goodside.Tag,leakreplay.GuardianComplete
+  model_type: rest
+  generators:
+    rest:
+      RestGenerator:
+        name: localrag
+        uri: http://localhost:8000/rag
+        method: post
+        headers:
+          Content-Type: application/json
+        req_template_json_object:
+          messages:
+            - role: user
+              content: $INPUT
+        response_json: false
+        request_timeout: 180
+
+reporting:
+  report_prefix: bench-localrag-more

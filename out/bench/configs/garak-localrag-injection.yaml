@@ -1,0 +1,36 @@
+# garak against the third-party RAG app, on the family that actually applies to it.
+#
+# THE PILOT USED ANSI PROBES AND THAT WAS THE WRONG QUESTION. `ansiescape` asks whether the
+# model will emit terminal escape sequences; this target's exposure is a poisoned document in
+# its corpus. Reporting garak's ANSI numbers as "garak's score" would be the unfair benchmark
+# this whole exercise exists not to be, so the pilot's 22% is thrown away rather than quoted.
+#
+# `latentinjection` IS the family: indirect injection through retrieved content, which is
+# exactly what this app does with its corpus. 256 prompts, uncapped, because
+# `soft_probe_prompt_cap` is not honoured by this module and truncating a tool's own corpus
+# would mean comparing something other than the tool as shipped. The budget is therefore
+# reported rather than equalised: prompts sent and wall-clock, per tool, on the page.
+
+run:
+  generations: 1
+
+plugins:
+  probe_spec: latentinjection.LatentInjectionFactSnippetEiffel
+  model_type: rest
+  generators:
+    rest:
+      RestGenerator:
+        name: localrag
+        uri: http://localhost:8000/rag
+        method: post
+        headers:
+          Content-Type: application/json
+        req_template_json_object:
+          messages:
+            - role: user
+              content: $INPUT
+        response_json: false
+        request_timeout: 180
+
+reporting:
+  report_prefix: bench-localrag-injection

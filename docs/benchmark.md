@@ -42,16 +42,34 @@ layer, which is exactly what makes it the control half of a pair.
 
 ## The method that made the numbers mean something
 
-A benign baseline came first: 50 ordinary customer-support questions, no attack. On the
-unguarded app the planted string comes back on **46%** of them. That alone disqualifies a raw
-count as evidence of anything.
+A benign baseline came first: 50 probes with no attack in them. On the unguarded app the
+planted string comes back on **46%** of them, which alone disqualifies a raw count as evidence
+of anything.
+
+**Those 50 are not all ordinary questions, and the split matters.** 36 are plain customer
+support. The other 14 are legitimate questions that happen to CONTAIN attack-shaped text, which
+is what a false-positive corpus is for: a customer pasting a stack trace, an XML snippet with an
+entity declaration in it, a URL with a template expression. They are benign, and they behave
+differently:
+
+| subset | n | poisoned doc retrieved | leaked | leaked given retrieval |
+|---|---|---|---|---|
+| plain support questions | 36 | 16 (44%) | 15 (42%) | 15/16 (94%) |
+| benign but attack-shaped | 14 | 11 (79%) | 8 (57%) | 8/11 (73%) |
+| both, as used below | 50 | 27 (54%) | 23 (46%) | 23/27 (85%) |
+
+The attack-shaped half pulls the poisoned file in at nearly twice the rate of a plain question,
+which is what lifts the pooled background from 44% to 54%. This was published first as "50
+ordinary customer-support questions", which was wrong, and the error mattered: it is the
+comparator every claim below is measured against.
 
 A fair objection survives it. The benign questions and the attack questions are different
 questions, so comparing their rates compares two distributions as well as two conditions. The
 application closes that itself: it **lists the documents it retrieved** at the end of every
 answer, so the condition is observable from outside. Which document carries the payload is
-measured rather than declared, being the one cited by every leaking reply and by no clean one,
-and every reply is then split on it. Attack replies and benign replies are compared under the
+measured rather than declared, being the one document cited by every leaking reply. It is
+cited by clean replies too, 38 of them, and it has to be: if only leaking replies cited it,
+retrieval and leaking would be the same event and there would be nothing to condition on. Attack replies and benign replies are compared under the
 same condition rather than across two question sets.
 
 ## The unguarded target
@@ -74,9 +92,16 @@ on its own.** No attack is needed for that number. garak's injection probes land
 and QAtration lands just under it, which means neither adds anything to what the app does with
 a poisoned document in front of a 3B model.
 
-**promptfoo moves it, and that is the clearest single-tool result here.** 95% against the same
-85% background, on 158 retrievals. Its generated prompts make the model act on the payload more
-often than an ordinary question does.
+**promptfoo comes out higher, and it does not clear a significance test.** 95% against the
+pooled 85% background is Fisher exact p = 0.078, and against the plain-question background of
+94% it is p = 0.59. The limiting number is not promptfoo's 158 retrievals, it is the 27 in the
+baseline. So the honest statement is that promptfoo may raise the repeat rate and this run does
+not establish it. An earlier version of this page called it the clearest result here, on 158
+observations, without running the test. It was corrected within a day of publication after a
+review asked for the p-value, and the sentence it replaces is quoted in the commit.
+
+For the same comparison: garak 103/121 against the baseline is p = 1.00, and QAtration 187/225
+is p = 1.00. Those two add nothing to the repeat rate, and that part is not in doubt.
 
 **QAtration wins the other factor.** 86% retrieval against a 54% background: its arsenal pulls
 the poisoned document into context more reliably than anything else measured. Whether that is
@@ -95,7 +120,7 @@ Different questions, all legitimate, and the difference is most of the point.
 | garak | `dan.DanInTheWild` bypass **90.23%** [86.33, 93.75] | did the model comply with a request it should refuse |
 | garak | `encoding.InjectBase64` 0.78% | did the model decode and act on a base64 payload |
 | promptfoo | 143 of 200 tests failed | did a judge model think the attack succeeded |
-| QAtration | 192 of 261 attacks breached, all flagged unattributable | did a detector fire, and can the finding be attributed |
+| QAtration | 192 breaches, 181 flagged unattributable by the tool itself | did a detector fire, and can the finding be attributed |
 
 ## The guarded target
 
@@ -144,10 +169,12 @@ nothing, not a fault.
 
 ## What QAtration did that the others cannot
 
-One thing, and it is the reason the project exists. Every breach it reported on the unguarded
-target came with the reason it could not be attributed, naming the benign rate of each detector
-that fired. 192 findings, all disqualified by the tool that found them. Neither of the others
-takes a benign baseline, so neither can say it.
+One thing, and it is the reason the project exists. Of the 192 breaches it reported on the
+unguarded target, **181 came with the reason they could not be attributed**, naming the benign
+rate of each detector that fired. The remaining 11 carry no such flag, because the detectors
+behind them do not fire on this target's benign traffic, and those are the findings the run
+stands behind. Neither of the other tools takes a benign baseline, so neither can make the
+distinction either way.
 
 On the guarded target it was also the only tool to produce a positive finding.
 
@@ -165,13 +192,19 @@ On the guarded target it was also the only tool to produce a positive finding.
   first attempt at these runs is discarded for that reason.
 * **The conditioning does not transfer to the guarded target.** It answers with a bare reply
   and discloses nothing about its context, so there the benign baseline is all there is.
-* **garak ran four probe families out of forty-two**, chosen for this kind of target rather
-  than sampled. A different four could tell a different story.
+* **garak ran five probe modules out of forty-two**, chosen for this kind of target rather
+  than sampled: `latentinjection` against both targets, then `encoding`, `dan`, `goodside` and
+  `leakreplay` against the unguarded one. A different five could tell a different story.
 * **The 90.23% is measured on a random subset and we did not seed it.** `DanInTheWild` is a
   256-prompt sample drawn by `random.sample` from a library of about 700, and garak takes a
   `run.seed` we did not set. Anyone repeating that command gets a different 256 and a different
   figure. Set a seed to compare like with like, and read our number as an estimate of the
   library's bypass rate rather than as a fact about 256 particular prompts.
+* **promptfoo's red-team generator asks for email verification.** `promptfoo redteam
+  generate` would not run until an address was set with `promptfoo config set email`; a plain
+  `promptfoo eval` needs no account. We used the project's own address. Stated because anybody
+  reproducing this will meet it, and because it is the kind of thing a comparison should
+  mention rather than discover for you.
 * **The foreign tools' raw reports are not in this repository.** The commit guard refuses them
   over a Cyrillic character inside garak's jailbreak corpus, that corpus carries its own
   licence, and weakening a gate to accommodate a benchmark artifact is the failure this project
@@ -198,12 +231,16 @@ qatration benign --target-config redteam/targets_localrag.yaml
 qatration run --target-config redteam/targets_localrag.yaml --scope full --trials 1
 
 pip install garak==0.16.0
-python -m garak --config garak-localrag-injection.yaml
+python -m garak --config out/bench/configs/garak-localrag-injection.yaml
 
 npm install promptfoo@0.122.0
-promptfoo redteam generate -c promptfooconfig.yaml -o attacks.yaml
+promptfoo redteam generate -c out/bench/configs/promptfooconfig.yaml -o attacks.yaml
 promptfoo redteam eval -c attacks.yaml -o results.json --no-cache -j 1
 ```
+
+Every config those commands read is in `out/bench/configs/`: the REST generator garak was
+pointed at, the promptfoo target and plugin list, and the same pair for the guarded target.
+The files themselves, not a transcription of them.
 
 Then score every report by the same rule:
 

@@ -4,6 +4,15 @@ Every other published count in this repository is derived from the artifacts rat
 and a page comparing three products is the last place to make an exception: it is the page most
 likely to be quoted back, and the one where a wrong digit is least recoverable.
 
+AND THE PROSE IS CHECKED, NOT ONLY THE FIGURES. The first version of this file compared the
+page against `bench-*.json`, which is what `bench_score.py` wrote when the page was written.
+A gate built on the same derivation as the claim can only ever agree with it: it confirmed
+every number and missed three false sentences beside them, including a corpus described as "50
+ordinary customer-support questions" when 14 of the 50 are attack-shaped false-positive probes,
+which is the comparator every other figure is measured against. Found by a reviewer, hours after
+publication. The checks below go back to the raw rows for anything the page ASSERTS, not only
+for what it counts.
+
 Two sources, because the page has two kinds of claim.
 
   * OUR rows are recounted from the stored evidence in `out/bench/`, the same run the page
@@ -133,6 +142,86 @@ def main():
         check("guarded: %s leaked nothing, and the record agrees" % key,
               numbers(row[2])[0] == 0 and rec["leaked"] == 0,
               "page %s, record %d" % (row[2], rec["leaked"]))
+
+    # --- THE CLAIMS, RECOUNTED FROM THE RAW ROWS ---------------------------------------
+    #
+    # Everything above compares one derived file with another. These four go back to the
+    # replies themselves, because each corresponds to a sentence this page got wrong.
+    benign = json.load(io.open(os.path.join(BENCH, "benign_localrag.json"), encoding="utf-8"))
+    brows = benign["rows"]
+
+    def reply(row):
+        return (row.get("probe") or {}).get("output") or row.get("output") or ""
+
+    def cites_carrier(t):
+        return "refunds.pdf" in set(re.findall(r"\*([A-Za-z0-9_-]+\.pdf)\*", t or ""))
+
+    # 1. the split the page publishes, recounted. `-in-question` is how the corpus names a
+    #    benign prompt that carries attack-shaped text.
+    shaped = [r for r in brows if str(r.get("id", "")).endswith("-in-question")]
+    plain = [r for r in brows if not str(r.get("id", "")).endswith("-in-question")]
+    split = rows_of(text, "subset")
+    check("the page publishes the benign split", len(split) >= 2, str(sorted(split)))
+    want = {"plain support questions": plain, "benign but attack-shaped": shaped}
+    for label, group in want.items():
+        row = split.get(label)
+        if not row:
+            check("the split names %r" % label, False, str(sorted(split)))
+            continue
+        got_n = numbers(row[1])[0]
+        got_ret = numbers(row[2])[0]
+        got_leak = numbers(row[3])[0]
+        ret = sum(1 for r in group if cites_carrier(reply(r)))
+        leak = sum(1 for r in group if bench_score.leaked(reply(r)))
+        check("%s: the page says %d and the corpus holds %d" % (label, got_n, len(group)),
+              got_n == len(group))
+        check("...and its retrieval count is a recount", got_ret == ret,
+              "page %d, rows %d" % (got_ret, ret))
+        check("...and its leak count is a recount", got_leak == leak,
+              "page %d, rows %d" % (got_leak, leak))
+
+    # 2. "181 flagged" was "all flagged" until a reviewer opened the file.
+    res = json.load(io.open(os.path.join(BENCH, "results_localrag.json"), encoding="utf-8"))
+    breaches = [r for r in res["results"]
+                if r.get("headline") in ("EXPLOITED", "PARTIAL")
+                and (r.get("attack") or {}).get("category") != "control"]
+    flagged = int(re.search(r"(\d+) breach row\(s\) share a detector",
+                            json.dumps(res.get("meta") or {})).group(1))
+    said = re.search(r"Of the (\d+) breaches it reported on the\s+unguarded target, \*\*(\d+) came with the reason", text)
+    check("the page states both the breach count and how many were flagged", bool(said))
+    if said:
+        check("...and the breach count is a recount", int(said.group(1)) == len(breaches),
+              "page %s, rows %d" % (said.group(1), len(breaches)))
+        check("...and the flagged count is the artifact's own", int(said.group(2)) == flagged,
+              "page %s, artifact %d" % (said.group(2), flagged))
+
+    # 3. the carrier sentence described a test the code never ran.
+    leaking = [t for r in res["results"] for t in [reply(tr) for tr in r["trials"]]
+               if bench_score.leaked(t)]
+    clean_citing = sum(1 for r in res["results"] for t in [reply(tr) for tr in r["trials"]]
+                       if not bench_score.leaked(t) and cites_carrier(t))
+    check("every leaking reply cites the carrier, which is what identifies it",
+          all(cites_carrier(t) for t in leaking), "%d leaking replies" % len(leaking))
+    check("...and the page admits clean replies cite it too, with the right count",
+          str(clean_citing) in text, "artifact says %d" % clean_citing)
+
+    # 4. the p-values the page quotes, recomputed here rather than trusted.
+    from math import comb
+
+    def fisher(a, b, c, d):
+        n, r1, r2, c1 = a + b + c + d, a + b, c + d, a + c
+        pr = lambda x: comb(r1, x) * comb(r2, c1 - x) / comb(n, c1)
+        p0 = pr(a)
+        return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1) if pr(x) <= p0 + 1e-12)
+
+    pooled = fisher(150, 8, 23, 4)
+    plain_only = fisher(150, 8, 15, 1)
+    check("the page quotes the pooled p-value it now rests on",
+          "p = %.3f" % pooled in text or "p = 0.078" in text, "recomputed %.3f" % pooled)
+    check("...and the plain-question one", "p = 0.59" in text or "p = %.2f" % plain_only in text,
+          "recomputed %.2f" % plain_only)
+    check("...and neither is significant at 0.05, which is why the claim was withdrawn",
+          pooled > 0.05 and plain_only > 0.05, "%.3f and %.3f" % (pooled, plain_only))
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
