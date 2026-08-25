@@ -70,6 +70,12 @@ jobs:
           ref: ${{ steps.which.outputs.tag }}
           fetch-depth: 0
 
+        # 3.13 ON PURPOSE, and it is not the matrix in `check.yml` gone stale. That matrix
+        # states what the package SUPPORTS, and its newest leg is 3.14. This is the
+        # interpreter that builds and uploads the artifact, which is a different question:
+        # the wheel is `py3-none-any`, so the builder's version is not in it, and pinning the
+        # one that has published before keeps the publishing path off whatever shipped most
+        # recently. Moving it is a deliberate change, not a tidy-up.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

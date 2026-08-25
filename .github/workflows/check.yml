@@ -48,11 +48,22 @@ jobs:
         # stays true is if something runs there. Paired down to one job per extra platform
         # rather than a full grid, since the OS risk and the version risk are different risks
         # and neither needs the other multiplied through it.
+        #
+        # THE NEWEST MOVED, 3.13 TO 3.14, because it had stopped being the newest. 3.14 shipped
+        # in October 2025 and this matrix went on describing itself as "the oldest and the
+        # newest" while testing neither end honestly -- a workflow claiming something it does
+        # not do, which is the defect this repository exists to find, sitting in the file that
+        # is supposed to find it. `requires-python` has no upper bound, so pip was already
+        # installing this on 3.14 for anyone who had it.
+        #
+        # The classifier list follows on its own: `test_packaging` derives it from this matrix
+        # and refuses a pyproject that does not name every version between the floor and the
+        # newest leg here.
         include:
           - { os: ubuntu-latest, python: "3.9" }
-          - { os: ubuntu-latest, python: "3.13" }
-          - { os: macos-latest, python: "3.13" }
-          - { os: windows-latest, python: "3.13" }
+          - { os: ubuntu-latest, python: "3.14" }
+          - { os: macos-latest, python: "3.14" }
+          - { os: windows-latest, python: "3.14" }
 
     # BASH ON ALL THREE, or the Windows leg is a different script. GitHub's default shell there
     # is PowerShell, where `mkdir -p` and `$RUNNER_TEMP` do not mean what they mean below — so
