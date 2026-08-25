@@ -24,7 +24,22 @@ status=0
 while read -r _local_ref local_sha _remote_ref remote_sha; do
     [ "$local_sha" = "$zero" ] && continue
     if [ "$remote_sha" = "$zero" ]; then
-        range="$local_sha"                   # a new branch: everything reachable from it
+        # A NEW REF, WHICH IS USUALLY A TAG, AND "everything reachable from it" MADE RELEASES
+        # IMPOSSIBLE. A tag points at a commit the remote already has, so that range re-judged
+        # the entire published history -- and this history contains one commit, already on
+        # `origin/main` since August, whose message quotes the `+03:00` it was removing. See
+        # `scan_messages`, which records it: a force-push would not have helped, because GitHub
+        # keeps the orphan reachable by its sha and every clone keeps everything.
+        #
+        # So `git push origin v0.2.0` refused, permanently, for text that left this machine
+        # months ago. A gate that cannot be satisfied by any action is the one people learn to
+        # pass `--no-verify` to, which is exactly what the refusal text tells them never to do.
+        #
+        # What leaves this machine is what the remote does NOT have, and that is what is
+        # checked. A genuinely new branch still gets every one of its own commits read; if
+        # nothing has been fetched, `--remotes=origin` names nothing and the range widens back
+        # to everything, which is the safe direction to be wrong in.
+        range="$local_sha --not --remotes=origin"
     else
         range="$remote_sha..$local_sha"
     fi

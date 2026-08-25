@@ -504,7 +504,7 @@ def scan_messages(rng, refusals):
     Held to the same rules as the files, because there is no argument for holding published
     prose to less than published code.
     """
-    proc = _git("log", "--format=%H%x00%B%x01", rng)
+    proc = _git("log", "--format=%H%x00%B%x01", *_revs(rng))
     if proc.returncode != 0:
         why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
         refusals.append(f"the messages in {rng} could not be read, so nothing about them was "
@@ -593,6 +593,17 @@ def _pending_stamp(refusals):
                                 f"GIT_AUTHOR_DATE and GIT_COMMITTER_DATE in UTC")
 
 
+def _revs(rng):
+    """The range as git argv. A RANGE IS NOT ALWAYS ONE TOKEN.
+
+    `pre-push` has to exclude what the remote already has -- `<sha> --not --remotes=origin` --
+    and every caller here handed the string to `_git` as a single argument, where git reads it
+    as one revision and fails to resolve it. Splitting on whitespace is the whole change;
+    revisions do not contain spaces.
+    """
+    return rng.split()
+
+
 def _stamps(rng, refusals):
     """Who wrote these commits, and what place their timestamps name.
 
@@ -602,7 +613,7 @@ def _stamps(rng, refusals):
     A range git cannot resolve is refused here as well — an empty `git log` and a failed one
     are the same bytes on stdout.
     """
-    proc = _git("log", "--format=%an <%ae>%n%cn <%ce>", rng)
+    proc = _git("log", "--format=%an <%ae>%n%cn <%ce>", *_revs(rng))
     if proc.returncode != 0:
         why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
         refusals.append(f"who wrote {rng} could not be read, so nothing about it was "
@@ -621,7 +632,8 @@ def _stamps(rng, refusals):
     # default and shows the author line, which is usually already correct.
     #
     # Set `TZ=UTC` in the environment, or commit through `.githooks`.
-    stamps = _git("log", "--format=%ad|%cd", "--date=iso-strict", rng).stdout.splitlines()
+    stamps = _git("log", "--format=%ad|%cd", "--date=iso-strict",
+                  *_revs(rng)).stdout.splitlines()
     offsets = sorted({o for line in stamps if (o := _offset(line))})
     for o in offsets:
         refusals.append(f"a commit in {rng} is stamped {o}, not UTC — an offset is a location, "
@@ -650,7 +662,7 @@ def scan_history(rng, refusals):
     # history with nothing in it. Measured: git exit 128, guard exit 0, the word `ok`. That
     # is this project's own defect class sitting in the gate against it: a check that did
     # not run, reported as a check that passed.
-    proc = _git("rev-list", "--objects", rng)
+    proc = _git("rev-list", "--objects", *_revs(rng))
     if proc.returncode != 0:
         why = " ".join(proc.stderr.split())[:120] or f"git exited {proc.returncode}"
         refusals.append(f"the range {rng} could not be read, so nothing about it was "

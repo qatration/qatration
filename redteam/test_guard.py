@@ -724,6 +724,97 @@ def main():
                   r.returncode == 0,
                   "the gutted hook still refused, so the check above is not testing the hook")
 
+    # --- THE PUSH PATH, WITH A REAL REMOTE, BECAUSE A TAG IS A NEW REF ----------------------
+    #
+    # `pre-push` read "a new branch: everything reachable from it" for any ref the remote does
+    # not have, and a tag is exactly such a ref. So `git push origin v0.2.0` re-judged the whole
+    # published history and refused on the one commit whose message quotes the offset it was
+    # removing -- text that left this machine in August, that `scan_messages` records as
+    # unrewritable, and that no action available to anyone could satisfy. A gate no release can
+    # pass is the gate somebody passes `--no-verify` to, which is the one thing its own refusal
+    # text says never to do.
+    #
+    # Executed, not read: a repository, a bare remote, real pushes. What is under test is
+    # whether the push HAPPENS.
+    with tempfile.TemporaryDirectory() as d:
+        work, bare = os.path.join(d, "work"), os.path.join(d, "remote.git")
+        os.makedirs(work)
+        penv = git_env(d)
+
+        def pg(*a):
+            return _sp.run(["git", "-C", work] + list(a), capture_output=True, text=True,
+                           env=penv)
+
+        _sp.run(["git", "init", "-q", "--bare", bare], capture_output=True, text=True, env=penv)
+        shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(work, ".githooks"))
+        os.makedirs(os.path.join(work, "tools"), exist_ok=True)
+        for f in ("guard.py", "licences.py"):
+            shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(work, "tools", f))
+        io.open(os.path.join(work, "pyproject.toml"), "w", encoding="utf-8").write(
+            "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
+        pg("init", "-q", "-b", "main")
+        pg("config", "user.name", "QAtration")
+        pg("config", "user.email", "qatration@gmail.com")
+        pg("config", "core.hooksPath", ".githooks")
+        pg("remote", "add", "origin", bare)
+        for f in ("pre-commit", "pre-push"):
+            os.chmod(os.path.join(work, ".githooks", f), 0o755)
+
+        def pcommit(msg, body, verify=True):
+            io.open(os.path.join(work, "f.txt"), "w", encoding="utf-8").write(body)
+            pg("add", "-A")
+            return pg("commit", "-qm", msg) if verify else pg("commit", "-q", "--no-verify",
+                                                              "-m", msg)
+
+        first = pcommit("ordinary work", "one")
+        said = (first.stdout + first.stderr).lower()
+        if first.returncode != 0 and "cannot spawn" in said:
+            print("SKIP  the push path, end to end: no shell on this machine, so git cannot "
+                  "start a hook at all.")
+            print("      Verified on every platform in the matrix that has one. NOT verified "
+                  "here.")
+        else:
+            r = pg("push", "-q", "origin", "main")
+            check("the pre-push hook lets ordinary work out", r.returncode == 0,
+                  (r.stdout + r.stderr)[:200])
+
+            # HISTORY THAT IS ALREADY PUBLISHED, and cannot be rewritten out of anyone's clone.
+            # Assembled rather than spelled, so this file does not become a second copy of the
+            # thing it is about.
+            OFFSET = "+03" + ":00"
+            pcommit("explain a fix\n\nthe machine stamped `%s`" % OFFSET, "two", verify=False)
+            r = pg("push", "-q", "--no-verify", "origin", "main")
+            check("...and a bad message can be got onto a remote, as one once was",
+                  r.returncode == 0, (r.stdout + r.stderr)[:200])
+
+            # THE RELEASE. The tag names a commit the remote already has, so the only honest
+            # answer is that nothing is leaving.
+            pg("tag", "-a", "v1", "-m", "a release")
+            r = pg("push", "origin", "v1")
+            check("a tag on an already-pushed commit is not refused for that history",
+                  r.returncode == 0,
+                  "the push path re-judged what the remote already holds: "
+                  + (r.stdout + r.stderr)[:300])
+
+            # AND IT IS STILL A GATE. Narrowing the range must not have narrowed the rule: a
+            # new commit is exactly what the remote does NOT have.
+            pcommit("a message quoting %s in prose" % OFFSET, "three", verify=False)
+            r = pg("push", "origin", "main")
+            check("...while a NEW commit with the same fault is still refused",
+                  r.returncode != 0,
+                  "the push path let a fresh bad message through")
+
+            TOKEN2 = "ghp_" + "b" * 20
+            pg("reset", "-q", "--hard", "HEAD~1")
+            io.open(os.path.join(work, "leak.py"), "w", encoding="utf-8").write(
+                "KEY = '%s'" % TOKEN2)
+            pg("add", "-A")
+            pg("commit", "-q", "--no-verify", "-m", "an ordinary looking change")
+            r = pg("push", "origin", "main")
+            check("...and so is a new commit carrying a credential",
+                  r.returncode != 0,
+                  "the push path let a credential out")
+
     # ONE GIT ENVIRONMENT, AND THE REASON IS A RED MATRIX. This file built the environment for
     # its throwaway repositories five separate times. Some copies pinned the dates, none pinned
     # the identity, and the checks that ask git who it would record therefore asked the machine
