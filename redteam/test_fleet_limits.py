@@ -25,7 +25,9 @@ import glob
 import io
 import os
 import re
+import socket
 import sys
+import time
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -71,6 +73,16 @@ def _code_only(text, path):
                 and isinstance(body[0].value.value, str):
             body.pop(0)                       # the docstring, which explains the very thing
     return ast.unparse(tree)
+
+
+def _free_port():
+    """A port nobody is using, asked of the operating system rather than picked.
+
+    A constant here would collide with whatever the developer has running, and
+    the failure would look like the launcher rather than like the test."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def main():
@@ -157,6 +169,93 @@ def main():
           not untimed, f"no request timeout in: {untimed}")
 
     print(f"      checked: {', '.join(servers)}")
+
+    # --- AND THE LAUNCHER CAN ACTUALLY START ONE --------------------------------------------
+    #
+    # `up` refused to start anything, on every platform and every fresh clone, and said
+    # NO PYTHON eight times while `require_python` in the same file and the same run reported
+    # the same interpreter as usable. The test was `[ -x "$py" ] || [ -f "$py" ]`, and `$py`
+    # defaults to a PATH COMMAND -- `python` or `python3` -- deliberately: the comment beside
+    # that default says the honest one is the interpreter already on the path. A file test on a
+    # command name is false, so the default this file chooses was the one it refused.
+    #
+    # Nothing caught it because CI runs `fleet.sh status`, which only asks `require_python`.
+    # `AUTHORISED-USE.md` sends a newcomer to the practice fleet as the alternative to pointing
+    # this tool at a system they do not own, so the unstartable path was the sanctioned one.
+    #
+    # EXECUTED, with a real interpreter named the way a real default names it, a real server and
+    # a real port. A doctored copy of the launcher, so the fleet on this machine is untouched.
+    import shutil as _sh
+    import signal as _sig
+    import subprocess as _sp
+    import tempfile as _tf
+
+    name = None
+    for candidate in ("python3", "python"):
+        if _sh.which(candidate) and _sp.run([candidate, "-c", "pass"],
+                                            capture_output=True).returncode == 0:
+            name = candidate
+            break
+    have_bash = bool(_sh.which("bash"))
+    if not name or not have_bash:
+        # Never silence. A platform that cannot run this says so rather than passing.
+        print("SKIP  the launcher, end to end: no %s here, so it was NOT checked"
+              % ("bash" if name else "interpreter on PATH by name"))
+    else:
+        with _tf.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "tools"))
+            os.makedirs(os.path.join(d, "mybot"))
+            os.makedirs(os.path.join(d, "out"))
+            _sh.copy(os.path.join(ROOT, "tools", "fleet_procs.py"),
+                     os.path.join(d, "tools", "fleet_procs.py"))
+            src = io.open(os.path.join(ROOT, "tools", "fleet.sh"), encoding="utf-8").read()
+            head = src.index("FLEET=(")
+            tail = src.index("\n)\n", head) + len("\n)\n")
+            port = _free_port()
+            src = (src[:head]
+                   + 'FLEET=(\n  "%d|$HERE/mybot|$MAIN|server.py|%d"\n)\n' % (port, port)
+                   + src[tail:])
+            io.open(os.path.join(d, "tools", "fleet.sh"), "w", encoding="utf-8",
+                    newline="\n").write(src)
+            io.open(os.path.join(d, "mybot", "server.py"), "w", encoding="utf-8",
+                    newline="\n").write(
+                "import os, socket, sys, time\n"
+                "s = socket.socket()\n"
+                "s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+                "s.bind(('127.0.0.1', int(sys.argv[1])))\n"
+                "s.listen(5)\n"
+                "open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pid'), 'w')"
+                ".write(str(os.getpid()))\n"
+                # A backstop, so a failed assertion never leaves a process behind.
+                "time.sleep(30)\n")
+
+            env = dict(os.environ, QATRATION_PYTHON=name)
+            r = _sp.run(["bash", os.path.join(d, "tools", "fleet.sh"), "up"],
+                        capture_output=True, text=True, env=env, timeout=120)
+            said = r.stdout + r.stderr
+            check("the launcher accepts an interpreter named the way its own default names it",
+                  "NO PYTHON" not in said, said.strip()[:200])
+            check("...and says it is starting the server", "starting" in said,
+                  said.strip()[:200])
+
+            opened = False
+            for _ in range(60):
+                with socket.socket() as probe:
+                    probe.settimeout(0.4)
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        opened = True
+                        break
+                time.sleep(0.25)
+            check("...and the port really opens, so this is a start and not a message", opened,
+                  f"nothing answered on {port} within 15s")
+
+            pidfile = os.path.join(d, "mybot", "pid")
+            if os.path.isfile(pidfile):
+                try:
+                    os.kill(int(io.open(pidfile).read().strip()), _sig.SIGTERM)
+                except Exception:
+                    pass
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

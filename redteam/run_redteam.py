@@ -272,6 +272,21 @@ def _unresolved(target):
                   for k, path in declared.items() if path and not counts.get(k))
 
 
+def cell(value, width):
+    """One column of the streaming results table, padded, and never welded to the next one.
+
+    `f"{value:<20}"` pads to twenty and then stops caring: a value of exactly twenty
+    characters, or more, comes out with no trailing space and the next column begins inside
+    it. Alignment is the point of a width, but a separator is the point of a column, and only
+    one of those two things can be guaranteed when the value is wider than the space for it.
+
+    So: align where it fits, and fall back to a single space where it does not. A row that
+    loses its alignment is ugly; a row that reads `refusal_capability:1-` invents a name.
+    """
+    text = str(value)
+    return text.ljust(width) if len(text) < width else text + " "
+
+
 def is_unmeasurable(attack, dead):
     """True when every detector this attack declares is inert here, so a run would learn nothing.
 
@@ -675,11 +690,23 @@ def main():
     # attack named longer than 21 characters — 74 of 362 rows in a full generic sweep, so a
     # fifth of every run's output read as `ca-terminal-output-injectiondirect`. The arsenal
     # grew past the number and nothing said so, which is what a hard-coded width does.
+    #
+    # THE FIX WENT INTO TWO COLUMNS AND THE OTHER THREE KEPT THEIR CONSTANTS, which is the
+    # defect repaired for the instance rather than for the class. `blocked by` is `:<20` and
+    # `refusal_capability:1` is twenty characters exactly, so on a live target the row read
+    # `refusal_capability:1-`, with the next column's dash welded to a lock name. Every
+    # DEFENDED row that names a refusal is one -- a third of the first sweep anyone runs.
+    #
+    # `verdict` and `rate` cannot be measured in advance the way an id can: the table streams
+    # as the attacks run, so those values do not exist when the header is printed. `cell()` is
+    # what covers both cases, by making the separator a property of every column rather than a
+    # width that happens to be generous enough.
     _wid = max([len("id")] + [len(a["id"]) for a in attacks]) + 2
     _wdel = max([len("delivery")] + [len(a.get("delivery", "direct")) for a in attacks]) + 2
-    print(f"{'id':<{_wid}}{'delivery':<{_wdel}}{'verdict':<11}{'rate':<7}{'blocked by':<20}"
-          f"{'fired detectors'}")
-    print("-" * (_wid + _wdel + 11 + 7 + 20 + len("fired detectors")))
+    _ruler = "-" * (_wid + _wdel + 11 + 7 + 20 + len("fired detectors"))
+    print(cell("id", _wid) + cell("delivery", _wdel) + cell("verdict", 11)
+          + cell("rate", 7) + cell("blocked by", 20) + "fired detectors")
+    print(_ruler)
 
     broke = 0
     exploited_n = 0
@@ -695,8 +722,9 @@ def main():
         # which lock stopped it — a DEFENDED row is useless without this
         locks = summarize(recs, ctx)
         lock_str = ",".join(f"{k}:{v}" for k, v in locks.items() if k != "compliance")
-        print(f"{a['id']:<{_wid}}{a.get('delivery','direct'):<{_wdel}}{head:<11}{rate:<7}"
-              f"{(lock_str or '-'):<20}{','.join(fired_list) or '-'}")
+        print(cell(a["id"], _wid) + cell(a.get("delivery", "direct"), _wdel)
+              + cell(head, 11) + cell(rate, 7) + cell(lock_str or "-", 20)
+              + (",".join(fired_list) or "-"))
         # serialize trials (probe dataclass -> plain dict) for the report/JSON
         trials_ser = [{
             "verdict": r["verdict"], "fired": r["fired"],
@@ -718,7 +746,9 @@ def main():
                         "fired": fired_list, "locks": locks, "trials": trials_ser})
 
     attacks_n = sum(1 for a in attacks if a["category"] != "control")
-    print("-" * 78)
+    # The same ruler as the header. This was `"-" * 78` while the line above it is as wide as
+    # the ids in this arsenal, so the table closed with a rule that stopped short of it.
+    print(_ruler)
     print(f"\n{broke}/{attacks_n} attacks breached the target (controls excluded).")
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence

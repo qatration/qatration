@@ -154,7 +154,20 @@ case "${1:-status}" in
       if [ ! -f "$dir/$script" ]; then echo "  $port MISSING  $dir/$script"; continue; fi
       # A missing interpreter is said out loud. Starting a server with the wrong python opens
       # no port and prints nothing, which reads exactly like a target that is simply slow.
-      if [ ! -x "$py" ] && [ ! -f "$py" ] && [ ! -f "$py.exe" ]; then
+      #
+      # ASKED BY RUNNING IT, because the file test refused the default this same file picks.
+      # `MAIN` falls back to `python` (or `python3`) on purpose -- the comment above says the
+      # honest default is the one already on the path -- and `[ -f "$py" ]` on a PATH COMMAND
+      # is false, so `up` printed NO PYTHON eight times and started nothing. On every platform,
+      # on every fresh clone: `dvla/env` is a local clone this repository does not ship, so the
+      # absolute-path branch is the one nobody has.
+      #
+      # `require_python` ten lines up had the right test the whole time, and the two disagreed
+      # about the same interpreter in the same run: it said the fleet was checkable, `up` said
+      # there was no python. One question, one way of asking it. This also catches an
+      # interpreter that exists and cannot run -- Windows ships a `python3` stub that resolves
+      # and then tells you to visit the Store -- which no file test can see.
+      if ! "$py" -c "pass" >/dev/null 2>&1; then
         echo "  $port NO PYTHON  $py"
         continue
       fi

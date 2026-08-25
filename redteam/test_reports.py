@@ -332,6 +332,25 @@ def main():
     # single-variable A/B that pair exists for, measuring nothing. Done by hand once, which
     # is how it was found.
     import run_redteam as rr
+
+    # --- THE RESULTS TABLE MAY NOT WELD TWO COLUMNS TOGETHER --------------------------------
+    #
+    # Found by running a live sweep and reading it: `blocked by` was `:<20` and
+    # `refusal_capability:1` is twenty characters, so every DEFENDED row naming a refusal
+    # printed the next column's dash inside the lock name. The id and delivery columns had
+    # already been fixed by measuring the data; these three kept their constants, and the two
+    # that carry a verdict cannot be measured in advance because the table streams as the
+    # attacks run.
+    check("a value narrower than its column is padded to it", rr.cell("x", 5) == "x    ")
+    check("a value exactly as wide as its column still ends the column",
+          rr.cell("refusal_capability:1", 20) == "refusal_capability:1 ")
+    check("...and a value wider than its column does too",
+          rr.cell("a" * 25, 20) == "a" * 25 + " ")
+    _row = (rr.cell("d-scope-competitor", 22) + rr.cell("direct", 10) + rr.cell("DEFENDED", 11)
+            + rr.cell("0/1", 7) + rr.cell("refusal_capability:1", 20) + "-")
+    check("...so a real row never reads a lock name that includes the next column",
+          "refusal_capability:1-" not in _row, _row)
+
     check("a config with no expect_build is not checked at all",
           rr._build_mismatch({"url": "http://localhost:1/"}) == "")
     check("...nor one with no url to ask", rr._build_mismatch({"expect_build": {"G": "off"}}) == "")
