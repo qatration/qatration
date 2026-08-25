@@ -110,6 +110,14 @@ def _decomment(block):
     return "\n".join(out)
 
 
+def _place(out, table, key, value):
+    """Store `value` under `table.key`, creating the intermediate tables on the way."""
+    node = out
+    for part in (table.split(".") if table else []):
+        node = node.setdefault(part, {})
+    node[key] = value
+
+
 def parse(pyproject_path):
     """-> the parsed pyproject as a dict. The ONE parser, so 3.9 is not a second implementation.
 
@@ -139,6 +147,14 @@ def parse(pyproject_path):
             continue
         key, _, rest = line.partition("=")
         key, rest = key.strip(), rest.strip()
+        # A QUOTED STRING IS A VALUE TOO. This branch read arrays and nothing else, so on the
+        # interpreter the fallback exists FOR, `requires-python` came back absent rather than
+        # ">=3.9" -- and absent is the answer a caller cannot tell from "unrestricted". Nothing
+        # asked for it until the classifier gate did; a gate whose input is missing on the 3.9
+        # leg is a check that is present everywhere and answers only where tomllib is.
+        if rest[:1] in ('"', "'"):
+            _place(out, table, key, rest[1:].split(rest[0], 1)[0])
+            continue
         if not rest.startswith("["):
             continue
         body = rest[1:]
@@ -157,10 +173,7 @@ def parse(pyproject_path):
         # never read the commonest constraint there is, on the interpreter it exists for.
         items = [p.strip().strip(",").strip().strip('"').strip("'")
                  for p in _split_items(body.replace("\n", " "))]
-        node = out
-        for part in (table.split(".") if table else []):
-            node = node.setdefault(part, {})
-        node[key] = [i for i in items if i]
+        _place(out, table, key, [i for i in items if i])
     return out
 
 

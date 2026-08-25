@@ -29,12 +29,32 @@ keywords = [
     "llm", "security", "red-team", "prompt-injection", "ai-safety",
     "agent-security", "guardrails", "testing",
 ]
+# THE PER-VERSION LINES ARE THE FILTER PyPI ACTUALLY OFFERS. "Programming Language :: Python
+# :: 3" alone says nothing a reader can act on: somebody on 3.9 searching for a package that
+# runs there sees this project excluded from the results it belongs in, and somebody reading
+# the sidebar has to open `requires-python` in the metadata to learn anything. The list below
+# is not typed out. `test_packaging.test_python_classifiers_are_derived()` rebuilds it from the
+# floor in `requires-python` up to the newest interpreter `.github/workflows/check.yml` runs,
+# and fails when the two disagree — so raising the floor, or adding a leg to CI, moves this
+# list or stops the build.
+#
+# WHAT IT DOES NOT SAY, because a version list reads as the full answer: `requires-python` has
+# no upper bound, so pip will happily install this on 3.14 and on whatever comes after, while
+# nothing here is claimed on them and nothing runs there. And of the five below, two are
+# executed in CI — the floor and the ceiling — and 3.10 through 3.12 are covered only in the
+# sense that they sit between two legs that pass.
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Software Development :: Testing",
 ]

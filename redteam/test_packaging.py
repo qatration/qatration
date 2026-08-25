@@ -367,6 +367,134 @@ def test_one_version_number():
     print("  ok  one version number, %s, in both places" % declared)
 
 
+PY_CLASSIFIER = "Programming Language :: Python :: "
+
+
+def _pyproject():
+    """The parsed pyproject.toml, through the one parser in `tools/licences.py`.
+
+    The same reason `declared_dependencies()` goes there: the hand-written fallback that runs on
+    3.9 and 3.10 is the part most likely to answer differently, and a second copy of it here is
+    a second thing to get wrong. `test_the_support_claim_survives_without_tomllib` below makes
+    the fallback answer this file's questions on every leg, not only on the two oldest.
+    """
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import licences
+    return licences.parse(os.path.join(REPO, "pyproject.toml"))
+
+
+def _minor(text):
+    """'3.10' -> (3, 10), and None for anything that is not a major.minor pair."""
+    m = re.match(r"^(\d+)\.(\d+)$", (text or "").strip())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def ci_python_versions():
+    """Every interpreter `.github/workflows/check.yml` actually starts, as (major, minor).
+
+    Read out of the matrix rather than stated here, because a list of which interpreters are
+    tested, kept in the file that checks the claim about which interpreters are supported, is
+    the same fact written twice with nothing comparing the copies.
+    """
+    path = os.path.join(REPO, ".github", "workflows", "check.yml")
+    assert os.path.isfile(path), "%s is gone, so nothing runs the support claim" % path
+    text = io.open(path, encoding="utf-8").read()
+    found = {v for v in (_minor(x) for x in re.findall(r'\bpython:\s*"([^"]+)"', text)) if v}
+    assert found, ("no interpreter found in the check workflow's matrix. The key may have been "
+                   "renamed; an empty answer here would pass every comparison below by "
+                   "matching nothing")
+    return found
+
+
+def test_python_classifiers_are_derived_from_the_support_claim():
+    """A classifier is a claim about where this runs, and it was the vaguest one in the file.
+
+    `Programming Language :: Python :: 3` is what PyPI is told today, and it puts the package
+    outside every version filter a reader uses to decide whether it will run for them. The fix
+    is not a typed-out list of versions: that is a third copy of a fact `requires-python` and
+    the CI matrix already state, and the copy nobody re-reads is the one that goes stale — a
+    package still advertising 3.8 two floor-raises later says something that is simply false.
+
+    So the list is REBUILT here, from the floor the package promises up to the newest
+    interpreter CI runs, and compared. Raising `requires-python`, or adding a leg to CI, now
+    either moves the classifiers or fails the build.
+    """
+    proj = _pyproject().get("project") or {}
+    spec = (proj.get("requires-python") or "").strip()
+    assert spec, ("requires-python is missing, or the parser could not read it. Either way "
+                  "there is no floor to derive from, and an empty floor must not pass")
+    m = re.match(r"^>=\s*(\d+\.\d+)$", spec)
+    assert m, ("this derivation understands a bare floor like '>=3.9'; requires-python says %r. "
+               "The claim changed shape, so the derivation has to change with it rather than "
+               "quietly match nothing" % spec)
+    floor = _minor(m.group(1))
+
+    ci = ci_python_versions()
+    oldest, newest = min(ci), max(ci)
+    assert oldest == floor, (
+        "requires-python promises %d.%d and the oldest interpreter CI runs is %d.%d. A floor is "
+        "kept true by something running on it, not by being written down"
+        % (floor + oldest))
+    assert floor[0] == newest[0] == 3, (
+        "this derivation does not span major versions: floor %r, newest tested %r" % (floor, newest))
+
+    expected = {(3, n) for n in range(floor[1], newest[1] + 1)}
+    declared = {v for v in (_minor(c[len(PY_CLASSIFIER):])
+                            for c in (proj.get("classifiers") or [])
+                            if c.startswith(PY_CLASSIFIER)) if v}
+    def _fmt(s):
+        return ", ".join("%d.%d" % v for v in sorted(s)) or "(none)"
+    assert declared == expected, (
+        "the Python classifiers say %s. Derived from requires-python (>=%d.%d) up to the newest "
+        "interpreter CI runs (%d.%d), they should say %s"
+        % ((_fmt(declared),) + floor + newest + (_fmt(expected),)))
+
+    every = proj.get("classifiers") or []
+    assert PY_CLASSIFIER + "3" in every,         "the plain `Programming Language :: Python :: 3` line is gone"
+    assert PY_CLASSIFIER + "3 :: Only" in every, (
+        "requires-python is >=%d.%d, so this is a Python 3 package and nothing else. `:: 3 :: "
+        "Only` is the line that says so to a resolver reading metadata rather than prose"
+        % floor)
+    print("  ok  Python classifiers %s, derived from >=%d.%d and CI's newest leg %d.%d"
+          % ((_fmt(declared),) + floor + newest))
+
+
+def test_the_support_claim_survives_without_tomllib():
+    """The gate above must ask its question on 3.9 too, where there is no tomllib.
+
+    The fallback parser in `tools/licences.py` read array literals and nothing else, so
+    `requires-python` — a string — came back ABSENT on exactly the interpreter the fallback
+    exists for. Nothing noticed, because nothing had asked it for a scalar until now. This is
+    the third time in this repository that a check turned out to answer only where the newest
+    interpreter runs it, and the first two were found the same way: by asking.
+    """
+    import builtins
+    real = builtins.__import__
+
+    def fake(name, *rest, **kw):
+        if name == "tomllib":
+            raise ImportError("tomllib arrived in 3.11")
+        return real(name, *rest, **kw)
+
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    import licences
+    path = os.path.join(REPO, "pyproject.toml")
+    full = licences.parse(path)
+    builtins.__import__ = fake
+    try:
+        hand = licences.parse(path)
+    finally:
+        builtins.__import__ = real
+
+    for key in ("requires-python", "classifiers", "version", "name"):
+        want = (full.get("project") or {}).get(key)
+        got = (hand.get("project") or {}).get(key)
+        assert got, ("without tomllib, project.%s came back %r. A 3.9 machine would run the "
+                     "classifier gate against nothing" % (key, got))
+        assert got == want, "project.%s: tomllib says %r, the fallback says %r" % (key, want, got)
+    print("  ok  requires-python and the classifiers read the same with and without tomllib")
+
+
 def test_out_dir_honours_the_env_var():
     old = os.environ.get(workspace.ENV_VAR)
     try:
