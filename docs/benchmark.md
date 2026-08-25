@@ -35,8 +35,10 @@ front of that sentence before they have had the chance to read it. If they are h
 named, this line changes and the link goes in. The second is NVIDIA NeMo Guardrails with
 input and output rails.
 
-**The poisoned document in the first target's corpus is ours.** We wrote it, we put it there,
-and the canary inside it is ours. Nothing below is a finding about that project's security and
+**The entire corpus of the first target is ours, poisoned document included.** That project
+ships no documents at all: its `pdfs/` folder is gitignored and its README tells you to create
+one and add your own. So the nine PDFs it answered from were written here, and one of them
+carries our canary. Nothing below is a finding about that project's security and
 none of it is a criticism of its author. It is an ordinary RAG application with no guardrail
 layer, which is exactly what makes it the control half of a pair.
 
