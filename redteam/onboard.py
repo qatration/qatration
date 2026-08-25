@@ -148,6 +148,13 @@ def check(cfg_path, probe_text=PROBE):
         return False, rep
 
     if probe is None or probe.error:
+        # AND THE HEADER MUST NOT SAY "answered". `render` prints the elapsed time under
+        # that word whenever a probe came back at all, so a refused connection printed
+        # "answered in 4.1s" three lines above "the endpoint returned an error". The
+        # PROBLEM line was right and the header contradicted it, which is the same
+        # overstatement this tool refuses everywhere else: a thing that did not happen,
+        # reported in the vocabulary of the thing that did.
+        rep["answered"] = False
         rep["problems"].append(f"the endpoint returned an error: "
                                f"{(probe.error if probe else 'no reply')}")
         return False, rep
@@ -230,7 +237,8 @@ def render(ok, rep):
         print(f"authorised  {auth.get('method')}" + (f"  {auth.get('origin')}"
                                                      if auth.get("origin") else ""))
     if rep.get("seconds") is not None:
-        print(f"answered    in {rep['seconds']}s")
+        print(f"answered    in {rep['seconds']}s" if rep.get("answered", True)
+              else f"no answer   after {rep['seconds']}s")
     if rep.get("reply"):
         print(f"reply       {rep['reply'][:120]!r}")
     if rep.get("capabilities") is not None:
@@ -306,7 +314,8 @@ def main():
         target = HttpConfiguredTarget(**{k: v for k, v in cfg.items()
                                          if k not in CONFIG_ONLY_KEYS})
         probe = target.send(_ht.VERIFY_PROMPT)
-        if _ht.planted(probe.output or "", args.verify_honeytoken):
+        _why = _ht.verify_refusal(probe, args.verify_honeytoken)
+        if _why is None:
             print(f"planted: the deployment returned {args.verify_honeytoken}. Canary "
                   f"detectors can speak here.\n")
             # FALL THROUGH TO THE REAL REPORT. This used to `return` here, which made the flag
@@ -322,9 +331,13 @@ def main():
             # canary detector finds nothing, every attack comes back DEFENDED, and the report
             # says the deployment held. That is a gap reported as a measurement, on the run a
             # customer is judged by.
-            print("NOT PLANTED \u2014 " + _ht.unplanted_note(args.verify_honeytoken),
-                  file=sys.stderr)
-            print(f"\nwhat it said instead: {(probe.output or '')[:200]!r}", file=sys.stderr)
+            print(f"{_why[0]} \u2014 {_why[1]}", file=sys.stderr)
+            # Only when something answered. "what it said instead: ''" under a refused
+            # connection describes a bot that stayed silent, which is a different bug to
+            # go looking for than a server that is not running.
+            if _why[0] == "NOT PLANTED":
+                print(f"\nwhat it said instead: {(probe.output or '')[:200]!r}",
+                      file=sys.stderr)
             sys.exit(5)
 
     ok, rep = check(args.config)

@@ -74,6 +74,38 @@ def main():
     check("an empty reply is not a plant", not ht.planted("", verify))
     check("...nor is a missing verifier", not ht.planted("anything at all", ""))
 
+    # --- A REFUSAL MUST NAME THE RIGHT CAUSE --------------------------------------------
+    #
+    # `planted()` answers one question and both callers used it to answer two. An errored
+    # probe carries an empty output, an empty output is what "not planted" looks like, so a
+    # stranger whose endpoint was not running was told the snippet had not been pasted and
+    # sent to re-read the system prompt they had just edited. Refusing was right; the
+    # sentence was about a different failure.
+    from target import Probe
+    answered = Probe(prompt=ht.VERIFY_PROMPT,
+                     output=f"Our deployment reference is {verify}.")
+    silent = Probe(prompt=ht.VERIFY_PROMPT, output="I can't share that.")
+    refused = Probe(prompt=ht.VERIFY_PROMPT, output="",
+                    error="URLError: <urlopen error [WinError 10061] refused>")
+
+    check("a planted token is no refusal at all", ht.verify_refusal(answered, verify) is None)
+
+    why = ht.verify_refusal(silent, verify)
+    check("a bot that answers without the token is NOT PLANTED",
+          why is not None and why[0] == "NOT PLANTED", str(why))
+    check("...and the sentence sends the reader to the system prompt",
+          why is not None and "snippet was not applied" in why[1], str(why))
+
+    why = ht.verify_refusal(refused, verify)
+    check("an endpoint that never answered is NO ANSWER, not NOT PLANTED",
+          why is not None and why[0] == "NO ANSWER", str(why))
+    check("...and the sentence quotes the transport error rather than the canary",
+          why is not None and "10061" in why[1] and "snippet" not in why[1], str(why))
+    check("...and still refuses the run, because nothing can be measured either way",
+          why is not None)
+    check("a probe that never existed refuses too, rather than passing on None",
+          (ht.verify_refusal(None, verify) or ("", ""))[0] == "NO ANSWER")
+
     # The secret must NEVER be the thing we ask for. A bot that answers has already failed the
     # test the token exists to run, and a bot that refuses looks exactly like a bot that was
     # never given anything.
@@ -95,17 +127,25 @@ def main():
     # has to insist for itself — otherwise the whole design rests on a human remembering, and
     # the failure mode is a clean report rather than an error.
     rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    ob = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
     check("the sweep verifies the honeytoken before spending anything",
-          "honeytoken as _ht" in rr and "_ht.planted(" in rr)
+          "honeytoken as _ht" in rr and "_ht.verify_refusal(" in rr)
     check("...and refuses the run rather than reporting a clean one",
-          "sys.exit(5)" in rr and "unplanted_note" in rr)
+          "sys.exit(5)" in rr and "_why[1]" in rr)
+    # THROUGH THE SHARED DECISION, not its own `planted()` call. That call is what let
+    # two causes share one sentence: an errored probe has an empty output, an empty
+    # output is what an unplanted token looks like, and a stranger with a dead port was
+    # told to go and check their system prompt. Re-adding it here brings that back.
+    check("...asking through the one function, so a dead endpoint cannot read as an "
+          "unplanted canary", "_ht.planted(" not in rr)
+    check("...and the same for onboarding, which asks the same question",
+          "_ht.verify_refusal(" in ob and "_ht.planted(" not in ob)
     check("...and refuses a honeytoken declared with nothing to verify it by",
           "honeytoken_verify" in rr)
     # Only for tokens that are OURS: a customer who declared their own real value has made a
     # different choice, and this has nothing to say about it.
     check("...only when the canary is one we minted", "looks_like_ours(" in rr)
 
-    ob = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
     check("onboarding can mint a pair and print the paste", "--mint-honeytoken" in ob)
     mn_src = open(os.path.join(HERE, "mint.py"), encoding="utf-8").read()
     check("...and the paste tells the customer to declare BOTH, so the sweep can check itself",

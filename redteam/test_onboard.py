@@ -12,7 +12,7 @@ telling them a field was empty and leaving them to guess a second time.
 
     python test_onboard.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, json, shutil, subprocess, tempfile, threading
+import sys, os, io, json, shutil, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
@@ -145,6 +145,21 @@ def main():
         check("...and is reported as a connection failure, not as a quiet bot",
               any("could not be reached" in p or "error" in p for p in rep["problems"]),
               str(rep["problems"])[:200])
+        # AND THE HEADER MUST AGREE WITH IT. `render` printed the elapsed time under the
+        # word "answered" whenever a probe came back at all, so a refused connection read
+        # "answered in 4.1s" three lines above "the endpoint returned an error". Both lines
+        # were about the same probe and only one of them was true.
+        _out = io.StringIO()
+        _stdout, sys.stdout = sys.stdout, _out
+        try:
+            onboard.render(ok, rep)
+        finally:
+            sys.stdout = _stdout
+        printed = _out.getvalue()
+        check("...and the header does not say the endpoint answered", "answered" not in printed,
+              printed[:200])
+        check("...it says there was no answer, and after how long",
+              "no answer" in printed, printed[:200])
 
         # --- nothing is queued for a config that failed the check --------------------------
         # A job submitted against an unreachable target is an hour of queue time spent to

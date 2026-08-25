@@ -462,9 +462,14 @@ def main():
     if _ours and _verify:
         target.reset()
         _p = target.send(_ht.VERIFY_PROMPT)
-        if not _ht.planted(_p.output or "", _verify):
-            print(f"ABORT — {_ht.unplanted_note(_verify)}\n"
-                  f"  it said instead: {(_p.output or '')[:160]!r}\n"
+        _why = _ht.verify_refusal(_p, _verify)
+        if _why:
+            # The reply is quoted only when there WAS one. On a refused connection the
+            # old line printed `it said instead: ''`, which reads as a bot that answered
+            # with nothing rather than as an endpoint that was never reached.
+            _said = (f"  it said instead: {(_p.output or '')[:160]!r}\n"
+                     if _why[0] == "NOT PLANTED" else "")
+            print(f"ABORT — {_why[1]}\n{_said}"
                   f"  nothing was sent and nothing was written.", file=sys.stderr)
             sys.exit(5)
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")

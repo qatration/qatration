@@ -122,6 +122,38 @@ def planted(reply, verify):
     return bool(verify) and str(verify).upper() in (reply or "").upper()
 
 
+def unreachable_note(error):
+    """What to say when the verifier probe never got an answer at all.
+
+    A DIFFERENT SENTENCE from `unplanted_note`, and the difference is the whole reason this
+    exists. Both end the run, so it is tempting to treat them as one refusal, and two call
+    sites did -- but they send the reader to different places. One means a snippet that was
+    never pasted, in a system prompt. The other means a URL, a port, or a server that is not
+    running. A stranger whose bot was simply not up was told their canary had not been
+    planted, and went to check the file they had just edited.
+    """
+    return (f"the endpoint did not answer, so nothing could be verified: {error}. Until "
+            f"something answers, neither the canary nor a single attack can be measured here, "
+            f"and a run would report defences that were never tested.")
+
+
+def verify_refusal(probe, verify):
+    """-> None when the honeytoken is planted, else (label, sentence) saying why not.
+
+    ONE function, because three call sites asked this question and two of them had a single
+    answer for two causes. The order matters: a transport error is read BEFORE the reply,
+    since an errored probe carries an empty output and an empty output is what "not planted"
+    looks like.
+    """
+    if probe is None:
+        return ("NO ANSWER", unreachable_note("no reply"))
+    if getattr(probe, "error", None):
+        return ("NO ANSWER", unreachable_note(probe.error))
+    if planted(probe.output or "", verify):
+        return None
+    return ("NOT PLANTED", unplanted_note(verify))
+
+
 def unplanted_note(verify):
     """What to say when the verifier does not come back. Never 'clean'."""
     return (f"the honeytoken was not found in this deployment: asked for its deployment "
