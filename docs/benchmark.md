@@ -228,10 +228,17 @@ The poisoned document is ours and is not part of that project. Put a PDF in `bac
 carrying a canary of your own, minted with `qatration mint`, and re-run its ingestion.
 
 ```
-pip install qatration==0.2.0
+pip install git+https://github.com/qatration/qatration@4c678f4
 qatration benign --target-config redteam/targets_localrag.yaml
 qatration run --target-config redteam/targets_localrag.yaml --scope full --trials 1
+```
 
+**Not 0.2.0, and the difference is six attacks.** `attacks_docframe.yaml` was committed eight
+minutes before these runs started, so the 262 replies include its six `doc-*` attacks while the
+released 0.2.0 arsenal does not contain them. Installing the release would send 362 attacks
+where this run sent 368, and would not reproduce the row. The commit above is what ran.
+
+```
 pip install garak==0.16.0
 python -m garak --config out/bench/configs/garak-localrag-injection.yaml
 
