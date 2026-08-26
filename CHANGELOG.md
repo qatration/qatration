@@ -6,7 +6,7 @@ What changed, in the project's own words, newest first.
 
 ---
 
-## Attacks that carry their own marker, and a page that says where we lose (0.2.1, 2026-08-26)
+## Attacks that carry their own marker, and a page that says where we lose (0.3.0, 2026-08-26)
 
 **The release exists because of one measurement.** Run beside garak and promptfoo against a
 third-party RAG application, every finding this tool produced was unattributable: they rested on

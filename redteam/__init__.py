@@ -29,4 +29,4 @@ __all__ = ["__version__"]
 # the commit that produced an artifact and is what gets stamped into evidence; this is what pip
 # resolves. Keeping them separate is deliberate: two installs of 0.1.0 can be different commits,
 # and a stored result has to say which one wrote it.
-__version__ = "0.2.1"
+__version__ = "0.3.0"
