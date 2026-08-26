@@ -70,6 +70,47 @@ def out_dir():
     return os.path.abspath(os.path.join(os.getcwd(), DEFAULT_DIR))
 
 
+def tracked_by_git(path):
+    """Is this file committed to a repository, rather than an ordinary artifact?
+
+    Answered by asking git, once, and treating every failure as "no": no git on PATH, not a
+    checkout, a detached worktree. A guard that raises when it cannot answer would refuse runs
+    on machines that have nothing to protect.
+    """
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", os.path.dirname(path) or ".",
+                            "ls-files", "--error-unmatch", os.path.basename(path)],
+                           capture_output=True, text=True, timeout=20)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def refuse_to_overwrite_evidence(path, force=False):
+    """-> a sentence explaining why this write must not happen, or ''.
+
+    THE FILE THIS EXISTS FOR is a results file that somebody committed. In this repository the
+    published counts are recounted from `out/`, so replacing one of those with a six-attack
+    experiment does not corrupt a run, it corrupts the numbers on the front page. It happened
+    here: a `--attacks` run against a shipped practice bot took `results_httpbot.json` from a
+    full sweep to eight rows, and `detector_coverage` immediately reported 958 fewer probes.
+    Nothing warned, because the write is an ordinary `open(path, "w")`.
+
+    An untracked file is not evidence anybody publishes, so it is overwritten as before: a
+    person re-running their own sweep must not be asked permission every time.
+    """
+    if force or not os.path.exists(path) or not tracked_by_git(path):
+        return ""
+    return (f"REFUSED: {os.path.basename(path)} is committed to a repository, and this run "
+            f"would replace it.\n"
+            f"  A tracked artifact is evidence something else recounts: in this project the "
+            f"README, the site and `qatration coverage` all read these files.\n"
+            f"  Write somewhere else instead:\n"
+            f"      QATRATION_OUT=/tmp/scratch qatration run ...\n"
+            f"  or pass --overwrite-evidence if replacing it is the point.")
+
+
 def out_origin():
     """Which of the three rules chose OUT, in words, for a tool that wants to say so.
 

@@ -13,7 +13,8 @@ except Exception:
     pass
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
-from workspace import OUT as WORKSPACE_OUT, safe_target_name   # one place decides where output goes
+from workspace import (OUT as WORKSPACE_OUT, safe_target_name,
+                       refuse_to_overwrite_evidence)   # one place decides where output goes
 OUT_DIR = WORKSPACE_OUT
 
 import yaml
@@ -336,6 +337,8 @@ def main():
     # somebody is paying for, so the size of a run is a decision the operator makes. It is
     # recorded on the run either way, because a narrow run and a wide one are different
     # measurements and a report that does not say which it was is not readable.
+    ap.add_argument("--overwrite-evidence", action="store_true",
+                    help="replace a results file that is committed to a repository. Refused by default, because published counts are recounted from those files")
     ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="full",
                     help="how much traffic to send: `quick` is one attack per category, "
                          "`full` is the whole arsenal. Recorded on the run either way."),
@@ -465,6 +468,18 @@ def main():
               f"  Mint your own — `qatration mint` — and put the pair in your system prompt and "
               f"your config.\n"
               f"  Nothing was sent.", file=sys.stderr)
+        sys.exit(5)
+
+    # BEFORE A SINGLE PROBE. The results file is written at the END of the run, so a check
+    # there would refuse after somebody had paid for forty-seven minutes of model time and
+    # leave them with nothing. Same reason the honeytoken verification below sits here: a guard
+    # that fires after the cost has been paid is an error message rather than a guard.
+    _tag = "_" + re.sub(r"[^A-Za-z0-9.]+", "-", args.model) if args.model else ""
+    _refusal = refuse_to_overwrite_evidence(
+        os.path.join(OUT_DIR, f"results_{target.name}{_tag}.json"),
+        force=getattr(args, "overwrite_evidence", False))
+    if _refusal:
+        print(_refusal, file=sys.stderr)
         sys.exit(5)
 
     _verify = (ctx.get("honeytoken_verify") or "").strip()

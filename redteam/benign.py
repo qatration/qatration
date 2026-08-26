@@ -32,7 +32,7 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, read_artifact
+from workspace import OUT as WORKSPACE_OUT, read_artifact, refuse_to_overwrite_evidence
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
 try:
@@ -619,6 +619,8 @@ def main():
     ap.add_argument("--write", action="store_true", help="apply a --rejudge")
     ap.add_argument("--summary", action="store_true",
                     help="fold every stored benign run into one per-detector rate")
+    ap.add_argument("--overwrite-evidence", action="store_true",
+                    help="replace a baseline that is committed to a repository. Refused by default: the published false-positive rates are recounted from these files")
     ap.add_argument("--trials", type=int, default=1)
     ap.add_argument("--dry-run", action="store_true",
                     help="judge the corpus against an empty reply — proves the detectors "
@@ -804,6 +806,17 @@ def main():
     sys.path.insert(0, HERE)
     from run_redteam import load_target
     target = load_target(cfg)
+    # THE SAME GUARD THE SWEEP HAS, and it sits BEFORE the probes for the same reason: the
+    # baselines are evidence, the false-positive rates on the front page and every `weakened`
+    # verdict are recounted from them, and refusing after fifty probes have been paid for is an
+    # error message rather than a guard.
+    _refusal = refuse_to_overwrite_evidence(
+        os.path.join(OUT_DIR, f"benign_{args.target}.json"),
+        force=getattr(args, "overwrite_evidence", False))
+    if _refusal:
+        print(_refusal, file=sys.stderr)
+        sys.exit(5)
+
     print(f"benign corpus -> {args.target}  ({len(CORPUS)} prompts + "
           f"{len(CONVERSATIONS)} conversations x{args.trials})\n")
     rows = run(target, ctx, conversations=CONVERSATIONS, trials=args.trials)

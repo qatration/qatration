@@ -178,5 +178,124 @@ def main():
     print("\nOK — one place decides where artifacts go.")
 
 
+def check_evidence_guard():
+    """A run must not silently replace a results file somebody committed.
+
+    WALKED INTO RATHER THAN IMAGINED. Eight attacks were run against a shipped practice bot from
+    inside the checkout, and `out/results_httpbot.json` went from 1.6 MB of a full sweep to
+    16 KB of an experiment. `detector_coverage` immediately reported 958 fewer probes, and the
+    README, the site and the false-positive rates are all recounted from those files. Restored
+    from git, which is the only reason it is a story rather than a wrong number in a release.
+
+    The guard lives at the resource: both commands that write evidence call one function, so a
+    third one cannot arrive without it by being written somewhere else.
+    """
+    import io
+    import subprocess
+    import tempfile
+    from workspace import refuse_to_overwrite_evidence, tracked_by_git
+
+    bad = []
+
+    def want(label, ok, detail=""):
+        print("%s  %s" % ("PASS" if ok else "FAIL", label))
+        if not ok:
+            bad.append("%s: %s" % (label, detail))
+
+    with tempfile.TemporaryDirectory() as d:
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                   GIT_CONFIG_SYSTEM=os.path.join(d, "none"))
+
+        def git(*a):
+            return subprocess.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                                  env=env)
+
+        git("init", "-q")
+        git("config", "user.name", "QAtration")
+        git("config", "user.email", "qatration@gmail.com")
+        kept = os.path.join(d, "results_kept.json")
+        io.open(kept, "w", encoding="utf-8").write('{"results": []}')
+        git("add", "-A")
+        r = git("commit", "-qm", "evidence")
+        if r.returncode != 0 and "cannot spawn" in (r.stdout + r.stderr).lower():
+            print("SKIP  the evidence guard: git cannot commit here, so it was NOT checked")
+            return bad
+
+        loose = os.path.join(d, "results_loose.json")
+        io.open(loose, "w", encoding="utf-8").write('{"results": []}')
+
+        want("a committed results file is recognised as evidence", tracked_by_git(kept))
+        want("...and an uncommitted one is not", not tracked_by_git(loose))
+        want("writing over the committed one is refused",
+             bool(refuse_to_overwrite_evidence(kept)))
+        want("...and the refusal says how to write elsewhere",
+             "QATRATION_OUT" in refuse_to_overwrite_evidence(kept))
+        want("...and names the file, so the reader knows what was nearly lost",
+             "results_kept.json" in refuse_to_overwrite_evidence(kept))
+        want("the flag is an escape hatch, not a suggestion",
+             refuse_to_overwrite_evidence(kept, force=True) == "")
+        want("an ordinary artifact is written without ceremony",
+             refuse_to_overwrite_evidence(loose) == "")
+        want("a file that does not exist yet is not evidence",
+             refuse_to_overwrite_evidence(os.path.join(d, "results_new.json")) == "")
+
+    # BOTH WRITERS, EXECUTED RATHER THAN GREPPED. The first version of this checked that the
+    # string `refuse_to_overwrite_evidence(` appeared in each module, and a mutation proved what
+    # that is worth: `_refusal = None and refuse_to_overwrite_evidence(...)` keeps the string,
+    # disarms the guard, and passed. Both commands are run for real against a committed file
+    # and have to refuse. Neither reaches a target, because both check before they send.
+    with tempfile.TemporaryDirectory() as d:
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d, "none"),
+                   GIT_CONFIG_SYSTEM=os.path.join(d, "none"), QATRATION_OUT=d)
+
+        def git(*a):
+            return subprocess.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                                  env=env)
+
+        git("init", "-q")
+        git("config", "user.name", "QAtration")
+        git("config", "user.email", "qatration@gmail.com")
+        for name in ("results_httpbot.json", "benign_httpbot.json"):
+            io.open(os.path.join(d, name), "w", encoding="utf-8").write('{"rows": [], "results": []}')
+        git("add", "-A")
+        r = git("commit", "-qm", "evidence")
+        if r.returncode != 0 and "cannot spawn" in (r.stdout + r.stderr).lower():
+            print("SKIP  the two commands: git cannot commit here, so they were NOT run")
+            return bad
+
+        cli = os.path.join(HERE, "cli.py")
+        for label, argv in (
+                ("qatration run", [cli, "run", "--target-config",
+                                   os.path.join(HERE, "targets_httpbot.yaml"),
+                                   "--attacks", os.path.join(HERE, "attacks_refusal.yaml"),
+                                   "--trials", "1"]),
+                ("qatration benign", [cli, "benign", "--target", "httpbot"])):
+            # A GUARD THAT DOES NOT FIRE DOES NOT HANG THE SUITE, it fails by name. With the
+            # check disarmed, `benign` starts its fifty-probe corpus against a live bot and the
+            # call times out; without this the suite dies on a TimeoutExpired traceback and
+            # says nothing about which guard was missing. Sixty seconds is generous: a guard
+            # that works answers in under one.
+            try:
+                proc = subprocess.run([sys.executable] + argv, capture_output=True, text=True,
+                                      env=env, timeout=60)
+                said = proc.stdout + proc.stderr
+                code = proc.returncode
+            except subprocess.TimeoutExpired:
+                said, code = "it started working instead of refusing", -1
+            want("%s refuses to replace a committed artifact" % label,
+                 code == 5, "exit %s: %s" % (code, said.strip()[:160]))
+            want("...and says which file and how to write elsewhere",
+                 "REFUSED" in said and "QATRATION_OUT" in said, said.strip()[:160])
+            want("...and the file on disk is untouched",
+                 io.open(os.path.join(d, "results_httpbot.json"), encoding="utf-8").read()
+                 == '{"rows": [], "results": []}')
+    return bad
+
+
 if __name__ == "__main__":
+    _bad = check_evidence_guard()
+    if _bad:
+        for _b in _bad:
+            print('  !', _b)
+        sys.exit(1)
     main()
