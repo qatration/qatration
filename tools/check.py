@@ -16,6 +16,7 @@ starts needing a fleet will fail here first, which is the right place to find ou
 """
 
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -42,6 +43,63 @@ TAIL = 25
 # `timeout-minutes: 30` in both workflows sits above it as the backstop for what a per-suite
 # deadline cannot reach.
 DEADLINE = int(os.environ.get("QATRATION_SUITE_TIMEOUT", "600"))
+
+# And how long a suite that was killed may take to hand over what it printed. A dead process
+# hands its buffer over at once; this is the ceiling on waiting for one that cannot.
+DRAIN = int(os.environ.get("QATRATION_DRAIN_TIMEOUT", "20"))
+
+
+def kill_tree(proc):
+    """Kill the suite AND whatever it started, because the deadline is worthless otherwise.
+
+    `subprocess.run(capture_output=True, timeout=N)` kills the suite at N and then reads its
+    pipes to end-of-file. The suite is dead and holds nothing, but a SERVER it started inherited
+    the same pipe and is still alive, so end-of-file never comes and the call blocks. Measured
+    here rather than reasoned about: with a five-second deadline it had not returned after two
+    minutes. The job then dies at the workflow's `timeout-minutes: 30` and reports "cancelled",
+    naming no suite -- exactly the outcome this deadline exists to prevent, in exactly the case
+    it was written for. Several suites bind sockets and start servers, so that is the likely
+    shape of a hang here rather than an exotic one.
+    """
+    if os.name == "nt":
+        # The only tree-kill Windows offers without a dependency.
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
+def run_suite(path):
+    """-> (returncode, output, hung, orphaned). returncode is None when it had to be killed."""
+    # Its own process group, so one signal reaches everything it started. The cost is that
+    # Ctrl-C no longer reaches the suite on its own, which is why the interrupt is caught here
+    # and turned into the same tree kill.
+    opts = {} if os.name == "nt" else {"start_new_session": True}
+    proc = subprocess.Popen([sys.executable, path], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, cwd=ROOT, **opts)
+    try:
+        out, err = proc.communicate(timeout=DEADLINE)
+        return proc.returncode, (out or "") + (err or ""), False, False
+    except subprocess.TimeoutExpired:
+        pass
+    except KeyboardInterrupt:
+        kill_tree(proc)
+        raise
+    kill_tree(proc)
+    try:
+        out, err = proc.communicate(timeout=DRAIN)
+        return None, (out or "") + (err or ""), True, False
+    except subprocess.TimeoutExpired:
+        # ABANDONED RATHER THAN CLOSED. A reader thread is still blocked on that pipe and
+        # closing it underneath that thread is not safe. They are daemon threads and go when
+        # this process does; the tree is already dead, so nothing is left running.
+        return None, "", True, True
 
 
 def skipped(text):
@@ -89,24 +147,19 @@ def main(argv):
     slowest = (0.0, "")
     for name in names:
         t0 = time.time()
-        try:
-            proc = subprocess.run([sys.executable, os.path.join(SUITES, name)],
-                                  capture_output=True, text=True, cwd=ROOT,
-                                  timeout=DEADLINE)
-        except subprocess.TimeoutExpired as e:
-            # A HANG IS A RESULT AND IT HAS A NAME. Without the deadline this call blocks
-            # until the CI job's own limit — six hours by default on GitHub Actions — and the
-            # run reports as "cancelled", which names no suite. Several suites here bind
-            # sockets and start server threads, so a hang is the likely shape of a failure
-            # rather than an exotic one.
-            secs = time.time() - t0
+        rc, text, hung, orphaned = run_suite(os.path.join(SUITES, name))
+        if hung:
+            # A HANG IS A RESULT AND IT HAS A NAME. Without this the run blocks until the CI
+            # job's own limit and reports as "cancelled", which names no suite.
             failed.append(name)
             print("  HUNG %-28s %5.1fs   (killed at the %ds deadline)"
-                  % (name[5:-3], secs, DEADLINE))
-            tail = (e.stdout or b"") if isinstance(e.stdout, bytes) else (e.stdout or "")
-            if isinstance(tail, bytes):
-                tail = tail.decode("utf-8", "replace")
-            lines = str(tail).rstrip().splitlines()
+                  % (name[5:-3], time.time() - t0, DEADLINE))
+            if orphaned:
+                # WORTH ITS OWN LINE: it says the suite leaked a process, which is a second
+                # defect and the reason the deadline used to be unable to fire at all.
+                print("       | it left something running that held the output pipe open, so")
+                print("       | nothing it printed survived. The whole tree has been killed.")
+            lines = text.rstrip().splitlines()
             if lines:
                 for line in lines[-TAIL:]:
                     print("       | " + line)
@@ -127,10 +180,9 @@ def main(argv):
         # nobody would ever see it. Every suite here exits correctly today; nothing made
         # that true of the next one. `0/0 passed` is caught by the same rule: a suite
         # that ran no checks is indistinguishable from one that ran sixty-six.
-        text = (proc.stdout or "") + (proc.stderr or "")
         lied = [ln for ln in text.splitlines()
                 if ln.strip().startswith("FAIL") or ln.strip().startswith("0/0 passed")]
-        if proc.returncode == 0 and not lied:
+        if rc == 0 and not lied:
             print("  ok   %-28s %5.1fs" % (name[5:-3], secs))
             # AND WHAT IT DID NOT CHECK. Output from a passing suite is discarded, so a suite
             # that skipped half of itself and passed the rest reported exactly like one that
@@ -143,7 +195,7 @@ def main(argv):
             for line in skipped(text):
                 print("       | " + line)
             continue
-        if proc.returncode == 0:
+        if rc == 0:
             failed.append(name)
             print("  LIED %-28s %5.1fs  exited 0 while reporting failures"
                   % (name[5:-3], secs))
@@ -152,7 +204,7 @@ def main(argv):
             continue
         failed.append(name)
         print("  FAIL %-28s %5.1fs" % (name[5:-3], secs))
-        out = ((proc.stdout or "") + (proc.stderr or "")).rstrip().splitlines()
+        out = text.rstrip().splitlines()
         for line in out[-TAIL:]:
             print("       | " + line)
 

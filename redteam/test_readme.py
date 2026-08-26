@@ -630,16 +630,45 @@ def main():
     # checks that run AFTER the summary has already been printed. Nine of them were appended to
     # test_history.py, it printed "36/36 passed" and then ran nine more, and this check passed.
     # A guard only covers where it looks, and it was looking for one spelling of the mistake.
+    # AND THIRD, PARSED RATHER THAN GREPPED, because the pattern above knew exactly one
+    # spelling. It looked for the literal `passed")`, so a suite ending
+    # `print("%d/%d passed" % (...))` matched nothing and was skipped WHOLE -- six of the
+    # forty-six here, silently uncovered by a gate reporting green. In the other direction it
+    # read any line containing those characters, so a suite whose FIXTURE prints "1/1 passed"
+    # was judged against a string constant and every real check after it called trailing.
+    # Both arrived on the same day, from the same suite. A summary is a call to print, and a
+    # check is a call to check; asking the parser costs the same and cannot be spelled around.
+    def _literals(node):
+        """Every string that a print() argument is built from, whatever the formatting."""
+        out = []
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                out.append(sub.value)
+        return out
+
     for fp in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
-        lines = open(fp, encoding="utf-8").read().splitlines()
-        shown = [i for i, l in enumerate(lines) if "passed\")" in l and "print(" in l]
-        if not shown:
+        try:
+            tree = ast.parse(open(fp, encoding="utf-8").read())
+        except SyntaxError:            # a broken suite is another gate's finding, not this one
             continue
-        trailing = [j for j in range(shown[-1] + 1, len(lines))
-                    if lines[j].lstrip().startswith("check(")]
+        summaries, ran = [], []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            called = getattr(node.func, "id", None)
+            if called == "print":
+                if any("passed" in lit for arg in node.args for lit in _literals(arg)):
+                    summaries.append(node.lineno)
+            elif called == "check":
+                ran.append(node.lineno)
+        if not summaries:
+            # A suite with no summary line at all is a separate finding, made elsewhere.
+            continue
+        last = max(summaries)
+        trailing = [ln for ln in ran if ln > last]
         if trailing:
             early.append(f"{os.path.basename(fp)}: {len(trailing)} check(s) run after the "
-                         f"summary was printed at line {shown[-1] + 1}")
+                         f"summary was printed at line {last}")
     check("no suite counts itself before its last check has run",
           not early, "; ".join(early))
 
