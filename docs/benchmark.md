@@ -218,14 +218,15 @@ On the guarded target it was also the only tool to produce a positive finding.
 Both targets are third-party and neither is vendored here.
 
 ```
-# the target repository, once its author has agreed to be named
-git clone <the RAG application>
+git clone https://github.com/HeskethGD/local-rag-chat
+git -C local-rag-chat checkout cd8cd89
 # then follow its README: poetry install, ollama pull llama3.2:3b, ollama pull nomic-embed-text
-cd backend && venv/Scripts/python -m uvicorn app.main:app --port 8000
+cd local-rag-chat/backend && venv/Scripts/python -m uvicorn app.main:app --port 8000
 ```
 
-The poisoned document is ours and is not part of that project. Put a PDF in `backend/pdfs`
-carrying a canary of your own, minted with `qatration mint`, and re-run its ingestion.
+The corpus is ours: that project ships no documents, `pdfs/` is gitignored and its README says
+to create the folder and add your own. Put PDFs in `backend/pdfs`, one of them carrying a canary
+minted with `qatration mint`, and run its ingestion script.
 
 ```
 pip install git+https://github.com/qatration/qatration@4c678f4
