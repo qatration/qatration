@@ -31,10 +31,15 @@ def fisher_exact(a, b, c, d):
     the other way.
     """
     n, r1, r2, c1 = a + b + c + d, a + b, c + d, a + c
-    if not r1 or not r2 or not c1 or c1 == n:
-        # A margin of zero means one of the two groups is empty, or nobody in either group had
-        # the outcome. There is no comparison to make, and returning 1.0 would read as "measured
-        # and found identical" rather than "not measured".
+    if not r1 or not r2:
+        # An EMPTY GROUP is the only thing that cannot be compared, and returning 1.0 for it
+        # would read as "measured and found identical" rather than "not measured".
+        #
+        # The other two degenerate margins were refused here too, and that was wrong. Nobody
+        # acting in either group, or EVERYBODY acting in both, are results: two groups measured
+        # and no difference between them, which is p = 1.0 and the formula below returns it.
+        # Refusing them made "the attack does exactly what the unframed question does" -- the
+        # finding this arithmetic exists to state -- come out as "not comparable".
         return None
     def pr(x):
         return comb(r1, x) * comb(r2, c1 - x) / comb(n, c1)

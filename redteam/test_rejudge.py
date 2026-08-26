@@ -377,8 +377,14 @@ def main():
             _meta = json.load(io.open(os.path.join(_d, "results_localrag.json"),
                                       encoding="utf-8"))["meta"]
             check("...and the artifact keeps it, so a page can read it later",
-                  "reached the model" in (_meta.get("delivery") or ""),
+                  "delivered" in (_meta.get("delivery") or ""),
                   str(_meta.get("delivery"))[:200])
+            # AND REFUSES THE FRAMING VERDICT, because that arsenal's three localrag "attacks"
+            # are ordinary customer questions with no unframed control beside them. Issue #2
+            # restated as a property of this repository, said by the tool rather than by me.
+            check("...and refuses the framing verdict where nothing holds the question fixed",
+                  "not separable" in (_meta.get("delivery") or ""),
+                  str(_meta.get("delivery"))[-200:])
             # THE COUNTS, NOT JUST THE HEADING. A note printed with both rates empty would
             # satisfy a substring check and say nothing.
             check("...carrying the background this run measured, not a quoted one",
