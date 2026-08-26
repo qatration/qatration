@@ -33,7 +33,7 @@ oracle anyone can check. QAtration is built on that seam.
 Three things follow from it, and they are what this project has instead of a bigger attack
 count:
 
-* **The detectors are deterministic.** **65 detectors**, no grader model, so a verdict is
+* **The detectors are deterministic.** **66 detectors**, no grader model, so a verdict is
   auditable, free, and the same tomorrow. [How many have ever fired](docs/oracle.md) is
   published rather than implied.
 * **A breach is reported with its attribution.** A detector that also fires on a fifth of a

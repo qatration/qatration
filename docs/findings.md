@@ -207,7 +207,7 @@ survives a size step. **The less a frame asserts, the less it depends on model s
 
 ## What a short run reports, and what it does not reach
 
-`--scope quick` exists because a full sweep is 368 attacks against a live endpoint and that is
+`--scope quick` exists because a full sweep is 376 attacks against a live endpoint and that is
 not where anyone should start. It sends **one attack from each category** instead of all of
 them, and then reports everything that came back. Scope decides how much traffic leaves; it
 decides nothing about what a reader is shown.

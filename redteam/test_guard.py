@@ -752,6 +752,14 @@ def main():
             shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(work, "tools", f))
         io.open(os.path.join(work, "pyproject.toml"), "w", encoding="utf-8").write(
             "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
+        # THE FIXTURE NEEDS THE ONE FILE EVERY REAL CHECKOUT HAS. This repository copies
+        # `tools/*.py` in, python compiles them, and `git add -A` then stages
+        # `tools/__pycache__/*.pyc`. A .pyc is a bag of bytes and some of those bytes decode as
+        # Cyrillic, so the guard refused the push and this test failed for a reason that had
+        # nothing to do with what it measures. It passed until yesterday only because the
+        # compiled bytes happened not to contain one.
+        io.open(os.path.join(work, ".gitignore"), "w", encoding="utf-8",
+                newline="\n").write("__pycache__/\n*.pyc\n")
         pg("init", "-q", "-b", "main")
         pg("config", "user.name", "QAtration")
         pg("config", "user.email", "qatration@gmail.com")

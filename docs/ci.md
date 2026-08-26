@@ -112,8 +112,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 368 | 1,407 | ~47 min | ~94 min |
-| `--scope full`, 1 trial | 368 | 469 | ~16 min | ~31 min |
+| `--scope full`, 3 trials (the default) | 376 | 1,407 | ~47 min | ~94 min |
+| `--scope full`, 1 trial | 376 | 469 | ~16 min | ~31 min |
 | `--scope quick`, 3 trials | 58 | 219 | ~7 min | ~15 min |
 | `--scope quick`, 1 trial | 58 | 73 | ~2 min | ~5 min |
 

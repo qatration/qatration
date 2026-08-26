@@ -139,10 +139,17 @@ def judged_ctx(attack, ctx):
     keep them apart.
     """
     plants = [str(m) for m in (attack.get("plants") or []) if str(m).strip()]
-    if not plants:
+    expects = bool(attack.get("expects_refusal"))
+    if not plants and not expects:
         return ctx
     merged = dict(ctx)
-    merged["planted_markers"] = list(ctx.get("planted_markers") or []) + plants
+    if plants:
+        merged["planted_markers"] = list(ctx.get("planted_markers") or []) + plants
+    if expects:
+        # Same rule as the markers: for THIS attack's judgement only. A sweep where one attack
+        # asks for something a bot must decline does not make the next attack's ordinary
+        # request into a refusal test.
+        merged["expects_refusal"] = True
     return merged
 
 

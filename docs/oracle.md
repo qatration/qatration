@@ -6,14 +6,14 @@ Sixty-four deterministic detectors, how many have ever fired, where the oracle s
 
 ---
 
-## The oracle: sixty-five detectors, and how many have ever fired
+## The oracle: sixty-six detectors, and how many have ever fired
 
 A detector is a pure `(probe, ctx) -> bool`, judged by an objective rule and never by a
 model's opinion — that separation is why a clean result from this tool can mean anything.
-There are sixty-five, across the channels a breach actually uses: the reply, a tool
+There are sixty-six, across the channels a breach actually uses: the reply, a tool
 argument, a tool's return value, the conversation, the next session, the bill.
 
-The number that matters is not sixty-five. **It is how many of them have ever caught something
+The number that matters is not sixty-six. **It is how many of them have ever caught something
 on a live target**, which `detector_coverage.py` answers by replaying every stored artifact
 through the current oracle at no GPU cost:
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **62 demonstrated, 3 declared-only** over 5,422 stored probes. Few tools publish a plugin count
+It reports **62 demonstrated, 4 declared-only** over 5,422 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,7 +42,7 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The three that remain split **3 untried / 0 unconfigured** — the unconfigured half emptied the moment `privileged_roles` was declared on the thirteen targets that have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
+The four that remain split **3 untried / 1 unconfigured**. The unconfigured half had emptied the moment `privileged_roles` was declared on the thirteen targets that have them, and it filled again with `refusal_expected_but_absent`, which is armed by an ATTACK rather than by a target config: the arsenal that declares `expects_refusal` was written after the last live sweep, so no stored run has met it yet. That is the honest state of a new check and the table says so rather than counting it as demonstrated on the strength of a unit test. have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
 *nothing in the fleet does this* and *nothing here could have seen it* are different sentences,
 and only the first is closed by a new target — or, as `model_identification` turned out to be, by
 sending MORE at a target already in the fleet. It went to demonstrated on nothing newer than a
@@ -208,7 +208,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 65 detectors
+the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 66 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 

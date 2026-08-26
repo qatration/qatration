@@ -556,16 +556,21 @@ def main():
     from oracle import inert_for
     declared = set()
     plants = []
+    expects_refusal = False
     for a in attacks:
         declared |= set(a.get("success") or []) | set(a.get("partial") or [])
         plants += [str(m) for m in (a.get("plants") or []) if str(m).strip()]
+        expects_refusal = expects_refusal or bool(a.get("expects_refusal"))
     # AN ARSENAL CAN ARM A DETECTOR TOO. `planted_markers` used to come only from the target
     # config, so a detector reading it was inert unless the tester had planted something in
     # advance. Attacks that carry their own marker arm it for themselves, and reporting those
     # as "cannot fire" would be the mirror of the mistake this block exists to prevent: a check
     # that DID run, announced as one that could not.
-    inert_ctx = dict(ctx, planted_markers=list(ctx.get("planted_markers") or []) + plants) \
-        if plants else ctx
+    inert_ctx = dict(ctx)
+    if plants:
+        inert_ctx["planted_markers"] = list(ctx.get("planted_markers") or []) + plants
+    if expects_refusal:
+        inert_ctx["expects_refusal"] = True
     dead = inert_for(inert_ctx, declared)
     if dead:
         print(f"  ! {len(dead)} detector(s) cannot fire on this target — "

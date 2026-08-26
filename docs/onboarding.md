@@ -311,7 +311,7 @@ about what to send — an accident of which file something was written in. Gener
 attack ids already live in two files at once: the per-bot arsenals were split out of the main
 one by hand and both halves were then edited. A third hand-maintained copy would repeat it.
 
-The arsenal is **368 attacks across 59 categories** now. Against a plain chat endpoint that
+The arsenal is **376 attacks across 60 categories** now. Against a plain chat endpoint that
 declares only a canary, **249 attacks in 46 categories** actually run; one that carries a
 transcript gets **313 in 56**. What is held back is held back for a reason each time: `control` rows are
 per-target baselines and sending eighteen of them would pad the count with prompts that are not
