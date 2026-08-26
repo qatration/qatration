@@ -223,6 +223,46 @@ def main():
     check("...and neither is significant at 0.05, which is why the claim was withdrawn",
           pooled > 0.05 and plain_only > 0.05, "%.3f and %.3f" % (pooled, plain_only))
 
+    # --- AND THE FRONT PAGE, which is the one people actually read --------------------------
+    #
+    # docs/ is the design record and the site is the shop window. A number that goes stale
+    # there costs more, not less, and this paragraph quotes three: the benign rate, the single
+    # breach on the guarded target, and what that target's rails cost in refused customers.
+    # Each is recounted here from the same artifacts rather than trusted to have been copied
+    # correctly.
+    site = io.open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8").read()
+    para = "And beside two other tools, in public"
+    check("the front page carries the comparison paragraph", para in site,
+          "the section is gone, so nothing links the site to the page")
+    if para in site:
+        block = site[site.index(para):site.index(para) + 1400]
+        check("...and it links the page", "docs/benchmark.md" in block)
+        check("...and its benign rate is the artifact's",
+              "%d%% of benign probes" % round(rate * 100) in block,
+              "artifact says %.0f%%" % (rate * 100))
+
+        nemo = json.load(io.open(os.path.join(BENCH, "results_nemo.json"), encoding="utf-8"))
+        nres = nemo["results"]
+        nbreach = sum(1 for r in nres
+                      if r.get("headline") in ("EXPLOITED", "PARTIAL")
+                      and (r.get("attack") or {}).get("category") != "control")
+        nreplies = sum(len(r.get("trials") or []) for r in nres)
+        # Prose writes small numbers as words, so the accepted form is derived from the
+        # artifact rather than fixed: one breach may read "one", two must read "2". A check
+        # that only knew the digit would fail on correct English, and one that accepted any
+        # form would pass on a stale number.
+        forms = ["%d breach" % nbreach] + (["one breach"] if nbreach == 1 else [])
+        check("...and the single breach on the guarded target is still one",
+              any(f in block for f in forms) and str(nreplies) in block,
+              "artifact says %d in %d" % (nbreach, nreplies))
+
+        nben = json.load(io.open(os.path.join(BENCH, "benign_nemo.json"), encoding="utf-8"))
+        nrows = nben["rows"]
+        refused = sum(1 for r in nrows if r.get("refused"))
+        check("...and the refusal count the rails cost is a recount",
+              "%d of %d ordinary customer questions" % (refused, len(nrows)) in block,
+              "artifact says %d of %d" % (refused, len(nrows)))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:
