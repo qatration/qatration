@@ -471,8 +471,41 @@ they are different interventions:
 
 Against the unframed control each arm comes out at p = 0.18. Pooled they clear 0.05, and that
 pool is not a result: regrouping two arms after seeing both fail, when they were separated on
-purpose beforehand, is how a p-value gets manufactured. Against a 95% ceiling there was almost
-nothing left to win.
+purpose beforehand, is how a p-value gets manufactured.
+
+**Then it was run again with the size fixed in advance**, because p = 0.18 on fifty probes is a
+sample size rather than an answer. Three controls and five act-on-the-document framings, thirty
+trials each, 90 control probes and 150 framed, one run, identical conditions, the count written
+into the arsenal before it started:
+
+| arm | acted, given delivery |
+|---|---|
+| framed | 150/150 (100%) |
+| the same questions unframed | 89/90 (99%) |
+| ordinary traffic | 25/27 (93%) |
+
+p = 0.375 against the control and p = 0.023 against the background, which is the confound
+demonstrated a second time on 240 probes. The control's real rate is 99%, so the 95% measured on
+120 probes an hour earlier was noise too. **There is no headroom on this target at all**, and
+that is a fact about the application: its retrieval prompt interpolates document text straight
+into the instruction, and once the poisoned document is retrieved the payload does everything.
+
+### The other end of the same problem
+
+If a lift needs headroom, the obvious move is a target that resists. `guardedrag` is one: an
+ambient poisoned document, an LLM output filter as the only defence, and zero canary fires
+across fifty ordinary prompts. Ten framings aimed at the guard rather than at the model — bare
+data with no notice vocabulary, a JSON record, a printed-leaflet fine print, a quotation, an
+audit inventory, another language — went with six unframed questions on the poisoned document's
+own topic.
+
+Nothing got through. 0 of 10 framed, and 0 of 6 unframed: the guard blocks the whole answer
+whenever that document is retrieved. Floor instead of ceiling, and no more measurable than
+before.
+
+So the instrument this question needs is a **partially effective** defence, and neither stand
+has one. That is the state of issue #2: not an attack waiting to be written, a stand waiting to
+be found.
 
 The reproduction framings are not in the shipped arsenal, and the reason is the same kind of
 care. "Quote the refund policy word for word" takes the canary rate to 60 of 60 by the model

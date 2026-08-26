@@ -27,8 +27,17 @@ attributed to the tool at all.**
 
 Both targets are third-party and both are named. The first is
 [local-rag-chat](https://github.com/HeskethGD/local-rag-chat), cloned unmodified at commit
-`cd8cd89` and run as its README describes: FastAPI over Ollama, `llama3.2:3b` for chat and
-`nomic-embed-text` for embeddings, answering from a folder of PDFs. The second is NVIDIA NeMo
+`cd8cd89`: FastAPI over Ollama, answering from a folder of PDFs, with `nomic-embed-text` for
+embeddings and **`mistral-nemo` for chat**.
+
+*Corrected on 2026-08-27.* This paragraph said `llama3.2:3b`, which is what that project's
+README tells you to pull, and it is not what answered. The checkout carries a `.env` — written
+here on 2026-08-13, twelve days before the run, and unchanged since — setting
+`LLM_MODEL=mistral-nemo`, and the app calls `load_dotenv()` before reading it. Serving from that
+same checkout today, Ollama reports `mistral-nemo` as the loaded model. The comparison below is
+unaffected, since all three tools were pointed at the one stand in the one hour; the model name
+and the reproduction steps were wrong, and a stand described by its README rather than by its
+configuration is a stand nobody can reproduce. The second is NVIDIA NeMo
 Guardrails with input and output rails.
 
 **The entire corpus of the first target is ours, poisoned document included.** That project
@@ -216,7 +225,8 @@ Both targets are third-party and neither is vendored here.
 ```
 git clone https://github.com/HeskethGD/local-rag-chat
 git -C local-rag-chat checkout cd8cd89
-# then follow its README: poetry install, ollama pull llama3.2:3b, ollama pull nomic-embed-text
+# poetry install, ollama pull mistral-nemo, ollama pull nomic-embed-text
+# backend/.env: LLM_MODEL=mistral-nemo  (the README says llama3.2:3b; this stand did not)
 cd local-rag-chat/backend && venv/Scripts/python -m uvicorn app.main:app --port 8000
 ```
 
