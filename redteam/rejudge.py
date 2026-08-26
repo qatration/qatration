@@ -38,6 +38,7 @@ from report_engine import build_html
 import datetime
 from isolation import apply_keysearch, _verdict, read_maps, write_maps
 from baseline import note as _baseline_note
+from baseline import two_factor_note as _two_factor_note
 
 
 def contexts():
@@ -232,7 +233,16 @@ def main():
         # page said nothing — the exact failure baseline.py exists to prevent, reached through
         # the replay door instead of the sweep door.
         note = _baseline_note(base, data["results"], (ctxs[base] or {}).get("canaries") or [])
-        note_moved = (note or "") != (data["meta"].get("attribution") or "")
+        # AND THE SHARPER CAVEAT, THROUGH THE SAME DOOR. Splitting a breach into "the payload
+        # reached the model" and "the model acted on it" needs nothing but the stored replies,
+        # so every run already on disk can answer it — including the ones that predate the
+        # measurement, which is every run there is. `caps` comes from the run's own meta: a
+        # target that was seedable then is refused now, rather than compared against a baseline
+        # that never met the payload.
+        delivery = _two_factor_note(base, data["results"], ctxs[base] or {},
+                                    caps=(data.get("meta") or {}).get("caps") or ())
+        note_moved = ((note or "") != (data["meta"].get("attribution") or "")
+                      or (delivery or "") != (data["meta"].get("delivery") or ""))
         if not changed and not note_moved:
             continue
         files_touched += 1
@@ -249,8 +259,12 @@ def main():
                      "  (a caveat is withdrawn)" if was and not now else ""))
             for l in now[:3]:
                 print(f"      {l.strip()[:96]}")
+        if delivery and delivery != (data["meta"].get("delivery") or ""):
+            for l in delivery.strip().splitlines()[:4]:
+                print(f"      {l.strip()[:96]}")
         if args.write:
             data["meta"]["attribution"] = note
+            data["meta"]["delivery"] = delivery
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
             html = os.path.join(OUT_DIR, f"report_{name}.html")

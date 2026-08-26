@@ -346,6 +346,44 @@ def main():
           "QATRATION_CONFIGS" in _src,
           "the message describes the state without saying what to do about it")
 
+    # --- the decomposition reaches the runs that predate it ------------------------------
+    #
+    # Separating "the payload reached the model" from "the model acted on it" needs nothing
+    # but the stored replies, so every run already on disk can answer it — and every run on
+    # disk predates the measurement. A capability only new sweeps could use would leave the
+    # evidence that PROVOKED issue #2 unable to state its own finding.
+    #
+    # On the shipped localrag artifacts rather than a fixture: that app carries its poison
+    # permanently, which is the only arrangement where ordinary traffic meets the same payload
+    # and the two rates are comparable at all.
+    import shutil, subprocess
+    _real = os.path.join(os.path.dirname(HERE), "out")
+    _have = all(os.path.exists(os.path.join(_real, f))
+                for f in ("results_localrag.json", "benign_localrag.json"))
+    if not _have:
+        print("SKIP  the replay door for delivery-vs-effect: the localrag artifacts are not "
+              "in this checkout, so it was NOT exercised")
+    else:
+        with tempfile.TemporaryDirectory() as _d:
+            for f in ("results_localrag.json", "benign_localrag.json"):
+                shutil.copy(os.path.join(_real, f), os.path.join(_d, f))
+            _env = dict(os.environ, QATRATION_OUT=_d, PYTHONIOENCODING="utf-8")
+            _r = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                 "rejudge", "--target", "localrag", "--write"],
+                                capture_output=True, text=True, env=_env, timeout=300)
+            _said = _r.stdout + _r.stderr
+            check("replaying a stored run reports delivery and effect separately",
+                  "DELIVERY AND EFFECT" in _said, _said[-400:])
+            _meta = json.load(io.open(os.path.join(_d, "results_localrag.json"),
+                                      encoding="utf-8"))["meta"]
+            check("...and the artifact keeps it, so a page can read it later",
+                  "reached the model" in (_meta.get("delivery") or ""),
+                  str(_meta.get("delivery"))[:200])
+            # THE COUNTS, NOT JUST THE HEADING. A note printed with both rates empty would
+            # satisfy a substring check and say nothing.
+            check("...carrying the background this run measured, not a quoted one",
+                  "27/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
