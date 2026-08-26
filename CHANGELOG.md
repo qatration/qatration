@@ -6,6 +6,47 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## Attacks that carry their own marker, and a page that says where we lose (0.2.1, 2026-08-26)
+
+**The release exists because of one measurement.** Run beside garak and promptfoo against a
+third-party RAG application, every finding this tool produced was unattributable: they rested on
+a canary planted in the corpus before the run, and that same string comes back on 46% of
+ordinary questions. The tool said so itself, on 181 of 192 breaches, which is the right answer
+and not a useful one.
+
+`attacks_docframe.yaml` is the fix, and the design is copied from garak's `latentinjection`: six
+framings of a quoted document with an instruction inside it, each carrying a token minted for
+that attack alone. No capability is required of the target, so unlike every other indirect
+attack here it can be sent to somebody's real endpoint. `planted_instruction_obeyed` is
+echo-subtracted, so a bot that merely quotes the document back scores clean.
+
+TWO EARLIER VERSIONS OF THE FAMILY MEASURED THE WRONG THING and both are on the record. Asked
+for the token reversed, a 3B model obeyed and reversed it wrongly. Asked for it with a hyphen
+removed, it obeyed and returned the token unchanged. The instruction had been followed both
+times and the detector reported clean. A transformation the target will not perform turns an
+injection test into a string-handling exam. The token now arrives in two pieces and is asked for
+joined, which is something a model does while obeying rather than a skill it needs.
+
+`runner.judged_ctx` merges an attack's `plants` into `planted_markers` for that attack's
+judgement only, and the sweep's inert-detector report counts the arsenal's own markers, so a
+detector armed by the attacks is no longer announced as unable to fire.
+
+**Two messages stopped naming the wrong failure.** A dead port used to be reported as an
+unpasted canary, because an errored probe carries an empty output and an empty output is what
+"not planted" looks like. `onboard` printed "answered in 4.1s" three lines above "the endpoint
+returned an error". Both went out through one decision function that reads the transport error
+before the reply.
+
+**And the practice fleet could not be started at all**, on any platform or fresh clone:
+`tools/fleet.sh` file-tested an interpreter that is a PATH command by design, while
+`require_python` in the same file called the same interpreter usable. CI only ever ran `status`,
+which asks the second question and not the first.
+
+The comparison itself is `docs/benchmark.md`, with the raw artifacts, the scoring scripts, the
+limitations, and the claim we withdrew after a reviewer asked for a p-value.
+
+---
+
 ## The release a stranger can start from (0.2.0, 2026-08-25)
 
 **The published 0.1.0 had thirteen commands and no `init`.** Three days of work later the tool

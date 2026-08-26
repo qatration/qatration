@@ -19,7 +19,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qatration"
-version = "0.2.0"
+version = "0.2.1"
 description = "Adversarial testing for AI chatbots and agents. Runs on your own machine or CI, against your own deployment"
 readme = "README.md"
 requires-python = ">=3.9"
