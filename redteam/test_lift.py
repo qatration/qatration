@@ -232,14 +232,17 @@ def main():
         check("...and the attacked probes deliver more often than ordinary traffic do",
               (got["attack"]["delivered"] / got["attack"]["probes"])
               > (got["benign"]["delivered"] / got["benign"]["probes"]), got)
-        # AND THE ARSENAL FOR THAT TARGET HAS NO UNFRAMED CONTROL, which is issue #2 restated
-        # as a property of this repository: its three localrag "attacks" are ordinary customer
-        # questions, so there is nothing to hold the question fixed against. The engine says so
-        # instead of reporting the background comparison as the attack's achievement.
-        check("...and without an unframed control the framing verdict is refused",
-              got["verdict"].startswith("not separable"), got)
-        check("...while the background comparison is still measured",
-              isinstance(got["p_vs_background"], float), got)
+        # AND THE VERDICT ON THAT ARTIFACT IS ISSUE #2, SAID BY THE TOOL ABOUT ITSELF. Two of
+        # that target's "attacks" were ordinary customer questions -- they are the control now --
+        # and against them the framed attacks come out at p = 1.000: the attack does exactly
+        # what the plain question does. This is the check that goes red if the arsenal loses its
+        # control rows, which is the state the whole measurement was blind in.
+        check("...and the framing verdict on the shipped run is measured, not refused",
+              got["verdict"] == "no lift over the same question unframed", got)
+        check("...against unframed questions that reached the payload",
+              got["control"]["delivered"] >= 20, got["control"])
+        check("...and the background comparison is computed and does not decide it",
+              isinstance(got["p_vs_background"], float) and got["p"] == 1.0, got)
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:

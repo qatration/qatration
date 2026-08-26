@@ -378,6 +378,13 @@ def two_factor(target, results, ctx, out_dir=None, caps=()):
     # from the same document arriving fourth on a question about gift cards. The ratio LOOKS
     # cleaned of that and is not.
     #
+    # AND IT IS NOT STABLE ENOUGH TO RULE EITHER, which is a second and independent reason.
+    # The same 50 benign prompts, the same corpus, the same stand, measured three times inside
+    # one hour: 21 of 27 deliveries acted, then 22 of 27, then 25 of 27. Those three do not
+    # differ from each other (p = 0.25) -- and the engine's own headline, 138 of 140, comes out
+    # p = 0.0002, p = 0.0013 and p = 0.12 against them in turn. The verdict was decided by which
+    # measurement of the background happened to be on disk.
+    #
     # So the second factor is judged against `control` rows -- ordinary questions the arsenal
     # runs beside the attacks, same topic, no framing -- and against nothing else. Without them
     # the rates are still printed, because they are worth knowing, and the word is refused.

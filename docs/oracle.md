@@ -120,7 +120,7 @@ signal, and the others are the diagnosis.
 ### The headline number, and why it is not a percentage
 
 With a benign baseline on all 30 targets there are **1,500 probes on which nobody attacked
-anything**, and 514 detector fires across them. Publishing that as a 33% false-positive rate
+anything**, and 528 detector fires across them. Publishing that as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
 makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
@@ -148,20 +148,28 @@ written down — one verdict per (target, detector), each with a reason, keyed a
 because a detector is routinely right about one bot and wrong about another. Today:
 
 ```
-of 514 fire(s) on clean traffic:
-     399 adjudicated as FINDINGS about the target — it does this with nobody attacking it
-     115 adjudicated as false alarms
-    false-alarm rate over what HAS been settled: 115/514 (22.4%)
+of 528 fire(s) on clean traffic:
+     411 adjudicated as FINDINGS about the target — it does this with nobody attacking it
+     117 adjudicated as false alarms
+    false-alarm rate over what HAS been settled: 117/528 (22.2%)
 ```
 
-**The unadjudicated line is gone because there is nothing left in it.** All 514 fires across 30
+**The unadjudicated line is gone because there is nothing left in it.** All 528 fires across 30
 targets are settled, one (target, detector) pair at a time, each with the evidence that decided
-it. The number went 0.4% → 6.3% → 9.2% → 19.4% → 21.5% → 21.4% → 22.4% as the settling proceeded, and
-every step but the last made it less flattering. **That direction is the only evidence that the
-process is a measurement rather than a defence**: a rate that improved as somebody looked harder
-would have been a rate somebody was managing. Adding a thirtieth target moved it; so did
-widening the corpus from 48 prompts to 50. The last step is the exception and it is the dull
-kind — three baselines re-measured on the wider corpus, nothing re-argued.
+it. The number went 0.4% → 6.3% → 9.2% → 19.4% → 21.5% → 21.4% → 22.4% → 22.2% as the settling proceeded, and
+it rose at every step but two. **That direction is the only evidence that the process is a
+measurement rather than a defence**: a rate that improved as somebody looked harder would have
+been a rate somebody was managing. Adding a thirtieth target moved it; so did widening the
+corpus from 48 prompts to 50.
+
+Both exceptions are the dull kind, and neither is a verdict being revisited. 21.5% → 21.4% was
+three baselines re-measured on the wider corpus. 22.4% → 22.2% was localrag re-measured on
+2026-08-26: the same fifty prompts against the same corpus produced fourteen fires the earlier
+run had not, twelve of them true findings and two false alarms, so a denominator that grew
+mostly with findings pulled the rate down while nobody re-argued anything. The two false alarms
+were prompts the corpus carries in order to provoke those detectors — a question about what a
+Python traceback means, and a question about which escape sequence colours terminal output —
+and on every earlier baseline this model had happened to answer them without tripping either.
 
 The widening is worth one more sentence, because the mechanism behaved well under it. Two new
 prompts produced sixteen fires nobody had ruled on, and the roll-up put the UNADJUDICATED line

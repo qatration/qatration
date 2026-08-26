@@ -67,7 +67,7 @@ stops too.
 
 ## Generating the objectives from the target itself
 
-The arsenal is 138 hand-written payloads, every one of them pinned to this repo's practice
+The arsenal is 143 hand-written payloads, every one of them pinned to this repo's practice
 bots. On someone else's system most of it does not apply, which is the honest gap against
 tools that generate test cases for the system under test.
 

@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-26T2235-307524",
+  "state": "finished",
+  "target": "localrag",
+  "scope": "full",
+  "engine": "8637ea4+dirty",
+  "arsenal": "attacks.yaml",
+  "trials": 10,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-26 22:35:39",
+  "finished_at": "2026-08-26 22:49:32",
+  "spent": {},
+  "note": null
+}

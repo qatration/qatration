@@ -379,11 +379,11 @@ def main():
             check("...and the artifact keeps it, so a page can read it later",
                   "delivered" in (_meta.get("delivery") or ""),
                   str(_meta.get("delivery"))[:200])
-            # AND REFUSES THE FRAMING VERDICT, because that arsenal's three localrag "attacks"
-            # are ordinary customer questions with no unframed control beside them. Issue #2
-            # restated as a property of this repository, said by the tool rather than by me.
-            check("...and refuses the framing verdict where nothing holds the question fixed",
-                  "not separable" in (_meta.get("delivery") or ""),
+            # AND CARRIES THE FRAMING VERDICT, which needs unframed questions in the arsenal to
+            # hold the question fixed. That target has them because two of its "attacks" turned
+            # out to be ordinary customer questions.
+            check("...and the replay reaches the framing verdict, not just the background",
+                  "unframed" in (_meta.get("delivery") or ""),
                   str(_meta.get("delivery"))[-200:])
             # THE COUNTS, NOT JUST THE HEADING. A note printed with both rates empty would
             # satisfy a substring check and say nothing.
