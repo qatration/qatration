@@ -25,15 +25,11 @@ attributed to the tool at all.**
 
 ## The honest labelling, before any number
 
-Both targets are third-party. The first is a small open-source RAG chat application, cloned unmodified and run as its README
-describes: FastAPI over Ollama, `llama3.2:3b` for chat and `nomic-embed-text` for embeddings,
-answering from a folder of PDFs.
-
-**It is not named here, and that is deliberate.** Its author has not been asked yet, and a page
-that shows somebody's hobby project leaking a string WE planted should not put their name in
-front of that sentence before they have had the chance to read it. If they are happy to be
-named, this line changes and the link goes in. The second is NVIDIA NeMo Guardrails with
-input and output rails.
+Both targets are third-party and both are named. The first is
+[local-rag-chat](https://github.com/HeskethGD/local-rag-chat), cloned unmodified at commit
+`cd8cd89` and run as its README describes: FastAPI over Ollama, `llama3.2:3b` for chat and
+`nomic-embed-text` for embeddings, answering from a folder of PDFs. The second is NVIDIA NeMo
+Guardrails with input and output rails.
 
 **The entire corpus of the first target is ours, poisoned document included.** That project
 ships no documents at all: its `pdfs/` folder is gitignored and its README tells you to create
