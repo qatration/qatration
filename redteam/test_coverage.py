@@ -427,6 +427,39 @@ def main():
     check("demonstrated + declared accounts for every detector",
           len(demo) + len([k for k in DETECTORS if not hits3[k]]) == len(DETECTORS))
 
+    # --- THE REPLAY MUST NOT CONTRADICT THE ARTIFACTS -------------------------------------
+    #
+    # `refusal_expected_but_absent` fired four times in results_httpbot.json and this page went
+    # on printing it under "never yet seen to fire". Both numbers are ours and they disagreed,
+    # and the one that recounts was the wrong one: the replay judged with the TARGET's context
+    # alone, while a run merges the attack's own `expects_refusal` and `plants` through
+    # `runner.judged_ctx`. A detector answerable only per attack could therefore never fire
+    # here, whatever the evidence said.
+    #
+    # Derived, not listed: it reads what every stored run RECORDED as fired and requires the
+    # replay to reach the same detectors. A new detector with the same dependency fails this on
+    # the day it is added rather than sitting in "declared only" looking like an honest gap.
+    import glob as _glob, json as _json
+    recorded = set()
+    from workspace import OUT as _REAL_OUT   # the one place that decides where these live;
+    for _fp in _glob.glob(os.path.join(_REAL_OUT, "results_*.json")):   # dc.OUT gets rebound above
+        # A NARROW except, because the wide one hid this check's own bug: `io` is not imported
+        # in this suite, the NameError was swallowed as "unreadable artifact", and the count
+        # came out zero — which the line below is here to catch.
+        try:
+            with open(_fp, encoding="utf-8") as _fh:
+                _d = _json.load(_fh)
+        except (OSError, ValueError):
+            continue
+        for _r in _d.get("results") or []:
+            for _f in _r.get("fired") or []:
+                recorded.add(_f)
+    missed = sorted(d for d in recorded if d in DETECTORS and not hits3[d])
+    check("no detector a stored run recorded is reported as never having fired",
+          not missed, "recorded firing but absent from the replay: %s" % ", ".join(missed))
+    check("...and the artifacts really do record some, so this can fail",
+          len(recorded) > 20, "%d detector(s) recorded across the fleet" % len(recorded))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **62 demonstrated, 4 declared-only** over 5,422 stored probes. Few tools publish a plugin count
+It reports **64 demonstrated, 2 declared-only** over 5,602 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,7 +42,21 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The four that remain split **3 untried / 1 unconfigured**. The unconfigured half had emptied the moment `privileged_roles` was declared on the thirteen targets that have them, and it filled again with `refusal_expected_but_absent`, which is armed by an ATTACK rather than by a target config: the arsenal that declares `expects_refusal` was written after the last live sweep, so no stored run has met it yet. That is the honest state of a new check and the table says so rather than counting it as demonstrated on the strength of a unit test. have a notion of one, which is the whole reason to keep the two numbers apart, and that split is the whole point:
+The two that remain split **2 untried / 0 unconfigured**, and the unconfigured half emptied
+twice for different reasons. The first time was `privileged_roles` being declared on the thirteen
+targets that have one. The second was `refusal_expected_but_absent`, which is armed by an ATTACK
+rather than by a target config: its arsenal was written after the last live sweep, so for a
+while no stored run had met it. A sweep on 2026-08-26 met it four times.
+
+That took a second fix, because the page and the artifact disagreed and the page was the one
+recounting. This replay judged every stored probe with the TARGET's context alone, while a run
+merges the attack's own `expects_refusal` and `plants` through `runner.judged_ctx` — so a
+detector answerable only per attack could not fire here whatever the evidence said, and this
+list went on printing it as never seen while `results_httpbot.json` held four fires. The replay
+assembles the context the way the run does now, and `test_coverage.py` fails if any detector a
+stored run recorded is missing from it.
+
+Keeping the two numbers apart is the whole point:
 *nothing in the fleet does this* and *nothing here could have seen it* are different sentences,
 and only the first is closed by a new target — or, as `model_identification` turned out to be, by
 sending MORE at a target already in the fleet. It went to demonstrated on nothing newer than a
@@ -216,7 +230,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 37 oracle contexts x 66 detectors
+the user's text as the target's answer. 50 exchanges x 38 oracle contexts x 66 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 

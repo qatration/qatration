@@ -28,6 +28,7 @@ except Exception:
 
 import yaml
 from target import Probe, target_configs
+from runner import judged_ctx   # one definition of "what did this attack declare"
 from oracle import DETECTORS, inert_for
 from target import engine_version
 from rejudge import _prompt_of
@@ -125,12 +126,21 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None):
                 # file, and here it inflates the headline number this tool exists to
                 # publish. Prefer what was actually stored, reconstruct only for the older
                 # files that predate it.
+                # THE ATTACK'S OWN CONTEXT, THE WAY THE RUN ASSEMBLED IT. Some detectors are
+                # answerable only per attack: `expects_refusal` and `plants` live in the
+                # arsenal entry, not in the target config, and `runner.judged_ctx` merges them
+                # for one attack at a time. This replay used the target context alone, so
+                # those detectors could not fire here no matter what the evidence said —
+                # `refusal_expected_but_absent` fired four times in results_httpbot.json and
+                # this page went on printing it under "never yet seen to fire". Two of our own
+                # outputs contradicting each other, and the one that recounts was wrong.
                 scan(Probe(prompt=_prompt_of(r["attack"], pd.get("prompt")),
                            output=pd.get("output") or "",
                            tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
                            observations=pd.get("observations") or [],
                            turns=pd.get("turns") or [], error=pd.get("error"),
-                           seconds=pd.get("seconds") or 0), ctx, tgt)
+                           seconds=pd.get("seconds") or 0),
+                     judged_ctx(r.get("attack") or {}, ctx), tgt)
         note_engine(d, os.path.basename(fp), n - before)
 
     # THE BENIGN CORPUS WAS NOT READ AT ALL, and it is the larger body of evidence: 1,392

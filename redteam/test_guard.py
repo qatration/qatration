@@ -107,7 +107,12 @@ def main():
         ("a SendGrid key", "x.env", "SG." + "c" * 20),
         ("an npm token", "x.npmrc", "_authToken=npm_" + "d" * 30),
         ("a Stripe live key", "x.py", "sk_live_" + "e" * 16),
-        ("a JWT", "site/x.js", "t='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig'"),
+        # A WHOLE ONE. The signature used to be the three letters `sig`, and the pattern used
+        # to stop at the second dot and never look -- so this fixture agreed with a pattern
+        # that fired on the practice bot's hand-typed fake. A real HS256 signature is 43
+        # base64url characters and this is built, not written out, like every other sample here.
+        ("a JWT", "site/x.js",
+         "t='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "s" * 43 + "'"),
         ("an OpenSSH private key header", "x.pem", "-----BEGIN OPENSSH PRIVATE KEY-----"),
         ("a Cyrillic character in source", "redteam/x.py", "# \u0416\u0429\u04ae\u0424"),
     ]
