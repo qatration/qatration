@@ -224,6 +224,8 @@ qatration/
     compare_targets.py# attacks x targets, plus a guard-on/guard-off per-attack diff
     defense_report.py # breaches -> prioritised remediation, grouped by root cause
     baseline.py       # is a breach ATTRIBUTABLE? the benign rate beside the number
+    stats.py          # two proportions and whether the gap between them is worth a
+                      #   sentence — Fisher, because the counts are small
     init_config.py    # the starting config, so the first command is not homework
     mint.py           # a canary that is yours alone; a published one proves nothing
     signing.py        # SigV4, so Bedrock is reachable at all — pinned to AWS's own

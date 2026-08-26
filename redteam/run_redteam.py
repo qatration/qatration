@@ -797,6 +797,19 @@ def main():
         print()
         print(attribution_note)
 
+    # AND THE SHARPER VERSION OF THE SAME QUESTION, for a target whose payload arrives by
+    # retrieval. Attribution asks whether the target does this anyway; this asks whether the
+    # ATTACK did anything once the payload was in front of the model. Against a third-party RAG
+    # app the answer was no -- 83% effect against an 85% background -- while the headline count
+    # read as a win. Silent unless the config says what a delivered payload looks like, since
+    # nothing else can tell retrieval from a prompt that carried its own payload.
+    from baseline import two_factor_note as _two_factor_note
+    delivery_note = _two_factor_note(target.name, results, ctx,
+                                     caps=getattr(target, "capabilities", ()))
+    if delivery_note:
+        print()
+        print(delivery_note)
+
     # EVERY TRIAL ERRORED = NOTHING WAS MEASURED, and the file on disk is the record of a run
     # that did. Guarded here for the same reason the empty-arsenal case is guarded one screen
     # up: a well-formed results file full of ERROR rows is not a smaller finding, it is the
