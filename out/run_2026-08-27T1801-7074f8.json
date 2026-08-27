@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-27T1801-7074f8",
+  "state": "aborted",
+  "target": "guardedrag-mitigated",
+  "scope": "full",
+  "engine": "286ae80+dirty",
+  "arsenal": "attacks_guardlift.yaml",
+  "trials": 2,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-27 18:01:19",
+  "finished_at": "2026-08-27 18:01:19",
+  "spent": {},
+  "note": "no attack in this arsenal applies to guardedrag-mitigated; nothing was sent and nothing was written"
+}

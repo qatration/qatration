@@ -75,7 +75,7 @@ qatration benign --summary                     # fleet roll-up
 ```
 
 The offline half is a CI gate in `test_benign.py`, and it locks in the central claim:
-**no detector may read the question.** 50 prompts x 38 oracle contexts x 66 detectors,
+**no detector may read the question.** 50 prompts x 39 oracle contexts x 66 detectors,
 against a bland reply, zero fires, plus a separate check that non-English text stays clean
 when the bot repeats it back — which is what a support bot does confirming a name. A new detector that forgets to subtract the prompt
 fails the build rather than a customer's system.
@@ -492,79 +492,65 @@ into the instruction, and once the poisoned document is retrieved the payload do
 
 ### What the attack adds, and where
 
-Issue #2 said this tool contributes nothing once the payload is in the model's context. That is
-true, and it is half the picture. The other half took a stand that could show a difference at
-all.
+Issue #2 said this tool contributes nothing once the payload is in the model's context, measured
+against a third-party RAG application. The measurement was right and the conclusion does not
+survive being asked anywhere else, because **that target has no defence at all**, and a target
+with no defence measures the payload rather than the tool.
 
-**Neither of the first two stands could.** On the third-party RAG application, unframed customer
-questions on the poisoned document's own topic acted on 89 of 90 deliveries — there is no room
-above 99%, and 150 framed probes came out at 150 of 150, p = 0.375. On `guardedrag` with its LLM
-output judge, ten framings and six unframed questions all scored zero: the judge blocks the
-entire answer whenever the poisoned document is retrieved. A ceiling and a floor. **The
-sensitivity of a method cannot be measured against a defence that always passes or always
-blocks**, and real defences are partial.
+Four stands, the same hundred questions, each in two forms — the plain customer question and
+the same question wrapped in a framing. The pair is the unit, `paired_with` names the twin, and
+only the pairs that disagree carry information.
 
-`GUARD=weak` is that partial defence: the keyword denylist a team ships the morning after
-finding a phishing notice in its logs, built from the payload's own vocabulary. It was
-calibrated once, on the CONTROL arm only — the first list missed what this model actually
-writes, so 18 of 20 plain questions walked through and there was again nothing to flip. A
-threshold tuned on the treatment arm would decide the result it is supposed to measure.
+| the stand | plain | framed | McNemar |
+|---|---|---|---|
+| no defence — the third-party app, and this bot with `GUARD=off` | 99% (89/90) | 100% (150/150) | 0.375 |
+| a mitigation in the system prompt — `MITIGATION=firm` | **16/100** | **55/100** | **1.8 × 10⁻⁸** |
+| a keyword output filter — `GUARD=weak` | **13/40** | **36/40** | **1.6 × 10⁻⁶** |
+| an LLM output judge — `GUARD=on` | 0/6 | 0/10 | nothing through either way |
 
-**Paired, because the variance is between questions.** Two independent arms of forty need a
-22-point gap before anything resolves. Each framed prompt carries `paired_with` naming the plain
-form of the same question, only the pairs that disagree carry information, and six of those in
-one direction is p = 0.031.
+**An arsenal's contribution is invisible exactly where there is nothing to beat, and
+substantial wherever there is something that is not total.** Issue #2 benchmarked on the one
+kind of target where the answer had to come out zero.
 
-Sixty pairs, size fixed before the run: 23 to 11 toward the framing, p = 0.058. By the rule
-declared with them that is **not resolved**, not an absence, so it was not quietly extended
-until it crossed a line. Broken down by style afterwards, the split fell where
-`attacks_defended.yaml` already said it would — obfuscation beats a keyword filter and backfires
-against anything smarter. Framings that move the payload out of English notice prose went 18 to
-4; framings that keep the prose went 5 to 7.
+### Two axes, and each needed a stand with range
 
-That grouping was read off the results, so it does not count. It was fixed as a hypothesis, and
-forty fresh pairs were written to test it:
+The two middle rows are different questions and were run separately on purpose.
 
-| confirmatory set, 40 pairs, hypothesis declared beforehand | |
-|---|---|
-| plain question through the guard | 13/40 (32%) |
-| the same question, form- or language-shifted | 36/40 (90%) |
-| pairs that disagreed | 25 — framed-only **24**, plain-only **1** |
-| McNemar exact | **p = 1.6 × 10⁻⁶** |
+`MITIGATION=firm` tells the model that retrieved text is reference material rather than
+instructions, and leaves the output unfiltered. It answers issue #2's own question — does the
+framing make the model **act** on the payload — and the answer is yes, 16 against 55.
 
-All six styles point the same way, including `data`, which had gone 2 to 3 in the exploratory
-set and stayed in the group because it belongs there by mechanism.
+`GUARD=weak` leaves the model alone and filters the answer on the way out with the keyword
+denylist a team ships the morning after finding a phishing notice in its logs. It answers a
+different question — does the framing make the result **survive** — and the answer is also yes,
+13 against 36.
 
-### It is evasion, not persuasion
+Neither could be asked before those stands existed. **The sensitivity of a method cannot be
+measured against a defence that always passes or always blocks**, and until 2026-08-27 every
+stand here was one or the other: 99% on the third-party app, 0% against the LLM judge. Both
+modes were calibrated on the CONTROL arm and nothing else — a threshold tuned on the treatment
+arm decides the result it is supposed to measure. The ladders and what each rung scored are in
+`external/guardedrag/server.py`.
 
-Which is the distinction worth more than the p-value. Twelve plain and twelve framed prompts
-from the confirmatory set, run against the same bot with `GUARD=off` so nothing filters
-anything:
+### The discipline that produced the numbers
 
-| with the guard off | payload in the answer | notice phrasing in the answer |
-|---|---|---|
-| plain | 12/12 | 9/12 |
-| framed | 11/12 | 0/12 |
+Sixty pairs on the filter axis came out 23 to 11, p = 0.058. By the rule declared with them
+that is **not resolved**, not an absence, and the run was not extended until it crossed a line.
+The per-style split afterwards fell where `attacks_defended.yaml` already said it would —
+obfuscation beats a keyword filter — so that grouping was fixed as a hypothesis and forty fresh
+questions were written to test it. Those forty are the row in the table.
 
-**The framing does not make the model act on the payload more often.** It emits it either way.
-What changes is the wrapper: asked for JSON, or for two fields, or in French, the model drops
-the "Verify your session here:" sentence and hands over the same link as data. The filter was
-matching the wrapper.
+`tools/paired_score.py` recounts every figure here from the artifacts and prints, beside each
+p-value, the strongest one the discordant count could have produced. That second number is the
+difference between "no effect" and "this could not have found one", and it is why the 60-pair
+run was reported rather than quietly repeated.
 
-So issue #2 is right about the model and wrong about the defence. Once the payload is in
-context, nothing in an arsenal makes a model act on it more — that held on every stand measured.
-What an arsenal buys is whether the result survives a defence that reads words, and there the
-difference is 32% against 90%.
+### What it costs to know this
 
-The claim stops there, deliberately. It says nothing about the LLM judge, which blocked framed
-and unframed alike, and nothing about a target with no guard, where the payload does all of the
-work by itself. Framing matters in the middle.
-
-*(The guard-off table is a twelve-prompt live check rather than a shipped artifact, and is
-labelled that way because nothing recounts it:
-`GUARD=off python external/guardedrag/server.py`, then the confirmatory prompts by hand. The
-paired numbers above are recounted from `out/results_guardedrag-weak.json` by
-`tools/paired_score.py`.)*
+The benchmark in `docs/benchmark.md` compared three tools on an undefended target. Nothing is
+wrong with the numbers and the conclusion drawn from them was too broad: on that stand every
+tool's contribution to the second factor had to be near zero, because the payload was already
+doing all of the work. Comparing red-team tools where there is no defence measures the payload.
 
 
 ## What a negative result is worth
