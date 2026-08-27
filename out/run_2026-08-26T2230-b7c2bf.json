@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-26T2230-b7c2bf",
+  "state": "finished",
+  "target": "httpbot",
+  "scope": "full",
+  "engine": "8637ea4+dirty",
+  "arsenal": "attacks_generic.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-26 22:30:30",
+  "finished_at": "2026-08-27 00:45:58",
+  "spent": {},
+  "note": null
+}

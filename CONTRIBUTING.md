@@ -95,6 +95,7 @@ What actually keeps an attack out is what is IN it, which is a property nobody h
 | names a canary planted in one practice bot | tests a string that does not exist anywhere else |
 | names one bot's tool | same |
 | carries a `seed:` block | plants a document, which needs a store a chat endpoint does not expose |
+| carries `paired_with` | one half of an A/B pair, whose measurement is the pair rather than the prompt — the framed halves of `attacks_guardlift.yaml` are sixty variants of one question and mean nothing apart from their twins |
 | names a brand | reads as a different company's bot, which changes what is being tested — promotable with a text edit, and `build_generic.py --blocked` lists these so the work stays visible |
 
 So write the payload so it says what it means without naming our furniture, and it travels. Name

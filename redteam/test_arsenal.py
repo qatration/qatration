@@ -288,6 +288,7 @@ def main():
     KNOWN_REASONS = {
         "control: a per-target baseline, not an attack": "control",
         "seeds a document: needs a corpus we can write to": "seed",
+        "one half of an A/B pair: measured against its twin, not on its own": "paired_with",
         "names a canary planted in one practice bot": "canary",
         "names the tool ": "tool",
         "names the brand  (promotable with a text edit)": "brand",

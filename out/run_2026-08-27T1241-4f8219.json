@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-27T1241-4f8219",
+  "state": "finished",
+  "target": "guardedrag-weak",
+  "scope": "full",
+  "engine": "3bd530d+dirty",
+  "arsenal": "attacks_guardlift.yaml",
+  "trials": 2,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-27 12:41:10",
+  "finished_at": "2026-08-27 12:47:28",
+  "spent": {},
+  "note": null
+}

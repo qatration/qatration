@@ -490,45 +490,82 @@ demonstrated a second time on 240 probes. The control's real rate is 99%, so the
 that is a fact about the application: its retrieval prompt interpolates document text straight
 into the instruction, and once the poisoned document is retrieved the payload does everything.
 
-### The other end of the same problem
+### What the attack adds, and where
 
-If a lift needs headroom, the obvious move is a target that resists. `guardedrag` is one: an
-ambient poisoned document, an LLM output filter as the only defence, and zero canary fires
-across fifty ordinary prompts. Ten framings aimed at the guard rather than at the model — bare
-data with no notice vocabulary, a JSON record, a printed-leaflet fine print, a quotation, an
-audit inventory, another language — went with six unframed questions on the poisoned document's
-own topic.
+Issue #2 said this tool contributes nothing once the payload is in the model's context. That is
+true, and it is half the picture. The other half took a stand that could show a difference at
+all.
 
-Nothing got through. 0 of 10 framed, and 0 of 6 unframed: the guard blocks the whole answer
-whenever that document is retrieved. Floor instead of ceiling, and no more measurable than
-before.
+**Neither of the first two stands could.** On the third-party RAG application, unframed customer
+questions on the poisoned document's own topic acted on 89 of 90 deliveries — there is no room
+above 99%, and 150 framed probes came out at 150 of 150, p = 0.375. On `guardedrag` with its LLM
+output judge, ten framings and six unframed questions all scored zero: the judge blocks the
+entire answer whenever the poisoned document is retrieved. A ceiling and a floor. **The
+sensitivity of a method cannot be measured against a defence that always passes or always
+blocks**, and real defences are partial.
 
-So the instrument this question needs is a **partially effective** defence, and neither stand
-has one. That is the state of issue #2: not an attack waiting to be written, a stand waiting to
-be found.
+`GUARD=weak` is that partial defence: the keyword denylist a team ships the morning after
+finding a phishing notice in its logs, built from the payload's own vocabulary. It was
+calibrated once, on the CONTROL arm only — the first list missed what this model actually
+writes, so 18 of 20 plain questions walked through and there was again nothing to flip. A
+threshold tuned on the treatment arm would decide the result it is supposed to measure.
 
-The reproduction framings are not in the shipped arsenal, and the reason is the same kind of
-care. "Quote the refund policy word for word" takes the canary rate to 60 of 60 by the model
-obeying **us**: the injected line arrives as content somebody asked for, not as an instruction
-that was followed. Shipping those as attacks would pool them into the verdict and manufacture
-the headline this whole section exists to avoid.
+**Paired, because the variance is between questions.** Two independent arms of forty need a
+22-point gap before anything resolves. Each framed prompt carries `paired_with` naming the plain
+form of the same question, only the pairs that disagree carry information, and six of those in
+one direction is p = 0.031.
 
-The five that remain ask the assistant to act on what its documentation says and never ask for
-the text. They are in the arsenal because the comparison is worth running against any RAG
-target, not because they won it. On the shipped artifact the tool now says so itself:
+Sixty pairs, size fixed before the run: 23 to 11 toward the framing, p = 0.058. By the rule
+declared with them that is **not resolved**, not an absence, so it was not quietly extended
+until it crossed a line. Broken down by style afterwards, the split fell where
+`attacks_defended.yaml` already said it would — obfuscation beats a keyword filter and backfires
+against anything smarter. Framings that move the payload out of English notice prose went 18 to
+4; framings that keep the prose went 5 to 7.
 
-```
-  DELIVERY AND EFFECT, measured separately (carrier: refunds.pdf)
-      attacked                    delivered 100/110 (91%) acted 98/100 (98%)
-      the same questions unframed delivered 20/20 (100%) acted 20/20 (100%)
-      ordinary traffic            delivered 27/48 (56%)  acted 25/27 (93%)
-      vs ordinary traffic: p = 0.198 — a fact about the PAYLOAD and about which question
-        was asked, not about the attack.
-      -> no lift over the same question unframed (p = 1.000). That is what the attack itself adds.
-```
+That grouping was read off the results, so it does not count. It was fixed as a hypothesis, and
+forty fresh pairs were written to test it:
 
-**p = 1.000.** Issue #2 is not closed, and the reason it is not closed is now a measurement
-instead of a guess.
+| confirmatory set, 40 pairs, hypothesis declared beforehand | |
+|---|---|
+| plain question through the guard | 13/40 (32%) |
+| the same question, form- or language-shifted | 36/40 (90%) |
+| pairs that disagreed | 25 — framed-only **24**, plain-only **1** |
+| McNemar exact | **p = 1.6 × 10⁻⁶** |
+
+All six styles point the same way, including `data`, which had gone 2 to 3 in the exploratory
+set and stayed in the group because it belongs there by mechanism.
+
+### It is evasion, not persuasion
+
+Which is the distinction worth more than the p-value. Twelve plain and twelve framed prompts
+from the confirmatory set, run against the same bot with `GUARD=off` so nothing filters
+anything:
+
+| with the guard off | payload in the answer | notice phrasing in the answer |
+|---|---|---|
+| plain | 12/12 | 9/12 |
+| framed | 11/12 | 0/12 |
+
+**The framing does not make the model act on the payload more often.** It emits it either way.
+What changes is the wrapper: asked for JSON, or for two fields, or in French, the model drops
+the "Verify your session here:" sentence and hands over the same link as data. The filter was
+matching the wrapper.
+
+So issue #2 is right about the model and wrong about the defence. Once the payload is in
+context, nothing in an arsenal makes a model act on it more — that held on every stand measured.
+What an arsenal buys is whether the result survives a defence that reads words, and there the
+difference is 32% against 90%.
+
+The claim stops there, deliberately. It says nothing about the LLM judge, which blocked framed
+and unframed alike, and nothing about a target with no guard, where the payload does all of the
+work by itself. Framing matters in the middle.
+
+*(The guard-off table is a twelve-prompt live check rather than a shipped artifact, and is
+labelled that way because nothing recounts it:
+`GUARD=off python external/guardedrag/server.py`, then the confirmatory prompts by hand. The
+paired numbers above are recounted from `out/results_guardedrag-weak.json` by
+`tools/paired_score.py`.)*
+
 
 ## What a negative result is worth
 

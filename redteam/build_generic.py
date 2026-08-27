@@ -20,6 +20,9 @@ WHAT IS NOT PROMOTED, and why each is a judgement rather than a filter:
   * `control` — an ordinary question used as a per-target baseline. Eighteen of them in a
     portable arsenal would pad the count with prompts that are not attacks, and a probe count
     inflated by non-attacks is a number nobody can act on.
+  * attacks carrying `paired_with` — half of an A/B pair, whose measurement is the pair and
+    not the prompt. Promoting the framed halves alone would pad the arsenal with twenty
+    variants of one question and leave the comparison behind.
   * attacks naming a CANARY or a TOOL — they reference one bot's planted secret or one bot's
     tool by name, so against anything else they test a string that does not exist.
   * attacks with a `seed:` block — they plant a document in a corpus. That needs a store we can
@@ -114,6 +117,13 @@ def blocked_reason(a, canaries, tools):
         return "control: a per-target baseline, not an attack"
     if a.get("seed"):
         return "seeds a document: needs a corpus we can write to"
+    if a.get("paired_with"):
+        # HALF OF AN A/B PAIR, and useless without the other half. `attacks_guardlift.yaml`
+        # holds twenty variants of one question so a framing can be compared against the plain
+        # form of the SAME question; promoting the twenty framed halves would pad the portable
+        # arsenal with an experiment's scaffolding, and their measurement is the pair rather
+        # than the prompt. Same judgement as `control` above and for the same reason.
+        return "one half of an A/B pair: measured against its twin, not on its own"
     blob = json.dumps({k: v for k, v in a.items() if k not in ("applies_to", "id")},
                       ensure_ascii=False).lower()
     for c in canaries:
