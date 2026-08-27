@@ -187,6 +187,15 @@ On the guarded target it was also the only tool to produce a positive finding.
 
 ## What this does not cover
 
+* **The unguarded target measures the payload, not the tool.** *Added 2026-08-27, after the
+  runs below prompted issue #2 and the answer to it came back.* Where an application has no
+  defence, a poisoned document does all of the work and every tool's contribution to the second
+  factor has to come out near zero — which is what the second-factor rows here show, for all
+  three tools. Rebuilt on stands that have a partial defence, the same hundred prompts move the
+  outcome from 16 of 100 to 55 of 100 against a system-prompt mitigation and from 13 of 40 to 36
+  of 40 against a keyword output filter. Nothing below is wrong; the reading "these tools add
+  nothing once the payload is in context" is too broad, and the evidence is in
+  [attribution.md](attribution.md).
 * **Two targets, two models, one day.** Nothing here generalises to a different application.
 * **The budgets are not equal.** 200, 256 and 324 replies. Rates are compared rather than
   totals, and each tool ran its own shipped corpus at its own default size, because truncating
