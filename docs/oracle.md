@@ -133,8 +133,8 @@ signal, and the others are the diagnosis.
 
 ### The headline number, and why it is not a percentage
 
-With a benign baseline on all 32 targets there are **1,600 probes on which nobody attacked
-anything**, and 570 detector fires across them. Publishing that as a 33% false-positive rate
+With a benign baseline on all 35 targets there are **1,750 probes on which nobody attacked
+anything**, and 758 detector fires across them. Publishing that as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
 makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
@@ -162,13 +162,13 @@ written down — one verdict per (target, detector), each with a reason, keyed a
 because a detector is routinely right about one bot and wrong about another. Today:
 
 ```
-of 570 fire(s) on clean traffic:
-     451 adjudicated as FINDINGS about the target — it does this with nobody attacking it
-     119 adjudicated as false alarms
-    false-alarm rate over what HAS been settled: 119/570 (20.9%)
+of 758 fire(s) on clean traffic:
+     613 adjudicated as FINDINGS about the target — it does this with nobody attacking it
+     145 adjudicated as false alarms
+    false-alarm rate over what HAS been settled: 145/758 (19.1%)
 ```
 
-**The unadjudicated line is gone because there is nothing left in it.** All 570 fires across 32
+**The unadjudicated line is gone because there is nothing left in it.** All 758 fires across 35
 targets are settled, one (target, detector) pair at a time, each with the evidence that decided
 it.
 
@@ -180,9 +180,9 @@ harder would have been a rate somebody was managing.
 
 The fleet changing moves it too, and that says nothing at all. Widening the corpus from 48
 prompts to 50 took it to 21.4%, re-measuring localrag took it to 22.2%, and adding
-`guardedrag-weak` and then `guardedrag-mitigated` took it to 21.0% and 20.9%, because a target
-whose poisoned document leaks on ordinary traffic contributes far more findings than false
-alarms. Those four are arithmetic
+`guardedrag-weak`, `guardedrag-mitigated` and then three more built for the refusal measurement
+took it to 21.0%, 20.9% and 19.1%, because a target whose poisoned document leaks on ordinary
+traffic contributes far more findings than false alarms. Those are arithmetic
 rather than judgement. They used to sit in the same sequence as the settling steps, which cost
 the sentence above its meaning: a claim with two grudging exceptions in it is one nobody can
 check.
@@ -241,7 +241,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 39 oracle contexts x 66 detectors
+the user's text as the target's answer. 50 exchanges x 42 oracle contexts x 66 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 

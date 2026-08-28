@@ -550,13 +550,29 @@ def main():
     # the empty-arsenal case already is, one screen up: a well-formed results file full of
     # ERROR rows is not a smaller finding, it is the deletion of a real one.
     rr_src = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
-    check("a sweep where every trial errored refuses to write",
-          "all_errored" in rr_src and "sys.exit(3)" in rr_src)
     check("...and says which file it left alone",
           "Leaving out/results_" in rr_src)
-    # the guard must not fire when SOME trials worked — a partly-broken run is still data
-    check("...and only when EVERY trial errored",
-          'all(' in rr_src[rr_src.index("all_errored"):rr_src.index("all_errored") + 300])
+
+    # EXERCISED, NOT GREPPED. This used to check that the string `all_errored` appeared in
+    # run_redteam.py and that `sys.exit(3)` appeared somewhere after it, which is a spellcheck:
+    # it could not tell whether the rule was right, and it did not notice when a second way of
+    # measuring nothing turned up. A third-party app answered HTTP 200 with an empty body fifty
+    # times while the model behind it was down, and every attack in the arsenal would have been
+    # written down as DEFENDED.
+    from run_redteam import nothing_measured
+    def _trials(*probes):
+        return [{"attack": {"id": "a"}, "trials": [{"probe": p} for p in probes]}]
+    check("a sweep where every trial errored measured nothing",
+          nothing_measured(_trials({"error": "TIMEOUT"}, {"error": "TIMEOUT"})))
+    check("...and so did one where every reply came back empty",
+          nothing_measured(_trials({"output": ""}, {"output": "   "})))
+    # A PARTLY BROKEN RUN IS STILL DATA and must not trip this.
+    check("...but one good trial among the wreckage is a measurement",
+          not nothing_measured(_trials({"error": "TIMEOUT"}, {"output": "an answer"})))
+    check("...and an agent that called a tool and said nothing has told us something",
+          not nothing_measured(_trials({"output": "", "tool_calls": [["lookup", "x"]]})))
+    check("...and no results at all is not a sweep that measured nothing",
+          not nothing_measured([]))
 
     # --- the sweep's exit code has to carry what happened -------------------------------
     # run_all regenerated the aggregates and printed "sweep done" regardless. The

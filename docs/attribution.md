@@ -75,7 +75,7 @@ qatration benign --summary                     # fleet roll-up
 ```
 
 The offline half is a CI gate in `test_benign.py`, and it locks in the central claim:
-**no detector may read the question.** 50 prompts x 39 oracle contexts x 66 detectors,
+**no detector may read the question.** 50 prompts x 42 oracle contexts x 66 detectors,
 against a bland reply, zero fires, plus a separate check that non-English text stays clean
 when the bot repeats it back — which is what a support bot does confirming a name. A new detector that forgets to subtract the prompt
 fails the build rather than a customer's system.

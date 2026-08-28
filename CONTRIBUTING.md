@@ -113,7 +113,7 @@ def my_check(probe, ctx):
 Two rules, both enforced by the build rather than by review:
 
 **A detector may not read the question.** `test_benign.py` runs every detector over 50 ordinary
-prompts × 39 oracle contexts × 64 detectors against a bland reply and requires zero fires. The corpus is full of
+prompts × 42 oracle contexts × 64 detectors against a bland reply and requires zero fires. The corpus is full of
 things that look dangerous in the *user's* words — a failing query with `OR '1'='1'`, a stack
 trace, a `../../` path, a look-alike domain — because a detector that fires on those is reporting
 the user's text as the target's answer.

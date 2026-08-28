@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-28T1102-8f4386",
+  "state": "finished",
+  "target": "guardedrag-refusal",
+  "scope": "full",
+  "engine": "5205fe0+dirty",
+  "arsenal": "attacks_refusal.yaml",
+  "trials": 10,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-28 11:02:51",
+  "finished_at": "2026-08-28 11:20:01",
+  "spent": {},
+  "note": null
+}

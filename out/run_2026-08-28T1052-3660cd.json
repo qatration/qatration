@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-28T1052-3660cd",
+  "state": "finished",
+  "target": "localrag-refusal",
+  "scope": "full",
+  "engine": "5205fe0+dirty",
+  "arsenal": "attacks_refusal.yaml",
+  "trials": 10,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-28 10:52:20",
+  "finished_at": "2026-08-28 10:57:06",
+  "spent": {},
+  "note": null
+}

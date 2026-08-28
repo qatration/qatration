@@ -28,7 +28,8 @@ sys.path.insert(0, HERE)
 import yaml
 from target import Probe, payload, target_configs
 from oracle import DETECTORS
-from benign import CORPUS, SECURITY_TALK, CONVERSATIONS, fires_on, summary, excerpt
+from benign import (CORPUS, SECURITY_TALK, CONVERSATIONS, fires_on, summary,
+                    excerpt, run as benign_run)
 from workspace import OUT as ARTIFACTS   # one place decides where evidence lives
 
 # Every prompt the gate has to clear: the single sends, plus each conversation flattened
@@ -156,16 +157,56 @@ def main():
             {"fired": [], "refused": False},
             {"fired": [], "error": "TIMEOUT"},
             # a conversation the target cannot hold: neither clean nor a finding
-            {"fired": [], "skipped": "needs chain"}]
+            {"fired": [], "skipped": "needs chain"},
+            # AND A TARGET THAT ANSWERED WITH NOTHING AT ALL, which is neither. A live app
+            # returned HTTP 200 and an empty body for fifty consecutive probes while the model
+            # behind it was down, and this summary called 48 of them clean. Silence is the
+            # strongest claim a baseline can make about a target and it was being made by
+            # measuring nothing, so it has its own line and its own row here.
+            {"fired": [], "silent": True}]
     s = summary(rows)
     check("over_refusal is a usability finding, not a false alarm",
           "over_refusal" not in s["per_detector"] and s["refused"] == 1,
           str(s))
     check("clean means the target simply answered: refusal is not clean",
           s["clean"] == 1, str(s))
-    check("clean + refused + noisy + skipped + errors accounts for every probe",
+    check("clean + refused + noisy + skipped + errors + silent accounts for every probe",
           s["clean"] + s["refused"] + sum(s["per_detector"].values()) + s["skipped"]
-          + s["errors"] == s["probes"], str(s))
+          + s["errors"] + s["silent"] == s["probes"], str(s))
+    check("an empty reply is counted as silence and not as clean",
+          s["silent"] == 1 and s["clean"] == 1, str(s))
+
+    # --- and the two halves of that, which a hand-set fixture flag cannot reach -----------
+    #
+    # Both were written and both survived being mutated away, because the rows above set
+    # `silent` by hand: neither `Probe.silent` nor the line that records it was ever executed.
+    # A fixture that states the answer is not a test of the thing that computes it.
+    check("a probe with nothing in it is silent",
+          Probe(prompt="q", output="").silent())
+    check("...and whitespace is nothing",
+          Probe(prompt="q", output=" " + chr(10) + chr(9) + " ").silent())
+    check("...but an answer is not", not Probe(prompt="q", output="hello").silent())
+    # AN AGENT THAT CALLED A TOOL AND SAID NOTHING HAS TOLD US A GREAT DEAL, so these count.
+    check("...and neither is a tool call with no prose",
+          not Probe(prompt="q", output="", tool_calls=[("lookup", "x")]).silent())
+    check("...nor an observation with no prose",
+          not Probe(prompt="q", output="", observations=["retrieved: refunds"]).silent())
+
+    class _Mute:
+        """A target that answers 200 with an empty body, which is what started this."""
+        name = "mute"
+        capabilities = set()
+
+        def send(self, prompt):
+            return Probe(prompt=prompt, output="")
+
+        def reset(self):
+            pass
+
+    _rows = benign_run(_Mute(), {}, corpus=CORPUS[:3], trials=1, echo=False)
+    _s = summary(_rows)
+    check("a target that answers with nothing produces silent rows, not clean ones",
+          _s["silent"] == len(_rows) and _s["clean"] == 0, str(_s))
     check("a skipped conversation is neither clean nor a finding",
           s["skipped"] == 1 and s["clean"] == 1, str(s))
     check("errors are counted, never silently dropped", s["errors"] == 1, str(s))

@@ -395,6 +395,12 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
             noisy = [f for f in fired if f != "over_refusal"]
             rows.append({"id": cid, "provokes": provokes, "prompt": text,
                          "fired": fired, "refused": "over_refusal" in fired,
+                         # RECORDED HERE, WHERE THE PROBE IS, rather than inferred later from
+                         # a missing field. The first version of this asked `summary()` to spot
+                         # silence by looking for absent text, which cannot tell a target that
+                         # said nothing from a row that does not store what it said -- the same
+                         # mistake one level down, absence of evidence read as evidence.
+                         "silent": probe.silent(),
                          # THE PROBE, not a summary of it. Storing an excerpt meant a
                          # benign run could not be re-judged, so every oracle fix cost a
                          # full model re-run of ten to twenty minutes
@@ -439,14 +445,22 @@ def summary(rows):
     # no error. Counting a refusal as clean made the headline line non-additive, so
     # `clean + refused + noisy + errors` could exceed the number of probes and the reader
     # had no way to see it.
+    # AN EMPTY REPLY IS NOT A CLEAN ONE, and this line counted it as one. A third-party RAG
+    # app answered HTTP 200 with an empty body for fifty consecutive probes while the model
+    # behind it was down: no error was raised because none occurred, nothing fired because there
+    # was nothing to fire on, and this reported `48 clean`. A baseline of silence then becomes
+    # the background every attribution is measured against.
+    silent = sum(1 for r in rows
+                 if r.get("silent") and not r.get("error") and not r.get("skipped"))
     clean = sum(1 for r in rows
-                if not r.get("fired") and not r.get("error") and not r.get("skipped"))
+                if not r.get("fired") and not r.get("error") and not r.get("skipped")
+                and not r.get("silent"))
     # `probes` IS THE ROW COUNT, NOT THE SENT COUNT -- it includes the rows recorded
     # under `skipped`, which were never sent. Three modules used it as the denominator
     # for a noise rate and got a number 4% low on five shipped artifacts. Anything
     # dividing by "how much benign traffic did we actually see" must ask
     # `baseline.rates`, which counts the rows that carry a probe.
-    return {"probes": len(rows), "clean": clean,
+    return {"probes": len(rows), "clean": clean, "silent": silent,
             "skipped": sum(1 for r in rows if r.get("skipped")),
             "refused": sum(1 for r in rows if r.get("refused")),
             "errors": sum(1 for r in rows if r.get("error")),
@@ -822,7 +836,8 @@ def main():
     rows = run(target, ctx, conversations=CONVERSATIONS, trials=args.trials)
     s = summary(rows)
     print(f"\n{s['clean']}/{s['probes']} clean · {s['refused']} refused · "
-          f"{s['skipped']} skipped · {s['errors']} errors")
+          f"{s['skipped']} skipped · {s['errors']} errors"
+          + (f" · {s['silent']} came back EMPTY" if s.get('silent') else ""))
     for d, n in s["per_detector"].items():
         print(f"    {d:<26}{n}")
     # NOTHING MEASURED IS NOT A CLEAN BASELINE. The sweep already refuses to write when every
@@ -835,8 +850,18 @@ def main():
     #
     # Exit 3, the same code the sweep uses for the same sentence, so a worker can tell the two
     # halves of a run apart without parsing prose.
-    if s["errors"] and s["errors"] >= s["probes"] - s["skipped"]:
-        print(f"\nNOTHING MEASURED — every probe errored (is {args.target} up?). "
+    # AND SILENCE ARRIVES THROUGH A THIRD DOOR, which this condition did not cover. A
+    # third-party RAG app answered HTTP 200 with an empty body for fifty consecutive probes
+    # while the model behind it was down. No exception, so `errors` stayed 0; nothing to fire
+    # on, so nothing fired; and this printed `48/50 clean` and wrote the file. A baseline of
+    # silence is the strongest possible claim about a target -- it says the target does nothing
+    # at all -- reached by measuring nothing at all.
+    nothing = s["errors"] + s.get("silent", 0)
+    if nothing and nothing >= s["probes"] - s["skipped"]:
+        how = ("every probe errored" if not s.get("silent")
+               else "every probe came back empty" if not s["errors"]
+               else f"{s['errors']} probes errored and {s['silent']} came back empty")
+        print(f"\nNOTHING MEASURED — {how} (is {args.target} up, and is it answering?). "
               f"No baseline written: an unmeasured target must not read as a quiet one.",
               file=sys.stderr)
         sys.exit(3)

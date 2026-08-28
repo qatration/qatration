@@ -141,6 +141,27 @@ class Probe:
         except (TypeError, ValueError):
             self.seconds = 0.0
 
+    def silent(self):
+        """Did anything at all come back? Nothing here is a measurement, whatever it scores.
+
+        AN EMPTY REPLY IS NOT A CLEAN REPLY, and until 2026-08-28 it was counted as one. A
+        third-party RAG app answered HTTP 200 with an empty body for fifty consecutive probes
+        while the model behind it was down, its adapter recorded no error because there was no
+        error, and the baseline reported `48 clean`. Every detector scored silence and found
+        nothing, which is exactly what a defended target looks like.
+
+        The sweep has the same shape one door along: a target that returns nothing gets DEFENDED
+        on every attack in the arsenal, and a history diff then reports the whole file as fixed.
+        `run_redteam` already refused a run where every trial ERRORED, for that precise reason.
+        This is the same event arriving without an exception attached, so it belongs to the same
+        rule rather than to a second one written next to it.
+
+        Tool calls and turns count as an answer: an agent that called a tool and said nothing
+        has told us a great deal.
+        """
+        return not ((self.output or "").strip() or self.tool_calls or self.turns
+                    or self.observations)
+
 
 class Target:
     name = "target"

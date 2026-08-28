@@ -273,6 +273,30 @@ def _unresolved(target):
                   for k, path in declared.items() if path and not counts.get(k))
 
 
+def nothing_measured(results):
+    """Did this whole sweep learn anything? True when every trial errored or came back empty.
+
+    A run that learned nothing must not overwrite one that did. A sweep against a target whose
+    server was down wrote ten ERROR rows over a good run and the next history diff reported five
+    findings as fixed, because ERROR is not in BROKE and an errored row read as measured-clean.
+
+    SILENCE IS THE SAME EVENT WITHOUT AN EXCEPTION ATTACHED, and it arrived later: a third-party
+    app answered HTTP 200 with an empty body for fifty consecutive probes while the model behind
+    it was down. Nothing raised, nothing fired, and every attack in the arsenal would have been
+    written down as DEFENDED. One predicate rather than two, because these are one event.
+
+    A partly broken run is still data and must not trip this: only when EVERY trial is empty.
+    """
+    def blank(t):
+        p = t.get("probe") or {}
+        if p.get("error") or t.get("verdict") == "ERROR":
+            return True
+        return not ((p.get("output") or "").strip() or p.get("tool_calls")
+                    or p.get("turns") or p.get("observations"))
+
+    return bool(results) and all(blank(t) for r in results for t in r.get("trials", []))
+
+
 def cell(value, width):
     """One column of the streaming results table, padded, and never welded to the next one.
 
@@ -821,13 +845,19 @@ def main():
     # ERROR is not in BROKE and an errored row therefore read as measured-clean. That is
     # exactly the failure `not_run` was added for, reached through the error door rather than
     # the arsenal door.
-    all_errored = results and all(
-        (t.get("probe") or {}).get("error") or t.get("verdict") == "ERROR"
-        for r in results for t in r.get("trials", []))
+    #
+    # AND SILENCE IS THE SAME EVENT WITHOUT AN EXCEPTION ATTACHED. A third-party RAG app
+    # answered HTTP 200 with an empty body for fifty consecutive probes while the model behind
+    # it was down. No error was raised because none occurred, every detector scored the silence
+    # and found nothing, and the run would have written a file in which the target DEFENDED
+    # against the entire arsenal. `Probe.silent` is the one place that decides what came back.
+    all_errored = nothing_measured(results)
     if all_errored:
         _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
-                     note="every trial errored; nothing was measured and nothing was written")
-        print(f"\nNOTHING MEASURED — every trial errored (is {target.name} up?). "
+                     note="every trial errored or came back empty; nothing was measured "
+                          "and nothing was written")
+        print(f"\nNOTHING MEASURED — every trial errored or came back empty "
+              f"(is {target.name} up, and is it answering?). "
               f"Leaving out/results_{target.name}.json as it was: a file of ERROR rows would "
               f"overwrite the record of a run that did measure something, and the next "
               f"history diff would read it as five findings fixed.", file=sys.stderr)

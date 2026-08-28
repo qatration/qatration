@@ -114,9 +114,15 @@ existing bot into every aggregate under a different name.
 **"279 findings across 30 targets" invites a reading that is not true, so the front page now
 says which.** Most of those targets are bots written here to exercise the engine. A finding on
 one of them is evidence that the engine works, which is worth having and is not the same claim
-as a finding on somebody else's code. Eight are third-party and carry **56 of the 279**:
+as a finding on somebody else's code. Nine are third-party and carry **56 of the 279**:
 smolagents two ways, LangChain, NeMo Guardrails with and without its output rail, and two
-cloned practice applications this repository does not ship. Every config states its provenance,
+cloned practice applications this repository does not ship.
+
+**Nine configs, eight systems.** `localrag` and `localrag-refusal` are the same cloned
+application under two arsenals, filed separately because the first artifact carries a paired
+experiment a published issue comment recounts from and a second arsenal must not overwrite it.
+The count above is of things measured, which is what the check enforces, and it is said here
+rather than left for a reader to discover that one application appears twice. Every config states its provenance,
 the dashboard leads with the split, and both numbers are counted rather than written down.
 
 **That share was wrong until it was counted.** Two of the clones declared themselves `practice`
