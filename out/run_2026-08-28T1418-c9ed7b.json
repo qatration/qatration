@@ -1,0 +1,15 @@
+{
+  "run_id": "2026-08-28T1418-c9ed7b",
+  "state": "finished",
+  "target": "guardedrag",
+  "scope": "full",
+  "engine": "6656b58",
+  "arsenal": "attacks.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {},
+  "started_at": "2026-08-28 14:18:33",
+  "finished_at": "2026-08-28 14:26:17",
+  "spent": {},
+  "note": null
+}
