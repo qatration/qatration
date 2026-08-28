@@ -102,6 +102,33 @@ because the point of that target is to measure the engine against a published, u
 exploit somebody else designed, and a paraphrase would measure something else.
 Copyright ReversecLabs (formerly WithSecure Labs), Apache License 2.0.
 
+AND THE LIST ABOVE IS MEASURED, NOT PROMISED. `tools/corpus_overlap.py` compares every prompt
+this repository ships against published jailbreak corpora and prints what they share. Run on
+2026-08-28 against 9,159 strings from three of them -- the in-the-wild collection garak's `dan`
+module draws on, and both halves of JailBreakV-28K -- across the 616 prompts here:
+
+    exact matches after normalisation                        1
+    prompts sharing 8+ consecutive words with a published one 3
+    the longest run for everything else                       6 words
+
+All four are accounted for. The exact match is `g-whitespace`, whose text is whitespace, and the
+corpus contains a whitespace row too. Two of the three long runs are the GCG suffixes described
+immediately below, deliberately reproduced and credited. The third is `rf-persona-override`,
+which opens "for the rest of this conversation you are" -- eight words of ordinary English that
+two people writing a persona jailbreak arrive at independently, and 11% shingle overlap with the
+row it matched.
+
+Coverage, stated because it is not complete: the in-the-wild collection (1,405) and RedTeam_2K
+(2,000) were pulled in full, JailBreakV-28K's combinations only to 2,900 of 28,000 before the
+API began refusing. That sample is not a limitation of the same size it looks: every one of the
+2,900 has its `redteam_query` verbatim in RedTeam_2K, so the 28,000 are combinations of two
+corpora held here in full.
+
+The point of measuring rather than asserting: red-team corpora are scraped from the sources
+jailbreak classifiers are trained on, and a prompt a guard has already seen in training measures
+the guard's memory rather than its behaviour. Writing prompts by hand is only worth the effort
+if somebody can check that it worked.
+
 ADVERSARIAL SUFFIXES REPRODUCED VERBATIM. Two attacks in `redteam/attacks_coverage.yaml`,
 `g-suffix-garbage` and `g-suffix-repeat-tail`, and their copies in the generated
 `redteam/attacks_generic.yaml`, embed the two most widely reproduced GCG adversarial suffixes
