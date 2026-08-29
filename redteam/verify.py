@@ -103,6 +103,29 @@ def verdict(before_hits, before_trials, now_hits, now_trials,
                      % (before_hits, before_trials, now_trials, again_trials))
 
 
+def age_note(meta, now=None):
+    """-> a sentence about how old the measurement being checked is.
+
+    "Stale" is a claim about time and this command could not say how much. Sweeps stamp `when`
+    from 2026-08-28; every artifact written before that says nothing, and saying nothing is the
+    answer that must be printed rather than a zero or a guess. Two questions in this repository
+    have already died on a missing date.
+    """
+    from datetime import datetime
+    when = (meta or {}).get("when")
+    if not when:
+        return ("this artifact carries no date, so how stale a stale row is cannot be said — "
+                "sweeps stamp one from 2026-08-28")
+    try:
+        made = datetime.fromisoformat(str(when))
+    except ValueError:
+        return "this artifact's date is unreadable (%r)" % when
+    days = ((now or datetime.now()) - made).days
+    if days < 0:
+        return "this artifact is dated in the future (%s), so its age says nothing" % when
+    return "measured %s, %d day%s ago" % (when, days, "" if days == 1 else "s")
+
+
 def check_row(hits, trials, send, first_trials, confirm_trials):
     """-> (verdict, sentence, breaches, delivered, probes spent) for one claimed row.
 
@@ -168,6 +191,7 @@ def main():
     rows = claimed(stored.get("results") or [])
     print("verify → target='%s'  %d claimed breach(es) in %s  trials=%d (+%d to confirm)"
           % (target.name, len(rows), os.path.basename(path), args.trials, args.confirm_trials))
+    print("  %s" % age_note(stored.get("meta")))
     if not rows:
         print("\nnothing in that artifact claims a breach, so there is nothing to re-send.")
         print("This checks published FINDINGS. Whether the target got worse is a sweep's "

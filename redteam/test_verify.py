@@ -38,7 +38,7 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from verify import claimed, verdict, check_row
+from verify import claimed, verdict, check_row, age_note
 
 
 def main():
@@ -140,6 +140,26 @@ def main():
     v, why, _, _, _ = check_row(1, 3, s5, 3, 5)
     check("a flaky claim never reaches a second pass at all",
           v == "unclear" and s5.calls == [3], "%s %s" % (v, s5.calls))
+
+    # --- how old is the claim being checked -----------------------------------------------
+    #
+    # "Stale" is a claim about time, and until 2026-08-28 no results file carried a date at all.
+    # That absence cost two answers: five findings on guardedrag stopped reproducing and nothing
+    # could say whether the artifact was a day or six weeks old.
+    from datetime import datetime
+    now = datetime(2026, 9, 1, 12, 0, 0)
+    check("an artifact with a date says how old it is",
+          "3 days ago" in age_note({"when": "2026-08-29 12:00:00"}, now),
+          age_note({"when": "2026-08-29 12:00:00"}, now))
+    check("...and one day is not 1 days", "1 day ago" in age_note({"when": "2026-08-31 12:00:00"}, now))
+    # SAYING NOTHING IS THE ANSWER, not zero. A missing date read as "today" would make every
+    # old artifact look freshly measured, which is the direction that hides the problem.
+    check("an artifact with no date says so rather than reading as fresh",
+          "carries no date" in age_note({}, now), age_note({}, now))
+    check("...and an unreadable one is named rather than guessed",
+          "unreadable" in age_note({"when": "last tuesday"}, now))
+    check("...and a date in the future is not an age",
+          "future" in age_note({"when": "2026-09-09 12:00:00"}, now))
 
     # --- and it must not write ------------------------------------------------------------
     #

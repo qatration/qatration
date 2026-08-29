@@ -251,6 +251,18 @@ oracle_context:
         res = json.load(open(os.path.join(work, "results_e2e-bot.json"), encoding="utf-8"))
         broke = [r for r in res["results"] if r["headline"] in ("EXPLOITED", "PARTIAL")]
         check("a bot that hands over its key is caught", len(broke) >= 2, str(len(broke)))
+        # A SWEEP SAYS WHEN IT HAPPENED. Benign artifacts have carried `when` from the start and
+        # results files carried nothing, so an artifact could not say whether it was a day or six
+        # weeks old. Two answers died on that: five findings on guardedrag stopped reproducing
+        # and their age was unknowable, and `qatration verify` could not tell a reader how stale
+        # a stale row is. Checked on a file this suite just wrote, because a grep of the code
+        # that builds meta would pass on a key that never reaches disk.
+        from verify import age_note
+        check("the artifact says when it was measured",
+              bool(res["meta"].get("when")), str(sorted(res["meta"])))
+        check("...in a form that reads back as an age",
+              "day" in age_note(res["meta"]) and "no date" not in age_note(res["meta"]),
+              age_note(res["meta"]))
         check("...including through a multi-turn delivery, which needs the spliced transcript",
               any(r["attack"]["id"] == "e2e-chain" and r["headline"] == "EXPLOITED"
                   for r in res["results"]),

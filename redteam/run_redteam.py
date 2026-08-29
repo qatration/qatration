@@ -866,6 +866,13 @@ def main():
     # --- step 4: write JSON + HTML scorecard to out/ -------------------------
     os.makedirs(OUT_DIR, exist_ok=True)
     meta = {"target": target.name, "model": tcfg.get("model", ""),
+            # WHEN, which every benign artifact has carried from the start and no results file
+            # did. `engine` says which build of OUR code produced this; nothing said how old
+            # the measurement is, and the target is the half that moves. Two answers this
+            # repository could not give cost exactly that: five findings on guardedrag stopped
+            # reproducing and the artifact could not say whether it was made yesterday or in
+            # July, and `qatration verify` had no way to tell a reader how stale "stale" is.
+            "when": datetime.now().isoformat(" ", "seconds"),
             # which build of the engine wrote this, so a replay can tell evidence that
             # predates a fix from evidence that survived one
             "engine": engine_version(),
