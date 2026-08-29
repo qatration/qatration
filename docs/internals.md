@@ -220,6 +220,8 @@ qatration/
     targets_dvla.yaml # per-target config: model, canaries, watched tools
     run_redteam.py    # entry point
     rejudge.py        # replay the current oracle over stored runs, zero GPU
+    verify.py         # re-send only what a stored report CLAIMS, and say whether it
+                      #   still happens — the cheap half of a regression check
     compare_recon.py  # the whole fleet's profile in one table, worst first
     compare_targets.py# attacks x targets, plus a guard-on/guard-off per-attack diff
     defense_report.py # breaches -> prioritised remediation, grouped by root cause

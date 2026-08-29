@@ -47,6 +47,11 @@ COMMANDS = {
     "history":  ("history",         "what changed since the last run, and whether it can be believed"),
     "compare":  ("compare_targets", "one page across every target that has evidence"),
     "rejudge":  ("rejudge",         "re-score stored results with the current oracle, no model calls"),
+    # THE CHEAP QUESTION NOTHING ANSWERED. `history` needs a second full sweep before it
+    # can say anything and `rejudge` never touches the target, so an artifact whose
+    # target changed underneath was invisible to both. One shipped file spent twelve days
+    # publishing five breaches that had stopped happening.
+    "verify":   ("verify",          "re-send only what a stored report claims, and say if it still happens"),
     "sarif":    ("sarif",           "stored results as SARIF 2.1.0, for a code-scanning tab"),
     # THE THREE THAT HAD NO DOOR. Each ran from the day it was written, reachable only by
     # invoking a module inside an installed package, which nobody discovers. `fixes` is the

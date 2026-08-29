@@ -16,7 +16,7 @@ except Exception:
     pass
 
 OUT = WORKSPACE_OUT
-BROKE = ("EXPLOITED", "PARTIAL")
+from workspace import BROKE   # one definition of what counts as a breach
 
 
 def _frac(rate):

@@ -20,7 +20,7 @@ def esc(s):
     return html.escape(str(s))
 
 
-BROKE = ("EXPLOITED", "PARTIAL")
+from workspace import BROKE   # one definition of what counts as a breach
 
 
 def load(known=None):

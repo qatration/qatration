@@ -38,7 +38,7 @@ try:
 except Exception:
     pass
 
-BROKE = ("EXPLOITED", "PARTIAL")
+from workspace import BROKE   # one definition of what counts as a breach
 
 
 def _path(target):

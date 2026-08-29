@@ -277,6 +277,13 @@ def safe_target_name(name, where="target config"):
 # counted as a control that stayed quiet. Three modules, three different halves of one rule.
 NOT_MEASURED = ("SKIP", "ERROR")
 
+# AND ITS OPPOSITE, in one place for the same reason. This tuple was written out in three
+# modules -- `history`, `discrimination` and `build_index` -- and a fourth was about to be
+# added by a new command before the grep. Three copies of a rule agree until the day somebody
+# decides a fourth verdict counts as a breach, and then two reports disagree about what a
+# finding is.
+BROKE = ("EXPLOITED", "PARTIAL")
+
 
 def measured(meta):
     """-> (attacks measured, attacks that errored), from a results file's meta.
