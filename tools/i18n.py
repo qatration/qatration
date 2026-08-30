@@ -378,7 +378,18 @@ def skeleton(lang):
     import json
     src = io.open(SOURCE, encoding="utf-8").read()
     path = os.path.join(DICT_DIR, "%s.json" % lang)
-    have = load(lang) if os.path.exists(path) else {}
+    # EVERYTHING EXCEPT `strings` SURVIVES, and this function has now had to learn that twice.
+    # It rewrote the file as `{"language", "strings"}` and nothing else, so running it deleted
+    # `figures_differ` in silence: measured on Turkish, four declared exceptions became zero
+    # while the command reported success, and the next suite run went red on four translations
+    # that were correct. That is the same shape as the collapse this command is the documented
+    # repair FOR. A repair that discards what it does not understand is not a repair, so the
+    # document is loaded whole and only the part this function owns is replaced.
+    doc = {}
+    if os.path.exists(path):
+        with io.open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    have = doc.get("strings") or {}
     table, missing = {}, 0
     for s in extract(src):
         table[s] = have.get(s, "")
@@ -390,10 +401,24 @@ def skeleton(lang):
     dropped = [k for k in have if k not in table]
     if not os.path.isdir(DICT_DIR):
         os.makedirs(DICT_DIR)
-    with io.open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(json.dumps({"language": lang, "strings": table},
-                           ensure_ascii=False, indent=2, sort_keys=False))
+    doc["language"] = lang
+    doc["strings"] = table
+    # WRITTEN BESIDE, THEN MOVED INTO PLACE. `open(path, "w")` truncates before it writes, so
+    # anything that raises between those two moments leaves a zero-byte dictionary where a
+    # translation used to be. Not hypothetical: a typo in this very function emptied tr.json
+    # mid-session, and the backup the next command took copied the empty file. A dictionary is
+    # hand-written work that no gate can regenerate, and the tool that maintains it must not be
+    # able to destroy it merely by failing.
+    tmp = path + ".new"
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=False))
         f.write("\n")
+    # `os.replace`, NOT remove-then-rename. The first version did the latter, and the crash test
+    # written to prove the fix deleted the dictionary instead: between the remove and the rename
+    # there is a window in which the file does not exist at all, and an exception inside it is
+    # worse than the truncation this was meant to prevent. `os.replace` is atomic on Windows as
+    # well as POSIX and leaves no window.
+    os.replace(tmp, path)
     return len(table), missing, dropped
 
 

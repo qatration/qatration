@@ -57,7 +57,7 @@ HEADLINE = "Find out what an attacker can make your chatbot do."
 # not opened the page yet, so it may quote the page and may not improve on it. The capital
 # letter is added at draw time so this stays an exact substring.
 SUB = ("fires real prompt-injection attacks at your AI bot and gives you a plain-English "
-       "report of everything it leaked or did")
+       "report of what it leaked or did")
 FOOT = "open source  ·  Apache 2.0  ·  qatration.com"
 WORD_A, WORD_B = "QA", "tration"
 

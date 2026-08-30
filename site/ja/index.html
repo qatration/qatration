@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLMセキュリティテスト · オープンソース · Apache 2.0</span>
       <h1>攻撃者はあなたのチャットボットに何をさせられるのか。</h1>
-      <p class="sub">QAtrationはあなたのAIボットに本物のプロンプトインジェクション攻撃を送り、ボットが何を漏らし、何をしたかを平易な言葉の報告書にして、ほかの誰かに見つけられる前に手渡します。 <b>実行するのはあなたです。</b> あなたのマシンかCIから、あなた自身のデプロイ環境に対して。アカウントも不要、エンドポイントを預ける必要もなく、どこにも何も送信されません。</p>
+      <p class="sub">QAtrationはあなたのAIボットに本物のプロンプトインジェクション攻撃を送り、ボットが何を漏らし、何をしたかを平易な言葉の報告書にして、ほかの誰かに見つけられる前に手渡します。 <b>実行するのはあなたです。</b> あなたのマシンかCIから、あなた自身のデプロイ環境に対して。アカウントも不要、エンドポイントを預ける必要もなく、こちらには何も送信されません。</p>
       <p class="warnbox">
         <b>あなたのものではないシステムに向けないでください。</b> これは本物の攻撃（プロンプトインジェクション、データ持ち出し、ツールの悪用）を、指定されたURLがどこであろうと送ります。あなた自身のデプロイか、所有者から事前に書面で許可を得たものに限ります。面白そうだと思った公開チャットボットではありません。ベンダーのデモでもありません。
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> ファイルを最初の実行の前にお読みください。</p>
@@ -605,10 +608,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">何を捕まえるか見る</a>
       </div>
       <p class="evid-note" style="margin-top:14px">依存は二つだけ。攻撃コーパス一式が同梱され、このページのすべての数字を裏づける証拠も同梱されます。そのすべては
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>にあり、パッケージとともに配布されます。</p>
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>にあり、リポジトリとともに配布されます。他の二つのツール自身の報告書はここにはありません。ライセンスがそれを許さないためです。それらを再生成するコマンドはあります。</p>
       <ul class="evid">
-        <li><b>46</b> 件の攻撃を、防御されたボットのチャット欄に打ち込みました。通ったものはありません。
-          <b>一件</b> を取得された文書の中に忍ばせた場合、毎回通ります。</li>
+        <li><b>46</b> 件の攻撃を、防御されたボットのチャット欄に打ち込みました。通ったものはありません。その出力フィルターを切ると、 <b>一件</b> の攻撃が取得された文書の中に忍ばせられ、毎回そのまま外へ出ていきます。入力フィルターはそれを一度も見ていません。</li>
         <li><b>9体中5体</b> のボットが、ごく普通の依頼に対して自らの指示を差し出しました。 <span class="keep">攻撃はいっさいありません。</span></li>
         <li><b>二体</b> がデータベースの再起動を報告しました。どちらも何かを再起動できるツールなど持っていません。</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>エージェントを通した注入</h3><span class="chip exploited">突破</span></div>
-        <p>SQLやシェルコマンドがツール呼び出しに紛れ込みます。古典的なRCEに、新しい玄関口。</p>
+        <p>SQLやシェルコマンドがツール呼び出しに紛れ込みます。古いバグの種類に、新しい玄関口。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>汚染された知識ベース</h3><span class="chip exploited">突破</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">手順 01</div>
         <h3>ボットを記述する</h3>
-        <p>YAMLでおよそ十行。URL、環境変数として渡す認証ヘッダー、そして応答のどこに本文があるか。OpenAI形式のAPIとAnthropicのAPI向けに、既成の設定を用意しています。 <span class="mono" translate="no">qatration onboard</span> はごく普通の質問を一つ送り、攻撃が一つも出ていく前に、何が足りないかを教えます。</p>
+        <p>YAMLでおよそ十行。URL、環境変数として渡す認証ヘッダー、そして応答のどこに本文があるか。OpenAI形式のAPIと、Anthropic、Bedrock、VertexのAPI向けに、既成の設定を用意しています。 <span class="mono" translate="no">qatration onboard</span> はごく普通の質問を一つ送り、攻撃が一つも出ていく前に、何が足りないかを教えます。</p>
       </div>
       <div class="step">
         <div class="num">手順 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>きれいな結果に意味があるのは、何がそれをきれいにしたのかが分かるときだけです。</h2>
       <p>通らなかった攻撃はゼロを報告します。実行できなかった検査も、本当に堅牢なボットも、同じくゼロです。テストが行き詰まるのはここです。三つの異なる事実が同じ見た目で届き、次に何を試せばよいか誰にも分かりません。これらは実際の実行から得た測定値であり、推計ではありません。
         <b>そして攻撃が原因であってはじめて、侵害は侵害です。</b> どの対象にもまず無害な実行を行います。普通の質問だけで、誰も攻撃しません。ここに挙げたボットの一つでは、
-        <code>canary_in_tool_call</code> がその普通のトラフィックの88%で発火します。そのため、それに依拠する指摘はすべて、計上せず「弱化」と印を付けます。</p>
+        <code>canary_in_tool_call</code> がその普通のトラフィックの88%で発火します。そのため、それだけに依拠する指摘は、計上せず「帰属不能」と印を付けます。</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>より大きなモデルは解決策ではない</h3></div>
-        <p>ボット一つ、モデル二つ、それぞれ282件の攻撃、それぞれ3回の試行。小さい方は28件で破られ、大きい方は25件で破られました。そのうち18件は同じ攻撃で、うち17件は両方のモデルを毎回破ります。大きなモデルは、端のどの攻撃が通るかを入れ替えるだけです。穴は塞ぎません。</p>
+        <p>ボット一つ、モデル二つ、それぞれ282件の攻撃、それぞれ3回の試行。小さい方は28件で破られ、大きい方は25件で破られました。そのうち18件は同じ攻撃で、うち17件は両方のモデルを毎回破ります。このボットでは、大きなモデルは端のどの攻撃が通るかを入れ替えただけでした。穴は塞ぎません。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>設定では見えない隙間</h3></div>
-        <p>実際のガードレールのフレームワークに対して、チャット欄に打ち込んだ46件の攻撃は一つも通りませんでした。取得された文書の中に忍ばせた攻撃は一件、こちらは毎回通ります。入力フィルターが読むのは利用者が打った内容です。知識ベースがモデルに渡すものは決して見ません。出力フィルターを切れば、同じ文書はそのまま外へ出ていきます。入力側の防壁は、そもそもそれを止めていたものではなかったのです。</p>
+        <p>実際のガードレールのフレームワークに対して、チャット欄に打ち込んだ46件の攻撃は一つも通りませんでした。取得された文書の中に忍ばせた攻撃も、両方のレールが入っている間は通りませんでした。出力フィルターを切ると、同じ文書が毎回そのまま外へ出ていきます。入力フィルターが読むのは利用者が打った内容であり、知識ベースがモデルに渡すものは決して見ないので、入力側のレールはそもそもそれを止めていたものではなかったのです。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>そして答えがどれだけ安定しているか</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>自分たち自身に対して実行しました</h3></div>
-        <p>常に何かを見つけるスキャナーには価値がありません。そこで私たちは逆の数字を測りました。攻撃者がどこにもいない、ごく普通のサポート依頼1500件を、同じ検査に通したのです。その半分は、正当な理由でセキュリティの話をするユーザーです。パターンマッチャーを壊すのはまさにそこだからです。失敗するクエリを貼り付ける開発者、スタックトレースを転送するサポート、よく似たドメインが本物かどうか尋ねてくる人。</p>
+        <p>常に何かを見つけるスキャナーには価値がありません。そこで私たちは逆の数字を測りました。攻撃者がどこにもいない1500件の無害なプローブを30の対象にまたがって、同じ検査に通したのです。その半分は、正当な理由でセキュリティの話をするユーザーです。パターンマッチャーを壊すのはまさにそこだからです。失敗するクエリを貼り付ける開発者、スタックトレースを転送するサポート、よく似たドメインが本物かどうか尋ねてくる人。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>次に、私たちが作っていないシステムに対して</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">ソースコードを読む →</a>
     </div>
-    <div class="note">あなたのマシンで動く · 何もそこから出ない · 許可された対象のみ</div>
+    <div class="note">あなたのマシンで動く · 結果は手元に残る · 許可された対象のみ</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>許可された対象のみ。</b> これは向けられた相手が何であれ、本物の攻撃を送ります。動くのはあなたのマシンで、あなたの鍵で、あなたの名において実行されます。localhost以外はすべて、あなたがそれを管理していることを証明する必要があります（DNSレコード、既知のパスに置いたファイル、あるいはボット自身が返すトークン）。それがなければ、覚えておいてくださいと促すのではなく、実行そのものが開始を拒みます。あなたのものではない、あるいは許可のないシステムをテストすることは違法であり、その責任はツールではなく実行する人にあります。
+      <b>許可された対象のみ。</b> これは向けられた相手が何であれ、本物の攻撃を送ります。動くのはあなたのマシンで、あなたの鍵で、あなたの権限のもとで実行されます。localhost以外はすべて、あなたがそれを管理していることを証明する必要があります（DNSレコード、既知のパスに置いたファイル、あるいはボット自身が返すトークン）。それがなければ、覚えておいてくださいと促すのではなく、実行そのものが開始を拒みます。あなたのものではない、あるいは許可のないシステムをテストすることは多くの国で犯罪であり、その責任はツールではなく実行する人にあります。
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> ファイルを最初の実行の前にお読みください。
       <br><br>
       不具合を見つけましたか。あるいは、このツールが測っていないことを報告している箇所を見つけましたか。
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

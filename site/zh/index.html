@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLM 安全测试 · 开源 · Apache 2.0</span>
       <h1>看看攻击者能让你的聊天机器人做些什么。</h1>
-      <p class="sub">QAtration 向你的 AI 机器人发送真实的提示词注入攻击，并把它泄露了什么、做了什么，用平实的语言写成报告交给你，赶在别人发现之前。 <b>运行它的人是你。</b> 在你的机器或 CI 中，针对你自己的部署：不需要账号，不必交出任何端点，不向任何地方发送任何东西。</p>
+      <p class="sub">QAtration 向你的 AI 机器人发送真实的提示词注入攻击，并把它泄露了什么、做了什么，用平实的语言写成报告交给你，赶在别人发现之前。 <b>运行它的人是你。</b> 在你的机器或 CI 中，针对你自己的部署：不需要账号，不必交出任何端点，也不会向我们发送任何东西。</p>
       <p class="warnbox">
         <b>不要把它指向不属于你的系统。</b> 它会向你给出的任何 URL 发送真实攻击（提示词注入、数据外泄、工具滥用）。只能是你自己的部署，或者其所有者事先给了你书面许可的部署。不是你觉得有意思的公开聊天机器人。也不是某家厂商的演示。
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> 请在第一次运行之前读一遍。</p>
@@ -605,10 +608,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">看看它能抓到什么</a>
       </div>
       <p class="evid-note" style="margin-top:14px">只有两个依赖。整套攻击语料随包提供，支撑本页每一个数字的证据也随包提供，全部都在
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a> 里，随包一起分发。</p>
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a> 里，随仓库一起分发。另外两个工具自己的报告不在这里，因为它们的许可证不允许。能重新生成这些报告的命令是在的。</p>
       <ul class="evid">
-        <li><b>46</b> 次攻击被输入到一个有防护的机器人的聊天框里：一次也没通过。
-          <b>有一次攻击</b> 被夹带在检索到的文档里：每次都能通过。</li>
+        <li><b>46</b> 次攻击被输入到一个有防护的机器人的聊天框里：一次也没通过。把它的输出过滤关掉， <b>一次</b> 夹带在检索到的文档里的攻击每回都会走出去。输入过滤从来没有见过它。</li>
         <li><b>9 个中的 5 个</b> 机器人在一句普通的请求面前交出了自己的指令， <span class="keep">完全没有攻击。</span></li>
         <li><b>两个</b> 机器人报告数据库已重启。可它们都没有任何能重启东西的工具。</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>经由智能体的注入</h3><span class="chip exploited">已攻破</span></div>
-        <p>SQL 或 shell 命令被夹带进一次工具调用：经典的 RCE，新的正门。</p>
+        <p>SQL 或 shell 命令被夹带进一次工具调用。一类老漏洞，一扇新的正门。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>被投毒的知识库</h3><span class="chip exploited">已攻破</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">步骤 01</div>
         <h3>描述你的机器人</h3>
-        <p>大约十行 YAML：URL、作为环境变量的鉴权头，以及回复正文在响应中的位置。为 OpenAI 形态的 API 和 Anthropic 的 API 都准备了现成配置。 <span class="mono" translate="no">qatration onboard</span> 会发送一个普通问题，在任何一次攻击发出之前就告诉你还缺什么。</p>
+        <p>大约十行 YAML：URL、作为环境变量的鉴权头，以及回复正文在响应中的位置。为 OpenAI 形态的 API，以及 Anthropic、Bedrock 和 Vertex 的 API 都准备了现成配置。 <span class="mono" translate="no">qatration onboard</span> 会发送一个普通问题，在任何一次攻击发出之前就告诉你还缺什么。</p>
       </div>
       <div class="step">
         <div class="num">步骤 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>一个干净的结果只有在你知道是什么让它干净时才有价值。</h2>
       <p>没打通的攻击报告为零。跑不起来的检查同样报告为零，一个真正加固过的机器人也一样，而测试正是卡在这里：三个不同的事实以完全相同的样子送到面前，没人知道下一步该试什么。这些是来自真实运行的实测值，不是推算。
         <b>而且只有攻击导致的攻破才算攻破。</b> 每个目标都先跑一遍无害运行：只有普通问题，没人在攻击。在这里的一个机器人上，
-        <code>canary_in_tool_call</code> 在这类普通流量的 88% 上都会触发，因此凡是依赖它的发现都被标为已削弱，而不是计入。</p>
+        <code>canary_in_tool_call</code> 在这类普通流量的 88% 上都会触发，因此仅仅依赖它的发现会被标为无法归因，而不是计入。</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>更大的模型不是解药</h3></div>
-        <p>一个机器人，两个模型，各 282 次攻击，各试 3 遍。较小的那个在其中 28 次上被攻破，较大的在 25 次上被攻破，其中 18 次是同样的攻击，而这里面有 17 次每一遍都能攻破两个模型。更大的模型只是重新洗了牌，改变哪些攻击能在边缘处打通。这个洞它并没有堵上。</p>
+        <p>一个机器人，两个模型，各 282 次攻击，各试 3 遍。较小的那个在其中 28 次上被攻破，较大的在 25 次上被攻破，其中 18 次是同样的攻击，而这里面有 17 次每一遍都能攻破两个模型。在这个机器人上，更大的模型只是重新洗了牌，改变哪些攻击能在边缘处打通。这个洞它并没有堵上。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>配置看不出来的那道缺口</h3></div>
-        <p>面对一套真正的护栏框架，输入聊天框的 46 次攻击一次也没通过。夹带在检索文档里的攻击有一次，它每一遍都能通过。输入过滤读的是用户敲进去的内容，永远看不到你的知识库递给模型的东西。把输出过滤关掉，同一份文档就大摇大摆地出去了：拦住它的从来就不是输入侧那道栏。</p>
+        <p>面对一套真正的护栏框架，输入聊天框的 46 次攻击一次也没通过。夹带在检索文档里的那一次同样没有通过，只要它的两道栏都开着。把输出过滤关掉，同一份文档每一遍都会走出去。输入过滤读的是用户敲进去的内容，永远看不到你的知识库递给模型的东西，所以拦住它的从来就不是输入侧那道栏。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>以及答案有多稳定</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>我们先拿自己跑了一遍</h3></div>
-        <p>一个总能找出点什么的扫描器毫无价值，所以我们测了相反的那个数字：1500 条普通的客服请求，里面没有任何攻击者，走同样的检查。其中一半是完全有正当理由谈论安全的用户，因为击垮模式匹配的恰恰就是这种情况：粘贴报错查询的开发者、转发堆栈跟踪的客服、问一个仿冒域名是不是真的那个用户。</p>
+        <p>一个总能找出点什么的扫描器毫无价值，所以我们测了相反的那个数字：1500 次无害探测，分布在 30 个目标上，里面没有任何攻击者，走同样的检查。其中一半是完全有正当理由谈论安全的用户，因为击垮模式匹配的恰恰就是这种情况：粘贴报错查询的开发者、转发堆栈跟踪的客服、问一个仿冒域名是不是真的那个用户。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>接着是一套不是我们造的系统</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">阅读源码 →</a>
     </div>
-    <div class="note">运行在你的机器上 · 没有东西离开它 · 仅限已授权的目标</div>
+    <div class="note">运行在你的机器上 · 结果留在你这里 · 仅限已授权的目标</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>仅限已授权的目标。</b> 它会向被指向的任何对象发送真实攻击，运行在你的机器上，用你的密钥，以你的名义。凡是不是 localhost 的目标，都必须证明由你掌控（一条 DNS 记录、一个已知路径下的文件，或者机器人自己返回的一个令牌），没有这一步，运行会直接拒绝启动，而不是提醒你自己记着。测试不属于你、或者你没有获得许可的系统是违法的，这份责任在操作者身上，不在工具身上。
+      <b>仅限已授权的目标。</b> 它会向被指向的任何对象发送真实攻击，运行在你的机器上，用你的密钥，凭你的授权。凡是不是 localhost 的目标，都必须证明由你掌控（一条 DNS 记录、一个已知路径下的文件，或者机器人自己返回的一个令牌），没有这一步，运行会直接拒绝启动，而不是提醒你自己记着。测试不属于你、或者你没有获得许可的系统，在多数国家都是犯罪，这份责任在操作者身上，不在工具身上。
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> 请在第一次运行之前读一遍。
       <br><br>
       发现了缺陷，或者发现这个工具报告了它并没有实测过的东西？
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

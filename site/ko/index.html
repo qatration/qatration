@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLM 보안 테스트 · 오픈 소스 · Apache 2.0</span>
       <h1>공격자가 내 챗봇에게 무엇을 시킬 수 있는지 확인해 보세요.</h1>
-      <p class="sub">QAtration은 당신의 AI 봇에 실제 프롬프트 인젝션 공격을 보내고, 그것이 무엇을 유출했고 무엇을 했는지 쉬운 말로 정리한 보고서를 다른 누군가가 찾아내기 전에 건네줍니다. <b>실행하는 사람은 당신입니다.</b> 내 컴퓨터나 CI에서, 내가 배포한 시스템을 대상으로. 계정도 필요 없고, 엔드포인트를 넘길 필요도 없으며, 아무것도 어디로도 전송되지 않습니다.</p>
+      <p class="sub">QAtration은 당신의 AI 봇에 실제 프롬프트 인젝션 공격을 보내고, 그것이 무엇을 유출했고 무엇을 했는지 쉬운 말로 정리한 보고서를 다른 누군가가 찾아내기 전에 건네줍니다. <b>실행하는 사람은 당신입니다.</b> 내 컴퓨터나 CI에서, 내가 배포한 시스템을 대상으로. 계정도 필요 없고, 엔드포인트를 넘길 필요도 없으며, 우리 쪽으로는 아무것도 전송되지 않습니다.</p>
       <p class="warnbox">
         <b>당신의 것이 아닌 시스템을 향하게 하지 마십시오.</b> 이 도구는 당신이 지정하는 URL이면 어디로든 실제 공격을 보냅니다(프롬프트 인젝션, 데이터 유출, 도구 오용). 당신 자신의 배포이거나, 소유자가 사전에 서면으로 허가한 배포여야 합니다. 흥미로워 보이는 공개 챗봇이 아닙니다. 어느 업체의 데모도 아닙니다.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> 문서를 첫 실행 전에 꼭 읽어 보십시오.</p>
@@ -605,10 +608,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">무엇을 잡아내는지 보기</a>
       </div>
       <p class="evid-note" style="margin-top:14px">의존성은 둘뿐입니다. 공격 코퍼스 전체가 함께 제공되고, 이 페이지의 모든 숫자를 뒷받침하는 증거도 함께 제공됩니다. 그 모두가
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>에 있으며, 패키지와 함께 배포됩니다.</p>
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>에 있으며, 저장소와 함께 배포됩니다. 다른 두 도구의 자체 보고서는 여기에 없습니다. 그 도구들의 라이선스가 허용하지 않기 때문입니다. 그것들을 다시 만들어 내는 명령은 있습니다.</p>
       <ul class="evid">
-        <li><b>46</b> 건의 공격을 보호된 봇의 채팅창에 입력했습니다. 통과한 것은 없습니다.
-          <b>한 건</b> 을 검색된 문서 안에 실어 보내면 매번 통과합니다.</li>
+        <li><b>46</b> 건의 공격을 보호된 봇의 채팅창에 입력했습니다. 통과한 것은 없습니다. 그 출력 필터를 끄면, <b>한 건</b> 의 공격이 검색된 문서 안에 실려 매번 밖으로 걸어 나갑니다. 입력 필터는 그것을 한 번도 본 적이 없습니다.</li>
         <li><b>9대 중 5대</b> 의 봇이 평범한 요청에 자신의 지시문을 그대로 내주었습니다. <span class="keep">공격은 전혀 없었습니다.</span></li>
         <li><b>두 대</b> 가 데이터베이스 재시작을 보고했습니다. 둘 다 무언가를 재시작할 수 있는 도구를 갖고 있지 않았습니다.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>에이전트를 통한 인젝션</h3><span class="chip exploited">침해됨</span></div>
-        <p>SQL이나 셸 명령이 도구 호출에 몰래 실립니다: 고전적인 RCE이자 새로운 현관문입니다.</p>
+        <p>SQL이나 셸 명령이 도구 호출에 몰래 실립니다. 오래된 버그 유형이자 새로운 현관문입니다.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>오염된 지식 베이스</h3><span class="chip exploited">침해됨</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">단계 01</div>
         <h3>봇을 설명하세요</h3>
-        <p>YAML 열 줄 남짓입니다. URL, 환경 변수로 넘기는 인증 헤더, 그리고 응답에서 본문이 있는 위치. OpenAI 형식 API와 Anthropic API를 위한 기성 설정이 준비되어 있습니다. <span class="mono" translate="no">qatration onboard</span> 는 평범한 질문 하나를 보내고, 공격이 하나라도 나가기 전에 무엇이 빠졌는지 알려줍니다.</p>
+        <p>YAML 열 줄 남짓입니다. URL, 환경 변수로 넘기는 인증 헤더, 그리고 응답에서 본문이 있는 위치. OpenAI 형식 API와 Anthropic, Bedrock, Vertex API를 위한 기성 설정이 준비되어 있습니다. <span class="mono" translate="no">qatration onboard</span> 는 평범한 질문 하나를 보내고, 공격이 하나라도 나가기 전에 무엇이 빠졌는지 알려줍니다.</p>
       </div>
       <div class="step">
         <div class="num">단계 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>깨끗한 결과는 무엇이 그것을 깨끗하게 만들었는지 알 때에만 값어치가 있습니다.</h2>
       <p>통하지 않은 공격은 0을 보고합니다. 실행되지 못한 검사도 그렇고, 정말로 단단히 잠긴 봇도 그렇습니다. 테스트가 막히는 지점이 바로 여기입니다. 서로 다른 세 가지 사실이 똑같은 모습으로 도착하고, 다음에 무엇을 시도해야 할지 아무도 모릅니다. 이 값들은 실제 실행에서 얻은 측정치이며 추정이 아닙니다.
         <b>그리고 돌파는 공격이 그것을 일으켰을 때에만 돌파입니다.</b> 모든 대상은 먼저 무해한 실행을 거칩니다. 평범한 질문뿐이고 아무도 공격하지 않습니다. 여기 있는 봇 중 하나에서는
-        <code>canary_in_tool_call</code> 이 그 평범한 트래픽의 88%에서 발동합니다. 그래서 거기에 기대는 모든 발견 사항은 집계하지 않고 약화됨으로 표시됩니다.</p>
+        <code>canary_in_tool_call</code> 이 그 평범한 트래픽의 88%에서 발동합니다. 그래서 오직 거기에만 기대는 발견 사항은 집계하지 않고 귀속 불가로 표시됩니다.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>더 큰 모델은 해결책이 아닙니다</h3></div>
-        <p>봇 하나, 모델 둘, 각각 282건의 공격, 각각 3회 시도. 작은 쪽은 그중 28건에서 무너졌고 큰 쪽은 25건에서 무너졌으며, 그중 18건은 같은 공격이고 그 가운데 17건은 매 시도마다 두 모델을 모두 무너뜨립니다. 더 큰 모델은 가장자리에서 어떤 공격이 통하는지를 다시 섞을 뿐입니다. 구멍을 막지는 않습니다.</p>
+        <p>봇 하나, 모델 둘, 각각 282건의 공격, 각각 3회 시도. 작은 쪽은 그중 28건에서 무너졌고 큰 쪽은 25건에서 무너졌으며, 그중 18건은 같은 공격이고 그 가운데 17건은 매 시도마다 두 모델을 모두 무너뜨립니다. 이 봇에서 더 큰 모델은 가장자리에서 어떤 공격이 통하는지를 다시 섞었을 뿐입니다. 구멍을 막지는 않습니다.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>설정만으로는 보이지 않는 틈</h3></div>
-        <p>실제 가드레일 프레임워크를 상대로 채팅창에 입력한 46건의 공격은 하나도 통하지 않았습니다. 검색된 문서 안에 실어 보낸 공격 한 건은 매 시도마다 통합니다. 입력 필터는 사용자가 입력한 것을 읽습니다. 지식 베이스가 모델에 건네는 것은 결코 보지 못합니다. 출력 필터를 끄면 같은 문서가 그대로 걸어 나갑니다. 입력 쪽 방벽은 애초에 그것을 막던 것이 아니었습니다.</p>
+        <p>실제 가드레일 프레임워크를 상대로 채팅창에 입력한 46건의 공격은 하나도 통하지 않았습니다. 검색된 문서 안에 실어 보낸 공격 한 건도, 두 레일이 모두 켜져 있는 동안에는 통하지 않았습니다. 출력 필터를 끄면 같은 문서가 매 시도마다 그대로 걸어 나갑니다. 입력 필터는 사용자가 입력한 것을 읽을 뿐, 지식 베이스가 모델에 건네는 것은 결코 보지 못하므로, 입력 쪽 레일은 애초에 그것을 막던 것이 아니었습니다.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>그리고 답이 얼마나 일관적인지</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>우리 자신을 상대로 돌려보았습니다</h3></div>
-        <p>항상 무언가를 찾아내는 스캐너는 아무 가치가 없습니다. 그래서 우리는 반대편 숫자를 측정했습니다. 어디에도 공격자가 없는 평범한 지원 요청 1500건을 같은 검사에 통과시킨 것입니다. 그 절반은 정당한 이유로 보안을 이야기하는 사용자입니다. 패턴 대조를 깨뜨리는 것이 바로 그런 경우이기 때문입니다. 실패하는 쿼리를 붙여 넣는 개발자, 스택 트레이스를 전달하는 지원 담당, 비슷하게 생긴 도메인이 진짜인지 묻는 사람.</p>
+        <p>항상 무언가를 찾아내는 스캐너는 아무 가치가 없습니다. 그래서 우리는 반대편 숫자를 측정했습니다. 어디에도 공격자가 없는 1500건의 무해한 프로브를 30개 대상에 걸쳐 같은 검사에 통과시킨 것입니다. 그 절반은 정당한 이유로 보안을 이야기하는 사용자입니다. 패턴 대조를 깨뜨리는 것이 바로 그런 경우이기 때문입니다. 실패하는 쿼리를 붙여 넣는 개발자, 스택 트레이스를 전달하는 지원 담당, 비슷하게 생긴 도메인이 진짜인지 묻는 사람.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>다음으로, 우리가 만들지 않은 시스템을 상대로</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">소스 코드 보기 →</a>
     </div>
-    <div class="note">당신의 컴퓨터에서 실행됨 · 아무것도 밖으로 나가지 않음 · 허가된 대상만</div>
+    <div class="note">당신의 컴퓨터에서 실행됨 · 결과는 당신에게 남음 · 허가된 대상만</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>허가된 대상만.</b> 이 도구는 겨냥한 대상이 무엇이든 실제 공격을 보내며, 당신의 컴퓨터에서, 당신의 키로, 당신의 이름으로 실행됩니다. localhost가 아닌 모든 것은 당신이 그것을 관리한다는 사실을 증명해야 합니다(DNS 레코드, 알려진 경로의 파일, 또는 봇 자신이 돌려주는 토큰). 그것이 없으면 실행은 기억해 두라고 요청하는 대신 시작 자체를 거부합니다. 당신의 것이 아니거나 허가받지 않은 시스템을 테스트하는 것은 불법이며, 그 책임은 도구가 아니라 운영자에게 있습니다.
+      <b>허가된 대상만.</b> 이 도구는 겨냥한 대상이 무엇이든 실제 공격을 보내며, 당신의 컴퓨터에서, 당신의 키로, 당신의 권한으로 실행됩니다. localhost가 아닌 모든 것은 당신이 그것을 관리한다는 사실을 증명해야 합니다(DNS 레코드, 알려진 경로의 파일, 또는 봇 자신이 돌려주는 토큰). 그것이 없으면 실행은 기억해 두라고 요청하는 대신 시작 자체를 거부합니다. 당신의 것이 아니거나 허가받지 않은 시스템을 테스트하는 것은 대부분의 나라에서 범죄이며, 그 책임은 도구가 아니라 운영자에게 있습니다.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> 문서를 첫 실행 전에 꼭 읽어 보십시오.
       <br><br>
       버그를 찾으셨거나, 이 도구가 측정하지 않은 것을 보고하는 경우를 발견하셨나요?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

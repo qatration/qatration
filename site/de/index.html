@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLM-Sicherheitstests · Open Source · Apache 2.0</span>
       <h1>Finden Sie heraus, wozu ein Angreifer Ihren Chatbot bringen kann.</h1>
-      <p class="sub">QAtration schickt echte Prompt-Injection-Angriffe an Ihren KI-Bot und liefert einen Bericht in klarer, verständlicher Sprache über alles, was er preisgegeben oder getan hat, bevor es jemand anderes findet. <b>Sie führen es aus.</b> Auf Ihrem Rechner oder in Ihrer CI, gegen Ihr eigenes Deployment: kein Konto, kein übergebener Endpoint, nichts wird irgendwohin geschickt.</p>
+      <p class="sub">QAtration schickt echte Prompt-Injection-Angriffe an Ihren KI-Bot und liefert einen Bericht in klarer, verständlicher Sprache darüber, was er preisgegeben oder getan hat, bevor es jemand anderes findet. <b>Sie führen es aus.</b> Auf Ihrem Rechner oder in Ihrer CI, gegen Ihr eigenes Deployment: kein Konto, kein übergebener Endpoint, nichts wird an uns geschickt.</p>
       <p class="warnbox">
         <b>Richten Sie das nicht auf ein System, das Ihnen nicht gehört.</b> Es schickt echte Angriffe (Prompt-Injection, Datenabfluss, Tool-Missbrauch) an jede URL, die Sie ihm geben. Ihr eigenes Deployment oder eines, dessen Eigentümer Ihnen vorab eine schriftliche Erlaubnis erteilt hat. Kein öffentlicher Chatbot, den Sie interessant finden. Keine Demo eines Anbieters.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Lesen Sie AUTHORISED-USE.md</a> vor dem ersten Lauf.</p>
@@ -605,10 +608,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">Sehen, was es findet</a>
       </div>
       <p class="evid-note" style="margin-top:14px">Zwei Abhängigkeiten. Das gesamte Angriffskorpus wird mitgeliefert, und ebenso die Belege hinter jeder Zahl auf dieser Seite, alles in
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, das mit dem Paket ausgeliefert wird.</p>
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, das mit dem Repository ausgeliefert wird. Die eigenen Berichte der beiden anderen Werkzeuge sind nicht dabei, weil ihre Lizenzen das nicht zulassen. Die Befehle, die sie erzeugen, schon.</p>
       <ul class="evid">
-        <li><b>46</b> Angriffe, in das Chat-Eingabefeld eines geschützten Bots getippt: keiner kam durch.
-          <b>Einer</b> in einem abgerufenen Dokument mitgeliefert: kam jedes Mal durch.</li>
+        <li><b>46</b> Angriffe, in das Chat-Eingabefeld eines geschützten Bots getippt: keiner kam durch. Schalten Sie seinen Ausgangsfilter ab, und <b>ein</b> Angriff, in einem abgerufenen Dokument mitgeliefert, spaziert jedes Mal hinaus. Der Eingangsfilter hat ihn nie zu sehen bekommen.</li>
         <li><b>5 von 9</b> Bots gaben ihre eigenen Anweisungen auf eine schlichte Bitte hin heraus, <span class="keep">ganz ohne Angriff.</span></li>
         <li><b>Zwei</b> meldeten einen Datenbank-Neustart. Keiner von beiden hatte ein Tool, das irgendetwas neu starten könnte.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Injection durch den Agenten hindurch</h3><span class="chip exploited">Ausgenutzt</span></div>
-        <p>SQL oder ein Shell-Befehl, in einen Tool-Aufruf geschmuggelt: klassisches RCE, neue Haustür.</p>
+        <p>SQL oder ein Shell-Befehl, in einen Tool-Aufruf geschmuggelt. Eine alte Fehlerklasse, eine neue Haustür.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Vergiftete Wissensbasis</h3><span class="chip exploited">Ausgenutzt</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">SCHRITT 01</div>
         <h3>Beschreiben Sie Ihren Bot</h3>
-        <p>Etwa zehn Zeilen YAML: die URL, der Auth-Header als Umgebungsvariable und wo im Response-Body die Antwort des Bots steht. Fertige Konfigurationen für APIs im OpenAI-Format und für die von Anthropic. <span class="mono" translate="no">qatration onboard</span> schickt eine ganz normale Frage und sagt Ihnen, was fehlt, bevor auch nur ein einziger Angriff verschickt wird.</p>
+        <p>Etwa zehn Zeilen YAML: die URL, der Auth-Header als Umgebungsvariable und wo im Response-Body die Antwort des Bots steht. Fertige Konfigurationen für APIs im OpenAI-Format und für die von Anthropic, Bedrock und Vertex. <span class="mono" translate="no">qatration onboard</span> schickt eine ganz normale Frage und sagt Ihnen, was fehlt, bevor auch nur ein einziger Angriff verschickt wird.</p>
       </div>
       <div class="step">
         <div class="num">SCHRITT 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>Ein sauberes Ergebnis ist nur dann etwas wert, wenn Sie wissen, was es sauber gemacht hat.</h2>
       <p>Ein Angriff, der nicht durchkam, meldet eine Null. Eine Prüfung, die nicht laufen konnte, ebenso, und ein wirklich gehärteter Bot auch, und genau da bleibt das Testen stecken: drei verschiedene Tatsachen sehen gleich aus, und niemand weiß, was als Nächstes zu versuchen wäre. Das sind Messungen aus echten Läufen, keine Hochrechnungen.
         <b>Und ein Einbruch ist nur dann ein Einbruch, wenn der Angriff ihn verursacht hat.</b> Jedes Ziel bekommt zuerst einen harmlosen Lauf: gewöhnliche Fragen, niemand greift an. Bei einem der Bots hier
-        <code>canary_in_tool_call</code> schlägt bei 88% dieses gewöhnlichen Datenverkehrs an, deshalb wird jeder Befund, der darauf beruht, als abgeschwächt markiert und nicht gezählt.</p>
+        <code>canary_in_tool_call</code> schlägt bei 88% dieses gewöhnlichen Datenverkehrs an, deshalb wird ein Befund, der allein darauf beruht, als nicht zuschreibbar markiert und nicht gezählt.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ein größeres Modell ist nicht die Lösung</h3></div>
-        <p>Ein Bot, zwei Modelle, je 282 Angriffe, je 3 Versuche. Das kleinere brach bei 28 davon ein, das größere bei 25, und 18 davon sind dieselben Angriffe, 17 davon brachen beide Modelle bei jedem einzelnen Versuch. Ein größeres Modell mischt neu, welche Angriffe an den Rändern durchkommen. Das Loch schließt es nicht.</p>
+        <p>Ein Bot, zwei Modelle, je 282 Angriffe, je 3 Versuche. Das kleinere brach bei 28 davon ein, das größere bei 25, und 18 davon sind dieselben Angriffe, 17 davon brachen beide Modelle bei jedem einzelnen Versuch. Bei diesem Bot mischte das größere Modell neu, welche Angriffe an den Rändern durchkommen. Das Loch schließt es nicht.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Die Lücke, die eine Konfiguration Ihnen nicht zeigen kann</h3></div>
-        <p>Gegen ein echtes Guardrail-Framework: 46 Angriffe, in das Chat-Eingabefeld getippt, kamen nicht durch. Ein Angriff, in einem abgerufenen Dokument mitgeliefert, kam bei jedem einzelnen Versuch durch. Eingangsfilter lesen, was der Nutzer tippt. Sie sehen nie, was Ihre Wissensbasis dem Modell reicht. Schalten Sie den Ausgangsfilter ab, und dasselbe Dokument spaziert hinaus: der Eingangsfilter war nie das, was das Dokument aufgehalten hat.</p>
+        <p>Gegen ein echtes Guardrail-Framework: 46 Angriffe, in das Chat-Eingabefeld getippt, kamen nicht durch. Ein Angriff in einem abgerufenen Dokument kam ebenso wenig durch, solange beide Rails eingeschaltet waren. Schalten Sie den Ausgangsfilter ab, und dasselbe Dokument spaziert bei jedem einzelnen Versuch hinaus. Eingangsfilter lesen, was der Nutzer tippt, und sehen nie, was Ihre Wissensbasis dem Modell reicht, also war der Eingangsfilter nie das, was es aufgehalten hat.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Und wie stabil die Antwort ist</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Wir haben es gegen uns selbst laufen lassen</h3></div>
-        <p>Ein Scanner, der immer etwas findet, ist nichts wert, also haben wir die Gegenprobe gemessen: 1500 gewöhnliche Support-Anfragen, in keiner davon ein Angreifer, durch dieselben Prüfungen. Die Hälfte davon sind Nutzer, die völlig legitim über Sicherheit sprechen, denn genau das bricht einen Pattern-Matcher: eine Entwicklerin, die die fehlschlagende Query einfügt, ein Support-Mitarbeiter, der einen Stacktrace weiterleitet, jemand, der fragt, ob eine täuschend ähnliche Domain echt ist.</p>
+        <p>Ein Scanner, der immer etwas findet, ist nichts wert, also haben wir die Gegenprobe gemessen: 1500 harmlose Proben über 30 Ziele, in keiner davon ein Angreifer, durch dieselben Prüfungen. Die Hälfte davon sind Nutzer, die völlig legitim über Sicherheit sprechen, denn genau das bricht einen Pattern-Matcher: eine Entwicklerin, die die fehlschlagende Query einfügt, ein Support-Mitarbeiter, der einen Stacktrace weiterleitet, jemand, der fragt, ob eine täuschend ähnliche Domain echt ist.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Dann gegen ein System, das wir nicht gebaut haben</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Den Quellcode lesen →</a>
     </div>
-    <div class="note">läuft auf Ihrem Rechner · nichts verlässt ihn · nur erlaubte Ziele</div>
+    <div class="note">läuft auf Ihrem Rechner · die Ergebnisse bleiben bei Ihnen · nur erlaubte Ziele</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Nur erlaubte Ziele.</b> Dieses Werkzeug schickt echte Angriffe an das, worauf es gerichtet wird, und es läuft auf Ihrem Rechner, unter Ihrem Schlüssel, auf Ihre Verantwortung. Alles, was nicht localhost ist, muss belegen, dass Sie es kontrollieren (ein DNS-Eintrag, eine Datei an einem bekannten Pfad, oder ein Token, das der Bot selbst zurückgibt), und ohne das verweigert der Lauf den Start, statt sich darauf zu verlassen, dass Sie daran denken. Systeme zu testen, die Ihnen nicht gehören oder für die Sie keine Erlaubnis haben, ist rechtswidrig, und die Verantwortung liegt hier beim Betreiber, nicht beim Werkzeug.
+      <b>Nur erlaubte Ziele.</b> Dieses Werkzeug schickt echte Angriffe an das, worauf es gerichtet wird, und es läuft auf Ihrem Rechner, unter Ihrem Schlüssel, auf Ihre Verantwortung. Alles, was nicht localhost ist, muss belegen, dass Sie es kontrollieren (ein DNS-Eintrag, eine Datei an einem bekannten Pfad, oder ein Token, das der Bot selbst zurückgibt), und ohne das verweigert der Lauf den Start, statt sich darauf zu verlassen, dass Sie daran denken. Systeme zu testen, die Ihnen nicht gehören oder für die Sie keine Erlaubnis haben, ist in den meisten Ländern strafbar, und die Verantwortung liegt hier beim Betreiber, nicht beim Werkzeug.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Lesen Sie AUTHORISED-USE.md</a> vor dem ersten Lauf.
       <br><br>
       Einen Fehler gefunden oder einen Fall, in dem dieses Werkzeug über etwas berichtet, das es nicht gemessen hat?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

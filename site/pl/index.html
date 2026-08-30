@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">testowanie bezpieczeństwa LLM · open source · Apache 2.0</span>
       <h1>Sprawdź, do czego atakujący może zmusić twojego chatbota.</h1>
-      <p class="sub">QAtration wysyła prawdziwe ataki prompt injection na twojego bota AI i zwykłym językiem raportuje wszystko, co ujawnił albo zrobił, zanim znajdzie to ktoś inny. <b>Uruchamiasz to ty.</b> Na twojej maszynie albo w twoim CI, przeciwko twojemu wdrożeniu: bez konta, bez przekazywania endpointu, nic nigdzie nie jest wysyłane.</p>
+      <p class="sub">QAtration wysyła prawdziwe ataki prompt injection na twojego bota AI i zwykłym językiem raportuje, co ujawnił albo zrobił, zanim znajdzie to ktoś inny. <b>Uruchamiasz to ty.</b> Na twojej maszynie albo w twoim CI, przeciwko twojemu wdrożeniu: bez konta, bez przekazywania endpointu, nic nie jest wysyłane do nas.</p>
       <p class="warnbox">
         <b>Nie kieruj tego na system, który nie należy do ciebie.</b> Wysyła prawdziwe ataki (prompt injection, eksfiltracja danych, nadużycie narzędzi) na dowolny URL, który mu podasz. Twoje własne wdrożenie albo takie, którego właściciel z góry dał ci pisemną zgodę. Nie publiczny chatbot, który wydał ci się ciekawy. Nie demo dostawcy.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Przeczytaj AUTHORISED-USE.md</a> przed pierwszym uruchomieniem.</p>
@@ -605,10 +608,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">Zobacz, co wychwytuje</a>
       </div>
       <p class="evid-note" style="margin-top:14px">Dwie zależności. Cały korpus ataków jest dołączony, a razem z nim dowody stojące za każdą liczbą na tej stronie, wszystko w
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, który jest dostarczany razem z pakietem.</p>
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, który jest dostarczany razem z repozytorium. Własnych raportów dwóch pozostałych narzędzi tu nie ma, bo nie pozwalają na to ich licencje. Polecenia, które je odtwarzają, są.</p>
       <ul class="evid">
-        <li><b>46</b> ataków wpisanych w okno czatu chronionego bota: nie przeszedł żaden.
-          <b>Jeden</b> przeniesiony wewnątrz pobranego dokumentu: przechodzi za każdym razem.</li>
+        <li><b>46</b> ataków wpisanych w okno czatu chronionego bota: nie przeszedł żaden. Wyłącz jego filtr wyjściowy, a <b>jeden</b> atak przeniesiony wewnątrz pobranego dokumentu wychodzi na zewnątrz za każdym razem. Filtr wejściowy nigdy go nie zobaczył.</li>
         <li><b>5 z 9</b> botów oddało własne instrukcje na zwykłą prośbę, <span class="keep">bez żadnego ataku.</span></li>
         <li><b>Dwa</b> zgłosiły restart bazy danych. Żaden z nich nie miał narzędzia, które mogłoby cokolwiek zrestartować.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Wstrzyknięcie przez agenta</h3><span class="chip exploited">Złamany</span></div>
-        <p>SQL albo polecenie powłoki przemycone do wywołania narzędzia: klasyczne RCE, nowe drzwi wejściowe.</p>
+        <p>SQL albo polecenie powłoki przemycone do wywołania narzędzia. Stara klasa błędów, nowe drzwi wejściowe.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Zatruta baza wiedzy</h3><span class="chip exploited">Złamany</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">KROK 01</div>
         <h3>Opisz swojego bota</h3>
-        <p>Około dziesięciu linii YAML: URL, nagłówek uwierzytelniający jako zmienna środowiskowa i to, w którym miejscu odpowiedzi znajduje się tekst bota. Gotowe konfiguracje dla API w formacie OpenAI i dla API Anthropic. <span class="mono" translate="no">qatration onboard</span> wysyła jedno zwykłe pytanie i mówi, czego brakuje, zanim wyleci choć jeden atak.</p>
+        <p>Około dziesięciu linii YAML: URL, nagłówek uwierzytelniający jako zmienna środowiskowa i to, w którym miejscu odpowiedzi znajduje się tekst bota. Gotowe konfiguracje dla API w formacie OpenAI oraz dla API Anthropic, Bedrock i Vertex. <span class="mono" translate="no">qatration onboard</span> wysyła jedno zwykłe pytanie i mówi, czego brakuje, zanim wyleci choć jeden atak.</p>
       </div>
       <div class="step">
         <div class="num">KROK 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>Czysty wynik jest coś wart tylko wtedy, gdy wiesz, co go takim zrobiło.</h2>
       <p>Atak, który nie przeszedł, raportuje zero. Tak samo sprawdzenie, które nie mogło się wykonać, i tak samo naprawdę utwardzony bot, i właśnie tu testowanie grzęźnie: trzy różne fakty wyglądają identycznie i nikt nie wie, co próbować dalej. To są pomiary z prawdziwych przebiegów, nie szacunki.
         <b>A wyłom jest wyłomem tylko wtedy, gdy spowodował go atak.</b> Każdy cel dostaje najpierw nieszkodliwy przebieg: zwykłe pytania, nikt nie atakuje. Na jednym z tutejszych botów
-        <code>canary_in_tool_call</code> odpala się przy 88% tego zwykłego ruchu, więc każde ustalenie, które się na nim opiera, jest oznaczane jako osłabione, a nie liczone.</p>
+        <code>canary_in_tool_call</code> odpala się przy 88% tego zwykłego ruchu, więc ustalenie, które opiera się wyłącznie na nim, jest oznaczane jako nieprzypisywalne, a nie liczone.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Większy model to nie jest poprawka</h3></div>
-        <p>Jeden bot, dwa modele, po 282 ataki każdy, po 3 próby. Mniejszy pękł na 28 z nich, większy na 25, a 18 z nich to te same ataki, z czego 17 łamie oba modele przy każdej pojedynczej próbie. Większy model przetasowuje, które ataki wchodzą na obrzeżach. Dziury nie zamyka.</p>
+        <p>Jeden bot, dwa modele, po 282 ataki każdy, po 3 próby. Mniejszy pękł na 28 z nich, większy na 25, a 18 z nich to te same ataki, z czego 17 łamie oba modele przy każdej pojedynczej próbie. Na tym bocie większy model jedynie przetasował, które ataki wchodzą na obrzeżach. Dziury nie zamyka.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Luka, której konfiguracja ci nie pokaże</h3></div>
-        <p>Przeciwko prawdziwemu frameworkowi guardraili, 46 ataków wpisanych w okno czatu: nie przeszedł żaden. Jeden atak przeniesiony wewnątrz pobranego dokumentu: przechodzi przy każdej pojedynczej próbie. Filtry wejściowe czytają to, co wpisuje użytkownik. Nigdy nie widzą tego, co twoja baza wiedzy podaje modelowi. Wyłącz filtr wyjściowy, a ten sam dokument wychodzi na zewnątrz: guardrail wejściowy nigdy nie był tym, co go zatrzymywało.</p>
+        <p>Przeciwko prawdziwemu frameworkowi guardraili, 46 ataków wpisanych w okno czatu: nie przeszedł żaden. Nie przeszedł też jeden przeniesiony wewnątrz pobranego dokumentu, dopóki oba jego guardraile były włączone. Wyłącz filtr wyjściowy, a ten sam dokument wychodzi na zewnątrz przy każdej pojedynczej próbie. Filtry wejściowe czytają to, co wpisuje użytkownik, i nigdy nie widzą tego, co twoja baza wiedzy podaje modelowi, więc guardrail wejściowy nigdy nie był tym, co go zatrzymywało.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>I jak stabilna jest odpowiedź</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Puściliśmy to na nas samych</h3></div>
-        <p>Skaner, który zawsze coś znajduje, jest nic niewart, więc zmierzyliśmy to od drugiej strony: 1500 zwykłych zgłoszeń do wsparcia, bez żadnego atakującego w żadnym z nich, przez te same sprawdzenia. Połowa z nich to użytkownicy, którzy mają pełne prawo mówić o bezpieczeństwie, bo właśnie to łamie dopasowanie do wzorca: ktoś, kto wkleja zapytanie, które się wywala, wsparcie przekazujące stack trace, ktoś pytający, czy łudząco podobna domena jest prawdziwa.</p>
+        <p>Skaner, który zawsze coś znajduje, jest nic niewart, więc zmierzyliśmy to od drugiej strony: 1500 nieszkodliwych sond na 30 celach, bez żadnego atakującego wśród nich, przez te same sprawdzenia. Połowa z nich to użytkownicy, którzy mają pełne prawo mówić o bezpieczeństwie, bo właśnie to łamie dopasowanie do wzorca: ktoś, kto wkleja zapytanie, które się wywala, wsparcie przekazujące stack trace, ktoś pytający, czy łudząco podobna domena jest prawdziwa.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Potem przeciwko systemowi, którego nie budowaliśmy</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Przeczytaj kod →</a>
     </div>
-    <div class="note">działa na twojej maszynie · nic z niej nie wychodzi · tylko autoryzowane cele</div>
+    <div class="note">działa na twojej maszynie · wyniki zostają u ciebie · tylko autoryzowane cele</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Tylko autoryzowane cele.</b> To wysyła prawdziwe ataki na to, na co zostanie skierowane, i działa na twojej maszynie, z twoim kluczem, na twoją odpowiedzialność. Wszystko, co nie jest localhostem, musi udowodnić, że to ty go kontrolujesz (wpis DNS, plik pod znaną ścieżką albo token, który zwraca sam bot), a bez tego przebieg odmawia startu, zamiast liczyć na twoją pamięć. Testowanie systemów, które nie należą do ciebie albo na które nie masz zgody, jest nielegalne, a odpowiedzialność spoczywa tu na operatorze, nie na narzędziu.
+      <b>Tylko autoryzowane cele.</b> To wysyła prawdziwe ataki na to, na co zostanie skierowane, i działa na twojej maszynie, z twoim kluczem, na twoją odpowiedzialność. Wszystko, co nie jest localhostem, musi udowodnić, że to ty go kontrolujesz (wpis DNS, plik pod znaną ścieżką albo token, który zwraca sam bot), a bez tego przebieg odmawia startu, zamiast liczyć na twoją pamięć. Testowanie systemów, które nie należą do ciebie albo na które nie masz zgody, jest w większości krajów przestępstwem, a odpowiedzialność spoczywa tu na operatorze, nie na narzędziu.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Przeczytaj AUTHORISED-USE.md</a> przed pierwszym uruchomieniem.
       <br><br>
       Masz błąd albo przypadek, w którym to narzędzie raportuje coś, czego nie zmierzyło?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

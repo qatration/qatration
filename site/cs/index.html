@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">testování bezpečnosti LLM · otevřený zdroj · Apache 2.0</span>
       <h1>Zjisti, k čemu dokáže útočník tvého chatbota přimět.</h1>
-      <p class="sub">QAtration posílá skutečné útoky typu prompt injection na tvého AI bota a předá ti srozumitelnou zprávu o všem, co vyzradil nebo udělal, dřív než to najde někdo jiný. <b>Spouštíš to ty.</b> Na svém stroji nebo ve své CI, proti svému vlastnímu nasazení: žádný účet, žádný předávaný endpoint, nikam se nic neposílá.</p>
+      <p class="sub">QAtration posílá skutečné útoky typu prompt injection na tvého AI bota a předá ti srozumitelnou zprávu o tom, co vyzradil nebo udělal, dřív než to najde někdo jiný. <b>Spouštíš to ty.</b> Na svém stroji nebo ve své CI, proti svému vlastnímu nasazení: žádný účet, žádný předávaný endpoint, nám se neposílá nic.</p>
       <p class="warnbox">
         <b>Nemiř tímhle nástrojem na systém, který ti nepatří.</b> Posílá skutečné útoky (prompt injection, odčerpání dat, zneužití nástrojů) na jakoukoli adresu, kterou mu zadáš. Tvoje vlastní nasazení, nebo takové, jehož vlastník ti předem dal písemný souhlas. Ne veřejný chatbot, který ti přišel zajímavý. Ani ukázka nějakého dodavatele.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Přečti si AUTHORISED-USE.md</a> před prvním spuštěním.</p>
@@ -604,11 +607,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">Podívej se, co odhalí</a>
       </div>
-      <p class="evid-note" style="margin-top:14px">Dvě závislosti. Celý korpus útoků je součástí balíčku a spolu s ním i doklady za každým číslem na této stránce, všechny v
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, který se distribuuje spolu s balíčkem.</p>
+      <p class="evid-note" style="margin-top:14px">Dvě závislosti. Celý korpus útoků je součástí balíčku a spolu s ním i důkazy za každým číslem na této stránce, všechny v
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, který se distribuuje spolu s repozitářem. Vlastní zprávy zbylých dvou nástrojů tu nejsou, protože to jejich licence nedovolují. Příkazy, které je znovu vytvoří, ano.</p>
       <ul class="evid">
-        <li><b>46</b> útoků napsaných do chatovacího okna chráněného bota: neprošel ani jeden.
-          <b>Jeden</b> pronesený uvnitř dohledaného dokumentu: projde pokaždé.</li>
+        <li><b>46</b> útoků napsaných do chatovacího okna chráněného bota: neprošel ani jeden. Vypni mu výstupní filtr a <b>jeden</b> útok pronesený uvnitř dohledaného dokumentu odejde ven pokaždé. Vstupní filtr ho nikdy neviděl.</li>
         <li><b>5 z 9</b> botů vydalo vlastní instrukce na obyčejnou žádost, <span class="keep">úplně bez útoku.</span></li>
         <li><b>Dva</b> ohlásili restart databáze. Ani jeden z nich neměl nástroj, který by dokázal cokoli restartovat.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Injektáž skrz agenta</h3><span class="chip exploited">Prolomeno</span></div>
-        <p>SQL nebo příkaz shellu propašovaný do volání nástroje: klasické RCE, nové vstupní dveře.</p>
+        <p>SQL nebo příkaz shellu propašovaný do volání nástroje. Stará třída chyb, nové vstupní dveře.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Otrávená znalostní báze</h3><span class="chip exploited">Prolomeno</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">KROK 01</div>
         <h3>Popiš svého bota</h3>
-        <p>Zhruba deset řádků YAML: adresa, autentizační hlavička jako proměnná prostředí a to, ve kterém poli odpovědi je text bota. Hotové konfigurace pro API ve tvaru OpenAI a pro API Anthropicu. <span class="mono" translate="no">qatration onboard</span> pošle jednu obyčejnou otázku a řekne ti, co chybí, ještě než vyletí jediný útok.</p>
+        <p>Zhruba deset řádků YAML: adresa, autentizační hlavička jako proměnná prostředí a to, ve kterém poli odpovědi je text bota. Hotové konfigurace pro API ve tvaru OpenAI a pro API Anthropicu, Bedrocku a Vertexu. <span class="mono" translate="no">qatration onboard</span> pošle jednu obyčejnou otázku a řekne ti, co chybí, ještě než vyletí jediný útok.</p>
       </div>
       <div class="step">
         <div class="num">KROK 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>Čistý výsledek má cenu jen tehdy, když víš, co ho čistým udělalo.</h2>
       <p>Útok, který neprošel, hlásí nulu. Stejně tak kontrola, která se nemohla spustit, a stejně tak opravdu zocelený bot, a právě tady testování uvázne: tři různé skutečnosti dorazí a vypadají naprosto stejně a nikdo neví, co zkusit dál. Tohle jsou měření ze skutečných běhů, ne odhady.
         <b>A průlom je průlomem jen tehdy, když ho způsobil útok.</b> Každý cíl nejdřív projde neškodným během: obyčejné otázky, nikdo neútočí. Na jednom ze zdejších botů
-        <code>canary_in_tool_call</code> se spouští na 88 % toho běžného provozu, takže každé zjištění, které se o něj opírá, se označí jako oslabené místo aby se započítalo.</p>
+        <code>canary_in_tool_call</code> se spouští na 88 % toho běžného provozu, takže zjištění, které se opírá jen o něj, se označí jako nepřiřaditelné, a ne započítá.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Větší model není řešení</h3></div>
-        <p>Jeden bot, dva modely, po 282 útocích, po 3 pokusech. Menší praskl na 28 z nich, větší na 25, a 18 z toho jsou tytéž útoky, z nichž 17 láme oba modely při každém jednotlivém pokusu. Větší model jen přemíchá, které útoky projdou na okrajích. Díru nezavře.</p>
+        <p>Jeden bot, dva modely, po 282 útocích, po 3 pokusech. Menší praskl na 28 z nich, větší na 25, a 18 z toho jsou tytéž útoky, z nichž 17 láme oba modely při každém jednotlivém pokusu. U tohohle bota větší model jen přemíchal, které útoky projdou na okrajích. Díru nezavře.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Mezera, kterou ti konfigurace neukáže</h3></div>
-        <p>Proti skutečnému frameworku guardrailů: 46 útoků napsaných do chatovacího okna, neprošel ani jeden. Jeden útok pronesený uvnitř dohledaného dokumentu projde při každém jednotlivém pokusu. Vstupní filtry čtou to, co píše uživatel. Nikdy nevidí to, co modelu podává tvoje znalostní báze. Vypni výstupní filtr a tentýž dokument klidně odejde ven: vstupní guardrail nikdy nebyl to, co ho zastavovalo.</p>
+        <p>Proti skutečnému frameworku guardrailů: 46 útoků napsaných do chatovacího okna, neprošel ani jeden. Neprošel ani jeden pronesený uvnitř dohledaného dokumentu, dokud byly zapnuté obě jeho pojistky. Vypni výstupní filtr a tentýž dokument odejde ven při každém jednotlivém pokusu. Vstupní filtry čtou to, co píše uživatel, a nikdy nevidí to, co modelu podává tvoje znalostní báze, takže vstupní guardrail nikdy nebyl to, co ho zastavovalo.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>A jak stabilní ta odpověď je</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Pustili jsme to proti sobě samým</h3></div>
-        <p>Skener, který vždycky něco najde, nemá žádnou cenu, a tak jsme změřili opačné číslo: 1 500 obyčejných požadavků na podporu, bez jediného útočníka mezi nimi, přes tytéž kontroly. Polovina z nich jsou uživatelé, kteří mají plné právo mluvit o bezpečnosti, protože právě to láme porovnávání podle vzorů: někdo, kdo vloží dotaz, který padá, pracovník podpory přeposílající stack trace, někdo, kdo se ptá, jestli je matoucně podobná doména pravá.</p>
+        <p>Skener, který vždycky něco najde, nemá žádnou cenu, a tak jsme změřili opačné číslo: 1 500 neškodných sond na 30 cílech, bez jediného útočníka mezi nimi, přes tytéž kontroly. Polovina z nich jsou uživatelé, kteří mají plné právo mluvit o bezpečnosti, protože právě to láme porovnávání podle vzorů: někdo, kdo vloží dotaz, který padá, pracovník podpory přeposílající stack trace, někdo, kdo se ptá, jestli je matoucně podobná doména pravá.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Pak proti systému, který jsme nestavěli my</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Přečíst zdrojový kód →</a>
     </div>
-    <div class="note">běží na tvém stroji · nic z něj neodchází · jen povolené cíle</div>
+    <div class="note">běží na tvém stroji · výsledky zůstávají u tebe · jen povolené cíle</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Jen povolené cíle.</b> Tenhle nástroj posílá skutečné útoky na cokoli, na co je namířený, a běží na tvém stroji, pod tvým klíčem, na tvou odpovědnost. Všechno, co není localhost, musí doložit, že to ovládáš ty (DNS záznam, soubor na známé cestě, nebo token, který vrátí sám bot), a bez toho běh odmítne nastartovat, místo aby spoléhal, že si vzpomeneš. Testovat systémy, které ti nepatří nebo ke kterým nemáš souhlas, je nezákonné, a odpovědnost je tu na tom, kdo to spouští, ne na nástroji.
+      <b>Jen povolené cíle.</b> Tenhle nástroj posílá skutečné útoky na cokoli, na co je namířený, a běží na tvém stroji, pod tvým klíčem, na tvou odpovědnost. Všechno, co není localhost, musí doložit, že to ovládáš ty (DNS záznam, soubor na známé cestě, nebo token, který vrátí sám bot), a bez toho běh odmítne nastartovat, místo aby spoléhal, že si vzpomeneš. Testovat systémy, které ti nepatří nebo ke kterým nemáš souhlas, je ve většině zemí trestné, a odpovědnost nese ten, kdo to spouští, ne nástroj.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Přečti si AUTHORISED-USE.md</a> před prvním spuštěním.
       <br><br>
       Našel jsi chybu, nebo případ, kdy tenhle nástroj hlásí něco, co neměřil?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

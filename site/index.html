@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -597,9 +600,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="eyebrow">LLM security testing · open source · Apache 2.0</span>
       <h1>Find out what an attacker can make your chatbot do.</h1>
       <p class="sub">QAtration fires real prompt-injection attacks at your AI bot and gives
-        you a plain-English report of everything it leaked or did, before someone else finds
+        you a plain-English report of what it leaked or did, before someone else finds
         it. <b>You run it.</b> On your machine or in your CI, against your own deployment —
-        no account, no endpoint handed over, nothing sent anywhere.</p>
+        no account, no endpoint handed over, nothing sent to us.</p>
       <p class="warnbox">
         <b>Do not point this at a system you do not own.</b> It sends real attacks &mdash;
         prompt injection, data exfiltration, tool abuse &mdash; at whatever URL you give it.
@@ -612,11 +615,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a class="btn btn-ghost" href="#finds">See what it catches</a>
       </div>
       <p class="evid-note" style="margin-top:14px">Two dependencies. The whole attack corpus
-        ships with it, and so does the evidence behind every number on this page — all of it in
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, which ships with the package.</p>
+        ships with it, and so does the evidence behind every number on this page, all of it in
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, which ships with the repository. The two other tools' own reports are not
+        here, because their licences keep them out. The commands that regenerate them are.</p>
       <ul class="evid">
         <li><b>46</b> attacks typed into the chat box of a guarded bot: none got through.
-          <b>One</b> carried inside a retrieved document: through every time.</li>
+          Take its output filter off and <b>one</b> attack carried inside a retrieved document
+          walks out every time. The input filter never saw it.</li>
         <li><b>5 of 9</b> bots handed over their own instructions to a plain request, <span class="keep">with no attack at all.</span></li>
         <li><b>Two</b> reported a database restarted. Neither had a tool that could restart
           anything.</li>
@@ -699,7 +704,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Injection through the agent</h3><span class="chip exploited">Exploited</span></div>
-        <p>SQL or a shell command smuggled into a tool call: classic RCE, new front door.</p>
+        <p>SQL or a shell command smuggled into a tool call. An old bug class, a new front
+          door.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Poisoned knowledge base</h3><span class="chip exploited">Exploited</span></div>
@@ -725,8 +731,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <div class="num">STEP 01</div>
         <h3>Describe your bot</h3>
         <p>About ten lines of YAML: the URL, the auth header as an environment variable, and
-          where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and
-          for Anthropic's. <span class="mono" translate="no">qatration onboard</span> sends one ordinary
+          where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for
+          Anthropic's, Bedrock's and Vertex's. <span class="mono" translate="no">qatration onboard</span> sends one ordinary
           question and tells you what is missing before a single attack goes out.</p>
       </div>
       <div class="step">
@@ -760,7 +766,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <b>And a breach is only a breach if the attack caused it.</b> Every target gets a
         benign run first: ordinary questions, nobody attacking. On one of the bots here
         <code>canary_in_tool_call</code> fires on 88% of that ordinary traffic, so every
-        finding resting on it is marked weakened instead of counted.</p>
+        finding resting on it alone is marked unattributable instead of counted.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -774,16 +780,16 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <div class="top-row"><h3>A bigger model is not the fix</h3></div>
         <p>One bot, two models, 282 attacks each, 3 tries apiece. The smaller broke on 28,
           the larger on 25 — and 18 of those are the same attacks, 17 of them breaking on
-          every single try of both. A larger model reshuffles which attacks land at the
+          every single try of both. On this bot the larger model reshuffled which attacks land at the
           edges. It does not close the hole.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>The gap a config can't show you</h3></div>
         <p>Against a real guardrail framework, 46 attacks typed into the chat box: none got
-          through. One attack carried inside a retrieved document: through on every single
-          try. Input filters read what the user types. They never see what your knowledge
-          base hands the model. Turn the output filter off and that same document walks
-          out: the input rail was never what stopped it.</p>
+          through. Neither did one carried inside a retrieved document, while both of its
+          rails were on. Turn the output filter off and that same document walks out on every
+          single try. Input filters read what the user types, and never see what your
+          knowledge base hands the model, so the input rail was never what stopped it.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>And how steady the answer is</h3></div>
@@ -802,7 +808,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="find">
         <div class="top-row"><h3>We ran it against ourselves</h3></div>
         <p>A scanner that always finds something is worth nothing, so we measured the
-          opposite number: 1,500 ordinary support requests, no attacker anywhere in them,
+          opposite number: 1,500 benign probes across 30 targets, no attacker anywhere in them,
           through the same checks. Half of them are a user who legitimately talks about
           security, because that is what breaks a pattern matcher: a developer pasting the
           failing query, support forwarding a stack trace, someone asking whether a
@@ -893,7 +899,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Read the source →</a>
     </div>
-    <div class="note">runs on your machine · nothing leaves it · authorized targets only</div>
+    <div class="note">runs on your machine · the results stay with you · authorised targets only</div>
   </div>
 
 </div>
@@ -905,7 +911,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       and it runs on your machine, under your key, on your authority. Anything that is not
       localhost has to prove you control it — a DNS record, a file at a known path, or a token
       the bot itself returns — and the run refuses without that rather than asking you to
-      remember. Testing systems you do not own or are not permitted to test is illegal, and
+      remember. Testing systems you do not own or are not permitted to test is a crime in most
+      places, and
       that is on the operator, not the tool.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read
       AUTHORISED-USE.md</a> before the first run.
@@ -940,7 +947,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

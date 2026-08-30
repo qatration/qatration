@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">kiểm thử an toàn LLM · mã nguồn mở · Apache 2.0</span>
       <h1>Xem thử kẻ tấn công có thể khiến chatbot của bạn làm những gì.</h1>
-      <p class="sub">QAtration gửi những cuộc tấn công prompt injection thật vào bot AI của bạn và trao cho bạn một báo cáo bằng lời lẽ dễ hiểu về mọi thứ nó đã để lộ hoặc đã làm, trước khi có người khác tìm ra. <b>Người chạy nó là bạn.</b> Trên máy của bạn hoặc trong CI của bạn, nhắm vào bản triển khai của chính bạn: không cần tài khoản, không phải giao endpoint cho ai, không có gì được gửi đi đâu cả.</p>
+      <p class="sub">QAtration gửi những cuộc tấn công prompt injection thật vào bot AI của bạn và trao cho bạn một báo cáo bằng ngôn ngữ dễ hiểu về những gì nó đã để lộ hoặc đã làm, trước khi có người khác tìm ra. <b>Người chạy nó là bạn.</b> Trên máy của bạn hoặc trong CI của bạn, nhắm vào bản triển khai của chính bạn: không cần tài khoản, không phải giao endpoint cho ai, không có gì được gửi về phía chúng tôi.</p>
       <p class="warnbox">
         <b>Đừng chĩa công cụ này vào một hệ thống không phải của bạn.</b> Nó gửi những cuộc tấn công thật (prompt injection, rút trộm dữ liệu, lạm dụng công cụ) tới bất kỳ URL nào bạn đưa cho nó. Bản triển khai của chính bạn, hoặc một bản mà chủ sở hữu đã cho bạn phép bằng văn bản từ trước. Không phải một chatbot công khai mà bạn thấy thú vị. Cũng không phải bản demo của một nhà cung cấp.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Hãy đọc AUTHORISED-USE.md</a> trước lần chạy đầu tiên.</p>
@@ -604,11 +607,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">Xem nó bắt được những gì</a>
       </div>
-      <p class="evid-note" style="margin-top:14px">Hai phụ thuộc. Toàn bộ kho tấn công đi kèm sẵn, và bằng chứng đằng sau từng con số trên trang này cũng vậy, tất cả đều nằm trong
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, được phát hành cùng gói.</p>
+      <p class="evid-note" style="margin-top:14px">Chỉ hai gói phụ thuộc. Toàn bộ kho tấn công đi kèm sẵn, và bằng chứng đằng sau từng con số trên trang này cũng vậy, tất cả đều nằm trong
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, được phát hành cùng kho mã. Báo cáo của hai công cụ kia không có ở đây, vì giấy phép của chúng không cho phép. Các lệnh tạo lại chúng thì có.</p>
       <ul class="evid">
-        <li><b>46</b> cuộc tấn công gõ thẳng vào khung chat của một bot có phòng vệ: không cuộc nào lọt qua.
-          <b>Một</b> được mang theo trong một tài liệu truy xuất được: lần nào cũng lọt.</li>
+        <li><b>46</b> cuộc tấn công gõ thẳng vào khung chat của một bot có phòng vệ: không cuộc nào lọt qua. Tắt bộ lọc đầu ra của nó đi và <b>một</b> cuộc tấn công được mang theo trong một tài liệu được truy xuất sẽ đi ra ngoài, lần nào cũng vậy. Bộ lọc đầu vào chưa bao giờ nhìn thấy nó.</li>
         <li><b>5 trên 9</b> bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường, <span class="keep">không hề có tấn công nào.</span></li>
         <li><b>Hai</b> báo rằng một cơ sở dữ liệu đã được khởi động lại. Cả hai đều không hề có công cụ nào khởi động lại được thứ gì.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Tiêm qua tác nhân</h3><span class="chip exploited">Bị chọc thủng</span></div>
-        <p>SQL hoặc một lệnh shell được tuồn vào trong một lệnh gọi công cụ: RCE kinh điển, cửa trước mới.</p>
+        <p>SQL hoặc một lệnh shell được tuồn vào trong một lệnh gọi công cụ. Một lớp lỗi cũ, một cửa trước mới.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Kho tri thức bị đầu độc</h3><span class="chip exploited">Bị chọc thủng</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">BƯỚC 01</div>
         <h3>Mô tả bot của bạn</h3>
-        <p>Chừng mười dòng YAML: URL, header xác thực đặt trong biến môi trường, và phần nào của phản hồi chứa câu trả lời của bot. Có sẵn cấu hình cho các API theo dạng OpenAI và cho API của Anthropic. <span class="mono" translate="no">qatration onboard</span> gửi một câu hỏi bình thường và cho bạn biết còn thiếu gì, trước khi có dù chỉ một cuộc tấn công được gửi đi.</p>
+        <p>Chừng mười dòng YAML: URL, header xác thực đặt trong biến môi trường, và phần nào của phản hồi chứa câu trả lời của bot. Có sẵn cấu hình cho các API theo dạng OpenAI và cho API của Anthropic, Bedrock và Vertex. <span class="mono" translate="no">qatration onboard</span> gửi một câu hỏi bình thường và cho bạn biết còn thiếu gì, trước khi có dù chỉ một cuộc tấn công được gửi đi.</p>
       </div>
       <div class="step">
         <div class="num">BƯỚC 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>Một kết quả sạch chỉ đáng giá khi bạn biết điều gì đã khiến nó sạch.</h2>
       <p>Một cuộc tấn công không lọt được sẽ báo về số không. Một phép kiểm tra không chạy nổi cũng vậy, và một con bot thật sự được gia cố cũng vậy, và đó chính là chỗ việc kiểm thử tắc lại: ba sự thật khác nhau hiện ra trông y hệt nhau, và không ai biết nên thử gì tiếp theo. Đây là những phép đo từ các lần chạy thật, không phải ước tính.
         <b>Và một vụ chọc thủng chỉ là chọc thủng nếu chính cuộc tấn công gây ra nó.</b> Mỗi mục tiêu đều được chạy một lượt vô hại trước: toàn câu hỏi bình thường, không ai tấn công cả. Trên một trong các bot ở đây,
-        <code>canary_in_tool_call</code> kích hoạt trên 88% lưu lượng bình thường đó, nên mọi phát hiện dựa vào nó đều bị đánh dấu là đã suy yếu thay vì được tính vào.</p>
+        <code>canary_in_tool_call</code> kích hoạt trên 88% lưu lượng bình thường đó, nên một phát hiện chỉ dựa vào riêng nó sẽ bị đánh dấu là không quy được nguồn thay vì được tính vào.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Mô hình lớn hơn không phải là cách sửa</h3></div>
-        <p>Một bot, hai mô hình, mỗi mô hình 282 cuộc tấn công, mỗi cuộc 3 lần thử. Mô hình nhỏ vỡ ở 28 trong số đó, mô hình lớn vỡ ở 25, và 18 trong số ấy là cùng những cuộc tấn công, 17 trong đó phá được cả hai mô hình ở từng lần thử một. Mô hình lớn hơn chỉ xáo lại xem cuộc tấn công nào lọt ở vùng rìa. Cái lỗ thì nó không bịt.</p>
+        <p>Một bot, hai mô hình, mỗi mô hình 282 cuộc tấn công, mỗi cuộc 3 lần thử. Mô hình nhỏ vỡ ở 28 trong số đó, mô hình lớn vỡ ở 25, và 18 trong số ấy là cùng những cuộc tấn công, 17 trong đó phá được cả hai mô hình ở mọi lần thử. Trên con bot này, mô hình lớn hơn chỉ xáo lại xem cuộc tấn công nào lọt ở vùng rìa. Nó không bịt được cái lỗ đó.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Khoảng hở mà một tệp cấu hình không thể cho bạn thấy</h3></div>
-        <p>Đối đầu với một khung guardrail thật, 46 cuộc tấn công gõ thẳng vào khung chat: không cuộc nào lọt qua. Một cuộc tấn công mang trong tài liệu truy xuất được: lần thử nào cũng lọt. Bộ lọc đầu vào đọc thứ người dùng gõ. Chúng không bao giờ thấy thứ kho tri thức của bạn đưa cho mô hình. Tắt bộ lọc đầu ra đi và chính tài liệu ấy ung dung đi ra: hàng rào đầu vào chưa bao giờ là thứ đã chặn nó.</p>
+        <p>Đối đầu với một framework guardrail thật, 46 cuộc tấn công gõ thẳng vào khung chat: không cuộc nào lọt qua. Một cuộc mang trong tài liệu được truy xuất cũng không lọt, khi cả hai hàng rào của nó còn bật. Tắt bộ lọc đầu ra đi và chính tài liệu ấy đi ra ngoài ở mọi lần thử. Bộ lọc đầu vào đọc thứ người dùng gõ, và không bao giờ thấy thứ kho tri thức của bạn đưa cho mô hình, nên hàng rào đầu vào chưa bao giờ là thứ đã chặn nó.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Và câu trả lời ổn định đến đâu</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Chúng tôi đã chạy nó nhắm vào chính mình</h3></div>
-        <p>Một công cụ quét lúc nào cũng tìm ra thứ gì đó thì chẳng đáng giá gì, nên chúng tôi đo con số ngược lại: 1500 yêu cầu hỗ trợ bình thường, không có kẻ tấn công nào trong đó, cho chạy qua đúng những phép kiểm tra ấy. Một nửa trong số đó là người dùng hoàn toàn có lý do chính đáng để nói về bảo mật, bởi đó đúng là thứ làm vỡ một bộ khớp mẫu: một lập trình viên dán vào câu truy vấn đang lỗi, một nhân viên hỗ trợ chuyển tiếp một stack trace, một người hỏi xem một tên miền trông na ná kia có thật hay không.</p>
+        <p>Một công cụ quét lúc nào cũng tìm ra thứ gì đó thì chẳng đáng giá gì, nên chúng tôi đo con số ngược lại: 1500 lượt thăm dò vô hại trên 30 mục tiêu, không có kẻ tấn công nào trong đó, cho chạy qua đúng những phép kiểm tra ấy. Một nửa trong số đó là người dùng hoàn toàn có lý do chính đáng để nói về bảo mật, bởi đó đúng là thứ làm vỡ một bộ so khớp mẫu: một lập trình viên dán vào câu truy vấn đang lỗi, một nhân viên hỗ trợ chuyển tiếp một stack trace, một người hỏi xem một tên miền trông na ná có thật hay không.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Rồi nhắm vào một hệ thống không do chúng tôi dựng nên</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Đọc mã nguồn →</a>
     </div>
-    <div class="note">chạy trên máy của bạn · không có gì rời khỏi đó · chỉ những mục tiêu được phép</div>
+    <div class="note">chạy trên máy của bạn · kết quả ở lại với bạn · chỉ những mục tiêu được phép</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Chỉ những mục tiêu được phép.</b> Công cụ này gửi những cuộc tấn công thật vào bất cứ thứ gì nó được chĩa vào, và nó chạy trên máy của bạn, bằng khóa của bạn, dưới trách nhiệm của bạn. Mọi thứ không phải localhost đều phải chứng minh được rằng chính bạn kiểm soát nó (một bản ghi DNS, một tệp ở một đường dẫn đã biết, hoặc một token do chính con bot trả về), và không có thứ đó thì lần chạy sẽ từ chối khởi động chứ không trông chờ bạn tự nhớ. Kiểm thử những hệ thống không thuộc về bạn hoặc bạn không được phép là hành vi phạm pháp, và trách nhiệm ấy thuộc về người vận hành, không thuộc về công cụ.
+      <b>Chỉ những mục tiêu được phép.</b> Công cụ này gửi những cuộc tấn công thật vào bất cứ thứ gì nó được chĩa vào, và nó chạy trên máy của bạn, bằng khóa của bạn, và do chính bạn cho phép. Mọi thứ không phải localhost đều phải chứng minh được rằng chính bạn kiểm soát nó (một bản ghi DNS, một tệp ở một đường dẫn đã biết, hoặc một token do chính con bot trả về), và không có thứ đó thì lần chạy sẽ từ chối khởi động chứ không trông chờ bạn tự nhớ. Kiểm thử những hệ thống không thuộc về bạn hoặc bạn không được phép là hành vi phạm pháp ở phần lớn các nước, và trách nhiệm ấy thuộc về người vận hành, không thuộc về công cụ.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Hãy đọc AUTHORISED-USE.md</a> trước lần chạy đầu tiên.
       <br><br>
       Bạn tìm thấy một lỗi, hay một trường hợp công cụ này báo cáo thứ nó chưa hề đo?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }

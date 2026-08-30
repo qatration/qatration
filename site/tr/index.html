@@ -478,7 +478,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .steps{grid-template-columns:1fr;gap:26px}
   .illus{display:none}
 }
-@media (prefers-reduced-motion:reduce){.cursor{animation:none}*{scroll-behavior:auto}}
+/* `html`, not `*`: a universal selector is specificity (0,0,0) and loses to the
+   `html{scroll-behavior:smooth}` it exists to override, which is (0,0,1). The rule was
+   dead the day it was written, and the `.cursor` half of it working is what hid that. */
+@media (prefers-reduced-motion:reduce){.cursor{animation:none}html{scroll-behavior:auto}}
 </style>
 <script>
   /* Applies a STORED choice before the first paint so it never flashes. With no stored
@@ -596,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLM güvenlik testi · açık kaynak · Apache 2.0</span>
       <h1>Bir saldırganın sohbet botunuza neler yaptırabileceğini öğrenin.</h1>
-      <p class="sub">QAtration yapay zekâ botunuza gerçek prompt injection saldırıları gönderir ve nelerin sızdığını, nelerin yapıldığını sade bir dille yazılmış bir raporla, başkası bulmadan önce size verir. <b>Onu siz çalıştırırsınız.</b> Kendi makinenizde ya da CI'nızda, kendi dağıtımınıza karşı: hesap yok, teslim edilen bir uç nokta yok, hiçbir yere hiçbir şey gönderilmiyor.</p>
+      <p class="sub">QAtration yapay zekâ botunuza gerçek prompt injection saldırıları gönderir ve botunuzun neleri sızdırdığını, neler yaptığını sade bir dille anlatan bir raporu, başkası bulmadan önce size verir. <b>Onu siz çalıştırırsınız.</b> Kendi makinenizde ya da CI'nızda, kendi kurulumunuza karşı: hesap yok, teslim edilen bir uç nokta yok, bize hiçbir şey gönderilmiyor.</p>
       <p class="warnbox">
         <b>Bunu size ait olmayan bir sisteme yöneltmeyin.</b> Verdiğiniz her URL'ye gerçek saldırılar gönderir (prompt injection, veri sızdırma, araç kötüye kullanımı). Kendi dağıtımınız ya da sahibinin size önceden yazılı izin verdiği bir dağıtım olmalı. İlginç bulduğunuz herkese açık bir sohbet botu değil. Bir satıcının demosu da değil.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md dosyasını okuyun</a> ilk çalıştırmadan önce.</p>
@@ -604,11 +607,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">Neleri yakaladığına bakın</a>
       </div>
-      <p class="evid-note" style="margin-top:14px">İki bağımlılık. Saldırı külliyatının tamamı pakete dahildir, bu sayfadaki her sayının arkasındaki kanıtlar da öyle, hepsi de şurada:
-        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, paketle birlikte dağıtılır.</p>
+      <p class="evid-note" style="margin-top:14px">İki bağımlılık. Saldırı kümesinin tamamı pakete dahildir, bu sayfadaki her sayının arkasındaki kanıtlar da öyle, hepsi de şurada:
+        <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, depoyla birlikte gelir. Diğer iki aracın kendi raporları burada değil, çünkü lisansları buna izin vermiyor. Onları yeniden üreten komutlar ise burada.</p>
       <ul class="evid">
-        <li><b>46</b> saldırı, korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi.
-          <b>Bir tanesi</b> getirilen bir belgenin içinde taşındı: her seferinde geçiyor.</li>
+        <li><b>46</b> saldırı, korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve <b>bir</b> saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.</li>
         <li><b>9 bottan 5'i</b> düz bir isteğe karşılık kendi talimatlarını verdi, <span class="keep">hiçbir saldırı olmadan.</span></li>
         <li><b>İki bot</b> bir veritabanının yeniden başlatıldığını bildirdi. İkisinin de herhangi bir şeyi yeniden başlatabilecek bir aracı yoktu.</li>
       </ul>
@@ -680,7 +682,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ajan üzerinden enjeksiyon</h3><span class="chip exploited">Ele geçirildi</span></div>
-        <p>Bir araç çağrısının içine sokuşturulmuş SQL ya da kabuk komutu: klasik RCE, yeni bir ön kapı.</p>
+        <p>Bir araç çağrısının içine sokuşturulmuş SQL ya da kabuk komutu. Eski bir hata sınıfı, yeni bir ön kapı.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Zehirlenmiş bilgi tabanı</h3><span class="chip exploited">Ele geçirildi</span></div>
@@ -704,7 +706,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">ADIM 01</div>
         <h3>Botunuzu tanımlayın</h3>
-        <p>Yaklaşık on satır YAML: URL, ortam değişkeni olarak kimlik doğrulama başlığı ve yanıtın hangi alanında botun metninin bulunduğu. OpenAI biçimindeki API'ler ve Anthropic'inkiler için hazır yapılandırmalar. <span class="mono" translate="no">qatration onboard</span> sıradan bir soru gönderir ve tek bir saldırı bile çıkmadan önce neyin eksik olduğunu söyler.</p>
+        <p>Yaklaşık on satır YAML: URL, ortam değişkeni olarak kimlik doğrulama başlığı ve yanıtın hangi alanında botun metninin bulunduğu. OpenAI biçimindeki API'ler ile Anthropic, Bedrock ve Vertex API'leri için hazır yapılandırmalar. <span class="mono" translate="no">qatration onboard</span> sıradan bir soru gönderir ve tek bir saldırı bile çıkmadan önce neyin eksik olduğunu söyler.</p>
       </div>
       <div class="step">
         <div class="num">ADIM 02</div>
@@ -726,7 +728,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>Temiz bir sonuç, ancak onu neyin temiz kıldığını biliyorsanız bir değer taşır.</h2>
       <p>Geçemeyen bir saldırı sıfır bildirir. Çalışamayan bir denetim de öyle, gerçekten sertleştirilmiş bir bot da öyle ve test tam burada tıkanır: üç farklı olgu birbirinin aynısı görünerek gelir ve kimse sırada neyi deneyeceğini bilmez. Bunlar gerçek çalıştırmalardan alınan ölçümlerdir, tahmin değil.
         <b>Ve bir ihlal, ancak ona saldırı yol açtıysa ihlaldir.</b> Her hedef önce zararsız bir çalıştırmadan geçer: sıradan sorular, saldıran kimse yok. Buradaki botlardan birinde
-        <code>canary_in_tool_call</code> o sıradan trafiğin 88%'inde tetikleniyor, bu yüzden ona dayanan her bulgu sayılmak yerine zayıflatılmış olarak işaretleniyor.</p>
+        <code>canary_in_tool_call</code> o sıradan trafiğin %88'inde tetikleniyor, bu yüzden yalnızca ona dayanan bir bulgu sayılmak yerine atfedilemez olarak işaretleniyor.</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -735,11 +737,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Daha büyük bir model çözüm değil</h3></div>
-        <p>Bir bot, iki model, her birine 282 saldırı, her birine 3 deneme. Küçük olan bunların 28'inde kırıldı, büyük olan 25'inde ve bunların 18'i aynı saldırılar, 17'si her tek denemede iki modeli birden kırıyor. Daha büyük bir model, kenarlarda hangi saldırıların geçtiğini yeniden karıştırır. Deliği kapatmaz.</p>
+        <p>Bir bot, iki model, her modele 282 saldırı, her saldırıya 3 deneme. Küçük olan bunların 28'inde kırıldı, büyük olan 25'inde ve bunların 18'i aynı saldırılar, 17'si her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Bir yapılandırmanın size gösteremeyeceği boşluk</h3></div>
-        <p>Gerçek bir guardrail çatısına karşı sohbet kutusuna yazılan 46 saldırıdan hiçbiri geçemedi. Getirilen bir belgenin içinde taşınan tek bir saldırı ise her tek denemede geçiyor. Girdi filtreleri kullanıcının yazdığını okur. Bilgi tabanınızın modele verdiğini asla görmezler. Çıktı filtresini kapatın, aynı belge öylece dışarı yürür: girdi tarafındaki guardrail onu durduran şey hiç olmamıştı.</p>
+        <p>Gerçek bir guardrail çerçevesine karşı sohbet kutusuna yazılan 46 saldırıdan hiçbiri geçemedi. Getirilen bir belgenin içinde taşınan bir saldırı da, her iki rayı da açıkken geçemedi. Çıktı filtresini kapatın, aynı belge her tek denemede dışarı yürür. Girdi filtreleri kullanıcının yazdığını okur ve bilgi tabanınızın modele verdiğini asla görmez, yani girdi tarafındaki guardrail onu durduran şey hiç olmamıştı.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve yanıtın ne kadar tutarlı olduğu</h3></div>
@@ -751,7 +753,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Onu kendimize karşı çalıştırdık</h3></div>
-        <p>Her zaman bir şey bulan bir tarayıcının hiçbir değeri yoktur, bu yüzden karşıt sayıyı ölçtük: içlerinde hiçbir saldırgan olmayan 1500 sıradan destek talebini aynı denetimlerden geçirdik. Bunların yarısı, güvenlikten tümüyle haklı olarak söz eden kullanıcılar, çünkü bir örüntü eşleyiciyi kıran tam da budur: hata veren sorguyu yapıştıran bir geliştirici, yığın izini ileten bir destek çalışanı, benzerine çok yakın bir alan adının gerçek olup olmadığını soran biri.</p>
+        <p>Her zaman bir şey bulan bir tarayıcının hiçbir değeri yoktur, bu yüzden karşıt sayıyı ölçtük: 1500 zararsız yoklamayı, 30 hedefe yayılmış ve içlerinde hiçbir saldırgan olmayan bir küme olarak, aynı denetimlerden geçirdik. Bunların yarısı, güvenlikten tümüyle haklı olarak söz eden kullanıcılar, çünkü bir örüntü eşleyiciyi kıran tam da budur: hata veren sorguyu yapıştıran bir geliştirici, stack trace ileten bir destek çalışanı, benzerine çok yakın bir alan adının gerçek olup olmadığını soran biri.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Sonra bizim yapmadığımız bir sisteme karşı</h3></div>
@@ -811,7 +813,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Kaynak kodunu okuyun →</a>
     </div>
-    <div class="note">makinenizde çalışır · hiçbir şey oradan çıkmaz · yalnızca izin verilen hedefler</div>
+    <div class="note">makinenizde çalışır · sonuçlar sizde kalır · yalnızca izin verilen hedefler</div>
   </div>
 
 </div>
@@ -819,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Yalnızca izin verilen hedefler.</b> Bu araç kendisine yöneltilen her neyse ona gerçek saldırılar gönderir ve sizin makinenizde, sizin anahtarınızla, sizin sorumluluğunuz altında çalışır. localhost olmayan her şey, onu sizin denetlediğinizi kanıtlamak zorundadır (bir DNS kaydı, bilinen bir yoldaki bir dosya ya da botun kendisinin döndürdüğü bir jeton) ve bu olmadan çalıştırma, hatırlamanızı istemek yerine başlamayı reddeder. Size ait olmayan ya da izniniz bulunmayan sistemleri test etmek yasa dışıdır ve bu sorumluluk aracın değil, onu çalıştıranındır.
+      <b>Yalnızca izin verilen hedefler.</b> Bu araç, yöneltildiği şey her ne olursa olsun ona gerçek saldırılar gönderir ve sizin makinenizde, sizin anahtarınızla, sizin yetkinizle çalışır. localhost olmayan her şey, onu sizin denetlediğinizi kanıtlamak zorundadır (bir DNS kaydı, bilinen bir yoldaki bir dosya ya da botun kendisinin döndürdüğü bir token) ve bu olmadan çalıştırma, hatırlamanızı istemek yerine başlamayı reddeder. Size ait olmayan ya da izniniz bulunmayan sistemleri test etmek çoğu ülkede suçtur ve bu sorumluluk aracın değil, onu çalıştıranındır.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md dosyasını okuyun</a> ilk çalıştırmadan önce.
       <br><br>
       Bir hata mı buldunuz, ya da bu aracın ölçmediği bir şeyi bildirdiği bir durum mu?
@@ -851,7 +853,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       // English words the page generator cannot see, so a translated page said everything in
       // its own language until the first repaint and then said "Light".
       btn.textContent = light ? btn.getAttribute('data-to-dark') : btn.getAttribute('data-to-light');
-      btn.setAttribute('aria-pressed', String(light));
+      // NO `aria-pressed` HERE EITHER, and this line is why the rule needed writing
+      // twice. The markup above dropped the attribute and says at length why; this
+      // set it again on every repaint, so the shipped pages announced exactly the
+      // contradiction the comment describes. A rule stated in one place and undone
+      // in another is not a rule.
       btn.setAttribute('aria-label',
         light ? btn.getAttribute('data-aria-dark') : btn.getAttribute('data-aria-light'));
     }
