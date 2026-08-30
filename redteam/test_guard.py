@@ -25,7 +25,9 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -1050,6 +1052,48 @@ def main():
           "core.hooksPath" in io.open(os.path.join(ROOT, "CONTRIBUTING.md"),
                                       encoding="utf-8").read(),
           "CONTRIBUTING.md does not say how to turn the hooks on")
+
+    # THE COUNT IN ITS OWN COMMENT, RECOUNTED. That comment used to read "zero across all 429
+    # tracked files", and by the time anyone looked there were 511 of them: a number typed once
+    # into a file that describes the repository, which is the arrangement the comment beside it
+    # now argues against. Saying so and leaving it ungated would have been the same mistake in
+    # a more self-aware voice.
+    _g = io.open(os.path.join(ROOT, "tools", "guard.py"), encoding="utf-8").read()
+    _run = re.compile(guard.LITERAL_CYRILLIC[0] + "+")
+    _tracked = [f for f in subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,
+                                          text=True).stdout.split()
+                if not f.lower().endswith(guard.BINARY)]
+    _carry = []
+    for _f in _tracked:
+        try:
+            if _run.search(io.open(os.path.join(ROOT, _f), encoding="utf-8").read()):
+                _carry.append(_f)
+        except (IOError, OSError, UnicodeDecodeError):
+            pass
+    _said = re.search(r"Today it is (\w+) files:", _g)
+    check("the guard's own comment states how much Cyrillic the repository holds", bool(_said),
+          "the sentence recording the count is gone, so nothing recounts it")
+    if _said:
+        _words = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+                  "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        check("...and the number of files it names is the number there are",
+              _words.get(_said.group(1)) == len(_carry),
+              "the comment says %s, the tree has %d: %s"
+              % (_said.group(1), len(_carry), ", ".join(sorted(_carry))))
+
+    # AND EVERY ONE IS A PLACE THE EXEMPTION ACTUALLY NAMES. The count alone would pass if a
+    # leak replaced a translation file one for one, so the run itself is checked: outside a
+    # declared dictionary, the only Cyrillic allowed is a language writing its own name.
+    _stray = []
+    for _f in _carry:
+        if _f in guard.translation_files(ROOT):
+            continue
+        _txt = io.open(os.path.join(ROOT, _f), encoding="utf-8").read()
+        _bad = [m.group(0) for m in _run.finditer(_txt) if m.group(0) not in guard.endonyms(ROOT)]
+        if _bad:
+            _stray.append("%s: %s" % (_f, _bad[0][:20]))
+    check("...and every Cyrillic run outside a dictionary is a language naming itself",
+          not _stray, "; ".join(_stray))
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

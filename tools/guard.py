@@ -47,7 +47,9 @@ a pattern that fires on its own fixture is one somebody switches off. Everything
 nothing in this repository today, which is the only reason it will mean something tomorrow.
 """
 import argparse
+import ast
 import hashlib
+import io
 import os
 import re
 import subprocess
@@ -104,8 +106,21 @@ CREDENTIALS = [
 # a Cyrillic character and the six-character text of its escape are different bytes, and neither
 # pattern sees the other.
 #
-#   LITERAL — the character itself. Zero across all 429 tracked files today, which is the only
-#   reason it is worth asserting; a check that starts life with exemptions never gets any.
+#   LITERAL — the character itself. This said "zero across all 429 tracked files today, which
+#   is the only reason it is worth asserting; a check that starts life with exemptions never
+#   gets any", and that stopped being true the day the landing page got a Ukrainian
+#   translation. Today it is four files: a dictionary, the page generated from it, and the two
+#   places where a language names itself. Not this one, which says all of that without writing
+#   a single Cyrillic character, the same way the patterns above are written as escapes.
+#
+#   That count is recounted by `test_guard.py` rather than trusted, because the sentence it
+#   replaced was a number typed once into a file describing the repository, and it was wrong
+#   by eighty-two files before anybody read it again.
+#
+#   The argument survives the change, which is why the exemption is derived rather than
+#   listed - see `translation_files`. What does not survive is leaving the old sentence here:
+#   a file that describes the repository is the worst place to keep a fact by memory, and a
+#   guard whose own comment overstates it is teaching the wrong habit.
 #
 #   ESCAPED — the same character written `\\uXXXX`, and the same thing at more layers.
 #   `json.dumps` handed a string that already contains the escape writes `\\\\uXXXX`, a third
@@ -120,6 +135,52 @@ ESCAPED_CYRILLIC = (r"(?:\\){1,4}u04[0-9a-fA-F]{2}", r"\\u0416")
 # Stored artifacts are JSON, and inside one the two kinds of string are structurally distinct:
 # what we wrote (a prompt from the corpus, a note, a config path) and what a model said back.
 ARTIFACT = re.compile(r"(^|/)out/.*\.json$")
+
+# THE FIRST EXEMPTION THIS CHECK HAS EVER HAD, and the comment above argues against having one:
+# zero Cyrillic across every tracked file was worth asserting precisely because it had no
+# exceptions. A Ukrainian translation of the landing page ends that. The alphabet on its own
+# stopped being evidence of a leak, so the rule has to name where it stopped being evidence.
+#
+# It is a PLACE, not a permission, and the place is DERIVED rather than listed: a declared
+# dictionary under `site/i18n/`, and the page generated from it. Adding a language cannot
+# widen this by hand, and deleting one narrows it the same day.
+#
+# Everywhere else the ban stands, with one allowance: a language naming itself. That is read
+# out of the ENDONYM table in tools/i18n.py rather than written here, and it matches only a
+# WHOLE run of Cyrillic, so a language's own name passes and a sentence that merely
+# contains it does not. The name is not written here as a literal, for the reason at
+# LITERAL_CYRILLIC: this file must stay under its own check rather than need an
+# exemption from it, and the first draft of this comment made the guard refuse itself
+# in any checkout where tools/i18n.py was absent.
+def translation_files(root):
+    """-> repo-relative paths where Cyrillic is the point rather than a leak."""
+    d = os.path.join(root, "site", "i18n")
+    langs = sorted(f[:-len(".json")] for f in os.listdir(d)
+                   if f.endswith(".json")) if os.path.isdir(d) else []
+    return ({"site/i18n/%s.json" % c for c in langs}
+            | {"site/%s/index.html" % c for c in langs})
+
+
+def endonyms(root):
+    """-> what each language calls itself, parsed out of tools/i18n.py.
+
+    `ast`, not a regex and not an import: the point is to read one literal without running a
+    module that writes files, and without a pattern that a differently-formatted table defeats.
+
+    NOTHING ELSE IS CAUGHT. The first version wrapped all of this in `except Exception`, and a
+    missing `import io` in this module became "there are no endonyms" rather than a traceback:
+    a guard that reports a legitimate translation as a leak, for a reason nowhere in its output.
+    A missing file is the one real absence here - no i18n.py means no translations to allow.
+    """
+    path = os.path.join(root, "tools", "i18n.py")
+    if not os.path.exists(path):
+        return set()
+    tree = ast.parse(io.open(path, encoding="utf-8").read())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "ENDONYM"
+                                                for t in node.targets):
+            return {v for v in ast.literal_eval(node.value).values() if isinstance(v, str)}
+    return set()
 
 # EXEMPT BY FIELD, NOT BY FILE. The earlier rule named `out/benign_guardedrag-naive.json` and
 # its reason — "a model's own reply, recorded verbatim" — and that reason is not a property of
@@ -444,9 +505,12 @@ def scan_files(items, reader, refusals, path_of=None):
     """
     to_path = path_of or (lambda label: label)
     literals = _local_literals()
-    lit = re.compile(LITERAL_CYRILLIC[0])
+    lit_run = re.compile(LITERAL_CYRILLIC[0] + "+")
+    translations = translation_files(ROOT)
+    known_endonyms = endonyms(ROOT)
     for item in items:
         path = to_path(item)
+        rel = path.replace("\\", "/").lstrip("./")
         if path.lower().endswith(BINARY):
             continue
         text = reader(item)
@@ -467,12 +531,18 @@ def scan_files(items, reader, refusals, path_of=None):
                     f"{item}: does not parse as JSON ({sample}), so what it holds is unknown"
                     if where == UNPARSEABLE else
                     f"{item}: Cyrillic under `{where}`, which is not a model's reply: {sample!r}")
-        else:
-            m = lit.search(text)
-            if m:
+        elif not any(rel == t or rel.endswith("/" + t) for t in translations):
+            # WHOLE RUNS, not the first character. Matching a single letter and comparing it
+            # against a language name would let anything through the moment one name was
+            # allowed; a maximal run means a language's own name is exempt and a sentence
+            # that merely contains it is not.
+            for m in lit_run.finditer(text):
+                if m.group(0) in known_endonyms:
+                    continue
                 line = text[:m.start()].count("\n") + 1
                 refusals.append(f"{item}:{line}: a Cyrillic character in a tracked file "
-                                f"({m.group(0)})")
+                                f"({m.group(0)[:24]})")
+                break
         if path.replace("\\", "/") not in SELF:      # see SELF: these files ARE the patterns
             for label, pattern, _sample in CREDENTIALS:
                 m = re.search(pattern, text)

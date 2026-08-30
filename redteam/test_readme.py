@@ -1273,6 +1273,130 @@ def main():
                   _worst_pct - _claim <= 10,
                   f"the page says {_claim}% and the evidence now shows {_worst_pct}%")
 
+    # ============================================================== TRANSLATIONS
+    #
+    # A SECOND LANGUAGE IS A SECOND COPY OF EVERY NUMBER ON THIS PAGE, and every check above
+    # this line recounts exactly one of them. Left as hand-written files, the translated pages
+    # would go on publishing last month's figures in languages nobody here reads closely
+    # enough to catch it, which is the failure this whole file exists to prevent.
+    #
+    # So they are generated from the English page, and these are the rules that make generating
+    # them safe. Each one is a way the arrangement could quietly stop working.
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import i18n as _i18n
+
+    _langs = _i18n.languages()
+    _keys = set(_i18n.extract(_site))
+
+    # 1. NOTHING ON DISK IS HAND-WRITTEN. Without this the generator is a suggestion: an edit
+    #    to a translated page survives until the next build, and in the meantime it is a
+    #    sentence no check on this page has ever read.
+    _drifted = [os.path.relpath(p, ROOT) for p, _changed in _i18n.build(write=False) if _changed]
+    check("every published page is exactly what the source generates",
+          not _drifted,
+          "stale or hand-edited: %s (run `python tools/i18n.py`)" % ", ".join(_drifted))
+
+    for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
+        _table = _i18n.load(_lang)
+
+        # 2. NO ENGLISH LEFT IN. A missing translation renders as the English sentence, which
+        #    reads as a deliberate choice rather than as a gap, and nothing else would notice.
+        _missing = sorted(k for k in _keys if not _table.get(k))
+        check("%s translates every string the page shows" % _lang, not _missing,
+              "%d untranslated, first: %s" % (len(_missing), (_missing or [""])[0][:60]))
+
+        # 3. NO TRANSLATION OF A SENTENCE THAT NO LONGER EXISTS. The dictionary is keyed by the
+        #    English text, so editing a sentence orphans its translation. An orphan is harmless
+        #    on the page and dangerous in the file: it makes a dictionary look complete.
+        _orphans = sorted(k for k in _table if k not in _keys)
+        check("...and %s carries no translation of a sentence that is gone" % _lang,
+              not _orphans,
+              "%d orphaned key(s), first: %s" % (len(_orphans), (_orphans or [""])[0][:60]))
+
+        # 4. EVERY FIGURE SURVIVES. This is the one that matters. Thousands separators may move
+        #    (`1,500` and `1 500` are the same measurement); digits may not. A number written
+        #    out as a word, or quietly rounded, stops being the thing the artifacts recount.
+        _moved = sorted(k for k, v in _table.items()
+                        if v and _i18n.numbers(k) != _i18n.numbers(v))
+        check("...and every number in %s is still the number in the artifacts" % _lang,
+              not _moved,
+              "%d string(s) changed a figure, first: %s"
+              % (len(_moved), (_moved or [""])[0][:60]))
+
+    # 5. NO VISIBLE TEXT BUILT IN JAVASCRIPT. The theme button used to set its own label from
+    #    two string literals in the script, so a translated page said everything in its own
+    #    language until the first repaint and then said "Light". The generator cannot see
+    #    inside a script, so nothing user-facing may be assembled there.
+    _script = "\n".join(re.findall(r"(?s)<script\b[^>]*>(.*?)</script>", _site))
+    # COMMENTS ARE NOT CODE, and this check called its own explanation a defect: the line
+    # recording why the labels were moved out of the script quotes the word it moved, and a
+    # scan of raw text cannot tell the two apart. Reading the file rather than the thing it
+    # describes is precisely the mistake being checked for, so the comments come out first.
+    _script = re.sub(r"(?s)/\*.*?\*/", " ", re.sub(r"(?m)//.*$", " ", _script))
+    _lits = set(re.findall(r"'([^'\n]{2,})'", _script)) | set(re.findall(r'"([^"\n]{2,})"', _script))
+    _leaked = sorted(_lits & _keys)
+    check("no string the page displays is written inside its script", not _leaked,
+          "the script hardcodes %s, which no translation can reach" % ", ".join(_leaked[:3]))
+
+    _assigns = re.findall(r"(?:textContent|innerText|innerHTML)\s*=\s*['\"]", _script)
+    _assigns += re.findall(r"setAttribute\(\s*['\"]aria-label['\"]\s*,\s*['\"]", _script)
+    check("...and none is assigned to an element as a literal", not _assigns,
+          "%d assignment(s) of a literal string to visible text or a label" % len(_assigns))
+
+    # 6. THE ALTERNATES AGREE WITH WHAT IS ACTUALLY PUBLISHED, on every page and in both
+    #    directions. A page that advertises a language it does not link to, or omits one that
+    #    exists, sends a search engine to a URL that is not there.
+    _want_alt = set(_langs) | {"x-default"}
+    for _lang in _langs:
+        _path = _i18n.page_path(_lang)
+        _page = io.open(_path, encoding="utf-8").read()
+        _got = set(re.findall(r'<link rel="alternate" hreflang="([^"]+)"', _page))
+        check("the %s page lists every language and no other" % _lang, _got == _want_alt,
+              "hreflang is %s, the site has %s" % (sorted(_got), sorted(_want_alt)))
+        _self = _i18n.SITE_URL if _lang == _i18n.DEFAULT else "%s%s/" % (_i18n.SITE_URL, _lang)
+        check("...and the %s page names itself as its own canonical" % _lang,
+              '<link rel="canonical" href="%s">' % _self in _page,
+              "canonical does not point at %s, so the page declares itself a copy" % _self)
+        # 7. AND A READER CAN GET FROM ONE TO THE OTHER. hreflang is for crawlers; a person
+        #    who lands on the wrong one needs a link they can see.
+        #    Read the hrefs off the switch links rather than matching a run of attributes:
+        #    the first version of this looked for `class="lang" href="/uk/"` and went red the
+        #    moment a `translate="no"` was added between the two, reporting a missing link
+        #    that was right there. A check that depends on attribute order is checking the
+        #    spelling of the markup, not the thing the markup does.
+        _switch = {m.group(1) for m in
+                   re.finditer(r'<a\b[^>]*\bclass="lang"[^>]*\bhref="([^"]+)"', _page)}
+        _switch |= {m.group(1) for m in
+                    re.finditer(r'<a\b[^>]*\bhref="([^"]+)"[^>]*\bclass="lang"', _page)}
+        for _other in [c for c in _langs if c != _lang]:
+            _href = "/" if _other == _i18n.DEFAULT else "/%s/" % _other
+            check("...and the %s page offers the reader %s" % (_lang, _other),
+                  _href in _switch,
+                  "no visible switch from %s to %s; the page offers %s"
+                  % (_lang, _other, sorted(_switch) or "nothing"))
+
+    # 8. THE SITEMAP LISTS THE LANGUAGES, and is still a document a parser accepts. It said in
+    #    a comment that one page was the honest size of this site, which was true until it
+    #    was not: a file describing the site is the wrong place for a fact kept by memory.
+    _sm = io.open(os.path.join(ROOT, "site", "sitemap.xml"), encoding="utf-8").read()
+    _locs = set(re.findall(r"<loc>([^<]+)</loc>", _sm))
+    _want_locs = {_i18n.SITE_URL if c == _i18n.DEFAULT else "%s%s/" % (_i18n.SITE_URL, c)
+                  for c in _langs}
+    check("the sitemap lists every language and nothing else", _locs == _want_locs,
+          "sitemap has %s, the site has %s" % (sorted(_locs), sorted(_want_locs)))
+    # Whether it parses at all is NOT rechecked here. `the sitemap is well-formed XML` above
+    # already does it, and a second copy of a rule is not twice the safety: it is two things
+    # to keep in step, and the day they disagree the answer is whichever one somebody reads.
+
+    # 9. AND NOTHING BLOCKS THE TRANSLATIONS FROM BEING FOUND. `Disallow: /fixtures/` is
+    #    deliberate; a rule that swallowed `/uk/` would make the whole exercise pointless
+    #    while every check above still passed.
+    _robots = io.open(os.path.join(ROOT, "site", "robots.txt"), encoding="utf-8").read()
+    _blocked = [c for c in _langs if c != _i18n.DEFAULT
+                and re.search(r"^Disallow:\s*/%s/?\s*$" % c, _robots, re.M)]
+    check("robots.txt does not hide a translation", not _blocked,
+          "crawling is disallowed for: %s" % ", ".join(_blocked))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:
