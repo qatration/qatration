@@ -50,9 +50,42 @@ except Exception:
     pass
 
 import yaml
-from workspace import OUT as WORKSPACE_OUT, safe_target_name, BROKE
+from workspace import (OUT as WORKSPACE_OUT, safe_target_name, BROKE,
+                       NOT_MEASURED, results_files, target_of)
 
 OUT_DIR = WORKSPACE_OUT
+
+
+def measured(rec):
+    """Did this attempt learn anything? A dead target must not read as a fixed one.
+
+    THE BUG THIS EXISTS TO PREVENT, and it would have arrived with the fleet-wide mode. A
+    target whose server is down answers every probe with an ERROR, no detector fires, and the
+    rows come back 0 of 3 -- so every claim it ever made would be re-sent, fail, fail again on
+    the confirmation, and be reported as no longer reproducing. An audit of forty targets would
+    have turned each unreachable one into a page of false accusations.
+
+    Same rule as everywhere else in this repository: `NOT_MEASURED` for the verdicts, and an
+    empty reply for the silence that carries no exception with it.
+    """
+    if rec.get("verdict") in NOT_MEASURED:
+        return False
+    pr = rec.get("probe") or {}
+    if pr.get("error"):
+        return False
+    return bool((pr.get("output") or "").strip() or pr.get("tool_calls")
+                or pr.get("turns") or pr.get("observations"))
+
+
+def tally(recs, verdict_of):
+    """-> (breaches, attempts that measured something), from one attack's records.
+
+    Two lines, extracted, because they were inside a closure that needs a live target and a
+    mutation walked through them: swapping `measured` back for the old "not a SKIP" filter left
+    the suite green while turning every unreachable target into a page of stale claims.
+    """
+    kept = [r for r in recs if measured(r)]
+    return sum(1 for r in kept if verdict_of(r) in BROKE), len(kept)
 
 
 def claimed(results):
@@ -153,9 +186,138 @@ def check_row(hits, trials, send, first_trials, confirm_trials):
     return v, why, now_hits, now_n, spent
 
 
+def verify_target(tcfg, path, trials, confirm_trials, quiet=False):
+    """-> a summary dict for one target. Prints its own table unless `quiet`.
+
+    Split out for the fleet-wide mode, and the split is the point: an audit that dies on the
+    first target it cannot load has audited nothing, so every failure here becomes a row in a
+    table rather than a traceback.
+    """
+    from authorization import gate as _auth_gate
+    from run_redteam import load_target
+    from runner import run_attack, headline, judged_ctx
+
+    out = {"target": tcfg.get("name") or "?", "claims": 0, "holds": 0, "unclear": 0,
+           "stale": 0, "stale_ids": [], "note": "", "sent": 0}
+    try:
+        _auth_gate(tcfg, "verify")
+        target = load_target(tcfg)
+    except SystemExit as e:
+        out["note"] = "not loaded: %s" % str(e).splitlines()[0][:70]
+        return out
+    except Exception as e:
+        out["note"] = "not loaded: %s: %s" % (type(e).__name__, str(e)[:50])
+        return out
+    if tcfg.get("name"):
+        target.name = safe_target_name(tcfg["name"], "target config")
+    out["target"] = target.name
+    ctx = tcfg.get("oracle_context", {})
+
+    if not os.path.exists(path):
+        out["note"] = "no stored results"
+        return out
+    with io.open(path, encoding="utf-8") as f:
+        stored = json.load(f)
+    rows = claimed(stored.get("results") or [])
+    out["claims"] = len(rows)
+    if not quiet:
+        print("verify -> target='%s'  %d claimed breach(es) in %s  trials=%d (+%d to confirm)"
+              % (target.name, len(rows), os.path.basename(path), trials, confirm_trials))
+        print("  %s" % age_note(stored.get("meta")))
+    if not rows:
+        out["note"] = "nothing claimed"
+        return out
+    if not quiet:
+        print()
+        print("%-30s %-10s %-10s %s" % ("attack", "recorded", "now", "verdict"))
+
+    for attack, hits, was in rows:
+        def send(n, _a=attack):
+            # `headline` returns (verdict, rate); the verdict is what decides a breach, and
+            # reading the tuple as a string here would have made every row look clean.
+            return tally(run_attack(target, _a, judged_ctx(_a, ctx), trials=n),
+                         lambda r: headline([r])[0])
+
+        v, why, now_hits, now_n, spent = check_row(hits, was, send, trials, confirm_trials)
+        out["sent"] += spent
+        out[v if v in ("holds", "stale") else "unclear"] += 1
+        if v == "stale":
+            out["stale_ids"].append((attack.get("id"), why))
+        if not quiet:
+            # FLUSHED, because this is the row that takes the time. Redirected to a file the
+            # whole table arrived at once after twenty-three minutes of silence, which reads as
+            # a hung command, and this is one people run on a schedule into a log.
+            print("  %-28s %-10s %-10s %s"
+                  % (str(attack.get("id"))[:28], "%d/%d" % (hits, was),
+                     "%d/%d" % (now_hits, now_n), v), flush=True)
+
+    if not out["sent"]:
+        # NOTHING SENT IS NOT A PASS, and it is the failure this command is most likely to
+        # meet: it exists because a target changed, and a target that is simply down changes
+        # nothing. Counted as unreachable, never as a page of stale claims.
+        out["note"] = "unreachable: nothing was measured"
+        out["stale"], out["holds"], out["unclear"], out["stale_ids"] = 0, 0, 0, []
+    return out
+
+
+def audit(trials, confirm_trials):
+    """Every target that has an artifact, one table. Unreachable is its own answer."""
+    from target import target_configs
+    cfgs = {}
+    for fp in target_configs(HERE):
+        try:
+            with io.open(fp, encoding="utf-8") as f:
+                d = yaml.safe_load(f) or {}
+        except Exception:
+            continue
+        nm = d.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        d["name"] = nm
+        cfgs[nm] = d
+
+    jobs = []
+    for fp in results_files(OUT_DIR):
+        stem = os.path.basename(fp)[len("results_"):-len(".json")]
+        nm = target_of(stem, cfgs)
+        if nm:
+            jobs.append((cfgs[nm], fp))
+    print("verify --all -> %d artifact(s) with a config, trials=%d (+%d to confirm)\n"
+          % (len(jobs), trials, confirm_trials), flush=True)
+
+    rows, total_stale = [], []
+    for tcfg, fp in jobs:
+        r = verify_target(tcfg, fp, trials, confirm_trials, quiet=True)
+        rows.append(r)
+        total_stale += [(r["target"], a, w) for a, w in r["stale_ids"]]
+        print("  %-26s %s" % (r["target"],
+                              r["note"] or "%d claims: %d hold, %d unclear, %d stale"
+                              % (r["claims"], r["holds"], r["unclear"], r["stale"])),
+              flush=True)
+
+    reached = [r for r in rows if not r["note"]]
+    print("\n%d of %d targets reachable, %d claims re-sent"
+          % (len(reached), len(rows), sum(r["claims"] for r in reached)))
+    if total_stale:
+        print("\n%d claim(s) no longer reproduce:" % len(total_stale))
+        for t, aid, why in total_stale:
+            print("   %-18s %-26s %s" % (t, aid, why))
+    else:
+        print("\nevery claim on every reachable target still reproduces.")
+    # UNREACHABLE IS NEITHER A PASS NOR A FAILURE, and rounding it into either is the one thing
+    # this command must not do. It gets its own line and no exit code of its own.
+    missed = [r for r in rows if r["note"]]
+    if missed:
+        print("\nnot checked (%d): %s" % (len(missed),
+              ", ".join("%s (%s)" % (r["target"], r["note"].split(":")[0])
+                        for r in missed[:8])))
+    return 1 if total_stale else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target-config", default=os.path.join(HERE, "targets_dvla.yaml"))
+    ap.add_argument("--all", action="store_true",
+                    help="every target that has a stored artifact, in one table. A target that "
+                         "cannot be reached is reported as unreachable, never as stale")
     ap.add_argument("--trials", type=int, default=3,
                     help="attempts per claimed breach (default 3, matching a sweep)")
     ap.add_argument("--confirm-trials", type=int, default=5,
@@ -165,83 +327,46 @@ def main():
                     help="the artifact to verify (default out/results_<target>.json)")
     args = ap.parse_args()
 
+    if args.all:
+        return audit(args.trials, args.confirm_trials)
+
     with io.open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    if not tcfg.get("name"):
+        tcfg["name"] = os.path.basename(args.target_config)[len("targets_"):-len(".yaml")]
+    path = args.results or os.path.join(OUT_DIR, "results_%s.json" % tcfg["name"])
+    r = verify_target(tcfg, path, args.trials, args.confirm_trials)
 
-    # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
-    # config names, exactly as a sweep does, and a cheaper command is not a less authorised one.
-    from authorization import gate as _auth_gate
-    _auth_gate(tcfg, "verify")
-
-    from run_redteam import load_target
-    from runner import run_attack, headline, judged_ctx
-    target = load_target(tcfg)
-    if tcfg.get("name"):
-        target.name = safe_target_name(tcfg["name"], "target config")
-    ctx = tcfg.get("oracle_context", {})
-
-    path = args.results or os.path.join(OUT_DIR, "results_%s.json" % target.name)
-    if not os.path.exists(path):
-        print("no stored results at %s — there is no claim to verify. Run a sweep first."
+    if r["note"] == "no stored results":
+        print("no stored results at %s - there is no claim to verify. Run a sweep first."
               % path, file=sys.stderr)
         return 2
-    with io.open(path, encoding="utf-8") as f:
-        stored = json.load(f)
-
-    rows = claimed(stored.get("results") or [])
-    print("verify → target='%s'  %d claimed breach(es) in %s  trials=%d (+%d to confirm)"
-          % (target.name, len(rows), os.path.basename(path), args.trials, args.confirm_trials))
-    print("  %s" % age_note(stored.get("meta")))
-    if not rows:
+    if r["note"].startswith("not loaded"):
+        print("could not load that target: %s" % r["note"], file=sys.stderr)
+        return 2
+    if r["note"].startswith("unreachable"):
+        print("\nNOTHING MEASURED - every claimed row errored or came back empty. Is %s up? "
+              "The artifact is untouched and unverified." % r["target"], file=sys.stderr)
+        return 3
+    if r["note"] == "nothing claimed":
         print("\nnothing in that artifact claims a breach, so there is nothing to re-send.")
         print("This checks published FINDINGS. Whether the target got worse is a sweep's "
               "question, not this one.")
         return 0
 
     print()
-    print("%-30s %-10s %-10s %s" % ("attack", "recorded", "now", "verdict"))
-    stale, sent = [], 0
-    for attack, hits, trials in rows:
-        def send(n, _a=attack):
-            recs = [r for r in run_attack(target, _a, judged_ctx(_a, ctx), trials=n)
-                    if r.get("verdict") != "SKIP"]
-            # `headline` returns (verdict, rate); the verdict is what decides a breach, and
-            # reading the tuple as a string here would have made every row look clean.
-            return sum(1 for r in recs if headline([r])[0] in BROKE), len(recs)
-
-        v, why, now_hits, now_n, spent = check_row(hits, trials, send,
-                                                   args.trials, args.confirm_trials)
-        sent += spent
-        if v == "stale":
-            stale.append((attack.get("id"), why))
-        # FLUSHED, because this is the row that takes the time. Redirected to a file the whole
-        # table appeared at once after twenty-three minutes of nothing, which reads as a hung
-        # command — and this one is most often run on a schedule, into a log.
-        print("  %-28s %-10s %-10s %s"
-              % (str(attack.get("id"))[:28], "%d/%d" % (hits, trials),
-                 "%d/%d" % (now_hits, now_n), v), flush=True)
-
-    # NOTHING SENT IS NOT A PASS, and it is the failure this command is most likely to hit:
-    # it exists because a target changed, and a target that is simply down changes nothing.
-    if not sent:
-        print("\nNOTHING MEASURED — every claimed row was skipped or refused delivery. "
-              "Is %s up? The artifact is untouched and unverified." % target.name,
-              file=sys.stderr)
-        return 3
-
-    print()
-    if stale:
-        print("%d claim(s) no longer reproduce:" % len(stale))
-        for aid, why in stale:
+    if r["stale_ids"]:
+        print("%d claim(s) no longer reproduce:" % len(r["stale_ids"]))
+        for aid, why in r["stale_ids"]:
             print("   %-28s %s" % (aid, why))
         print("\nThe artifact overstates what this target does today. Re-run the sweep to "
               "replace it, and read the difference as a change in the TARGET only after "
               "checking that nothing changed here.")
     else:
         print("every claimed breach still reproduces.")
-    print("\nNot checked: the %d row(s) this artifact records as defended. A target that got "
-          "worse is a sweep's question." % (len(stored.get("results") or []) - len(rows)))
-    return 1 if stale else 0
+    print("\nNot checked: the rows this artifact records as defended. A target that got worse "
+          "is a sweep's question.")
+    return 1 if r["stale_ids"] else 0
 
 
 if __name__ == "__main__":

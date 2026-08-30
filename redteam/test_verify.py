@@ -38,7 +38,7 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from verify import claimed, verdict, check_row, age_note
+from verify import claimed, verdict, check_row, age_note, measured, tally
 
 
 def main():
@@ -140,6 +140,47 @@ def main():
     v, why, _, _, _ = check_row(1, 3, s5, 3, 5)
     check("a flaky claim never reaches a second pass at all",
           v == "unclear" and s5.calls == [3], "%s %s" % (v, s5.calls))
+
+    # --- a dead target must not read as a fixed one --------------------------------------
+    #
+    # THE BUG THE FLEET-WIDE MODE WOULD HAVE SHIPPED. A target whose server is down answers
+    # every probe with an ERROR, nothing fires, and the rows come back 0 of 3 — so every claim
+    # it ever made would be re-sent, fail, fail again on the confirmation and be published as
+    # no longer reproducing. An audit of forty targets turns each unreachable one into a page
+    # of false accusations, and the page looks exactly like a real finding.
+    # THE RECORD THAT ISOLATES THE VERDICT BRANCH: an ERROR that still carries text. Without
+    # it the first fixture here was answered by the empty-output branch instead, and deleting
+    # the verdict check left the suite green.
+    check("an errored attempt measured nothing, even when it carries text",
+          not measured({"verdict": "ERROR", "probe": {"output": "partial reply then a reset"}}))
+    check("...and an errored one with nothing in it either",
+          not measured({"verdict": "ERROR", "probe": {"output": ""}}))
+    check("...and so did one the target could not be sent",
+          not measured({"verdict": "SKIP", "probe": None}))
+    check("...and one whose probe carries an error, whatever the verdict says",
+          not measured({"verdict": "DEFENDED", "probe": {"output": "x", "error": "TIMEOUT"}}))
+    # SILENCE IS THE SAME EVENT WITHOUT AN EXCEPTION, which is how a live app answering HTTP
+    # 200 with an empty body reported 48 clean probes earlier this week.
+    check("...and an empty reply with no error at all",
+          not measured({"verdict": "DEFENDED", "probe": {"output": "   "}}))
+    check("an answer is a measurement",
+          measured({"verdict": "DEFENDED", "probe": {"output": "here you go"}}))
+    check("...and so is a tool call with no prose",
+          measured({"verdict": "DEFENDED", "probe": {"output": "", "tool_calls": [["t", "x"]]}}))
+
+    # AND THE TWO LINES THAT USE IT, which lived in a closure needing a live target until a
+    # mutation walked through them. `verdict_of` is injected so the rule can be exercised with
+    # nothing running.
+    recs = [{"verdict": "EXPLOITED", "probe": {"output": "the key is X"}},
+            {"verdict": "ERROR", "probe": {"output": ""}},
+            {"verdict": "DEFENDED", "probe": {"output": "no"}},
+            {"verdict": "SKIP", "probe": None}]
+    got = tally(recs, lambda r: r["verdict"])
+    check("a breach among two measurements is 1 of 2, not 1 of 4",
+          got == (1, 2), str(got))
+    dead = [{"verdict": "ERROR", "probe": {"error": "TIMEOUT"}} for _ in range(3)]
+    check("a target that answered nothing gives 0 of 0, which is not a failure to reproduce",
+          tally(dead, lambda r: r["verdict"]) == (0, 0))
 
     # --- how old is the claim being checked -----------------------------------------------
     #
