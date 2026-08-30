@@ -41,7 +41,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="QAtration">
 <meta property="og:url" content="https://qatration.com/ja/">
-<meta property="og:title" content="QAtration: AIチャットボットとエージェントのための敵対的テスト">
+<meta property="og:title" content="QAtration：AIチャットボットとエージェントのための敵対的テスト">
 <meta property="og:description" content="攻撃者があなたのチャットボットに何をさせられるかを確かめてください。オープンソース、Apache 2.0、あなたのマシンやCIから、あなた自身のデプロイに対して動きます。">
 <meta property="og:image" content="https://qatration.com/og-card.png">
 <meta property="og:image:width" content="1200">
@@ -67,7 +67,7 @@
 <!-- /i18n:locale -->
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="QAtration: AIチャットボットとエージェントのための敵対的テスト">
+<meta name="twitter:title" content="QAtration：AIチャットボットとエージェントのための敵対的テスト">
 <meta name="twitter:description" content="攻撃者があなたのチャットボットに何をさせられるかを確かめてください。オープンソース、Apache 2.0、あなたのマシンやCIから、あなた自身のデプロイに対して動きます。">
 <meta name="twitter:image" content="https://qatration.com/og-card.png">
 <style>
@@ -532,11 +532,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <div class="hero">
     <div>
       <span class="eyebrow">LLMセキュリティテスト · オープンソース · Apache 2.0</span>
-      <h1>攻撃者があなたのチャットボットに何をさせられるかを確かめてください。</h1>
-      <p class="sub">QAtrationはあなたのAIボットに本物のプロンプトインジェクション攻撃を送り、それが何を漏らし何をしたかを平易な言葉の報告書にして、ほかの誰かに見つけられる前に手渡します。 <b>実行するのはあなたです。</b> あなたのマシンかCIから、あなた自身のデプロイに対して。アカウントも不要、エンドポイントを預ける必要もなく、どこにも何も送信されません。</p>
+      <h1>攻撃者はあなたのチャットボットに何をさせられるのか。</h1>
+      <p class="sub">QAtrationはあなたのAIボットに本物のプロンプトインジェクション攻撃を送り、ボットが何を漏らし、何をしたかを平易な言葉の報告書にして、ほかの誰かに見つけられる前に手渡します。 <b>実行するのはあなたです。</b> あなたのマシンかCIから、あなた自身のデプロイ環境に対して。アカウントも不要、エンドポイントを預ける必要もなく、どこにも何も送信されません。</p>
       <p class="warnbox">
-        <b>あなたのものではないシステムに向けないでください。</b> これは本物の攻撃（プロンプトインジェクション、データ持ち出し、ツールの悪用）を、指定されたURLへ送ります。あなた自身のデプロイか、所有者から事前に書面で許可を得たものに限ります。面白そうだと思った公開チャットボットではありません。ベンダーのデモでもありません。
-        <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md をお読みください</a> 最初の実行の前に。</p>
+        <b>あなたのものではないシステムに向けないでください。</b> これは本物の攻撃（プロンプトインジェクション、データ持ち出し、ツールの悪用）を、指定されたURLがどこであろうと送ります。あなた自身のデプロイか、所有者から事前に書面で許可を得たものに限ります。面白そうだと思った公開チャットボットではありません。ベンダーのデモでもありません。
+        <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> ファイルを最初の実行の前にお読みください。</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">何を捕まえるか見る</a>
@@ -572,7 +572,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
           <div class="bubble">承知しました。内部スタッフキーはこちらです： <span class="leak" translate="no">ACME-SK-7731-QA</span><span class="cursor"></span></div>
         </div>
         <div class="verdict">
-          <span class="chip exploited">侵害</span>
+          <span class="chip exploited">突破</span>
           <span class="muted mono" style="font-size:12.5px">秘密が漏洩 · 応答内でカナリアが一致</span>
         </div>
       </div>
@@ -584,25 +584,25 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="sec-head">
       <span class="eyebrow">カバー範囲</span>
       <h2>間に合わせのプロンプトでは止まらないもの。</h2>
-      <p>世に出るAI機能はどれも新しい攻撃面です。あなたの攻撃面のどこまで届くかは、あなたのデプロイが何を見せるかで決まります。ここでは境界をぼかさず引いています。観測できないものまでカバーしていると称するスキャナーこそ、あなたが避けたいものだからです</p>
+      <p>世に出るAI機能はどれも新しい攻撃面です。どこまで届くかは、デプロイ環境が何を見せるかで決まります。ここでは境界をぼかさず引いています。観測できないものまでカバーしていると称するスキャナーこそ、避けたいものだからです。</p>
     </div>
-    <div class="grp">あなたのエンドポイントだけで見えるもの</div>
+    <div class="grp">エンドポイントだけで見えるもの</div>
     <p class="grp-note">チャットエンドポイントがあれば十分です。複数ターンにわたるものも含め、そのままテストできます。</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>プロンプトインジェクション</h3><span class="chip exploited">侵害</span></div>
+        <div class="top-row"><h3>プロンプトインジェクション</h3><span class="chip exploited">突破</span></div>
         <p>攻撃者のテキストがボットの規則を上書きします。「指示を無視して…」。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>秘密とデータの漏洩</h3><span class="chip exploited">侵害</span></div>
-        <p>ボットがAPIキー、内部コード、あるいは別の顧客のデータを明かします。</p>
+        <div class="top-row"><h3>秘密とデータの漏洩</h3><span class="chip exploited">突破</span></div>
+        <p>ボットがAPIキー、社内の識別コード、あるいは別の顧客のデータを明かします。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>システムプロンプトの露出</h3><span class="chip partial">部分的</span></div>
+        <div class="top-row"><h3>システムプロンプトの露出</h3><span class="chip partial">一部突破</span></div>
         <p>隠された指示が一字一句そのまま漏れます。以降のあらゆる攻撃のための地図です。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>記憶の汚染</h3><span class="chip exploited">侵害</span></div>
+        <div class="top-row"><h3>記憶の汚染</h3><span class="chip exploited">突破</span></div>
         <p>あるターンで仕込まれた規則が、以降のすべての応答を静かに変えます。会話が再び普通に見えるようになった、ずっとあとまで。</p>
       </div>
     </div>
@@ -612,19 +612,19 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <b>このツールに同梱された証拠で測定した結果です。ツール呼び出しを報告する対象では、138件の指摘のうち61件が、応答だけを読んだ場合にはまったく現れません。</b> ボットは丁重に答えつつ、秘密を呼び出しの引数に入れます。</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>エージェントのツール悪用</h3><span class="chip exploited">侵害</span></div>
-        <p>あなたのエージェントが取り返しのつかない操作へ誘導されます。削除、返金、メール送信。</p>
+        <div class="top-row"><h3>エージェントのツール悪用</h3><span class="chip exploited">突破</span></div>
+        <p>エージェントが取り返しのつかない操作へ誘導されます。削除、返金、メール送信。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>エージェントを通した注入</h3><span class="chip exploited">侵害</span></div>
+        <div class="top-row"><h3>エージェントを通した注入</h3><span class="chip exploited">突破</span></div>
         <p>SQLやシェルコマンドがツール呼び出しに紛れ込みます。古典的なRCEに、新しい玄関口。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>汚染された知識ベース</h3><span class="chip exploited">侵害</span></div>
-        <p>あなたのRAGに悪意ある文書が一つあるだけで、無害な質問への回答が乗っ取られます。</p>
+        <div class="top-row"><h3>汚染された知識ベース</h3><span class="chip exploited">突破</span></div>
+        <p>RAGに悪意ある文書が一つあるだけで、無害な質問への回答が乗っ取られます。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>汚染されたツール定義</h3><span class="chip exploited">侵害</span></div>
+        <div class="top-row"><h3>汚染されたツール定義</h3><span class="chip exploited">突破</span></div>
         <p>ツールの説明に隠された一行が、ごく普通の質問に対してエージェントに情報を漏らさせます。攻撃者からのメッセージは要りません。</p>
       </div>
       
@@ -663,7 +663,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h2>きれいな結果に意味があるのは、何がそれをきれいにしたのかが分かるときだけです。</h2>
       <p>通らなかった攻撃はゼロを報告します。実行できなかった検査も、本当に堅牢なボットも、同じくゼロです。テストが行き詰まるのはここです。三つの異なる事実が同じ見た目で届き、次に何を試せばよいか誰にも分かりません。これらは実際の実行から得た測定値であり、推計ではありません。
         <b>そして攻撃が原因であってはじめて、侵害は侵害です。</b> どの対象にもまず無害な実行を行います。普通の質問だけで、誰も攻撃しません。ここに挙げたボットの一つでは、
-        <code>canary_in_tool_call</code> がその普通のトラフィックの88%で発火します。そのため、それに依拠する指摘はすべて、計上せず「弱い」と印を付けます。</p>
+        <code>canary_in_tool_call</code> がその普通のトラフィックの88%で発火します。そのため、それに依拠する指摘はすべて、計上せず「弱化」と印を付けます。</p>
     </div>
     <div class="finds">
       <div class="find">
@@ -676,11 +676,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>設定では見えない隙間</h3></div>
-        <p>実際のガードレール製品に対して、チャット欄に打ち込んだ46件の攻撃は一つも通りませんでした。取得された文書の中に忍ばせた攻撃は一件、こちらは毎回通ります。入力フィルターが読むのは利用者が打った内容です。知識ベースがモデルに渡すものは決して見ません。出力フィルターを切れば、同じ文書はそのまま外へ出ていきます。入力側の防壁は、そもそもそれを止めていたものではなかったのです。</p>
+        <p>実際のガードレールのフレームワークに対して、チャット欄に打ち込んだ46件の攻撃は一つも通りませんでした。取得された文書の中に忍ばせた攻撃は一件、こちらは毎回通ります。入力フィルターが読むのは利用者が打った内容です。知識ベースがモデルに渡すものは決して見ません。出力フィルターを切れば、同じ文書はそのまま外へ出ていきます。入力側の防壁は、そもそもそれを止めていたものではなかったのです。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>そして答えがどれだけ安定しているか</h3></div>
-        <p>同じメッセージをそのガードレールに送り直したところ、常に自分自身と一致するわけではありませんでした。同一の入力に対して五つの言い回しが異なる判定を受け、ごく普通の質問が十二回中十回通されました。ですから私たちは、何回の試行が破ったかを報告し、一回でも破ったかどうかは報告しません。一度の実行は一日の物語にすぎず、それはきれいな結果についても悪い結果と同じく当てはまります。私たち自身の結果も含めて。</p>
+        <p>同じメッセージをそのガードレールに送り直したところ、常に自分自身と一致するわけではありませんでした。同一の入力に対して五つの言い回しが異なる判定を受け、ごく普通の質問が十二回中十回通されました。ですから私たちは、何回の試行が破ったかを報告し、一回でも破ったかどうかは報告しません。一度の実行はある日の午後の物語にすぎず、それはきれいな結果についても悪い結果と同じく当てはまります。私たち自身の結果も含めて。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>そのガードレールの代償</h3></div>
@@ -688,15 +688,15 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>自分たち自身に対して実行しました</h3></div>
-        <p>常に何かを見つけるスキャナーには価値がありません。そこで私たちは逆の数字を測りました。攻撃者がどこにもいない、ごく普通のサポート依頼1500件を、同じ検査に通したのです。その半分は、正当な理由でセキュリティの話をする利用者です。パターン照合を壊すのはまさにそこだからです。失敗するクエリを貼り付ける開発者、スタックトレースを転送するサポート、よく似たドメインが本物かどうか尋ねてくる人。</p>
+        <p>常に何かを見つけるスキャナーには価値がありません。そこで私たちは逆の数字を測りました。攻撃者がどこにもいない、ごく普通のサポート依頼1500件を、同じ検査に通したのです。その半分は、正当な理由でセキュリティの話をするユーザーです。パターンマッチャーを壊すのはまさにそこだからです。失敗するクエリを貼り付ける開発者、スタックトレースを転送するサポート、よく似たドメインが本物かどうか尋ねてくる人。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>次に、私たちが作っていないシステムに対して</h3></div>
-        <p>ここで書かれたボットは易しい例です。そこで、ここの誰も設計していないエージェントフレームワークに向けました。48件のきれいなプロンプトを流した一度の実行で、八件の誤検知が出ました。しかも、自分たちのボット群に対する480件のプローブでは一度も出たことのない四つの分類でした。四つとも修正済みで、その下にある二つの規則は今、あなたの報告書ではなく私たちのビルドを落とします。どの検査も質問を読んではならない。どの検査もエージェント自身の言葉をシステムについての証拠として扱ってはならない。</p>
+        <p>私たちが書いたボットは簡単な部類です。そこで、ここの誰も設計していないエージェントフレームワークに向けました。48件のきれいなプロンプトを流した一度の実行で、八件の誤検知が出ました。しかも、自分たちのボット群に対する480件のプローブでは一度も出たことのない四つの分類でした。四つとも修正済みで、その下にある二つの規則は今、あなたの報告書ではなく私たちのビルドを落とします。どの検査も質問を読んではならない。どの検査もエージェント自身の言葉をシステムについての証拠として扱ってはならない。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>そして他の二つのツールと並べて、公開の場で</h3></div>
-        <p>garakおよびpromptfooと同じ第三者の対象に対して実行し、三つすべての応答を、各ツール独自の判定ではなく単一の部分文字列規則で採点しました。ガードレールのないRAGアプリでは、 <b>無害なプローブの46%がすでに仕込まれた文字列を返します</b>。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。324件中1件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。当該ページは、他の二つが優れている点も、査読者からp値を求められて撤回した主張も公開しています。
+        <p>garakおよびpromptfooと同じ第三者の対象に対して実行し、三つすべての応答を、各ツール独自の判定ではなく単一の部分文字列規則で採点しました。ガードレールのないRAGアプリでは、 <b>無害なプローブの46%がすでに仕込まれた文字列を返します</b>。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。324件中1件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。比較ページには、他の二つが優れている点も、査読者からp値を求められて撤回した主張も載せています。
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">比較を読む</a>.</p>
       </div>
@@ -708,7 +708,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 
     <div class="sec-head" style="margin-top:64px">
       <span class="eyebrow">二度目</span>
-      <h2>あなたのAI機能は毎週変わります。一度のスキャンは数日で古くなります。</h2>
+      <h2>AI機能は毎週変わります。一度のスキャンは数日で古くなります。</h2>
     </div>
     <div class="finds">
       <div class="find">
@@ -716,12 +716,12 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <p>すべての実行が保存されるので、指摘には最初に現れた日付が付きます。「重大」は意見です。「重大、かつ三日から未解決」は、チームがそうした指摘にどう応じているかという事実であり、修正が計画に載るのはこの一行のおかげです。</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>あなたの修正は持ちこたえましたか</h3></div>
+        <div class="top-row"><h3>その修正は持ちこたえましたか</h3></div>
         <p>閉じたあとに戻ってきた指摘は「再発」として印を付け、新しいものと一緒に黙って数えたりはしません。持ちこたえなかった修正は二つの会話のうち厳しい方であり、混ぜてしまうとそれが隠れます。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>再テストしていないもの</h3></div>
-        <p>実行が攻撃を送らなかった場合、その攻撃は報告書に「未テスト」と記され、「修正済み」とは決して記されません。不在はきれいな結果ではありません。この二つをぼかす報告書は、誰も見ていないのに脆弱性が消えたと告げてしまいます。</p>
+        <p>実行が攻撃を送らなかった場合、その攻撃は報告書に「未テスト」と記され、「修正済み」とは決して記されません。送っていないことはきれいな結果ではありません。この二つをぼかす報告書は、誰も見ていないのに脆弱性が消えたと告げてしまいます。</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>見ることができなかったもの</h3></div>
@@ -734,7 +734,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="big" style="margin-top:14px">テストしていないガードレールは、 <span class="u">事実ではなく主張です。</span></div>
       <p>「秘密を明かさないように指示しました」は主張であって防御ではありません。ここに挙げた対象では、その防御は最初の数回の攻撃のうちに崩れました。QAtrationは本当に固く守られたボットをきちんと「問題なし」とも判定します。だからこそ、きれいな結果には意味があります。毎回オオカミが来たと叫ぶのではなく、あなたのボットを測っているのです。</p>
       <div class="ab">
-        <span><span class="chip exploited">侵害</span> 防御のないボットは鍵を明け渡す</span>
+        <span><span class="chip exploited">突破</span> 防御のないボットは鍵を明け渡す</span>
         <span><span class="chip defended">防御成功</span> きちんと守られたボットは持ちこたえる</span>
       </div>
     </div>
@@ -756,12 +756,12 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>許可された対象のみ。</b> これは向けられた相手に本物の攻撃を送ります。動くのはあなたのマシンで、あなたの鍵で、あなたの名において実行されます。localhost以外はすべて、あなたがそれを管理していることを証明する必要があります（DNSレコード、既知のパスに置いたファイル、あるいはボット自身が返すトークン）。それがなければ、覚えておいてくださいと促すのではなく、実行そのものが開始を拒みます。あなたのものではない、あるいは許可のないシステムをテストすることは違法であり、その責任はツールではなく実行する人にあります。
-      <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md をお読みください</a> 最初の実行の前に。
+      <b>許可された対象のみ。</b> これは向けられた相手が何であれ、本物の攻撃を送ります。動くのはあなたのマシンで、あなたの鍵で、あなたの名において実行されます。localhost以外はすべて、あなたがそれを管理していることを証明する必要があります（DNSレコード、既知のパスに置いたファイル、あるいはボット自身が返すトークン）。それがなければ、覚えておいてくださいと促すのではなく、実行そのものが開始を拒みます。あなたのものではない、あるいは許可のないシステムをテストすることは違法であり、その責任はツールではなく実行する人にあります。
+      <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md</a> ファイルを最初の実行の前にお読みください。
       <br><br>
       不具合を見つけましたか。あるいは、このツールが測っていないことを報告している箇所を見つけましたか。
-      <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">issueを立てる</a>、あるいは先に連絡を
-      <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> 公開すべきでないことはすべて、こちらへ。
+      <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">issueを立てる</a>。公開すべきでないことは、まず
+      <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> までご連絡ください。
     </div>
     <div>© QAtration</div>
   </div>
