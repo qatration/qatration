@@ -106,22 +106,16 @@ CREDENTIALS = [
 # a Cyrillic character and the six-character text of its escape are different bytes, and neither
 # pattern sees the other.
 #
-#   LITERAL — the character itself. This said "zero across all 429 tracked files today, which
-#   is the only reason it is worth asserting; a check that starts life with exemptions never
-#   gets any", and that stopped being true the day the landing page got a Ukrainian
-#   translation. Today it is four files: a dictionary, the page generated from it, and the two
-#   places where a language names itself. Not this one, which says all of that without writing
-#   a single Cyrillic character, the same way the patterns above are written as escapes.
+#   LITERAL - the character itself. This carried a count of how many tracked files hold any,
+#   twice, and both were wrong within a day: the first said 429 files when there were 511, and
+#   the second said four Cyrillic-bearing files the morning before nine translated pages each
+#   grew one word, a language naming itself in the switch. A number that every new language
+#   makes wrong is not a fact worth writing down, so the rule is written down instead.
 #
-#   That count is recounted by `test_guard.py` rather than trusted, because the sentence it
-#   replaced was a number typed once into a file describing the repository, and it was wrong
-#   by eighty-two files before anybody read it again.
-#
-#   The argument survives the change, which is why the exemption is derived rather than
-#   listed - see `translation_files`. What does not survive is leaving the old sentence here:
-#   a file that describes the repository is the worst place to keep a fact by memory, and a
-#   guard whose own comment overstates it is teaching the wrong habit.
-#
+#   THE RULE: Cyrillic belongs in a declared dictionary under `site/i18n/` and in the page
+#   generated from it, and nowhere else except where a language writes its own name. That is
+#   what `translation_files` and `endonyms` below encode, and what `test_guard.py` enforces by
+#   reading every run rather than by counting files.
 #   ESCAPED — the same character written `\\uXXXX`, and the same thing at more layers.
 #   `json.dumps` handed a string that already contains the escape writes `\\\\uXXXX`, a third
 #   encoding that a literal scan and a single-escape scan both miss.
@@ -314,8 +308,21 @@ def _staged_files():
 
 
 def _tree_files():
-    r = _git("ls-files")
-    return [p for p in r.stdout.splitlines() if p.strip()]
+    """Every file in the working tree that git would keep, TRACKED OR NOT.
+
+    `ls-files` alone lists only what is already tracked, so a file created and not yet added is
+    invisible to `--tree` - and that is exactly the moment a scan is worth running. It cost a
+    red build: nine new pages passed every local run while untracked, then failed on all four
+    CI platforms the instant the commit made them visible. `--others --exclude-standard` adds
+    what is new and not ignored, which is the set a person means by "the working tree".
+    """
+    seen, out = set(), []
+    for args in (("ls-files",), ("ls-files", "--others", "--exclude-standard")):
+        for p in _git(*args).stdout.splitlines():
+            if p.strip() and p not in seen:
+                seen.add(p)
+                out.append(p)
+    return out
 
 
 def _read_blobs(sha_by_path):
