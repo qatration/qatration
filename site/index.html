@@ -290,6 +290,22 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 .auth b{color:var(--ink)}
 
 @media (max-width:820px){
+  /* THE THEME BUTTON WAS 110px OFF THE RIGHT EDGE OF A PHONE. `.top` is a flex row that never
+     wrapped, so on a 375px screen the wordmark, the tagline and the two buttons kept their
+     desktop widths and ran straight off the viewport: measured, the row is 737px wide and the
+     `Light` button sat at x=419 on a 375px screen. Nothing above this line mentioned `.top`
+     at all, because the mobile work was done on the hero and the sections below it.
+
+     Wrapping alone is not enough and the arithmetic says why: at 375px the content box is
+     327px, and brand + GitHub + Light + two gaps is 337. Ten pixels short, so the second
+     button dropped to a line of its own and looked like a mistake. The wordmark is 34px on
+     purpose -- it was doubled so it would not read as one line with the tagline beside it --
+     and here the tagline moves to its own row anyway, so that reason does not apply. 28px is
+     the largest that fits all three on one line. */
+  .top{flex-wrap:wrap;gap:12px}
+  .top .lede{order:3;flex-basis:100%;padding-left:0;border-left:0}
+  .brand{font-size:28px}
+
   /* ONE COLUMN AGAIN, so the promotion above has to be undone or `grid-column:2` puts the
      panel in a column that no longer exists. And `row-gap` has to come back by name: the
      rule above sets it to 0, which silently ate the 34px between the column and the panel

@@ -1009,7 +1009,39 @@ def main():
 
     # And the single-column layout must undo the placement, or below 820px the panel is put in
     # a column that does not exist.
-    _mobile = _site[_site.find("@media (max-width:820px)"):][:700]
+    # THE BLOCK, BY ITS BRACES, not by a byte count. This read the first 700 characters after
+    # the `@media` line, so the day a rule was added above `.hero` with a comment explaining
+    # why, the rules this checks fell out of the window and the gate reported the CSS broken
+    # while the CSS was fine. A check whose coverage is a magic number fails when the file
+    # grows, which is the one thing a file reliably does.
+    def _block(css, opener):
+        i = css.find(opener)
+        if i < 0:
+            return ""
+        j = css.find("{", i)
+        depth, k = 1, j + 1
+        while k < len(css) and depth:
+            if css[k] == "{":
+                depth += 1
+            elif css[k] == "}":
+                depth -= 1
+            k += 1
+        return css[j + 1:k - 1]
+
+    _mobile = _block(_site, "@media (max-width:820px)")
+    # AND THE TOP BAR WRAPS, or the theme toggle leaves the screen. Measured in a browser at
+    # 375px before this was written: the row is 737px wide, the `Light` button sat at x=419,
+    # and the page scrolled 110px sideways to reach it. A phone user had to swipe right to
+    # find the only control on the page.
+    #
+    # A TEXT CHECK STANDING IN FOR A BROWSER, and said so rather than dressed up: nothing in
+    # this suite renders anything, so this asserts the rule is present and the measurement
+    # that justified it lives in the CSS comment beside it. It catches the deletion, which is
+    # the failure that actually happened, and not a subtler regression.
+    check("the narrow layout lets the top bar wrap, so the theme toggle stays on screen",
+          "flex-wrap:wrap" in _mobile and ".top" in _mobile,
+          "no wrapping rule for .top below 820px; the toggle goes off the right edge")
+
     check("the narrow layout puts the panel back in the one column it has",
           "grid-column:1" in _mobile and "grid-row:auto" in _mobile,
           "below 820px `.term` keeps grid-column:2 and lands outside the grid")
