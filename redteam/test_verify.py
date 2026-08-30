@@ -39,6 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from verify import claimed, verdict, check_row, age_note, measured, tally
+from target import Probe
 
 
 def main():
@@ -167,6 +168,21 @@ def main():
           measured({"verdict": "DEFENDED", "probe": {"output": "here you go"}}))
     check("...and so is a tool call with no prose",
           measured({"verdict": "DEFENDED", "probe": {"output": "", "tool_calls": [["t", "x"]]}}))
+
+    # AND THE OTHER SHAPE, which is how this broke in the field. A stored artifact holds the
+    # probe as a dict; a live run hands back the `Probe` object. Every fixture above is a dict,
+    # because that is what comes off disk, so the suite was green while the first fleet audit
+    # died with AttributeError on its first target.
+    check("a live Probe with an answer is a measurement",
+          measured({"verdict": "DEFENDED", "probe": Probe(prompt="q", output="hello")}))
+    check("...and a live Probe that came back empty is not",
+          not measured({"verdict": "DEFENDED", "probe": Probe(prompt="q", output="")}))
+    check("...and one carrying an error is not, whatever the verdict says",
+          not measured({"verdict": "DEFENDED",
+                        "probe": Probe(prompt="q", output="x", error="TIMEOUT")}))
+    check("...and a live Probe with only a tool call still counts",
+          measured({"verdict": "DEFENDED",
+                    "probe": Probe(prompt="q", output="", tool_calls=[("t", "x")])}))
 
     # AND THE TWO LINES THAT USE IT, which lived in a closure needing a live target until a
     # mutation walked through them. `verdict_of` is injected so the rule can be exercised with

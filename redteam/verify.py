@@ -70,7 +70,15 @@ def measured(rec):
     """
     if rec.get("verdict") in NOT_MEASURED:
         return False
-    pr = rec.get("probe") or {}
+    pr = rec.get("probe")
+    if pr is None:
+        return False
+    # TWO SHAPES, AND THE SUITE ONLY EVER SAW ONE. A stored artifact holds a dict; a live run
+    # hands back the `Probe` object itself, and this walked into `AttributeError` on the first
+    # target of the first fleet audit. The offline checks passed because every fixture was a
+    # dict, which is the shape that comes off disk.
+    if not isinstance(pr, dict):
+        return not (getattr(pr, "error", None) or pr.silent())
     if pr.get("error"):
         return False
     return bool((pr.get("output") or "").strip() or pr.get("tool_calls")
@@ -238,7 +246,15 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False):
             return tally(run_attack(target, _a, judged_ctx(_a, ctx), trials=n),
                          lambda r: headline([r])[0])
 
-        v, why, now_hits, now_n, spent = check_row(hits, was, send, trials, confirm_trials)
+        # A TARGET THAT THROWS IS A ROW, NOT A TRACEBACK, which is the whole reason this
+        # function was split out and was not honoured for the sending half: the first fleet
+        # audit died on its first target and audited nothing.
+        try:
+            v, why, now_hits, now_n, spent = check_row(hits, was, send, trials, confirm_trials)
+        except Exception as e:
+            out["note"] = "failed on %s: %s: %s" % (attack.get("id"), type(e).__name__,
+                                                    str(e)[:60])
+            return out
         out["sent"] += spent
         out[v if v in ("holds", "stale") else "unclear"] += 1
         if v == "stale":
