@@ -484,8 +484,13 @@ def switcher(lang, langs):
             raise SystemExit("no ENDONYM entry for %r in tools/i18n.py: a language switch "
                              "needs the name that language uses for itself" % code)
         href = "/" if code == DEFAULT else "/%s/" % code
-        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s"%s>%s'
-                    '<span class="sr-only" lang="%s"> %s</span></a>'
+        # THE NAME IS VISIBLE NOW, not off-screen. It was `sr-only`, which meant the reader
+        # who most needs it - the one who cannot read the page this menu sits on - got two
+        # letters, and `UK` read aloud is United Kingdom. Ten rows of two characters was also
+        # a tall empty column, and this is the one thing that belongs in that space.
+        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s"%s>'
+                    '<span class="lang-code">%s</span>'
+                    '<span class="lang-name" lang="%s">%s</span></a>'
                     % (href, code, ' aria-current="page"' if code == lang else "",
                        code.upper(), code, ENDONYM[code]))
     rows.append(MARK_SW_CLOSE)
