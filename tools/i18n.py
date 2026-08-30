@@ -454,20 +454,28 @@ MARK_LC_CLOSE = "<!-- /i18n:locale -->"
 # and the choice here is Brazil because that is where the readers are. A language without an
 # entry is refused rather than guessed at.
 LOCALE = {
-    "en": "en_US", "de": "de_DE", "es": "es_ES", "fr": "fr_FR", "ja": "ja_JP",
-    "ko": "ko_KR", "pl": "pl_PL", "pt": "pt_BR", "uk": "uk_UA", "zh": "zh_CN",
+    "cs": "cs_CZ", "de": "de_DE", "en": "en_US", "es": "es_ES", "fr": "fr_FR",
+    "id": "id_ID", "it": "it_IT", "ja": "ja_JP", "ko": "ko_KR", "nl": "nl_NL",
+    "pl": "pl_PL", "pt": "pt_BR", "tr": "tr_TR", "uk": "uk_UA",
+    "vi": "vi_VN", "zh": "zh_CN",
 }
 
 ENDONYM = {
     "en": "English",
+    "cs": "Čeština",
     "de": "Deutsch",
     "es": "Español",
     "fr": "Français",
+    "id": "Bahasa Indonesia",
+    "it": "Italiano",
     "ja": "日本語",
     "ko": "한국어",
+    "nl": "Nederlands",
     "pl": "Polski",
     "pt": "Português",
+    "tr": "Türkçe",
     "uk": "Українська",
+    "vi": "Tiếng Việt",
     "zh": "简体中文",
 }
 

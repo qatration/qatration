@@ -1512,6 +1512,18 @@ def main():
                   isinstance(_got, dict) and set(_got) == set(_langs),
                   "the island reads %r" % (_isl.group(1)[:70],))
 
+    # 6e. AND THE LANGUAGE MENU CANNOT OUTGROW THE SCREEN. It gains a row per language, so it
+    #     is the one part of this page whose height is a function of how many dictionaries
+    #     exist. Measured at sixteen languages on a 375x667 phone before the cap: the menu ran
+    #     103px past the bottom of the viewport and the last entry could not be reached at all,
+    #     which no amount of adding languages would ever have announced.
+    _menu = re.search(r"\.lang-menu\{([^}]*)\}", _site)
+    check("the language menu is capped to the viewport", bool(_menu) and "max-height" in _menu.group(1),
+          "no max-height on .lang-menu, so it grows without limit as languages are added")
+    check("...and scrolls what does not fit",
+          bool(_menu) and "overflow-y:auto" in _menu.group(1),
+          "capped without a scroll, which hides the last languages instead of showing them")
+
     # 6d. AND A CLASS THE MARKUP USES IS A CLASS THE STYLESHEET DEFINES. `.sr-only` carries the
     #     language switch's spoken name; an edit to the block beneath it deleted the rule and
     #     the header shipped reading "UK MOVA", with the off-screen word rendered at full size

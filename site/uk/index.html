@@ -26,14 +26,20 @@
      own language is not on the list. -->
 <!-- i18n:alternates -->
 <link rel="alternate" hreflang="en" href="https://qatration.com/">
+<link rel="alternate" hreflang="cs" href="https://qatration.com/cs/">
 <link rel="alternate" hreflang="de" href="https://qatration.com/de/">
 <link rel="alternate" hreflang="es" href="https://qatration.com/es/">
 <link rel="alternate" hreflang="fr" href="https://qatration.com/fr/">
+<link rel="alternate" hreflang="id" href="https://qatration.com/id/">
+<link rel="alternate" hreflang="it" href="https://qatration.com/it/">
 <link rel="alternate" hreflang="ja" href="https://qatration.com/ja/">
 <link rel="alternate" hreflang="ko" href="https://qatration.com/ko/">
+<link rel="alternate" hreflang="nl" href="https://qatration.com/nl/">
 <link rel="alternate" hreflang="pl" href="https://qatration.com/pl/">
 <link rel="alternate" hreflang="pt" href="https://qatration.com/pt/">
+<link rel="alternate" hreflang="tr" href="https://qatration.com/tr/">
 <link rel="alternate" hreflang="uk" href="https://qatration.com/uk/">
+<link rel="alternate" hreflang="vi" href="https://qatration.com/vi/">
 <link rel="alternate" hreflang="zh" href="https://qatration.com/zh/">
 <link rel="alternate" hreflang="x-default" href="https://qatration.com/">
 <!-- /i18n:alternates -->
@@ -56,13 +62,19 @@
 <!-- i18n:locale -->
 <meta property="og:locale" content="uk_UA">
 <meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="cs_CZ">
 <meta property="og:locale:alternate" content="de_DE">
 <meta property="og:locale:alternate" content="es_ES">
 <meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="id_ID">
+<meta property="og:locale:alternate" content="it_IT">
 <meta property="og:locale:alternate" content="ja_JP">
 <meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:locale:alternate" content="nl_NL">
 <meta property="og:locale:alternate" content="pl_PL">
 <meta property="og:locale:alternate" content="pt_BR">
+<meta property="og:locale:alternate" content="tr_TR">
+<meta property="og:locale:alternate" content="vi_VN">
 <meta property="og:locale:alternate" content="zh_CN">
 <!-- /i18n:locale -->
 
@@ -188,8 +200,21 @@
    width with the one piece of text that helps the reader this menu exists for, the one who
    cannot read the page it sits on. The code stays, and stays first, so the visible label is
    still inside the accessible name. */
+/* AND IT SCROLLS RATHER THAN RUNNING OFF THE SCREEN. A list that grows one row per language
+   eventually outgrows a phone: measured at sixteen languages on a 375x667 screen, the menu
+   ran 103px past the bottom and the last entry could not be reached at all. `dvh` because a
+   mobile browser's own chrome moves the viewport as you scroll, and `vh` first so a browser
+   without it still gets a cap.
+
+   180px is measured, not guessed, and the first attempt at 130 was the same mistake in
+   miniature: the cap has to cover the menu's own distance from the top of the screen, which
+   is 67px when the header fits one row and 161px when it wraps to three. 180 clears the
+   worst of those with slack, and still leaves 620px at 800px tall, which is more than the
+   607px the full sixteen-language list needs, so a desktop reader never sees a scrollbar. */
 .lang-menu{position:absolute;right:0;top:calc(100% - 12px);z-index:20;
   display:flex;flex-direction:column;min-width:184px;padding:6px 0;
+  max-height:calc(100vh - 180px);max-height:calc(100dvh - 180px);overflow-y:auto;
+  overscroll-behavior:contain;
   background:var(--surface);border:1px solid var(--line);border-radius:8px;
   box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .lang{display:flex;align-items:baseline;gap:10px;
@@ -481,7 +506,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
        and only the list is generated; a `script` body is opaque to the extractor, so nothing
        here can be read back in as something to translate. -->
   <!-- i18n:offer -->
-  <script type="application/json" id="i18n-langs">{"de": "Deutsch", "en": "English", "es": "Español", "fr": "Français", "ja": "日本語", "ko": "한국어", "pl": "Polski", "pt": "Português", "uk": "Українська", "zh": "简体中文"}</script>
+  <script type="application/json" id="i18n-langs">{"cs": "Čeština", "de": "Deutsch", "en": "English", "es": "Español", "fr": "Français", "id": "Bahasa Indonesia", "it": "Italiano", "ja": "日本語", "ko": "한국어", "nl": "Nederlands", "pl": "Polski", "pt": "Português", "tr": "Türkçe", "uk": "Українська", "vi": "Tiếng Việt", "zh": "简体中文"}</script>
   <!-- /i18n:offer -->
 
   <div class="top">
@@ -518,14 +543,20 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="lang-menu">
       <!-- i18n:switcher -->
       <a class="lang" translate="no" href="/" hreflang="en"><span class="lang-code">EN</span><span class="lang-name" lang="en">English</span></a>
+      <a class="lang" translate="no" href="/cs/" hreflang="cs"><span class="lang-code">CS</span><span class="lang-name" lang="cs">Čeština</span></a>
       <a class="lang" translate="no" href="/de/" hreflang="de"><span class="lang-code">DE</span><span class="lang-name" lang="de">Deutsch</span></a>
       <a class="lang" translate="no" href="/es/" hreflang="es"><span class="lang-code">ES</span><span class="lang-name" lang="es">Español</span></a>
       <a class="lang" translate="no" href="/fr/" hreflang="fr"><span class="lang-code">FR</span><span class="lang-name" lang="fr">Français</span></a>
+      <a class="lang" translate="no" href="/id/" hreflang="id"><span class="lang-code">ID</span><span class="lang-name" lang="id">Bahasa Indonesia</span></a>
+      <a class="lang" translate="no" href="/it/" hreflang="it"><span class="lang-code">IT</span><span class="lang-name" lang="it">Italiano</span></a>
       <a class="lang" translate="no" href="/ja/" hreflang="ja"><span class="lang-code">JA</span><span class="lang-name" lang="ja">日本語</span></a>
       <a class="lang" translate="no" href="/ko/" hreflang="ko"><span class="lang-code">KO</span><span class="lang-name" lang="ko">한국어</span></a>
+      <a class="lang" translate="no" href="/nl/" hreflang="nl"><span class="lang-code">NL</span><span class="lang-name" lang="nl">Nederlands</span></a>
       <a class="lang" translate="no" href="/pl/" hreflang="pl"><span class="lang-code">PL</span><span class="lang-name" lang="pl">Polski</span></a>
       <a class="lang" translate="no" href="/pt/" hreflang="pt"><span class="lang-code">PT</span><span class="lang-name" lang="pt">Português</span></a>
+      <a class="lang" translate="no" href="/tr/" hreflang="tr"><span class="lang-code">TR</span><span class="lang-name" lang="tr">Türkçe</span></a>
       <a class="lang" translate="no" href="/uk/" hreflang="uk" aria-current="page"><span class="lang-code">UK</span><span class="lang-name" lang="uk">Українська</span></a>
+      <a class="lang" translate="no" href="/vi/" hreflang="vi"><span class="lang-code">VI</span><span class="lang-name" lang="vi">Tiếng Việt</span></a>
       <a class="lang" translate="no" href="/zh/" hreflang="zh"><span class="lang-code">ZH</span><span class="lang-name" lang="zh">简体中文</span></a>
       <!-- /i18n:switcher -->
       </div>
@@ -892,5 +923,24 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         if (s) s.focus();
       }
     });
+  })();
+
+  // AND THE MENU IS SIZED TO WHAT IS ACTUALLY BELOW IT. The CSS cap above subtracts a
+  // constant, and a constant cannot be right: the distance from the top of the screen to
+  // this menu is the height of the header, which wraps to one, two or three rows depending
+  // on how long the tagline runs in the language being read. Measured when the menu opens,
+  // it is right in every language on every screen, and the CSS keeps working when this
+  // does not run.
+  (function () {
+    var box = document.querySelector('details.langs');
+    if (!box) return;
+    var menu = box.querySelector('.lang-menu');
+    function fit() {
+      if (!box.open) return;
+      var top = menu.getBoundingClientRect().top;
+      menu.style.maxHeight = Math.max(160, window.innerHeight - top - 16) + 'px';
+    }
+    box.addEventListener('toggle', fit);
+    window.addEventListener('resize', fit);
   })();
 </script>
