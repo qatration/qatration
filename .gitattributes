@@ -23,3 +23,19 @@
 *.pdf binary
 *.gguf binary
 *.whl binary
+
+# WHAT IS GENERATED SAYS SO. GitHub's language bar reads bytes, and this repository ships 3.4MB
+# of HTML against 2.3MB of Python, so it called itself a 60% HTML project. None of that HTML is
+# written: `out/*.html` is written by the reporter, and every `site/<lang>/index.html` is
+# written by tools/i18n.py from site/index.html, which is the one page a person edits and the
+# one left counted.
+#
+# `linguist-generated` changes two things and nothing else. It takes these files out of the
+# language statistics, and it folds them in a diff, which is the more useful half: a
+# regenerated 74KB page in every pull request buries the source change that caused it.
+#
+# It does NOT hide them. `out/` is the evidence this project stakes its claims on, the page
+# links straight into it, and every file stays browsable at the same URL. Saying a derived
+# file is derived is not the same as hiding it.
+out/*.html linguist-generated=true
+site/*/index.html linguist-generated=true
