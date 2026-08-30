@@ -1,3 +1,4 @@
+<html lang="en">
 <meta charset="utf-8">
 <title>QAtration</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -118,11 +119,21 @@
   border:1px solid var(--accent);border-radius:6px;
   background:color-mix(in srgb, var(--accent) 12%, transparent);
   padding:7px 12px;margin-left:auto;transition:background .15s,color .15s}
-.ghlink:hover{background:var(--accent);color:var(--bg)}
+/* `--ground`, and NOT `--bg`, which does not exist and never has. An unresolvable `var()`
+   in `color` is invalid at computed-value time, which means `inherit`, so the hover rendered
+   `--ink` on `--accent`: measured 2.33:1 in dark and 2.97:1 in light, both under the 4.5:1
+   this project enforces on its own favicon. `--ground` measures 7.11 and 5.54. */
+.ghlink:hover{background:var(--accent);color:var(--ground)}
 .ghlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* THE LANGUAGE SWITCH, deliberately the quietest thing in this row. The page already has a
    primary action and a link to the source, and a third bordered control beside them reads as
    a third decision to make rather than a way to keep reading. Muted mono, accent on hover. */
+/* Off the screen, not out of the accessibility tree. `display:none` and `visibility:hidden`
+   both remove the text from the name a screen reader builds, which is the one thing it is
+   here for. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.langs{display:contents}
 .lang{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);text-decoration:none;padding:6px 4px;transition:color .15s}
 .lang:hover{color:var(--accent)}
@@ -192,7 +203,9 @@ h1,h2,h3{text-wrap:balance;line-height:1.1;margin:0}
    panel is never squeezed into one short row. */
 .term{grid-column:2;grid-row:4 / span 5;align-self:start}
 .hero h1{font-size:clamp(34px,5vw,52px);font-weight:800;letter-spacing:-.02em;margin:16px 0 18px}
-.warnbox{font-size:16px;line-height:1.5;color:var(--fg);max-width:100%;margin:0 0 26px;
+/* `--ink`, for the reason above: `--fg` is undefined, so this said `inherit` and
+   happened to inherit the colour it wanted. It would stop the day a `--fg` existed. */
+.warnbox{font-size:16px;line-height:1.5;color:var(--ink);max-width:100%;margin:0 0 26px;
   border:1px solid var(--attack);border-left:5px solid var(--attack);border-radius:8px;
   background:var(--attack-soft);padding:14px 16px}
 .warnbox b{color:var(--attack);text-transform:uppercase;letter-spacing:.02em}
@@ -324,12 +337,25 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   .top{flex-wrap:wrap;gap:12px}
   .top .lede{order:3;flex-basis:100%;padding-left:0;border-left:0}
   .brand{font-size:28px}
-  /* And the control that wraps wraps to the RIGHT, under the two it belongs with. Four
+  /* And the row that wraps wraps to the RIGHT, under the controls it belongs with. Four
      controls do not fit one 375px row once a language switch joins them, and the theme
      button dropping to the left margin on its own line reads as a layout accident rather
      than a choice. Its label is translated, so its width is a property of the language:
-     any arrangement that only just fits in English breaks in the first longer word. */
-  .theme{margin-left:auto}
+     any arrangement that only just fits in English breaks in the first longer word.
+
+     ONE AUTO MARGIN, NOT TWO, and the first version of this rule got that wrong in a way
+     that shipped green. `.ghlink` already carries `margin-left:auto` unconditionally;
+     adding `margin-left:auto` to `.theme` gave the line two of them, and two auto margins
+     SPLIT the free space rather than pooling it. Measured on the deployed page: at 820px
+     the gap either side of the cluster was 219px and 220px, at 768px it was 193 and 194 --
+     the header torn in half across every width between 375 and 820, to fix an alignment
+     that only misbehaves below 400. The brand takes the auto margin now and the line is
+     justified to the end, so the controls stay together and the wrapped row lands under
+     them. Measured after: 12px between the language switch and the toggle at 820, 768 and
+     500, and at 375 the toggle wraps to the right edge with no horizontal overflow. */
+  .top{justify-content:flex-end}
+  .brand{margin-right:auto}
+  .ghlink{margin-left:0}
 
   /* ONE COLUMN AGAIN, so the promotion above has to be undone or `grid-column:2` puts the
      panel in a column that no longer exists. And `row-gap` has to come back by name: the
@@ -359,21 +385,46 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <div class="wrap">
 
   <div class="top">
-    <div class="brand"><b>QA</b>tration</div>
+    <div class="brand" translate="no"><b>QA</b>tration</div>
     <div class="lede">adversarial testing for AI chatbots &amp; agents</div>
     <a class="ghlink" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">GitHub</a>
     <!-- THE OTHER LANGUAGES THIS PAGE EXISTS IN, filled by tools/i18n.py. Empty here until a
          second language has a dictionary, and generated rather than written so that adding one
-         does not mean remembering to edit every page that should link to it. Two-letter codes
-         because the header has ten pixels of room at 375px and a native name has none. -->
+         does not mean remembering to edit every page that should link to it.
+
+         THE CODE IS VISIBLE AND THE NAME IS SPOKEN. Two letters, because the header has ten
+         pixels of room at 375px and a native name needs eighty. But `UK` announced on its own
+         is United Kingdom, not Ukrainian, and the visitor who most needs this link is the one
+         who cannot read the page it is on. So each link carries the language's own name for
+         itself, off-screen and in that language, and the visible code stays inside the
+         accessible name rather than being replaced by it, which is what 2.5.3 asks and what a
+         voice-control user needs to say out loud.
+
+         The `nav` and its label are written here rather than generated, so the label is an
+         ordinary string this file's own dictionary translates. Generated, it would be text
+         the extractor reads back out of the page it just wrote. -->
+    <nav class="langs" aria-label="Language">
     <!-- i18n:switcher -->
-    <a class="lang" translate="no" href="/uk/" hreflang="uk" lang="uk" title="Українська">UK</a>
+    <a class="lang" translate="no" href="/uk/" hreflang="uk" title="Українська">UK<span class="sr-only" lang="uk"> Українська</span></a>
     <!-- /i18n:switcher -->
-    <button class="theme" type="button" aria-pressed="false"
-            aria-label="Switch to the light theme"
+    </nav>
+    <!-- NO `aria-pressed`. It said `true` while the label said "switch to the dark theme", so
+         a screen reader announced "switch to the dark theme, toggle button, pressed" - a name
+         describing the action and a state describing the opposite, changing together, telling
+         a listener nothing. A toggle earns `aria-pressed` when its name is stable and
+         state-describing; this button renames itself, so it is an action button.
+
+         AND THE NAME CONTAINS THE LABEL. It was "Switch to the light theme" beside a visible
+         "Light", which English passes on a case-insensitive reading and Ukrainian fails
+         outright: the Ukrainian for "Light" is nominative and the phrase inflects it, so the
+         word written on the button is not the word inside its name and a voice-control user
+         reading the button aloud could not press it. "Light theme", and its equivalent in
+         each language, holds in both places. -->
+    <button class="theme" type="button"
+            aria-label="Light theme"
             data-to-light="Light" data-to-dark="Dark"
-            data-aria-light="Switch to the light theme"
-            data-aria-dark="Switch to the dark theme">Light</button>
+            data-aria-light="Light theme"
+            data-aria-dark="Dark theme">Light</button>
   </div>
 
   <!-- HERO -->
@@ -393,7 +444,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read
         AUTHORISED-USE.md</a> first.</p>
       <div class="cta-row">
-        <span class="install"><span class="pmt">$</span>pip install qatration</span>
+        <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
         <a class="btn btn-ghost" href="#finds">See what it catches</a>
       </div>
       <p class="evid-note" style="margin-top:14px">Two dependencies. The whole attack corpus
@@ -410,7 +461,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         alongside is an illustration of the idea; these are results.</p>
     </div>
 
-    <div class="term" aria-label="Example attack transcript">
+    <div class="term" role="figure" aria-label="Example attack transcript">
       <div class="term-bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="name">scan · your-support-bot</span>
@@ -427,7 +478,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         </div>
         <div class="turn">
           <div class="who">bot</div>
-          <div class="bubble">Sure — the internal staff key is <span class="leak">ACME-SK-7731-QA</span><span class="cursor"></span></div>
+          <div class="bubble">Sure — the internal staff key is <span class="leak" translate="no">ACME-SK-7731-QA</span><span class="cursor"></span></div>
         </div>
         <div class="verdict">
           <span class="chip exploited">Exploited</span>
@@ -511,13 +562,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <h3>Describe your bot</h3>
         <p>About ten lines of YAML: the URL, the auth header as an environment variable, and
           where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and
-          for Anthropic's. <span class="mono">qatration onboard</span> sends one ordinary
+          for Anthropic's. <span class="mono" translate="no">qatration onboard</span> sends one ordinary
           question and tells you what is missing before a single attack goes out.</p>
       </div>
       <div class="step">
         <div class="num">STEP 02</div>
         <h3>Plant a canary</h3>
-        <p><span class="mono">qatration mint</span> generates a secret of your own and
+        <p><span class="mono" translate="no">qatration mint</span> generates a secret of your own and
           the block to paste into your system prompt. The run confirms it actually landed
           first — an unplanted canary means every check finds nothing, and that reads exactly
           like a bot that held.</p>
@@ -526,8 +577,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <div class="num">STEP 03</div>
         <h3>Run it, and put it in CI</h3>
         <p>What leaked, exactly how, and the one fix that closes it, written for a team
-          without a security expert. <span class="mono">--fail-on exploited</span> fails a
-          build; <span class="mono">qatration sarif</span> puts the findings straight into
+          without a security expert. <span class="mono" translate="no">--fail-on exploited</span> fails a
+          build; <span class="mono" translate="no">qatration sarif</span> puts the findings straight into
           your code-scanning tab.</p>
       </div>
     </div>
@@ -675,7 +726,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <h2>Test your bot before an attacker does.</h2>
     <p>Apache 2.0. Install it, point it at your own deployment, keep the evidence.</p>
     <div class="cta-row" style="justify-content:center">
-      <span class="install"><span class="pmt">$</span>pip install qatration</span>
+      <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
       <a class="btn btn-ghost" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">Read the source →</a>
     </div>
     <div class="note">runs on your machine · nothing leaves it · authorized targets only</div>

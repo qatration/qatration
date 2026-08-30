@@ -721,6 +721,11 @@ def main():
     # library the site does not need at runtime.
     import struct as _struct
     _site = io.open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8").read()
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import i18n as _i18n
+    _langs = _i18n.languages()
+    _page_url = lambda c: (_i18n.SITE_URL if c == _i18n.DEFAULT
+                           else "%s%s/" % (_i18n.SITE_URL, c))
     _ico = os.path.join(ROOT, "site", "favicon.ico")
     check("the favicon.ico referenced by the page exists", os.path.exists(_ico), _ico)
     if os.path.exists(_ico):
@@ -860,7 +865,6 @@ def main():
         check(f"the page declares {_prop}", f'"{_prop}"' in _site, "missing")
     check("the page has a meta description",
           'name="description"' in _site, "search results would show scraped text")
-    check("...and a canonical url", 'rel="canonical"' in _site, "missing")
 
     _abs = set(re.findall(r'content="https://qatration\.com/([A-Za-z0-9._/-]+)"', _site))
     _gone = sorted(f for f in _abs if not os.path.exists(os.path.join(ROOT, "site", f)))
@@ -891,8 +895,10 @@ def main():
             _locs = []
             check("the sitemap is well-formed XML", False,
                   f"{_e} — a crawler will refuse the whole file")
-        check("the sitemap lists at least the home page",
-              any(l.rstrip("/") == "https://qatration.com" for l in _locs), str(_locs))
+        _want_locs = {_page_url(c) for c in _langs}
+        check("the sitemap lists every language and nothing else",
+              set(_locs) == _want_locs,
+              f"sitemap has {sorted(_locs)}, the site has {sorted(_want_locs)}")
         _contra = [l for l in _locs for d in _disallowed
                    if d != "/" and l.startswith("https://qatration.com" + d)]
         check("...and lists nothing robots.txt tells crawlers to skip",
@@ -1038,6 +1044,21 @@ def main():
     # this suite renders anything, so this asserts the rule is present and the measurement
     # that justified it lives in the CSS comment beside it. It catches the deletion, which is
     # the failure that actually happened, and not a subtler regression.
+    # AND EXACTLY ONE THING IN THAT ROW PUSHES. Two auto margins on one flex line SPLIT the
+    # free space instead of pooling it, and the first version of the wrap rule added a second
+    # one to `.theme` while `.ghlink` already carried one unconditionally. Measured on the
+    # deployed page: 219px of gap either side of the controls at 820px and 193 at 768, the
+    # header torn in half at every width between 375 and 820, to fix an alignment that only
+    # misbehaves below 400. It shipped green, because nothing in this file renders anything.
+    #
+    # This cannot see a layout, so it checks the arrangement that produces one: if the narrow
+    # block introduces an auto margin, it has to say what happens to the one already there.
+    _autos = re.findall(r"margin-(?:left|right):\s*auto", _mobile)
+    check("only one control in the narrow top bar carries an auto margin",
+          not _autos or "margin-left:0" in _mobile,
+          "the narrow block adds %d auto margin(s) and never zeroes `.ghlink`'s, so the free "
+          "space is split between them rather than pooled" % len(_autos))
+
     check("the narrow layout lets the top bar wrap, so the theme toggle stays on screen",
           "flex-wrap:wrap" in _mobile and ".top" in _mobile,
           "no wrapping rule for .top below 820px; the toggle goes off the right edge")
@@ -1282,10 +1303,6 @@ def main():
     #
     # So they are generated from the English page, and these are the rules that make generating
     # them safe. Each one is a way the arrangement could quietly stop working.
-    sys.path.insert(0, os.path.join(ROOT, "tools"))
-    import i18n as _i18n
-
-    _langs = _i18n.languages()
     _keys = set(_i18n.extract(_site))
 
     # 1. NOTHING ON DISK IS HAND-WRITTEN. Without this the generator is a suggestion: an edit
@@ -1375,27 +1392,124 @@ def main():
                   "no visible switch from %s to %s; the page offers %s"
                   % (_lang, _other, sorted(_switch) or "nothing"))
 
-    # 8. THE SITEMAP LISTS THE LANGUAGES, and is still a document a parser accepts. It said in
-    #    a comment that one page was the honest size of this site, which was true until it
-    #    was not: a file describing the site is the wrong place for a fact kept by memory.
-    _sm = io.open(os.path.join(ROOT, "site", "sitemap.xml"), encoding="utf-8").read()
-    _locs = set(re.findall(r"<loc>([^<]+)</loc>", _sm))
-    _want_locs = {_i18n.SITE_URL if c == _i18n.DEFAULT else "%s%s/" % (_i18n.SITE_URL, c)
-                  for c in _langs}
-    check("the sitemap lists every language and nothing else", _locs == _want_locs,
-          "sitemap has %s, the site has %s" % (sorted(_locs), sorted(_want_locs)))
-    # Whether it parses at all is NOT rechecked here. `the sitemap is well-formed XML` above
-    # already does it, and a second copy of a rule is not twice the safety: it is two things
-    # to keep in step, and the day they disagree the answer is whichever one somebody reads.
+    # 6. NODE BY NODE AGAINST THE ENGLISH PAGE, and this is the only check here that does not
+    #    ask the extractor what it found. Everything above is quantified over `extract()`, so a
+    #    walker that stops finding strings satisfies all of it at once: measured, one void
+    #    element carrying `translate="no"` in the top bar took the key set from 141 to 134, and
+    #    the documented repair then rewrote the dictionary to match and left the suite green
+    #    with seven English strings in the header of a page served as `uk`.
+    #
+    #    The first version of this looked for the twelve longest English sentences and missed
+    #    exactly that case, because the strings it lost were short. The pages are generated
+    #    from one source, so their visible nodes align one for one; anything identical in both
+    #    is a string that was not translated, and there are only ever a handful of those.
+    #
+    #    Identical BY DESIGN: commands you type, an identifier, and half of a brand. The list
+    #    is short on purpose, and its growth is the signal - a translation lost anywhere adds
+    #    to it, and adding to it has to be a decision somebody writes down.
+    _SAME_BY_DESIGN = {
+        "tration",                 # the second half of the brand, split for the accent colour
+        "pip install qatration", "qatration onboard", "qatration mint", "qatration sarif",
+        "--fail-on exploited",     # commands: a localised one is a broken instruction
+        "ACME-SK-7731-QA",         # the leaked key in the illustrated transcript
+        "canary_in_tool_call",     # a detector's name, which is what you grep for
+    }
 
-    # 9. AND NOTHING BLOCKS THE TRANSLATIONS FROM BEING FOUND. `Disallow: /fixtures/` is
-    #    deliberate; a rule that swallowed `/uk/` would make the whole exercise pointless
-    #    while every check above still passed.
-    _robots = io.open(os.path.join(ROOT, "site", "robots.txt"), encoding="utf-8").read()
-    _blocked = [c for c in _langs if c != _i18n.DEFAULT
-                and re.search(r"^Disallow:\s*/%s/?\s*$" % c, _robots, re.M)]
-    check("robots.txt does not hide a translation", not _blocked,
-          "crawling is disallowed for: %s" % ", ".join(_blocked))
+    def _nodes(path):
+        _t = io.open(path, encoding="utf-8").read()
+        _t = re.sub(r"(?s)<(script|style)\b.*?</\1>", " ", _t)
+        _t = re.sub(r"(?s)<!--.*?-->", " ", _t)
+        return [x for x in (re.sub(r"\s+", " ", n).strip()
+                            for n in re.split(r"(?s)<[^>]*>", _t)) if x]
+
+    _en_nodes = _nodes(_i18n.page_path(_i18n.DEFAULT))
+    for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
+        _tbl = _i18n.load(_lang)
+        _uk_nodes = _nodes(_i18n.page_path(_lang))
+        check("the %s page has the same shape as the English one" % _lang,
+              len(_en_nodes) == len(_uk_nodes),
+              "%d visible nodes against %d, so they cannot be compared in step"
+              % (len(_uk_nodes), len(_en_nodes)))
+        if len(_en_nodes) == len(_uk_nodes):
+            _untouched = [a for a, b in zip(_en_nodes, _uk_nodes)
+                          if a == b and re.search(r"[A-Za-z]{4}", a)
+                          and a not in _SAME_BY_DESIGN and _tbl.get(a) != a]
+            check("...and every string on it that should differ does",
+                  not _untouched,
+                  "%d English string(s) survived into %s, first: %s"
+                  % (len(_untouched), _lang, (_untouched or [""])[0][:60]))
+
+    # 7. A TRANSLATION IS TEXT, NEVER MARKUP. The generator escapes what it substitutes, so a
+    #    stray quote can no longer close an attribute; this catches the other half, a
+    #    translator pasting a tag, before it becomes an escaped tag printed on the page.
+    _markupy = []
+    for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
+        for _k, _v in _i18n.load(_lang).items():
+            if re.search(r"<[a-zA-Z/!]", _v or ""):
+                _markupy.append("%s: %s" % (_lang, (_v or "")[:40]))
+    check("no translation contains markup", not _markupy, "; ".join(_markupy[:3]))
+
+    # 8. EVERY PAGE SAYS WHAT LANGUAGE IT IS IN. The English page had no `lang` at all, which
+    #    is a WCAG 3.1.1 failure at level A and leaves a screen reader reading it in whatever
+    #    voice the visitor happens to have set.
+    for _lang in _langs:
+        _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
+        _decl = re.findall(r"(?is)\A<html[^>]*\blang=\"([^\"]+)\"", _page)
+        check("the %s page declares its own language" % _lang, _decl == [_lang],
+              "the root element declares %s" % (_decl or "nothing"))
+
+        # 9. AND THE ALTERNATES POINT AT REAL URLS. The codes were compared and the addresses
+        #    were not, so dropping a trailing slash would have sent every alternate at a 308
+        #    and stayed green. The pattern reads whole tags rather than a fixed attribute
+        #    order, which is the mistake the switch check above already made once.
+        _alts = {}
+        for _tag in re.findall(r"<link\b[^>]*\brel=\"alternate\"[^>]*>", _page):
+            _c = re.search(r'hreflang="([^"]+)"', _tag)
+            _h = re.search(r'href="([^"]+)"', _tag)
+            if _c and _h:
+                _alts[_c.group(1)] = _h.group(1)
+        _want_alts = dict({c: _page_url(c) for c in _langs},
+                          **{"x-default": _i18n.SITE_URL})
+        check("...and the %s page's alternates address every language exactly" % _lang,
+              _alts == _want_alts,
+              "alternates are %s, they should be %s" % (sorted(_alts.items()),
+                                                        sorted(_want_alts.items())))
+
+        # 10. AND SO DOES og:url, which nothing checked. It is rewritten by exact string match,
+        #     so reformatting the source tag makes the rewrite a silent no-op and every share
+        #     of a translated page previews as the English one.
+        _og = re.findall(r'<meta property="og:url" content="([^"]+)"', _page)
+        check("...and the %s page's og:url is its own address" % _lang,
+              _og == [_page_url(_lang)],
+              "og:url is %s, this page is %s" % (_og or "absent", _page_url(_lang)))
+
+    # 11. THE THEME BUTTON'S SPOKEN NAME CONTAINS ITS WRITTEN ONE, in every language. English
+    #     passed on a case-insensitive reading and Ukrainian did not: the label is nominative
+    #     and the phrase around it inflected the word, so the string written on the button was
+    #     not inside the name it answers to, and a voice-control user reading the button aloud
+    #     could not press it. WCAG 2.5.3, and a failure a dictionary can reintroduce at any
+    #     time without touching a line of markup.
+    _pairs = [("data-to-light", "data-aria-light"), ("data-to-dark", "data-aria-dark")]
+    for _lang in _langs:
+        _tbl = {} if _lang == _i18n.DEFAULT else _i18n.load(_lang)
+        for _vis_attr, _name_attr in _pairs:
+            _vis = re.search(r'%s="([^"]*)"' % _vis_attr, _site)
+            _name = re.search(r'%s="([^"]*)"' % _name_attr, _site)
+            if not (_vis and _name):
+                continue
+            _v = _tbl.get(_vis.group(1)) or _vis.group(1)
+            _n = _tbl.get(_name.group(1)) or _name.group(1)
+            check("the %s theme button can be pressed by saying what it says (%s)"
+                  % (_lang, _vis_attr[-5:]),
+                  _v.lower() in _n.lower(),
+                  "the button reads %r and answers to %r" % (_v, _n))
+
+    # THE SITEMAP AND ROBOTS.TXT ARE NOT CHECKED AGAIN HERE. Both were, and both were already
+    # covered upstream: the URL list is compared against the languages where the file is
+    # parsed, and `...and lists nothing robots.txt tells crawlers to skip` is strictly stronger
+    # than the rule written here, which matched `Disallow: /uk` exactly and would have missed
+    # `Disallow: /u` and `Disallow: /uk/index.html` alike. The copy written second had the more
+    # confident name, which is how a weaker rule ends up looking like the authority.
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

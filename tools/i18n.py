@@ -30,13 +30,34 @@ DICT_DIR = os.path.join(SITE, "i18n")
 # The opaque runs. A `<` inside the page's JavaScript is a comparison, not a tag, so the
 # script and style bodies are lifted out whole before anything looks for a tag at all.
 OPAQUE = re.compile(r"(?is)(<script\b.*?</script>|<style\b.*?</style>|<!--.*?-->)")
-TAG = re.compile(r"(?s)(<[^>]*>)")
+# QUOTED VALUES ARE PART OF THE TAG. This was `<[^>]*>`, which cuts a tag at the first `>` it
+# meets even inside an attribute: `<p aria-label="a > b">Sentence.</p>` yielded the key
+# `b">Sentence.` and put the translation INSIDE the attribute. One `->` in a title or an alt
+# was enough, and because the corruption is deterministic the disk matched the generator and
+# the build stayed green.
+#
+# And a tag STARTS WITH A NAME. Without that, `fewer than < 5 findings` reads `< 5 findings
+# here</p>` as a tag and silently swallows the rest of the text node.
+TAG = re.compile(r"""(?s)(<[a-zA-Z!/?](?:[^>"']|"[^"]*"|'[^']*')*>)""")
 NO_TRANSLATE = ("code", "pre", "kbd", "samp")
 HAS_LETTER = re.compile(r"[A-Za-z]")
 
+# NO CLOSING TAG EVER COMES. The skip stack pushes on an opening tag and pops on its close, so
+# a void element carrying `translate="no"` - a flag image in the language switch is the obvious
+# one - would push and never pop, and every string after it stops being translatable. Measured
+# on this page before the fix: 148 keys became 15, and the documented repair (`--extract`) then
+# deleted 133 real translations and left every gate green on an English page served as `uk`.
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+        "meta", "param", "source", "track", "wbr"}
+
+# WRITTEN AS A PATTERN, not as a substring. `' translate="no"' in tag` missed `translate='no'`,
+# `TRANSLATE="no"`, and the same attribute preceded by a newline, and each miss puts generated
+# text back into the key set.
+NO_TR = re.compile(r"""(?i)\stranslate\s*=\s*['"]?no['"]?""")
+
 # Attributes that are read by a person or a search engine rather than by the browser.
 ATTR_META = {"description", "og:title", "og:description", "og:image:alt",
-             "twitter:title", "twitter:description"}
+             "twitter:title", "twitter:description", "twitter:image:alt"}
 # `data-to-*` and `data-aria-*` are the theme button's two labels. They live in the markup
 # precisely so this file can reach them: a label built inside the page's script is a string no
 # generator sees, and the translated page reverts to English the moment the button repaints.
@@ -64,7 +85,14 @@ def walk(html, on_text, on_attr):
     Returns the rebuilt document. One traversal serves extraction and rendering, so the set of
     strings a language file is asked for cannot drift from the set the renderer substitutes.
     """
-    out, skip, in_title = [], [], False
+    # THE FULL ELEMENT STACK, and a DEPTH at which skipping began. A stack of only the skipped
+    # names keys on the tag name alone, so `<span translate="no">$<span>pip install</span>` had
+    # its inner `</span>` close the outer one and handed the command straight back to the
+    # translator - which is how `pip install qatration` was still a translatable string after
+    # the element around it was marked. A stray close unwinds to its own name if it has one on
+    # the stack and is ignored otherwise, so one malformed tag costs its own element and not
+    # the rest of the document.
+    out, stack, skip_at, in_title = [], [], None, False
     for chunk in OPAQUE.split(html):
         if OPAQUE.match(chunk or ""):
             out.append(chunk)
@@ -74,20 +102,39 @@ def walk(html, on_text, on_attr):
                 continue
             if part.startswith("<"):
                 name = _tag_name(part)
-                # A STACK OF NAMES, not a counter. A counter closes on the first `</...>` it
-                # meets whatever element that is, so one unbalanced tag inside a skipped block
-                # hands the rest of the document back to the translator.
                 if part.startswith("</"):
-                    if skip and skip[-1] == name:
-                        skip.pop()
-                elif not part.rstrip().endswith("/>") and (
-                        name in NO_TRANSLATE or ' translate="no"' in part):
-                    skip.append(name)
-                if name == "title":
-                    in_title = not part.startswith("</")
-                out.append(_rewrite_attrs(part, on_attr))
+                    if name in stack:
+                        while stack and stack.pop() != name:
+                            pass
+                    if skip_at is not None and len(stack) < skip_at:
+                        skip_at = None
+                else:
+                    marked = name in NO_TRANSLATE or NO_TR.search(part)
+                    if name in VOID or part.rstrip().endswith("/>"):
+                        # A VOID ELEMENT HAS NO INSIDE, so it never enters the skip - and the
+                        # first version of this therefore translated the `alt` of an `<img
+                        # translate="no">`, which is the one attribute such a tag has and the
+                        # whole reason it was marked. It is skipped in place instead.
+                        if marked:
+                            out.append(part)
+                            in_title = False
+                            continue
+                    else:
+                        stack.append(name)
+                        if skip_at is None and marked:
+                            skip_at = len(stack)
+                # ONE TEXT NODE, not the rest of the document. `in_title` used to stay true
+                # until a `</title>` arrived, so a missing one ran the whitespace-dropping
+                # branch over every later string and joined words together.
+                in_title = name == "title" and not part.startswith("</")
+                # AND ATTRIBUTES OBEY THE SKIP. They did not, so `<input translate="no"
+                # placeholder="Email">` still offered `Email` for translation - and the
+                # generated language switch, whose whole point is to stay in its own language,
+                # was safe only by the accident of `title` not being on the list.
+                out.append(part if skip_at is not None
+                           else _rewrite_attrs(part, on_attr))
                 continue
-            if skip or (not HAS_LETTER.search(part)):
+            if skip_at is not None or (not HAS_LETTER.search(part)):
                 out.append(part)
                 continue
             out.append(_sub_text(part, on_text, in_title))
@@ -104,9 +151,23 @@ def _sub_text(part, on_text, in_title):
     rep = on_text(body)
     if rep is None:
         return part
+    # A `<` in a translation is text, not the start of an element. Nothing else is escaped:
+    # every key on this page carries entities already, so touching `&` would print them.
+    rep = rep.replace("<", "&lt;")
     # Leading and trailing whitespace is layout, not language: `<b>46</b> attacks` needs the
     # space before `attacks` to survive, and rendering it away joins two words into one.
     return lead + rep + trail if not in_title else rep
+
+
+def _esc_attr(s):
+    """A translation goes into an attribute as text, never as markup.
+
+    Substitution used to be a raw splice, so one `"` in a translated `og:description` closed
+    the attribute early and the remainder of the sentence became a run of bogus attributes.
+    `&` is left alone on purpose: the keys on this page carry `&mdash;` and `&amp;` already,
+    and re-escaping them would print the entity instead of the character.
+    """
+    return s.replace('"', "&quot;").replace("<", "&lt;")
 
 
 def _rewrite_attrs(tag, on_attr):
@@ -114,16 +175,19 @@ def _rewrite_attrs(tag, on_attr):
     attrs = []
     if key in ATTR_META:
         attrs.append("content")
+    # `(?<![\w-])`, NOT `\b`: a word boundary sits between `-` and a letter, so `\balt` matched
+    # `data-alt` and `\baria-label` matched `data-aria-label`, translating attributes nobody
+    # asked for and that nothing displays.
     for a in ATTR_PLAIN:
-        if re.search(r'\b%s\s*=\s*"' % a, tag):
+        if re.search(r'(?<![\w-])%s\s*=\s*"' % a, tag):
             attrs.append(a)
     for a in attrs:
-        m = re.search(r'(\b%s\s*=\s*")([^"]*)(")' % a, tag)
+        m = re.search(r'((?<![\w-])%s\s*=\s*")([^"]*)(")' % a, tag)
         if not m or not HAS_LETTER.search(m.group(2)):
             continue
         rep = on_attr(tag, a, m.group(2))
         if rep is not None:
-            tag = tag[:m.start(2)] + rep + tag[m.end(2):]
+            tag = tag[:m.start(2)] + _esc_attr(rep) + tag[m.end(2):]
     return tag
 
 
@@ -181,12 +245,23 @@ def alternates(langs):
     return "\n".join(rows)
 
 
-def with_alternates(html, langs):
-    block = alternates(langs)
-    i, j = html.find(MARK_OPEN), html.find(MARK_CLOSE)
+def _fill(html, open_mark, close_mark, block):
+    """Replace one marked region. Refuses a region that is not a region.
+
+    The order check is not pedantry: with the close marker first, `html[:i] + block +
+    html[j+len:]` re-emits a slab of the document twice and still produces a page that parses.
+    """
+    i, j = html.find(open_mark), html.find(close_mark)
     if i < 0 or j < 0:
-        raise SystemExit("site/index.html has no %s ... %s region to fill" % (MARK_OPEN, MARK_CLOSE))
-    return html[:i] + block + html[j + len(MARK_CLOSE):]
+        raise SystemExit("site/index.html has no %s ... %s region to fill"
+                         % (open_mark, close_mark))
+    if j < i:
+        raise SystemExit("%s comes before %s in site/index.html" % (close_mark, open_mark))
+    return html[:i] + block + html[j + len(close_mark):]
+
+
+def with_alternates(html, langs):
+    return _fill(html, MARK_OPEN, MARK_CLOSE, alternates(langs))
 
 
 def render(html, lang, table, langs):
@@ -210,7 +285,7 @@ def render(html, lang, table, langs):
                           '<link rel="canonical" href="%s%s/">' % (SITE_URL, lang))
         out = out.replace('<meta property="og:url" content="%s">' % SITE_URL,
                           '<meta property="og:url" content="%s%s/">' % (SITE_URL, lang))
-    return '<html lang="%s">\n' % lang + out
+    return out
 
 
 # ------------------------------------------------------------------- numbers
@@ -222,7 +297,14 @@ _NUM = re.compile(r"\d+(?:\.\d+)?")
 
 
 def numbers(s):
-    return sorted(_NUM.findall(_SEP.sub("", s)))
+    """-> the figures in a string, IN ORDER.
+
+    Sorted, this compared a multiset, and `5 of 9` matched `9 of 5` while `61 of 138` matched
+    `138 of 61`. Both of those are live sentences on this page, and both say something false
+    when reversed. Order is the cheap half of the property, and a language that genuinely has
+    to reorder two numbers should turn the gate red and be looked at.
+    """
+    return _NUM.findall(_SEP.sub("", s))
 
 
 # ----------------------------------------------------------------- the build
@@ -231,9 +313,14 @@ def page_path(lang):
     return SOURCE if lang == DEFAULT else os.path.join(SITE, lang, "index.html")
 
 
+# The English page IS the source, so it carries whatever the last build wrote at the top of it.
+# Stripped before anything else runs, or every build prepends another `<html>` start tag.
+HTML_OPEN = re.compile(r"(?is)\A<html[^>]*>\s*")
+
+
 def build(write=True):
     """Regenerate every page. -> list of (path, changed) so `--check` can refuse a hand edit."""
-    src = io.open(SOURCE, encoding="utf-8").read()
+    src = HTML_OPEN.sub("", io.open(SOURCE, encoding="utf-8").read())
     langs = languages()
     done = []
     want = sitemap(langs)
@@ -242,8 +329,13 @@ def build(write=True):
     if write and have != want:
         io.open(SITEMAP, "w", encoding="utf-8", newline="\n").write(want)
     for lang in langs:
+        # EVERY PAGE DECLARES ITS LANGUAGE, English included. This was prepended only to
+        # translations, so the English page shipped with no `lang` at all: a WCAG 3.1.1
+        # failure at level A, and a screen reader pronouncing it in whichever voice the
+        # visitor happens to have set.
         out = (with_switcher(with_alternates(src, langs), lang, langs) if lang == DEFAULT
                else render(src, lang, load(lang), langs))
+        out = '<html lang="%s">\n' % lang + out
         path = page_path(lang)
         old = io.open(path, encoding="utf-8").read() if os.path.exists(path) else None
         done.append((path, old != out))
@@ -338,18 +430,21 @@ def switcher(lang, langs):
         # page, so the extractor reads it back and offers `UK` as a string to translate, and
         # the first honest answer to "how do you write UK in Ukrainian" makes the switch
         # unfindable to the reader it exists for.
-        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s" lang="%s" '
-                    'title="%s">%s</a>'
-                    % (href, code, code, ENDONYM.get(code, code), code.upper()))
+        # A LANGUAGE WITHOUT A NAME FOR ITSELF IS A BUG, not a fallback. Falling back to the
+        # code printed `title="fr"` and an accessible name of `FR`, and the affordance quietly
+        # stopped working for exactly the reader it exists for.
+        if code not in ENDONYM:
+            raise SystemExit("no ENDONYM entry for %r in tools/i18n.py: a language switch "
+                             "needs the name that language uses for itself" % code)
+        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s" title="%s">%s'
+                    '<span class="sr-only" lang="%s"> %s</span></a>'
+                    % (href, code, ENDONYM[code], code.upper(), code, ENDONYM[code]))
     rows.append(MARK_SW_CLOSE)
     return "\n    ".join(rows)
 
 
 def with_switcher(html, lang, langs):
-    i, j = html.find(MARK_SW_OPEN), html.find(MARK_SW_CLOSE)
-    if i < 0 or j < 0:
-        raise SystemExit("site/index.html has no %s region to fill" % MARK_SW_OPEN)
-    return html[:i] + switcher(lang, langs) + html[j + len(MARK_SW_CLOSE):]
+    return _fill(html, MARK_SW_OPEN, MARK_SW_CLOSE, switcher(lang, langs))
 
 
 
