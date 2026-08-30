@@ -188,8 +188,19 @@
    The menu is absolutely positioned so that opening it moves nothing: a disclosure that
    reflows the page under the pointer is worse than the row of links it replaced. */
 .langs{font-family:var(--mono)}
-.langs>summary{list-style:none;cursor:pointer;font-size:12px;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--muted);padding:6px 4px;transition:color .15s}
+/* A THUMB IS BIGGER THAN THE WORD `EN`. Measured on the deployed page at 375px: this control
+   is 24 by 31, which is exactly the 24x24 floor WCAG 2.5.8 sets and well under the 44x44 and
+   48x48 that Apple and Google ask for. The other two controls in the row are 67x28 and 73x35,
+   comfortable in width and short in height for the same reason: they are sized by their text.
+
+   The hit area is grown with a pseudo-element rather than with padding, so nothing in the
+   header moves. The row is already ten pixels from overflowing at 375px, and buying a tap
+   target by making the layout worse is not a trade worth taking. */
+.langs>summary{position:relative;list-style:none;cursor:pointer;font-size:12px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 4px;
+  transition:color .15s}
+.langs>summary::after{content:"";position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);width:44px;height:44px}
 .langs>summary::-webkit-details-marker{display:none}
 .langs>summary:hover{color:var(--accent)}
 .langs>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
