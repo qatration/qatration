@@ -194,7 +194,32 @@ def check_row(hits, trials, send, first_trials, confirm_trials):
     return v, why, now_hits, now_n, spent
 
 
-def verify_target(tcfg, path, trials, confirm_trials, quiet=False):
+def note_verdict(note):
+    """-> (exit code, one line) for a target that was not verified. "" means it was.
+
+    THE DEFAULT IS THE REFUSAL, and it was the reassurance. `main` handled four notes by name
+    and fell through everything else to "every claimed breach still reproduces" — so pointing
+    the command at `guardedrag-weak` while the server ran GUARD=on, which the build check
+    correctly caught, printed a clean bill of health after sending no probes at all. An
+    unhandled state must not be able to read as a pass, and a table of known cases with no
+    default is exactly the shape that lets it.
+    """
+    if not note:
+        return 0, ""
+    if note == "nothing claimed":
+        return 0, ("nothing in that artifact claims a breach, so there is nothing to re-send. "
+                   "This checks published FINDINGS; whether the target got worse is a sweep's "
+                   "question.")
+    if note == "no stored results":
+        return 2, "no stored results - there is no claim to verify. Run a sweep first."
+    if note.startswith("unreachable"):
+        return 3, ("NOTHING MEASURED - every claimed row errored or came back empty. "
+                   "The artifact is untouched and unverified.")
+    return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
+
+
+def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
+                  build_check=None):
     """-> a summary dict for one target. Prints its own table unless `quiet`.
 
     Split out for the fleet-wide mode, and the split is the point: an audit that dies on the
@@ -220,6 +245,23 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False):
         target.name = safe_target_name(tcfg["name"], "target config")
     out["target"] = target.name
     ctx = tcfg.get("oracle_context", {})
+
+    # THE WRONG BUILD ANSWERING IS NOT A STALE CLAIM, and the fleet audit was about to publish
+    # five of them. Six configs point at one guardedrag port and differ only by an environment
+    # variable, so checking `guardedrag-weak` against a server running GUARD=on compares claims
+    # made under one build with the behaviour of another — and every row would come back 0 of 3
+    # and be called stale. The sweep has refused to run against the wrong build since the day a
+    # guard-on/guard-off diff turned out to compare two runs of the same build; this command
+    # sends the same traffic and had no such check.
+    # INJECTED so the wiring can be exercised without a server. The rule itself lives in
+    # `run_redteam` and is not copied here; what a test needs to reach is the branch that acts
+    # on it, which is where today's other two wiring bugs were.
+    if build_check is None:
+        from run_redteam import _build_mismatch as build_check
+    wrong = build_check(tcfg)
+    if wrong:
+        out["note"] = "wrong build: %s" % wrong[:70]
+        return out
 
     if not os.path.exists(path):
         out["note"] = "no stored results"
@@ -353,22 +395,12 @@ def main():
     path = args.results or os.path.join(OUT_DIR, "results_%s.json" % tcfg["name"])
     r = verify_target(tcfg, path, args.trials, args.confirm_trials)
 
-    if r["note"] == "no stored results":
-        print("no stored results at %s - there is no claim to verify. Run a sweep first."
-              % path, file=sys.stderr)
-        return 2
-    if r["note"].startswith("not loaded"):
-        print("could not load that target: %s" % r["note"], file=sys.stderr)
-        return 2
-    if r["note"].startswith("unreachable"):
-        print("\nNOTHING MEASURED - every claimed row errored or came back empty. Is %s up? "
-              "The artifact is untouched and unverified." % r["target"], file=sys.stderr)
-        return 3
-    if r["note"] == "nothing claimed":
-        print("\nnothing in that artifact claims a breach, so there is nothing to re-send.")
-        print("This checks published FINDINGS. Whether the target got worse is a sweep's "
-              "question, not this one.")
-        return 0
+    code, line = note_verdict(r["note"])
+    if r["note"]:
+        where = sys.stderr if code else sys.stdout
+        print()
+        print(line, file=where)
+        return code
 
     print()
     if r["stale_ids"]:

@@ -38,7 +38,8 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from verify import claimed, verdict, check_row, age_note, measured, tally
+from verify import (claimed, verdict, check_row, age_note, measured, tally,
+                    note_verdict, verify_target)
 from target import Probe
 
 
@@ -217,6 +218,53 @@ def main():
           "unreadable" in age_note({"when": "last tuesday"}, now))
     check("...and a date in the future is not an age",
           "future" in age_note({"when": "2026-09-09 12:00:00"}, now))
+
+    # --- a state nobody handled must not read as a pass -----------------------------------
+    #
+    # `main` handled four notes by name and fell through everything else to "every claimed
+    # breach still reproduces". Pointed at `guardedrag-weak` while the server ran GUARD=on, the
+    # build check correctly refused, set a note none of the four matched, and the command
+    # printed a clean bill of health having sent no probes at all. A table of known cases with
+    # no default is exactly the shape that lets an unhandled state invert an answer.
+    code, line = note_verdict("")
+    check("a target that WAS verified carries no refusal", code == 0 and not line)
+    code, line = note_verdict("wrong build: GUARD='on' (config says 'weak')")
+    check("a note nobody wrote a branch for is a refusal, not a pass",
+          code == 2 and "NOT VERIFIED" in line, "%s %s" % (code, line))
+    check("...and it repeats what was wrong rather than a generic sentence",
+          "GUARD='on'" in note_verdict("wrong build: GUARD='on' (config says 'weak')")[1])
+    code, _ = note_verdict("unreachable: nothing was measured")
+    check("an unreachable target has its own code, apart from a failure", code == 3)
+    code, _ = note_verdict("nothing claimed")
+    check("an artifact with no claims in it is not an error", code == 0)
+    code, _ = note_verdict("no stored results")
+    check("...but no artifact at all is", code == 2)
+
+    # --- and the wrong build answering is not a stale claim -------------------------------
+    #
+    # Six configs point at one guardedrag port and differ only by an environment variable, so
+    # checking `guardedrag-weak` against a server running GUARD=on compares claims made under
+    # one build against the behaviour of another. Every row would come back 0 of 3 and be
+    # published as no longer reproducing. The sweep has refused this since a guard-on/guard-off
+    # diff turned out to compare two runs of the same build; this command sends the same
+    # traffic and had no such check.
+    #
+    # The rule lives in `run_redteam` and is injected here, because what needs reaching is the
+    # branch that acts on it — which is where the other two wiring bugs of the day were.
+    fake = {"adapter": "httpbot", "name": "wiring-fake", "provenance": "practice",
+            "url": "http://127.0.0.1:9/chat", "oracle_context": {}}
+    # THE ARTIFACT PATH DOES NOT EXIST ON PURPOSE. With the build check in place the run stops
+    # before it is ever read, so a missing file is unreachable; delete the check and the note
+    # becomes "no stored results" instead, which fails the assertion below BY NAME rather than
+    # by a traceback from parsing a source file as JSON.
+    r = verify_target(fake, "no-such-file.json", 1, 0,
+                      quiet=True, build_check=lambda _c: "GUARD='on' (config says 'weak')")
+    check("a mismatched build stops the check before a single probe",
+          r["note"].startswith("wrong build") and r["sent"] == 0, str(r))
+    check("...and nothing is called stale on the way out", not r["stale_ids"], str(r))
+    check("...while a matching build lets it through to the artifact, which is missing here",
+          verify_target(fake, "no-such-file.json", 1, 0, quiet=True,
+                        build_check=lambda _c: "")["note"] == "no stored results")
 
     # --- and it must not write ------------------------------------------------------------
     #
