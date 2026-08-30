@@ -41,6 +41,10 @@ OPAQUE = re.compile(r"(?is)(<script\b.*?</script>|<style\b.*?</style>|<!--.*?-->
 TAG = re.compile(r"""(?s)(<[a-zA-Z!/?](?:[^>"']|"[^"]*"|'[^']*')*>)""")
 NO_TRANSLATE = ("code", "pre", "kbd", "samp")
 HAS_LETTER = re.compile(r"[A-Za-z]")
+# ENTITIES ARE NOT WORDS, and their spelling is not language. `HAS_LETTER` matched the letters
+# INSIDE one, so a node holding nothing but `&times;` was offered as a string to translate and
+# the build then demanded a translation of a multiplication sign.
+ENTITY = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);")
 
 # NO CLOSING TAG EVER COMES. The skip stack pushes on an opening tag and pops on its close, so
 # a void element carrying `translate="no"` - a flag image in the language switch is the obvious
@@ -134,7 +138,7 @@ def walk(html, on_text, on_attr):
                 out.append(part if skip_at is not None
                            else _rewrite_attrs(part, on_attr))
                 continue
-            if skip_at is not None or (not HAS_LETTER.search(part)):
+            if skip_at is not None or not HAS_LETTER.search(ENTITY.sub("", part)):
                 out.append(part)
                 continue
             out.append(_sub_text(part, on_text, in_title))
@@ -183,7 +187,7 @@ def _rewrite_attrs(tag, on_attr):
             attrs.append(a)
     for a in attrs:
         m = re.search(r'((?<![\w-])%s\s*=\s*")([^"]*)(")' % a, tag)
-        if not m or not HAS_LETTER.search(m.group(2)):
+        if not m or not HAS_LETTER.search(ENTITY.sub("", m.group(2))):
             continue
         rep = on_attr(tag, a, m.group(2))
         if rep is not None:
@@ -413,6 +417,10 @@ def main():
 
 MARK_SW_OPEN = "<!-- i18n:switcher -->"
 MARK_SW_CLOSE = "<!-- /i18n:switcher -->"
+MARK_CUR_OPEN = "<!-- i18n:current -->"
+MARK_CUR_CLOSE = "<!-- /i18n:current -->"
+MARK_OF_OPEN = "<!-- i18n:offer -->"
+MARK_OF_CLOSE = "<!-- /i18n:offer -->"
 
 # What each language calls itself, for the `title` a reader gets on hover and for screen
 # readers. The visible label stays the two-letter code because the header has ten pixels of
@@ -421,30 +429,53 @@ ENDONYM = {"en": "English", "uk": "Українська"}
 
 
 def switcher(lang, langs):
-    """-> the links to the OTHER languages. Nothing at all when there is only one."""
-    others = [c for c in langs if c != lang]
+    """-> one entry per language, the current one marked. Every language, not just the others:
+    a menu that hides the page you are on cannot tell you which page that is."""
     rows = [MARK_SW_OPEN]
-    for code in others:
-        href = "/" if code == DEFAULT else "/%s/" % code
-        # `translate="no"` is not decoration here. This block is generated INTO the source
-        # page, so the extractor reads it back and offers `UK` as a string to translate, and
-        # the first honest answer to "how do you write UK in Ukrainian" makes the switch
-        # unfindable to the reader it exists for.
+    for code in langs:
         # A LANGUAGE WITHOUT A NAME FOR ITSELF IS A BUG, not a fallback. Falling back to the
-        # code printed `title="fr"` and an accessible name of `FR`, and the affordance quietly
-        # stopped working for exactly the reader it exists for.
+        # code printed `FR` as the whole accessible name, and the affordance quietly stopped
+        # working for exactly the reader it exists for.
         if code not in ENDONYM:
             raise SystemExit("no ENDONYM entry for %r in tools/i18n.py: a language switch "
                              "needs the name that language uses for itself" % code)
-        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s" title="%s">%s'
+        href = "/" if code == DEFAULT else "/%s/" % code
+        rows.append('<a class="lang" translate="no" href="%s" hreflang="%s"%s>%s'
                     '<span class="sr-only" lang="%s"> %s</span></a>'
-                    % (href, code, ENDONYM[code], code.upper(), code, ENDONYM[code]))
+                    % (href, code, ' aria-current="page"' if code == lang else "",
+                       code.upper(), code, ENDONYM[code]))
     rows.append(MARK_SW_CLOSE)
-    return "\n    ".join(rows)
+    return "\n      ".join(rows)
+
+
+def current(lang):
+    """-> the code shown on the closed disclosure."""
+    return "%s%s%s" % (MARK_CUR_OPEN, lang.upper(), MARK_CUR_CLOSE)
+
+
+def offer(langs):
+    """-> the language list the offer bar reads, as JSON inside a script element.
+
+    A `script` body is opaque to `walk`, which is the point: this is generated INTO the source
+    page, so anything here that looked like prose would be read straight back out as a string
+    to translate. Codes and the name each language uses for itself, and nothing else.
+    """
+    import json
+    listing = json.dumps({c: ENDONYM[c] for c in langs}, ensure_ascii=False, sort_keys=True)
+    # THE MARKERS STAY OUTSIDE THE ISLAND. Inside a `script` element an HTML comment is not a
+    # comment: the parser hands the whole body through as text, so the marker pair landed
+    # inside the JSON and `JSON.parse` threw. The offer bar then did nothing at all, silently,
+    # because that parse is wrapped in the try/catch that keeps a locked-down browser working.
+    # Found by opening the page, not by any check in this repository - which is why one now
+    # parses the island offline.
+    return ('%s\n  <script type="application/json" id="i18n-langs">%s</script>\n  %s'
+            % (MARK_OF_OPEN, listing, MARK_OF_CLOSE))
 
 
 def with_switcher(html, lang, langs):
-    return _fill(html, MARK_SW_OPEN, MARK_SW_CLOSE, switcher(lang, langs))
+    html = _fill(html, MARK_SW_OPEN, MARK_SW_CLOSE, switcher(lang, langs))
+    html = _fill(html, MARK_CUR_OPEN, MARK_CUR_CLOSE, current(lang))
+    return _fill(html, MARK_OF_OPEN, MARK_OF_CLOSE, offer(langs))
 
 
 

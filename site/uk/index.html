@@ -125,19 +125,45 @@
    this project enforces on its own favicon. `--ground` measures 7.11 and 5.54. */
 .ghlink:hover{background:var(--accent);color:var(--ground)}
 .ghlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* OFF THE SCREEN, NOT OUT OF THE ACCESSIBILITY TREE. `display:none` and `visibility:hidden`
+   both drop the text from the name a screen reader builds, which is the one thing it is here
+   for. This rule was written once and then deleted by a later edit to the block below it, and
+   the page shipped a header reading "UK MOVA" - the off-screen word rendered in full beside
+   the code it was supposed to explain. A check now fails if the class is used and undefined. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
+/* The offer bar. Slim, above everything, and gone for good once answered. */
+.offer{display:flex;align-items:center;gap:14px;margin:0 0 18px;padding:9px 14px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  font-family:var(--mono);font-size:13px}
+.offer[hidden]{display:none}
+.offer-go{color:var(--accent);text-decoration:none;font-weight:600}
+.offer-go:hover{text-decoration:underline}
+.offer-no{margin-left:auto;background:transparent;border:0;cursor:pointer;
+  color:var(--muted);font-size:18px;line-height:1;padding:0 4px}
+.offer-no:hover{color:var(--ink)}
 /* THE LANGUAGE SWITCH, deliberately the quietest thing in this row. The page already has a
    primary action and a link to the source, and a third bordered control beside them reads as
-   a third decision to make rather than a way to keep reading. Muted mono, accent on hover. */
-/* Off the screen, not out of the accessibility tree. `display:none` and `visibility:hidden`
-   both remove the text from the name a screen reader builds, which is the one thing it is
-   here for. */
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
-  clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.langs{display:contents}
-.lang{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--muted);text-decoration:none;padding:6px 4px;transition:color .15s}
-.lang:hover{color:var(--accent)}
-.lang:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+   a third decision to make rather than a way to keep reading. Muted mono, accent on hover.
+
+   The menu is absolutely positioned so that opening it moves nothing: a disclosure that
+   reflows the page under the pointer is worse than the row of links it replaced. */
+.langs{position:relative;font-family:var(--mono)}
+.langs>summary{list-style:none;cursor:pointer;font-size:12px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);padding:6px 4px;transition:color .15s}
+.langs>summary::-webkit-details-marker{display:none}
+.langs>summary:hover{color:var(--accent)}
+.langs>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
+  border-radius:4px}
+.lang-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;
+  display:flex;flex-direction:column;min-width:88px;padding:6px 0;
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.lang{font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);text-decoration:none;padding:7px 14px;transition:color .15s,background .15s}
+.lang:hover{color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent)}
+.lang:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .theme{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;
   padding:6px 13px;cursor:pointer;transition:color .15s,border-color .15s}
@@ -384,30 +410,71 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 
 <div class="wrap">
 
+  <!-- THE LANGUAGE THIS VISITOR READS, OFFERED RATHER THAN IMPOSED. A silent redirect on
+       `navigator.language` costs three things: a link to `/` stops being a link to the English
+       page, so sending one to a colleague sends them somewhere else; a crawler sees one version
+       where hreflang promises several, which is why Google's own guidance is a banner and not a
+       redirect; and somebody who deliberately opened the English page cannot stay on it.
+
+       NO SENTENCE, ON PURPOSE. A sentence here would have to exist in every language, which
+       means every translated sentence living inside the English page - and the shortest, least
+       ambiguous signal that a page exists in your language is that language's own name for
+       itself, which is why Wikipedia has used exactly that for twenty years. The list and the
+       names come from the generator, so the script has no text of its own to get wrong.
+
+       The choice is remembered, so this is asked once. -->
+  <aside class="offer" hidden>
+    <a class="offer-go" href="/"></a>
+    <button class="offer-no" type="button" aria-label="Закрити">&times;</button>
+  </aside>
+  <!-- THE LANGUAGE LIST, as data rather than as markup, and this is the second attempt. The
+       first generated the whole bar, aria-label and all - and a generated region is filled
+       AFTER the translation pass, so `Dismiss` was extracted as a string to translate, dutifully
+       translated, and then overwritten in English on every page. The bar is ordinary markup now
+       and only the list is generated; a `script` body is opaque to the extractor, so nothing
+       here can be read back in as something to translate. -->
+  <!-- i18n:offer -->
+  <script type="application/json" id="i18n-langs">{"en": "English", "uk": "Українська"}</script>
+  <!-- /i18n:offer -->
+
   <div class="top">
     <div class="brand" translate="no"><b>QA</b>tration</div>
     <div class="lede">змагальне тестування ШІ-ботів і агентів</div>
     <a class="ghlink" href="https://github.com/qatration/qatration" target="_blank" rel="noopener noreferrer">GitHub</a>
-    <!-- THE OTHER LANGUAGES THIS PAGE EXISTS IN, filled by tools/i18n.py. Empty here until a
-         second language has a dictionary, and generated rather than written so that adding one
-         does not mean remembering to edit every page that should link to it.
+    <!-- EVERY LANGUAGE THIS PAGE EXISTS IN, filled by tools/i18n.py. Generated rather than
+         written, so adding one never means remembering to edit every page that should link
+         to it.
 
-         THE CODE IS VISIBLE AND THE NAME IS SPOKEN. Two letters, because the header has ten
-         pixels of room at 375px and a native name needs eighty. But `UK` announced on its own
-         is United Kingdom, not Ukrainian, and the visitor who most needs this link is the one
-         who cannot read the page it is on. So each link carries the language's own name for
-         itself, off-screen and in that language, and the visible code stays inside the
-         accessible name rather than being replaced by it, which is what 2.5.3 asks and what a
-         voice-control user needs to say out loud.
+         A DISCLOSURE, NOT A ROW OF LINKS. The flat row worked for two languages and was
+         measured to tear at five: at 375px the codes split across two lines with half of
+         them stranded at the left margin, which is the layout accident the wrap rule exists
+         to prevent, moved from the toggle onto the switch. One control that opens a list
+         costs the header a single button whatever the list holds, and `details` gives the
+         keyboard and the screen reader the right behaviour with no script at all.
 
-         The `nav` and its label are written here rather than generated, so the label is an
-         ordinary string this file's own dictionary translates. Generated, it would be text
-         the extractor reads back out of the page it just wrote. -->
-    <nav class="langs" aria-label="Мова">
-    <!-- i18n:switcher -->
-    <a class="lang" translate="no" href="/" hreflang="en" title="English">EN<span class="sr-only" lang="en"> English</span></a>
-    <!-- /i18n:switcher -->
-    </nav>
+         THE CODE IS SEEN AND THE NAME IS SPOKEN. Two letters, because the header has ten
+         pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
+         United Kingdom, not Ukrainian, and the visitor who most needs this control is the
+         one who cannot read the page it sits on. So each entry carries the language's own
+         name for itself, off-screen and marked as that language so it is pronounced
+         correctly, and the visible code stays INSIDE the accessible name rather than being
+         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+
+         The word `Language` is written here rather than generated, so it is an ordinary
+         string this file's own dictionary translates. Generated, it would be text the
+         extractor reads back out of the page it just wrote. -->
+    <details class="langs">
+      <summary>
+        <span translate="no"><!-- i18n:current -->UK<!-- /i18n:current --></span>
+        <span class="sr-only">Мова</span>
+      </summary>
+      <div class="lang-menu">
+      <!-- i18n:switcher -->
+      <a class="lang" translate="no" href="/" hreflang="en">EN<span class="sr-only" lang="en"> English</span></a>
+      <a class="lang" translate="no" href="/uk/" hreflang="uk" aria-current="page">UK<span class="sr-only" lang="uk"> Українська</span></a>
+      <!-- /i18n:switcher -->
+      </div>
+    </details>
     <!-- NO `aria-pressed`. It said `true` while the label said "switch to the dark theme", so
          a screen reader announced "switch to the dark theme, toggle button, pressed" - a name
          describing the action and a state describing the opposite, changing together, telling
@@ -711,5 +778,64 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     btn.addEventListener('pointerenter', repaintIfSystemDriven);
     btn.addEventListener('focus', repaintIfSystemDriven);
     paint();
+  })();
+
+  // THE LANGUAGE THIS VISITOR READS. Offered once, never imposed, and the script owns no text
+  // of its own: the codes and the names are read out of a JSON island the generator writes, so
+  // a language added to `site/i18n/` appears here with nothing edited by hand.
+  (function () {
+    var bar = document.querySelector('.offer');
+    if (!bar) return;
+    var here = document.documentElement.getAttribute('lang') || 'en';
+    var island = document.getElementById('i18n-langs');
+    var have = {};
+    try { have = JSON.parse(island ? island.textContent : '{}'); } catch (e) { return; }
+
+    // ASKED ONCE. A bar that comes back on every visit is not an offer, it is a nag, and the
+    // visitor who dismissed it has already answered. Storage can throw outright in a locked
+    // down browser, so every touch of it is guarded and the failure mode is simply asking.
+    var KEY = 'qatration.lang', chosen = null;
+    try { chosen = localStorage.getItem(KEY); } catch (e) {}
+    if (chosen) return;
+
+    // The PRIMARY SUBTAG only. `pt-BR`, `de-AT` and `uk-UA` should each find their language,
+    // and matching the whole tag would miss all three.
+    var list = navigator.languages || [navigator.language || ''], want = null;
+    for (var i = 0; i < list.length && !want; i++) {
+      var base = String(list[i]).toLowerCase().split('-')[0];
+      if (have[base]) want = base;
+    }
+    if (!want || want === here) return;
+
+    var go = bar.querySelector('.offer-go');
+    go.href = want === 'en' ? '/' : '/' + want + '/';
+    go.textContent = have[want];
+    go.setAttribute('lang', want);
+    go.setAttribute('hreflang', want);
+    bar.hidden = false;
+
+    function remember(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+    go.addEventListener('click', function () { remember(want); });
+    bar.querySelector('.offer-no').addEventListener('click', function () {
+      remember(here);
+      bar.hidden = true;
+    });
+  })();
+
+  // The language menu closes the way every menu does. `details` gives the keyboard and the
+  // screen reader everything else for free; these two are the parts it does not cover.
+  (function () {
+    var box = document.querySelector('details.langs');
+    if (!box) return;
+    document.addEventListener('click', function (e) {
+      if (box.open && !box.contains(e.target)) box.open = false;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && box.open) {
+        box.open = false;
+        var s = box.querySelector('summary');
+        if (s) s.focus();
+      }
+    });
   })();
 </script>

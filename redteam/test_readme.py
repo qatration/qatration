@@ -1431,13 +1431,68 @@ def main():
               "%d visible nodes against %d, so they cannot be compared in step"
               % (len(_uk_nodes), len(_en_nodes)))
         if len(_en_nodes) == len(_uk_nodes):
+            # An entity is not a word, and a language's own name is the same string on every
+            # page by definition. Both are DERIVED - the entity pattern and the endonym table
+            # come from the generator - so neither is a list that has to be kept in step.
             _untouched = [a for a, b in zip(_en_nodes, _uk_nodes)
-                          if a == b and re.search(r"[A-Za-z]{4}", a)
-                          and a not in _SAME_BY_DESIGN and _tbl.get(a) != a]
+                          if a == b
+                          and re.search(r"[A-Za-z]{4}", _i18n.ENTITY.sub("", a))
+                          and a not in _SAME_BY_DESIGN
+                          and a not in _i18n.ENDONYM.values()
+                          and _tbl.get(a) != a]
             check("...and every string on it that should differ does",
                   not _untouched,
                   "%d English string(s) survived into %s, first: %s"
                   % (len(_untouched), _lang, (_untouched or [""])[0][:60]))
+
+    # 6b. AND EVERY TRANSLATION ACTUALLY REACHES THE PAGE. The other direction of the same
+    #     defect: a string can be extracted, dutifully translated, and then never substituted.
+    #     It happened here. The offer bar was a GENERATED region, and a generated region is
+    #     filled after the translation pass, so its `aria-label` was offered for translation
+    #     and then overwritten in English on every page - a key doing nothing, in a dictionary
+    #     that reported itself complete.
+    for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
+        _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
+        _lost = [k for k, v in _i18n.load(_lang).items() if v and v != k and v not in _page]
+        check("every %s translation reaches the page it was written for" % _lang,
+              not _lost,
+              "%d translated string(s) appear nowhere on the page, first: %s"
+              % (len(_lost), (_lost or [""])[0][:60]))
+
+    # 6c. AND THE DATA ISLAND PARSES. The language list the offer bar reads is JSON inside a
+    #     `script` element, and the marker comments that generate it sat INSIDE that element
+    #     for one build. A `script` body is text to the HTML parser, comments and all, so the
+    #     JSON was unparseable and the bar silently did nothing - the parse is inside the
+    #     try/catch that keeps a browser with storage disabled working, so it failed quietly.
+    #     Nothing in this file could see it; it was found by opening the page.
+    for _lang in _langs:
+        _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
+        _isl = re.search(r'<script type="application/json" id="i18n-langs">(.*?)</script>',
+                         _page, re.S)
+        check("the %s page carries a language list the browser can read" % _lang, bool(_isl),
+              "no i18n-langs island on the page, so the offer bar has nothing to match against")
+        if _isl:
+            try:
+                _got = json.loads(_isl.group(1))
+            except ValueError as _e:
+                _got = None
+            check("...and the %s island is JSON, not JSON with comments in it" % _lang,
+                  isinstance(_got, dict) and set(_got) == set(_langs),
+                  "the island reads %r" % (_isl.group(1)[:70],))
+
+    # 6d. AND A CLASS THE MARKUP USES IS A CLASS THE STYLESHEET DEFINES. `.sr-only` carries the
+    #     language switch's spoken name; an edit to the block beneath it deleted the rule and
+    #     the header shipped reading "UK MOVA", with the off-screen word rendered at full size
+    #     beside the code it exists to explain. A missing rule is invisible to every check that
+    #     reads markup and to every check that reads CSS, because each half is fine alone.
+    _used = set(re.findall(r'class="([^"]+)"', _site))
+    _classes = {c for v in _used for c in v.split()}
+    _styles = set(re.findall(r"\.([a-zA-Z][\w-]*)\s*(?=[{,:.>\s])", _site[:_site.find("</style>")]))
+    _orphan = sorted(c for c in ("sr-only", "offer", "offer-go", "offer-no", "lang", "lang-menu",
+                                 "langs")
+                     if c in _classes and c not in _styles)
+    check("every class the header relies on is one the stylesheet defines", not _orphan,
+          "used in the markup and styled nowhere: %s" % ", ".join(_orphan))
 
     # 7. A TRANSLATION IS TEXT, NEVER MARKUP. The generator escapes what it substitutes, so a
     #    stray quote can no longer close an attribute; this catches the other half, a
