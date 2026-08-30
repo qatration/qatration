@@ -1,11 +1,25 @@
 {
   "language": "zh",
-  "figures_differ": [
-    "5 of 9",
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.",
-    "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.",
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value."
-  ],
+  "figures_differ": {
+    "5 of 9": [
+      "9",
+      "5"
+    ],
+    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "138",
+      "61"
+    ],
+    "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
+      "9",
+      "6"
+    ],
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
+      "324",
+      "1",
+      "48",
+      "38"
+    ]
+  },
   "strings": {
     "QAtration": "QAtration",
     "Fires real prompt-injection attacks at your AI chatbot or agent, then reports in plain English what it leaked or did. Open source, runs on your own machine.": "向你的 AI 聊天机器人或智能体发送真实的提示词注入攻击，然后用平实的语言报告它泄露了什么、做了什么。开源，运行在你自己的机器上。",

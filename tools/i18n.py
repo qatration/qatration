@@ -240,25 +240,33 @@ def load(lang):
 
 
 def figures_differ(lang):
-    """-> the keys where this language's figures do not line up with the English one for one.
+    """-> {english key: the figure sequence this language is expected to produce}.
 
-    THE EXCEPTION IS DECLARED, NOT ASSUMED. Figures are compared in order, because `5 of 9` and
-    `9 of 5` carry the same digits and opposite claims. Two things break that legitimately, and
-    both were found by the check rather than guessed at: Japanese and Korean write `5 of 9` as
-    `9 of which 5`, which is correct and reverses them; and both render an English number
-    written as a word (`reports a zero`, `three tries`) as a digit, which adds figures the
-    English side does not have.
+    THE EXCEPTION IS DECLARED, AND IT RECORDS WHAT IT EXPECTS. Figures are compared in order,
+    because `5 of 9` and `9 of 5` carry the same digits and opposite claims. Two things break
+    that legitimately, and both were found by the check rather than guessed at: Japanese,
+    Korean, Turkish and Chinese write `5 of 9` as `9 of which 5`, which is correct and reverses
+    them; and several render an English number written as a word (`reports a zero`, `three
+    tries`) as a digit, which adds figures the English side does not have.
 
-    So a dictionary NAMES the strings where it happens, and for exactly those the demand drops
-    to every English figure still being present. Nothing else is relaxed, the list is refused
-    if it holds a key that did not need it, and a key it does not name is compared in order.
+    THIS USED TO BE A BARE LIST, and a bare list drops the order claim entirely: `5 of 9` is
+    declared in four languages, so those four would have accepted `9 of 5` - the exact reversal
+    the rule exists to catch, in the sentence it matters most in. Recording the expected
+    sequence keeps the whole claim: the figures may be in this language's order, and in no
+    other.
     """
     import json
     path = os.path.join(DICT_DIR, "%s.json" % lang)
     if not os.path.exists(path):
-        return []
+        return {}
     with io.open(path, encoding="utf-8") as f:
-        return json.load(f).get("figures_differ") or []
+        got = json.load(f).get("figures_differ") or {}
+    if isinstance(got, list):
+        raise SystemExit(
+            "site/i18n/%s.json declares figures_differ as a list. It must be a mapping from "
+            "the English string to the figure sequence this language produces, or the order "
+            "claim is dropped for exactly the strings where order matters most." % lang)
+    return got
 
 
 def alternates(langs):

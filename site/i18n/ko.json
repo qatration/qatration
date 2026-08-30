@@ -1,14 +1,35 @@
 {
   "language": "ko",
-  "figures_differ": [
-    "5 of 9",
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.",
-    "An attack that failed reports a zero. So does a check that could not run, and so does a genuinely hardened bot, and that is where testing stalls: three different facts arrive looking identical, and nobody knows what to try next. These are measurements from real runs, not projections.",
-    "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.",
-    "Run against the same third-party targets as garak and promptfoo, with every reply from all three scored by one substring rule instead of by each tool's own judge. On a RAG app with no guardrails,",
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.",
-    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third is a fact about how a team responds to them, and it is the line that gets a fix scheduled."
-  ],
+  "figures_differ": {
+    "5 of 9": [
+      "9",
+      "5"
+    ],
+    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "138",
+      "61"
+    ],
+    "An attack that failed reports a zero. So does a check that could not run, and so does a genuinely hardened bot, and that is where testing stalls: three different facts arrive looking identical, and nobody knows what to try next. These are measurements from real runs, not projections.": [
+      "0"
+    ],
+    "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
+      "9",
+      "6"
+    ],
+    "Run against the same third-party targets as garak and promptfoo, with every reply from all three scored by one substring rule instead of by each tool's own judge. On a RAG app with no guardrails,": [
+      "3"
+    ],
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
+      "0",
+      "324",
+      "1",
+      "48",
+      "38"
+    ],
+    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third is a fact about how a team responds to them, and it is the line that gets a fix scheduled.": [
+      "3"
+    ]
+  },
   "strings": {
     "QAtration": "QAtration",
     "Fires real prompt-injection attacks at your AI chatbot or agent, then reports in plain English what it leaked or did. Open source, runs on your own machine.": "당신의 AI 챗봇이나 에이전트에 실제 프롬프트 인젝션 공격을 보내고, 무엇을 유출했고 무엇을 했는지 쉬운 말로 보고합니다. 오픈 소스이며 당신의 컴퓨터에서 실행됩니다.",

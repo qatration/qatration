@@ -1349,28 +1349,35 @@ def main():
             if not _v:
                 continue
             _en, _tr = _i18n.numbers(_k), _i18n.numbers(_v)
-            if _en == _tr:
-                if _k in _declared:
-                    _extra.append(_k)
+            if _k not in _declared:
+                if _en != _tr:
+                    _moved.append(_k)
                 continue
-            if _k in _declared:
-                _left = list(_tr)
-                for _n in _en:
-                    if _n in _left:
-                        _left.remove(_n)
-                    else:
-                        _moved.append(_k)
-                        break
-            else:
+            # A DECLARED KEY IS STILL COMPARED, just against the order this language records
+            # rather than against the English one. Declaring used to drop the order claim
+            # outright, which meant `5 of 9` - declared in four languages - would have accepted
+            # `9 of 5`, the exact reversal the rule exists to catch.
+            if _tr != _declared[_k]:
                 _moved.append(_k)
+                continue
+            _left = list(_tr)
+            for _n in _en:
+                if _n in _left:
+                    _left.remove(_n)
+                else:
+                    _moved.append(_k)
+                    break
+            if _en == _tr:
+                _extra.append(_k)
+        _extra += [_k for _k in _declared if _k not in _table]
         check("...and every number in %s is still the number in the artifacts" % _lang,
               not _moved,
-              "%d string(s) changed a figure, first: %s"
+              "%d string(s) changed a figure or its declared order, first: %s"
               % (len(_moved), (_moved or [""])[0][:60]))
         check("...and %s declares a figure exception only where it is needed" % _lang,
               not _extra,
-              "%d key(s) listed under figures_differ whose figures match the English exactly: %s"
-              % (len(_extra), (_extra or [""])[0][:60]))
+              "%d key(s) under figures_differ that match the English exactly or are not on "
+              "the page: %s" % (len(_extra), (_extra or [""])[0][:60]))
 
     # 5. NO VISIBLE TEXT BUILT IN JAVASCRIPT. The theme button used to set its own label from
     #    two string literals in the script, so a translated page said everything in its own
@@ -1451,8 +1458,14 @@ def main():
         _t = io.open(path, encoding="utf-8").read()
         _t = re.sub(r"(?s)<(script|style)\b.*?</\1>", " ", _t)
         _t = re.sub(r"(?s)<!--.*?-->", " ", _t)
-        return [x for x in (re.sub(r"\s+", " ", n).strip()
-                            for n in re.split(r"(?s)<[^>]*>", _t)) if x]
+        # `_i18n.TAG`, NOT `<[^>]*>`. The generator carries a comment recording that pattern
+        # as the bug that corrupted the key set, because it cuts a tag at the first `>` even
+        # when that `>` is inside an attribute. Writing it again here would be the same rule
+        # implemented twice, with the wrong copy in the check that reads the artifact. TAG has
+        # one capture group, so `split` alternates text, tag, text, and the even entries are
+        # the text nodes.
+        _parts = _i18n.TAG.split(_t)
+        return [x for x in (re.sub(r"\s+", " ", n).strip() for n in _parts[0::2]) if x]
 
     _en_nodes = _nodes(_i18n.page_path(_i18n.DEFAULT))
     for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
@@ -1517,12 +1530,38 @@ def main():
     #     exist. Measured at sixteen languages on a 375x667 phone before the cap: the menu ran
     #     103px past the bottom of the viewport and the last entry could not be reached at all,
     #     which no amount of adding languages would ever have announced.
-    _menu = re.search(r"\.lang-menu\{([^}]*)\}", _site)
-    check("the language menu is capped to the viewport", bool(_menu) and "max-height" in _menu.group(1),
-          "no max-height on .lang-menu, so it grows without limit as languages are added")
-    check("...and scrolls what does not fit",
-          bool(_menu) and "overflow-y:auto" in _menu.group(1),
-          "capped without a scroll, which hides the last languages instead of showing them")
+    #
+    #     THE FIRST VERSION CHECKED THE SPELLING OF THE CSS. `overflow-y: auto` with one space
+    #     turned it red while rendering identically, and `max-height:99999px` or a trailing
+    #     `;max-height:none` left it green with the cap gone. It also read only the stylesheet,
+    #     while the real limit is set by the script, so it was blind to the half that decides.
+    #     Whitespace is normalised, the LAST declaration is the one judged because that is the
+    #     one that wins, the value has to be viewport-relative rather than merely present, and
+    #     the script that computes the real height is checked as well.
+    _mtxt = re.search(r"\.lang-menu\{([^}]*)\}", _site)
+    check("the language menu has a height rule at all", bool(_mtxt),
+          "no `.lang-menu` block, so nothing bounds the menu as languages are added")
+    if _mtxt:
+        _decl = re.sub(r"\s+", "", _mtxt.group(1))
+        _caps = re.findall(r"max-height:([^;}]+)", _decl)
+        check("...and the rule that wins is measured against the viewport",
+              bool(_caps) and re.search(r"\d+d?vh", _caps[-1]),
+              "the last max-height is %r, which does not shrink with the screen"
+              % (_caps[-1] if _caps else None))
+        check("...and what does not fit scrolls rather than being cut off",
+              re.search(r"overflow(-y)?:(auto|scroll)", _decl),
+              "no scroll on the menu, so a cap hides the last languages instead of showing them")
+
+    # 6f. AND THE SCRIPT SIZES IT FROM THE VIEWPORT, which is where the real limit comes from.
+    #     The CSS above subtracts a constant and cannot be right: the distance from the top of
+    #     the screen to this menu is the header's height, and the header wraps to one, two or
+    #     three rows depending on how long the tagline runs in the language being read. Three
+    #     constants were tried and each one overflowed a language the previous had fitted.
+    check("the menu's height is measured when it opens, not assumed",
+          "innerHeight" in _script and "getBoundingClientRect" in _script,
+          "nothing measures the space below the menu, so the CSS constant is the only cap and "
+          "it is wrong in whichever language wraps the header furthest")
+
 
     # 6d. AND A CLASS THE MARKUP USES IS A CLASS THE STYLESHEET DEFINES. `.sr-only` carries the
     #     language switch's spoken name; an edit to the block beneath it deleted the rule and
@@ -1532,11 +1571,32 @@ def main():
     _used = set(re.findall(r'class="([^"]+)"', _site))
     _classes = {c for v in _used for c in v.split()}
     _styles = set(re.findall(r"\.([a-zA-Z][\w-]*)\s*(?=[{,:.>\s])", _site[:_site.find("</style>")]))
-    _orphan = sorted(c for c in ("sr-only", "offer", "offer-go", "offer-no", "lang", "lang-menu",
-                                 "langs")
-                     if c in _classes and c not in _styles)
-    check("every class the header relies on is one the stylesheet defines", not _orphan,
+    # EVERY CLASS, NOT SEVEN OF THEM. The first version listed the classes it happened to care
+    # about, which is a coverage decision disguised as a rule: `lang-name`, added later, was not
+    # among them. All 63 classes this page uses are styled today, so the whole set is the honest
+    # comparison and a new unstyled one is caught the day it appears.
+    _classes = {c for v in re.findall(r'class="([^"]+)"', _site) for c in v.split()}
+    _styles = set(re.findall(r"\.([a-zA-Z][\w-]*)\s*(?=[{,:.>\s])", _site[:_site.find("</style>")]))
+    _orphan = sorted(_classes - _styles)
+    check("every class the page uses is one the stylesheet defines", not _orphan,
           "used in the markup and styled nowhere: %s" % ", ".join(_orphan))
+
+    # 6g. AND THE THEME BUTTON IS NOT A TOGGLE, on any page. `aria-pressed` was removed with a
+    #     comment explaining at length why: the button renames itself, so a state describing the
+    #     origin sits beside a name describing the destination and the two change together,
+    #     telling a listener nothing. The script then set it again on every repaint, directly
+    #     under that comment, and all sixteen pages shipped announcing the contradiction it
+    #     describes. A rule written in one place and undone in another is not a rule, so it is
+    #     checked on the artifact and in the script that builds it.
+    for _lang in _langs:
+        _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
+        _btn = re.search(r"(?s)<button[^>]*class=\"theme\".*?>", _page)
+        check("the %s theme button does not claim a pressed state" % _lang,
+              bool(_btn) and "aria-pressed" not in _btn.group(0),
+              "aria-pressed is back on the rendered button, beside a name that renames itself")
+    check("...and nothing puts it back at runtime",
+          "aria-pressed" not in _script,
+          "the script sets aria-pressed, so the markup's rule survives only until first paint")
 
     # 7. A TRANSLATION IS TEXT, NEVER MARKUP. The generator escapes what it substitutes, so a
     #    stray quote can no longer close an attribute; this catches the other half, a
@@ -1595,26 +1655,39 @@ def main():
               _og == [_page_url(_lang)],
               "og:url is %s, this page is %s" % (_og or "absent", _page_url(_lang)))
 
-    # 11. THE THEME BUTTON'S SPOKEN NAME CONTAINS ITS WRITTEN ONE, in every language. English
-    #     passed on a case-insensitive reading and Ukrainian did not: the label is nominative
-    #     and the phrase around it inflected the word, so the string written on the button was
-    #     not inside the name it answers to, and a voice-control user reading the button aloud
-    #     could not press it. WCAG 2.5.3, and a failure a dictionary can reintroduce at any
-    #     time without touching a line of markup.
+    # 11. THE THEME BUTTON'S SPOKEN NAME CONTAINS ITS WRITTEN ONE, in every language, READ OFF
+    #     THE PAGE. English passed on a case-insensitive reading and Ukrainian did not: the
+    #     label is nominative and the phrase around it inflected the word, so the string written
+    #     on the button was not inside the name it answers to, and a voice-control user reading
+    #     the button aloud could not press it. WCAG 2.5.3.
+    #
+    #     THE FIRST VERSION COMPARED THE DICTIONARY WITH ITSELF. It looked the two attribute
+    #     names up in the SOURCE and then translated both through the same table, so renaming
+    #     the attributes until `ATTR_PLAIN` stopped matching them shipped the English name on
+    #     all sixteen pages while this reported every language passing: with no dictionary key,
+    #     both sides fell back to the same English literal and trivially contained each other.
+    #     The one check that names a WCAG criterion could not see the artifact it is about.
+    #     It reads the rendered page now, which is the only place the answer exists.
     _pairs = [("data-to-light", "data-aria-light"), ("data-to-dark", "data-aria-dark")]
     for _lang in _langs:
-        _tbl = {} if _lang == _i18n.DEFAULT else _i18n.load(_lang)
+        _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
+        _btn = re.search(r"(?s)<button[^>]*class=\"theme\".*?>", _page)
+        check("the %s page still has a theme button to check" % _lang, bool(_btn),
+              "no button.theme on the rendered page, so 2.5.3 cannot be judged at all")
+        if not _btn:
+            continue
         for _vis_attr, _name_attr in _pairs:
-            _vis = re.search(r'%s="([^"]*)"' % _vis_attr, _site)
-            _name = re.search(r'%s="([^"]*)"' % _name_attr, _site)
-            if not (_vis and _name):
+            _v = re.search(r'%s="([^"]*)"' % _vis_attr, _btn.group(0))
+            _n = re.search(r'%s="([^"]*)"' % _name_attr, _btn.group(0))
+            check("the %s theme button carries both a label and a name (%s)"
+                  % (_lang, _vis_attr[-5:]), bool(_v) and bool(_n),
+                  "the rendered button is missing %s or %s" % (_vis_attr, _name_attr))
+            if not (_v and _n):
                 continue
-            _v = _tbl.get(_vis.group(1)) or _vis.group(1)
-            _n = _tbl.get(_name.group(1)) or _name.group(1)
-            check("the %s theme button can be pressed by saying what it says (%s)"
+            check("...and the %s button can be pressed by saying what it says (%s)"
                   % (_lang, _vis_attr[-5:]),
-                  _v.lower() in _n.lower(),
-                  "the button reads %r and answers to %r" % (_v, _n))
+                  _v.group(1).lower() in _n.group(1).lower(),
+                  "the button reads %r and answers to %r" % (_v.group(1), _n.group(1)))
 
     # THE SITEMAP AND ROBOTS.TXT ARE NOT CHECKED AGAIN HERE. Both were, and both were already
     # covered upstream: the URL list is compared against the languages where the file is
