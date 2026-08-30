@@ -26,7 +26,15 @@
      own language is not on the list. -->
 <!-- i18n:alternates -->
 <link rel="alternate" hreflang="en" href="https://qatration.com/">
+<link rel="alternate" hreflang="de" href="https://qatration.com/de/">
+<link rel="alternate" hreflang="es" href="https://qatration.com/es/">
+<link rel="alternate" hreflang="fr" href="https://qatration.com/fr/">
+<link rel="alternate" hreflang="ja" href="https://qatration.com/ja/">
+<link rel="alternate" hreflang="ko" href="https://qatration.com/ko/">
+<link rel="alternate" hreflang="pl" href="https://qatration.com/pl/">
+<link rel="alternate" hreflang="pt" href="https://qatration.com/pt/">
 <link rel="alternate" hreflang="uk" href="https://qatration.com/uk/">
+<link rel="alternate" hreflang="zh" href="https://qatration.com/zh/">
 <link rel="alternate" hreflang="x-default" href="https://qatration.com/">
 <!-- /i18n:alternates -->
 
@@ -39,6 +47,24 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="QAtration. Find out what an attacker can make your chatbot do.">
+
+<!-- WHICH LANGUAGE A SHARED LINK IS IN. Without these, Facebook and LinkedIn assume en_US for
+     every page, so a Ukrainian or Japanese link previews as English and the alternates are
+     invisible to them. `hreflang` above is for search engines and does not serve this purpose.
+     Generated, for the same reason as the alternates: a language added to site/i18n/ has to
+     appear here without anyone remembering to edit it. -->
+<!-- i18n:locale -->
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="ja_JP">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta property="og:locale:alternate" content="pl_PL">
+<meta property="og:locale:alternate" content="pt_BR">
+<meta property="og:locale:alternate" content="uk_UA">
+<meta property="og:locale:alternate" content="zh_CN">
+<!-- /i18n:locale -->
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QAtration: adversarial testing for AI chatbots and agents">
@@ -434,7 +460,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
        and only the list is generated; a `script` body is opaque to the extractor, so nothing
        here can be read back in as something to translate. -->
   <!-- i18n:offer -->
-  <script type="application/json" id="i18n-langs">{"en": "English", "uk": "Українська"}</script>
+  <script type="application/json" id="i18n-langs">{"de": "Deutsch", "en": "English", "es": "Español", "fr": "Français", "ja": "日本語", "ko": "한국어", "pl": "Polski", "pt": "Português", "uk": "Українська", "zh": "简体中文"}</script>
   <!-- /i18n:offer -->
 
   <div class="top">
@@ -471,7 +497,15 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="lang-menu">
       <!-- i18n:switcher -->
       <a class="lang" translate="no" href="/" hreflang="en" aria-current="page">EN<span class="sr-only" lang="en"> English</span></a>
+      <a class="lang" translate="no" href="/de/" hreflang="de">DE<span class="sr-only" lang="de"> Deutsch</span></a>
+      <a class="lang" translate="no" href="/es/" hreflang="es">ES<span class="sr-only" lang="es"> Español</span></a>
+      <a class="lang" translate="no" href="/fr/" hreflang="fr">FR<span class="sr-only" lang="fr"> Français</span></a>
+      <a class="lang" translate="no" href="/ja/" hreflang="ja">JA<span class="sr-only" lang="ja"> 日本語</span></a>
+      <a class="lang" translate="no" href="/ko/" hreflang="ko">KO<span class="sr-only" lang="ko"> 한국어</span></a>
+      <a class="lang" translate="no" href="/pl/" hreflang="pl">PL<span class="sr-only" lang="pl"> Polski</span></a>
+      <a class="lang" translate="no" href="/pt/" hreflang="pt">PT<span class="sr-only" lang="pt"> Português</span></a>
       <a class="lang" translate="no" href="/uk/" hreflang="uk">UK<span class="sr-only" lang="uk"> Українська</span></a>
+      <a class="lang" translate="no" href="/zh/" hreflang="zh">ZH<span class="sr-only" lang="zh"> 简体中文</span></a>
       <!-- /i18n:switcher -->
       </div>
     </details>

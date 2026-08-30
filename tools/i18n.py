@@ -239,6 +239,28 @@ def load(lang):
     return d.get("strings") or {}
 
 
+def figures_differ(lang):
+    """-> the keys where this language's figures do not line up with the English one for one.
+
+    THE EXCEPTION IS DECLARED, NOT ASSUMED. Figures are compared in order, because `5 of 9` and
+    `9 of 5` carry the same digits and opposite claims. Two things break that legitimately, and
+    both were found by the check rather than guessed at: Japanese and Korean write `5 of 9` as
+    `9 of which 5`, which is correct and reverses them; and both render an English number
+    written as a word (`reports a zero`, `three tries`) as a digit, which adds figures the
+    English side does not have.
+
+    So a dictionary NAMES the strings where it happens, and for exactly those the demand drops
+    to every English figure still being present. Nothing else is relaxed, the list is refused
+    if it holds a key that did not need it, and a key it does not name is compared in order.
+    """
+    import json
+    path = os.path.join(DICT_DIR, "%s.json" % lang)
+    if not os.path.exists(path):
+        return []
+    with io.open(path, encoding="utf-8") as f:
+        return json.load(f).get("figures_differ") or []
+
+
 def alternates(langs):
     rows = [MARK_OPEN]
     for code in langs:
@@ -421,11 +443,33 @@ MARK_CUR_OPEN = "<!-- i18n:current -->"
 MARK_CUR_CLOSE = "<!-- /i18n:current -->"
 MARK_OF_OPEN = "<!-- i18n:offer -->"
 MARK_OF_CLOSE = "<!-- /i18n:offer -->"
+MARK_LC_OPEN = "<!-- i18n:locale -->"
+MARK_LC_CLOSE = "<!-- /i18n:locale -->"
 
 # What each language calls itself, for the `title` a reader gets on hover and for screen
 # readers. The visible label stays the two-letter code because the header has ten pixels of
 # room at 375px, measured, and `Українська` needs eighty.
-ENDONYM = {"en": "English", "uk": "Українська"}
+# The territory each language is announced with to a link preview. `og:locale` wants a full
+# locale, not a language code, and there is no way to derive one: `pt` could be pt_BR or pt_PT,
+# and the choice here is Brazil because that is where the readers are. A language without an
+# entry is refused rather than guessed at.
+LOCALE = {
+    "en": "en_US", "de": "de_DE", "es": "es_ES", "fr": "fr_FR", "ja": "ja_JP",
+    "ko": "ko_KR", "pl": "pl_PL", "pt": "pt_BR", "uk": "uk_UA", "zh": "zh_CN",
+}
+
+ENDONYM = {
+    "en": "English",
+    "de": "Deutsch",
+    "es": "Español",
+    "fr": "Français",
+    "ja": "日本語",
+    "ko": "한국어",
+    "pl": "Polski",
+    "pt": "Português",
+    "uk": "Українська",
+    "zh": "简体中文",
+}
 
 
 def switcher(lang, langs):
@@ -472,9 +516,26 @@ def offer(langs):
             % (MARK_OF_OPEN, listing, MARK_OF_CLOSE))
 
 
+def locales(lang, langs):
+    """-> og:locale for this page and og:locale:alternate for the others."""
+    missing = [c for c in langs if c not in LOCALE]
+    if missing:
+        raise SystemExit("no LOCALE entry for %s in tools/i18n.py: og:locale needs a full "
+                         "locale and there is no way to derive one from a language code"
+                         % ", ".join(missing))
+    rows = [MARK_LC_OPEN,
+            '<meta property="og:locale" content="%s">' % LOCALE[lang]]
+    for code in langs:
+        if code != lang:
+            rows.append('<meta property="og:locale:alternate" content="%s">' % LOCALE[code])
+    rows.append(MARK_LC_CLOSE)
+    return "\n".join(rows)
+
+
 def with_switcher(html, lang, langs):
     html = _fill(html, MARK_SW_OPEN, MARK_SW_CLOSE, switcher(lang, langs))
     html = _fill(html, MARK_CUR_OPEN, MARK_CUR_CLOSE, current(lang))
+    html = _fill(html, MARK_LC_OPEN, MARK_LC_CLOSE, locales(lang, langs))
     return _fill(html, MARK_OF_OPEN, MARK_OF_CLOSE, offer(langs))
 
 

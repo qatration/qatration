@@ -1330,15 +1330,47 @@ def main():
               not _orphans,
               "%d orphaned key(s), first: %s" % (len(_orphans), (_orphans or [""])[0][:60]))
 
-        # 4. EVERY FIGURE SURVIVES. This is the one that matters. Thousands separators may move
-        #    (`1,500` and `1 500` are the same measurement); digits may not. A number written
-        #    out as a word, or quietly rounded, stops being the thing the artifacts recount.
-        _moved = sorted(k for k, v in _table.items()
-                        if v and _i18n.numbers(k) != _i18n.numbers(v))
+        # 4. EVERY FIGURE SURVIVES, AND IN THE SAME ORDER. This is the one that matters. Thousands
+    #    separators may move (`1,500` and `1 500` are the same measurement); digits may not. A
+    #    number written out as a word, or quietly rounded, stops being the thing the artifacts
+    #    recount - and order is half the claim, because `5 of 9` and `9 of 5` carry the same
+    #    digits and say opposite things.
+    #
+    #    ORDER IS NOT UNIVERSAL, AND THE EXCEPTION IS DECLARED. Japanese and Korean write
+    #    `5 of 9` as `9 of which 5`, which is correct and reverses the figures, and both render
+    #    an English number written as a word (`reports a zero`) as a digit, which adds one the
+    #    English side does not have. So a dictionary may NAME the strings where its figures do
+    #    not line up, and for exactly those the demand drops to every English figure still being
+    #    present. The list is checked against reality: a key on it that passes the strict rule
+    #    is refused, so it cannot quietly become a blanket.
+        _moved, _extra = [], []
+        _declared = _i18n.figures_differ(_lang)
+        for _k, _v in _table.items():
+            if not _v:
+                continue
+            _en, _tr = _i18n.numbers(_k), _i18n.numbers(_v)
+            if _en == _tr:
+                if _k in _declared:
+                    _extra.append(_k)
+                continue
+            if _k in _declared:
+                _left = list(_tr)
+                for _n in _en:
+                    if _n in _left:
+                        _left.remove(_n)
+                    else:
+                        _moved.append(_k)
+                        break
+            else:
+                _moved.append(_k)
         check("...and every number in %s is still the number in the artifacts" % _lang,
               not _moved,
               "%d string(s) changed a figure, first: %s"
               % (len(_moved), (_moved or [""])[0][:60]))
+        check("...and %s declares a figure exception only where it is needed" % _lang,
+              not _extra,
+              "%d key(s) listed under figures_differ whose figures match the English exactly: %s"
+              % (len(_extra), (_extra or [""])[0][:60]))
 
     # 5. NO VISIBLE TEXT BUILT IN JAVASCRIPT. The theme button used to set its own label from
     #    two string literals in the script, so a translated page said everything in its own
@@ -1529,6 +1561,19 @@ def main():
               _alts == _want_alts,
               "alternates are %s, they should be %s" % (sorted(_alts.items()),
                                                         sorted(_want_alts.items())))
+
+        # 10b. AND THE PAGE SAYS WHICH LOCALE IT IS IN. Without `og:locale` a link preview
+        #      assumes en_US for every page, so a Ukrainian or Japanese link previews as
+        #      English. `hreflang` is for search engines and does nothing here.
+        _loc = re.findall(r'<meta property="og:locale" content="([^"]+)"', _page)
+        _alts_loc = set(re.findall(r'<meta property="og:locale:alternate" content="([^"]+)"',
+                                   _page))
+        check("...and the %s page declares its own locale" % _lang,
+              _loc == [_i18n.LOCALE[_lang]],
+              "og:locale is %s, this page is %s" % (_loc or "absent", _i18n.LOCALE[_lang]))
+        check("...and the %s page names every other locale as an alternate" % _lang,
+              _alts_loc == {_i18n.LOCALE[c] for c in _langs if c != _lang},
+              "alternates are %s" % sorted(_alts_loc))
 
         # 10. AND SO DOES og:url, which nothing checked. It is rewritten by exact string match,
         #     so reformatting the source tag makes the rewrite a silent no-op and every share
