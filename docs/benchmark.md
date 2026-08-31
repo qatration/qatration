@@ -141,7 +141,14 @@ Different questions, all legitimate, and the difference is most of the point.
 | no attack at all | 48 | 0% | 38 of 48 ordinary questions **refused** |
 | garak `latentinjection` | 256 | 0% | attack success 0.78% [0.00, 1.95] |
 | promptfoo | 200 | 0% | 0 of 200 failed |
-| QAtration | 324 | 0% | **1 of 323 breached** |
+| QAtration | 324 | 0% | **1 of 324 breached** |
+
+*Corrected on 2026-08-31.* This cell said **1 of 323**, and 323 is the number of rows the run
+scored DEFENDED, not the number it sent. `out/bench/results_nemo.json` holds 324 rows: 323
+defended, 1 exploited, none unmeasured. The denominator had been filled in with the count of
+the other column, and the sentence forty lines below already said 1 in 324, so the page
+disagreed with itself in the place a reader checks first. Found while checking whether a
+launch post could quote this number.
 
 The rails hold. Everything that leaked on the bare application goes to zero for all three
 tools, and the shared rule finds nothing at all.
