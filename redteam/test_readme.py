@@ -1402,10 +1402,37 @@ def main():
     # 6. THE ALTERNATES AGREE WITH WHAT IS ACTUALLY PUBLISHED, on every page and in both
     #    directions. A page that advertises a language it does not link to, or omits one that
     #    exists, sends a search engine to a URL that is not there.
+    # 6a. AND THE TAB SAYS WHICH PAGE THIS IS. Every other line in the head is translated -
+    #     description, og:title, og:description, og:image:alt - and `<title>` was the one that
+    #     was not, because it held the bare brand name and nothing else. The node-by-node rule
+    #     further down exists to catch precisely this, an English string surviving into a
+    #     translated page, but it accepts a dictionary entry mapping a string to itself as a
+    #     declaration of "identical by design", and the brand genuinely needs that declaration.
+    #     The title was exactly the brand, so the one check that would have found it had been
+    #     told to look away, and sixteen pages shipped a single title: one tab name, one
+    #     bookmark, one search result, for every language on the site.
+    #
+    #     DERIVED from the English page's own title and from the same dictionaries the pages
+    #     are built from. A list of sixteen expected titles typed here would be the same rule
+    #     written a second time, and the copy in the check is the one that goes stale.
+    _m = re.search(r"(?s)<title>(.*?)</title>", _site)
+    _en_title = _m.group(1).strip() if _m else ""
+    check("the English page's title says what the page is, not just who made it",
+          len(_en_title.split()) > 1,
+          "<title> is %r, and a title that is only the brand renders identically in every "
+          "language no matter how complete the dictionaries are" % _en_title)
+    _titles = {}
+
     _want_alt = set(_langs) | {"x-default"}
     for _lang in _langs:
         _path = _i18n.page_path(_lang)
         _page = io.open(_path, encoding="utf-8").read()
+        _m = re.search(r"(?s)<title>(.*?)</title>", _page)
+        _titles[_lang] = _m.group(1).strip() if _m else ""
+        _want_title = _en_title if _lang == _i18n.DEFAULT else _i18n.load(_lang).get(_en_title)
+        check("the %s page's title is the %s translation of the English one" % (_lang, _lang),
+              _titles[_lang] == _want_title,
+              "<title> is %r where the dictionary gives %r" % (_titles[_lang], _want_title))
         _got = set(re.findall(r'<link rel="alternate" hreflang="([^"]+)"', _page))
         check("the %s page lists every language and no other" % _lang, _got == _want_alt,
               "hreflang is %s, the site has %s" % (sorted(_got), sorted(_want_alt)))
@@ -1430,6 +1457,15 @@ def main():
                   _href in _switch,
                   "no visible switch from %s to %s; the page offers %s"
                   % (_lang, _other, sorted(_switch) or "nothing"))
+
+    # 6b. AND NO TWO OF THEM ARE THE SAME STRING. The rule above is per page and would still
+    #     pass if two dictionaries happened to give one answer, or if a language translated the
+    #     title back into the English. This is the property a reader sees: sixteen tabs open,
+    #     sixteen different names. It is what the defect above actually looked like.
+    _dupe = sorted({t for t in _titles.values() if list(_titles.values()).count(t) > 1})
+    check("no two pages on the site carry the same title",
+          not _dupe,
+          "%d title(s) appear on more than one page, first: %r" % (len(_dupe), (_dupe or [""])[0]))
 
     # 6. NODE BY NODE AGAINST THE ENGLISH PAGE, and this is the only check here that does not
     #    ask the extractor what it found. Everything above is quantified over `extract()`, so a
