@@ -601,11 +601,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h1>Find out what an attacker can make your chatbot do.</h1>
       <p class="sub">QAtration fires real prompt-injection attacks at your AI bot and gives
         you a plain-English report of what it leaked or did, before someone else finds
-        it. <b>You run it.</b> On your machine or in your CI, against your own deployment —
-        no account, no endpoint handed over, nothing sent to us.</p>
+        it. <b>You run it.</b> On your machine or in your CI, against your own deployment.
+        No account, no endpoint handed over, nothing sent to us.</p>
       <p class="warnbox">
-        <b>Do not point this at a system you do not own.</b> It sends real attacks &mdash;
-        prompt injection, data exfiltration, tool abuse &mdash; at whatever URL you give it.
+        <b>Do not point this at a system you do not own.</b> It sends real attacks at whatever URL you give it:
+        prompt injection, data exfiltration, tool abuse.
         Your own deployment, or one whose owner gave you written permission in advance.
         Not a public chatbot you find interesting. Not a vendor&rsquo;s demo.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read
@@ -627,7 +627,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
           anything.</li>
       </ul>
       <p class="evid-note">Measured on our own test targets, not projected. The transcript
-        alongside is an illustration of the idea; these are results.</p>
+        alongside is an illustration of the idea. These are results.</p>
     </div>
 
     <div class="term" role="figure" aria-label="Example attack transcript">
@@ -740,7 +740,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <h3>Plant a canary</h3>
         <p><span class="mono" translate="no">qatration mint</span> generates a secret of your own and
           the block to paste into your system prompt. The run confirms it actually landed
-          first — an unplanted canary means every check finds nothing, and that reads exactly
+          first. An unplanted canary means every check finds nothing, and that reads exactly
           like a bot that held.</p>
       </div>
       <div class="step">
@@ -748,7 +748,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <h3>Run it, and put it in CI</h3>
         <p>What leaked, exactly how, and the one fix that closes it, written for a team
           without a security expert. <span class="mono" translate="no">--fail-on exploited</span> fails a
-          build; <span class="mono" translate="no">qatration sarif</span> puts the findings straight into
+          build. <span class="mono" translate="no">qatration sarif</span> puts the findings straight into
           your code-scanning tab.</p>
       </div>
     </div>
@@ -779,7 +779,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="find">
         <div class="top-row"><h3>A bigger model is not the fix</h3></div>
         <p>One bot, two models, 282 attacks each, 3 tries apiece. The smaller broke on 28,
-          the larger on 25 — and 18 of those are the same attacks, 17 of them breaking on
+          the larger on 25, and 18 of those are the same attacks, 17 of them breaking on
           every single try of both. On this bot the larger model reshuffled which attacks land at the
           edges. It does not close the hole.</p>
       </div>
@@ -881,9 +881,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="thesis">
       <span class="eyebrow">Why it matters</span>
       <div class="big" style="margin-top:14px">A guardrail you haven't tested is <span class="u">a claim, not a fact.</span></div>
-      <p>“We told it not to reveal secrets” is a claim, not a defence — on the targets here it fell within the first few attacks. QAtration
+      <p>“We told it not to reveal secrets” is a claim, not a defence. On the targets here it fell within the first few attacks. QAtration
         also clears bots that are genuinely locked down, so a clean result actually means something.
-        It measures your bot; it doesn't just always cry wolf.</p>
+        It measures your bot instead of always crying wolf.</p>
       <div class="ab">
         <span><span class="chip exploited">Exploited</span> undefended bot leaks the key</span>
         <span><span class="chip defended">Defended</span> properly-guarded bot holds</span>
@@ -909,8 +909,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="auth">
       <b>Authorized targets only.</b> This sends real attacks at whatever it is pointed at,
       and it runs on your machine, under your key, on your authority. Anything that is not
-      localhost has to prove you control it — a DNS record, a file at a known path, or a token
-      the bot itself returns — and the run refuses without that rather than asking you to
+      localhost has to prove you control it: a DNS record, a file at a known path, or a token
+      the bot itself returns. The run refuses without that rather than asking you to
       remember. Testing systems you do not own or are not permitted to test is a crime in most
       places, and
       that is on the operator, not the tool.

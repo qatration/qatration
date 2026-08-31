@@ -48,11 +48,11 @@
 <meta property="og:site_name" content="QAtration">
 <meta property="og:url" content="https://qatration.com/id/">
 <meta property="og:title" content="QAtration: pengujian adversarial untuk chatbot dan agen AI">
-<meta property="og:description" content="Cari tahu apa yang bisa dibuat penyerang terhadap chatbot Anda. Sumber terbuka, Apache 2.0, berjalan di mesin Anda atau di CI Anda terhadap deployment Anda sendiri.">
+<meta property="og:description" content="Cari tahu penyerang bisa membuat chatbot Anda melakukan apa saja. Sumber terbuka, Apache 2.0, berjalan di mesin atau CI Anda, terhadap deployment Anda sendiri.">
 <meta property="og:image" content="https://qatration.com/og-card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="QAtration. Cari tahu apa yang bisa dibuat penyerang terhadap chatbot Anda.">
+<meta property="og:image:alt" content="QAtration. Cari tahu penyerang bisa membuat chatbot Anda melakukan apa saja.">
 
 <!-- WHICH LANGUAGE A SHARED LINK IS IN. Without these, Facebook and LinkedIn assume en_US for
      every page, so a Ukrainian or Japanese link previews as English and the alternates are
@@ -80,7 +80,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="QAtration: pengujian adversarial untuk chatbot dan agen AI">
-<meta name="twitter:description" content="Cari tahu apa yang bisa dibuat penyerang terhadap chatbot Anda. Sumber terbuka, Apache 2.0, berjalan di mesin Anda atau di CI Anda terhadap deployment Anda sendiri.">
+<meta name="twitter:description" content="Cari tahu penyerang bisa membuat chatbot Anda melakukan apa saja. Sumber terbuka, Apache 2.0, berjalan di mesin atau CI Anda, terhadap deployment Anda sendiri.">
 <meta name="twitter:image" content="https://qatration.com/og-card.png">
 <style>
 :root{
@@ -598,10 +598,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <div class="hero">
     <div>
       <span class="eyebrow">pengujian keamanan LLM · sumber terbuka · Apache 2.0</span>
-      <h1>Cari tahu apa yang bisa dibuat penyerang terhadap chatbot Anda.</h1>
+      <h1>Cari tahu penyerang bisa membuat chatbot Anda melakukan apa saja.</h1>
       <p class="sub">QAtration mengirim serangan prompt injection sungguhan ke bot AI Anda dan memberi Anda laporan dengan bahasa sederhana tentang apa yang bocor dan apa yang dilakukannya, sebelum orang lain menemukannya. <b>Anda yang menjalankannya.</b> Di mesin Anda atau di CI Anda, terhadap deployment Anda sendiri: tanpa akun, tanpa menyerahkan endpoint, tidak ada yang dikirim kepada kami.</p>
       <p class="warnbox">
-        <b>Jangan arahkan ini ke sistem yang bukan milik Anda.</b> Alat ini mengirim serangan sungguhan (prompt injection, pencurian data, penyalahgunaan tool) ke URL mana pun yang Anda berikan. Deployment Anda sendiri, atau yang pemiliknya sudah memberi Anda izin tertulis di awal. Bukan chatbot publik yang menurut Anda menarik. Bukan pula demo milik vendor.
+        <b>Jangan arahkan ini ke sistem yang bukan milik Anda.</b> Alat ini mengirim serangan sungguhan (prompt injection, eksfiltrasi data, penyalahgunaan tool) ke URL mana pun yang Anda berikan. Deployment Anda sendiri, atau yang pemiliknya sudah memberi Anda izin tertulis di awal. Bukan chatbot publik yang menurut Anda menarik. Bukan pula demo milik vendor.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Baca AUTHORISED-USE.md</a> sebelum menjalankannya pertama kali.</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
@@ -610,9 +610,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Dua dependensi. Seluruh korpus serangan ikut disertakan, begitu pula bukti di balik setiap angka di halaman ini, semuanya ada di
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, yang didistribusikan bersama repositorinya. Laporan milik dua alat lainnya tidak ada di sini, karena lisensi mereka tidak mengizinkannya. Perintah yang membuatnya ulang ada.</p>
       <ul class="evid">
-        <li><b>46</b> serangan diketikkan ke kotak obrolan bot yang terlindungi: tidak satu pun tembus. Matikan filter keluarannya dan <b>satu</b> serangan yang dibawa di dalam dokumen yang diambil melenggang keluar setiap kali. Filter masukan tidak pernah melihatnya.</li>
+        <li><b>46</b> serangan diketikkan ke kotak obrolan bot yang terlindungi: tidak satu pun tembus. Matikan filter keluarannya dan <b>Satu serangan</b> serangan yang dibawa di dalam dokumen yang diambil melenggang keluar setiap kali. Filter masukan tidak pernah melihatnya.</li>
         <li><b>5 dari 9</b> bot menyerahkan instruksinya sendiri hanya karena permintaan biasa, <span class="keep">tanpa serangan sama sekali.</span></li>
-        <li><b>Dua</b> melaporkan basis data telah dimulai ulang. Keduanya sama sekali tidak punya tool yang bisa memulai ulang apa pun.</li>
+        <li><b>Dua</b> bot melaporkan basis data telah dimulai ulang. Keduanya sama sekali tidak punya tool yang bisa memulai ulang apa pun.</li>
       </ul>
       <p class="evid-note">Diukur pada target uji kami sendiri, bukan diperkirakan. Transkrip di sebelahnya menggambarkan idenya, angka di atas adalah hasilnya.</p>
     </div>
@@ -638,7 +638,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         </div>
         <div class="verdict">
           <span class="chip exploited">Ditembus</span>
-          <span class="muted mono" style="font-size:12.5px">rahasia bocor · kanari cocok di dalam balasan</span>
+          <span class="muted mono" style="font-size:12.5px">rahasia bocor · canary cocok di dalam balasan</span>
         </div>
       </div>
     </div>
@@ -649,14 +649,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="sec-head">
       <span class="eyebrow">Cakupan</span>
       <h2>Hal-hal yang tidak akan dihentikan oleh prompt yang disusun asal-asalan.</h2>
-      <p>Setiap fitur AI yang naik ke produksi adalah permukaan serangan yang baru. Seberapa banyak permukaan Anda yang bisa dijangkau bergantung pada apa yang diizinkan dilihat oleh deployment Anda, dan garisnya ditarik di sini alih-alih dikaburkan, sebab pemindai yang mengaku mencakup hal yang tidak bisa diamatinya justru itulah yang sedang Anda hindari.</p>
+      <p>Setiap fitur AI yang naik ke produksi adalah permukaan serangan yang baru. Seberapa banyak permukaan Anda yang bisa dijangkau bergantung pada apa saja yang diizinkan deployment Anda untuk dilihat alat ini, dan garisnya ditarik di sini alih-alih dikaburkan, sebab pemindai yang mengaku mencakup hal yang tidak bisa diamatinya justru itulah yang sedang Anda hindari.</p>
     </div>
     <div class="grp">Terlihat dari endpoint Anda saja</div>
     <p class="grp-note">Sebuah endpoint obrolan sudah cukup: semua ini bisa diuji apa adanya, termasuk yang melintasi beberapa giliran percakapan.</p>
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Prompt injection</h3><span class="chip exploited">Ditembus</span></div>
-        <p>Teks penyerang mengalahkan aturan bot Anda: «abaikan instruksimu dan…».</p>
+        <p>Teks penyerang menimpa aturan bot Anda: “abaikan instruksimu dan…”.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Kebocoran rahasia dan data</h3><span class="chip exploited">Ditembus</span></div>
@@ -710,8 +710,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="step">
         <div class="num">LANGKAH 02</div>
-        <h3>Tanam sebuah kanari</h3>
-        <p><span class="mono" translate="no">qatration mint</span> membuat rahasia milik Anda sendiri beserta blok yang perlu Anda tempelkan ke prompt sistem. Proses menjalankannya lebih dulu memastikan rahasia itu benar-benar sampai: kanari yang tidak tertanam berarti setiap pemeriksaan tidak menemukan apa-apa, dan itu terbaca persis seperti bot yang bertahan.</p>
+        <h3>Tanam sebuah canary</h3>
+        <p><span class="mono" translate="no">qatration mint</span> membuat rahasia milik Anda sendiri beserta blok yang perlu Anda tempelkan ke prompt sistem. Proses menjalankannya lebih dulu memastikan rahasia itu benar-benar sampai: canary yang tidak tertanam berarti setiap pemeriksaan tidak menemukan apa-apa, dan itu terbaca persis seperti bot yang bertahan.</p>
       </div>
       <div class="step">
         <div class="num">LANGKAH 03</div>
@@ -727,7 +727,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <span class="eyebrow">Lebih dari sekadar lulus atau gagal</span>
       <h2>Hasil yang bersih baru berarti kalau Anda tahu apa yang membuatnya bersih.</h2>
       <p>Serangan yang tidak tembus melaporkan angka nol. Begitu pula pemeriksaan yang tidak bisa berjalan, dan begitu pula bot yang benar-benar diperkuat, dan di sinilah pengujian mentok: tiga fakta yang berbeda datang dengan rupa yang sama persis, dan tidak ada yang tahu apa yang harus dicoba berikutnya. Semua ini pengukuran dari proses yang benar-benar dijalankan, bukan perkiraan.
-        <b>Dan sebuah pembobolan baru disebut pembobolan kalau serangan yang menyebabkannya.</b> Setiap target lebih dulu melewati proses yang tidak berbahaya: pertanyaan biasa, tidak ada yang menyerang. Pada salah satu bot di sini,
+        <b>Dan sebuah pembobolan baru disebut pembobolan kalau serangan yang menyebabkannya.</b> Setiap target lebih dulu dijalankan tanpa serangan: pertanyaan biasa, tidak ada yang menyerang. Pada salah satu bot di sini,
         <code>canary_in_tool_call</code> aktif pada 88% lalu lintas biasa itu, sehingga temuan yang bersandar hanya padanya ditandai sebagai tidak dapat diatribusikan alih-alih dihitung.</p>
     </div>
     <div class="finds">
@@ -749,7 +749,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Dan berapa harga guardrail itu</h3></div>
-        <p>Guardrail yang sama yang memblokir dokumen tadi juga menolak menjawab 6 dari 9 pertanyaan pelanggan biasa pada topik-topik yang terkait. Pertahanan yang menjawab «tidak» kepada pelanggan Anda adalah angka yang ingin Anda ketahui sebelum rilis, bukan sesudahnya.</p>
+        <p>Guardrail yang sama yang memblokir dokumen tadi juga menolak menjawab 6 dari 9 pertanyaan pelanggan biasa pada topik-topik yang terkait. Pertahanan yang menjawab “tidak” kepada pelanggan Anda adalah angka yang ingin Anda ketahui sebelum rilis, bukan sesudahnya.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Kami menjalankannya terhadap diri kami sendiri</h3></div>
@@ -757,11 +757,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Lalu terhadap sistem yang bukan kami yang membangunnya</h3></div>
-        <p>Bot yang ditulis di sini adalah kasus yang mudah, jadi kami mengarahkannya ke kerangka agen yang tidak seorang pun di sini merancangnya. Ia menghasilkan delapan alarm palsu dalam satu kali proses berisi 48 prompt bersih, pada empat kategori yang 480 uji terhadap armada bot kami sendiri tidak pernah menghasilkannya sekali pun. Keempatnya sudah diperbaiki, dan dua aturan yang menopangnya kini membuat build kami gagal alih-alih laporan Anda: tidak ada pemeriksaan yang boleh membaca pertanyaannya, dan tidak ada pemeriksaan yang boleh memperlakukan kata-kata agen itu sendiri sebagai bukti tentang sistemnya.</p>
+        <p>Bot yang ditulis di sini adalah kasus yang mudah, jadi kami mengarahkannya ke kerangka kerja agen yang tidak dirancang siapa pun di sini. Ia menghasilkan delapan alarm palsu dalam satu kali proses berisi 48 prompt bersih, pada empat kategori yang tidak pernah muncul sekali pun dalam 480 probe terhadap armada bot kami sendiri. Keempatnya sudah diperbaiki, dan dua aturan yang menopangnya kini membuat build kami gagal alih-alih laporan Anda: tidak ada pemeriksaan yang boleh membaca pertanyaannya, dan tidak ada pemeriksaan yang boleh memperlakukan kata-kata agen itu sendiri sebagai bukti tentang sistemnya.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Dan berdampingan dengan dua alat lain, di depan umum</h3></div>
-        <p>Dijalankan terhadap target pihak ketiga yang sama seperti garak dan promptfoo, dengan setiap balasan dari ketiganya dinilai oleh satu aturan substring alih-alih oleh juri masing-masing alat. Pada aplikasi RAG tanpa guardrail sama sekali, <b>46% uji yang tidak berbahaya sudah mengembalikan untaian yang ditanam</b>, sehingga menghitung temuan berarti mengukur aplikasinya dan bukan penyerangnya. Satu dari tiga alat itu menyebutkannya di laporannya sendiri. Pada target yang terlindungi ketiganya mendapat nol menurut aturan bersama, dan hanya kami yang menemukan sesuatu, satu pembobolan dari 324, sementara deployment yang sama menolak menjawab 38 dari 48 pertanyaan pelanggan biasa. Halaman itu juga memuat bagian-bagian yang dua alat lainnya lebih baik, serta satu klaim yang kami tarik setelah seorang pengulas meminta nilai p.
+        <p>Dijalankan terhadap target pihak ketiga yang sama seperti garak dan promptfoo, dengan setiap balasan dari ketiganya dinilai oleh satu aturan substring alih-alih oleh penilai masing-masing alat. Pada aplikasi RAG tanpa guardrail sama sekali, <b>46% probe tidak berbahaya sudah mengembalikan string yang ditanam</b>, sehingga menghitung temuan berarti mengukur aplikasinya dan bukan penyerangnya. Satu dari tiga alat itu menyebutkannya di laporannya sendiri. Pada target yang terlindungi ketiganya mendapat nol menurut aturan bersama, dan hanya kami yang menemukan sesuatu, satu pembobolan dari 324, sementara deployment yang sama menolak menjawab 38 dari 48 pertanyaan pelanggan biasa. Halaman itu juga memuat bagian-bagian tempat dua alat lainnya lebih unggul, serta satu klaim yang kami tarik setelah seorang pengulas meminta nilai p.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Baca perbandingannya</a>.</p>
       </div>
@@ -778,7 +778,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Ini baru, atau sudah ada sebulan?</h3></div>
-        <p>Setiap proses disimpan, jadi setiap temuan membawa tanggal saat ia pertama kali muncul. «Kritis» adalah pendapat. «Kritis dan terbuka sejak tanggal tiga» adalah fakta tentang bagaimana sebuah tim menanggapi temuan semacam itu, dan justru baris itulah yang membuat sebuah perbaikan masuk rencana.</p>
+        <p>Setiap proses disimpan, jadi setiap temuan membawa tanggal saat ia pertama kali muncul. “Kritis” adalah pendapat. “Kritis dan masih terbuka sejak tanggal tiga” adalah fakta tentang bagaimana sebuah tim menanggapi temuan semacam itu, dan justru baris itulah yang membuat sebuah perbaikan masuk rencana.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Apakah perbaikan Anda bertahan?</h3></div>
@@ -790,14 +790,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Yang tidak bisa kami lihat</h3></div>
-        <p>Sebagian panggilan menyerahkan sebuah nilai ke tool yang tidak muncul di teks mana pun yang bisa kami baca. Yang seperti itu kami daftarkan terpisah dan kami beri tahu log mana yang membukanya, sebab beda antara «kami memeriksa dan bersih» dan «kami tidak bisa melihat» adalah beda antara sebuah pengukuran dan sebuah janji.</p>
+        <p>Sebagian panggilan menyerahkan ke sebuah tool suatu nilai yang tidak pernah muncul di teks mana pun yang bisa kami baca. Yang seperti itu kami daftarkan terpisah dan kami beri tahu log mana yang membukanya, sebab beda antara “kami memeriksa dan bersih” dan “kami tidak bisa melihat” adalah beda antara sebuah pengukuran dan sebuah janji.</p>
       </div>
     </div>
 
     <div class="thesis">
       <span class="eyebrow">Mengapa ini penting</span>
       <div class="big" style="margin-top:14px">Guardrail yang belum Anda uji adalah <span class="u">sebuah klaim, bukan fakta.</span></div>
-      <p>«Kami sudah menyuruhnya tidak membocorkan rahasia» adalah sebuah klaim, bukan pertahanan: pada target-target di sini pertahanan itu jatuh dalam beberapa serangan pertama. QAtration juga menyatakan bersih bot yang memang benar-benar terkunci rapat, jadi hasil yang bersih memang berarti sesuatu. Ia mengukur bot Anda, alih-alih setiap kali berteriak ada serigala.</p>
+      <p>“Kami sudah menyuruhnya tidak membocorkan rahasia” adalah sebuah klaim, bukan pertahanan: pada target-target di sini klaim itu runtuh dalam beberapa serangan pertama. QAtration juga menyatakan bersih bot yang memang benar-benar terkunci rapat, jadi hasil yang bersih memang berarti sesuatu. Ia mengukur bot Anda, alih-alih sekadar membunyikan alarm palsu setiap saat.</p>
       <div class="ab">
         <span><span class="chip exploited">Ditembus</span> bot tanpa pertahanan menyerahkan kuncinya</span>
         <span><span class="chip defended">Bertahan</span> bot yang terlindungi dengan benar bertahan</span>
@@ -824,9 +824,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <b>Hanya target yang diizinkan.</b> Alat ini mengirim serangan sungguhan ke apa pun yang diarahkan kepadanya, dan berjalan di mesin Anda, dengan kunci Anda, atas wewenang Anda. Segala sesuatu yang bukan localhost harus membuktikan bahwa Anda yang mengendalikannya (satu rekaman DNS, satu berkas di jalur yang diketahui, atau satu token yang dikembalikan oleh bot itu sendiri), dan tanpa itu proses menolak berjalan alih-alih mengandalkan ingatan Anda. Menguji sistem yang bukan milik Anda atau yang tidak Anda punya izinnya merupakan tindak pidana di sebagian besar negara, dan tanggung jawabnya ada pada yang menjalankan, bukan pada alatnya.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Baca AUTHORISED-USE.md</a> sebelum menjalankannya pertama kali.
       <br><br>
-      Menemukan bug, atau kasus di mana alat ini melaporkan sesuatu yang tidak diukurnya?
-      <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">Buka sebuah issue</a>, atau tulis lebih dulu ke
-      <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> untuk apa pun yang seharusnya tidak menjadi publik.
+      Menemukan bug, atau kasus ketika alat ini melaporkan sesuatu yang tidak diukurnya?
+      <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">Buka issue</a>, atau tulis lebih dulu ke
+      <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> untuk apa pun yang sebaiknya tidak dipublikasikan.
     </div>
     <div>© QAtration</div>
   </div>

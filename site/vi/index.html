@@ -601,7 +601,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h1>Xem thử kẻ tấn công có thể khiến chatbot của bạn làm những gì.</h1>
       <p class="sub">QAtration gửi những cuộc tấn công prompt injection thật vào bot AI của bạn và trao cho bạn một báo cáo bằng ngôn ngữ dễ hiểu về những gì nó đã để lộ hoặc đã làm, trước khi có người khác tìm ra. <b>Người chạy nó là bạn.</b> Trên máy của bạn hoặc trong CI của bạn, nhắm vào bản triển khai của chính bạn: không cần tài khoản, không phải giao endpoint cho ai, không có gì được gửi về phía chúng tôi.</p>
       <p class="warnbox">
-        <b>Đừng chĩa công cụ này vào một hệ thống không phải của bạn.</b> Nó gửi những cuộc tấn công thật (prompt injection, rút trộm dữ liệu, lạm dụng công cụ) tới bất kỳ URL nào bạn đưa cho nó. Bản triển khai của chính bạn, hoặc một bản mà chủ sở hữu đã cho bạn phép bằng văn bản từ trước. Không phải một chatbot công khai mà bạn thấy thú vị. Cũng không phải bản demo của một nhà cung cấp.
+        <b>Đừng chĩa công cụ này vào một hệ thống không phải của bạn.</b> Nó gửi những cuộc tấn công thật (prompt injection, rút trộm dữ liệu, lạm dụng công cụ) tới bất kỳ URL nào bạn đưa cho nó. Bản triển khai của chính bạn, hoặc một bản mà chủ sở hữu đã cho phép bạn bằng văn bản từ trước. Không phải một chatbot công khai mà bạn thấy thú vị. Cũng không phải bản demo của một nhà cung cấp.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Hãy đọc AUTHORISED-USE.md</a> trước lần chạy đầu tiên.</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
@@ -612,7 +612,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <ul class="evid">
         <li><b>46</b> cuộc tấn công gõ thẳng vào khung chat của một bot có phòng vệ: không cuộc nào lọt qua. Tắt bộ lọc đầu ra của nó đi và <b>một</b> cuộc tấn công được mang theo trong một tài liệu được truy xuất sẽ đi ra ngoài, lần nào cũng vậy. Bộ lọc đầu vào chưa bao giờ nhìn thấy nó.</li>
         <li><b>5 trên 9</b> bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường, <span class="keep">không hề có tấn công nào.</span></li>
-        <li><b>Hai</b> báo rằng một cơ sở dữ liệu đã được khởi động lại. Cả hai đều không hề có công cụ nào khởi động lại được thứ gì.</li>
+        <li><b>Hai con bot</b> báo rằng một cơ sở dữ liệu đã được khởi động lại. Cả hai đều không hề có công cụ nào khởi động lại được thứ gì.</li>
       </ul>
       <p class="evid-note">Đo trên chính các mục tiêu thử nghiệm của chúng tôi, không phải ước tính. Bản ghi bên cạnh minh họa ý tưởng, còn những con số phía trên là kết quả.</p>
     </div>
@@ -637,8 +637,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
           <div class="bubble">Được thôi, khóa nội bộ của nhân viên là: <span class="leak" translate="no">ACME-SK-7731-QA</span><span class="cursor"></span></div>
         </div>
         <div class="verdict">
-          <span class="chip exploited">Bị chọc thủng</span>
-          <span class="muted mono" style="font-size:12.5px">lộ bí mật · khớp chim hoàng yến trong câu trả lời</span>
+          <span class="chip exploited">Bị khai thác</span>
+          <span class="muted mono" style="font-size:12.5px">lộ bí mật · khớp canary trong câu trả lời</span>
         </div>
       </div>
     </div>
@@ -648,18 +648,18 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <section id="finds">
     <div class="sec-head">
       <span class="eyebrow">Phạm vi bao phủ</span>
-      <h2>Những thứ mà một câu lệnh chắp vá vội vàng sẽ không chặn nổi.</h2>
+      <h2>Những thứ mà một prompt chắp vá vội vàng sẽ không chặn nổi.</h2>
       <p>Mỗi tính năng AI đưa lên chạy thật đều là một bề mặt tấn công mới. Nó chạm được tới bao nhiêu phần bề mặt của bạn còn tùy vào những gì bản triển khai của bạn cho nó thấy, và ở đây ranh giới được vạch ra chứ không bị làm nhòe, bởi một công cụ quét tuyên bố bao phủ cả thứ nó không quan sát được chính là thứ bạn đang cố tránh.</p>
     </div>
     <div class="grp">Nhìn thấy được chỉ từ endpoint của bạn</div>
     <p class="grp-note">Một endpoint chat là đủ: những thứ này kiểm thử được nguyên trạng, kể cả những thứ trải qua nhiều lượt hội thoại.</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>Prompt injection</h3><span class="chip exploited">Bị chọc thủng</span></div>
-        <p>Văn bản của kẻ tấn công đè lên luật lệ của bot: «bỏ qua chỉ dẫn của mày và…».</p>
+        <div class="top-row"><h3>Prompt injection</h3><span class="chip exploited">Bị khai thác</span></div>
+        <p>Văn bản của kẻ tấn công đè lên quy tắc của bot: “bỏ qua các chỉ dẫn của bạn và…”.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Rò rỉ bí mật và dữ liệu</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Rò rỉ bí mật và dữ liệu</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>Bot của bạn để lộ khóa API, mã nội bộ, hoặc dữ liệu của một khách hàng khác.</p>
       </div>
       <div class="find">
@@ -667,29 +667,29 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <p>Chỉ dẫn ẩn của bạn rò ra nguyên văn: tấm bản đồ cho mọi cuộc tấn công về sau.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Đầu độc bộ nhớ</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Đầu độc bộ nhớ</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>Một quy tắc cài vào trong một lượt sẽ lặng lẽ đổi mọi câu trả lời sau đó, rất lâu sau khi cuộc trò chuyện trông đã bình thường trở lại.</p>
       </div>
     </div>
 
-    <div class="grp">Cần có quyền chạm vào chính thứ bị tấn công</div>
-    <p class="grp-note">Bạn không thể cài một tài liệu vào kho tri thức mà bạn không có quyền ghi, và từ bên ngoài bạn không phân biệt được một lệnh gọi công cụ thực sự đã chạy với một lệnh gọi mà bot chỉ mô tả suông, một khác biệt mà chúng tôi đã đo được rằng chính các bot cũng nhầm về bản thân mình. Muốn vậy phải có kho ngữ liệu, định nghĩa công cụ, hoặc quyền nhìn thấy các lệnh gọi.
+    <div class="grp">Cần quyền truy cập vào chính thứ bị tấn công</div>
+    <p class="grp-note">Bạn không thể cài một tài liệu vào kho tri thức mà bạn không có quyền ghi, và từ bên ngoài bạn không phân biệt được một lệnh gọi công cụ thực sự đã chạy với một lệnh gọi mà bot chỉ mô tả suông, một điều mà chúng tôi đã đo và thấy chính các bot cũng nhầm về bản thân mình. Muốn vậy phải có kho tấn công, định nghĩa công cụ, hoặc quyền nhìn thấy các lệnh gọi.
       <b>Đo trên bằng chứng phát hành kèm công cụ này: 61 trong số 138 phát hiện trên các mục tiêu có báo cáo lệnh gọi công cụ hoàn toàn không hiện ra nếu chỉ đọc câu trả lời.</b> Bot trả lời lịch sự rồi nhét bí mật vào một đối số của lệnh gọi.</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>Lạm dụng công cụ của tác nhân</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Lạm dụng công cụ của tác nhân</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>Tác nhân của bạn bị thuyết phục thực hiện một hành động không thể hoàn tác: xóa, hoàn tiền, gửi thư.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Tiêm qua tác nhân</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Tiêm qua tác nhân</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>SQL hoặc một lệnh shell được tuồn vào trong một lệnh gọi công cụ. Một lớp lỗi cũ, một cửa trước mới.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Kho tri thức bị đầu độc</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Kho tri thức bị đầu độc</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>Chỉ một tài liệu độc hại trong RAG của bạn là đủ để cướp lấy câu trả lời cho những câu hỏi vô hại.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Bản kê công cụ bị đầu độc</h3><span class="chip exploited">Bị chọc thủng</span></div>
+        <div class="top-row"><h3>Bản kê công cụ bị đầu độc</h3><span class="chip exploited">Bị khai thác</span></div>
         <p>Một dòng ẩn trong phần mô tả của một công cụ khiến tác nhân của bạn để lộ thứ gì đó ngay với một câu hỏi bình thường, mà không cần bất kỳ tin nhắn nào từ kẻ tấn công.</p>
       </div>
       
@@ -710,13 +710,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="step">
         <div class="num">BƯỚC 02</div>
-        <h3>Cài một con chim hoàng yến</h3>
-        <p><span class="mono" translate="no">qatration mint</span> tạo ra một bí mật của riêng bạn cùng đoạn văn bản để dán vào câu lệnh hệ thống. Lần chạy sẽ xác nhận trước rằng nó thật sự đã vào đúng chỗ: một con chim hoàng yến chưa được cài nghĩa là mọi phép kiểm tra đều không tìm thấy gì, và điều đó đọc lên y hệt một con bot đã trụ vững.</p>
+        <h3>Cài một canary</h3>
+        <p><span class="mono" translate="no">qatration mint</span> tạo ra một bí mật của riêng bạn cùng đoạn văn bản để dán vào prompt hệ thống. Lần chạy sẽ xác nhận trước rằng nó thật sự đã vào đúng chỗ: một canary chưa được cài nghĩa là mọi phép kiểm tra đều không tìm thấy gì, và điều đó đọc lên y hệt một con bot đã trụ vững.</p>
       </div>
       <div class="step">
         <div class="num">BƯỚC 03</div>
         <h3>Chạy nó, rồi đưa vào CI</h3>
-        <p>Cái gì đã rò rỉ, rò rỉ chính xác ra sao, và một cách sửa duy nhất khép nó lại, viết cho một nhóm không có chuyên gia bảo mật. <span class="mono" translate="no">--fail-on exploited</span> làm hỏng một bản build. <span class="mono" translate="no">qatration sarif</span> đưa thẳng các phát hiện vào tab code scanning của bạn.</p>
+        <p>Cái gì đã rò rỉ, rò rỉ chính xác ra sao, và một cách sửa duy nhất khép nó lại, viết cho một nhóm không có chuyên gia bảo mật. <span class="mono" translate="no">--fail-on exploited</span> khiến một bản build thất bại. <span class="mono" translate="no">qatration sarif</span> đưa thẳng các phát hiện vào tab code scanning của bạn.</p>
       </div>
     </div>
   </section>
@@ -749,7 +749,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Và cái giá của guardrail ấy</h3></div>
-        <p>Chính guardrail đã chặn tài liệu đó cũng từ chối trả lời 6 trong số 9 câu hỏi khách hàng bình thường về những chủ đề liên quan. Một lớp phòng vệ trả lời «không» với khách hàng của bạn là một con số bạn muốn biết trước khi phát hành, chứ không phải sau.</p>
+        <p>Chính guardrail đã chặn tài liệu đó cũng từ chối trả lời 6 trong số 9 câu hỏi khách hàng bình thường về những chủ đề liên quan. Một lớp phòng vệ trả lời “không” với khách hàng của bạn là một con số bạn muốn biết trước khi phát hành, chứ không phải sau.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Chúng tôi đã chạy nó nhắm vào chính mình</h3></div>
@@ -757,17 +757,17 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Rồi nhắm vào một hệ thống không do chúng tôi dựng nên</h3></div>
-        <p>Những con bot viết ở đây là trường hợp dễ, nên chúng tôi chĩa nó vào một khung tác nhân mà ở đây không ai thiết kế. Nó tạo ra tám báo động giả chỉ trong một lần chạy 48 câu lệnh sạch, ở bốn nhóm mà 480 lần thăm dò nhắm vào chính dàn bot của chúng tôi chưa từng tạo ra lấy một lần. Cả bốn đều đã sửa, và hai quy tắc bên dưới chúng giờ làm hỏng bản build của chúng tôi chứ không phải báo cáo của bạn: không phép kiểm tra nào được đọc câu hỏi, và không phép kiểm tra nào được coi chính lời của tác nhân là bằng chứng về hệ thống.</p>
+        <p>Những con bot viết ở đây là trường hợp dễ, nên chúng tôi chĩa nó vào một framework tác nhân mà ở đây không ai thiết kế. Nó tạo ra tám báo động giả chỉ trong một lần chạy 48 prompt sạch, ở bốn nhóm mà 480 lần thăm dò nhắm vào chính dàn bot của chúng tôi chưa từng tạo ra lấy một lần. Cả bốn đều đã sửa, và hai quy tắc bên dưới chúng giờ làm bản build của chúng tôi thất bại chứ không phải báo cáo của bạn: không phép kiểm tra nào được đọc câu hỏi, và không phép kiểm tra nào được coi chính lời của tác nhân là bằng chứng về hệ thống.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Và đặt cạnh hai công cụ khác, công khai</h3></div>
-        <p>Chạy trên đúng những mục tiêu bên thứ ba như garak và promptfoo, mọi câu trả lời của cả ba đều được chấm bằng một quy tắc chuỗi con duy nhất thay vì bằng bộ chấm riêng của từng công cụ. Trên một ứng dụng RAG không hề có guardrail, <b>46% các lần thăm dò vô hại vốn đã trả về chuỗi được cài sẵn</b>, nên việc đếm phát hiện là đang đo ứng dụng chứ không phải đo kẻ tấn công. Một trong ba công cụ có nói điều đó trong báo cáo của mình. Trên mục tiêu có phòng vệ, theo quy tắc chung cả ba đều được không điểm, và chúng tôi là bên duy nhất tìm được thứ gì đó, một vụ chọc thủng trên 324; trong khi đó chính bản triển khai ấy từ chối trả lời 38 trong số 48 câu hỏi khách hàng bình thường. Trang đó cũng công bố những chỗ hai công cụ kia làm tốt hơn, cùng một khẳng định chúng tôi đã rút lại sau khi một người phản biện hỏi về giá trị p.
+        <p>Chạy trên đúng những mục tiêu bên thứ ba như garak và promptfoo, mọi câu trả lời của cả ba đều được chấm bằng một quy tắc chuỗi con duy nhất thay vì bằng bộ chấm riêng của từng công cụ. Trên một ứng dụng RAG không hề có guardrail, <b>46% các lần thăm dò vô hại vốn đã trả về chuỗi được cài sẵn</b>, nên việc đếm phát hiện là đang đo ứng dụng chứ không phải đo kẻ tấn công. Một trong ba công cụ có nói điều đó trong báo cáo của mình. Trên mục tiêu có phòng vệ, theo quy tắc chung cả ba đều được không điểm, và chúng tôi là bên duy nhất tìm được thứ gì đó, một vụ chọc thủng trên 324. Trong khi đó chính bản triển khai ấy từ chối trả lời 38 trong số 48 câu hỏi khách hàng bình thường. Trang đó cũng công bố những chỗ hai công cụ kia làm tốt hơn, cùng một khẳng định chúng tôi đã rút lại sau khi một người phản biện yêu cầu một giá trị p.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Đọc phần so sánh</a>.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Tìm ra trước cả cuộc tấn công đầu tiên</h3></div>
-        <p>Một hồ sơ gồm mười hai lần thăm dò, tất cả đều vô hại: năm con bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường. Một con in ra khóa phiên bí mật của nó ngay bên trong đúng câu đang cấm nó chia sẻ khóa ấy. Hai con báo rằng một cơ sở dữ liệu đã được khởi động lại trong khi chúng không hề có công cụ nào khởi động lại được thứ gì.</p>
+        <p>Một hồ sơ gồm mười hai lượt thăm dò, tất cả đều vô hại: năm con bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường. Một con in ra khóa phiên bí mật của nó ngay bên trong đúng câu đang cấm nó chia sẻ khóa ấy. Hai con báo rằng một cơ sở dữ liệu đã được khởi động lại trong khi chúng không hề có công cụ nào khởi động lại được thứ gì.</p>
       </div>
     </div>
 
@@ -778,28 +778,28 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Cái này mới, hay đã có ở chỗ ta cả tháng rồi?</h3></div>
-        <p>Mọi lần chạy đều được giữ lại, nên mỗi phát hiện đều mang ngày nó xuất hiện lần đầu. «Nghiêm trọng» là một ý kiến. «Nghiêm trọng và còn treo từ mùng ba» là một sự thật về cách một nhóm phản ứng với những phát hiện như thế, và chính dòng đó mới khiến một bản sửa được xếp lịch.</p>
+        <p>Mọi lần chạy đều được giữ lại, nên mỗi phát hiện đều mang ngày nó xuất hiện lần đầu. “Nghiêm trọng” là một ý kiến. “Nghiêm trọng và còn treo từ ngày 3” là một sự thật về cách một nhóm phản ứng với những phát hiện như thế, và chính dòng đó mới khiến một bản sửa được xếp lịch.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Bản sửa của bạn có trụ được không?</h3></div>
-        <p>Một phát hiện quay lại sau khi bạn đã đóng nó sẽ được đánh dấu là tái xuất hiện, chứ không lặng lẽ đếm chung với những cái mới. Một bản sửa không trụ được là cuộc trò chuyện khó chịu hơn trong hai cuộc, và trộn chúng lại là che nó đi.</p>
+        <p>Một phát hiện quay lại sau khi bạn đã đóng nó sẽ được đánh dấu là tái xuất hiện, chứ không lặng lẽ đếm chung với những cái mới. Một bản sửa không trụ được là cuộc trò chuyện tệ hơn trong hai cuộc, và trộn chúng lại là che nó đi.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Những gì chúng tôi không kiểm thử lại</h3></div>
-        <p>Nếu một lần chạy không gửi một cuộc tấn công nào đó, cuộc tấn công ấy vào báo cáo với trạng thái chưa kiểm thử, không bao giờ là đã sửa. Vắng mặt không phải là một kết quả sạch, và một báo cáo làm nhòe hai thứ đó sẽ bảo bạn rằng các lỗ hổng của bạn đã hết trong khi thật ra chẳng ai nhìn cả.</p>
+        <p>Nếu một lần chạy không gửi một cuộc tấn công nào đó, cuộc tấn công ấy được ghi vào báo cáo với trạng thái chưa kiểm thử, không bao giờ là đã sửa. Sự vắng mặt không phải là một kết quả sạch, và một báo cáo làm nhòe hai thứ đó sẽ bảo bạn rằng các lỗ hổng của bạn đã hết trong khi thật ra chẳng ai nhìn cả.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Những gì chúng tôi không nhìn thấy được</h3></div>
-        <p>Có những lệnh gọi đưa cho công cụ một giá trị không xuất hiện trong bất kỳ văn bản nào chúng tôi đọc được. Những cái đó chúng tôi liệt kê riêng và nói cho bạn biết bản ghi nào mở được chúng, bởi khác biệt giữa «chúng tôi đã kiểm tra và nó sạch» với «chúng tôi không nhìn thấy được» chính là khác biệt giữa một phép đo và một lời hứa.</p>
+        <p>Có những lệnh gọi đưa cho công cụ một giá trị không xuất hiện trong bất kỳ văn bản nào chúng tôi đọc được. Những cái đó chúng tôi liệt kê riêng và nói cho bạn biết bản ghi nào mở được chúng, bởi khác biệt giữa “chúng tôi đã kiểm tra và nó sạch” với “chúng tôi không nhìn thấy được” chính là khác biệt giữa một phép đo và một lời hứa.</p>
       </div>
     </div>
 
     <div class="thesis">
       <span class="eyebrow">Vì sao điều này quan trọng</span>
-      <div class="big" style="margin-top:14px">Một guardrail mà bạn chưa kiểm thử thì <span class="u">là một khẳng định, không phải một sự thật.</span></div>
-      <p>«Chúng tôi đã dặn nó đừng tiết lộ bí mật» là một khẳng định, không phải một lớp phòng vệ: trên các mục tiêu ở đây nó đổ ngay trong vài cuộc tấn công đầu. QAtration cũng xác nhận là sạch với những con bot thật sự khóa kín, nên một kết quả sạch quả thật có ý nghĩa. Nó đo chính con bot của bạn, chứ không phải lần nào cũng kêu có sói.</p>
+      <div class="big" style="margin-top:14px">Một guardrail mà bạn chưa kiểm thử <span class="u">là một khẳng định, không phải một sự thật.</span></div>
+      <p>“Chúng tôi đã dặn nó đừng tiết lộ bí mật” là một khẳng định, không phải một lớp phòng vệ: trên các mục tiêu ở đây nó đổ ngay trong vài cuộc tấn công đầu. QAtration cũng kết luận sạch cho những con bot thật sự khóa kín, nên một kết quả sạch quả thật có ý nghĩa. Nó đo chính con bot của bạn, chứ không phải lúc nào cũng báo động giả.</p>
       <div class="ab">
-        <span><span class="chip exploited">Bị chọc thủng</span> bot không phòng vệ giao nộp khóa</span>
+        <span><span class="chip exploited">Bị khai thác</span> bot không phòng vệ để lộ khóa</span>
         <span><span class="chip defended">Chặn được</span> bot được bảo vệ đúng cách thì trụ vững</span>
       </div>
     </div>

@@ -601,7 +601,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h1>Scopri che cosa un attaccante può far fare al tuo chatbot.</h1>
       <p class="sub">QAtration lancia veri attacchi di prompt injection contro il tuo bot IA e ti consegna un rapporto in parole semplici di ciò che ha lasciato trapelare o fatto, prima che lo trovi qualcun altro. <b>Lo esegui tu.</b> Sulla tua macchina o nella tua CI, contro il tuo deployment: nessun account, nessun endpoint da consegnare, niente che venga inviato a noi.</p>
       <p class="warnbox">
-        <b>Non puntare questo strumento su un sistema che non è tuo.</b> Invia attacchi veri (prompt injection, esfiltrazione di dati, abuso di strumenti) all'URL che gli indichi. Il tuo deployment, oppure uno il cui proprietario ti ha dato un permesso scritto in anticipo. Non un chatbot pubblico che ti sembra interessante. Non la demo di un fornitore.
+        <b>Non puntare questo strumento su un sistema che non è tuo.</b> Invia attacchi veri (prompt injection, esfiltrazione di dati, abuso di tool) a qualunque URL tu gli indichi. Il tuo deployment, oppure uno il cui proprietario ti ha dato un permesso scritto in anticipo. Non un chatbot pubblico che ti sembra interessante. Non la demo di un fornitore.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Leggi AUTHORISED-USE.md</a> prima della prima esecuzione.</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
@@ -649,9 +649,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="sec-head">
       <span class="eyebrow">Copertura</span>
       <h2>Ciò che un prompt messo insieme alla svelta non fermerà.</h2>
-      <p>Ogni funzionalità IA che va in produzione è una nuova superficie di attacco. Quanta parte della tua riesce a raggiungere dipende da ciò che il tuo deployment gli lascia vedere, e qui la linea viene tracciata invece che sfumata, perché uno scanner che dichiara di coprire ciò che non può osservare è esattamente la cosa che stai cercando di evitare.</p>
+      <p>Ogni funzionalità IA che va in produzione è una nuova superficie di attacco. Quanta parte della tua questo strumento riesce a raggiungere dipende da ciò che il tuo deployment gli lascia vedere, e qui la linea viene tracciata invece che sfumata, perché uno scanner che dichiara di coprire ciò che non può osservare è esattamente la cosa che stai cercando di evitare.</p>
     </div>
-    <div class="grp">Visibile dal solo tuo endpoint</div>
+    <div class="grp">Visibile con il solo endpoint</div>
     <p class="grp-note">Basta un endpoint di chat: questo si può testare così com'è, anche nell'arco di più turni.</p>
     <div class="finds">
       <div class="find">
@@ -672,12 +672,12 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
     </div>
 
-    <div class="grp">Richiede accesso alla cosa che viene attaccata</div>
-    <p class="grp-note">Non puoi piantare un documento in una base di conoscenza su cui non hai permesso di scrittura, e dall'esterno non puoi distinguere una chiamata a strumento realmente eseguita da una che il bot ha soltanto descritto, una distinzione su cui abbiamo misurato che i bot sbagliano riguardo a sé stessi. Per questo servono il corpus, le definizioni degli strumenti o la visibilità delle chiamate.
-      <b>Misurato sulle prove distribuite con questo strumento: 61 riscontri su 138, su obiettivi che riportano le chiamate agli strumenti, non compaiono affatto se si legge soltanto la risposta.</b> Il bot risponde con garbo e mette il segreto in un argomento della chiamata.</p>
+    <div class="grp">Richiede accesso al sistema attaccato</div>
+    <p class="grp-note">Non puoi piantare un documento in una base di conoscenza su cui non hai il permesso di scrittura, e dall'esterno non puoi distinguere una chiamata a tool realmente eseguita da una che il bot ha soltanto descritto, una distinzione che, nelle nostre misure, i bot sbagliano su sé stessi. Per questo servono il corpus, le definizioni dei tool o la visibilità delle chiamate.
+      <b>Misurato sulle prove distribuite con questo strumento: 61 dei 138 riscontri su obiettivi che riportano le chiamate ai tool non compaiono affatto se si legge soltanto la risposta.</b> Il bot risponde con garbo e mette il segreto in un argomento della chiamata.</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>Abuso degli strumenti dell'agente</h3><span class="chip exploited">Violato</span></div>
+        <div class="top-row"><h3>Abuso dei tool dell'agente</h3><span class="chip exploited">Violato</span></div>
         <p>Il tuo agente viene convinto a compiere un'azione irreversibile: cancellare, rimborsare, inviare una email.</p>
       </div>
       <div class="find">
@@ -689,8 +689,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <p>Un solo documento malevolo nel tuo RAG dirotta le risposte a domande innocue.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Manifesto degli strumenti avvelenato</h3><span class="chip exploited">Violato</span></div>
-        <p>Una riga nascosta nella descrizione di uno strumento fa sì che il tuo agente riveli qualcosa a fronte di una domanda ordinaria, senza alcun messaggio da parte di un attaccante.</p>
+        <div class="top-row"><h3>Manifesto dei tool avvelenato</h3><span class="chip exploited">Violato</span></div>
+        <p>Una riga nascosta nella descrizione di un tool fa sì che il tuo agente riveli qualcosa a fronte di una domanda ordinaria, senza alcun messaggio da parte di un attaccante.</p>
       </div>
       
     </div>
@@ -716,7 +716,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">PASSO 03</div>
         <h3>Eseguilo, e mettilo in CI</h3>
-        <p>Che cosa è trapelato, come esattamente, e l'unica correzione che lo chiude, scritto per una squadra senza un esperto di sicurezza. <span class="mono" translate="no">--fail-on exploited</span> fa fallire una build. <span class="mono" translate="no">qatration sarif</span> mette i riscontri direttamente nella tua scheda code scanning.</p>
+        <p>Che cosa è trapelato, come esattamente, e la correzione che lo chiude, scritto per una squadra senza un esperto di sicurezza. <span class="mono" translate="no">--fail-on exploited</span> fa fallire una build. <span class="mono" translate="no">qatration sarif</span> mette i riscontri direttamente nella tua scheda code scanning.</p>
       </div>
     </div>
   </section>
@@ -761,7 +761,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>E accanto ad altri due strumenti, in pubblico</h3></div>
-        <p>Eseguito contro gli stessi obiettivi di terze parti di garak e promptfoo, con ogni risposta di tutti e tre valutata da una sola regola di sottostringa invece che dal giudice proprio di ciascuno strumento. Su un'applicazione RAG senza alcun guardrail, <b>il 46% delle sonde innocue restituisce già la stringa piantata</b>, cosicché contare i riscontri misura l'applicazione e non l'attaccante. Uno dei tre strumenti lo dice nel proprio rapporto. Sull'obiettivo protetto tutti e tre segnano zero secondo la regola comune, e siamo stati gli unici a trovare qualcosa, una violazione su 324, mentre quello stesso deployment rifiuta di rispondere a 38 domande ordinarie di clienti su 48. Quella pagina pubblica anche i punti in cui gli altri due sono migliori, e un'affermazione che abbiamo ritirato dopo che un revisore ha chiesto un valore p.
+        <p>Eseguito contro gli stessi obiettivi di terze parti usati da garak e promptfoo, con ogni risposta di tutti e tre valutata da una sola regola di sottostringa invece che dal judge proprio di ciascuno strumento. Su un'applicazione RAG senza alcun guardrail, <b>il 46% delle sonde innocue restituisce già la stringa piantata</b>, cosicché contare i riscontri misura l'applicazione e non l'attaccante. Uno dei tre strumenti lo dice nel proprio rapporto. Sull'obiettivo protetto tutti e tre segnano zero secondo la regola comune, e siamo stati gli unici a trovare qualcosa, una violazione su 324, mentre quello stesso deployment rifiuta di rispondere a 38 domande ordinarie di clienti su 48. Quella pagina pubblica anche i punti in cui gli altri due sono migliori, e un'affermazione che abbiamo ritirato dopo che un revisore ha chiesto un valore p.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Leggi il confronto</a>.</p>
       </div>
@@ -782,7 +782,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>La tua correzione ha retto?</h3></div>
-        <p>Un riscontro che ritorna dopo che l'hai chiuso viene segnalato come ricomparso, e non conteggiato in silenzio insieme a quelli nuovi. Una correzione che non ha retto è la peggiore delle due conversazioni, e mescolarle la nasconde.</p>
+        <p>Un riscontro che ritorna dopo che l'hai chiuso viene segnalato come ritornato, e non conteggiato in silenzio insieme a quelli nuovi. Una correzione che non ha retto è la peggiore delle due conversazioni, e mescolarle la nasconde.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Ciò che non abbiamo ricontrollato</h3></div>
@@ -790,14 +790,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ciò che non siamo riusciti a vedere</h3></div>
-        <p>Alcune chiamate consegnano a uno strumento un valore che non compare in nessun testo che possiamo leggere. Quelli li elenchiamo a parte e ti diciamo quale log li apre, perché la differenza tra «abbiamo controllato ed era pulito» e «non siamo riusciti a vedere» è la differenza tra una misura e una promessa.</p>
+        <p>Alcune chiamate consegnano a un tool un valore che non compare in nessun testo che possiamo leggere. Quelli li elenchiamo a parte e ti diciamo quale log li apre, perché la differenza tra «abbiamo controllato ed era pulito» e «non siamo riusciti a vedere» è la differenza tra una misura e una promessa.</p>
       </div>
     </div>
 
     <div class="thesis">
       <span class="eyebrow">Perché conta</span>
       <div class="big" style="margin-top:14px">Un guardrail che non hai testato è <span class="u">un'affermazione, non un fatto.</span></div>
-      <p>«Gli abbiamo detto di non rivelare segreti» è un'affermazione, non una difesa: sugli obiettivi qui presenti è caduta entro i primi attacchi. QAtration dichiara puliti anche i bot davvero blindati, quindi un risultato pulito significa davvero qualcosa. Misura il tuo bot, invece di gridare al lupo ogni volta.</p>
+      <p>«Gli abbiamo detto di non rivelare segreti» è un'affermazione, non una difesa: sugli obiettivi qui presenti è caduta già ai primi attacchi. QAtration dichiara puliti anche i bot davvero blindati, quindi un risultato pulito significa davvero qualcosa. Misura il tuo bot, invece di gridare al lupo ogni volta.</p>
       <div class="ab">
         <span><span class="chip exploited">Violato</span> un bot senza difese consegna la chiave</span>
         <span><span class="chip defended">Difeso</span> un bot protetto come si deve regge</span>

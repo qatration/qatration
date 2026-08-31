@@ -599,7 +599,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div>
       <span class="eyebrow">LLM güvenlik testi · açık kaynak · Apache 2.0</span>
       <h1>Bir saldırganın sohbet botunuza neler yaptırabileceğini öğrenin.</h1>
-      <p class="sub">QAtration yapay zekâ botunuza gerçek prompt injection saldırıları gönderir ve botunuzun neleri sızdırdığını, neler yaptığını sade bir dille anlatan bir raporu, başkası bulmadan önce size verir. <b>Onu siz çalıştırırsınız.</b> Kendi makinenizde ya da CI'nızda, kendi kurulumunuza karşı: hesap yok, teslim edilen bir uç nokta yok, bize hiçbir şey gönderilmiyor.</p>
+      <p class="sub">QAtration yapay zekâ botunuza gerçek prompt injection saldırıları gönderir ve botunuzun neleri sızdırdığını, neler yaptığını sade bir dille anlatan bir raporu, başkası bulmadan önce size verir. <b>Çalıştıran sizsiniz.</b> Kendi makinenizde ya da CI'nızda, kendi kurulumunuza karşı: hesap yok, teslim edilen bir uç nokta yok, bize hiçbir şey gönderilmiyor.</p>
       <p class="warnbox">
         <b>Bunu size ait olmayan bir sisteme yöneltmeyin.</b> Verdiğiniz her URL'ye gerçek saldırılar gönderir (prompt injection, veri sızdırma, araç kötüye kullanımı). Kendi dağıtımınız ya da sahibinin size önceden yazılı izin verdiği bir dağıtım olmalı. İlginç bulduğunuz herkese açık bir sohbet botu değil. Bir satıcının demosu da değil.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md dosyasını okuyun</a> ilk çalıştırmadan önce.</p>
@@ -611,7 +611,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, depoyla birlikte gelir. Diğer iki aracın kendi raporları burada değil, çünkü lisansları buna izin vermiyor. Onları yeniden üreten komutlar ise burada.</p>
       <ul class="evid">
         <li><b>46</b> saldırı, korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve <b>bir</b> saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.</li>
-        <li><b>9 bottan 5'i</b> düz bir isteğe karşılık kendi talimatlarını verdi, <span class="keep">hiçbir saldırı olmadan.</span></li>
+        <li><b>9 bottan 5'i</b> botun sıradan bir isteğe karşılık kendi talimatlarını verdiği görüldü, <span class="keep">hiçbir saldırı olmadan.</span></li>
         <li><b>İki bot</b> bir veritabanının yeniden başlatıldığını bildirdi. İkisinin de herhangi bir şeyi yeniden başlatabilecek bir aracı yoktu.</li>
       </ul>
       <p class="evid-note">Kendi test hedeflerimizde ölçüldü, tahmin edilmedi. Yandaki döküm fikri gösteriyor, yukarıdaki sayılar ise sonuçlar.</p>
@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="term-bar">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
         <span class="name">tarama · your-support-bot</span>
-        <span class="illus">gösterim</span>
+        <span class="illus">temsilî</span>
       </div>
       <div class="term-body">
         <div class="turn">
@@ -656,14 +656,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Prompt injection</h3><span class="chip exploited">Ele geçirildi</span></div>
-        <p>Saldırganın metni botunuzun kurallarının önüne geçer: «talimatlarını yok say ve…».</p>
+        <p>Saldırganın yazdığı metin, botunuzun kurallarını geçersiz kılar: “talimatlarını yok say ve…”.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Sır ve veri sızıntısı</h3><span class="chip exploited">Ele geçirildi</span></div>
         <p>Botunuz API anahtarlarını, dahili kodları ya da başka bir müşterinin verilerini açık eder.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>Sistem promptunun ifşası</h3><span class="chip partial">Kısmen</span></div>
+        <div class="top-row"><h3>Sistem promptunun ifşası</h3><span class="chip partial">Kısmi</span></div>
         <p>Gizli talimatlarınız kelimesi kelimesine sızar: sonraki her saldırı için bir harita.</p>
       </div>
       <div class="find">
@@ -673,7 +673,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     </div>
 
     <div class="grp">Saldırılan şeye erişim gerektirir</div>
-    <p class="grp-note">Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz; botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunun için külliyat, araç tanımları ya da çağrıların görünürlüğü gerekir.
+    <p class="grp-note">Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz. Botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunun için külliyat değil, saldırı kümesi, araç tanımları ya da çağrıların görünürlüğü gerekir.
       <b>Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 138 bulgunun 61'i, yalnızca yanıt okunduğunda hiç görünmüyor.</b> Bot kibarca yanıt verir ve sırrı bir çağrı argümanının içine koyar.</p>
     <div class="finds">
       <div class="find">
@@ -690,7 +690,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Zehirlenmiş araç bildirimi</h3><span class="chip exploited">Ele geçirildi</span></div>
-        <p>Bir aracın açıklamasındaki gizli bir satır, ajanınızın sıradan bir soruda bir şeyler sızdırmasına yol açar; saldırgandan hiçbir mesaj gerekmez.</p>
+        <p>Bir aracın açıklamasındaki gizli bir satır, ajanınızın sıradan bir soruda bir şeyler sızdırmasına yol açar. Saldırgandan hiçbir mesaj gerekmez.</p>
       </div>
       
     </div>
@@ -724,7 +724,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <!-- THESIS -->
   <section>
     <div class="sec-head" style="margin-top:8px">
-      <span class="eyebrow">Geçti ya da kaldının ötesinde</span>
+      <span class="eyebrow">Geçti/kaldı ikiliğinin ötesinde</span>
       <h2>Temiz bir sonuç, ancak onu neyin temiz kıldığını biliyorsanız bir değer taşır.</h2>
       <p>Geçemeyen bir saldırı sıfır bildirir. Çalışamayan bir denetim de öyle, gerçekten sertleştirilmiş bir bot da öyle ve test tam burada tıkanır: üç farklı olgu birbirinin aynısı görünerek gelir ve kimse sırada neyi deneyeceğini bilmez. Bunlar gerçek çalıştırmalardan alınan ölçümlerdir, tahmin değil.
         <b>Ve bir ihlal, ancak ona saldırı yol açtıysa ihlaldir.</b> Her hedef önce zararsız bir çalıştırmadan geçer: sıradan sorular, saldıran kimse yok. Buradaki botlardan birinde
@@ -749,7 +749,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve o guardrail'in bedeli</h3></div>
-        <p>O belgeyi engelleyen aynı guardrail, ilgili konulardaki 9 sıradan müşteri sorusundan 6'sını da yanıtlamayı reddetti. Müşterilerinize «hayır» diyen bir savunma, yayına almadan önce bilmek isteyeceğiniz bir sayıdır, sonrasında değil.</p>
+        <p>O belgeyi engelleyen aynı guardrail, ilgili konulardaki 9 sıradan müşteri sorusundan 6'sını da yanıtlamayı reddetti. Müşterilerinize “hayır” diyen bir savunma, yayına almadan önce bilmek isteyeceğiniz bir sayıdır, sonrasında değil.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Onu kendimize karşı çalıştırdık</h3></div>
@@ -757,17 +757,17 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Sonra bizim yapmadığımız bir sisteme karşı</h3></div>
-        <p>Burada yazılan botlar kolay durumdur, bu yüzden onu burada kimsenin tasarlamadığı bir ajan çatısına yönelttik. 48 temiz promptluk tek bir çalıştırmada sekiz yanlış alarm üretti, üstelik kendi bot filomuza karşı 480 sondanın bir kez bile üretmediği dört kategoride. Dördü de düzeltildi ve altlarındaki iki kural artık sizin raporunuzu değil bizim derlememizi başarısız kılıyor: hiçbir denetim soruyu okuyamaz ve hiçbir denetim ajanın kendi sözlerini sistem hakkında kanıt sayamaz.</p>
+        <p>Burada yazılan botlar kolay durumdur, bu yüzden onu burada kimsenin tasarlamadığı bir ajan çerçevesine yönelttik. 48 temiz promptluk tek bir çalıştırmada sekiz yanlış alarm üretti, üstelik kendi bot filomuza karşı 480 yoklamanın bir kez bile üretmediği dört kategoride. Dördü de düzeltildi ve altlarındaki iki kural artık sizin raporunuzu değil bizim derlememizi başarısız kılıyor: hiçbir denetim soruyu okuyamaz ve hiçbir denetim ajanın kendi sözlerini sistem hakkında kanıt sayamaz.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve iki başka aracın yanında, herkesin gözü önünde</h3></div>
-        <p>garak ve promptfoo ile aynı üçüncü taraf hedeflere karşı çalıştırıldı ve üçünün de her yanıtı, her aracın kendi hakemi yerine tek bir alt dize kuralıyla puanlandı. Hiçbir guardrail'i olmayan bir RAG uygulamasında <b>zararsız sondaların 46%'sı yerleştirilen diziyi zaten geri döndürüyor</b>, dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 324'te 1 ihlal; aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.
+        <p>garak ve promptfoo ile aynı üçüncü taraf hedeflere karşı çalıştırıldı ve üçünün de her yanıtı, her aracın kendi hakemi yerine tek bir alt dize kuralıyla puanlandı. Hiçbir guardrail'i olmayan bir RAG uygulamasında <b>zararsız sondaların 46%'sı yerleştirilen diziyi zaten geri döndürüyor</b>, dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 324'te 1 ihlal. Aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Karşılaştırmayı okuyun</a>.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>İlk saldırıdan önce bulunanlar</h3></div>
-        <p>On iki sondadan oluşan bir profil, hepsi zararsız: beş bot düz bir isteğe karşılık kendi talimatlarını verdi. Biri, o anahtarı paylaşmasını yasaklayan cümlenin tam içinde gizli oturum anahtarını yazdırdı. İki bot ise hiçbir şeyi yeniden başlatabilecek bir aracı yokken bir veritabanının yeniden başlatıldığını bildirdi.</p>
+        <p>On iki yoklamadan oluşan bir profil, hepsi zararsız: beş bot sıradan bir isteğe karşılık kendi talimatlarını verdi. Biri, o anahtarı paylaşmasını yasaklayan cümlenin tam içinde gizli oturum anahtarını yazdırdı. İki bot ise hiçbir şeyi yeniden başlatabilecek bir aracı yokken bir veritabanının yeniden başlatıldığını bildirdi.</p>
       </div>
     </div>
 
@@ -778,11 +778,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="finds">
       <div class="find">
         <div class="top-row"><h3>Bu yeni mi, yoksa bir aydır bizde mi?</h3></div>
-        <p>Her çalıştırma saklanır, bu yüzden her bulgu ilk göründüğü tarihi taşır. «Kritik» bir görüştür. «Kritik ve üçünden beri açık» ise bir ekibin böyle bulgulara nasıl yanıt verdiğine dair bir olgudur ve bir düzeltmenin plana girmesini sağlayan tam da o satırdır.</p>
+        <p>Her çalıştırma saklanır, bu yüzden her bulgu ilk göründüğü tarihi taşır. “Kritik” bir görüştür. “Kritik ve ayının üçünden beri açık” ise bir ekibin böyle bulgulara nasıl yanıt verdiğine dair bir olgudur ve bir düzeltmenin plana girmesini sağlayan tam da o satırdır.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Düzeltmeniz dayandı mı?</h3></div>
-        <p>Kapattıktan sonra geri gelen bir bulgu, yenilerin yanında sessizce sayılmak yerine yeniden ortaya çıktı olarak işaretlenir. Dayanmayan bir düzeltme iki konuşmanın daha can sıkıcı olanıdır ve ikisini karıştırmak bunu gizler.</p>
+        <p>Kapattıktan sonra geri gelen bir bulgu, yenilerin yanında sessizce sayılmak yerine yeniden ortaya çıktı olarak işaretlenir. Dayanmayan bir düzeltme iki konuşmanın daha kötü olanıdır ve ikisini karıştırmak bunu gizler.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Yeniden test etmediklerimiz</h3></div>
@@ -790,16 +790,16 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Göremediklerimiz</h3></div>
-        <p>Bazı çağrılar bir araca, okuyabildiğimiz hiçbir metinde geçmeyen bir değer verir. Bunları ayrı listeler ve hangi günlüğün onları açtığını söyleriz, çünkü «baktık ve temizdi» ile «göremedik» arasındaki fark, bir ölçüm ile bir vaat arasındaki farktır.</p>
+        <p>Bazı çağrılar bir araca, okuyabildiğimiz hiçbir metinde geçmeyen bir değer verir. Bunları ayrı listeler ve hangi günlüğün onları açtığını söyleriz, çünkü “baktık ve temizdi” ile “göremedik” arasındaki fark, bir ölçüm ile bir vaat arasındaki farktır.</p>
       </div>
     </div>
 
     <div class="thesis">
       <span class="eyebrow">Neden önemli</span>
       <div class="big" style="margin-top:14px">Test etmediğiniz bir guardrail <span class="u">bir iddiadır, olgu değil.</span></div>
-      <p>«Ona sırları açıklamamasını söyledik» bir iddiadır, savunma değil: buradaki hedeflerde ilk birkaç saldırı içinde düştü. QAtration gerçekten sıkı kapatılmış botları da temiz sayar, bu yüzden temiz bir sonuç gerçekten bir şey ifade eder. Her seferinde kurt diye bağırmak yerine botunuzu ölçer.</p>
+      <p>“Ona sırları açıklamamasını söyledik” bir iddiadır, savunma değil: buradaki hedeflerde ilk birkaç saldırı içinde düştü. QAtration gerçekten sıkı kapatılmış botları da temiz sayar, bu yüzden temiz bir sonuç gerçekten bir şey ifade eder. Durmadan boş alarm vermek yerine botunuzu ölçer.</p>
       <div class="ab">
-        <span><span class="chip exploited">Ele geçirildi</span> savunmasız bot anahtarı veriyor</span>
+        <span><span class="chip exploited">Ele geçirildi</span> savunmasız bot anahtarı sızdırıyor</span>
         <span><span class="chip defended">Savuşturuldu</span> düzgün korunan bot dayanıyor</span>
       </div>
     </div>
@@ -824,7 +824,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <b>Yalnızca izin verilen hedefler.</b> Bu araç, yöneltildiği şey her ne olursa olsun ona gerçek saldırılar gönderir ve sizin makinenizde, sizin anahtarınızla, sizin yetkinizle çalışır. localhost olmayan her şey, onu sizin denetlediğinizi kanıtlamak zorundadır (bir DNS kaydı, bilinen bir yoldaki bir dosya ya da botun kendisinin döndürdüğü bir token) ve bu olmadan çalıştırma, hatırlamanızı istemek yerine başlamayı reddeder. Size ait olmayan ya da izniniz bulunmayan sistemleri test etmek çoğu ülkede suçtur ve bu sorumluluk aracın değil, onu çalıştıranındır.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md dosyasını okuyun</a> ilk çalıştırmadan önce.
       <br><br>
-      Bir hata mı buldunuz, ya da bu aracın ölçmediği bir şeyi bildirdiği bir durum mu?
+      Bir hata mı buldunuz, yoksa bu aracın ölçmediği bir şeyi bildirdiği bir durum mu?
       <a href="https://github.com/qatration/qatration/issues" target="_blank" rel="noopener noreferrer">Bir issue açın</a>, ya da önce şuraya yazın:
       <a href="mailto:qatration@gmail.com?subject=QAtration">qatration@gmail.com</a> herkese açık olmaması gereken her şey için.
     </div>

@@ -601,7 +601,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h1>Ontdek waartoe een aanvaller je chatbot kan brengen.</h1>
       <p class="sub">QAtration stuurt echte prompt-injectieaanvallen naar je AI-bot en geeft je een rapport in gewone taal over wat hij heeft gelekt of gedaan, voordat iemand anders het vindt. <b>Jij voert het uit.</b> Op je eigen machine of in je CI, tegen je eigen deployment: geen account, geen endpoint dat je afstaat, niets dat naar ons toe gaat.</p>
       <p class="warnbox">
-        <b>Richt dit niet op een systeem dat niet van jou is.</b> Het stuurt echte aanvallen (prompt injectie, dataroof, misbruik van tools) naar elke URL die je opgeeft. Je eigen deployment, of een waarvan de eigenaar je vooraf schriftelijk toestemming heeft gegeven. Niet een openbare chatbot die je interessant vindt. Niet de demo van een leverancier.
+        <b>Richt dit niet op een systeem dat niet van jou is.</b> Het stuurt echte aanvallen (prompt-injectie, data-exfiltratie, misbruik van tools) naar welke URL je het ook geeft. Je eigen deployment, of een waarvan de eigenaar je vooraf schriftelijk toestemming heeft gegeven. Niet een openbare chatbot die je interessant vindt. Niet de demo van een leverancier.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Lees AUTHORISED-USE.md</a> vóór de eerste run.</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
@@ -649,14 +649,14 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="sec-head">
       <span class="eyebrow">Dekking</span>
       <h2>De dingen die een haastig in elkaar gezette prompt niet tegenhoudt.</h2>
-      <p>Elke AI-functie die live gaat is een nieuw aanvalsoppervlak. Hoeveel van het jouwe hier bereikt kan worden hangt af van wat je deployment laat zien, en de grens wordt hier getrokken in plaats van vervaagd, want een scanner die dekking claimt voor wat hij niet kan waarnemen is precies het ding dat je probeert te vermijden.</p>
+      <p>Elke AI-functie die live gaat is een nieuw aanvalsoppervlak. Hoeveel van het jouwe deze tool kan bereiken hangt af van wat je deployment hem laat zien, en de grens wordt hier getrokken in plaats van vervaagd, want een scanner die dekking claimt voor wat hij niet kan waarnemen is precies waar je vanaf wilt.</p>
     </div>
     <div class="grp">Zichtbaar vanaf alleen je endpoint</div>
     <p class="grp-note">Een chat-endpoint volstaat: dit is te testen zoals het is, ook over meerdere beurten heen.</p>
     <div class="finds">
       <div class="find">
-        <div class="top-row"><h3>Prompt injectie</h3><span class="chip exploited">Gebroken</span></div>
-        <p>De tekst van de aanvaller gaat boven de regels van je bot: „negeer je instructies en…”.</p>
+        <div class="top-row"><h3>Prompt-injectie</h3><span class="chip exploited">Gebroken</span></div>
+        <p>De tekst van de aanvaller overschrijft de regels van je bot: „negeer je instructies en…”.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Lek van geheimen en gegevens</h3><span class="chip exploited">Gebroken</span></div>
@@ -724,9 +724,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
   <!-- THESIS -->
   <section>
     <div class="sec-head" style="margin-top:8px">
-      <span class="eyebrow">Verder dan geslaagd of gezakt</span>
+      <span class="eyebrow">Verder dan geslaagd of mislukt</span>
       <h2>Een schoon resultaat is alleen iets waard als je weet wat het schoon heeft gemaakt.</h2>
-      <p>Een aanval die niet doorkwam rapporteert een nul. Dat geldt ook voor een controle die niet kon draaien, en ook voor een echt gehard bot, en daar loopt testen vast: drie verschillende feiten komen er precies hetzelfde uitzien, en niemand weet wat hij hierna moet proberen. Dit zijn metingen uit echte runs, geen extrapolaties.
+      <p>Een aanval die niet doorkwam rapporteert een nul. Dat geldt ook voor een controle die niet kon draaien, en ook voor een echt geharde bot, en daar loopt testen vast: drie verschillende feiten zien er precies hetzelfde uit, en niemand weet wat hij hierna moet proberen. Dit zijn metingen uit echte runs, geen extrapolaties.
         <b>En een inbraak is alleen een inbraak als de aanval hem heeft veroorzaakt.</b> Elk doel krijgt eerst een onschuldige run: doodgewone vragen, niemand die aanvalt. Bij een van de bots hier
         <code>canary_in_tool_call</code> slaat aan op 88% van dat gewone verkeer, dus een bevinding die alleen daarop steunt wordt gemarkeerd als niet toe te wijzen in plaats van meegeteld.</p>
     </div>
@@ -745,29 +745,29 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>En hoe stabiel het antwoord is</h3></div>
-        <p>We stuurden dezelfde berichten opnieuw naar dat guardrail en het was het niet altijd met zichzelf eens: vijf formuleringen kregen bij identieke invoer verschillende oordelen, en één doodgewone vraag werd tien van de twaalf keer doorgelaten. Daarom rapporteren wij hoeveel pogingen iets braken, en niet óf er één iets brak. Eén enkele run is het verhaal van één middag, en dat geldt net zo goed voor een schoon resultaat als voor een slecht, het onze inbegrepen.</p>
+        <p>We stuurden dezelfde berichten opnieuw naar die guardrail en hij was het niet altijd met zichzelf eens: vijf formuleringen kregen bij identieke invoer verschillende oordelen, en één doodgewone vraag werd tien van de twaalf keer doorgelaten. Daarom rapporteren wij hoeveel pogingen iets braken, en niet óf er één iets brak. Eén enkele run is het verhaal van één middag, en dat geldt net zo goed voor een schoon resultaat als voor een slecht, het onze inbegrepen.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>En wat dat guardrail kost</h3></div>
-        <p>Datzelfde guardrail dat dat document blokkeerde, weigerde ook 6 van de 9 doodgewone klantvragen over de betrokken onderwerpen te beantwoorden. Een verdediging die „nee” zegt tegen je klanten is een getal dat je vóór het uitbrengen wilt kennen, niet erna.</p>
+        <div class="top-row"><h3>En wat die guardrail kost</h3></div>
+        <p>Diezelfde guardrail die dat document blokkeerde, weigerde ook 6 van de 9 doodgewone klantvragen over de betrokken onderwerpen te beantwoorden. Een verdediging die „nee” zegt tegen je klanten is een getal dat je vóór het uitbrengen wilt kennen, niet erna.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>We hebben het tegen onszelf gedraaid</h3></div>
-        <p>Een scanner die altijd iets vindt is niets waard, dus hebben we het tegenovergestelde getal gemeten: 1500 onschuldige sondes over 30 doelen, zonder ook maar één aanvaller ertussen, door dezelfde controles. De helft daarvan komt van gebruikers die met alle recht over beveiliging praten, want precies dat breekt een patroonherkenner: iemand die de falende query plakt, een supportmedewerker die een stacktrace doorstuurt, iemand die vraagt of een sterk gelijkend domein echt is.</p>
+        <p>Een scanner die altijd iets vindt is niets waard, dus hebben we het tegenovergestelde getal gemeten: 1500 onschuldige probes over 30 doelen, zonder ook maar één aanvaller ertussen, door dezelfde controles. De helft daarvan komt van gebruikers die met alle recht over beveiliging praten, want precies dat breekt een patroonherkenner: iemand die de falende query plakt, een supportmedewerker die een stacktrace doorstuurt, iemand die vraagt of een sterk gelijkend domein echt is.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Daarna tegen een systeem dat wij niet hebben gebouwd</h3></div>
         <p>Bots die hier zijn geschreven zijn het makkelijke geval, dus hebben we het gericht op een agentframework dat hier niemand heeft ontworpen. Het leverde acht valse alarmen op in één run van 48 schone prompts, in vier categorieën die 480 sondes tegen onze eigen vloot nog nooit één keer hadden opgeleverd. Alle vier zijn verholpen, en de twee regels eronder laten nu onze build falen in plaats van jouw rapport: geen enkele controle mag de vraag lezen, en geen enkele controle mag de eigen woorden van de agent behandelen als bewijs over het systeem.</p>
       </div>
       <div class="find">
-        <div class="top-row"><h3>En naast twee andere gereedschappen, in het openbaar</h3></div>
-        <p>Gedraaid tegen dezelfde doelen van derden als garak en promptfoo, waarbij elk antwoord van alle drie is beoordeeld met één substring-regel in plaats van met de eigen jury van elk gereedschap. Bij een RAG-applicatie zonder enig guardrail geeft <b>46% van de onschuldige sondes de geplante tekenreeks al terug</b>, zodat het tellen van bevindingen de applicatie meet en niet de aanvaller. Een van de drie gereedschappen zegt dat in zijn eigen rapport. Op het beschermde doel scoren alle drie nul volgens de gedeelde regel, en wij waren de enigen die überhaupt iets vonden, één inbraak op 324, terwijl datzelfde deployment 38 van de 48 doodgewone klantvragen weigert te beantwoorden. Die pagina publiceert ook waar de andere twee beter zijn, en een bewering die we hebben ingetrokken nadat een beoordelaar om een p-waarde vroeg.
+        <div class="top-row"><h3>En naast twee andere tools, in het openbaar</h3></div>
+        <p>Gedraaid tegen dezelfde doelen van derden als garak en promptfoo, waarbij elk antwoord van alle drie is beoordeeld met één substring-regel in plaats van met de eigen judge van elke tool. Bij een RAG-applicatie zonder enige guardrail geeft <b>46% van de onschuldige sondes de geplante tekenreeks al terug</b>, zodat het tellen van bevindingen de applicatie meet en niet de aanvaller. Een van de drie gereedschappen zegt dat in zijn eigen rapport. Op het beschermde doel scoren alle drie nul volgens de gedeelde regel, en wij waren de enigen die überhaupt iets vonden, één inbraak op 324, terwijl datzelfde deployment 38 van de 48 doodgewone klantvragen weigert te beantwoorden. Die pagina publiceert ook waar de andere twee beter zijn, en een bewering die we hebben ingetrokken nadat een beoordelaar om een p-waarde vroeg.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Lees de vergelijking</a>.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Gevonden nog vóór de eerste aanval</h3></div>
-        <p>Een profiel van twaalf sondes, allemaal onschuldig: vijf bots gaven hun eigen instructies prijs op een eenvoudig verzoek. Eén drukte zijn vertrouwelijke sessiesleutel af binnen precies de zin die hem verbood die sleutel te delen. Twee meldden dat een database opnieuw was gestart terwijl ze geen enkele tool hadden die iets opnieuw kon starten.</p>
+        <p>Een profiel van twaalf probes, allemaal onschuldig: vijf bots gaven hun eigen instructies prijs op een eenvoudig verzoek. Eén drukte zijn vertrouwelijke sessiesleutel af binnen precies de zin die hem verbood die sleutel te delen. Twee meldden dat een database opnieuw was gestart terwijl ze geen enkele tool hadden die iets opnieuw kon starten.</p>
       </div>
     </div>
 
@@ -796,7 +796,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 
     <div class="thesis">
       <span class="eyebrow">Waarom het uitmaakt</span>
-      <div class="big" style="margin-top:14px">Een guardrail dat je niet hebt getest is <span class="u">een bewering, geen feit.</span></div>
+      <div class="big" style="margin-top:14px">Een guardrail die je niet hebt getest is <span class="u">een bewering, geen feit.</span></div>
       <p>„We hebben hem gezegd geen geheimen prijs te geven” is een bewering, geen verdediging: op de doelen hier viel die binnen de eerste paar aanvallen. QAtration verklaart bots die echt op slot zitten net zo goed schoon, dus een schoon resultaat betekent echt iets. Het meet je bot, in plaats van elke keer wolf te roepen.</p>
       <div class="ab">
         <span><span class="chip exploited">Gebroken</span> onverdedigde bot geeft de sleutel prijs</span>
