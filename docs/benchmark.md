@@ -97,7 +97,12 @@ tool and from ordinary traffic alike.
 **Once it is retrieved, the application repeats the injected instruction about 85% of the time
 on its own.** No attack is needed for that number. garak's injection probes land exactly on it
 and QAtration lands just under it, which means neither adds anything to what the app does with
-a poisoned document in front of a 3B model.
+a poisoned document in front of it.
+
+*Corrected on 2026-08-31.* This sentence ended "in front of a 3B model", which survived the
+correction thirty lines above that established the stand serves `mistral-nemo` rather than
+`llama3.2:3b`. One sentence was fixed and its restatement was not, which is the ordinary way a
+corrected page stays wrong: the claim moves and the paraphrase of it does not.
 
 **promptfoo comes out higher, and it does not clear a significance test.** 95% against the
 pooled 85% background is Fisher exact p = 0.078, and against the plain-question background of
