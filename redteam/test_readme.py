@@ -180,6 +180,13 @@ def facts():
     return {
         "copyable_configs": _copyable,
         "rollup_fires": _find + _fp + _unk,
+        # EVERYTHING THAT FIRED, which is a different number from everything that entered the
+        # ledger. `over_refusal` is admitted per (detector, target) only where that pair was
+        # adjudicated a false positive, so 87 of its 123 fires sit outside `rollup_fires` -
+        # and the page said "758 detector fires across them" while 845 had fired. Recounted
+        # here because a sentence about how much fired has to be checked against how much
+        # fired.
+        "rollup_reached": sum(_s["reached"].values()),
         "rollup_findings": _find,
         "rollup_false_alarms": _fp,
         "rollup_unadjudicated": _unk,
@@ -242,7 +249,13 @@ def claims(f):
         ("the quoted roll-up's percentage",
          r"rate over what HAS been settled: \d+/\d+ \(([\d.]+)%\)", f["rollup_rate"]),
         ("the prose's fire count beside the probe count",
-         r"anything\*\*,\s*and (\d+) detector fires across them", str(f["rollup_fires"])),
+         r"anything\*\*,\s*and \*\*([\d,]+) detector fires\*\* across them",
+         f"{f['rollup_reached']:,}"),
+        ("...and how many of those reached the adjudication ledger",
+         r"across them\.\s*(\d+) of those enter the ledger", str(f["rollup_fires"])),
+        ("...and how many were held back as usability findings",
+         r"the\s*other (\d+) are `over_refusal`",
+         str(f["rollup_reached"] - f["rollup_fires"])),
         ("the claim that nothing is left unadjudicated names the right total",
          # `\s+` and not a space: the sentence wraps between "30" and "targets", and a
          # pattern that assumes one line is a pattern that silently matches nothing.

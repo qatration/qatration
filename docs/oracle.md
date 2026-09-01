@@ -141,7 +141,13 @@ signal, and the others are the diagnosis.
 ### The headline number, and why it is not a percentage
 
 With a benign baseline on all 35 targets there are **1,750 probes on which nobody attacked
-anything**, and 758 detector fires across them. Publishing that as a 33% false-positive rate
+anything**, and **845 detector fires** across them. 758 of those enter the ledger below; the
+other 87 are `over_refusal` fires on targets where the refusal was judged a usability problem
+rather than a false alarm, which is a real distinction and used to be an invisible one. The
+block that discloses them compared the SET of detector names in each column, and `over_refusal`
+appears in both — it is admitted per (detector, target) whenever that pair was adjudicated a
+false positive — so the difference was empty and eighty-seven fires printed nowhere. It
+compares counts now. Publishing 758 as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
 makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33

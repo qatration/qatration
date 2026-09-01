@@ -699,11 +699,19 @@ def main():
             print(f"    {d:<26}{v['n']:>3}   {', '.join(v['targets'])[:60]}")
         # Fired, deliberately not a candidate false positive, and therefore invisible in the
         # list above. Printed so the roll-up does not read as if it never happened.
-        extra = sorted(set(s["reached"]) - set(s["fires"]))
+        # COUNTS, NOT NAMES. This was `set(reached) - set(fires)`, a key-set difference, and
+        # the exclusion it exists to disclose is PARTIAL: `over_refusal` is admitted whenever
+        # a (detector, target) pair was adjudicated a false positive, so the name appears in
+        # both dicts and the difference is empty. Measured on the shipped fleet: reached 123,
+        # counted 36, and the eighty-seven in between printed nowhere. The safety net for a
+        # missing count was quantified over names.
+        extra = [(d, s["reached"][d] - s["fires"].get(d, {}).get("n", 0))
+                 for d in sorted(s["reached"])
+                 if s["reached"][d] > s["fires"].get(d, {}).get("n", 0)]
         if extra:
             print("  fired, but counted as a usability finding rather than a false alarm:")
-            for d in extra:
-                print(f"    {d:<26}{s['reached'][d]:>3}")
+            for d, held in extra:
+                print(f"    {d:<26}{held:>3}   of {s['reached'][d]} fire(s) on clean traffic")
         # THE NUMBER THIS ENGINE IS JUDGED ON, and the one it must not declare. 514 fires over
         # 1,500 clean probes is not a 34% false-positive rate: most of them are TRUE. The
         # poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive makes
