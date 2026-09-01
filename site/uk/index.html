@@ -234,7 +234,16 @@
   transition:color .15s,background .15s}
 .lang:hover{color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent)}
 .lang:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.lang[aria-current]{color:var(--ink)}
+/* WHICH LANGUAGE YOU ARE ALREADY READING, marked by something other than its colour.
+   `aria-current` says it to a screen reader, and for everyone else the only difference was
+   --ink against --muted: 2.52:1 in the dark theme and 2.70:1 in the light one. That is a
+   difference you can measure and not one you can count on anybody seeing, so the state was
+   carried by colour alone. The weight and the dot say the same thing without asking the two
+   greys to be told apart, and the dot is a shape rather than a glyph because a character
+   here would be text the generator offers for translation and no language would translate. */
+.lang[aria-current]{color:var(--ink);font-weight:700}
+.lang[aria-current]::after{content:"";flex:0 0 auto;align-self:center;
+  width:6px;height:6px;border-radius:50%;background:var(--accent)}
 /* The name is the language's own, so it keeps that language's own capitalisation: the
    uppercase the rest of this menu uses is wrong for a language name, and in several
    scripts it is not a transformation that exists. The code beside it is a code and

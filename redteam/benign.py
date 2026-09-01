@@ -743,21 +743,38 @@ def main():
     # worth what the system's silence is worth when nobody attacks it — and the one class of
     # target an operator can actually onboard had no way to measure that half. Every finding on
     # a first run was unattributed, and nothing in the pipeline could have made it otherwise.
+    # THE CONFIG FIRST, FROM EITHER DOOR, AND NOTHING BUILT YET. Splitting this from the gate
+    # below is the whole point: there are two ways to name a target and the gate has to sit
+    # above both of them, not inside one.
     if args.target_config:
         cfg = yaml.safe_load(open(args.target_config, encoding="utf-8")) or {}
+    else:
+        if not args.target:
+            ap.error("--target or --target-config is required unless --summary is given")
+        cfg, _ = _ctx_for(args.target)
 
-        # WHO ASKED FOR THIS, before anything is built. This call used to sit below the name
-        # resolution, and resolving a name for a config that omits `name:` means BUILDING the
-        # target — which is not inert. The HTTP adapter expands `${VAR}` in its headers in the
-        # constructor, so an unauthorised config learned which of the operator's environment
-        # variables are set from the difference between "expanded" and "not set in this shell",
-        # and other adapters here open connections and start processes there. The same ordering
-        # was wrong in `run_redteam.py`; a gate placed after the thing it guards is a record of
-        # a decision rather than a control, and `test_authorization` now checks the order in
-        # every door rather than only the presence.
-        from authorization import gate as _auth_gate
-        _auth_gate(cfg, "benign run")
+    # WHO ASKED FOR THIS, before anything is built. This call used to sit below the name
+    # resolution, and resolving a name for a config that omits `name:` means BUILDING the
+    # target — which is not inert. The HTTP adapter expands `${VAR}` in its headers in the
+    # constructor, so an unauthorised config learned which of the operator's environment
+    # variables are set from the difference between "expanded" and "not set in this shell",
+    # and other adapters here open connections and start processes there. The same ordering
+    # was wrong in `run_redteam.py`; a gate placed after the thing it guards is a record of
+    # a decision rather than a control, and `test_authorization` now checks the order in
+    # every door rather than only the presence.
+    #
+    # AND IT USED TO SIT INSIDE THE `--target-config` BRANCH, which is a different way of
+    # being in the wrong place: `--target NAME` resolves through `_ctx_for`, which scans this
+    # package's own `targets_*.yaml`, and four of those ship live third-party URLs
+    # (api.anthropic.com, api.openai.com, bedrock, vertex). So `qatration benign --target
+    # anthropic-messages` sent the whole benign corpus at somebody else's production API with
+    # no proof of ownership at all. `test_authorization` looked for the string `_auth_gate(`
+    # in this file and found it — in the other branch. Presence in a file is not coverage of
+    # a path, which is the same lesson as the ordering above one line down.
+    from authorization import gate as _auth_gate
+    _auth_gate(cfg, "benign run")
 
+    if args.target_config:
         # THE SAME NAME THE SWEEP WILL USE, asked of the same loader rather than derived a
         # second time. `run_redteam` builds the target and lets the adapter supply a default,
         # overriding it only when the config states `name:`. Deriving it from the filename here
@@ -771,11 +788,9 @@ def main():
         else:
             from run_redteam import load_target_or_explain
             args.target = load_target_or_explain(cfg, args.target_config, was_default=False).name
-        ctx = cfg.get("oracle_context", {})
-    else:
-        if not args.target:
-            ap.error("--target or --target-config is required unless --summary is given")
-        cfg, ctx = _ctx_for(args.target)
+    # ONE ANSWER FOR BOTH DOORS. `_ctx_for` returns exactly this expression for the `--target`
+    # path, so reading it here rather than in each branch keeps the two from drifting.
+    ctx = cfg.get("oracle_context", {})
 
     # IS THIS THE BUILD THE CONFIG DESCRIBES? The same check run_redteam makes, here because
     # a guard only covers where it looks and this is the second door. It matters more here,

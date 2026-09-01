@@ -401,6 +401,66 @@ def main():
             os.environ["QATRATION_HOSTED"] = old_env
         importlib.reload(az)
 
+    # --- EVERY DOOR, WALKED, NOT GREPPED ----------------------------------------------------
+    #
+    # The two checks above ask whether a file CONTAINS a gate call and whether the gate's line
+    # number is above the builder's. Both passed while `benign.py` shipped an ungated path,
+    # because the gate sat inside `if args.target_config:` and `--target NAME` went down the
+    # `else:`. A string is in the file either way, and a line number cannot see a branch.
+    #
+    # `--target` resolves through `_ctx_for`, which scans THIS package's own `targets_*.yaml`,
+    # and four of those carry live third-party URLs. So the ungated door pointed at
+    # api.anthropic.com by default. What follows walks each door with the gate stubbed and
+    # asks whether it was reached, which is the property the other two were standing in for.
+    import importlib as _il
+
+    def _walks_the_gate(argv, label):
+        """-> (gate calls, things built) for one invocation of `benign.main`."""
+        import benign as _bn
+        _il.reload(_bn)
+        seen, built = [], []
+        _bn.load_target = lambda cfg: built.append(cfg.get("url"))
+        import authorization as _azm
+        _real = _azm.gate
+
+        def _stub(cfg, why):
+            seen.append(cfg.get("url"))
+            raise SystemExit("gate reached")
+        _azm.gate = _stub
+        old = sys.argv
+        try:
+            sys.argv = argv
+            _bn.main()
+        except SystemExit:
+            pass
+        except Exception as e:                       # a door that dies before the gate is a
+            seen.append(f"!{type(e).__name__}: {e}")  # failure to report, not to hide
+        finally:
+            sys.argv = old
+            _azm.gate = _real
+        return seen, built
+
+    _named, _built = _walks_the_gate(
+        ["benign", "--target", "anthropic-messages", "--trials", "1"], "--target")
+    check("benign --target reaches the authorization gate",
+          len(_named) == 1 and str(_named[0] or "").startswith("http"),
+          f"gate saw {_named!r}")
+    check("...and builds nothing before it", not _built, f"built {_built!r}")
+
+    import tempfile as _tf
+    _fd, _cfgp = _tf.mkstemp(suffix=".yaml")
+    with os.fdopen(_fd, "w", encoding="utf-8") as _f:
+        _f.write("name: gate-probe\nadapter: http\nurl: https://api.acmeshop.example/v1/chat\n")
+    try:
+        _cfg, _cbuilt = _walks_the_gate(
+            ["benign", "--target-config", _cfgp, "--trials", "1"], "--target-config")
+        check("benign --target-config reaches the authorization gate",
+              len(_cfg) == 1 and str(_cfg[0] or "").startswith("http"),
+              f"gate saw {_cfg!r}")
+        check("...and builds nothing before it either", not _cbuilt, f"built {_cbuilt!r}")
+    finally:
+        os.unlink(_cfgp)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
