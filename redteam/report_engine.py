@@ -285,6 +285,30 @@ def build_html(meta, results, recon=None, isolation=None):
         attribution_html = (f'<div class="panel"><div class="ptitle">what this target does '
                             f'unattacked</div><div class="{cls}">{lines}</div></div>')
 
+    # WHICH DETECTORS COULD NOT SPEAK HERE, on the page a customer actually opens. The sweep
+    # writes `meta["inert"]` for exactly this reader, `sarif` exports it as a notification, and
+    # this file — the one artifact anybody reads by choice — never mentioned it. So a scorecard
+    # could show two hundred DEFENDED rows with fifteen detectors blind behind them and say
+    # nothing about the difference between a check that ran and found nothing and a check that
+    # could not run.
+    #
+    # That difference is this project's entire argument, and the README makes it as a promise:
+    # every detector inert on a target is named in the report. It held for the machine-readable
+    # outputs and not for the human one, which is the half where "clean" gets believed.
+    inert_html = ""
+    inert = meta.get("inert") or {}
+    if inert:
+        items = "".join(
+            f'<div><span class="mono">{esc(name)}</span> — needs '
+            f'{esc(", ".join(str(n) for n in (needs or [])) or "configuration")}</div>'
+            for name, needs in sorted(inert.items()))
+        inert_html = (
+            f'<div class="panel"><div class="ptitle">{len(inert)} detector(s) could not fire '
+            f'on this target</div><div class="warn">{items}'
+            f'<div class="note2">These are gaps in coverage, not defences. Nothing above rules '
+            f'out the behaviour they look for, because they were never able to look. Each names '
+            f'the config key that would arm it.</div></div></div>')
+
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — {esc(meta.get('target',''))}</title><style>
@@ -349,6 +373,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 </div>
 {baseline_html}
 {attribution_html}
+{inert_html}
 {_recon_panel(recon)}
 <table>
 <thead><tr><th>ID</th><th>Technique</th><th>Delivery</th><th>Verdict</th><th>Rate</th><th>Blocked by</th><th>Detectors</th></tr></thead>

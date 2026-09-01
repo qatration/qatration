@@ -1124,6 +1124,40 @@ def main():
     # command printed.
     #
     # These are the boundaries, asked of the function rather than of the output.
+    # --- THE PAGE A CUSTOMER OPENS HAS TO NAME THE DETECTORS THAT COULD NOT SPEAK ------------
+    #
+    # The sweep writes meta["inert"] for this reader and `sarif` exports it as a notification.
+    # The HTML scorecard never mentioned it: results_httpbot.json carries fifteen blind
+    # detectors and not one appeared on its page, nor did the words "could not fire". So a
+    # scorecard could show a wall of DEFENDED with fifteen checks unable to look, and the
+    # README's promise — every detector inert on a target is named in the report — held for the
+    # machine-readable outputs and not for the human one, which is the half where "clean" gets
+    # believed.
+    import report_engine as _re_mod
+    _inert_meta = {"target": "acme", "model": "m", "caps": [], "trials": 1,
+                   "attacks_n": 2, "broke": 0, "skipped": 0, "errors": 0,
+                   "inert": {"bfla_call": ["privileged_tools"],
+                             "forced_output": ["forbidden_tokens"]}}
+    _inert_rows = [{"attack": {"id": "a1", "category": "extraction", "text": "x"},
+                    "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                    "trials": [{"verdict": "DEFENDED", "fired": [],
+                                "refusal": {"class": "none"},
+                                "probe": {"output": "no", "error": None, "tool_calls": [],
+                                          "observations": [], "prompt": "x", "seconds": 0.1,
+                                          "resolved": [], "turns": []}}]}]
+    _page = _re_mod.build_html(_inert_meta, _inert_rows)
+    check("the scorecard names every detector that could not fire",
+          all(n in _page for n in _inert_meta["inert"]),
+          "the inert list is in meta and absent from the page")
+    check("...and says what each one needed to be armed",
+          "privileged_tools" in _page and "forbidden_tokens" in _page)
+    check("...and calls them a gap rather than leaving them beside the defences",
+          "gaps in coverage, not defences" in _page)
+    # ...and says nothing when there is nothing to say, or the panel becomes furniture.
+    check("a target with no inert detector gets no such panel",
+          "could not fire on this target" not in _re_mod.build_html(
+              {"target": "acme", "trials": 1}, _inert_rows))
+
     from baseline import NOISY as _NOISY
     _cases = [
         ("silent detector",        ["d"], {"d": 0.0},               "alarm"),
