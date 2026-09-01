@@ -107,7 +107,9 @@ def check(cfg, secret, fetch=None):
         if got != token:
             return False, ("authorization.method=header, but the endpoint did not echo the "
                            "token; set it on the target and re-run")
-        return True, f"the endpoint echoed a token issued for {origin_of(url)} on {day}"
+        return True, (f"the operator states the endpoint echoes a token issued for "
+                      f"{origin_of(url)} on {day}; this build did not ask the endpoint, so "
+                      f"what is proved here is possession of the signing secret")
     if method == "well_known":
         probe = origin_of(url) + WELL_KNOWN
         try:
@@ -116,7 +118,7 @@ def check(cfg, secret, fetch=None):
             return False, f"could not read {probe}: {type(e).__name__}: {e}"
         if token not in body:
             return False, f"{probe} does not contain the token issued for this origin"
-        return True, f"{probe} carries a token issued on {day}"
+        return True, f"{probe} was fetched and carries a token issued on {day}"
     if method == "dns_txt":
         records = auth.get("records")
         if records is None:
@@ -124,7 +126,9 @@ def check(cfg, secret, fetch=None):
                            "this build does not resolve DNS itself, so pass them in")
         if not any(token in str(r) for r in records):
             return False, "no TXT record carries the token issued for this origin"
-        return True, f"a TXT record carries a token issued on {day}"
+        return True, (f"the operator supplied a TXT record carrying a token issued on "
+                      f"{day}; this build does not resolve DNS, so what is proved here is "
+                      f"possession of the signing secret")
     return False, f"unknown authorization.method: {method!r}"
 
 
@@ -164,6 +168,22 @@ def _http_get(url, timeout=10):
         return r.read(_MAX_WELL_KNOWN + 1)[:_MAX_WELL_KNOWN].decode("utf-8", "replace")
 
 
+# Which proofs this build OBSERVES, as opposed to reads back out of the config it was handed.
+# `well_known` fetches a URL and looks at what came back. `header` compares `authorization.
+# echoed` against `authorization.token`, both fields of the same file, and `dns_txt` reads
+# `authorization.records` from that file too — its own error message says "this build does not
+# resolve DNS itself, so pass them in".
+#
+# NEITHER IS AN OPEN DOOR: the token is an HMAC over origin and issue date, so forging one
+# needs the signing secret whatever the method says. What was wrong is the RECORD. `check`
+# returned "the endpoint echoed a token issued for <origin>" and `record` wrote that sentence
+# into the results file as the authorisation evidence — a network fact, asserted, that nothing
+# here observed. In a file whose whole purpose is to say who asked for this scan, an unobserved
+# claim reported in the vocabulary of an observation is the defect this project is named after,
+# aimed at its own provenance.
+OBSERVED_METHODS = frozenset({"well_known"})
+
+
 def record(cfg, sentence, secret_id="local"):
     """What goes beside the results: who authorised this, how, and when it was checked.
 
@@ -175,6 +195,14 @@ def record(cfg, sentence, secret_id="local"):
     return {"target": cfg.get("name"), "origin": origin_of(cfg.get("url", "")),
             "method": auth.get("method"), "issued": auth.get("issued"),
             "checked_at": datetime.datetime.now().isoformat(" ", "seconds"),
+            # WHO SAW THE PROOF, as a field rather than as a shade of wording. A reader
+            # auditing an assessment months later needs to know whether this tool observed
+            # the evidence or was handed it, and a sentence is not something they can filter
+            # on. See OBSERVED_METHODS: `header` and `dns_txt` are read back out of the same
+            # config file that carries the token.
+            "evidence": ("observed by this run"
+                         if auth.get("method") in OBSERVED_METHODS
+                         else "asserted in the target config"),
             "verified_by": secret_id, "detail": sentence}
 
 

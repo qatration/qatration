@@ -118,6 +118,37 @@ def main():
     check("...and carries the detail, so the file explains itself",
           rec["detail"] == why, str(rec))
 
+    # --- WHO SAW THE PROOF, and the record used to answer that wrongly -----------------
+    #
+    # `header` compares `authorization.echoed` against `authorization.token`, two fields of
+    # the same config file, and `dns_txt` reads `authorization.records` from that same file —
+    # its own error message says "this build does not resolve DNS itself, so pass them in".
+    # Only `well_known` fetches anything.
+    #
+    # Neither is an open door: the token is an HMAC over origin and issue date, so forging
+    # one needs the signing secret whatever the method says. What was wrong is the RECORD.
+    # `check` returned "the endpoint echoed a token issued for <origin>" and that sentence was
+    # written into the results file as the authorisation evidence — a network fact, asserted,
+    # that nothing here observed. In the one file whose purpose is to say who asked for this
+    # scan, an unobserved claim in the vocabulary of an observation is this project's own
+    # failure class aimed at its own provenance.
+    check("a proof read back out of the config says it was asserted, not observed",
+          rec["evidence"] == "asserted in the target config", str(rec))
+    check("...and its sentence does not claim the endpoint was asked",
+          "echoed a token" not in why and "possession of the signing secret" in why, why)
+    _dns_cfg = cfg("dns_txt", records=[f"qatration={token}"])
+    _dok, _dwhy = az.check(_dns_cfg, SECRET)
+    check("...and the DNS proof says the same about itself",
+          _dok and az.record(_dns_cfg, _dwhy)["evidence"] == "asserted in the target config"
+          and "does not resolve DNS" in _dwhy, _dwhy)
+    # ...while the one proof this build really does fetch says so, or the distinction is
+    # a label nobody can act on.
+    _wk_cfg = cfg("well_known")
+    _wok, _wwhy = az.check(_wk_cfg, SECRET, fetch=lambda u: f"qatration={token}")
+    check("a proof this run fetched for itself is marked observed",
+          _wok and az.record(_wk_cfg, _wwhy)["evidence"] == "observed by this run"
+          and "was fetched" in _wwhy, _wwhy)
+
     # --- origins ----------------------------------------------------------------------
     check("an origin drops the path", az.origin_of(URL) == "https://api.acmeshop.example")
     check("a port is part of the origin",
