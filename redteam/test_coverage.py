@@ -157,9 +157,18 @@ def main():
     # artifacts — rather than a number somebody typed. A hardcoded 184 would pass any assertion
     # about its value.
     sent = set()
-    dc.replay(None, None, sent)
+    _scanned = set()
+    dc.replay(None, None, sent, scanned_out=_scanned)
     check("the replay collects the attack ids it has evidence for", len(sent) > 50,
           f"only {len(sent)} distinct attack id(s) found in every stored sweep")
+    # AND WHICH TARGETS IT ACTUALLY READ, which is what keeps "no target in the fleet does
+    # this" from being said about targets nobody ran. The bucket unit tests above pass a
+    # `scanned` set by hand, so they stay green if `replay` quietly stops filling one —
+    # measured by mutation: removing the collection put `hallucinated_package` straight back
+    # under the fleet claim with every test still passing. This is the half they cannot see.
+    check("...and reports which targets it actually read a probe for",
+          len(_scanned) > 10 and _scanned <= set(dc.contexts()),
+          f"{len(_scanned)} target(s) scanned: {sorted(_scanned)[:5]}")
     import yaml as _y
     arsenal = {a["id"] for a in
                _y.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
@@ -251,23 +260,46 @@ def main():
     real_ctx = dc.contexts
     try:
         dc.contexts = lambda: {"a": {"canaries": ["X"]}, "b": {"canaries": ["Y"]}}
-        unconf, untried = dc.buckets(["memorised_completion"], {})
+        unconf, unev, untried = dc.buckets(["memorised_completion"], {}, scanned={"a", "b"})
         check("a detector no target configures is reported as unconfigured",
-              unconf == ["memorised_completion"] and not untried,
-              f"unconfigured={unconf} untried={untried}")
+              unconf == ["memorised_completion"] and not untried and not unev,
+              f"unconfigured={unconf} unevidenced={unev} untried={untried}")
 
         dc.contexts = lambda: {"a": {"canaries": ["X"]},
                                "b": {"expected_completions": ["some text"]}}
-        unconf2, untried2 = dc.buckets(["memorised_completion"], {})
+        unconf2, unev2, untried2 = dc.buckets(["memorised_completion"], {},
+                                              scanned={"a", "b"})
         check("...and as untried the moment one target could have exercised it",
-              untried2 == ["memorised_completion"] and not unconf2,
-              f"unconfigured={unconf2} untried={untried2}")
+              untried2 == ["memorised_completion"] and not unconf2 and not unev2,
+              f"unconfigured={unconf2} unevidenced={unev2} untried={untried2}")
+
+        # AND "no target does this" MUST NOT BE SAID ABOUT TARGETS NOBODY RAN. `untried`
+        # prints exactly that sentence and was reached by elimination — not inert everywhere,
+        # never fired — which a detector can satisfy while every target it could speak on has
+        # no stored probe at all. Measured on the real fleet: `hallucinated_package` can fire
+        # on four of forty-two configured targets and none of those four has a single probe,
+        # so a claim about fleet behaviour rested entirely on runs that never happened.
+        #
+        # Same two contexts as above; the difference is that the target where the detector is
+        # armed was not among the ones read.
+        unconf4, unev4, untried4 = dc.buckets(["memorised_completion"], {}, scanned={"a"})
+        check("a detector armed only on a target nobody ran is not 'no target does this'",
+              unev4 == ["memorised_completion"] and not untried4 and not unconf4,
+              f"unconfigured={unconf4} unevidenced={unev4} untried={untried4}")
+        # ...and with nothing read at all the split stays two-way, because a caller that
+        # cannot say what it scanned must not gain a bucket it has no evidence for.
+        unconf5, unev5, untried5 = dc.buckets(["memorised_completion"], {})
+        check("...while a caller that reports no scan keeps the old two-way answer",
+              untried5 == ["memorised_completion"] and not unev5,
+              f"unevidenced={unev5} untried={untried5}")
 
         # a detector that THREW is neither: a defect is not an absence.
         dc.contexts = lambda: {"a": {"canaries": ["X"]}}
-        unconf3, untried3 = dc.buckets(["ansi_exfil"], {"ansi_exfil": 3})
-        check("a detector that raised is filed under neither absence bucket",
-              not unconf3 and not untried3, f"unconfigured={unconf3} untried={untried3}")
+        unconf3, unev3, untried3 = dc.buckets(["ansi_exfil"], {"ansi_exfil": 3},
+                                              scanned={"a"})
+        check("a detector that raised is filed under no absence bucket at all",
+              not unconf3 and not untried3 and not unev3,
+              f"unconfigured={unconf3} unevidenced={unev3} untried={untried3}")
     finally:
         dc.contexts = real_ctx
 

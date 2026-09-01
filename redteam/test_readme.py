@@ -108,10 +108,14 @@ def spell(n):
 
 def facts():
     """Recount everything the README asserts, from the code rather than from the README."""
-    hits, where, probes, broke, _src = dc.replay()
+    # `scanned` collected here for the same reason `detector_coverage` collects it: without
+    # it, `buckets` cannot tell "no target does this" from "no target where this could speak
+    # was ever run", and this function is what the published split is recounted from.
+    _scanned = set()
+    hits, where, probes, broke, _src = dc.replay(scanned_out=_scanned)
     demo = sorted(k for k in DETECTORS if hits[k])
     declared = sorted(k for k in DETECTORS if not hits[k])
-    unconfigured, untried = dc.buckets(declared, broke)
+    unconfigured, unevidenced, untried = dc.buckets(declared, broke, scanned=_scanned)
 
     def count_ids(name):
         path = os.path.join(HERE, name)
@@ -189,6 +193,7 @@ def facts():
         "demonstrated": len(demo),
         "declared_only": len(declared),
         "untried": len(untried),
+        "unevidenced": len(unevidenced),
         "unconfigured": len(unconfigured),
         "probes": probes,
         "attacks": count_ids("attacks.yaml"),
@@ -256,9 +261,14 @@ def claims(f):
          r"It reports \*\*\d+ demonstrated, (\d+) declared-only\*\*",
          str(f["declared_only"])),
         ("the declared-only split, untried half",
-         r"split \*\*(\d+) untried / \d+ unconfigured\*\*", str(f["untried"])),
+         r"split \*\*(\d+) untried / \d+ unevidenced / \d+ unconfigured\*\*",
+         str(f["untried"])),
+        ("the declared-only split, unevidenced half",
+         r"split \*\*\d+ untried / (\d+) unevidenced / \d+ unconfigured\*\*",
+         str(f["unevidenced"])),
         ("the declared-only split, unconfigured half",
-         r"split \*\*\d+ untried / (\d+) unconfigured\*\*", str(f["unconfigured"])),
+         r"split \*\*\d+ untried / \d+ unevidenced / (\d+) unconfigured\*\*",
+         str(f["unconfigured"])),
         ("the false-positive section's premise counts demonstrated detectors",
          r"([A-Z][a-z]+-?[a-z]*) demonstrated detectors says none of those is dead",
          spell(f["demonstrated"]).capitalize()),

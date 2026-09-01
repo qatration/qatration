@@ -42,7 +42,14 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The two that remain split **2 untried / 0 unconfigured**, and the unconfigured half emptied
+The two that remain split **1 untried / 1 unevidenced / 0 unconfigured**. The middle bucket is
+new, and it exists because the other two could not hold what belongs in it. `untried` prints
+"no target in the fleet exhibits this behaviour", which is a claim about the targets, and it was
+reached by elimination: not inert everywhere, never fired. A detector can satisfy both while
+every target it could speak on has no stored probe at all, and then the sentence rests on runs
+that never happened. `hallucinated_package` is exactly that — armed on four of the forty-two
+configured targets, and not one of those four has a single probe behind it. It now says so
+instead. The unconfigured half emptied
 twice for different reasons. The first time was `privileged_roles` being declared on the thirteen
 targets that have one. The second was `refusal_expected_but_absent`, which is armed by an ATTACK
 rather than by a target config: its arsenal was written after the last live sweep, so for a

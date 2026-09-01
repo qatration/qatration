@@ -57,13 +57,17 @@ def contexts(collisions=None):
     return out
 
 
-def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None):
+def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
+           scanned_out=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
 
     `unresolved` collects artifacts whose target could not be matched to any config. They
     used to fall back to an empty context, which reads as a clean scan of real evidence.
     `attacks` collects every attack id that has a stored trial, for the arsenal line — an
     out-parameter like the other two, so the return shape stays what every caller expects.
+    `scanned_out` collects every target a probe was actually read for, which is a different
+    set from the targets that HAVE a config and the one `buckets` needs to tell "no target
+    does this" apart from "no target where this could speak was ever run".
     """
     ctxs = contexts()
     hits, where, n = collections.Counter(), collections.defaultdict(set), 0
@@ -91,6 +95,8 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None):
     def scan(pr, ctx, target, source="attack"):
         nonlocal n
         n += 1
+        if scanned_out is not None and target:
+            scanned_out.add(target)
         for name, fn in DETECTORS.items():
             try:
                 if fn(pr, ctx):
@@ -196,7 +202,7 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None):
     return hits, where, n, broke, sources
 
 
-def buckets(declared, broke=()):
+def buckets(declared, broke=(), scanned=None):
     """Split "never fired" into *cannot* and *did not*, over EVERY detector the replay runs.
 
     "Never fired" has three causes and they need different answers, so reporting them as one
@@ -220,12 +226,36 @@ def buckets(declared, broke=()):
     `replay()` runs every detector in DETECTORS on every probe regardless of what declares it,
     so DETECTORS is the set the inert question has to be asked over. Same set, both places.
     """
+    per_target = {name: set(inert_for(ctx, DETECTORS))
+                  for name, ctx in contexts().items()}
     inert = set(DETECTORS)
-    for ctx in contexts().values():
-        inert &= set(inert_for(ctx, DETECTORS))   # inert on EVERY target, not merely on one
+    for dead in per_target.values():
+        inert &= dead                             # inert on EVERY target, not merely on one
     unconfigured = sorted(k for k in declared if k in inert)
-    untried = sorted(k for k in declared if k not in inert and k not in broke)
-    return unconfigured, untried
+
+    # AND THE ONES WHOSE ONLY LIVE TARGETS WERE NEVER RUN. `untried` prints "no target in the
+    # fleet exhibits this behaviour", which is a claim about the targets. It was reached by
+    # elimination -- not inert everywhere, never fired -- and a detector can satisfy both while
+    # every target it could speak on has no stored probe at all. Then the sentence is sourced
+    # from evidence that does not exist.
+    #
+    # Measured here: `hallucinated_package` can fire on four of the forty-two configured
+    # targets and NONE of those four has a single stored probe, so the fleet claim rested
+    # entirely on runs that never happened. Sixteen more detectors are inert on 80-99% of the
+    # fleet, which the intersection cannot see either, but those at least have a live target
+    # with evidence behind the sentence.
+    #
+    # `scanned` is the set of targets a probe was actually read for, not the set that has a
+    # config. Passing nothing keeps the old two-way split, so callers that cannot say what was
+    # read do not silently gain a bucket they have no evidence for.
+    scanned = set(scanned or ())
+    unevidenced = sorted(
+        k for k in declared
+        if k not in inert and k not in broke and scanned
+        and not any(k not in per_target.get(t, set()) for t in scanned))
+    untried = sorted(k for k in declared
+                     if k not in inert and k not in broke and k not in unevidenced)
+    return unconfigured, unevidenced, untried
 
 
 def main():
@@ -237,14 +267,16 @@ def main():
     contexts(collisions)
     sent = set()
     _unreadable_seen = []
-    hits, where, n, broke, sources = replay(unresolved, engines, sent, _unreadable_seen)
+    _scanned = set()
+    hits, where, n, broke, sources = replay(unresolved, engines, sent, _unreadable_seen,
+                                            scanned_out=_scanned)
     demo = sorted(k for k in DETECTORS if hits[k])
     # Demonstrated ONLY on traffic nobody attacked is a different claim from demonstrated by
     # an attack, and the difference is the interesting one: the detector works, and what it
     # caught was the target doing it unprompted. Said rather than folded in.
     benign_only = sorted(k for k in demo if sources[k] == {"benign"})
     declared = sorted(k for k in DETECTORS if not hits[k])
-    unconfigured, untried = buckets(declared, broke)
+    unconfigured, unevidenced, untried = buckets(declared, broke, scanned=_scanned)
 
     for _name, _why in _unreadable_seen:
         print(f"  ! {_name} could not be read ({_why}). Its probes are NOT in the "
@@ -288,6 +320,11 @@ def main():
         print("  no target in the fleet exhibits this behaviour:")
         for k in untried:
             print(f"    {k}")
+    if unevidenced:
+        print("  could only speak on targets that were never run, so nothing here is "
+              "evidence either way:")
+        for k in unevidenced:
+            print(f"    {k}")
     if unconfigured:
         print("  cannot fire on any target as configured — untested, not exonerated:")
         for k in unconfigured:
@@ -296,8 +333,11 @@ def main():
         print("  RAISED on real data, which is a defect rather than an absence:")
         for k, c in broke.most_common():
             print(f"    {k:<24}{c} probe(s)")
-    print("\nOnly the first group is closed by a new target. The second needs config, the\n"
-          "third needs a fix, and collapsing them into one line hides two of the three.")
+    print("\nFour different things, and each is closed by a different act. The first needs a\n"
+          "target that does the behaviour. The second needs a RUN against a target that\n"
+          "already could — the detector is armed there and nobody has looked. The third\n"
+          "needs config. The fourth needs a fix. Collapsing them into one line hides three\n"
+          "of the four, and the second is the one that reads most like a clean bill.")
 
     # Neither of these changes a count. Both change what a count is allowed to mean, so they
     # are printed in the same breath rather than left for someone to notice.
