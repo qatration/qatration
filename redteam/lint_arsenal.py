@@ -30,7 +30,8 @@ def known_targets():
     (no-name configs use the adapter's default, which equals the basename)."""
     names = set()
     for cfg_path in target_configs(ROOT):
-        base = os.path.basename(cfg_path)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        base = _config_name(cfg_path, {})
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
         names.add(cfg.get("name", base))
     return names

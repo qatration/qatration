@@ -57,7 +57,8 @@ def contexts():
     out = {}
     for fp in target_configs(HERE):
         cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        name = cfg.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        name = _config_name(fp, cfg)
         out.setdefault(name, cfg.get("oracle_context", {}))
     return out
 

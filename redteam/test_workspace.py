@@ -156,7 +156,14 @@ def main():
     # Both conventions were carried in six and two modules respectively, each spelled out by
     # hand. This is what says a ninth module has grown its own copy.
     RULES = {'count("_")': "the per-model copy rule",
-             'split("_")[0]': "resolving a target from a filename"}
+             'split("_")[0]': "resolving a target from a filename",
+             # A config's `name:` is optional and eleven shipped ones omit it, so the name
+             # falls back to the filename stem. That was written out four times and the copy
+             # in `sarif` did not have the fallback at all: it compared `cfg["name"]` alone,
+             # so those eleven targets exported every finding with no location — 148 of 498
+             # across the fleet, 95 of them on httpbot, while the module's own comment says
+             # the anchor exists so a reviewer gets a file that is really there.
+             'len("targets_")': "deriving a target name from a config filename"}
     strays = []
     for fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
         base = os.path.basename(fp)
@@ -169,6 +176,30 @@ def main():
                 if needle in code and not code.lstrip().startswith(('"', "'")):
                     strays.append(f"{base}:{lineno}: {what}")
     check("no module re-implements an artifact-naming rule", not strays, "; ".join(strays))
+
+    # --- AND THE RULE ITSELF, not only that one copy of it exists ---------------------------
+    #
+    # The needle scan above is a spellcheck: it says nobody wrote the pattern out again, and
+    # nothing about what the surviving copy does. Both halves are asserted here, because the
+    # defect was in the behaviour of the half that had no fallback.
+    check("a config that names itself is called what it says",
+          workspace.config_name("/x/targets_thing.yaml", {"name": "acme-bot"}) == "acme-bot")
+    check("...and one that does not is called after its file",
+          workspace.config_name("/x/targets_httpbot.yaml", {}) == "httpbot")
+    check("...which is what lets SARIF anchor a finding to a config that omits `name:`",
+          workspace.config_name("/x/targets_httpbot.yaml", {}) != "")
+    check("a path that is not a targets_ file keeps its own stem",
+          workspace.config_name("/x/something.yaml", {}) == "something.yaml")
+    # ...and every reader agrees, since disagreeing is what cost the locations.
+    import yaml as _y
+    from target import target_configs as _tc
+    _by_helper = {workspace.config_name(fp) for fp in _tc()}
+    import detector_coverage as _dc
+    check("the coverage map and the helper name the same fleet",
+          set(_dc.contexts()) <= _by_helper,
+          f"only in coverage: {sorted(set(_dc.contexts()) - _by_helper)[:4]}")
+    check("...and so does fleet_names", workspace.fleet_names() <= _by_helper,
+          f"only in fleet_names: {sorted(workspace.fleet_names() - _by_helper)[:4]}")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

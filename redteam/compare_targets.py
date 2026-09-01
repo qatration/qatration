@@ -62,7 +62,8 @@ def _declared_pairs():
     pairs = {}
     for fp in _tc(os.path.dirname(os.path.abspath(__file__))):
         cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        name = cfg.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        name = _config_name(fp, cfg)
         if cfg.get("compare_with"):
             pairs[name] = (cfg["compare_with"], cfg.get("compare_label")
                            or f"{name} vs {cfg['compare_with']}")

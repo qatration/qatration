@@ -65,7 +65,8 @@ def main():
     _auth_gate(tcfg, "generate")
 
 
-    name = tcfg.get("name") or os.path.basename(args.target_config)[len("targets_"):-len(".yaml")]
+    from workspace import config_name as _config_name
+    name = _config_name(args.target_config, tcfg)
     ctx = tcfg.get("oracle_context", {})
 
     prof_path = args.recon or os.path.join(WORKSPACE_OUT, f"recon_{name}.json")

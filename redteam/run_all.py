@@ -82,7 +82,8 @@ def main():
     print(f"  QAtration fleet sweep — {len(configs)} target configs found")
     print("=" * 60)
     for cfg_path in configs:
-        base = os.path.basename(cfg_path)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        base = _config_name(cfg_path, {})
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
         name = cfg.get("name", base)
         if only and base not in only and name not in only:

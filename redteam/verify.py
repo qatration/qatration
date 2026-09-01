@@ -328,7 +328,8 @@ def audit(trials, confirm_trials):
                 d = yaml.safe_load(f) or {}
         except Exception:
             continue
-        nm = d.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        nm = _config_name(fp, d)
         d["name"] = nm
         cfgs[nm] = d
 
@@ -391,7 +392,8 @@ def main():
     with io.open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
     if not tcfg.get("name"):
-        tcfg["name"] = os.path.basename(args.target_config)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        tcfg["name"] = _config_name(args.target_config, {})
     path = args.results or os.path.join(OUT_DIR, "results_%s.json" % tcfg["name"])
     r = verify_target(tcfg, path, args.trials, args.confirm_trials)
 

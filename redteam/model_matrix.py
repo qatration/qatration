@@ -41,7 +41,8 @@ def main():
         ap.error("--models is required unless --from-disk is given")
 
     cfg = yaml.safe_load(open(args.target_config, encoding="utf-8")) or {}
-    base = os.path.basename(args.target_config)[len("targets_"):-len(".yaml")]
+    from workspace import config_name as _config_name
+    base = _config_name(args.target_config, {})
     tname = cfg.get("name", base)
     models = [m.strip() for m in (args.models or "").split(",") if m.strip()]
     env = dict(os.environ, PYTHONIOENCODING="utf-8")

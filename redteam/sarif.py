@@ -139,7 +139,12 @@ def build(results, target_config=None, out_dir=None):
                 cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
             except Exception:
                 continue
-            if (cfg.get("name") or "") == name:
+            # THROUGH `workspace.config_name`, which is where this rule lives. Comparing
+            # `cfg["name"]` alone meant the eleven shipped configs that omit the key could
+            # never match, so every finding for those targets exported with no location at
+            # all - 95 of 95 on httpbot - while the comment above says the fallback exists
+            # precisely so a reviewer gets a file that is really there.
+            if workspace.config_name(fp, cfg) == name:
                 return fp
         return None
 

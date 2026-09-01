@@ -200,6 +200,35 @@ def verdict_for(meta):
     return "Hardened"
 
 
+def config_name(path, cfg=None):
+    """What target a config file defines, whether or not it says so.
+
+    `name:` is optional and eleven of the shipped configs omit it, so the name falls back to
+    the filename between `targets_` and `.yaml`. That rule was written out four times — here,
+    in `benign._ctx_for`, in `detector_coverage.contexts`, and NOT in `sarif`, which compared
+    against `cfg["name"]` alone. The one that did not have it emitted every finding for those
+    eleven targets with `"locations": []`: 95 of 95 on httpbot, anchored nowhere, while the
+    module's own comment says the fallback exists so a reviewer gets a file that is really
+    there. The config was really there; two implementations of "what is this called"
+    disagreed about which one it was.
+
+    Takes the already-parsed mapping when the caller has it, because most of these loops are
+    reading the YAML anyway and a second parse per file is the sort of thing that makes a
+    shared helper worth avoiding.
+    """
+    import os as _os
+    if cfg is None:
+        import yaml as _yaml
+        try:
+            cfg = _yaml.safe_load(open(path, encoding="utf-8")) or {}
+        except Exception:
+            cfg = {}
+    stem = _os.path.basename(str(path))
+    if stem.startswith("targets_") and stem.endswith(".yaml"):
+        stem = stem[len("targets_"):-len(".yaml")]
+    return (cfg.get("name") or stem) if isinstance(cfg, dict) else stem
+
+
 def fleet_names(directory=None):
     """The target names the configs in `directory` define.
 
@@ -217,8 +246,7 @@ def fleet_names(directory=None):
             c = _yaml.safe_load(open(fp, encoding="utf-8")) or {}
         except Exception:
             continue
-        names.add(c.get("name")
-                  or _os.path.basename(fp)[len("targets_"):-len(".yaml")])
+        names.add(config_name(fp, c))
     return names
 
 

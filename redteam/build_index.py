@@ -113,7 +113,8 @@ def provenance():
             c = yaml.safe_load(open(fp, encoding="utf-8")) or {}
         except Exception:
             continue
-        name = c.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        from workspace import config_name as _config_name
+        name = _config_name(fp, c)
         out.setdefault(name, (c.get("provenance") or "unstated",
                               c.get("provenance_note") or ""))
     return out

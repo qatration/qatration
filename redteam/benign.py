@@ -32,7 +32,8 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, read_artifact, refuse_to_overwrite_evidence
+from workspace import (OUT as WORKSPACE_OUT, read_artifact,
+                       refuse_to_overwrite_evidence, config_name)
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
 try:
@@ -302,7 +303,7 @@ def _ctx_for(name):
         if not (fp.startswith("targets_") and fp.endswith(".yaml")):
             continue
         cfg = yaml.safe_load(open(os.path.join(HERE, fp), encoding="utf-8")) or {}
-        if (cfg.get("name") or fp[len("targets_"):-len(".yaml")]) == name:
+        if config_name(fp, cfg) == name:
             return cfg, cfg.get("oracle_context", {})
     raise SystemExit(f"no config named {name!r}")
 

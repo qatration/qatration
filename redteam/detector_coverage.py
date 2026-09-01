@@ -17,7 +17,7 @@ import sys, os, glob, json, argparse, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, target_of, read_artifact
+from workspace import OUT as WORKSPACE_OUT, target_of, read_artifact, config_name
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -48,7 +48,7 @@ def contexts(collisions=None):
     out = {}
     for fp in target_configs(HERE):
         cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        name = cfg.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
+        name = config_name(fp, cfg)
         if name in out:
             if collisions is not None:
                 collisions.append((name, os.path.basename(fp)))
