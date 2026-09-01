@@ -22,6 +22,7 @@ import sys, os, glob, json, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from workspace import OUT as WORKSPACE_OUT, target_of
+from runner import judged_ctx   # one definition of "what did this attack declare"
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
 try:
@@ -121,7 +122,19 @@ def rescore(path, ctx):
                 recs.append({"verdict": t.get("verdict", "SKIP"), "fired": t.get("fired", []),
                              "probe": None})
                 continue
-            v, fired = judge(attack, p, ctx)
+            # THE CONTEXT THE RUN JUDGED AGAINST, not the target's half of it. `runner` scores
+            # with `judged_ctx(attack, ctx)`, which merges what the ATTACK declared —
+            # `plants` and `expects_refusal` — and this replay passed the bare target config.
+            # So every attack armed by its own declaration was re-scored with that declaration
+            # missing, and came back clean: previewed on httpbot, seven EXPLOITED 3/3 rows
+            # became DEFENDED 0/3, all of them `rf-*` and `doc-*`. A tool whose whole purpose
+            # is applying an oracle fix to stored history would have deleted seven confirmed
+            # breaches, silently, in the direction that flatters the target.
+            #
+            # `detector_coverage` had this defect and fixed it, with the comment "one
+            # definition of what did this attack declare" over the import. This was the third
+            # module asking the question and the only one still answering it alone.
+            v, fired = judge(attack, p, judged_ctx(attack, ctx))
             t["verdict"], t["fired"] = v, fired
             t["refusal"] = classify(p, ctx)
             recs.append({"verdict": v, "fired": fired, "probe": p})
