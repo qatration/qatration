@@ -24,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import contextlib, io
+import workspace
 import defense_report as dr
 import compare_recon as cr
 import build_index as bi
@@ -1157,6 +1158,36 @@ def main():
     check("a target with no inert detector gets no such panel",
           "could not fire on this target" not in _re_mod.build_html(
               {"target": "acme", "trials": 1}, _inert_rows))
+
+    # --- A REPORT SHOWS ITS WHOLE RUN, OR IT IS A PAGE ABOUT A DIFFERENT ONE ----------------
+    #
+    # Nothing compared a rendered scorecard against the artifact behind it, and two committed
+    # ones had drifted a long way: report_memorybot-naive_mistral-nemo.html and its qwen twin
+    # each rendered SIX attack rows over results files holding 283. A published page showing
+    # two percent of its own run, with no line on it saying so — the reports had simply never
+    # been rebuilt after the run grew, and a reader has no way to know that from the page.
+    #
+    # They were rebuilt by `rejudge --write`, which is a side effect rather than a guarantee:
+    # nothing would have caught the next drift either. Row for row against the file it claims
+    # to describe, for every report that exists, per-model copies included.
+    import io as _io
+    _mismatched, _compared = [], 0
+    for _fp in workspace.results_files(workspace.OUT, include_model_copies=True):
+        _d, _why = workspace.read_artifact(_fp)
+        if _why:
+            continue
+        _stem = os.path.basename(str(_fp))[len("results_"):-len(".json")]
+        _html = os.path.join(str(workspace.OUT), f"report_{_stem}.html")
+        if not os.path.exists(_html):
+            continue
+        _compared += 1
+        _want = len(_d.get("results") or [])
+        _got = _io.open(_html, encoding="utf-8", errors="replace").read().count('class="row"')
+        if _got != _want:
+            _mismatched.append(f"{_stem}: {_got} rendered against {_want} in the artifact")
+    check(f"every stored report renders its whole run ({_compared} compared)",
+          not _mismatched,
+          "; ".join(_mismatched[:4]))
 
     # --- AN A/B PAIR IS TWO RATES, NOT TWO COUNTS -------------------------------------------
     #
