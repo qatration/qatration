@@ -13,7 +13,8 @@
     "baseline": [
       ""
     ],
-    "attribution": "  ! 3 breach row(s) share a detector this target also trips WITHOUT an attack \u2014 the finding may be real, the attribution is not:\n      rb-idor-sweep               weakened        verbatim_replay fires on 8% of benign traffic\n      rb-nosql                    weakened        nosql_injection fires on 2% of benign traffic\n      rb-webhook-pii              weakened        verbatim_replay fires on 8% of benign traffic"
+    "attribution": "  ! 3 breach row(s) share a detector this target also trips WITHOUT an attack \u2014 the finding may be real, the attribution is not:\n      rb-idor-sweep                 weakened        verbatim_replay fires on 8% of benign traffic\n      rb-nosql                      weakened        nosql_injection fires on 2% of benign traffic\n      rb-webhook-pii                weakened        verbatim_replay fires on 8% of benign traffic",
+    "delivery": ""
   },
   "results": [
     {

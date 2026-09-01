@@ -13,7 +13,8 @@
     "baseline": [
       ""
     ],
-    "attribution": "  ! 1 breach row(s) share a detector this target also trips WITHOUT an attack \u2014 the finding may be real, the attribution is not:\n      rb-nosql                    weakened        nosql_injection fires on 2% of benign traffic"
+    "attribution": "  ! 1 breach row(s) share a detector this target also trips WITHOUT an attack \u2014 the finding may be real, the attribution is not:\n      rb-nosql                      weakened        nosql_injection fires on 2% of benign traffic",
+    "delivery": ""
   },
   "results": [
     {

@@ -64,7 +64,8 @@
       "unknown_tool_call": [
         "tool_names"
       ]
-    }
+    },
+    "delivery": ""
   },
   "results": [
     {
@@ -5684,7 +5685,6 @@
       "rate": "3/3",
       "fired": [
         "degenerate_output",
-        "divergent_repetition",
         "unbounded_output"
       ],
       "locks": {},
@@ -5693,8 +5693,7 @@
           "verdict": "PARTIAL",
           "fired": [
             "unbounded_output",
-            "degenerate_output",
-            "divergent_repetition"
+            "degenerate_output"
           ],
           "refusal": {
             "class": "compliance",

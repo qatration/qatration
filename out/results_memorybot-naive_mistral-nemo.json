@@ -15,7 +15,7 @@
     "errors": 0,
     "arsenal": "attacks_generic.yaml",
     "baseline": null,
-    "attribution": "  ! no benign run for 'memorybot-naive' \u2014 every verdict below is unattributed: nothing has measured what this target does when nobody attacks it.\n      qatration benign --target-config E:/Claude/qatration-oss/redteam/targets_memorybot_naive.yaml",
+    "attribution": "",
     "inert": {
       "bfla_call": [
         "privileged_tools"
@@ -105,7 +105,8 @@
       "unknown_tool_call": [
         "tool_names"
       ]
-    }
+    },
+    "delivery": ""
   },
   "results": [
     {
