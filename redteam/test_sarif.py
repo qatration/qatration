@@ -202,6 +202,51 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         sys.argv = argv
 
+# --- A RUN THAT SENT NOTHING IS NOT A CLEAN SCAN --------------------------------------------
+#
+# Everything else here reasons from rows: an attack that errored or was skipped leaves one
+# behind, and `unrun` catches it. A sweep whose arsenal came out empty leaves none, so `unrun`
+# was empty, `executionSuccessful` was True, and the export was zero findings with no
+# notification at all — a green code-scanning tab for a run that tried nothing. That is
+# absence rendered as the best possible result, in the one artifact a CI acts on with nobody
+# reading it.
+#
+# `workspace.verdict_for` already answers this and was never asked. Both directions are
+# checked, because a rule that fails everything is as useless as one that fails nothing.
+_ZERO = {"meta": {"target": "acme", "attacks_n": 0, "errors": 0, "broke": 0}, "results": []}
+_ERRORED = {"meta": {"target": "acme", "attacks_n": 5, "errors": 5, "broke": 0},
+            "results": [{"headline": "ERROR", "attack": {"id": "a", "category": "x"},
+                         "trials": [{"error": "boom"}], "fired": []}]}
+_CLEAN = {"meta": {"target": "acme", "attacks_n": 5, "errors": 0, "broke": 0},
+          "results": [{"headline": "DEFENDED", "attack": {"id": "a", "category": "x"},
+                       "trials": [{}], "fired": []}]}
+_BROKE = {"meta": {"target": "acme", "attacks_n": 5, "errors": 0, "broke": 1},
+          "results": [{"headline": "EXPLOITED", "attack": {"id": "a", "category": "x"},
+                       "trials": [{}], "fired": ["canary_in_output"]}]}
+
+
+def _inv(doc):
+    return sarif.build(doc)["runs"][0]["invocations"][0]
+
+
+def _notes(doc):
+    return [n["descriptor"]["id"] for n in _inv(doc).get("toolExecutionNotifications", [])]
+
+
+check("a sweep that sent nothing is not a successful invocation",
+      _inv(_ZERO)["executionSuccessful"] is False,
+      "zero attacks exported as a clean scan")
+check("...and it says so, rather than exporting an empty list in silence",
+      "coverage/nothing-measured" in _notes(_ZERO), str(_notes(_ZERO)))
+check("...while a run whose attacks all errored keeps its own notification",
+      _inv(_ERRORED)["executionSuccessful"] is False
+      and "coverage/incomplete" in _notes(_ERRORED), str(_notes(_ERRORED)))
+check("a real clean run is still successful", _inv(_CLEAN)["executionSuccessful"] is True)
+check("...and so is one that found a breach and reported it",
+      _inv(_BROKE)["executionSuccessful"] is True)
+check("...neither of which carries the nothing-measured notification",
+      "coverage/nothing-measured" not in _notes(_CLEAN) + _notes(_BROKE))
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

@@ -269,7 +269,28 @@ def build(results, target_config=None, out_dir=None):
                                 "results: nothing below rules out a breach among them."},
             "descriptor": {"id": "coverage/incomplete"}})
 
-    invocation = {"executionSuccessful": not unrun}
+    # AND A RUN THAT SENT NOTHING AT ALL, which has no rows to be `unrun`. Everything above
+    # reasons from rows: an attack that errored or was skipped leaves one behind and is caught.
+    # A sweep whose arsenal came out empty — scoped to nothing, filtered to nothing, or stopped
+    # before its first send — leaves none, so `unrun` was empty, `executionSuccessful` was True
+    # and the export was zero findings, no notification, a green code-scanning tab. Absence
+    # rendered as the best possible result, in the one artifact a CI acts on without a human
+    # reading it.
+    #
+    # `workspace.verdict_for` already owns this rule and says "Not measured" for it, in the
+    # words of its own docstring: zero breaches out of zero attacks is not a defence. It was
+    # never consulted here; `meta["attacks_n"]` was read only to fill in `properties`.
+    unmeasured = workspace.verdict_for(meta) == "Not measured"
+    if unmeasured and not (unrun or skipped):
+        notifications.append({
+            "level": "error",
+            "message": {"text": "This run measured nothing: %s attack(s) were sent against %s. "
+                                "There are no findings below because nothing was tried, which "
+                                "is not the same as nothing being found."
+                                % (meta.get("attacks_n") or 0, target)},
+            "descriptor": {"id": "coverage/nothing-measured"}})
+
+    invocation = {"executionSuccessful": not unrun and not unmeasured}
     if notifications:
         invocation["toolExecutionNotifications"] = notifications
 
