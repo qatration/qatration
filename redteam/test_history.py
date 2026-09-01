@@ -12,7 +12,7 @@ finding nobody had seen before, and reporting them as one hides the worse of the
 
     python test_history.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, json, tempfile, shutil
+import sys, os, json, tempfile, shutil, time
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -151,6 +151,46 @@ def main():
               seeded and seeded[0].get("note"), str(seeded))
         check("backfilling twice does not duplicate the entry",
               H.backfill() == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
+
+        # THE CASE THAT MATTERED AND WAS NOT COVERED. The check above backfills the same file
+        # twice, so both passes read one mtime and the old clock-based key matched. A run the
+        # SWEEP recorded carries `datetime.now()`, taken when the snapshot was built; the file
+        # carries its mtime, whenever it was last touched. Two clocks, two moments, so the
+        # guard never fired: measured on the real repository, 28 of the 35 targets holding a
+        # timeline would be seeded a second time, and every mtime involved read the same
+        # instant because a bulk file operation had touched them all.
+        #
+        # The duplicate line is not the damage. `diff()` compares runs[-2] against runs[-1],
+        # so a re-seeded run is compared against its own copy and reports no new, no fixed,
+        # nothing regressed — which reads as a stable target and is nothing having been
+        # compared at all.
+        _rows_live = R(x1="EXPLOITED")
+        H.record({"target": "bf2"}, _rows_live)
+        _bf2 = os.path.join(tmp, "results_bf2.json")
+        with open(_bf2, "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "bf2"}, "results": _rows_live}, f)
+        # THE TWO CLOCKS ARE PUSHED APART ON PURPOSE. Written as-is, `record`'s
+        # `datetime.now()` and the file's mtime land in the same second and the old key
+        # matched by accident, so this check passed against the code it exists to refuse --
+        # caught by mutating and watching it stay green. An mtime an hour off is what the
+        # real case looks like: the file was touched when the sweep finished writing, or
+        # later by anything that rewrote it.
+        os.utime(_bf2, (time.time() - 3600, time.time() - 3600))
+        check("a run already recorded live is not seeded again from its own file",
+              H.backfill() == 0 and len(H.load("bf2")) == 1, str(H.load("bf2")))
+        # ...and the key must still let a run through that the timeline does not hold, or
+        # backfill stops being able to seed anything.
+        with open(os.path.join(tmp, "results_bf3.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "bf3"}, "results": R(x1="DEFENDED")}, f)
+        check("...while a run the timeline has never seen is still seeded",
+              H.backfill() == 1 and len(H.load("bf3")) == 1, str(H.load("bf3")))
+        # ...and a re-scored copy of a run the timeline holds is a DIFFERENT run: same target,
+        # same model, same trials, different verdicts. Seeding it is right; deduping it would
+        # hide a rejudge.
+        with open(os.path.join(tmp, "results_bf3.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "bf3"}, "results": R(x1="EXPLOITED")}, f)
+        check("...and a re-scored run is seeded rather than folded into the old one",
+              H.backfill() == 1 and len(H.load("bf3")) == 2, str(H.load("bf3")))
     finally:
         H.OUT, H.HIST = real_out, real_hist
         shutil.rmtree(tmp, ignore_errors=True)

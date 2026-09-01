@@ -60,13 +60,52 @@ def snapshot(meta, results, when=None, note=None):
             "note": note, "rows": rows}
 
 
-def record(meta, results, when=None, note=None):
-    """Append one run. Never rewrites a line, so a regression cannot be edited away."""
+def _append(snap):
+    """Write one prepared snapshot. Split out so `backfill` can inspect before appending."""
     os.makedirs(HIST, exist_ok=True)
-    snap = snapshot(meta, results, when, note)
     with open(_path(snap["target"]), "a", encoding="utf-8") as f:
         f.write(json.dumps(snap, ensure_ascii=False) + "\n")
     return snap
+
+
+def record(meta, results, when=None, note=None):
+    """Append one run. Never rewrites a line, so a regression cannot be edited away.
+
+    NOT DEDUPED, deliberately. A live run that reproduces the previous result exactly is a
+    fact worth keeping: it is the second data point that turns "fixed" into "fixed and it
+    held". Only `backfill` dedupes, and only because it is re-reading a run the timeline may
+    already hold.
+    """
+    return _append(snapshot(meta, results, when, note))
+
+
+def same_run(a, b):
+    """Is this the same run, recorded twice?
+
+    THE CLOCK CANNOT ANSWER THIS AND WAS ASKED TO. `backfill` skipped a results file when
+    some timeline entry carried the same `run` string, comparing a file mtime against a
+    stamp `record` took from `datetime.now()` when the snapshot was built. Those are two
+    different clocks reading two different moments -- the second is when the sweep finished
+    writing, the first is whenever the file was last touched -- so the strings differ and the
+    guard never fired. Measured on this repository: 28 of the 35 targets with a timeline
+    would be re-seeded, and every mtime involved reads 2026-08-20 16:08:13, because a bulk
+    file operation touched them all. The key was not merely the wrong clock, it was a clock
+    that no longer records anything about the run.
+
+    What that costs is not a duplicate line. `diff()` compares `runs[-2]` against `runs[-1]`,
+    so a re-seeded run is compared against its own copy: no new, no fixed, no regressed,
+    nothing flagged -- which reads as a stable target and is in fact nothing having been
+    compared. Sharper still after `rejudge`, which rewrites results in place and bumps the
+    mtime, so the phantom entry carries re-scored verdicts against the originals and an
+    oracle change surfaces as target findings that no run measured.
+
+    So identity is the RUN, not the moment: the model, the trial count and the finding set.
+    Two snapshots agreeing on all three say the same thing about the same target, and a
+    timeline holding both learns nothing from the second.
+    """
+    return (a.get("model") == b.get("model")
+            and a.get("trials") == b.get("trials")
+            and a.get("rows") == b.get("rows"))
 
 
 def load(target, unreadable=None):
@@ -242,9 +281,14 @@ def backfill():
             continue
         when = datetime.datetime.fromtimestamp(
             os.path.getmtime(fp)).isoformat(" ", "seconds")
-        if any(r["run"] == when for r in load(target)):
+        # ON THE RUN, NOT ON THE CLOCK. See `same_run`: this compared the file's mtime
+        # against a stamp `record` took from `datetime.now()`, so it never matched and
+        # re-seeded 28 of the 35 targets that already had a timeline.
+        snap = snapshot(d["meta"], d["results"], when=when,
+                        note="backfilled from results file")
+        if any(same_run(snap, r) for r in load(target)):
             continue                       # already seeded; append-only must stay honest
-        record(d["meta"], d["results"], when=when, note="backfilled from results file")
+        _append(snap)
         made += 1
     return made
 
