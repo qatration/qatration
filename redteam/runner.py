@@ -77,7 +77,23 @@ def _run_sessions(target, steps):
         target.reset()
         p = target.send(step)
         if p is None or p.error:
-            return p if p is not None else Probe(prompt=step, error="no probe")
+            # WHAT THE EARLIER STEPS ALREADY SHOWED IS NOT UNDONE BY A LATER FAILURE. This
+            # returned the error probe alone, so a sequence that leaked in step one and hit a
+            # socket reset in step two came back as verdict ERROR, output '', turns [] — the
+            # leak observed and then discarded, filed as a row nobody measured. `_resilient_send`
+            # then re-sends the whole sequence, which on a memory-poisoning target applies the
+            # plant twice.
+            #
+            # The error travels with the evidence rather than instead of it, and `judge` reads
+            # both: a breach already seen stands, a clean bill does not, because the steps that
+            # would have found one never ran. That asymmetry is the engine's own rule, written
+            # for `workspace.verdict_for` and applied here.
+            err = (p.error if p is not None else "no probe")
+            if not turns:
+                return p if p is not None else Probe(prompt=step, error=err)
+            return Probe(prompt="\n".join(steps[:i + 1]), output=out, tool_calls=calls,
+                         observations=obs, turns=turns, seconds=secs, resolved=resolved,
+                         error=err)
         out = p.output
         calls += p.tool_calls
         obs += p.observations
