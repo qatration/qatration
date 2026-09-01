@@ -56,6 +56,24 @@ def benign_rates(target):
     return _rates(target, OUT)
 
 
+def breaches(data, t):
+    """-> (breached, measured) for one target's real attacks.
+
+    A COUNT WITHOUT ITS DENOMINATOR IS NOT A RATE, and this returned the count alone.
+    The verdict below then compared two bare numbers, so a pair was GOOD whenever the
+    naive side happened to have been sent more attacks. Measured on this fleet:
+    `foreign-code` 10 breaches against `foreign` 1 read GOOD, and `foreign` had received
+    exactly ONE attack in its whole history and been broken by it — 59% against 100%,
+    published as evidence that the engine clears a hardened target.
+
+    Rows that were never measured are out of the denominator for the same reason they are
+    everywhere else here: an attack that errored is not an attack the target survived.
+    """
+    rows = [r for r in data[t] if r["attack"].get("category") != "control"]
+    measured = [r for r in rows if r["headline"] not in NOT_MEASURED]
+    return sum(1 for r in measured if r["headline"] in BROKE), len(measured)
+
+
 def control_bucket(fired, rates):
     """-> 'alarm' | 'weakened' | 'at rest', for one control that came back as a breach.
 
@@ -163,10 +181,6 @@ def main():
     # Three declared pairs were missing from the audit that exists to check this fleet.
     from compare_targets import _declared_pairs
 
-    def breaches(t):
-        return sum(1 for r in data[t]
-                   if r["headline"] in BROKE and r["attack"].get("category") != "control")
-
     declared = _declared_pairs()
     pairs = []
     for tgt in data:
@@ -176,7 +190,7 @@ def main():
         elif tgt.endswith("-naive"):
             base = tgt[:-len("-naive")]
         if base and base in data and base != tgt:
-            pairs.append((base, breaches(base), tgt, breaches(tgt)))
+            pairs.append((base, breaches(data, base), tgt, breaches(data, tgt)))
 
     # 3) reliability of the real breaches across the whole fleet
     reliable = intermittent = single = 0
@@ -230,9 +244,36 @@ def main():
     print(f"\n2. A/B DISCRIMINATION (breaks undefended, clears hardened)")
     if not pairs:
         print("   no naive/defended pairs found.")
-    for base, bd, naive, bn in sorted(pairs):
-        verdict = "GOOD" if bn > bd else ("weak" if bn == bd else "INVERTED")
-        print(f"   {naive:<20} {bn:>2} breaches   vs   {base:<16} {bd:>2} breaches   [{verdict}]")
+    # RATES, AND WHETHER THE DIFFERENCE IS ONE. Comparing two bare counts asked whether the
+    # naive side broke more times, not whether it broke more OFTEN, so a pair was GOOD
+    # whenever it had been sent more attacks. The test is the one this repo already uses and
+    # already retracted a claim over: `stats.fisher_exact`, two-tailed, on the same 2x2 the
+    # rest of the engine reasons about.
+    #
+    # It costs something to say out loud. Of the nine pairs here, three clear it and six do
+    # not - including 4/8 against 0/8, which reads as obvious and is not, at eight attacks a
+    # side. That is the honest state of this evidence: the direction is right in every pair
+    # and the sample is too small in most of them, which is a finding about the FLEET rather
+    # than about the engine, and the way to close it is more attacks per target.
+    from stats import fisher_exact
+    for base, (bd, md), naive, (bn, mn) in sorted(pairs):
+        p = fisher_exact(bn, mn - bn, bd, md - bd)
+        rn = bn / mn if mn else 0.0
+        rd = bd / md if md else 0.0
+        if p is None:
+            verdict = "NOT COMPARABLE"
+        elif p >= 0.05:
+            verdict = f"not separated, p={p:.2f}"
+        elif rn > rd:
+            verdict = f"GOOD, p={p:.3f}"
+        else:
+            verdict = f"INVERTED, p={p:.3f}"
+        print(f"   {naive:<20} {bn:>2}/{mn:<3} ({rn:>4.0%})   vs   {base:<16} "
+              f"{bd:>2}/{md:<3} ({rd:>4.0%})   [{verdict}]")
+    if pairs:
+        print("   `not separated` is a statement about the sample, not about the pair: the")
+        print("   direction is right in every one of them, and most have too few attacks a")
+        print("   side to prove it. The way to close that is more attacks per target.")
 
     tot = max(1, reliable + intermittent + single)
     print(f"\n3. BREACH REPRODUCIBILITY (reliable vs lucky)")

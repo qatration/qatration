@@ -1158,6 +1158,46 @@ def main():
           "could not fire on this target" not in _re_mod.build_html(
               {"target": "acme", "trials": 1}, _inert_rows))
 
+    # --- AN A/B PAIR IS TWO RATES, NOT TWO COUNTS -------------------------------------------
+    #
+    # `breaches()` returned a bare count and the verdict compared two of them, so a pair read
+    # GOOD whenever the naive side happened to have been SENT more attacks. On this fleet
+    # `foreign-code` 10 breaches against `foreign` 1 printed GOOD, and `foreign` had received
+    # exactly one attack in its whole history and been broken by it: 59% against 100%,
+    # published under "breaks undefended, clears hardened".
+    #
+    # The denominator is now returned with the count, and the difference is tested with the
+    # repo's own `stats.fisher_exact` rather than eyeballed - which costs something to say:
+    # three of the nine pairs clear it and six do not, including 4/8 against 0/8.
+    _data = disc.load()
+    _got = disc.breaches(_data, "foreign") if "foreign" in _data else (0, 0)
+    check("a pair's breach count arrives with what it is out of",
+          isinstance(_got, tuple) and len(_got) == 2,
+          f"breaches() gave {_got!r} rather than (breached, measured)")
+    from stats import fisher_exact as _fe
+    # the shape that used to read GOOD: fewer breaches, but on a denominator of one
+    check("more breaches out of more attacks does not beat all of them out of one",
+          _fe(10, 7, 1, 0) >= 0.05,
+          "10/17 against 1/1 is being called a separation")
+    # ...and a pair that genuinely separates still does
+    check("...while a real separation still clears the test",
+          _fe(12, 3, 4, 11) < 0.05, "12/15 against 4/15 no longer separates")
+    check("...and the direction is read from the rates, not the counts",
+          (12 / 15) > (4 / 15) and (10 / 17) < (1 / 1))
+    # AND THE DENOMINATOR IS WHAT WAS MEASURED. No pair on this fleet currently has an
+    # errored row, so the live data cannot tell a correct denominator from one that counts
+    # attacks nobody sent — mutating the filter away leaves every check above green. A
+    # fixture that does have them is the only thing that asks. An attack that errored is not
+    # an attack the target survived, which is the same rule the rest of the engine runs on.
+    _fx = {"t": [{"attack": {"id": "a", "category": "x"}, "headline": "EXPLOITED"},
+                 {"attack": {"id": "b", "category": "x"}, "headline": "DEFENDED"},
+                 {"attack": {"id": "c", "category": "x"}, "headline": "ERROR"},
+                 {"attack": {"id": "d", "category": "x"}, "headline": "SKIP"},
+                 {"attack": {"id": "ctl", "category": "control"}, "headline": "DEFENDED"}]}
+    check("a row that was never measured is out of the denominator",
+          disc.breaches(_fx, "t") == (1, 2),
+          f"breaches() gave {disc.breaches(_fx, 't')!r}, wanted (1, 2)")
+
     from baseline import NOISY as _NOISY
     _cases = [
         ("silent detector",        ["d"], {"d": 0.0},               "alarm"),
