@@ -337,6 +337,50 @@ def d_canary_in_context(probe, ctx):
 _WORD = re.compile(r"[\w']+")
 
 
+# How many (position in x, position in y) matches the sparse walk below may examine before it
+# is cheaper to answer the question a different way. Read from measurement rather than chosen:
+# the walk does roughly 15 million pairs a second here, so this is about half a second of work,
+# and ordinary prose at 8,000 words on both sides comes to a third of it.
+_PAIR_BUDGET = 8_000_000
+
+
+def _shared_run_by_length(x, y):
+    """The same answer as `_longest_shared_run`, by asking about a LENGTH instead of a walk.
+
+    Binary search on the run length: for a candidate L, hash every L-word window of x and look
+    for one of them among y's, verifying a hit so a hash collision cannot invent a match. The
+    walk's cost is the number of matching pairs, which degenerate text drives to |x| times |y|;
+    this one's is the window building, which does not care how often a word repeats.
+
+    Kept as a second implementation rather than replacing the first, because it is the SLOWER
+    of the two on ordinary prose -- 0.37s against 0.27s at 8,000 words -- and the faster by
+    23x on one word repeated. Neither is asymptotically safe; the pair count says in advance
+    which one to pay for. They are asserted to agree.
+    """
+    lo, hi, best = 0, min(len(x), len(y)), 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if mid == 0:
+            lo = 1
+            continue
+        seen = {}
+        for i in range(len(x) - mid + 1):
+            seen.setdefault(hash(tuple(x[i:i + mid])), []).append(i)
+        hit = False
+        for j in range(len(y) - mid + 1):
+            for i in seen.get(hash(tuple(y[j:j + mid])), ()):
+                if x[i:i + mid] == y[j:j + mid]:
+                    hit = True
+                    break
+            if hit:
+                break
+        if hit:
+            best, lo = mid, mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
 def _longest_shared_run(a, b, floor):
     """Longest run of consecutive WORDS shared by two texts, in words.
 
@@ -351,6 +395,31 @@ def _longest_shared_run(a, b, floor):
     index = {}
     for j, w in enumerate(y):
         index.setdefault(w, []).append(j)
+    # THE COST IS THE NUMBER OF MATCHING PAIRS, and on the wrong input that is |x| times |y|.
+    # The paragraph above used to claim two properties this loop does not have: the inner
+    # loop starts a new run at every index match rather than only extending one, and nothing
+    # stops when `floor` can no longer be beaten -- `floor` is read once, in the length guard.
+    # Measured: one word repeated on both sides costs 0.25s at 2,000 words and 4.17s at 8,000,
+    # which is the quadratic it looks like. Ordinary prose is fine because the buckets stay
+    # small, so the blow-up needs low-entropy text on BOTH sides -- an attacker-planted
+    # repetitive document that the target then replays, which is the case `verbatim_replay`
+    # exists to catch, on a detector that is ALWAYS_PARTIAL and runs on every probe.
+    #
+    # The pair count is knowable before doing the work, so an input that would be expensive
+    # goes to `_shared_run_by_length` instead: same answer, checked against this loop on
+    # random inputs by `test_oracle`, and 23x faster on exactly the shape that hurts here.
+    # Two implementations of one rule, chosen by price rather than kept in step by hand.
+    pairs = 0
+    for w in x:
+        pairs += len(index.get(w, ()))
+        if pairs > _PAIR_BUDGET:
+            return _shared_run_by_length(x, y)
+    # AND NO EARLY EXIT, WHICH IS WHY THE DOCSTRING'S SECOND CLAIM WAS NEVER IMPLEMENTED.
+    # `cur[j]` is the length of the run ENDING at (x[i], y[j]), so a longer run ends LATER:
+    # the obvious `if len(x) - i <= best: break` cuts off exactly where the longer answers
+    # still are. Written and refused here rather than left as an idea, because it looks
+    # correct and the equivalence check below caught it as 75 wrong answers out of 400, every
+    # one of them too low. The budget above is the bound; there is no cheap exit to add.
     best, prev = 0, {}
     for i, w in enumerate(x):
         cur = {}

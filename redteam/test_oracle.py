@@ -2011,6 +2011,73 @@ def test_inert_reads_values_not_truthiness():
     return ok, len(cases) + 2
 
 
+def test_shared_run_agreement():
+    """The two ways of measuring a shared run give the same answer.
+
+    `_longest_shared_run` walks matching pairs, which is cheap on prose and quadratic on
+    degenerate text: measured at 7.9s for 8,000 words of one repeated word, 35.9s at 16,000
+    and 146.7s at 32,000, on a detector that is ALWAYS_PARTIAL and runs against every probe.
+    Over a budget of matching pairs it hands off to `_shared_run_by_length`, which binary
+    searches the length instead and costs 6.0s where the walk costs 146.7s. The walk is the
+    better of the two on ordinary prose, which is why both are kept.
+
+    TWO IMPLEMENTATIONS OF ONE RULE ONLY WORK IF THEY AGREE, so this asks them, on the shape
+    that matters: small vocabularies, where accidental runs are long and the two algorithms
+    have the most room to diverge. It has already earned itself once. An early exit was added
+    to the walk on the reasoning that nothing starting in the remaining suffix of x can beat
+    the best run so far -- which is wrong, because `cur[j]` measures the run ENDING at that
+    position, so longer runs end LATER. It looked right, and this check returned 75 wrong
+    answers out of 400, every one too low.
+    """
+    import random as _r
+    from oracle import _longest_shared_run, _shared_run_by_length, _WORD
+    _r.seed(11)
+    ok = 0
+    trials = 400
+    for _ in range(trials):
+        v = _r.choice([2, 3, 6, 20])
+        alpha = "abcdefghijklmnopqrst"[:v]
+        a = " ".join(_r.choice(alpha) for _ in range(_r.randint(0, 40)))
+        b = " ".join(_r.choice(alpha) for _ in range(_r.randint(0, 40)))
+        floor = _r.randint(0, 6)
+        x = [w.lower() for w in _WORD.findall(a)]
+        y = [w.lower() for w in _WORD.findall(b)]
+        want = 0 if (len(x) < floor or len(y) < floor) else _shared_run_by_length(x, y)
+        got = _longest_shared_run(a, b, floor)
+        if got == want:
+            ok += 1
+        elif ok >= 0 and trials - ok < 6:      # print the first few, not four hundred
+            print(f"FAIL  shared-run disagreement at floor={floor}: walk {got}, "
+                  f"by-length {want}\n      x={a!r}\n      y={b!r}")
+    print(f"{'PASS' if ok == trials else 'FAIL'}  the two shared-run measures agree "
+          f"({ok}/{trials} random pairs)")
+
+    # AND THE HAND-OFF ACTUALLY HAPPENS. Agreement says the two give the same answer, which
+    # stays true however the budget is set — mutating it to zero, so that everything takes
+    # the by-length path, leaves the check above green. That is the whole defect this fix is
+    # about: nothing would notice the budget being raised out of the way and the quadratic
+    # coming back. So the routing is asserted directly, on the input that costs 146s without
+    # it, and by counting pairs rather than by timing anything.
+    import time as _t
+    from oracle import _PAIR_BUDGET
+    _deg = ("spam " * 8000).strip()
+    _x = [w.lower() for w in _WORD.findall(_deg)]
+    _pairs = len(_x) * len(_x)
+    routed = _pairs > _PAIR_BUDGET
+    print(f"{'PASS' if routed else 'FAIL'}  a degenerate reply is routed off the pair walk "
+          f"({_pairs:,} pairs against a {_PAIR_BUDGET:,} budget)")
+    _t0 = _t.time()
+    _got = _longest_shared_run(_deg, _deg, 10)
+    _took = _t.time() - _t0
+    # Generous by design: the walk needs 7.9s here and the hand-off 0.35s, so anything under
+    # four seconds means the hand-off happened. A tight bound would fail on a slow machine
+    # and teach somebody to delete the check.
+    quick = _got == len(_x) and _took < 4.0
+    print(f"{'PASS' if quick else 'FAIL'}  ...and answers it in {_took:.2f}s rather than the "
+          f"7.9s the walk costs (run {_got})")
+    return ok + routed + quick, trials + 2
+
+
 def main():
     # A GATE THAT PRINTS FAIL AND EXITS 0 IS NOT A GATE, and three of these did exactly
     # that. Each returned a pass COUNT which main added to the numerator and the
@@ -2021,7 +2088,7 @@ def main():
     gates = [test_always_on(), test_no_orphan_detectors(), test_inert_detectors(),
              test_builtin_markers_are_instruction_shaped(), test_visible_turns(),
              test_null_config_keys(), test_probe_shapes(),
-             test_inert_reads_values_not_truthiness()]
+             test_inert_reads_values_not_truthiness(), test_shared_run_agreement()]
     extra = sum(g for g, _ in gates)
     gates_total = sum(t for _, t in gates)
     # detectors exercised outside the CASES table (see test_always_on)
