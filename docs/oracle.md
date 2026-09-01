@@ -1,6 +1,6 @@
 # The oracle
 
-Sixty-four deterministic detectors, how many have ever fired, where the oracle stops, and the two gates that keep it from reading the question.
+Sixty-three deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
 
 *Part of the [QAtration](../README.md) design record.*
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **64 demonstrated, 2 declared-only** over 5,602 stored probes. Few tools publish a plugin count
+It reports **63 demonstrated, 3 declared-only** over 5,602 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,7 +42,10 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The two that remain split **1 untried / 1 unevidenced / 0 unconfigured**. The middle bucket is
+The three that remain split **2 untried / 1 unevidenced / 0 unconfigured**. It was two until
+`divergent_repetition` lost its only recorded fire: that fire came from an offset bug, which
+made the preamble in front of a loop read as the divergence after it, so the detector had never
+actually been demonstrated on stored evidence. The middle bucket is
 new, and it exists because the other two could not hold what belongs in it. `untried` prints
 "no target in the fleet exhibits this behaviour", which is a claim about the targets, and it was
 reached by elimination: not inert everywhere, never fired. A detector can satisfy both while
@@ -356,7 +359,7 @@ data surfacing.
 
 ### Why this catalogue is not shaped like a scanner's
 
-The result is **9 critical, 28 high, 27 medium** across all 64 detectors, and the middle two
+The result is **9 critical, 28 high, 27 medium** across all 66 detectors, and the middle two
 bands carry it: `high` and `medium` are within one of each other, and neither is the bottom
 of a pyramid. That is not a distribution to be corrected.
 
