@@ -51,7 +51,8 @@ def server_up(url, timeout=2.0):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--trials", type=int, default=None,
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=None,
                     help="passthrough to run_redteam (default: its own 3 / per-config)")
     ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks.yaml"))
     ap.add_argument("--only", default=None,

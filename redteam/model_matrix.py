@@ -31,7 +31,8 @@ def main():
     ap.add_argument("--target-config", required=True)
     ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks.yaml"))
     ap.add_argument("--models", default=None, help="comma list, e.g. mistral-nemo,qwen2.5:14b")
-    ap.add_argument("--trials", type=int, default=3)
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=3)
     ap.add_argument("--from-disk", action="store_true",
                     help="compare per-model runs ALREADY on disk, no GPU — and print when each "
                          "was measured and by which build, because that is the whole risk")

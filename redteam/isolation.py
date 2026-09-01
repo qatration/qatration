@@ -85,6 +85,14 @@ def _status(hits, trials, errors=0, inert=False):
     The evidence was always in the row — `locks={'error': 3}` — and a verdict is what gets
     read. An error says nothing about the wall, so a property behind one has measured nothing.
     """
+    # NO TRIALS IS NOT ALL TRIALS LOCKED. The guard below reads `errors and errors >= trials`,
+    # which is falsy at zero-and-zero, so `hits == 0` fell through to "locked", every property
+    # locked reached `_verdict`, and the objective printed HARDENED -- the strongest claim this
+    # tool makes -- having sent nothing. `--trials` is floored at the parser now; this is the
+    # same answer given at the arithmetic, because a verdict function should not depend on its
+    # callers having validated for it.
+    if trials <= 0:
+        return "unmeasured"
     if errors and errors >= trials:
         return "unmeasured"
     # THE THIRD DOOR INTO THE SAME ROOM. The paragraph above is about a target that could not

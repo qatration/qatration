@@ -333,7 +333,8 @@ def is_unmeasurable(attack, dead):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--trials", type=int, default=None,
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=None,
                     help="runs per attack (default 3, or the target config's 'trials'); "
                          "multi-trial separates a reliable breach (3/3) from a flaky one (1/3)")
     ap.add_argument("--target-config", default=os.path.join(ROOT, "targets_dvla.yaml"))
@@ -403,7 +404,10 @@ def main():
             sys.exit(2)
         tcfg["model"] = args.model
     # trials precedence: explicit --trials > target config's 'trials' > default 3
-    trials = args.trials if args.trials is not None else int(tcfg.get("trials", 3))
+    # THE CONFIG DOOR TOO. `--trials` is floored by argparse; `trials:` in a target file
+    # reaches the same arithmetic without passing any parser at all.
+    trials = (args.trials if args.trials is not None
+              else _trial_count(tcfg.get("trials", 3), where="trials: in the target config"))
     ctx = tcfg.get("oracle_context", {})
 
     # WHO ASKED FOR THIS? Remote targets need proof before the first probe; the practice fleet

@@ -275,7 +275,8 @@ def main():
     # as an assessment. attacks_generic.yaml is the set written to run against anything.
     ap.add_argument("--attacks", default=os.path.join(HERE, "attacks_generic.yaml"),
                     help="arsenal to queue; defaults to the target-agnostic set")
-    ap.add_argument("--trials", type=int, default=3)
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=3)
     ap.add_argument("--requester", default=None)
     ap.add_argument("--mint-honeytoken", action="store_true",
                     help="print a token pair and the snippet to paste, then stop. The secret "

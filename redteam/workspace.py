@@ -268,6 +268,39 @@ def safe_target_name(name, where="target config"):
     return name
 
 
+def trial_count(value, where="--trials"):
+    """A number of trials that can actually measure something, or a refusal saying why not.
+
+    ZERO TRIALS IS NOT A SMALL RUN, IT IS NO RUN, and every command here took `--trials` as a
+    bare `type=int` with no floor. What each did with a zero differed, and neither answer was
+    the honest one:
+
+      * `isolation` skipped the probe loop, scored every property `locked 0/0` — its guard
+        reads `errors and errors >= trials`, which is falsy at zero — and printed the
+        objective as **HARDENED**, "nothing gives, even in isolation". The strongest claim
+        this tool can make about a target, on zero requests. That is the exact case
+        `_status`'s own docstring records having fixed for a target that was DOWN, arriving
+        through a second door.
+      * the sweep crashed instead: `run_attack` returns [] and `headline` indexes `[0]`,
+        which reaches Python's default handler and exits 1 — the code the README defines as
+        "the target was exploited or breached", so a typed flag reads as a security finding.
+
+    Refused at the edge rather than handled at each of the six commands that accept it, and
+    at the config door too, because `trials:` in a target file reaches the same arithmetic
+    without passing any argparse at all.
+    """
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise SystemExit(f"{where}: {value!r} is not a whole number of trials.")
+    if n < 1:
+        raise SystemExit(
+            f"{where}={n} would send nothing. A run of zero trials cannot measure a target, "
+            f"and the verdicts here are only worth reading because they can go down: with no "
+            f"probe sent, every lock reads as held. Use 1 or more, or do not run the command.")
+    return n
+
+
 # A ROW THAT MEASURED NOTHING, in one place. Both verdicts mean the same thing to every
 # reader downstream — no probe came back, so the row is neither a breach nor a defence — and
 # they kept being handled one at a time. `history.state` named ERROR and not SKIP, so an

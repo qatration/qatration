@@ -56,7 +56,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target-config", default=os.path.join(HERE, "targets_dvla.yaml"))
     ap.add_argument("--objectives", default="isolation_example.yaml")
-    ap.add_argument("--trials", type=int, default=3,
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=3,
                     help="repeats per probe — one trial cannot tell a wall from noise")
     ap.add_argument("--only", default=None, help="run a single objective id")
     ap.add_argument("--model", default=None,

@@ -272,6 +272,48 @@ def main():
     check("...and one property unreachable downgrades the claim rather than voiding it",
           _map(HalfDead)["verdict"], "PARTIAL")
 
+    # --- ZERO TRIALS IS NOT EVERY LOCK HELD --------------------------------------------------
+    #
+    # `--trials 0` skipped the probe loop and `_status(0, 0, 0)` returned "locked": the errors
+    # guard reads `errors and errors >= trials`, which is falsy at zero-and-zero. Every property
+    # locked reaches `_verdict`, so the objective printed HARDENED -- "nothing gives, even in
+    # isolation", the strongest claim this tool makes -- against a target that received no
+    # request at all. That is the case `_status`'s docstring records having fixed for a target
+    # that was DOWN, arriving through a second door: argparse took `--trials` as a bare int.
+    #
+    # Floored at the parser now, and answered honestly here as well, because a verdict function
+    # should not depend on its callers having validated for it.
+    import workspace as _ws
+    from isolation import _status
+    check("no trials at all is unmeasured, not locked", _status(0, 0, 0), "unmeasured")
+    check("...and a real run of clean probes is still locked", _status(0, 3, 0), "locked")
+    check("...and every trial erroring is still unmeasured", _status(0, 3, 3), "unmeasured")
+    check("...and a hit on every trial is still open", _status(3, 3, 0), "open")
+    for _bad in ("0", "-1", "abc", None):
+        _refused = False
+        try:
+            _ws.trial_count(_bad)
+        except SystemExit:
+            _refused = True
+        check(f"a trial count of {_bad!r} is refused at the edge", _refused, True)
+    check("...while a usable count passes through unchanged", _ws.trial_count(3), 3)
+
+    # AND EVERY DOOR ACTUALLY USES IT. The checks above exercise the validator; none of them
+    # would notice a command going back to `type=int`, which is how the zero got in. Six
+    # commands accept `--trials`, so each is asked, by running it. A refusal here costs no
+    # network: argparse rejects before anything is built.
+    import subprocess as _sp, os as _os, sys as _sys
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    for _door in ("benign", "model_matrix", "onboard", "run_all", "run_isolation",
+                  "run_redteam"):
+        _p = _sp.run([_sys.executable, _os.path.join(_here, f"{_door}.py"), "--trials", "0"],
+                     cwd=_here, stdout=_sp.PIPE, stderr=_sp.STDOUT,
+                     env=dict(_os.environ, PYTHONIOENCODING="utf-8",
+                              PYTHONDONTWRITEBYTECODE="1"))
+        _said = _p.stdout.decode("utf-8", "replace")
+        check(f"{_door} refuses --trials 0 rather than running it",
+              _p.returncode != 0 and "would send nothing" in _said, True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

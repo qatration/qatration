@@ -635,7 +635,8 @@ def main():
                     help="fold every stored benign run into one per-detector rate")
     ap.add_argument("--overwrite-evidence", action="store_true",
                     help="replace a baseline that is committed to a repository. Refused by default: the published false-positive rates are recounted from these files")
-    ap.add_argument("--trials", type=int, default=1)
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=1)
     ap.add_argument("--dry-run", action="store_true",
                     help="judge the corpus against an empty reply — proves the detectors "
                          "cannot fire on the PROMPT alone, no model needed")
