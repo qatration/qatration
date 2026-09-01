@@ -486,7 +486,8 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
     # 6. self-disclosure — run last so a refusal here cannot colour the style baseline
     desc = _out(_send(target, SELFDESC_PROMPT))
     profile["self_description"] = desc
-    cans = [c for c in (ctx.get("canaries") or []) if c]
+    import honeytoken as _ht
+    cans = _ht.declared(ctx)
     profile["sysprompt_candidates"] = marker_candidates(desc, baseline, canaries=cans)
     # asked to state its rules, did it state the secret the rule protects?
     profile["selfdesc_leaked_canary"] = [c for c in cans if c.lower() in desc.lower()]

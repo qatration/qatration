@@ -483,7 +483,7 @@ def main():
     #
     # Checked before the honeytoken precondition below, because it is the cheaper mistake to
     # make and the more expensive one to believe.
-    _published = _ht.published_canaries() & {str(c).strip() for c in (ctx.get("canaries") or [])}
+    _published = _ht.published_canaries() & set(_ht.declared(ctx))
     if _published:
         print(f"ABORT — {target.name} uses a canary that ships with this tool: "
               f"{', '.join(sorted(_published))}.\n"
@@ -507,7 +507,7 @@ def main():
         sys.exit(5)
 
     _verify = (ctx.get("honeytoken_verify") or "").strip()
-    _ours = [c for c in (ctx.get("canaries") or []) if _ht.looks_like_ours(c)]
+    _ours = [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)]
     if _ours and not _verify:
         print(f"ABORT — {target.name} declares a honeytoken ({_ours[0]}) but no "
               f"`honeytoken_verify`, so nothing can confirm it was ever pasted in. Mint a pair "
@@ -815,7 +815,7 @@ def main():
     from baseline import note as _baseline_note
     # The config path travels with it, so the command the note prints is the one this reader
     # can actually run. `--target` only resolves against the fleet shipped in this package.
-    attribution_note = _baseline_note(target.name, results, ctx.get("canaries") or [],
+    attribution_note = _baseline_note(target.name, results, _ht.declared(ctx),
                                       config_path=getattr(args, "target_config", None))
     if attribution_note:
         print()

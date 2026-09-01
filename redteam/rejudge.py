@@ -232,7 +232,8 @@ def main():
         # ORDINARY prompts. Every canary_in_output row on that page was unattributed and the
         # page said nothing — the exact failure baseline.py exists to prevent, reached through
         # the replay door instead of the sweep door.
-        note = _baseline_note(base, data["results"], (ctxs[base] or {}).get("canaries") or [])
+        import honeytoken as _ht
+        note = _baseline_note(base, data["results"], _ht.declared(ctxs[base] or {}))
         # AND THE SHARPER CAVEAT, THROUGH THE SAME DOOR. Splitting a breach into "the payload
         # reached the model" and "the model acted on it" needs nothing but the stored replies,
         # so every run already on disk can answer it — including the ones that predate the

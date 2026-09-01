@@ -67,7 +67,8 @@ def fleet_literals():
             oc = (yaml.safe_load(open(fp, encoding="utf-8")) or {}).get("oracle_context") or {}
         except Exception:
             continue
-        for x in (oc.get("canaries") or []):
+        import honeytoken as _ht
+        for x in _ht.declared(oc):
             if str(x).strip():
                 canaries.add(str(x).lower())
         for x in (oc.get("tool_names") or []):

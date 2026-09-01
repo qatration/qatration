@@ -320,7 +320,8 @@ def two_factor(target, results, ctx, out_dir=None, caps=()):
     from stats import fisher_exact
 
     carriers = [str(c) for c in (ctx.get("payload_carrier") or []) if str(c).strip()]
-    canaries = [str(c) for c in (ctx.get("canaries") or []) if str(c).strip()]
+    import honeytoken as _ht
+    canaries = _ht.declared(ctx)
     if not carriers:
         return {"why": "no payload_carrier declared"}
     if not canaries:

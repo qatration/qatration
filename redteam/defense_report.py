@@ -989,7 +989,8 @@ def attribution_index():
             # it at all, so every finding on their page was unattributed and nothing said so.
             unmeasured.add(stem)
             continue
-        canaries = (ctxs.get(tgt) or {}).get("canaries") or []
+        import honeytoken as _ht
+        canaries = _ht.declared(ctxs.get(tgt) or {})
         c_rates = _bl.canary_rates(tgt, canaries, str(OUT_DIR))
         try:
             rows = ((read_artifact(fp)[0] or {}).get("results") or [])

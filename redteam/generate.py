@@ -183,7 +183,8 @@ def strip_planted_values(ask, ctx):
     the tester supplying the answer inside the question.
     """
     out, masked = ask or "", []
-    for c in (ctx.get("canaries") or []) + (ctx.get("planted_markers") or []):
+    import honeytoken as _ht
+    for c in _ht.declared(ctx) + (ctx.get("planted_markers") or []):
         c = str(c)
         if c and c.lower() in out.lower():
             out = re.sub(re.escape(c), "<the key>", out, flags=re.I)
@@ -208,7 +209,8 @@ def detectors_for(ask, ctx):
     """
     low = (ask or "").lower()
     names = []
-    if any(str(c).lower() in low for c in (ctx.get("canaries") or [])):
+    import honeytoken as _ht
+    if any(str(c).lower() in low for c in _ht.declared(ctx)):
         names.append("canary_in_output")
     if any(str(t).lower() in low for t in (ctx.get("forbidden_tokens") or [])):
         names.append("forced_output")
@@ -240,7 +242,8 @@ def detectors_for(ask, ctx):
     # planted at all, and say that this one was a guess.
     if ctx.get("forbidden_tokens"):
         return ["forced_output"], True
-    if ctx.get("canaries"):
+    import honeytoken as _ht
+    if _ht.declared(ctx):
         return ["canary_in_output"], True
     return [], False
 

@@ -190,7 +190,8 @@ def _excerpt(text, ctx, cap=600):
     if len(text) <= cap:
         return text
     needles = [str(x).lower() for x in
-               (list(ctx.get("canaries") or []) + list(ctx.get("forbidden_tokens") or []))
+               (__import__("honeytoken").declared(ctx)
+                + list(ctx.get("forbidden_tokens") or []))
                if x]
     low = text.lower()
     at = next((low.find(n) for n in needles if low.find(n) >= 0), -1)

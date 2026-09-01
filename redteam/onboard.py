@@ -195,7 +195,8 @@ def check(cfg_path, probe_text=PROBE):
             "no `tool_calls` mapping, so nothing can be said about what your tools RECEIVED. "
             "On an agent that is the blind spot: the prose can be impeccable while the call "
             "carries the secret.")
-    if not ((cfg.get("oracle_context") or {}).get("canaries")):
+    import honeytoken as _ht
+    if not _ht.declared(cfg.get("oracle_context") or {}):
         rep["notes"].append(
             "no `oracle_context.canaries`, so leak detection has no planted value to look for. "
             "Declare the secret your system prompt holds; without it a leak is invisible.")
