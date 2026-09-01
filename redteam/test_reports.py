@@ -1112,6 +1112,38 @@ def main():
     check("...and every severity is one of the three the reports know how to render",
           not bad_sev, f"unrenderable severity on: {bad_sev}")
 
+    # --- A CONTROL FIRE HAS THREE CAUSES AND THE GATE USED TO KNOW TWO ----------------------
+    #
+    # `discrimination` decided this inline with `any(rates.get(d, 0) > 0 for d in fired)`,
+    # which departs from `baseline.attribution` twice over: `any(... > 0)` lets the loudest
+    # detector settle it where attribution settles it on the quietest, and `> 0` exonerates at
+    # any ambient rate where NOISY draws the line at 20%. Sixteen control fires on a detector
+    # sitting at 4% were filed as "the target does this anyway" and vanished from the count —
+    # sixteen of the hundred controls on that target, four times the rate they were excused
+    # by. Nothing tested it, because the only way to see the answer was to read what the
+    # command printed.
+    #
+    # These are the boundaries, asked of the function rather than of the output.
+    from baseline import NOISY as _NOISY
+    _cases = [
+        ("silent detector",        ["d"], {"d": 0.0},               "alarm"),
+        ("just above silent",      ["d"], {"d": 0.01},              "weakened"),
+        ("just under the floor",   ["d"], {"d": _NOISY - 0.001},    "weakened"),
+        ("exactly at the floor",   ["d"], {"d": _NOISY},            "at rest"),
+        ("well over the floor",    ["d"], {"d": 0.9},               "at rest"),
+        # The quietest decides, not the loudest: a quiet detector firing alongside a noisy one
+        # has still shown something, and this is the pair the old `any()` got backwards.
+        ("quiet beside a loud one", ["quiet", "loud"],
+         {"quiet": 0.0, "loud": 0.9}, "alarm"),
+        ("both loud",              ["a", "b"], {"a": 0.5, "b": 0.9}, "at rest"),
+        # No baseline at all is not an exoneration.
+        ("no benign run",          ["d"], None,                     "alarm"),
+    ]
+    for _label, _fired, _rates, _want in _cases:
+        _got = disc.control_bucket(_fired, _rates)
+        check(f"a control fire with a {_label} is '{_want}'", _got == _want,
+              f"control_bucket({_fired}, {_rates}) gave {_got!r}")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

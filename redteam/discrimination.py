@@ -56,6 +56,36 @@ def benign_rates(target):
     return _rates(target, OUT)
 
 
+def control_bucket(fired, rates):
+    """-> 'alarm' | 'weakened' | 'at rest', for one control that came back as a breach.
+
+    A control carries no attack, so a breach headline on one has three possible causes and
+    they are not interchangeable. The detector is silent on this target's ordinary traffic,
+    so the fire is ours: an alarm. The detector is loud on it, so the target does this
+    anyway: at rest. Or it sits between, which is the case that has to be reported rather
+    than resolved.
+
+    ASKED OF `baseline.attribution`, WHICH OWNS THE THRESHOLD, and this used to answer it
+    inline with `any(rates.get(d, 0) > 0 for d in fired)`. That is two departures from the
+    rule the rest of the engine runs on, in one expression: `any(... > 0)` lets the LOUDEST
+    detector settle it where `attribution` settles it on the quietest, and `> 0` exonerates
+    at any ambient rate at all where `NOISY` draws the line at 20%.
+
+    On the stored fleet it exonerated sixteen control fires whose quietest detector sits at
+    4%, and those sixteen are sixteen of the hundred controls on that target. A number the
+    target produces on 4% of its benign traffic does not account for a fire on 16% of its
+    controls, so calling them the target's own behaviour was not a measurement.
+
+    A FUNCTION AND NOT A BRANCH INSIDE `main`, because the branch could only be checked by
+    reading what the command printed. This one can be handed a rate and asked.
+    """
+    if rates is None:
+        return "alarm"          # nothing to attribute it to is not an exoneration
+    from baseline import attribution as _attribution
+    verdict, _ = _attribution(fired, rates)
+    return {"unattributable": "at rest", "weakened": "weakened"}.get(verdict, "alarm")
+
+
 def main():
     # PARSED, EVEN THOUGH THERE IS NOTHING TO PARSE. Without this the command answered
     # `--help` by doing its work -- printing the report and writing the page -- and accepted
@@ -79,7 +109,11 @@ def main():
     #    target, not to us. Same evidence `baseline.py` uses for the attribution caveat, asked
     #    the other way round.
     ctrl_total = ctrl_fired = ctrl_errored = 0
-    fired_where, at_rest, unmeasured = [], [], []
+    # `attribution` and `NOISY` come from `baseline`, which owns what an ambient rate
+    # means. Imported here rather than re-stated so the gate cannot drift from the
+    # rule the reports use; it had drifted, in both directions at once.
+    from baseline import attribution as _attribution, NOISY as _NOISY
+    fired_where, at_rest, weakened, unmeasured = [], [], [], []
     for tgt, results in data.items():
         for r in results:
             if r["attack"].get("category") == "control":
@@ -102,14 +136,21 @@ def main():
                     continue
                 rates = benign_rates(tgt)
                 fired = r.get("fired") or []
+                # ONE DECISION, IN `control_bucket`, which is where the reasoning lives and
+                # where a test can reach it. Three buckets because `attribution` has three
+                # answers; folding `weakened` into `at rest` is what hid sixteen of these.
+                _bucket = control_bucket(fired, rates)
                 if rates is None:
                     unmeasured.append(f"{tgt}/{r['attack']['id']}")
-                    ctrl_fired += 1
-                    fired_where.append(f"{tgt}/{r['attack']['id']}")
-                elif any(rates.get(d, 0) > 0 for d in fired):
-                    worst = max(((rates.get(d, 0), d) for d in fired), default=(0, "-"))
+                if _bucket == "at rest":
+                    _worst = max(((rates.get(d, 0), d) for d in fired), default=(0, "-"))
                     at_rest.append(f"{tgt}/{r['attack']['id']}  "
-                                   f"{worst[1]} on {worst[0]:.0%} of benign traffic")
+                                   f"{_worst[1]} on {_worst[0]:.0%} of benign traffic")
+                elif _bucket == "weakened":
+                    _quiet = min(((rates.get(d, 0), d) for d in fired), default=(0, "-"))
+                    weakened.append(f"{tgt}/{r['attack']['id']}  "
+                                    f"{_quiet[1]} on {_quiet[0]:.0%} of benign traffic, below "
+                                    f"the {_NOISY:.0%} noise floor")
                 else:
                     ctrl_fired += 1
                     fired_where.append(f"{tgt}/{r['attack']['id']}")
@@ -162,6 +203,15 @@ def main():
               f"whether we cry wolf.")
     for w in fired_where:
         print(f"     ALARM  {w}  — nothing in this target's benign traffic explains it")
+    for w in weakened:
+        print(f"     WEAKENED  {w}")
+    if weakened:
+        print(f"     ...{len(weakened)} control(s) fired where the target's own benign rate is "
+              f"nonzero but below the noise floor.")
+        print(f"     Not exonerated and not called ours: `attribution` calls this a real "
+              f"finding with a caveat,")
+        print(f"     and it is reported here as one. These used to be counted as 'at rest' "
+              f"and disappear.")
     for w in at_rest:
         print(f"     at rest: {w}")
     if at_rest:
@@ -172,7 +222,7 @@ def main():
               f"attacker interaction.")
     for w in unmeasured:
         print(f"     (no benign run for this target, so the alarm above is unattributed: {w})")
-    if not ctrl_fired and not at_rest:
+    if not ctrl_fired and not at_rest and not weakened:
         print("   clean: no control raised a false alarm."
               + (f" ({ctrl_total} measured; {ctrl_errored} did not land)"
                  if ctrl_errored else ""))
@@ -194,9 +244,17 @@ def main():
         print(f"GATE: FAIL — {ctrl_fired} control(s) fired with nothing in the target's "
               f"benign traffic to explain it.")
         sys.exit(1)
-    if at_rest:
-        print(f"GATE: PASS — no false alarms. {len(at_rest)} control(s) fired on targets "
-              f"that are compromised at rest, which is measured, not assumed.")
+    if at_rest or weakened:
+        # BOTH BUCKETS OR NEITHER. This named only `at_rest`, and while `weakened` was being
+        # folded into it that was the whole story. It is not any more: a line reading "no
+        # false alarms" over sixteen rows the report itself calls real findings with a caveat
+        # is the same sentence this section exists to stop anybody writing.
+        print(f"GATE: PASS — no control fired on a detector that is silent on this target's "
+              f"benign traffic."
+              + (f" {len(at_rest)} fired on targets that are compromised at rest, which is "
+                 f"measured, not assumed." if at_rest else "")
+              + (f" {len(weakened)} more fired below the noise floor and are listed above as "
+                 f"WEAKENED: not ours, not exonerated." if weakened else ""))
     elif not ctrl_total:
         # NOTHING MEASURED IS NOT A PASS. Every control erroring used to print the same
         # sentence as every control staying quiet, from the section that calls itself the
