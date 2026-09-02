@@ -24,6 +24,32 @@ qatration run --target-config mybot.yaml --fail-on regression
 compares against `out/history/<target>.jsonl`, which is why the history has to survive between
 runs — see [persisting the timeline](#persisting-the-timeline).
 
+**A move the trials do not agree on is not a change.** A bot is sampled, not queried, so the
+same attack against the same deployment can break once in three attempts and then not at all,
+with nothing between the two runs but a different seed. Measured here: two runs of this engine
+against one endpoint, same config, same model, same scope, same `--trials 3`, nothing altered
+between them. Six attacks moved to "introduced or reopened" and four to "fixed", and not one of
+the ten broke on all three attempts in either run. That is a red build on a pull request that
+changed nothing, which is precisely the outcome `regression` exists to prevent.
+
+So a move is only counted when the side claiming it broke on **every** attempt: all trials now,
+for a finding introduced or reopened; all trials before, for one called fixed. Everything else
+is reported under its own heading and does not fail the build:
+
+```
+CI GATE: FAIL - 1 finding(s) this run introduced or reopened since 2026-09-02 17:46:44: d-skeleton-audience
+  (4 row(s) moved, but not on every attempt, so nothing here separates them from the sampling: gt-acrostic, cite-multi-hop, d-action-batch, d-split-alternate)
+```
+
+The second line is printed on a green build too. A row that moved is still a row that moved, and
+a gate that quietly dropped it would be making the same mistake in the other direction.
+
+Two consequences worth knowing. **Raising `--trials` makes the gate stricter, not noisier**: at
+3 an attack has to break three times, at 5 five, so a flaky finding is less able to reach the
+count. And **a row whose stored rate cannot be read is never counted** - snapshots written before
+this rule are named as unsteady rather than assumed reliable, because understating a diff is the
+direction this repo allows and overstating is not.
+
 **And it refuses to answer rather than passing.** If the arsenal changed, or the model changed,
 or the trial count dropped, or the stored timeline is torn, then before and after were measured
 with different instruments and neither a pass nor a failure would mean anything. In that case it
@@ -328,7 +354,7 @@ not exist in yours.
 
 | Code | What the build should conclude |
 |---|---|
-| `0` | this change introduced nothing new |
+| `0` | this change introduced no finding the trials agree on. Rows that moved without agreeing are named under the verdict, not hidden by it |
 | `1` | this change introduced or reopened a finding — the one case where red means what red usually means |
 | `2` | the config or the invocation was refused. Nothing was sent, and this is a build problem rather than a security one |
 | `3` | the question could not be answered: no baseline yet, or the comparison was confounded. **Not a pass** |

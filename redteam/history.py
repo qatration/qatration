@@ -24,7 +24,7 @@ one compact line per run. Append-only on purpose: a history that can be rewritte
     qatration history --target dvla   # one target, full timeline
     qatration history --backfill      # seed from today's results
 """
-import sys, os, json, glob, argparse, datetime
+import sys, os, re, json, glob, argparse, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -134,6 +134,31 @@ def load(target, unreadable=None):
     return out
 
 
+def broke_every_trial(row):
+    """Did this row break on EVERY attempt: True, False, or None when it cannot say.
+
+    `snapshot()` has written `rate` as "1/3" since the day it was written, and `diff()` threw
+    it away: the comparison read the verdict alone, so 0/3 -> 1/3 and 0/3 -> 3/3 were the same
+    event. They are not. The first is one sample of a coin the target was already flipping,
+    and the gate below turns events into somebody's build going red.
+
+    Measured, not supposed: two runs of this engine against one endpoint, nothing changed
+    between them but the sampler, moved ten attacks. Six became "introduced or reopened" and
+    four became "fixed", and not one of the ten broke on all three attempts in either run.
+
+    None rather than False when the rate is missing or unreadable, because a row that cannot
+    say is not a row that says no. The caller keeps such rows out of the counted buckets and
+    names them, which understates the diff. That is the allowed direction here.
+    """
+    m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", str((row or {}).get("rate") or ""))
+    if not m:
+        return None
+    hits, trials = int(m.group(1)), int(m.group(2))
+    if trials <= 0:
+        return None
+    return hits >= trials
+
+
 def diff(target):
     """Latest run against the one before it.
 
@@ -192,6 +217,7 @@ def diff(target):
 
     ids = sorted(set(cur["rows"]) | set(prev["rows"]))
     new, fixed, regressed, still, untested, assumed = [], [], [], [], [], []
+    unstable = []
     for aid in ids:
         now, before = state(cur, aid), state(prev, aid)
         if now is None:
@@ -199,17 +225,34 @@ def diff(target):
                 untested.append(aid)       # was broken, and this run did not check
             continue
         earlier = any(state(r, aid) for r in runs[:-2])
+        # A FLIP THE TRIALS DO NOT AGREE ON IS NOT A CHANGE IN THE TARGET. Every branch below
+        # decides whether somebody's build goes red, and 0/3 -> 1/3 says only that a coin the
+        # target was already flipping came up the other way. So a counted move has to break on
+        # every attempt on the side making the claim: now, for a finding introduced or
+        # reopened; before, for one called fixed. The rest are real rows with real verdicts,
+        # listed rather than dropped, but they are not the change this gate was asked about.
+        steady_now = broke_every_trial(cur["rows"].get(aid))
+        steady_before = broke_every_trial(prev["rows"].get(aid))
         if now and before is None:
             # The previous run never sent it, so nothing measured it clean and REGRESSED is
             # not available: a fix that did not hold requires a fix that was seen to hold.
             assumed.append(aid)
-            (still if earlier else new).append(aid)
+            if earlier:
+                still.append(aid)
+            else:
+                (new if steady_now else unstable).append(aid)
         elif now and not before:
             # A regression is a repeat, not a first sighting: it has to have been broken
             # in some run before the one that showed it clean.
-            (regressed if earlier else new).append(aid)
+            if not steady_now:
+                unstable.append(aid)
+            else:
+                (regressed if earlier else new).append(aid)
         elif before and not now:
-            fixed.append(aid)              # measured in both, and it stopped breaking
+            # Measured in both, and it stopped breaking -- if it had been breaking reliably.
+            # The confound below already says that a flaky attack given FEWER chances reads as
+            # a fix. Given the same number and a different seed, it reads as one just as well.
+            (fixed if steady_before else unstable).append(aid)
         elif now and before:
             still.append(aid)
     # Two runs made with different instruments are not comparable, and saying so is the
@@ -238,7 +281,8 @@ def diff(target):
                          f"broken now, and nothing measured them clean in between")
     return {"runs": len(runs), "prev": prev["run"], "cur": cur["run"],
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
-            "not_run": untested, "assumed_clean": assumed, "confounds": confounds}
+            "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
+            "confounds": confounds}
 
 
 def first_seen(target):
@@ -326,7 +370,7 @@ def main():
             continue
         for label, key in (("REGRESSED", "regressed"), ("new", "new"),
                            ("fixed", "fixed"), ("still open", "open"),
-                           ("NOT RUN", "not_run")):
+                           ("NOT RUN", "not_run"), ("unsteady", "unstable")):
             if d[key]:
                 shown = ", ".join(d[key][:6]) + (f" +{len(d[key]) - 6}" if len(d[key]) > 6 else "")
                 print(f"  {label:<11}{len(d[key]):>3}  {shown}")

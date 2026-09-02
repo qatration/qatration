@@ -142,12 +142,20 @@ def regression_verdict(d, is_model_copy=False):
         return 3, ["CI GATE: CANNOT ANSWER — the comparison is confounded: %s. Before and after "
                    "were measured with different instruments, so neither a pass nor a failure "
                    "here would mean anything." % "; ".join(d["confounds"])]
+    # SAID ON A RED BUILD AS WELL AS A GREEN ONE. A row that moved without the trials agreeing
+    # is excluded from the count either way, and a team reading "6 introduced" needs to know
+    # that four more moved and were not counted, or the number looks like the whole story.
+    noise = list(d.get("unstable") or [])
+    heard = (["  (%d row(s) moved, but not on every attempt, so nothing here separates them "
+              "from the sampling: %s%s)"
+              % (len(noise), ", ".join(noise[:8]),
+                 " +%d" % (len(noise) - 8) if len(noise) > 8 else "")] if noise else [])
     worse = list(d.get("regressed") or []) + list(d.get("new") or [])
     if worse:
         return 1, ["CI GATE: FAIL — %d finding(s) this run introduced or reopened since %s: %s%s"
                    % (len(worse), d["prev"], ", ".join(worse[:8]),
-                      " +%d" % (len(worse) - 8) if len(worse) > 8 else "")]
-    out = []
+                      " +%d" % (len(worse) - 8) if len(worse) > 8 else "")] + heard
+    out = list(heard)
     if d.get("not_run"):
         # Not a failure, but not silence either: a row that was not sent cannot have got better
         # or worse, and a gate that ignores it is claiming to have compared it.

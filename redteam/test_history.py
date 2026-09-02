@@ -284,6 +284,96 @@ def main():
         for d in made:
             shutil.rmtree(d, ignore_errors=True)
 
+    # --- a flip the trials do not agree on is not a change -----------------------------
+    # Two runs of this engine against one endpoint, nothing changed between them but the
+    # sampler: six attacks became "introduced or reopened", four became "fixed", and not one
+    # of the ten broke on all three attempts in either run. `--fail-on regression` is the gate
+    # `docs/ci.md` puts on pull requests, so that is a red build on somebody's unrelated
+    # change, which is the exact outcome the gate exists to prevent.
+    #
+    # The rate was on disk the whole time. `snapshot()` writes "1/3" per row and the
+    # comparison read the verdict beside it, so 0/3 -> 1/3 and 0/3 -> 3/3 were one event.
+    #
+    # `docs/ci.md` had already reasoned about this mechanism in the case where the INSTRUMENT
+    # changed -- comparing three trials against two, where "fewer attempts give a flaky attack
+    # fewer chances, which reads as a fix". Same mechanism, same wrong conclusion, and the
+    # guarded case was the rarer one.
+    rt_dirs = []
+    real_out3, real_hist3 = H.OUT, H.HIST
+    try:
+        def rate_diff(runs):
+            """runs = [{aid: (verdict, rate)}, ...] -> diff over that timeline."""
+            d = tempfile.mkdtemp()
+            rt_dirs.append(d)
+            os.makedirs(os.path.join(d, "history"), exist_ok=True)
+            with open(os.path.join(d, "history", "t.jsonl"), "w", encoding="utf-8") as f:
+                for i, rows in enumerate(runs):
+                    f.write(json.dumps(
+                        {"run": "2026-02-%02d 00:00:00" % (i + 1), "target": "t", "model": "m",
+                         "trials": 3, "attacks": len(rows),
+                         "rows": {a: {"v": v, "rate": r, "fired": []}
+                                  for a, (v, r) in rows.items()}}) + "\n")
+            H.OUT, H.HIST = d, os.path.join(d, "history")
+            return H.diff("t")
+
+        D, X = "DEFENDED", "EXPLOITED"
+
+        d = rate_diff([{"a": (D, "0/3")}, {"a": (X, "1/3")}])
+        check("an attack that broke on one attempt of three is not a new finding",
+              d["new"] == [] and d["regressed"] == [], str(d))
+        check("...it is named as unsteady rather than dropped",
+              d["unstable"] == ["a"], str(d["unstable"]))
+
+        d = rate_diff([{"a": (D, "0/3")}, {"a": (X, "2/3")}])
+        check("two of three is still not a change the trials agree on",
+              d["new"] == [] and d["unstable"] == ["a"], str(d))
+
+        d = rate_diff([{"a": (D, "0/3")}, {"a": (X, "3/3")}])
+        check("breaking on every attempt after breaking on none is a new finding",
+              d["new"] == ["a"] and d["unstable"] == [], str(d))
+
+        d = rate_diff([{"a": (X, "1/3")}, {"a": (D, "0/3")}])
+        check("an attack that only ever broke once in three is not called fixed",
+              d["fixed"] == [] and d["unstable"] == ["a"], str(d))
+
+        d = rate_diff([{"a": (X, "3/3")}, {"a": (D, "0/3")}])
+        check("...but one that broke on every attempt and stopped is",
+              d["fixed"] == ["a"] and d["unstable"] == [], str(d))
+
+        # A ROW THAT CANNOT SAY IS NOT A ROW THAT SAYS NO. Snapshots written before `rate`
+        # carried anything useful must not be read as reliable breaks; understating a diff is
+        # the allowed direction here, and the row is still named.
+        d = rate_diff([{"a": (D, "")}, {"a": (X, "")}])
+        check("a moved row with no readable rate is not counted as a change",
+              d["new"] == [] and d["unstable"] == ["a"], str(d))
+
+        # AND THE GATE ITSELF, because every branch above is only worth what the exit code
+        # does with it. Imported here rather than at the top: `run_redteam` pulls in the
+        # engine, and this suite is otherwise about one small module.
+        from run_redteam import regression_verdict
+
+        code, said = regression_verdict(rate_diff([{"a": (D, "0/3")}, {"a": (X, "1/3")}]))
+        check("the CI gate does not fail a build on a flip within the trials",
+              code == 0, "exit %s: %s" % (code, said))
+        check("...and says so rather than reporting nothing moved",
+              any("not on every attempt" in s and "a" in s for s in said), str(said))
+
+        code, said = regression_verdict(rate_diff([{"a": (D, "0/3")}, {"a": (X, "3/3")}]))
+        check("the CI gate still fails on a finding the trials all agree on",
+              code == 1, "exit %s: %s" % (code, said))
+
+        # BOTH AT ONCE is the case that matters on a real build: a team reading "1 introduced"
+        # has to be told that another row moved and was not counted, or the number reads as
+        # the whole story.
+        code, said = regression_verdict(rate_diff([{"a": (D, "0/3"), "b": (D, "0/3")},
+                                                   {"a": (X, "3/3"), "b": (X, "1/3")}]))
+        check("a failing build still names what moved without being counted",
+              code == 1 and any("not on every attempt" in s for s in said), str(said))
+    finally:
+        H.OUT, H.HIST = real_out3, real_hist3
+        for d in rt_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+
     # --- a gap in the timeline is a gap in the diff's confidence -----------------------
     # One unreadable line must not lose the whole timeline: a truncated write from a killed
     # run should cost the run it recorded and nothing else. But skipping it in silence makes
