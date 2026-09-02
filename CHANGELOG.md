@@ -6,6 +6,76 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## The first run could not finish, and the suite was green (0.4.0, 2026-09-02)
+
+**The release exists because the documented quickstart did not work.** Installed from a clean
+venv and walked as a stranger against a live endpoint, `qatration init` wrote a request body
+with no `model`, so `onboard` was rejected by every OpenAI-shaped API -- Ollama, vLLM, LM
+Studio, any provider. The 400 that came back said `{"error":{"message":"model is required"}}`
+and the user saw `Bad Request`, because the error body was discarded. There was no `--model`
+flag, no field, and the word did not appear in the file `init` writes.
+`targets_openai_compatible.yaml`, the copy-me config for that exact shape, has carried `model`
+all along; the template had drifted from it.
+
+The same drift cost the template its system message, while `init` printed "paste this into your
+bot's system prompt". Two deployments arrive at a url like that and need opposite things: your
+own product has a server-side prompt to plant into, a bare model endpoint has nowhere else.
+Both are in the template now, one commented, with the fork explained.
+
+**`qatration benign` sent fifty probes and then died on the write.** `OUT` is a path resolved at
+import and deliberately not created there, so whoever writes has to make it -- remembered in
+four modules, forgotten in two. The traceback goes to stderr and the results table to buffered
+stdout, so the failure scrolled past ABOVE the rows and the last line on screen was
+`36/50 clean`. Exit 1, no baseline written, and every later finding on that target
+unattributable because `baseline.rates` had nothing to read. It hid behind an order: the README
+ran `run` first and `run` creates the directory, while `init` prints `benign` first. Following
+the tool's own instructions was the way to meet it.
+
+**SARIF exported twenty findings anchored to nothing and printed the same line as a run that
+anchored all twenty.** Two halves, both fixed: a config that exists but omits `name:` never
+matched, because that rule was written thirteen times across the codebase and one copy lacked
+the filename fallback -- 148 of 498 findings on the stored fleet had no location. And when no
+config is found at all, the log now carries a notification and the terminal a line, because the
+person who runs this in CI is not the person who opens the result days later.
+
+**The oracle changed in five places, and each was measured against the stored artifacts before
+it was believed.** `sysprompt_paraphrase` compared punctuation-stripped n-grams against raw
+text, so a word-perfect copy of a system prompt scored 0.38 and the published 0.25 threshold
+behaved like 0.65. `idor_enumeration` read the first digit run in an argument, missing a harvest
+carried in JSON and firing on ordinary pagination. `role_assumed` built its "the user claimed
+this" evidence with `str(turn)`, which renders the dict and puts the model's own reply into it.
+`divergent_repetition` located its loop by word value rather than by offset, so a preamble in
+front of a loop was scored as the divergence after it -- that was the detector's only recorded
+fire, so it returns to declared-only and the demonstrated count drops from 64 to 63. And
+`xss_in_output` fired on the bare token `javascript:` in prose, at the top severity, on a bot
+correctly warning a customer off a malicious link.
+
+**`qatration rejudge` was deleting findings.** It scored stored probes with the bare target
+context while the sweep uses `judged_ctx`, which merges what the attack itself declared. The
+preview showed 25 rows changing, 21 of them findings being erased, including seven EXPLOITED 3/3
+rows on one target. It was caught by reading that preview before writing, which is possible only
+because the command has never written by default.
+
+**A canary with a trailing space turned a leak into a clean run.** `looks_like_ours` uses
+`re.fullmatch`, so the value stopped being recognised as ours, the precondition proving the
+token was planted never ran, and the leak detectors -- matching by substring -- did not see a
+reply carrying the secret verbatim. "Read the declared canaries" was written eleven times and
+normalised differently in each; `honeytoken.declared` is the only reader now.
+
+**And `qatration benign --target NAME` never reached the authorization gate.** The call sat
+inside the `--target-config` branch, and `--target` resolves through this package's own
+`targets_*.yaml`, four of which carry live third-party URLs. The existing checks passed: one
+greps each door for the string `_auth_gate(`, which this file contains, in the other branch.
+
+Smaller, and each with the check that would have caught it: `--trials 0` reported HARDENED
+having sent nothing; a missing `category:` key crashed mid-sweep and exited 1, the code the
+README defines as a breach; a run that measured nothing exported as a successful SARIF scan; the
+HTML scorecard never named the detectors that could not fire, and two committed reports rendered
+six rows over runs of 283; `history backfill` compared a file mtime against a wall clock and
+would have re-seeded 28 of 35 timelines; the A/B section compared breach counts without their
+denominators, so a target broken by the single attack it received read as GOOD; and the
+shared-run measure cost 146 seconds on text an attacker chooses.
+
 ## Attacks that carry their own marker, and a page that says where we lose (0.3.0, 2026-08-26)
 
 **The release exists because of one measurement.** Run beside garak and promptfoo against a

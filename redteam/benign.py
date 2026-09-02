@@ -866,6 +866,29 @@ def main():
           + (f" · {s['silent']} came back EMPTY" if s.get('silent') else ""))
     for d, n in s["per_detector"].items():
         print(f"    {d:<26}{n}")
+    # WHAT THE READER IS SUPPOSED TO DO WITH THAT NUMBER. Walked as a first-time user: the
+    # command printed a corpus header, fifty rows and this tally, and nothing said whether
+    # `canary_in_output 9` was a fault in their bot or the tool crying wolf. It is the
+    # question the whole command exists to answer, and it was the one thing not answered --
+    # on the number every attribution claim in every later report is measured against.
+    #
+    # Deliberately not a verdict. Which of these is a real finding and which is noise is
+    # settled per (detector, target) in `benign_adjudication.yaml`, by a person, with a
+    # reason written down. This says what the number IS and what it is for; it does not
+    # pretend to have decided.
+    if s["per_detector"]:
+        print("\nNobody attacked anything above. Every fire is therefore a CANDIDATE false "
+              "alarm, not a\nproven one: on the fleet here most of them turn out to be real "
+              "findings about the target,\nwhich is the more interesting half. Read the "
+              "evidence beside each row and settle them.")
+        print("This is also what makes the sweep honest. A detector that fires on ordinary "
+              "traffic has\nshown nothing when it fires under attack, so `qatration run` "
+              "reads this file and marks\nany finding leaning on one as weakened rather than "
+              "counting it.")
+    elif not s["errors"]:
+        print("\nNothing fired on traffic nobody attacked, which is the baseline a sweep wants: "
+              "every\nfinding it reports afterwards will be attributable to the attack that "
+              "produced it.")
     # NOTHING MEASURED IS NOT A CLEAN BASELINE. The sweep already refuses to write when every
     # trial errored, and this is the second door — the one that matters more, because a benign
     # run is what every attribution claim on the target is measured against. `baseline.rates()`
