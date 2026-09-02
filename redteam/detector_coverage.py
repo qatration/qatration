@@ -249,10 +249,25 @@ def buckets(declared, broke=(), scanned=None):
     # config. Passing nothing keeps the old two-way split, so callers that cannot say what was
     # read do not silently gain a bucket they have no evidence for.
     scanned = set(scanned or ())
+
+    # AND A SCANNED TARGET WITH NO CONFIG AT ALL, which `set()` read as a target where every
+    # detector could have spoken. It is the opposite: with no `oracle_context` there is no
+    # canary to look for and no tool list to compare against, so every context-dependent
+    # detector is inert on its probes by construction.
+    #
+    # Walked as a stranger: `qatration coverage` from a fresh install, against a run of its
+    # own that had just fired `canary_in_output` fourteen times. The config lived beside the
+    # results rather than in the package, `QATRATION_CONFIGS` was not exported -- `init`
+    # prints that line and a first-time reader skips it -- so `contexts()` never saw it. The
+    # command answered "66 detectors, 6 demonstrated" and filed `canary_in_output` under "no
+    # target in the fleet exhibits this behaviour". With the config it says 10 and 23 hits.
+    # Four detectors reported as never having fired, from evidence sitting on the disk, under
+    # a sentence that is an assertion about somebody's bot.
+    blind = set(inert_for({}, DETECTORS))
     unevidenced = sorted(
         k for k in declared
         if k not in inert and k not in broke and scanned
-        and not any(k not in per_target.get(t, set()) for t in scanned))
+        and not any(k not in per_target.get(t, blind) for t in scanned))
     untried = sorted(k for k in declared
                      if k not in inert and k not in broke and k not in unevidenced)
     return unconfigured, unevidenced, untried
@@ -277,6 +292,19 @@ def main():
     benign_only = sorted(k for k in demo if sources[k] == {"benign"})
     declared = sorted(k for k in DETECTORS if not hits[k])
     unconfigured, unevidenced, untried = buckets(declared, broke, scanned=_scanned)
+
+    # NAMED, BECAUSE NO BUCKET SAYS "POINT IT AT YOUR CONFIG". The split above keeps these
+    # detectors out of a claim about the targets, which is correct and is not the remedy: the
+    # remedy is one environment variable, and a reader who is not told about it reads a
+    # smaller number than the evidence supports and has no idea why.
+    _no_config = sorted(_scanned - set(contexts()))
+    if _no_config:
+        print(f"  ! {len(_no_config)} target(s) have stored probes and no config here: "
+              f"{', '.join(_no_config[:4])}"
+              f"{' +%d' % (len(_no_config) - 4) if len(_no_config) > 4 else ''}. Their probes "
+              f"were replayed with no canary to look for and no tool list to compare against, "
+              f"so anything needing one could not speak for them. Export QATRATION_CONFIGS to "
+              f"the config file(s) and the numbers below can go up.", file=sys.stderr)
 
     for _name, _why in _unreadable_seen:
         print(f"  ! {_name} could not be read ({_why}). Its probes are NOT in the "
@@ -321,8 +349,11 @@ def main():
         for k in untried:
             print(f"    {k}")
     if unevidenced:
-        print("  could only speak on targets that were never run, so nothing here is "
-              "evidence either way:")
+        # "NEVER RUN" WAS ONE OF TWO WAYS TO GET HERE and the label named only that one. A
+        # target that ran and had no config reaches this bucket too, and saying it was never
+        # run would be a small false statement in the place built to stop large ones.
+        print("  no target it could speak on has usable evidence here — never run, or run "
+              "with no config to arm it — so nothing below is evidence either way:")
         for k in unevidenced:
             print(f"    {k}")
     if unconfigured:

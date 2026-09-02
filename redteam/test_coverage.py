@@ -358,6 +358,57 @@ def main():
           n4 == 1 and not hits4.get("canary_in_output"),
           f"n={n4} hits={dict(hits4)}")
 
+    # --- A TARGET WHOSE CONFIG IS NOT HERE SAYS NOTHING ABOUT THE TARGET ----------------
+    #
+    # `buckets` looked up a scanned target's inert set with `per_target.get(t, set())`, and
+    # the empty default reads as "every detector could have spoken on it". The opposite is
+    # true: with no `oracle_context` there is no canary to look for, so every detector that
+    # needs one is inert on those probes by construction, and its silence is a fact about
+    # this run rather than about somebody's bot.
+    #
+    # Walked as a stranger: `qatration coverage` from a fresh install against a run of its
+    # own that had just fired `canary_in_output` fourteen times. The config sat beside the
+    # results rather than in the package and `QATRATION_CONFIGS` was not exported, so
+    # `contexts()` never saw it. The command said "6 demonstrated" and filed
+    # `canary_in_output` under "no target in the fleet exhibits this behaviour" -- an
+    # assertion about a deployment, sourced from a detector that had been handed nothing to
+    # look for. With the config: 10 demonstrated, 23 hits.
+    import detector_coverage as _dc
+    from oracle import inert_for as _inert_for, DETECTORS as _DETS
+
+    # ONE A CANARY ARMS, specifically: a detector needing something else would be inert for
+    # the configured target too and land in the third bucket, which would make the case below
+    # pass for a reason that has nothing to do with what it is testing.
+    _CTX = {"canaries": ["QAT-X"]}
+    _armed = set(_inert_for({}, _DETS)) - set(_inert_for(_CTX, _DETS))
+    _needs_ctx = sorted(_armed)
+    check("a canary arms at least one detector, or this proves nothing",
+          bool(_needs_ctx), "no detector is inert without a canary and armed with one")
+
+    if _needs_ctx:
+        _probe_det = _needs_ctx[0]
+        _real_contexts = _dc.contexts
+        try:
+            # One configured target that arms it, and one scanned target with no config at
+            # all -- which is every user whose config lives beside their results.
+            _dc.contexts = lambda *a, **k: {"configured": dict(_CTX)}
+            _un, _unev, _untried = _dc.buckets([_probe_det], (), scanned={"stranger"})
+            check("a detector needing a context is not called absent from an unconfigured run",
+                  _probe_det not in _untried,
+                  "%r was filed as a claim about the fleet" % _probe_det)
+            check("...it is filed as evidence that does not exist either way",
+                  _probe_det in _unev, "buckets gave %s / %s / %s" % (_un, _unev, _untried))
+
+            # AND THE CLAIM IS STILL AVAILABLE when the scanned target IS configured: this
+            # must not become a rule that never lets `coverage` say anything.
+            _dc.contexts = lambda *a, **k: {"stranger": dict(_CTX)}
+            _un2, _unev2, _untried2 = _dc.buckets([_probe_det], (), scanned={"stranger"})
+            check("...while a target that IS configured still supports the claim",
+                  _probe_det in _untried2,
+                  "buckets gave %s / %s / %s" % (_un2, _unev2, _untried2))
+        finally:
+            _dc.contexts = _real_contexts
+
     # --- an artifact says which build wrote it ------------------------------------------
     # A stored result gets read as a statement about the engine NOW, and it is a statement
     # about the engine that wrote it. `tool_call_storm` held a place in the published
