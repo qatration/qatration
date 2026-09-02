@@ -1249,6 +1249,64 @@ def main():
         check(f"a control fire with a {_label} is '{_want}'", _got == _want,
               f"control_bucket({_fired}, {_rates}) gave {_got!r}")
 
+    # --- WHY AN ATTACK IS ABSENT, ON THE PAGE SOMEBODY ACTS ON -------------------------
+    # The scorecard learned to separate "this deployment cannot take it" from "you asked for
+    # a short run"; this page had not, and it is the one a team reads to decide what to fix.
+    # It printed the sum under "scoped out" and explained it as attacks written for other
+    # systems and deliveries the config cannot carry. Walked: 333 absent, of which 319 were
+    # `--scope quick` and 14 the deployment, so the explanation covered none of the majority.
+    _split_dir = tempfile.mkdtemp()
+    try:
+        def _render(meta_extra):
+            with open(os.path.join(_split_dir, "results_splitbot.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"meta": dict({"target": "splitbot", "model": "m", "caps": [],
+                                         "trials": 1, "attacks_n": 45, "broke": 1,
+                                         "errors": 0, "skipped": 333,
+                                         "arsenal": "attacks_generic.yaml"}, **meta_extra),
+                           "results": [
+                               {"attack": {"id": "leak-1", "category": "extraction",
+                                           "text": "x", "delivery": "direct"},
+                                "headline": "EXPLOITED", "rate": "1/1",
+                                "fired": ["canary_in_output"], "locks": {},
+                                "trials": [{"verdict": "EXPLOITED",
+                                            "probe": {"output": "x"}}]}]}, f)
+            _p = os.path.join(_split_dir, "defense_report.html")
+            # REMOVED FIRST. The second render left the first one's page on disk when it did
+            # not rewrite, and the check read that -- a stale artifact taken for a fresh
+            # result, inside the suite that exists to catch exactly this.
+            if os.path.exists(_p):
+                os.remove(_p)
+            subprocess.run([sys.executable, os.path.join(HERE, "defense_report.py")],
+                           env=dict(os.environ, QATRATION_OUT=_split_dir,
+                                    PYTHONIOENCODING="utf-8"),
+                           capture_output=True, text=True, timeout=120,
+                           cwd=os.path.dirname(HERE))
+            return open(_p, encoding="utf-8").read() if os.path.exists(_p) else ""
+
+        _page = _render({"not_applicable": 14, "not_sent": 319})
+        _cells = re.findall(r"<td[^>]*>([^<]*)</td>", _page)
+        check("the defence report separates what the deployment cannot take",
+              "14" in _cells and "319" in _cells,
+              "neither number is a cell: %s" % _cells[:8])
+        check("...and names the flag that held the rest back",
+              "--scope quick" in _page and "319" in _page, _page[:0])
+        check("...and still shows the total, so nothing is lost in the split",
+              "333" in _cells, "no total cell: %s" % _cells[:8])
+
+        # AN ARTIFACT THAT DID NOT RECORD THE SPLIT MUST NOT BE GIVEN ONE. A zero under either
+        # column would be this page answering a question the run never asked.
+        _old = _render({})
+        _oldcells = re.findall(r"<td[^>]*>([^<]*)</td>", _old)
+        check("an older artifact is not given a split it never recorded",
+              "0" not in _oldcells and "333" in _oldcells,
+              "cells: %s" % _oldcells[:8])
+        check("...and no short-run sentence is invented for it",
+              "--scope quick" not in _old and "A further" not in _old,
+              "the page explained a scope hold the artifact never recorded")
+    finally:
+        shutil.rmtree(_split_dir, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

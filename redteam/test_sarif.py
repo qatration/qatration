@@ -274,6 +274,30 @@ check("...and it says so, rather than exporting an empty list in silence",
 check("...while a run whose attacks all errored keeps its own notification",
       _inv(_ERRORED)["executionSuccessful"] is False
       and "coverage/incomplete" in _notes(_ERRORED), str(_notes(_ERRORED)))
+# WHY AN ATTACK WAS NEVER SENT, IN THE ARTIFACT A CI ACTS ON WITHOUT A HUMAN READING IT.
+# One counter could only say "scoped out or unmeasurable on this target", naming both causes
+# and separating neither. They are different jobs: one is a config to extend, the other is a
+# flag to drop, and on a walked run the flag accounted for 319 of 333.
+_SPLIT = {"meta": dict(_BROKE["meta"], skipped=333, not_applicable=14, not_sent=319),
+          "results": _BROKE["results"]}
+_MERGED = {"meta": dict(_BROKE["meta"], skipped=333), "results": _BROKE["results"]}
+
+
+def _coverage_text(doc):
+    return " ".join(n["message"]["text"] for n in
+                    _inv(doc).get("toolExecutionNotifications", [])
+                    if n["descriptor"]["id"] == "coverage/incomplete")
+
+
+check("the SARIF says how many were beyond this target and how many the scope held",
+      "14 not applicable" in _coverage_text(_SPLIT)
+      and "319 held back" in _coverage_text(_SPLIT), _coverage_text(_SPLIT))
+check("...and still gives the total, so the two do not have to be added by the reader",
+      "333 attack(s) were never sent" in _coverage_text(_SPLIT), _coverage_text(_SPLIT))
+check("...and a run that recorded only the sum is not given a split it never had",
+      "not applicable to this target" not in _coverage_text(_MERGED)
+      and "333" in _coverage_text(_MERGED), _coverage_text(_MERGED))
+
 check("a real clean run is still successful", _inv(_CLEAN)["executionSuccessful"] is True)
 check("...and so is one that found a breach and reported it",
       _inv(_BROKE)["executionSuccessful"] is True)

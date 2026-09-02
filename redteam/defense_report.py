@@ -911,7 +911,13 @@ def arsenal_ran():
         sent, skipped = m.get("attacks_n"), m.get("skipped")
         if sent is None or not skipped:
             continue
-        out[stem] = (sent, skipped, m.get("arsenal"))
+        # THE SUM ANSWERS A QUESTION NOBODY ASKED. Of 333 rows outside one walked run, 319
+        # were held by `--scope quick` and 14 were beyond what the deployment can take. This
+        # page called all of them "scoped out" and explained them as written for other
+        # systems, which was true of none. `not_sent` is None on artifacts written before the
+        # counters were separated, and the caller says so rather than guessing a split.
+        out[stem] = (sent, skipped, m.get("arsenal"),
+                     m.get("not_applicable"), m.get("not_sent"))
     return out
 
 
@@ -1303,11 +1309,21 @@ def main():
     ran = {t: v for t, v in arsenal_ran().items() if t in {x for x, *_ in findings}}
     arsenal_html = ""
     if ran:
+        # A DASH, NOT A ZERO, when the artifact predates the split: it did not record which
+        # of the two this was, and printing 0 under one of them would answer for it.
         rows = "".join(
-            f'<tr><td class="mono">{esc(t)}</td><td>{sent}</td><td>{skipped}</td>'
+            f'<tr><td class="mono">{esc(t)}</td><td>{sent}</td>'
+            f'<td>{_na if isinstance(_na, int) else "—"}</td>'
+            f'<td>{_ns if isinstance(_ns, int) else "—"}</td>'
+            f'<td>{skipped}</td>'
             f'<td class="mono dim">{esc(arsenal or "—")}</td></tr>'
-            for t, (sent, skipped, arsenal) in sorted(ran.items()))
+            for t, (sent, skipped, arsenal, _na, _ns) in sorted(ran.items()))
         fewest = min(v[0] for v in ran.values())
+        _held = sum(v[4] for v in ran.values() if isinstance(v[4], int))
+        _short = (f" A further {_held} were not sent because the run was asked to be a short "
+                  f"one: <code>--scope quick</code> sends one attack per category, and a "
+                  f"flag is all that stands between this page and the rest of them."
+                  if _held else "")
         arsenal_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#92400e;background:#fef3c7">HOW MUCH RAN</span></div>
@@ -1315,12 +1331,13 @@ def main():
           <div class="fix"><span class="fixlabel">Read this before the counts</span>an attack
             that was never sent is a GAP, not a finding that came back clean — the same sentence this engine
             applies to a budget that runs out. The smallest run on this page sent
-            {fewest} attack(s). The rest of the file was scoped to other systems, so those were
-            never candidates here; that is only reassuring if the arsenal named below is the
-            one written for a system like yours. Deliveries your configuration cannot carry
-            were skipped as well — a transcript for multi-turn work, a tool-call log for
-            anything about what your tools received.</div>
-          <table class="pair"><thead><tr><th>system</th><th>sent</th><th>scoped out</th>
+            {fewest} attack(s).{_short} The rest of the file was scoped to other systems, so
+            those were never candidates here; that is only reassuring if the arsenal named
+            below is the one written for a system like yours. Deliveries your configuration
+            cannot carry were skipped as well — a transcript for multi-turn work, a
+            tool-call log for anything about what your tools received.</div>
+          <table class="pair"><thead><tr><th>system</th><th>sent</th>
+            <th>not applicable</th><th>not sent</th><th>total absent</th>
             <th>arsenal</th></tr></thead><tbody>{rows}</tbody></table>
         </section>"""
 

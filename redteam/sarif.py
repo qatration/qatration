@@ -288,8 +288,18 @@ def build(results, target_config=None, out_dir=None):
         if unrun:
             parts.append("%d attack(s) produced no measurement (%s)" % (len(unrun), detail))
         if skipped:
-            parts.append("%d attack(s) were never sent (scoped out or unmeasurable on this "
-                         "target)" % skipped)
+            # "SCOPED OUT OR UNMEASURABLE" NAMED BOTH CAUSES AND SEPARATED NEITHER, which is
+            # as far as one counter could go. The run records them apart now, and a reader in
+            # a code-scanning tab can act on the difference: one is a config to extend, the
+            # other is a flag to drop.
+            _na, _ns = meta.get("not_applicable"), meta.get("not_sent")
+            if isinstance(_na, int) and isinstance(_ns, int) and _ns:
+                parts.append("%d attack(s) were never sent: %d not applicable to this target, "
+                             "%d held back by the scope this run was given"
+                             % (skipped, _na, _ns))
+            else:
+                parts.append("%d attack(s) were never sent (scoped out or unmeasurable on "
+                             "this target)" % skipped)
         notifications.append({
             "level": "error" if unrun else "warning",
             "message": {"text": ". ".join(parts) + ". These are gaps in coverage, not clean "
