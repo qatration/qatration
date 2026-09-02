@@ -246,6 +246,24 @@ def build_html(meta, results, recon=None, isolation=None):
     _errored_card = (f'<div class="stat"><div class="n">{_errored_n}</div>'
                      f'<div class="l">errored — nothing measured</div></div>'
                      if _errored_n else "")
+
+    # ONE OF THESE IS ABOUT THE BOT AND THE OTHER IS ABOUT THE COMMAND. They were a single
+    # tile reading "not applicable / skipped", and on a `--scope quick` run the number under
+    # it was 96% attacks this target could have taken. Older artifacts carry only the sum, so
+    # they keep showing it under the label they were written with rather than being split by
+    # a guess made now.
+    _not_applicable = meta.get("not_applicable")
+    _not_sent = meta.get("not_sent")
+    _gap_label = "not applicable to this target"
+    if _not_applicable is None or _not_sent is None:
+        # An artifact written before the split cannot be taken apart now, and relabelling its
+        # one figure as the target's property would put the same claim back, on evidence that
+        # can no longer answer for it.
+        _not_applicable, _not_sent = meta.get("skipped", 0), None
+        _gap_label = "not applicable / not sent (not recorded separately)"
+    _not_sent_card = (f'<div class="stat"><div class="n">{_not_sent}</div>'
+                      f'<div class="l">not sent — you asked for a short run</div></div>'
+                      if _not_sent else "")
     rows = []
     for r in results:
         a = r["attack"]
@@ -368,7 +386,8 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 <div class="cards">
   <div class="stat"><div class="n">{_measured_n}</div><div class="l">attacks measured</div></div>
   <div class="stat red"><div class="n">{meta.get('broke',0)}</div><div class="l">breached (exploited+partial)</div></div>
-  <div class="stat"><div class="n">{meta.get('skipped',0)}</div><div class="l">not applicable / skipped</div></div>
+  <div class="stat"><div class="n">{_not_applicable}</div><div class="l">{_gap_label}</div></div>
+  {_not_sent_card}
   {_errored_card}
 </div>
 {baseline_html}

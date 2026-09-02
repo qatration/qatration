@@ -565,14 +565,28 @@ def main():
     attacks = [a for a in all_attacks
                if (not a.get("applies_to") or target.name in a["applies_to"])
                and a["id"] not in exclude]
-    skipped = len(all_attacks) - len(attacks)
+    # TWO REASONS AN ATTACK IS NOT IN A RUN, AND ONLY ONE OF THEM IS ABOUT THE TARGET.
+    # `not_applicable` is the deployment: the arsenal named an `applies_to` that excludes it,
+    # a detector it needs is dead here, or the delivery channel does not exist on this bot.
+    # `not_sent` is the INVOCATION: `--scope quick` held it back, and one flag brings it back.
+    #
+    # They were one counter, printed as "N not applicable to this target". Walked from an
+    # install against a black-box endpoint: 319 held by the scope and 14 the target genuinely
+    # could not run, all 333 reported as inapplicable. A reader concludes their bot is out of
+    # scope for most of the arsenal when they simply asked for a short run -- and the line
+    # printed immediately above says "319 more not sent", so the same run described one number
+    # correctly and incorrectly, two lines apart.
+    #
+    # `skipped` stays their sum: it is on every stored artifact and three modules read it.
+    not_applicable = len(all_attacks) - len(attacks)
+    not_sent = 0
 
     # A QUICK RUN IS A NARROWER RUN, not a fuller one with most of it withheld. Said out loud
     # here and recorded on the run, because "we tested 58 techniques" and "we tested 285" are
     # different claims and the report must not be able to make the second from the first.
     if args.scope == "quick":
         attacks, held = breadth_slice(attacks)
-        skipped += len(held)
+        not_sent += len(held)
         print(f"  · limited run: one attack from each of {len(attacks)} categories, "
               f"{len(held)} more not sent — a short run is a BROAD run rather than a deep one, "
               f"and every probe is a request to your own endpoint, on your own bill")
@@ -593,7 +607,8 @@ def main():
               f"({len(all_attacks)} not applicable) — leaving out/results_{target.name}.json "
               f"untouched.", file=sys.stderr)
         sys.exit(3)
-    scoped = f" ({skipped} not applicable to this target)" if skipped else ""
+    skipped = not_applicable + not_sent
+    scoped = f" ({not_applicable} not applicable to this target)" if not_applicable else ""
     print(f"engine → target='{target.name}'  caps={sorted(target.capabilities)}  "
           f"attacks={len(attacks)}{scoped}  trials={trials}")
 
@@ -645,7 +660,8 @@ def main():
     unmeasurable = [a for a in attacks if is_unmeasurable(a, dead)]
     if unmeasurable:
         attacks = [a for a in attacks if not is_unmeasurable(a, dead)]
-        skipped += len(unmeasurable)
+        not_applicable += len(unmeasurable)
+        skipped = not_applicable + not_sent
         by_need = {}
         for a in unmeasurable:
             for d in (set(a.get("success") or []) | set(a.get("partial") or [])):
@@ -693,7 +709,8 @@ def main():
     if nodeliver:
         _no = {a["id"] for a, _ in nodeliver}
         attacks = [a for a in attacks if a["id"] not in _no]
-        skipped += len(nodeliver)
+        not_applicable += len(nodeliver)
+        skipped = not_applicable + not_sent
         by_cap = {}
         for a, need in nodeliver:
             by_cap.setdefault((a.get("delivery", "direct"), need), set()).add(a["id"])
@@ -899,6 +916,7 @@ def main():
             # them judged an empty list and found nothing.
             "unresolved_paths": _unresolved(target),
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
+            "not_applicable": not_applicable, "not_sent": not_sent,
             # HOW MANY ROWS NEVER LANDED. Without this a reader cannot tell 20 attacks
             # that were defended from 1 defended and 19 that errored, and both used to
             # render as "0 / 20 breached" in green. `run_redteam` aborts only when EVERY

@@ -138,10 +138,10 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 376 | 1,407 | ~47 min | ~94 min |
-| `--scope full`, 1 trial | 376 | 469 | ~16 min | ~31 min |
-| `--scope quick`, 3 trials | 58 | 219 | ~7 min | ~15 min |
-| `--scope quick`, 1 trial | 58 | 73 | ~2 min | ~5 min |
+| `--scope full`, 3 trials (the default) | 379 | 1,464 | ~49 min | ~98 min |
+| `--scope full`, 1 trial | 379 | 488 | ~16 min | ~33 min |
+| `--scope quick`, 3 trials | 60 | 225 | ~8 min | ~15 min |
+| `--scope quick`, 1 trial | 60 | 75 | ~3 min | ~5 min |
 
 **Nobody is running the top row on every pull request.** A busy repository merges ten an hour,
 and forty minutes of a paid endpoint per merge is not a security practice, it is a denial of

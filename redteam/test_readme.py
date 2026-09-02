@@ -1245,6 +1245,59 @@ def main():
                   _sh <= min(_ka_n, _kb_n),
                   f"{_sh} shared cannot exceed {_ka_n} and {_kb_n}")
 
+    # --- WHAT A SWEEP COSTS, RECOUNTED FROM THE ARSENAL --------------------------------
+    #
+    # THE SAME FACT, PUBLISHED TWICE, GATED ONCE. `docs/onboarding.md` says "N attacks across
+    # M categories" and the check above recounts it. `docs/ci.md` says the same size again in
+    # the cost table a reader uses to decide whether this fits in their pipeline, and nothing
+    # looked at it: the arsenal grew to 379 across 60 while that table still said 376 and 58,
+    # and every derived column with it -- 1,407 requests where the run would send 1,464, and
+    # minutes computed from the stale figure.
+    #
+    # Derived the way the table was built, which is recoverable from the numbers it carried:
+    # requests are turns, not attacks, so a chain of three steps costs three. At 376 attacks
+    # that rule gives exactly the 469 and 1,407 the table used to print, which is what makes
+    # it the rule rather than a guess. `breadth_slice` is the engine's own, so the quick row
+    # cannot drift from what `--scope quick` actually sends.
+    import yaml as _yaml
+    sys.path.insert(0, HERE)
+    from run_redteam import breadth_slice as _slice
+
+    _arsenal = _yaml.safe_load(io.open(os.path.join(HERE, "attacks_generic.yaml"),
+                                       encoding="utf-8").read())
+    _arsenal = _arsenal if isinstance(_arsenal, list) else (_arsenal or {}).get("attacks") or []
+
+    def _turns(a):
+        steps = a.get("steps")
+        return len(steps) if isinstance(steps, list) else 1
+
+    def _minutes(requests, seconds_each):
+        return int(requests * seconds_each / 60.0 + 0.5)
+
+    _quick, _ = _slice(list(_arsenal))
+    _ci = io.open(os.path.join(ROOT, "docs", "ci.md"), encoding="utf-8").read()
+    for _scope, _rows in (("full", _arsenal), ("quick", _quick)):
+        _n, _per = len(_rows), sum(_turns(a) for a in _rows)
+        for _trials in (3, 1):
+            _req = _per * _trials
+            # "(the default)" is on the full row only, so it is optional rather than assumed.
+            _label = (r"3 trials(?: \(the default\))?" if _trials == 3 else "1 trial")
+            _m = re.search(r"\| `--scope %s`, %s \| ([\d,]+) \| ([\d,]+) \| ~(\d+) min \| ~(\d+) min \|"
+                           % (_scope, _label), _ci)
+            check("docs/ci.md prices `--scope %s` at %d trial(s)" % (_scope, _trials),
+                  bool(_m), "the row is not there to be checked")
+            if not _m:
+                continue
+            _got = [int(g.replace(",", "")) for g in _m.groups()]
+            check("...and says how many attacks that is",
+                  _got[0] == _n, "table %d, arsenal %d" % (_got[0], _n))
+            check("...and how many requests, counting a chain by its steps",
+                  _got[1] == _req, "table %d, arsenal %d" % (_got[1], _req))
+            check("...and the minutes that follow from them",
+                  (_got[2], _got[3]) == (_minutes(_req, 2), _minutes(_req, 4)),
+                  "table ~%d/~%d min, derived ~%d/~%d"
+                  % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
+
     # --- HOW MANY ASSERTIONS THE SUITE CARRIES, RECOUNTED -------------------------------
     #
     # The README says one QA engineer wrote this with Claude, and in the next breath that no

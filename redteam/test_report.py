@@ -16,6 +16,7 @@ anticipated turns into a crash or, worse, a quiet omission. Pinned here:
 
     python test_report.py        # exits 1 on any failure (CI gate)
 """
+import re
 import sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -95,6 +96,42 @@ def main():
     bare = build_html(META, RESULTS)
     check("renders with no recon and no isolation", "QAtration" in bare, True)
     check("no recon -> no profile panel", "TARGET PROFILE" in bare.upper(), False)
+
+    # 2a. WHAT IS MISSING FROM A RUN HAS TWO CAUSES AND THE SCORECARD USED TO NAME ONE.
+    # A single tile read "not applicable / skipped", and its number added the attacks this
+    # deployment cannot take to the attacks `--scope quick` held back. Walked from an install
+    # against a black-box endpoint: 319 held by the scope, 14 the target could not run, all
+    # 333 under a label whose first half is a property of the bot. A reader concludes their
+    # feature is out of scope for most of the arsenal, when one flag would have sent it.
+    split = build_html(dict(META, not_applicable=14, not_sent=319), RESULTS)
+    check("the scorecard names what this target cannot take",
+          "14" in split and "not applicable to this target" in split, True)
+    check("...and separately what the command did not send",
+          "319" in split and "short run" in split, True)
+    # READ THE TILES, NOT THE PAGE. The first version of this check looked for "333" anywhere
+    # in the HTML and found it in a CSS colour, which is a check that answers a question
+    # nobody asked.
+    def tiles(page):
+        return re.findall(r'<div class="stat[^"]*"><div class="n">([^<]*)</div>'
+                          r'<div class="l">([^<]*)</div>', page)
+
+    check("...and does not present the sum as one of them",
+          [n for n, _ in tiles(split) if n.strip() == "333"], [])
+
+    # NOTHING HELD BACK IS NOT A TILE. A full run has nothing to say here, and a zero under
+    # "not sent" invites the reader to wonder what it means.
+    full = build_html(dict(META, not_applicable=14, not_sent=0), RESULTS)
+    check("a full run grows no tile for attacks it did not withhold",
+          "short run" in full, False)
+
+    # AN ARTIFACT WRITTEN BEFORE THE SPLIT CANNOT BE TAKEN APART NOW, and relabelling its one
+    # figure as the target's property would put the same claim back on evidence that can no
+    # longer answer for it. It keeps a label its number supports.
+    old = build_html(dict(META, skipped=333), RESULTS)
+    check("an older artifact is not relabelled into a claim it cannot support",
+          "not applicable to this target" in old, False)
+    check("...it says the two were not recorded separately",
+          "not recorded separately" in old, True)
 
     # 2b. THE ATTRIBUTION CAVEAT REACHES THE PAGE. It was printed to the console, which the
     # person reading the scorecard never sees — and it is the sentence that decides whether
