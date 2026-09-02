@@ -141,8 +141,11 @@ def main():
         print(f"\nnot in the matrix: {', '.join(stale)} — comparing a fresh run against a "
               f"stored one measures the calendar, not the model.")
     if len(per_model) < 2:
+        # NOT ZERO. This command exists to compare, and a run that compared nothing has not
+        # answered its question: the same event `run` reports as 3, "nothing was measured".
+        # Exiting 0 told a script the matrix was fine and there was merely nothing to say.
         print("\nneed >=2 models with results FROM THIS RUN to compare.")
-        return
+        sys.exit(3)
     return report(tname, per_model)
 
 

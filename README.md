@@ -128,7 +128,7 @@ reason has to be recoverable from the number alone:
 |---|---|---|
 | `0` | ran, and the gate you asked for was not tripped | yes |
 | `1` | `--fail-on` tripped: the target was exploited or breached | yes |
-| `2` | the config or the invocation was refused — an override that cannot apply, a build that is not the one described | **no** |
+| `2` | the config or the invocation was refused — an override that cannot apply, a build that is not the one described, a committed results file this run would replace | **no** |
 | `3` | nothing was measured: every trial errored, so the results file was left alone rather than overwritten with a run of nothing | attempted |
 | `4` | not authorised: the target is not localhost and control of it was not proved | **no** |
 | `5` | a precondition failed: the canary is one this tool publishes, or a declared honeytoken was not found in the target, so the canary detectors could not have spoken | **no** |

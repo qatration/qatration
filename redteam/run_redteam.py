@@ -406,11 +406,30 @@ def main():
         # named after a model that was never used, filed beside the canonical run, and read by
         # the matrix as a second measurement.
         if (tcfg.get("adapter") or "") == "http":
-            print(f"ABORT — --model {args.model!r} cannot apply to an `adapter: http` target: "
-                  f"the model belongs to the endpoint, not to us. Nothing was sent.",
-                  file=sys.stderr)
-            sys.exit(2)
-        tcfg["model"] = args.model
+            # AND `request.model` IS NOW A KEY WITH A NAME. When this refusal was written the
+            # only place an http model could live was somewhere inside the operator's request
+            # body, unnamed and unfindable, so the override could not be applied and saying so
+            # was the whole of the honest answer. `init` writes `request: {model: ...}` since
+            # 0.4.0, because every OpenAI-shaped API requires it, so for that shape the
+            # substitution is exactly defined. Without it `qatration matrix`, which is offered
+            # to everyone and does nothing else, was inert on the one adapter every user has:
+            # both sub-runs aborted and the matrix reported nothing to compare.
+            #
+            # Only where the key is already a string. A config that keeps its model elsewhere
+            # (the Anthropic, Bedrock and Vertex shapes each differ) still gets the refusal,
+            # because writing `model` into a body with no such field would produce results
+            # named after a model that was never used, which is what the refusal was for.
+            _req = tcfg.get("request")
+            if isinstance(_req, dict) and isinstance(_req.get("model"), str):
+                _req["model"] = args.model
+            else:
+                print(f"ABORT — --model {args.model!r} cannot apply to this `adapter: http` "
+                      f"target: it carries no `request.model` to substitute, so the model "
+                      f"belongs to the endpoint and nothing here can change it. Nothing was "
+                      f"sent.", file=sys.stderr)
+                sys.exit(2)
+        else:
+            tcfg["model"] = args.model
     # trials precedence: explicit --trials > target config's 'trials' > default 3
     # THE CONFIG DOOR TOO. `--trials` is floored by argparse; `trials:` in a target file
     # reaches the same arithmetic without passing any parser at all.
@@ -515,8 +534,14 @@ def main():
         os.path.join(OUT_DIR, f"results_{target.name}{_tag}.json"),
         force=getattr(args, "overwrite_evidence", False))
     if _refusal:
+        # TWO, NOT FIVE. The codes exist so the reason is recoverable from the number alone,
+        # and this sat on 5 beside the canary preconditions it has nothing to do with: 5 is
+        # documented as "the canary is one this tool publishes, or a declared honeytoken was
+        # not found", so a CI mapping it would send somebody to check a canary that is fine.
+        # This is the invocation being refused, which is 2's own description, and the act that
+        # clears it is a flag or QATRATION_OUT rather than anything about the target.
         print(_refusal, file=sys.stderr)
-        sys.exit(5)
+        sys.exit(2)
 
     _verify = (ctx.get("honeytoken_verify") or "").strip()
     _ours = [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)]

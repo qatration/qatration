@@ -854,8 +854,10 @@ def main():
         os.path.join(OUT_DIR, f"benign_{args.target}.json"),
         force=getattr(args, "overwrite_evidence", False))
     if _refusal:
+        # 2, THE SAME AS `run`. Refusing to overwrite tracked evidence is the invocation being
+        # refused, not a precondition about the target, and 5 is documented as the canary one.
         print(_refusal, file=sys.stderr)
-        sys.exit(5)
+        sys.exit(2)
 
     print(f"benign corpus -> {args.target}  ({len(CORPUS)} prompts + "
           f"{len(CONVERSATIONS)} conversations x{args.trials})\n")

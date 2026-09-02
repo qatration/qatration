@@ -378,8 +378,16 @@ def check_evidence_guard():
                 code = proc.returncode
             except subprocess.TimeoutExpired:
                 said, code = "it started working instead of refusing", -1
+            # 2, NOT 5, AND THE NUMBER IS THE POINT. This was pinned at 5 with nothing
+            # saying why, next to the canary preconditions it shares no cause with. The
+            # README's rule for these codes is that "the reason has to be recoverable from
+            # the number alone", and 5 is documented there as "the canary is one this tool
+            # publishes, or a declared honeytoken was not found in the target" -- so a CI
+            # mapping the number would send somebody to check a canary that is fine. 2 is
+            # "the config or the invocation was refused", nothing was sent either way, and
+            # what clears this is a flag or QATRATION_OUT rather than anything about the bot.
             want("%s refuses to replace a committed artifact" % label,
-                 code == 5, "exit %s: %s" % (code, said.strip()[:160]))
+                 code == 2, "exit %s: %s" % (code, said.strip()[:160]))
             want("...and says which file and how to write elsewhere",
                  "REFUSED" in said and "QATRATION_OUT" in said, said.strip()[:160])
             want("...and the file on disk is untouched",
