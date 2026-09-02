@@ -190,6 +190,33 @@ def benign_noise():
     return out
 
 
+def fleet_lead(n_systems, n_vuln):
+    """The sentence at the top of the fleet page, which has to depend on the fleet.
+
+    It read "N of M were exploitable; the rest held", and then claimed that a tool "that
+    breaks the undefended and clears the hardened is measuring real posture, not crying
+    wolf" -- on every page this command has ever produced. Walked from an install with a
+    single target: "1 of 1 were exploitable; the rest held", where there is no rest, and
+    where nothing on the page discriminates between anything because there is one thing on
+    it. When every system is exploitable the second half is not unsupported but false: the
+    run has no system it left alone.
+
+    Pure, because it is a claim about somebody's security posture and a claim like that
+    should not need a fleet of bots and an afternoon to check.
+    """
+    if n_systems < 2:
+        return ("One system, tested with the arsenal below. This page exists to set several "
+                "side by side, and with one there is nothing to hold it against: read it as "
+                "that system's result rather than as a fleet.")
+    if n_vuln >= n_systems:
+        return (f"The same attack suite run against every system. <b>All {n_systems}</b> were "
+                f"exploitable, so nothing on this page shows the arsenal leaving a hardened "
+                f"system alone. That claim needs a system it did not break.")
+    return (f"The same attack suite run against every system. <b>{n_vuln} of {n_systems}</b> "
+            f"were exploitable; the rest held. A tool that breaks the undefended and clears "
+            f"the hardened is measuring real posture, not crying wolf.")
+
+
 def main():
     # ARGPARSE FOR ONE REASON: `--help` must not touch the filesystem. Without it this command
     # ignored its arguments entirely and went straight to building a report, so `qatration
@@ -397,6 +424,8 @@ def main():
                  f'A run older than the engine that produced the newest row was measured '
                  f'differently and should be re-run before it is compared.</div>')
     today = datetime.date.today().isoformat()
+
+    lead = fleet_lead(len(rows), n_vuln)
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Fleet Overview</title><style>
@@ -440,11 +469,9 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 </style></head><body><div class="wrap">
 <div class="head">
   <h1><span class="q">QA</span>tration — Fleet Overview</h1>
-  <div class="sub">Same arsenal · {len(rows)} systems · {today}</div>
+  <div class="sub">Same arsenal · {len(rows)} system{"" if len(rows) == 1 else "s"} · {today}</div>
 </div>
-<p class="lead">The same attack suite run against every system. <b>{n_vuln} of {len(rows)}</b> were
-exploitable; the rest held. A tool that breaks the undefended and clears the hardened is measuring
-real posture — not crying wolf.</p>
+<p class="lead">{lead}</p>
 
 {staleness}
 <table>

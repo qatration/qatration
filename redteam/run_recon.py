@@ -30,7 +30,14 @@ from workspace import OUT as WORKSPACE_OUT, safe_target_name
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target-config", default=os.path.join(HERE, "targets_dvla.yaml"))
+    # NO DEFAULT TARGET. This pointed at a practice bot shipped inside the package,
+    # so `qatration recon` from an install aimed at the author's LangChain agent
+    # rather than at the user's deployment, and the optional extra that bot needs is
+    # not installed by default: the command ended in a raw ModuleNotFoundError
+    # traceback and exit 1, which the exit-code contract reserves for "the target was
+    # exploited or breached". `benign`, `run` and `matrix` all ask for the config and
+    # exit 2; these two were the ones that did not.
+    ap.add_argument("--target-config", required=True)
     ap.add_argument("--model", default=None, help="override the target's model")
     ap.add_argument("--tool-prompt", default=None,
                     help="a benign request that SHOULD make the target use a tool "

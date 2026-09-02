@@ -1307,6 +1307,50 @@ def main():
     finally:
         shutil.rmtree(_split_dir, ignore_errors=True)
 
+    # --- THE FLEET PAGE'S OPENING SENTENCE HAS TO DEPEND ON THE FLEET -------------------
+    # It claimed "N of M were exploitable; the rest held" and that a tool "that breaks the
+    # undefended and clears the hardened is measuring real posture", unconditionally. Walked
+    # from an install with one target: "1 of 1 were exploitable; the rest held".
+    from compare_targets import fleet_lead as _lead
+
+    _one = _lead(1, 1)
+    check("one system is not described as a fleet with a rest that held",
+          "the rest held" not in _one, _one)
+    check("...and the page does not claim to discriminate on a page with one row",
+          "clears the hardened" not in _one, _one)
+    # ASSERT THE BRANCH, NOT MERELY THE ABSENCE OF TWO PHRASES. Written as absences first,
+    # and deleting the branch entirely still passed: the answer fell through to the
+    # all-exploitable sentence, which happens to contain neither phrase. A check that cannot
+    # tell the right branch from a wrong one is not checking the branch.
+    check("...it says what one system is worth instead",
+          "One system" in _one and "rather than as a fleet" in _one, _one)
+
+    _all = _lead(4, 4)
+    check("a fleet where everything broke does not claim a hardened system was cleared",
+          "clears the hardened" not in _all and "the rest held" not in _all, _all)
+    check("...and says why: there is no system it left alone",
+          "did not break" in _all, _all)
+
+    _mixed = _lead(4, 1)
+    check("a mixed fleet earns the claim and keeps it",
+          "clears the hardened" in _mixed and "1 of 4" in _mixed, _mixed)
+
+    # --- A COMMAND THAT DEFAULTS TO SOMEBODY ELSE'S BOT --------------------------------
+    # `recon` and `isolation` defaulted `--target-config` to a practice bot shipped in the
+    # package. From an install that meant aiming at the author's LangChain agent, whose extra
+    # is not installed by default: a raw ModuleNotFoundError traceback and exit 1, the code
+    # the contract reserves for "the target was exploited or breached". Their siblings all
+    # ask for the config and exit 2.
+    for _mod in ("run_recon", "run_isolation"):
+        _r = subprocess.run([sys.executable, os.path.join(HERE, _mod + ".py")],
+                            capture_output=True, text=True, timeout=120,
+                            cwd=os.path.dirname(HERE))
+        _said = (_r.stdout + _r.stderr)
+        check("%s asks for a target rather than picking one" % _mod,
+              _r.returncode == 2, "exit %s: %s" % (_r.returncode, _said.strip()[-120:]))
+        check("...and says which flag, rather than raising", "--target-config" in _said
+              and "Traceback" not in _said, _said.strip()[-160:])
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
