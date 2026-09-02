@@ -670,6 +670,27 @@ class HttpConfiguredTarget(Target):
             detail = ""
             if isinstance(e, urllib.error.HTTPError):
                 detail = f" {e.code}"
+                # AND WHAT THE ENDPOINT SAID ABOUT IT. `str(HTTPError)` is "HTTP Error 400: Bad
+                # Request" -- the status line and nothing else -- while the body it carries is
+                # where the reason lives. An OpenAI-shaped API answers a missing `model` with
+                # {"error":{"message":"model is required"}}, and every one of those words was
+                # thrown away here.
+                #
+                # `onboard` exists to answer "what is wrong with my config" in ten seconds
+                # rather than an hour, and this is the line that decided it could not. Walked
+                # as a first-time user against Ollama: `init` writes a request with no `model`,
+                # onboard refuses, and the whole explanation offered is "Bad Request".
+                #
+                # Bounded and never parsed: a body is attacker-influenced text on a target we
+                # do not trust, so it is truncated, stripped of newlines, and shown as the
+                # remote's own words rather than interpreted as anything.
+                try:
+                    body = (e.read() or b"").decode("utf-8", "replace")
+                except Exception:
+                    body = ""
+                body = " ".join(body.split())[:300]
+                if body:
+                    detail += f" ({body})"
                 # AN AUTH FAILURE IS NOT A FINDING ABOUT THE TARGET, and after a run has already
                 # succeeded it is not even a configuration problem — it is a credential that ran
                 # out mid-sweep. Left as a plain HTTPError, every probe after that point is an
