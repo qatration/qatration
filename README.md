@@ -82,7 +82,7 @@ step, so the sweep checks for itself.
 
 ## Pointing it at your own deployment
 
-`mybot.yaml` is about ten lines, and `qatration onboard` tells you what is missing from it
+`init` writes `mybot.yaml` for you, and `qatration onboard` tells you what is missing from it
 rather than making you guess twice. Four configs are ready to copy:
 
 * [`targets_openai_compatible.yaml`](redteam/targets_openai_compatible.yaml) — OpenAI, and
@@ -178,7 +178,7 @@ chasing and the calls about what counts as evidence are mine.
 
 None of that needs taking on trust. Every number in this README and on the site is recounted
 from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
-in the suite is allowed to be one that cannot fail — 1,639 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 1,663 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push, on four platforms.
 

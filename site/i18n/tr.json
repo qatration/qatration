@@ -95,7 +95,7 @@
     "No SDK. No code changes. A report your whole team can read.": "SDK yok. Kod değişikliği yok. Ekibinizin tamamının okuyabileceği bir rapor.",
     "STEP 01": "ADIM 01",
     "Describe your bot": "Botunuzu tanımlayın",
-    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "yapılandırmayı sizin yerinize yazar: yaklaşık on satır YAML, içinde URL, isteğin biçimi ve yanıtın hangi alanında botun metninin bulunduğu. Uzak bir hedef ayrıca kimlik doğrulama başlığı ister, ortam değişkeni olarak. OpenAI biçimindeki API'ler ile Anthropic, Bedrock ve Vertex API'leri için hazır yapılandırmalar.",
+    "writes the config for you: the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "yapılandırmayı sizin yerinize yazar: URL, isteğin biçimi ve yanıtın hangi alanında botun metninin bulunduğu. Uzak bir hedef ayrıca kimlik doğrulama başlığı ister, ortam değişkeni olarak. OpenAI biçimindeki API'ler ile Anthropic, Bedrock ve Vertex API'leri için hazır yapılandırmalar.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "sıradan bir soru gönderir ve tek bir saldırı bile çıkmadan önce neyin eksik olduğunu söyler.",
     "STEP 02": "ADIM 02",
     "Plant a canary": "Bir kanarya yerleştirin",

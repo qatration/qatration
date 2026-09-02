@@ -75,7 +75,7 @@
     "No SDK. No code changes. A report your whole team can read.": "Tanpa SDK. Tanpa perubahan kode. Sebuah laporan yang bisa dibaca seluruh tim Anda.",
     "STEP 01": "LANGKAH 01",
     "Describe your bot": "Jelaskan bot Anda",
-    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "menuliskan konfigurasinya untuk Anda: sekitar sepuluh baris YAML berisi URL, bentuk permintaannya, dan di bagian mana dari respons itu balasan bot berada. Target jarak jauh juga menuntut header autentikasi, sebagai variabel lingkungan. Konfigurasi siap pakai untuk API berbentuk OpenAI dan untuk milik Anthropic, Bedrock dan Vertex.",
+    "writes the config for you: the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "menuliskan konfigurasinya untuk Anda: URL, bentuk permintaannya, dan di bagian mana dari respons itu balasan bot berada. Target jarak jauh juga menuntut header autentikasi, sebagai variabel lingkungan. Konfigurasi siap pakai untuk API berbentuk OpenAI dan untuk milik Anthropic, Bedrock dan Vertex.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "mengirim satu pertanyaan biasa dan memberi tahu apa yang kurang sebelum satu pun serangan keluar.",
     "STEP 02": "LANGKAH 02",
     "Plant a canary": "Tanam sebuah canary",

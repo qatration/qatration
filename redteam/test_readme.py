@@ -1527,6 +1527,17 @@ def main():
         return [x for x in (re.sub(r"\s+", " ", n).strip() for n in _parts[0::2]) if x]
 
     _en_nodes = _nodes(_i18n.page_path(_i18n.DEFAULT))
+
+    # AND THE LIST ABOVE HAS TO STAY HONEST, or its growth stops being a signal. Its entries
+    # are excuses, and an excuse for a string that is no longer on the page excuses nothing
+    # while still making the list longer. `qatration mint` became one the day `init` took over
+    # both of the first two steps: the command left the page and its allowance stayed. Worse
+    # than untidy - if that string ever returns as ordinary prose rather than as a command,
+    # the allowance is already there and a lost translation of it would pass in silence.
+    _dead = sorted(s for s in _SAME_BY_DESIGN if s not in _en_nodes)
+    check("every string excused as identical by design is still on the page",
+          not _dead, "no longer on it: %s" % ", ".join(_dead))
+
     for _lang in [c for c in _langs if c != _i18n.DEFAULT]:
         _tbl = _i18n.load(_lang)
         _uk_nodes = _nodes(_i18n.page_path(_lang))
