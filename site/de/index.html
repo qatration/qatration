@@ -715,12 +715,12 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">SCHRITT 01</div>
         <h3>Beschreiben Sie Ihren Bot</h3>
-        <p>Etwa zehn Zeilen YAML: die URL, der Auth-Header als Umgebungsvariable und wo im Response-Body die Antwort des Bots steht. Fertige Konfigurationen für APIs im OpenAI-Format und für die von Anthropic, Bedrock und Vertex. <span class="mono" translate="no">qatration onboard</span> schickt eine ganz normale Frage und sagt Ihnen, was fehlt, bevor auch nur ein einziger Angriff verschickt wird.</p>
+        <p><span class="mono" translate="no">qatration init</span> schreibt die Konfiguration für Sie: etwa zehn Zeilen YAML mit der URL, der Form des Requests und der Angabe, wo im Response-Body die Antwort des Bots steht. Ein entferntes Ziel will zusätzlich einen Auth-Header, als Umgebungsvariable. Fertige Konfigurationen für APIs im OpenAI-Format und für die von Anthropic, Bedrock und Vertex. <span class="mono" translate="no">qatration onboard</span> schickt eine ganz normale Frage und sagt Ihnen, was fehlt, bevor auch nur ein einziger Angriff verschickt wird.</p>
       </div>
       <div class="step">
         <div class="num">SCHRITT 02</div>
         <h3>Setzen Sie einen Canary</h3>
-        <p><span class="mono" translate="no">qatration mint</span> erzeugt ein Geheimnis, das nur Ihnen gehört, und den Block, den Sie in Ihren System-Prompt einfügen. Der Lauf bestätigt zuerst, dass der Canary tatsächlich angekommen ist: ein nicht gesetzter Canary bedeutet, dass jede Prüfung nichts findet, und das liest sich genau wie ein Bot, der standgehalten hat.</p>
+        <p><span class="mono" translate="no">qatration init</span> erzeugt ein Geheimnis, das nur Ihnen gehört, und den Block, den Sie in Ihren System-Prompt einfügen. Der Lauf bestätigt zuerst, dass der Canary tatsächlich angekommen ist: ein nicht gesetzter Canary bedeutet, dass jede Prüfung nichts findet, und das liest sich genau wie ein Bot, der standgehalten hat.</p>
       </div>
       <div class="step">
         <div class="num">SCHRITT 03</div>

@@ -95,7 +95,7 @@
     "No SDK. No code changes. A report your whole team can read.": "不用 SDK。不改代码。一份你整个团队都读得懂的报告。",
     "STEP 01": "步骤 01",
     "Describe your bot": "描述你的机器人",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "大约十行 YAML：URL、作为环境变量的鉴权头，以及回复正文在响应中的位置。为 OpenAI 形态的 API，以及 Anthropic、Bedrock 和 Vertex 的 API 都准备了现成配置。",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "会替你写好配置：大约十行 YAML，包含 URL、请求的形状，以及回复正文在响应中的位置。远端目标还需要一个鉴权头，作为环境变量传入。为 OpenAI 形态的 API，以及 Anthropic、Bedrock 和 Vertex 的 API 都准备了现成配置。",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "会发送一个普通问题，在任何一次攻击发出之前就告诉你还缺什么。",
     "STEP 02": "步骤 02",
     "Plant a canary": "埋一只金丝雀",

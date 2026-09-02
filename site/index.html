@@ -739,15 +739,17 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">STEP 01</div>
         <h3>Describe your bot</h3>
-        <p>About ten lines of YAML: the URL, the auth header as an environment variable, and
-          where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for
+        <p><span class="mono" translate="no">qatration init</span> writes the config for you: about ten
+          lines of YAML with the URL, the request shape, and where the reply sits in the
+          response. A remote target also wants an auth header, as an environment variable.
+          Ready-made configs for OpenAI-shaped APIs and for
           Anthropic's, Bedrock's and Vertex's. <span class="mono" translate="no">qatration onboard</span> sends one ordinary
           question and tells you what is missing before a single attack goes out.</p>
       </div>
       <div class="step">
         <div class="num">STEP 02</div>
         <h3>Plant a canary</h3>
-        <p><span class="mono" translate="no">qatration mint</span> generates a secret of your own and
+        <p><span class="mono" translate="no">qatration init</span> generates a secret of your own and
           the block to paste into your system prompt. The run confirms it actually landed
           first. An unplanted canary means every check finds nothing, and that reads exactly
           like a bot that held.</p>

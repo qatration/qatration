@@ -96,7 +96,7 @@
     "No SDK. No code changes. A report your whole team can read.": "SDKなし。コード変更なし。チーム全員が読める報告書。",
     "STEP 01": "手順 01",
     "Describe your bot": "ボットを記述する",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "YAMLでおよそ十行。URL、環境変数として渡す認証ヘッダー、そして応答のどこに本文があるか。OpenAI形式のAPIと、Anthropic、Bedrock、VertexのAPI向けに、既成の設定を用意しています。",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "が設定ファイルを書きます。YAMLでおよそ十行、URL、リクエストの形、そして応答のどこに本文があるか。リモートの対象にはさらに認証ヘッダーが要り、環境変数として渡します。OpenAI形式のAPIと、Anthropic、Bedrock、VertexのAPI向けに、既成の設定を用意しています。",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "はごく普通の質問を一つ送り、攻撃が一つも出ていく前に、何が足りないかを教えます。",
     "STEP 02": "手順 02",
     "Plant a canary": "カナリアを仕込む",

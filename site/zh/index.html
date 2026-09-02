@@ -715,12 +715,12 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <div class="step">
         <div class="num">步骤 01</div>
         <h3>描述你的机器人</h3>
-        <p>大约十行 YAML：URL、作为环境变量的鉴权头，以及回复正文在响应中的位置。为 OpenAI 形态的 API，以及 Anthropic、Bedrock 和 Vertex 的 API 都准备了现成配置。 <span class="mono" translate="no">qatration onboard</span> 会发送一个普通问题，在任何一次攻击发出之前就告诉你还缺什么。</p>
+        <p><span class="mono" translate="no">qatration init</span> 会替你写好配置：大约十行 YAML，包含 URL、请求的形状，以及回复正文在响应中的位置。远端目标还需要一个鉴权头，作为环境变量传入。为 OpenAI 形态的 API，以及 Anthropic、Bedrock 和 Vertex 的 API 都准备了现成配置。 <span class="mono" translate="no">qatration onboard</span> 会发送一个普通问题，在任何一次攻击发出之前就告诉你还缺什么。</p>
       </div>
       <div class="step">
         <div class="num">步骤 02</div>
         <h3>埋一只金丝雀</h3>
-        <p><span class="mono" translate="no">qatration mint</span> 会生成一个只属于你的机密串，以及要粘进系统提示词的那段文字。运行时会先确认它真的到位了：没埋进去的金丝雀意味着每一项检查都查不到东西，而那读起来和一个扛住了的机器人一模一样。</p>
+        <p><span class="mono" translate="no">qatration init</span> 会生成一个只属于你的机密串，以及要粘进系统提示词的那段文字。运行时会先确认它真的到位了：没埋进去的金丝雀意味着每一项检查都查不到东西，而那读起来和一个扛住了的机器人一模一样。</p>
       </div>
       <div class="step">
         <div class="num">步骤 03</div>

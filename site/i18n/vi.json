@@ -75,7 +75,7 @@
     "No SDK. No code changes. A report your whole team can read.": "Không SDK. Không sửa mã. Một báo cáo mà cả nhóm bạn đều đọc được.",
     "STEP 01": "BƯỚC 01",
     "Describe your bot": "Mô tả bot của bạn",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "Chừng mười dòng YAML: URL, header xác thực đặt trong biến môi trường, và phần nào của phản hồi chứa câu trả lời của bot. Có sẵn cấu hình cho các API theo dạng OpenAI và cho API của Anthropic, Bedrock và Vertex.",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "tự viết cấu hình cho bạn: chừng mười dòng YAML gồm URL, hình dạng của yêu cầu, và phần nào của phản hồi chứa câu trả lời của bot. Mục tiêu từ xa còn cần thêm header xác thực, đặt trong biến môi trường. Có sẵn cấu hình cho các API theo dạng OpenAI và cho API của Anthropic, Bedrock và Vertex.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "gửi một câu hỏi bình thường và cho bạn biết còn thiếu gì, trước khi có dù chỉ một cuộc tấn công được gửi đi.",
     "STEP 02": "BƯỚC 02",
     "Plant a canary": "Cài một canary",

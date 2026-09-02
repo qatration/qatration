@@ -75,7 +75,7 @@
     "No SDK. No code changes. A report your whole team can read.": "Sem SDK. Sem mudanças de código. Um relatório que o seu time inteiro consegue ler.",
     "STEP 01": "PASSO 01",
     "Describe your bot": "Descreva o seu bot",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "Cerca de dez linhas de YAML: a URL, o cabeçalho de autenticação como variável de ambiente, e onde a resposta fica dentro do retorno. Configurações prontas para APIs no formato da OpenAI e para as da Anthropic, da Bedrock e da Vertex.",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "escreve a configuração por você: cerca de dez linhas de YAML com a URL, o formato da requisição, e onde a resposta fica dentro do retorno. Um alvo remoto ainda pede um cabeçalho de autenticação, como variável de ambiente. Configurações prontas para APIs no formato da OpenAI e para as da Anthropic, da Bedrock e da Vertex.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "envia uma pergunta comum e diz o que está faltando antes que um único ataque saia.",
     "STEP 02": "PASSO 02",
     "Plant a canary": "Plante um canário",

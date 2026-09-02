@@ -75,7 +75,7 @@
     "No SDK. No code changes. A report your whole team can read.": "Без SDK. Без змін у коді. Звіт, який прочитає вся ваша команда.",
     "STEP 01": "КРОК 01",
     "Describe your bot": "Опишіть свого бота",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "Близько десяти рядків YAML: URL, заголовок авторизації як змінна середовища і те, де у відповіді лежить текст. Готові конфіги для API у форматі OpenAI, а також для Anthropic, Bedrock і Vertex.",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "сам пише конфіг: близько десяти рядків YAML з URL, формою запиту і тим, де у відповіді лежить текст. Віддалена ціль хоче ще й заголовок авторизації, як змінну середовища. Готові конфіги для API у форматі OpenAI, а також для Anthropic, Bedrock і Vertex.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "надсилає одне звичайне питання і каже, чого бракує, ще до того, як вилетить бодай одна атака.",
     "STEP 02": "КРОК 02",
     "Plant a canary": "Поставте канарку",

@@ -75,7 +75,7 @@
     "No SDK. No code changes. A report your whole team can read.": "Žádné SDK. Žádné zásahy do kódu. Zpráva, kterou přečte celý tvůj tým.",
     "STEP 01": "KROK 01",
     "Describe your bot": "Popiš svého bota",
-    "About ten lines of YAML: the URL, the auth header as an environment variable, and where the reply sits in the response. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "Zhruba deset řádků YAML: adresa, autentizační hlavička jako proměnná prostředí a to, ve kterém poli odpovědi je text bota. Hotové konfigurace pro API ve tvaru OpenAI a pro API Anthropicu, Bedrocku a Vertexu.",
+    "writes the config for you: about ten lines of YAML with the URL, the request shape, and where the reply sits in the response. A remote target also wants an auth header, as an environment variable. Ready-made configs for OpenAI-shaped APIs and for Anthropic's, Bedrock's and Vertex's.": "ti konfiguraci napíše sám: zhruba deset řádků YAML s adresou, tvarem požadavku a s tím, ve kterém poli odpovědi je text bota. Vzdálený cíl chce navíc autentizační hlavičku, jako proměnnou prostředí. Hotové konfigurace pro API ve tvaru OpenAI a pro API Anthropicu, Bedrocku a Vertexu.",
     "sends one ordinary question and tells you what is missing before a single attack goes out.": "pošle jednu obyčejnou otázku a řekne ti, co chybí, ještě než vyletí jediný útok.",
     "STEP 02": "KROK 02",
     "Plant a canary": "Nasaď kanárka",

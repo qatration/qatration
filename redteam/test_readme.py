@@ -1507,7 +1507,7 @@ def main():
     #    to it, and adding to it has to be a decision somebody writes down.
     _SAME_BY_DESIGN = {
         "tration",                 # the second half of the brand, split for the accent colour
-        "pip install qatration", "qatration onboard", "qatration mint", "qatration sarif",
+        "pip install qatration", "qatration init", "qatration onboard", "qatration sarif",
         "--fail-on exploited",     # commands: a localised one is a broken instruction
         "ACME-SK-7731-QA",         # the leaked key in the illustrated transcript
         "canary_in_tool_call",     # a detector's name, which is what you grep for
