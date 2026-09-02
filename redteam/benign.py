@@ -32,6 +32,7 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import workspace
 from workspace import (OUT as WORKSPACE_OUT, read_artifact,
                        refuse_to_overwrite_evidence, config_name)
 ROOT = os.path.dirname(HERE)
@@ -891,7 +892,10 @@ def main():
               file=sys.stderr)
         sys.exit(3)
 
-    path = os.path.join(OUT_DIR, f"benign_{args.target}.json")
+    # THROUGH `workspace.artifact`, which makes the directory. See its docstring: this line
+    # is the one that lost fifty probes to a FileNotFoundError after sending every one of
+    # them, with the traceback scrolling past above a tally that read like success.
+    path = workspace.artifact(f"benign_{args.target}.json", root=OUT_DIR)
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"meta": {"target": args.target, "when": datetime.now().isoformat(" ", "seconds"),
                             "trials": args.trials, **s}, "rows": rows}, f, indent=2)

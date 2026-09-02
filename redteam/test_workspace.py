@@ -177,6 +177,71 @@ def main():
                     strays.append(f"{base}:{lineno}: {what}")
     check("no module re-implements an artifact-naming rule", not strays, "; ".join(strays))
 
+    # --- NOBODY WRITES INTO A DIRECTORY NOBODY MADE ------------------------------------------
+    #
+    # `OUT` is a path, not a directory: it is resolved at import and deliberately NOT created
+    # there, or `qatration <anything> --help` would litter the filesystem. So whoever writes
+    # has to create it, and that was remembered in four modules and forgotten in two.
+    #
+    # `benign` was the expensive one. Walked as a first-time user against a live model: fifty
+    # probes sent, all fifty rows printed, a tally printed, and then FileNotFoundError on the
+    # write. The traceback goes to stderr and the table to buffered stdout, so the failure
+    # scrolls past ABOVE the results and the last thing on screen is `36/50 clean` -- a
+    # summary that reads like a finished run. Exit 1, no baseline written, and every later
+    # finding on that target unattributable because `baseline.rates` had nothing to read.
+    #
+    # It hid because the README's order covers it: `run` creates the directory and comes
+    # first there. The order `init` prints INTO THE CONFIG IT WRITES puts `benign` before
+    # `run`, so following the tool's own instructions is the way to meet it.
+    #
+    # By AST, so a paragraph mentioning OUT_DIR cannot answer for the code, and asking about
+    # the WRITE rather than about the module: a file that reads from OUT all day is fine.
+    import ast as _ast2
+    _unmade = []
+    for fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+        base = os.path.basename(fp)
+        if base in ("workspace.py",) or base.startswith("test_"):
+            continue
+        try:
+            tree = _ast2.parse(open(fp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        makes = any(getattr(n.func, "attr", None) == "makedirs"
+                    for n in _ast2.walk(tree) if isinstance(n, _ast2.Call))
+        goes_through = any(getattr(n.func, "attr", None) == "artifact"
+                           for n in _ast2.walk(tree) if isinstance(n, _ast2.Call))
+        for n in _ast2.walk(tree):
+            if not (isinstance(n, _ast2.Call) and getattr(n.func, "id", None) == "open"):
+                continue
+            mode = ""
+            if len(n.args) > 1 and isinstance(n.args[1], _ast2.Constant):
+                mode = str(n.args[1].value)
+            if "w" not in mode and "a" not in mode:
+                continue
+            # THE PATH IS USUALLY IN A VARIABLE, WHICH THE FIRST VERSION OF THIS MISSED. It
+            # looked for OUT_DIR among the names INSIDE the open() call, so it caught
+            # `open(os.path.join(OUT_DIR, x), "w")` and not the two-line form every module
+            # here actually uses. Mutating benign back to the broken write left it green —
+            # a check about a value, written about an expression. Assignments are followed.
+            _tainted = set()
+            for a in _ast2.walk(tree):
+                if not isinstance(a, _ast2.Assign):
+                    continue
+                if {"OUT_DIR", "OUT", "WORKSPACE_OUT"} & {
+                        x.id for x in _ast2.walk(a.value) if isinstance(x, _ast2.Name)}:
+                    _tainted |= {t.id for t in a.targets if isinstance(t, _ast2.Name)}
+            names = {x.id for x in _ast2.walk(n.args[0]) if isinstance(x, _ast2.Name)} \
+                if n.args else set()
+            if not (({"OUT_DIR", "OUT", "WORKSPACE_OUT"} | _tainted) & names):
+                continue
+            if makes or goes_through:
+                continue
+            _unmade.append(f"{base}:{n.lineno}")
+    check("every module writing into the artifact directory creates it first",
+          not _unmade,
+          "opens a path under OUT for writing without makedirs or workspace.artifact: "
+          + ", ".join(_unmade))
+
     # --- AND THE RULE ITSELF, not only that one copy of it exists ---------------------------
     #
     # The needle scan above is a spellcheck: it says nobody wrote the pattern out again, and

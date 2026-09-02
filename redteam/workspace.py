@@ -70,6 +70,34 @@ def out_dir():
     return os.path.abspath(os.path.join(os.getcwd(), DEFAULT_DIR))
 
 
+def artifact(name, root=None):
+    """The path to write an artifact to, with the directory it needs already created.
+
+    EIGHT MODULES WRITE INTO THIS DIRECTORY AND FOUR OF THEM CREATED IT. The other four --
+    `benign`, `rejudge`, `run_generate`, `sarif` -- opened a path under a folder nothing had
+    made, and on a fresh `$QATRATION_OUT` that is a FileNotFoundError after the work is done.
+
+    Walked as a first-time user: `qatration benign` sent fifty probes to a live model, printed
+    all fifty rows and a tally, and then died writing the file. Worse than the loss, the
+    traceback goes to stderr and the table to buffered stdout, so the failure scrolls past
+    ABOVE the results and the last thing on screen is `36/50 clean` -- a summary that reads
+    like a finished run. Exit 1, no baseline, and every later finding on that target
+    unattributable because `baseline.rates` had nothing to read.
+
+    It survived because the README's order happens to hide it: `run` creates the directory and
+    comes first there. The order `init` prints into the config it writes puts `benign` before
+    `run`, so following the tool's own instructions is what breaks.
+
+    Not created at import, deliberately: `OUT` is resolved when this module loads, and making
+    a directory there as a side effect of an import would have `qatration <anything> --help`
+    litter the filesystem -- which `test_compare` explicitly checks for. It is created when
+    somebody actually writes.
+    """
+    base = str(root if root is not None else OUT)
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, name)
+
+
 def tracked_by_git(path):
     """Is this file committed to a repository, rather than an ordinary artifact?
 

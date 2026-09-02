@@ -21,6 +21,7 @@ import sys, os, glob, json, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import workspace
 from workspace import OUT as WORKSPACE_OUT, target_of
 from runner import judged_ctx   # one definition of "what did this attack declare"
 ROOT = os.path.dirname(HERE)
@@ -282,7 +283,7 @@ def main():
             data["meta"]["delivery"] = delivery
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
-            html = os.path.join(OUT_DIR, f"report_{name}.html")
+            html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)
             with open(html, "w", encoding="utf-8") as f:
                 f.write(build_html(data["meta"], data["results"]))
 
