@@ -371,6 +371,32 @@ def main():
     check("the engine reports a version and the same one twice",
           isinstance(ev, str) and ev and ev == engine_version(), repr(ev))
 
+    # AND IT STAMPS SOMETHING WHEN THERE IS NO REPOSITORY TO ASK. Every installed copy is that
+    # case, so it is the branch every user's artifacts take, and it used to write "unknown"
+    # into all of them: the one field whose purpose is to place a stored result answered
+    # nothing, in exactly the situation where placing one is hardest. `--version` had already
+    # learned to hide the word; the artifact had not. The check above could not see this,
+    # because "unknown" is a non-empty string that is stable across two calls.
+    #
+    # Simulated rather than trusted: a checkout always has git, so nothing in this suite would
+    # otherwise execute the branch that every release actually runs.
+    import subprocess as _sp
+    import target as _t
+    _real_run, _cached = _sp.run, _t._ENGINE_VERSION
+
+    def _no_git(*_a, **_k):
+        raise OSError("no git, as in every installed copy")
+
+    try:
+        _sp.run, _t._ENGINE_VERSION = _no_git, None
+        _stamped = _t.engine_version()
+    finally:
+        _sp.run, _t._ENGINE_VERSION = _real_run, _cached
+    check("...and stamps the release when there is no repository to ask",
+          _stamped.lower() != "unknown" and _stamped == _t.package_version(),
+          "engine_version() said %r with git unavailable, release is %r"
+          % (_stamped, _t.package_version()))
+
     def _engines(meta_extra):
         tmp = tempfile.mkdtemp()
         try:

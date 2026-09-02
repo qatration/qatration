@@ -8,7 +8,9 @@ A target may advertise capabilities so the engine can adapt / degrade gracefully
   - "seed": can plant attacker data for indirect-delivery scenarios.
 """
 import glob
+import io
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Optional, List, Tuple
 
@@ -187,6 +189,29 @@ class Target:
         raise NotImplementedError(f"target '{self.name}' has no 'chain' capability")
 
 
+def package_version():
+    """The version, whether this is an installed package or a file being run by path.
+
+    `from . import __version__` is the right way and it raises when there is no package
+    context, which is exactly how this file is run during development and in the offline
+    suites. Falling back to reading the constant out of its own source keeps `--version`
+    working in both, and keeps ONE definition of the number: the alternative is a copy in this
+    file that agrees with `__init__.py` until somebody bumps one of them.
+
+    It lives here rather than in `cli.py` because `engine_version()` below needs it too, and
+    the same rule written in two modules is the defect this project keeps finding elsewhere.
+    """
+    try:
+        from . import __version__
+        return __version__
+    except ImportError:
+        pass
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = io.open(os.path.join(here, "__init__.py"), encoding="utf-8").read()
+    found = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.M)
+    return found.group(1) if found else "unknown"
+
+
 def engine_version():
     """Which build of this engine produced an artifact. Cheap, cached, never fatal.
 
@@ -200,9 +225,9 @@ def engine_version():
 
     So every result carries the commit that produced it, and a reader can say "this evidence
     predates the fix" instead of discovering it by hand a day later. Best-effort on purpose:
-    a missing git, a tarball with no history, a detached checkout — none of those is a reason
-    to fail a run, and "unknown" is a truthful answer that still distinguishes itself from a
-    hash.
+    a missing git, a tarball with no history, a detached checkout, none of those is a reason
+    to fail a run. Where git cannot answer the installed release can, and it is stamped
+    instead; "unknown" is what is left when neither can be read.
     """
     global _ENGINE_VERSION
     if _ENGINE_VERSION is not None:
@@ -223,6 +248,19 @@ def engine_version():
                 _ENGINE_VERSION += "+dirty"
     except Exception:
         pass
+    if _ENGINE_VERSION == "unknown":
+        # AN INSTALLED COPY HAS NO REPOSITORY TO ASK, and that is every copy except this one.
+        # "unknown" was truthful and useless: the field exists so a reader can say "this
+        # evidence predates the fix", and it said nothing on every artifact a user of this
+        # tool was ever going to write. The release is knowable right here, one file away, so
+        # an install stamps "0.4.0" where a checkout stamps a commit. The two are told apart
+        # by shape, and "unknown" is left for the case where neither can be read at all.
+        try:
+            _pv = (package_version() or "").strip()
+            if _pv and _pv.lower() != "unknown":
+                _ENGINE_VERSION = _pv
+        except Exception:
+            pass
     return _ENGINE_VERSION
 
 

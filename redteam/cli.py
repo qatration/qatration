@@ -27,10 +27,9 @@ at. Those remain reachable as `python -m qatration.<module>`.
 """
 
 import importlib
-import io
-import os
-import re
 import sys
+
+from target import package_version
 
 # subcommand -> (module, one-line help). The module must expose `main()`; test_packaging.py
 # imports every one of them and fails if it does not, so this table cannot rot into a list of
@@ -87,39 +86,20 @@ def _usage(stream=sys.stdout):
     print("  qatration --version", file=stream)
 
 
-def package_version():
-    """The version, whether this is an installed package or a file being run by path.
-
-    `from . import __version__` is the right way and it raises when there is no package
-    context, which is exactly how this file is run during development and in the offline
-    suites. Falling back to reading the constant out of its own source keeps `--version`
-    working in both, and keeps ONE definition of the number: the alternative is a copy in this
-    file that agrees with `__init__.py` until somebody bumps one of them.
-    """
-    try:
-        from . import __version__
-        return __version__
-    except ImportError:
-        pass
-    here = os.path.dirname(os.path.abspath(__file__))
-    src = io.open(os.path.join(here, "__init__.py"), encoding="utf-8").read()
-    found = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.M)
-    return found.group(1) if found else "unknown"
-
-
 def _version():
     line = "qatration %s" % package_version()
     # The engine version is the commit that would be stamped into any evidence written now.
     # Reported beside the release because they answer different questions and a bug report that
     # quotes only one of them cannot be placed.
     #
-    # An installed copy has no repository to ask, so `engine_version()` answers "unknown" — and
-    # printing "(engine unknown)" tells the reader nothing while looking like something is
-    # broken. A version line that raises a question it cannot answer is worse than a short one.
+    # An installed copy has no repository to ask and stamps the release instead, which makes
+    # both halves of this line the same string. Printed twice it reads as two facts that
+    # happen to agree, rather than as one fact asked twice, so the engine is shown only when
+    # it says something the release does not.
     try:
         from target import engine_version
         ev = (engine_version() or "").strip()
-        if ev and ev.lower() != "unknown":
+        if ev and ev.lower() != "unknown" and ev != package_version():
             line += " (engine %s)" % ev
     except Exception:
         pass
