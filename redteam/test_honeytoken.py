@@ -114,6 +114,24 @@ def main():
     refused = Probe(prompt=ht.VERIFY_PROMPT, output="",
                     error="URLError: <urlopen error [WinError 10061] refused>")
 
+    # AN ANSWERED ENDPOINT WITH A WRONG PATH IS NOT AN ENDPOINT THAT DID NOT ANSWER. The
+    # extraction failure arrives as an error on the probe like any other, and was announced as
+    # "the endpoint did not answer" -- sending a reader to their network when the fault is one
+    # key in their YAML. `unreachable_note`'s own docstring is about exactly this split, one
+    # cause earlier. Walked: the quickstart `init` prints passes --verify-honeytoken, so the
+    # documented command was the one that got the wrong sentence, while onboard without the
+    # flag already said "The endpoint ANSWERED".
+    class _Unmapped:
+        error = ("ExtractionFailed: nothing at response.reply='choices.0.message.contnet'; "
+                 "the reply had keys ['choices']")
+        output = ""
+
+    _label, _said = ht.verify_refusal(_Unmapped(), verify)
+    check("a wrong reply path is not reported as silence from the endpoint",
+          _label != "NO ANSWER" and "did not answer" not in _said, "%s: %s" % (_label, _said))
+    check("...it says the endpoint answered and names the key to fix",
+          "ANSWERED" in _said and "response.reply" in _said, _said)
+
     check("a planted token is no refusal at all", ht.verify_refusal(answered, verify) is None)
 
     why = ht.verify_refusal(silent, verify)

@@ -177,6 +177,28 @@ def unreachable_note(error):
             f"and a run would report defences that were never tested.")
 
 
+def mapping_note(error):
+    """What to say when the endpoint answered and `response.reply` pointed nowhere.
+
+    `unreachable_note` above exists because "not planted" and "not reachable" send a reader to
+    two different places, and its docstring records the stranger who went to check the file
+    they had just edited when their bot was simply not up. The same split was still missing
+    one level along: an extraction failure was handed to that function and announced as "the
+    endpoint did not answer", when the endpoint answered perfectly and the path in the YAML
+    missed. Three places to go, not two, and the third is a line of their config.
+
+    Found by walking the quickstart `init` prints: `onboard --target-config x --verify-honeytoken
+    ...` on a config with one letter wrong in `response.reply`. Without the flag, `onboard`
+    said "The endpoint ANSWERED, so this is a mapping problem rather than a connectivity one"
+    and offered the working path. With it -- which is the documented command -- the honeytoken
+    verdict came first and said the opposite.
+    """
+    return (f"the endpoint ANSWERED and `response.reply` pointed at nothing, so this is a "
+            f"mapping problem rather than a connectivity one: {error}. Fix that key and run "
+            f"this again; left alone it does not fail a run, because an unmapped reply is an "
+            f"empty reply and an empty reply scores as a target that held.")
+
+
 def verify_refusal(probe, verify):
     """-> None when the honeytoken is planted, else (label, sentence) saying why not.
 
@@ -188,6 +210,11 @@ def verify_refusal(probe, verify):
     if probe is None:
         return ("NO ANSWER", unreachable_note("no reply"))
     if getattr(probe, "error", None):
+        # THE ANSWERED-BUT-UNMAPPED CASE FIRST: it is an error on the probe like any other,
+        # and reading it as silence sends the reader to their network when the fault is one
+        # key in their config.
+        if str(probe.error).startswith("ExtractionFailed"):
+            return ("BAD MAPPING", mapping_note(probe.error))
         return ("NO ANSWER", unreachable_note(probe.error))
     if planted(probe.output or "", verify):
         return None
