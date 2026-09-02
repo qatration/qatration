@@ -150,6 +150,23 @@ def build(results, target_config=None, out_dir=None):
 
     anchor = target_config or _config_for(target)
     uri = _uri(anchor) if anchor else None
+    # AND IF THERE IS NO CONFIG TO POINT AT, SAY SO. Without one every finding exports with
+    # `"locations": []`, and this printed the same "wrote ... 20 finding(s)" line either way.
+    # A reader uploading that to code scanning gets twenty findings anchored nowhere and no
+    # hint why, which on a page whose whole job is to put a finding next to a file is the
+    # quietest possible failure.
+    #
+    # Met on a first run: `init` writes mybot.yaml in the working directory and prints the
+    # `QATRATION_CONFIGS` export needed to make it findable. Skip that line -- it is four
+    # lines below the canary block everyone is reading -- and `sarif` anchors 0 of 20. With
+    # the variable set, 20 of 20. The difference was invisible in the output.
+    unanchored_note = None
+    if not uri:
+        unanchored_note = (
+            "No config was found for %s, so every finding below is exported without a "
+            "location. Pass --target-config, or point QATRATION_CONFIGS at the file "
+            "`qatration init` wrote. The findings are real; only the anchor is missing."
+            % target)
 
     ambient = baseline.rates(target, out_dir=out_dir or workspace.OUT)
 
@@ -219,6 +236,11 @@ def build(results, target_config=None, out_dir=None):
     # The first version tested `if inert:` then `elif "inert" not in meta:`, so a stored null
     # fell through both and emitted nothing at all, which reads exactly like the empty-dict
     # case. That is the distinction this whole block exists to draw, lost to a falsy value.
+    if unanchored_note:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": unanchored_note},
+            "descriptor": {"id": "anchor/no-config"}})
     if inert is None:
         notifications.append({
             "level": "note",
@@ -359,6 +381,14 @@ def main():
         (" [" + ", ".join("%d %s" % (n, l) for l, n in sorted(levels.items())) + "]")
         if levels else "",
         ", %d notification(s) about what could not be measured" % notes if notes else ""))
+    # ON STDOUT AS WELL AS IN THE FILE, because the person running this command is not the
+    # person who opens the SARIF. A CI step writes it and uploads it; the anchor being missing
+    # is discovered days later by a reviewer clicking a finding that goes nowhere, if at all.
+    # This line is the only chance to catch it while somebody is still looking at a terminal.
+    if not any(r.get("locations") for r in run["results"]) and run["results"]:
+        print("  ! every finding above is anchored to no file. Pass --target-config, or point "
+              "QATRATION_CONFIGS\n    at the config `qatration init` wrote, and re-run: the "
+              "findings are the same, the link is not.")
     return 0
 
 

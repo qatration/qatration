@@ -233,6 +233,39 @@ def _notes(doc):
     return [n["descriptor"]["id"] for n in _inv(doc).get("toolExecutionNotifications", [])]
 
 
+# --- A FINDING ANCHORED NOWHERE SAYS SO -----------------------------------------------------
+#
+# Without a config to point at, every finding exports with `"locations": []` and this printed
+# the identical "wrote ... 20 finding(s)" line either way. On the page whose whole job is to put
+# a finding next to a file, that is the quietest possible failure: a reviewer clicks a finding,
+# lands nowhere, and concludes the tool is broken.
+#
+# Met on a first run, not imagined. `init` writes mybot.yaml in the working directory and prints
+# the QATRATION_CONFIGS export that makes it findable, four lines below the canary block
+# everyone is reading. Skipping it anchored 0 of 20; setting it anchored 20 of 20; the output
+# was the same both times.
+_UNANCHORED = {"meta": {"target": "nowhere-bot", "attacks_n": 1, "errors": 0, "broke": 1},
+               "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                            "attack": {"id": "a", "category": "x"},
+                            "fired": ["canary_in_output"], "locks": {}, "trials": [{}]}]}
+_anch = sarif.build(_UNANCHORED)["runs"][0]
+check("a finding with no config to anchor to is exported anyway",
+      len(_anch["results"]) == 1, "the finding itself must not be dropped")
+check("...and the log says why it points nowhere",
+      "anchor/no-config" in [n["descriptor"]["id"]
+                             for n in _anch["invocations"][0].get(
+                                 "toolExecutionNotifications", [])],
+      str([n["descriptor"]["id"]
+           for n in _anch["invocations"][0].get("toolExecutionNotifications", [])]))
+# ...and the note is absent when there IS an anchor, or it becomes furniture nobody reads.
+_ok = sarif.build(_UNANCHORED, target_config="mybot.yaml")["runs"][0]
+check("...and an anchored export carries no such note",
+      "anchor/no-config" not in [n["descriptor"]["id"]
+                                 for n in _ok["invocations"][0].get(
+                                     "toolExecutionNotifications", [])]
+      and all(r.get("locations") for r in _ok["results"]),
+      "the note fires even when the findings are anchored")
+
 check("a sweep that sent nothing is not a successful invocation",
       _inv(_ZERO)["executionSuccessful"] is False,
       "zero attacks exported as a clean scan")
