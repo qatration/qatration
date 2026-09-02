@@ -48,10 +48,11 @@ count:
 ```
 pip install qatration
 
-qatration init --url https://your-bot.example.com/chat   # writes mybot.yaml, canary and all
+qatration init --url https://your-bot.example.com/chat --model your-model-id
+                                                        # writes mybot.yaml, canary and all
 qatration onboard --target-config mybot.yaml            # one real request: is the mapping right
-qatration run     --target-config mybot.yaml            # sweep it
 qatration benign  --target-config mybot.yaml            # what fires when NOBODY is attacking
+qatration run     --target-config mybot.yaml            # sweep it
 ```
 
 PyYAML and pyfiglet, nothing else. The model frameworks belong to the practice bots in this
