@@ -6,6 +6,79 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## Twelve things the code could not show us (0.4.1, 2026-09-03)
+
+**Every defect here was found the same way: install the published package, point it at a live
+endpoint, and read what comes out.** Not one of them fails a suite, and ten of the twelve are
+invisible from the source. The shape that recurred is worth more than the list: a rule
+implemented correctly in one place and forgotten in the one beside it. `rejudge` names a
+missing config and `coverage` blamed the target for it. `benign`, `run` and `matrix` ask for a
+config and `recon` and `isolation` aimed at a practice bot from this repository. The scorecard
+separated two reasons an attack was absent while two other pages still added them together.
+Each time the right answer was already written a few lines away.
+
+**The pull-request gate went red on the sampler.** `--fail-on regression` is what `docs/ci.md`
+puts on a pull request, because the absolute gates go red on whatever was already broken and
+teach a team to ignore the build. Two runs against one endpoint, same config, same model, same
+scope, same trials, nothing changed between them: six findings "introduced or reopened", four
+"fixed", and not one of the ten broke on all three attempts in either run. The rate was on
+disk the whole time -- `snapshot()` has written `1/3` per row since it was written and the
+comparison read the verdict beside it, so `0/3 -> 1/3` and `0/3 -> 3/3` were one event. A move
+is now counted only when the side claiming it broke on every attempt, and the rest are printed
+under their own heading on a red build as well as a green one.
+
+**Every artifact a user writes said it did not know which build wrote it.** `engine_version()`
+exists so a reader can say "this evidence predates the fix". It asks git; an installed copy has
+no repository, so it answered `unknown` for every artifact ever written by anyone but us. The
+release was knowable one file away. `--version` had already learned to hide the word -- the
+symptom was treated where a person reads it and left alone in the evidence.
+
+**A missing config was published as a fact about somebody's bot.** `qatration coverage` from a
+fresh install, against a run of its own that had just fired `canary_in_output` fourteen times,
+reported six detectors demonstrated and filed that one under "no target in the fleet exhibits
+this behaviour". With the config exported: ten, and twenty-three hits. One lookup did it -- an
+unconfigured target defaulted to "every detector could have spoken here", when the opposite is
+true. The run now names the targets it has probes but no context for, and the variable that
+fixes it.
+
+**Two commands were aimed at somebody else's bot.** `recon` and `isolation` defaulted
+`--target-config` to a practice bot shipped inside the package, so from an install they aimed
+at a LangChain agent whose extra is not installed by default: a raw traceback and exit 1, the
+code the contract reserves for "the target was exploited or breached". They ask for the config
+now and exit 2, like every sibling.
+
+**`matrix` could not run on the adapter every user has.** It is offered to everyone and does
+one thing, and on an `adapter: http` target both sub-runs refused before sending. The refusal
+was right when written: the model lived unnamed inside the operator's request body. `init` has
+written `request: {model: ...}` since 0.4.0, so for that shape the substitution is defined, and
+it is applied only where the key is already a string. A matrix that compared nothing exited 0;
+it exits 3, the code `run` gives the same event.
+
+**The documented command was the one that gave the wrong diagnosis.** With one letter wrong in
+`response.reply`, `onboard --verify-honeytoken` -- the line `init` prints for the reader to
+copy -- said "the endpoint did not answer". It answered perfectly. Without the flag the same
+config produced "The endpoint ANSWERED, so this is a mapping problem" and offered the working
+path. `unreachable_note`'s own docstring is about this split one cause earlier: there are three
+places to send a reader, not two, and the third is a line of their config.
+
+**And the pages stopped merging two different absences.** "333 not applicable to this target"
+was 319 attacks held back by `--scope quick` and 14 the deployment could not take. The
+scorecard, the defence report and the SARIF each say which is which now, and an artifact that
+recorded only the sum keeps a label its number can support instead of being relabelled into a
+claim it cannot answer for. The fleet page's opening sentence claimed a tool "that breaks the
+undefended and clears the hardened" on every page it produced, including one with a single row
+and nothing to discriminate. The sweep-cost table in `docs/ci.md` had drifted six numbers and
+is recounted from the arsenal now, by the engine's own slicer.
+
+Refusing to overwrite a committed results file exited 5, beside the canary preconditions it
+shares no cause with; it exits 2, and both exit-code tables name it. Two site sentences and two
+README figures that had outlived what they described are gone.
+
+Nothing new to run, and no reason to re-baseline: the fixes change what the tool says, not what
+it sends.
+
+---
+
 ## The first run could not finish, and the suite was green (0.4.0, 2026-09-02)
 
 **The release exists because the documented quickstart did not work.** Installed from a clean
