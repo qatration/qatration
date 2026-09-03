@@ -274,6 +274,53 @@ def main():
     print("\nOK — one place decides where artifacts go.")
 
 
+def check_measured_when():
+    """A run's date must come from the run, not from the file it happens to sit in.
+
+    `compare_targets` and `defense_report` both dated their evidence with
+    `os.path.getmtime`. Git does not preserve mtimes, so a fresh clone stamps every artifact
+    with the clone time: cloned this repository and all 45 results files came back with one
+    date. The fleet page would print that date for runs three weeks old, and its staleness
+    bar -- which exists to warn that rows were measured on different days -- would find no
+    difference and never render. An absence of evidence about age, read as evidence of the
+    same age.
+
+    `meta["when"]` was added for this and 44 of the 45 shipped artifacts predate it, so the
+    answer cannot be retrofitted; it can only be told apart from a guess.
+    """
+    import io as _io
+    import os as _os
+    import tempfile as _tf
+    from workspace import measured_when
+    bad = []
+
+    def want(label, ok, detail=""):
+        print(f"{'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            bad.append(f"{label}: {detail}")
+
+    said, from_run = measured_when({"when": "2026-08-18 19:08:29"}, None)
+    want("a run that recorded its date is dated by it",
+         from_run and said.startswith("2026-08-18"), said)
+
+    d = _tf.mkdtemp()
+    fp = _os.path.join(d, "results_x.json")
+    _io.open(fp, "w", encoding="utf-8").write("{}")
+    said, from_run = measured_when({}, fp)
+    want("a run that did not is dated by the file, and says so",
+         said and from_run is False, "%r / %r" % (said, from_run))
+
+    # THE FILE MUST NOT WIN over a date the run recorded, which is the whole defect.
+    said, from_run = measured_when({"when": "2026-08-18 19:08:29"}, fp)
+    want("...and the file never overrides what the run said",
+         from_run and said.startswith("2026-08-18"), said)
+
+    want("with neither, it claims nothing at all",
+         measured_when({}, None) == ("", False), str(measured_when({}, None)))
+    return bad
+
+
+
 def check_evidence_guard():
     """A run must not silently replace a results file somebody committed.
 
@@ -397,7 +444,7 @@ def check_evidence_guard():
 
 
 if __name__ == "__main__":
-    _bad = check_evidence_guard()
+    _bad = check_evidence_guard() + check_measured_when()
     if _bad:
         for _b in _bad:
             print('  !', _b)

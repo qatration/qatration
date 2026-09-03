@@ -10,7 +10,7 @@ from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
                        # aliased: `measured` is already a local here, and it holds the
                        # timestamp of the run rather than a count of it
-                       measured as measured_counts)
+                       measured as measured_counts, measured_when)
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
@@ -319,9 +319,9 @@ def main():
                         worst = s
         broke = meta.get("broke", 0)
         # a matrix mixing today's numbers with last week's reads as one snapshot, which is
-        # how a stale row gets cited as current. The age travels with the row.
-        measured = datetime.datetime.fromtimestamp(
-            os.path.getmtime(fp)).strftime("%Y-%m-%d %H:%M")
+        # how a stale row gets cited as current. The age travels with the row -- and it is the
+        # RUN's date where the run recorded one, never the file's, which a clone resets.
+        measured, _when_said = measured_when(meta, fp)
         rows.append(dict(measured=measured,
                          target=meta["target"], caps=meta.get("caps") or [],
                          # WHAT WAS MEASURED, not what was attempted — the same rule the
@@ -335,7 +335,7 @@ def main():
                                                           out_dir=str(OUT_DIR)),
                          # THE HEADER USED TO ASSERT THIS RATHER THAN READ IT. See
                          # `arsenal_claim` for what the shipped evidence actually holds.
-                         arsenal=meta.get("arsenal"),
+                         arsenal=meta.get("arsenal"), when_said=_when_said,
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -458,8 +458,19 @@ def main():
     if pair_html:
         pair_html = ('<h2 class="sect">What one change buys</h2>' + pair_html)
 
-    newest = max((r["measured"] for r in rows), default="")
-    older = sorted({r["measured"][:10] for r in rows if r["measured"][:10] < newest[:10]})
+    # ONLY THE ROWS WHOSE RUN RECORDED A DATE. The rest are dated by the file, which a clone
+    # resets to the clone day -- so in any checkout but the author's every row shared one date,
+    # this comparison found no difference, and the warning about mixing days never rendered.
+    # An absence of evidence about age, read as evidence of the same age.
+    _dated = [r for r in rows if r.get("when_said")]
+    _undated = len(rows) - len(_dated)
+    newest = max((r["measured"] for r in _dated), default="")
+    older = sorted({r["measured"][:10] for r in _dated if r["measured"][:10] < newest[:10]})
+    undatedbar = ("" if not _undated else
+                  f'<div class="stalebar">{_undated} of {len(rows)} rows are dated by their '
+                  f'FILE, not by the run: those artifacts predate the field that records when '
+                  f'a sweep happened, and a clone or a copy resets a file date. Read those '
+                  f'dates as "when this checkout got the file".</div>')
     staleness = ("" if not older else
                  f'<div class="stalebar">Rows on this page were measured on different '
                  f'days: newest {esc(newest[:10])}, also {esc(", ".join(older))}. '
@@ -527,6 +538,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 <p class="lead">{lead}</p>
 
 {staleness}
+{undatedbar}
 {arsenalbar}
 <table>
   <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>

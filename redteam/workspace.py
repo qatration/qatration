@@ -396,6 +396,30 @@ def measured(meta):
     return max(0, (meta.get("attacks_n") or 0) - errs), errs
 
 
+def measured_when(meta, path=None):
+    """-> (a date string for this run, True if the RUN said so).
+
+    THE FILE'S MTIME IS NOT WHEN THE RUN HAPPENED, and two pages dated their evidence with it.
+    Git does not preserve mtimes: a fresh clone stamps every file with the clone time, so in
+    any checkout but the author's the fleet page prints one date for all forty-five artifacts
+    -- including runs three weeks old -- and its staleness bar, whose whole job is to warn
+    that rows were measured on different days, finds no difference and never renders. Measured
+    by cloning: 45 files, one date. A `cp`, a `git checkout` or a `rejudge --write` does the
+    same thing one file at a time.
+
+    `meta["when"]` exists for exactly this and was added late, so 44 of the 45 shipped results
+    files predate it. Where it is there, it is the answer; where it is not, the caller is told
+    so rather than handed a date that looks like a measurement and is a filesystem event.
+    """
+    said = (meta or {}).get("when")
+    if said:
+        return str(said)[:16], True
+    if path is None:
+        return "", False
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M"), False
+
+
 def read_artifact(path):
     """One stored artifact, or the reason it could not be read. -> (data, None) | (None, why).
 

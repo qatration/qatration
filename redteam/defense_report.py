@@ -11,6 +11,7 @@ from target import target_configs
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from workspace import measured_when
 from workspace import (OUT as WORKSPACE_OUT, results_files, target_of,
                        fleet_names, fleet_filter,
                        read_artifact, read_artifacts, say_unreadable, measured,
@@ -753,8 +754,11 @@ def load_all(known=None):
         if tgt not in _keep_names:
             continue
         targets.add(tgt)
-        dates[tgt] = datetime.datetime.fromtimestamp(
-            os.path.getmtime(fp)).strftime("%Y-%m-%d")
+        # THE RUN'S DATE WHERE THE RUN RECORDED ONE. `os.path.getmtime` is a filesystem
+        # event: git does not preserve mtimes, so a fresh clone stamps every artifact with
+        # the clone day and this report dated three weeks of evidence as today. One reader
+        # in `workspace` now, shared with the fleet page.
+        dates[tgt] = measured_when((d.get("meta") or {}), fp)[0][:10]
         for r in d["results"]:
             if r["headline"] in ("EXPLOITED", "PARTIAL") and r["attack"].get("category") != "control":
                 best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in ("EXPLOITED", "PARTIAL") else 1)[0]
