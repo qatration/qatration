@@ -136,6 +136,30 @@ def main():
         check("...and the unsent attacks are named a gap rather than rows that held",
               "gap rather than rows that held" in notes, notes[:260])
 
+        # AND THE MINUTES IN IT ARE THE ARSENAL'S, NOT A LITERAL'S. `_arsenal_size()` exists
+        # because a hard-coded 19 had been true of a nineteen-attack arsenal and nothing
+        # re-read it; the request estimate above got that fix and the TIME estimate three
+        # lines away kept the 19, so the sentence named the real count while the arithmetic
+        # used a twentieth of it. A warning that understates stays quiet exactly when it
+        # should speak: at a 3s reply it reported 3 minutes against a real 57.
+        # READ FROM THE SOURCE, and the reason is itself worth recording: the note is guarded
+        # by `if rep["seconds"] and ...`, and a local fixture answers fast enough that
+        # `round(elapsed, 1)` is 0.0, which is falsy. So on this bench the estimate never runs
+        # and a functional check here would pass by never reaching the arithmetic -- the shape
+        # this repository calls a check that cannot fail. What can be asserted is that the
+        # multiplier is the arsenal and not a number somebody remembered.
+        import re as _re
+        _src = io.open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
+        _est = _re.search(r'if rep\["seconds"\] and rate\.max_seconds:.*?\n\s*need = ([^\n]+)',
+                          _src, _re.S)
+        check("the time estimate exists to be checked", bool(_est), "no `need =` after the guard")
+        if _est:
+            _expr = _est.group(1)
+            check("...and it multiplies by the arsenal, not by a literal",
+                  "need_att" in _expr and not _re.search(r"\*\s*\d\d\s*\*", _expr), _expr.strip())
+            check("...and the sentence beside it names the same count",
+                  "{need_att} attacks x 3" in _src, "the note does not name need_att")
+
         # --- an unreachable endpoint --------------------------------------------------------
         dead = os.path.join(work, "targets_dead.yaml")
         with open(dead, "w", encoding="utf-8") as f:

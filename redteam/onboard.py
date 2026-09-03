@@ -220,7 +220,18 @@ def check(cfg_path, probe_text=PROBE):
                 f"attacks it never sent are a gap rather than rows that held.")
         if rep["seconds"] and rate.max_seconds:
             # An estimate, said as one. The arsenal size x 3 trials is the default shape.
-            need = rep["seconds"] * 19 * 3
+            #
+            # AND IT WAS 19 UNTIL NOW, which is the literal `_arsenal_size()` exists to replace.
+            # Its docstring says so twelve lines up: "the number this replaced was a literal
+            # that had been true of a nineteen-attack arsenal, and nothing re-read it when the
+            # arsenal grew". The request estimate above got the fix; this one, in the same
+            # function, kept the literal -- so the sentence named `need_att` (379) while the
+            # arithmetic used 19 and the answer came out TWENTY TIMES SMALL. A budget warning
+            # that understates is worse than none in the one direction that matters: it stays
+            # quiet exactly when it should speak. At a 3s reply it reported 3 minutes against
+            # a real 57, so an 1800s budget looked comfortable and would stop a third of the
+            # way in.
+            need = rep["seconds"] * need_att * 3
             if need > rate.max_seconds:
                 rep["notes"].append(
                     f"that reply took {rep['seconds']}s, so a default run ({need_att} attacks x 3 "

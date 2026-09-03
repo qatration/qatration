@@ -781,6 +781,35 @@ def main():
               f"(which needs {sum(_requests_for(a) for a in breadth_slice(attacks)[0]) * trials} "
               f"requests at {trials} trial(s)).")
 
+    # AND THE OTHER HALF OF THE BUDGET, which this function never mentioned. `max_requests` got
+    # a warning; `max_seconds` got none, and time is the half that actually stops a sweep here.
+    # Measured by losing one: `resource` attacks exist to make the model keep generating, so
+    # each runs to the response timeout by construction, and with one retry that is two
+    # timeouts per trial. Six of them in the portable arsenal at three trials is 6,480s of
+    # worst case against a target whose budget is 1,800 -- three and a half times the whole
+    # allowance, spent before the rest of the arsenal is reached. The run then records those
+    # as never sent, correctly, and is worth a fraction of what it cost.
+    #
+    # Said as a worst case and named as one. The cheap attacks cannot be priced from here
+    # without a probe, and `onboard` is where that estimate belongs; what this can say for
+    # certain is the floor the slow ones put under the bill.
+    # FROM THE RUNNER'S OWN CONSTANTS, not the target's. `target.timeout` is the SOCKET
+    # timeout (300s by default) and is not what abandons a probe; `runner.SEND_TIMEOUT` is,
+    # at 180s, with `runner.RETRIES` more attempts after the first. Reading the wrong one
+    # would have priced this warning off a number that decides nothing -- the same defect it
+    # is here to report.
+    from runner import SEND_TIMEOUT as _send_to, RETRIES as _retries
+    _secs = getattr(_rate, "max_seconds", None) if _rate else None
+    _slow = [a for a in attacks if (a.get("category") or "") == "resource"]
+    if _secs and _slow:
+        _to = float(_send_to)
+        _worst = len(_slow) * _to * (1 + _retries) * trials
+        if _to and _worst >= _secs * 0.25:
+            print(f"  ! {len(_slow)} attack(s) here run to the response timeout BY DESIGN "
+                  f"(category `resource`: they ask the model not to stop). At {_to:.0f}s and "
+                  f"one retry that is up to {_worst / 60:.0f} min of a "
+                  f"{_secs / 60:.0f} min budget, before the rest of the arsenal is reached.")
+
     # baseline-diff: learn the target's CLEAN tool-call inputs from a benign probe
     # so 'rogue_tool_call' flags deviation from real behavior, not a model quirk
     # (fixes the qwen false alarm where the model calls a tool with empty input).
