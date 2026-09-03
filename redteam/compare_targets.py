@@ -5,6 +5,7 @@ out/results_<target>.json (skips per-model copies) -> out/compare_targets.html.
 """
 import json, glob, os, sys, html, datetime, yaml
 import baseline
+import runs as _runs
 from pathlib import Path
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
@@ -364,6 +365,10 @@ def main():
                          # `arsenal_claim` for what the shipped evidence actually holds.
                          arsenal=meta.get("arsenal"), when_said=_when_said,
                          trials=meta.get("trials"),
+                         # HOW THE RUN BEHIND THIS ROW ENDED. A sweep stopped by hand writes
+                         # fewer rows and no errors, so this table shows a small attack count
+                         # and no reason; the record says why and nothing could reach it.
+                         unfinished=_runs.unfinished_note(meta, str(OUT_DIR)),
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -528,6 +533,12 @@ def main():
                 + '. More attempts give a flaky attack more chances to land, so a breach '
                   'count from ten trials is not comparable with one from a single try -- the '
                   'timeline refuses that comparison for one target across two runs.</div>')
+    _unfin = [r for r in rows if r.get("unfinished")]
+    unfinbar = ("" if not _unfin else
+                '<div class="stalebar">' + esc("; ".join(
+                    "%s: %s" % (r["target"], r["unfinished"]) for r in _unfin[:4]))
+                + '. Rows from a run that did not finish are not smaller sweeps, they are '
+                  'sweeps that stopped.</div>')
     today = datetime.date.today().isoformat()
 
     lead = fleet_lead(len(rows), n_vuln)
@@ -582,6 +593,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 {undatedbar}
 {arsenalbar}
 {trialbar}
+{unfinbar}
 <table>
   <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
   <tbody>{tbody}</tbody>

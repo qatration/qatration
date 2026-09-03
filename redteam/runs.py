@@ -53,6 +53,46 @@ def _scope(rec):
     return rec.get("scope") or "?"
 
 
+def record_for(meta, root):
+    """The run record that produced this artifact, or None when it cannot be known.
+
+    A results file that predates `run_id` in its meta -- all forty-five shipped when this was
+    written -- returns None, and None means "cannot say", never "it finished". The pages have
+    to keep those apart: an artifact from a run STOPPED by hand looks exactly like a small
+    sweep, and one from a run stopped by its BUDGET looks like a sweep with errors in it.
+
+    Kept here rather than in a page because more than one page wants it, and because this is
+    the module that decides what a record is.
+    """
+    rid = (meta or {}).get("run_id")
+    if not rid:
+        return None
+    try:
+        with open(_path(root, rid), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def unfinished_note(meta, root):
+    """A sentence when the run behind this artifact did not finish, else "".
+
+    A run STOPPED by hand writes fewer rows and no errors, so the page shows a small attack
+    count and no reason; one stopped by its BUDGET writes ERROR rows, which `measured()`
+    already subtracts. Neither says WHY, and the record does: `stopped by hand after 7 of 357
+    attacks in 42 minutes` is a real note on a real record in this repository.
+
+    Silent for an artifact with no `run_id` -- every one shipped before the link existed --
+    because "cannot say" is not "it finished".
+    """
+    rec = record_for(meta, root)
+    if not rec or rec.get("state") == "finished":
+        return ""
+    why = (rec.get("note") or "").strip()
+    return ("the run behind this evidence ended as %r%s"
+            % (rec.get("state"), ": " + why if why else ""))
+
+
 def start(root, run_id, target, scope="full", authorization=None, budgets=None, engine=None,
           arsenal=None, trials=None, when=None):
     """Write the record BEFORE the first probe, and return it.

@@ -117,6 +117,44 @@ def main():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+    # --- AN ARTIFACT CAN NAME THE RUN THAT MADE IT -------------------------------------
+    # `runs.py` records what a sweep did, what it cost and how it ENDED, and forty-five
+    # stored results files carried no way to reach it -- the id exists three hundred lines
+    # above where the meta is written. A run stopped by hand writes fewer rows and NO errors,
+    # so a page shows a small attack count and no reason; the record has the reason.
+    import json as _json
+    import tempfile as _tf
+    import os as _os
+    import io as _io
+    import runs as _r
+
+    _d = _tf.mkdtemp()
+    _io.open(_os.path.join(_d, "run_abc.json"), "w", encoding="utf-8").write(_json.dumps(
+        {"run_id": "abc", "state": "stopped", "target": "t",
+         "note": "stopped by hand after 7 of 357 attacks"}))
+    _io.open(_os.path.join(_d, "run_fin.json"), "w", encoding="utf-8").write(_json.dumps(
+        {"run_id": "fin", "state": "finished", "target": "t", "note": ""}))
+
+    check("an artifact carrying a run_id reaches its record",
+          (_r.record_for({"run_id": "abc"}, _d) or {}).get("state") == "stopped",
+          str(_r.record_for({"run_id": "abc"}, _d)))
+    check("...and a stopped run is said, with the reason the record holds",
+          "stopped" in _r.unfinished_note({"run_id": "abc"}, _d)
+          and "7 of 357" in _r.unfinished_note({"run_id": "abc"}, _d),
+          _r.unfinished_note({"run_id": "abc"}, _d))
+    check("...and a finished run says nothing",
+          _r.unfinished_note({"run_id": "fin"}, _d) == "",
+          _r.unfinished_note({"run_id": "fin"}, _d))
+    # CANNOT SAY IS NOT IT FINISHED. Every artifact shipped before this link has no id, and
+    # inventing a verdict for them would be the claim this whole mechanism exists to avoid.
+    check("an artifact from before the link claims nothing",
+          _r.record_for({}, _d) is None and _r.unfinished_note({}, _d) == "",
+          "an artifact with no run_id was given a verdict")
+    check("...and neither does one whose record is gone",
+          _r.unfinished_note({"run_id": "missing"}, _d) == "",
+          _r.unfinished_note({"run_id": "missing"}, _d))
+
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

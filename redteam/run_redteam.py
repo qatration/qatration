@@ -969,6 +969,12 @@ def main():
             # detectors read the tool-call channel, and against a mistyped path every one of
             # them judged an empty list and found nothing.
             "unresolved_paths": _unresolved(target),
+            # WHICH RUN PRODUCED THIS. `runs.py` records what a sweep did, what it cost and
+            # how it ENDED -- finished, stopped, aborted -- and forty-five stored artifacts
+            # carried no way to reach it. The id is three hundred lines up in this same
+            # function. A record nothing can be matched to answers its questions about a run
+            # nobody can identify.
+            "run_id": _run_id,
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
             "not_applicable": not_applicable, "not_sent": not_sent,
             # HOW MANY ROWS NEVER LANDED. Without this a reader cannot tell 20 attacks
