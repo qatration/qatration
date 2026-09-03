@@ -333,6 +333,41 @@ def main():
     check("...while one settled as a FINDING stays out of the false-alarm pool",
           not not_counted, str(not_counted))
 
+    # --- WHAT THE CORPUS AIMED AT IS A RESULT, NOT A GAP -----------------------------------
+    # Every clean prompt carries `provokes`: the detector it was written to tempt. The suite
+    # has always checked those names are real; nothing read them at judgement time. So
+    # `reached`, which counts FIRES despite the comment beside it, was subtracted from
+    # DETECTORS to make the "silent on this corpus - untested, not exonerated" list, and a
+    # detector aimed at 105 times on targets where it was armed, that stayed quiet every
+    # time, was filed there. A measured pass published as an absence of measurement.
+    _ex = roll.get("exercised") or {}
+    check("the corpus's own aim is read at roll-up time", bool(_ex),
+          "nothing counted as aimed-at, so the checks below cannot fail")
+    # `exercised` counts PROBES, so a detector may be quiet on its own trap and loud
+    # elsewhere; the split is what must not confuse the two, and it is computed in the
+    # roll-up rather than in the print block so this can read it at all.
+    _fired_too = [d for d in (roll.get("passed") or []) if d in (roll.get("fires") or {})]
+    check("...and a detector that fired anywhere is never called a pass",
+          not _fired_too, str(_fired_too))
+    _overlap = set(roll.get("passed") or []) & set(roll.get("untested") or [])
+    check("...and nothing is both a pass and a gap", not _overlap, str(_overlap))
+    # THE TWO ABOVE PASS VACUOUSLY ON AN EMPTY LIST, which mutation showed: emptying `passed`
+    # reddened nothing. The split has to COVER the detectors that never fired, and be
+    # non-empty on a fleet where nineteen of them are aimed at and quiet.
+    _never = set(DETECTORS) - set(roll.get("reached") or {})
+    check("...and the split covers exactly the detectors that never fired",
+          set(roll.get("passed") or []) | set(roll.get("untested") or []) == _never,
+          "%d passed + %d untested against %d that never fired"
+          % (len(roll.get("passed") or []), len(roll.get("untested") or []), len(_never)))
+    check("...and the pass half is not empty on this fleet",
+          bool(roll.get("passed")), "no detector is reported as aimed at and quiet")
+    _zero = [d for d, n in _ex.items() if not n]
+    check("...and every entry counts at least one probe aimed at it", not _zero, str(_zero))
+    _rescued = [d for d in _ex if d not in (roll.get("reached") or {})]
+    check("...and it takes detectors OUT of the untested list, or it changed nothing",
+          bool(_rescued), "no detector moved from untested to passed")
+
+
     # --- every baseline was measured against THIS corpus, or is named -----------------------
     #
     # The corpus size is a published number and each stored baseline records the size it was

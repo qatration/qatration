@@ -44,7 +44,7 @@ except Exception:
 
 import yaml
 from target import payload
-from oracle import DETECTORS
+from oracle import DETECTORS, inert_for
 
 # ---------------------------------------------------------------------------------------
 # The corpus. Each entry names the detector it is built to provoke, so a fire is readable:
@@ -536,6 +536,7 @@ def roll_up():
     per, seen, probes, targets = collections.Counter(), collections.defaultdict(set), 0, []
     per_target = {}
     reached = collections.Counter()
+    exercised = collections.Counter()   # aimed at, armed, and it stayed quiet
     ages = {}
     for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
         d, why = read_artifact(fp)
@@ -553,7 +554,30 @@ def roll_up():
         # The matrix page learned this once; the roll-up had not.
         ages[t] = datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%m-%d %H:%M")
         probes += d["meta"]["probes"]
+        # WHAT THE CORPUS AIMED AT, which is not the same as what fired. Every clean prompt
+        # carries `provokes`: the detector it was written to tempt. `sql-in-question` is
+        # aimed at `sql_injection`, `path-in-question` at `path_traversal`. The suite checks
+        # those names are real and nothing has ever read them at judgement time, so a
+        # detector that was aimed at 105 times, on targets where it was armed, and correctly
+        # stayed quiet every time was reported as "silent on this corpus - untested, not
+        # exonerated". A measured pass, published as an absence of measurement.
+        #
+        # Armed matters: a trap fired at a target where the detector cannot speak measured
+        # nothing there, and 407 of the 1,563 trap probes on this fleet are that case. Where
+        # the config cannot be resolved -- an operator's target lives wherever they put it --
+        # nothing is claimed, which keeps this understating rather than over.
+        # `_ctx_for` returns (config, oracle_context) and RAISES for a name it cannot find --
+        # an operator's config lives wherever they put it, and a roll-up must not die on one.
+        try:
+            _ctx = _ctx_for(t)[1] or {}
+        except SystemExit:
+            _ctx = {}
+        _dead = set(inert_for(_ctx, DETECTORS)) if _ctx else set(DETECTORS)
         for r in d["rows"]:
+            _aim = r.get("provokes")
+            if (_aim and r.get("probe") and _aim not in _dead
+                    and _aim not in (r.get("fired") or [])):
+                exercised[_aim] += 1
             for f in r.get("fired", []):
                 reached[f] += 1
                 # An over-refusal on clean traffic is USUALLY a usability finding rather than a
@@ -589,6 +613,15 @@ def roll_up():
     # rather than from what happened.
     return {"targets": targets, "probes": probes, "ages": ages,
             "reached": dict(reached.most_common()),
+            "exercised": dict(exercised.most_common()),
+            # THE SPLIT ITSELF, not left to the print block. `baseline.note` taught this the
+            # same evening: a decision rendered inline is a decision no page and no check can
+            # read. `passed` is aimed at, armed, and never fired anywhere; `untested` is the
+            # remainder, which is the only half that is a gap.
+            "passed": sorted(d for d in DETECTORS
+                             if d not in reached and exercised.get(d)),
+            "untested": sorted(d for d in DETECTORS
+                               if d not in reached and not exercised.get(d)),
             "per_target": {k: dict(v) for k, v in per_target.items()},
             "fires": {k: {"n": v, "targets": sorted(seen[k])} for k, v in per.most_common()}}
 
@@ -681,7 +714,11 @@ def main():
         # From what the corpus REACHED, not from the false-positive list. Those differ by
         # exactly the detectors the FP filter removes, and calling one of those silent is a
         # false statement about the only evidence this section exists to summarise.
-        quiet = sorted(set(DETECTORS) - set(s["reached"]))
+        # SPLIT, because these are two different facts and only one of them is a gap.
+        # `reached` counts FIRES despite what the comment beside it used to claim, so
+        # subtracting it gives "never fired" -- which is where a detector that passed its own
+        # trap 105 times was being filed alongside one the corpus never sent anything at.
+        passed, quiet = s["passed"], s["untested"]
         # A roll-up with no age reads as "this is how things are", and it is not: these
         # files are written hours apart and an oracle fix lands between them. dvla's row
         # still shows three sysprompt_leak fires that a marker change has already removed.
@@ -740,6 +777,17 @@ def main():
         if settled:
             print(f"    false-alarm rate over what HAS been settled: {falsep}/{settled} "
                   f"({100 * falsep / settled:.1f}%)")
+
+        # THE HALF THAT IS A RESULT, printed before the half that is a gap. A detector the
+        # corpus aimed at, on a target where it could speak, that stayed quiet every time, is
+        # the strongest clean answer this instrument can give -- and it was filed under
+        # "untested" beside detectors nothing had ever sent anything at.
+        if passed:
+            print(f"\naimed at and quiet: {len(passed)} detectors. The corpus carries a "
+                  f"prompt written to tempt\neach of these, it was armed on the target that "
+                  f"received it, and it did not fire.\nThat is a pass, not a gap:")
+            for _d in passed:
+                print(f"    {_d:<26}{s['exercised'][_d]:>4} probe(s) aimed at it")
 
         print(f"\nsilent on this corpus: {len(quiet)} detectors. Not a clean bill — the "
               f"corpus is\n{len(CORPUS) + len(CONVERSATIONS)} exchanges wide and cannot "
