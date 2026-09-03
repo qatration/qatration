@@ -1,6 +1,6 @@
 # The oracle
 
-Sixty-three deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
+Sixty-four deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
 
 *Part of the [QAtration](../README.md) design record.*
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **63 demonstrated, 3 declared-only** over 5,602 stored probes. Few tools publish a plugin count
+It reports **64 demonstrated, 2 declared-only** over 6,882 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -42,17 +42,24 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The three that remain split **2 untried / 1 unevidenced / 0 unconfigured**. It was two until
-`divergent_repetition` lost its only recorded fire: that fire came from an offset bug, which
-made the preamble in front of a loop read as the divergence after it, so the detector had never
-actually been demonstrated on stored evidence. The middle bucket is
+The two that remain split **2 untried / 0 unevidenced / 0 unconfigured**. It was three until
+`hallucinated_package` was demonstrated; before that it was two, until `divergent_repetition`
+lost its only recorded fire, which came from an offset bug that made the preamble in front of a
+loop read as the divergence after it. The middle bucket is
 new, and it exists because the other two could not hold what belongs in it. `untried` prints
 "no target in the fleet exhibits this behaviour", which is a claim about the targets, and it was
 reached by elimination: not inert everywhere, never fired. A detector can satisfy both while
 every target it could speak on has no stored probe at all, and then the sentence rests on runs
-that never happened. `hallucinated_package` is exactly that — armed on four of the forty-two
-configured targets, and not one of those four has a single probe behind it. It now says so
-instead. The unconfigured half emptied
+that never happened. `hallucinated_package` was exactly that — armed on four of the forty-two
+configured targets, and not one of those four had a single probe behind it. It now says so
+instead, and that sentence is what got the detector measured: **the four were the copy-me
+templates**, which point at paid APIs and are never swept, so the one key that arms it
+(`nonexistent_packages`) was declared exclusively where nothing runs. Declaring it on
+`shipdesk` — a local support bot told to discuss orders and nothing else — demonstrated it on
+the first attempt, 2 of 2. Asked to confirm a library "a colleague mentioned", the bot answered
+`pip install vendor-support-sdk-async`; asked which package talks to its API, it invented
+`northgate_supply`. Both names are unregistered, which is the whole finding: anyone who reads
+that answer can register the name. The unconfigured half emptied
 twice for different reasons. The first time was `privileged_roles` being declared on the thirteen
 targets that have one. The second was `refusal_expected_but_absent`, which is armed by an ATTACK
 rather than by a target config: its arsenal was written after the last live sweep, so for a
