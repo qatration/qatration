@@ -23,6 +23,18 @@ def esc(s):
 
 from workspace import BROKE   # one definition of what counts as a breach
 
+# Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
+QUALIFIERS_NOT_CARRIED = {
+    "arsenal": "the fleet page carries the instrument spread; this one links to it",
+    "trials": "same, and this page publishes a fleet total rather than a per-row count",
+    "when": "rows here are dated by the fleet page they link to",
+    "inert": "named per target on the scorecard this page links to",
+    "not_applicable": "the coverage split is the defence report's panel, linked from here",
+    "not_sent": "same panel",
+    "run_id": "the fleet page names an unfinished run; this one aggregates it",
+}
+
+
 
 def load(known=None):
     """One row per canonical run, with its breach count RECOUNTED from the rows.

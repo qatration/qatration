@@ -20,6 +20,14 @@ from oracle import current_name
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
+# Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
+QUALIFIERS_NOT_CARRIED = {
+    "trials": "findings are listed per row with their rate, not compared across targets",
+    "when": "each finding carries its target's measurement date in the table above it",
+    "run_id": "the fleet page names an unfinished run; this one is about the findings",
+}
+
+
 # detector -> remediation (severity, OWASP LLM Top-10 class, one concrete fix).
 REMEDIATION = {
     "refusal_expected_but_absent": dict(sev="high", order=2,

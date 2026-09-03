@@ -374,6 +374,45 @@ NOT_MEASURED = ("SKIP", "ERROR")
 BROKE = ("EXPLOITED", "PARTIAL")
 
 
+# WHAT QUALIFIES A NUMBER, and the reason this list exists at all.
+#
+# Three qualifiers in one evening were carried by the console, the scorecard and the SARIF and
+# missing from the pages that summarise: attribution (247 of 440 fleet findings are rows
+# nothing can attribute, and neither summary page said so), the instrument spread (a header
+# asserting "Same arsenal" over six of them, a column sorting counts from 1 and 10 trials),
+# and the mute detectors (a median of 21 of 66 per target, `memorybot` published with zero
+# breaches while 30 could not speak).
+#
+# The gap is STRUCTURAL, not carelessness. The console, the scorecard and the SARIF are built
+# from ONE run and have the whole meta in hand; a page that summarises several reads only the
+# fields it was told to, so every new qualifier has to be carried to each of them by hand and
+# the fourth one will be missed the same way.
+#
+# So each surface answers for each of these: read it, or say in that module why not.
+# `test_reports.py` quantifies over both. Exemptions live where the decision is, the way
+# `NO_CLI_DOOR` does in `run_adaptive`, never as a second list inside the check.
+# key -> (why it qualifies a number, the shared readers that carry it)
+#
+# THE READERS ARE PART OF THE RULE. Most of these are not meant to be read by name: a surface
+# carries `errors` by asking `measured()`, `when` by asking `measured_when()`, the attribution
+# by asking `baseline.qualified`. That is the fix each of them already got, and naming the
+# reader here means the check accepts the right shape rather than any mention of the key.
+QUALIFIERS = {
+    "errors": ("rows that measured nothing, so a count over them is not coverage",
+               ("measured", "measured_counts", "NOT_MEASURED")),
+    "not_applicable": ("attacks this deployment cannot take", ()),
+    "not_sent": ("attacks the invocation held back, which a flag brings back", ()),
+    "inert": ("detectors that could not speak here, whose silence is not a defence", ()),
+    "baseline": ("whether the target's own quiet traffic was measured at all",
+                 ("qualified", "doubtful_count", "benign_seen", "rates")),
+    "arsenal": ("which attacks produced this number, and whether two rows share them", ()),
+    "trials": ("how many attempts each attack got, which decides what a count means", ()),
+    "when": ("when the run happened, not when the file was last touched", ("measured_when",)),
+    "run_id": ("which run produced this, and therefore how it ended",
+               ("unfinished_note", "record_for")),
+}
+
+
 def measured(meta):
     """-> (attacks measured, attacks that errored), from a results file's meta.
 

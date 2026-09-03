@@ -15,6 +15,14 @@ from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
+# Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
+QUALIFIERS_NOT_CARRIED = {
+    "inert": "named per target on the scorecard, and this page has one row per target",
+    "not_applicable": "the split is the defence report's coverage panel",
+    "not_sent": "same panel",
+}
+
+
 
 
 def _severity_table():

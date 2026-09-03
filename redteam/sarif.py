@@ -41,6 +41,15 @@ import baseline
 import workspace
 from target import target_configs
 
+# Qualifiers this export does not carry, and why. See `workspace.QUALIFIERS`.
+QUALIFIERS_NOT_CARRIED = {
+    "arsenal": "SARIF describes one run; there is no second run in it to be comparable with",
+    "trials": "the rate rides on each finding's message rather than the invocation summary",
+    "when": "the consumer stamps its own upload time, and a second date invites the wrong one",
+    "run_id": "a code-scanning tab has no way to open a run record, so the id would be noise",
+}
+
+
 SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 INFO_URI = "https://github.com/qatration/qatration"
 
@@ -181,7 +190,11 @@ def build(results, target_config=None, out_dir=None):
         # complete, clean scan. This module's whole argument is that a detector which could not
         # fire is a notification rather than a silence; an attack that was never sent is the
         # same claim one level up, and it was the one place the argument was not applied.
-        if head in ("ERROR", "SKIP"):
+        # `workspace.NOT_MEASURED`, not a literal of the same two names. The set is decided
+        # in one place -- it grew from ("ERROR",) to ("SKIP", "ERROR") once already, because
+        # an attack that was never delivered reads as one that held -- and a second copy here
+        # would keep the older answer without anything noticing.
+        if head in workspace.NOT_MEASURED:
             unrun.append(row)
             continue
         level = BASE_LEVEL.get(head)

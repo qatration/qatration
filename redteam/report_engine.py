@@ -8,6 +8,13 @@ import re
 from recon import memory_phrase
 from workspace import measured
 
+# Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
+QUALIFIERS_NOT_CARRIED = {
+    "arsenal": "one target, one run: there is nothing on this page to be comparable with",
+    "run_id": "the record is named beside this file in out/, and the page is the run's own",
+}
+
+
 VERDICT = {
     "EXPLOITED": ("#b3261e", "#fdeceb"),
     "PARTIAL":   ("#8a5a00", "#fff5e0"),

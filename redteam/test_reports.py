@@ -1375,6 +1375,62 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- EVERY SURFACE ANSWERS FOR EVERY QUALIFIER --------------------------------------
+    #
+    # Three qualifiers in one evening had the same gap, and the gap is structural: the
+    # console, the scorecard and the SARIF are built from ONE run and hold the whole meta,
+    # while a page that summarises several reads only the fields somebody carried to it. So
+    # the fourth would be missed the same way, and this exists so it cannot be missed
+    # silently -- a surface reads it, or says in its own module why not.
+    #
+    # Reading the source rather than the rendered page, deliberately: a qualifier can be a
+    # column, a bar, a tooltip or a sentence, and a check demanding one shape would be a
+    # check about layout. What this demands is that somebody decided.
+    from workspace import QUALIFIERS as _QUAL
+
+    _SURFACES = ["report_engine.py", "sarif.py", "defense_report.py",
+                 "compare_targets.py", "build_index.py"]
+    check("there is a list of qualifiers to quantify over", bool(_QUAL), "workspace.QUALIFIERS")
+
+    def _declared_in(src):
+        """The module's own exemptions, read out of its declaration block."""
+        head = src.find("QUALIFIERS_NOT_CARRIED")
+        if head < 0:
+            return {}, src
+        end = src.find("\n}", head)
+        body = src[head:end if end > 0 else head]
+        out = {}
+        for line in body.split("\n"):
+            if '":' not in line:
+                continue
+            key = line.split('"')[1] if line.count('"') >= 2 else ""
+            reason = line.split('": "')[-1].rstrip('",') if '": "' in line else ""
+            if key and len(reason) > 8:
+                out[key] = reason
+        return out, src[:head] + src[(end if end > 0 else head):]
+
+    for _mod in _SURFACES:
+        _src = io.open(os.path.join(HERE, _mod), encoding="utf-8").read()
+        _declared, _rest = _declared_in(_src)
+        def _carries(q):
+            if ('"%s"' % q) in _rest or ("'%s'" % q) in _rest:
+                return True
+            # OR THROUGH THE SHARED READER, which is how each of these was actually fixed:
+            # a page asks `measured()` for the errors and `measured_when()` for the date
+            # rather than touching the key, and demanding the key back would push the next
+            # surface into re-deriving the rule it is supposed to call.
+            # A NAME, NOT ONLY A CALL. `NOT_MEASURED` is a set used as `workspace.NOT_MEASURED`
+            # with no parentheses, and demanding a call would have pushed sarif back to the
+            # literal tuple this check just took out of it.
+            return any(r in _rest for r in (_QUAL[q][1] or ()))
+
+        _missing = [q for q in _QUAL if not _carries(q) and q not in _declared]
+        check("%s answers for every qualifier" % _mod, not _missing,
+              "neither read nor explained: %s" % ", ".join(_missing))
+        _stale = [k for k in _declared if k not in _QUAL]
+        check("...and explains none that is not one", not _stale, str(_stale))
+
+
     # --- THE QUALIFIER THE SUMMARY PAGES DID NOT CARRY ---------------------------------
     # A breach on a detector the target also trips with nobody attacking it is the
     # distinction this project argues for. The scorecard, the defence report and the SARIF
