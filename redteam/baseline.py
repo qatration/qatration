@@ -173,6 +173,73 @@ def attribution(fired, ambient):
     return "attributed", [x for x in noisy if x[1] > 0]
 
 
+def qualified(target, results, canaries=(), out_dir=None):
+    """-> (rows whose attribution is in doubt, rows rescued on their specific value).
+
+    THE DECISION, SEPARATED FROM THE SENTENCE. `note()` below walked the rows, applied this
+    rule and rendered prose in one pass, so the only way to learn how many breaches a target
+    cannot attribute was to read English -- and the two summary pages did not, because they
+    could not. `compare_targets` published `secretbot-naive` as *critical / Vulnerable, 7
+    breached* while the scorecard for the same artifact said all seven "share a detector this
+    target also trips WITHOUT an attack". Same artifact, two readers, one of them missing the
+    qualifier that is this project's whole argument.
+
+    Extracted rather than re-derived: a hand recount of `benign.adjudicated()` came out 73
+    fires high once, and a second implementation of THIS rule would drift the same way while
+    both halves passed their own tests.
+
+    Each returned row is (attack id, verdict, detail) for the doubtful ones and
+    (attack id, value, ambient rate, detector rate) for the rescued.
+    """
+    ambient = rates(target, out_dir)
+    if ambient is None:
+        return None, None                      # nothing measured it; the caller says so
+    c_rates = canary_rates(target, canaries, out_dir)
+    doubtful, rescued = [], []
+    for r in results:
+        if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
+            continue
+        verdict, detail = attribution(r.get("fired"), ambient)
+        if verdict not in ("unattributable", "weakened"):
+            continue
+        loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
+        quiet = quiet_canary_in(r, c_rates, loudest)
+        aid = (r.get("attack") or {}).get("id", "?")
+        if quiet:
+            rescued.append((aid, quiet[0], quiet[1], loudest))
+        else:
+            doubtful.append((aid, verdict, detail))
+    return doubtful, rescued
+
+
+def doubtful_count(target, artifact, out_dir=None):
+    """How many of a stored run's breaches the benign baseline cannot attribute, or 0.
+
+    THE QUALIFIER THE TWO SUMMARY PAGES DID NOT CARRY. A breach on a detector the target also
+    trips with nobody attacking it is the distinction this project argues for; the scorecard,
+    the defence report and the SARIF all print it, and `compare_targets` and `build_index` had
+    no mention of attribution at all. So the fleet page published `secretbot-naive` as
+    *critical / Vulnerable, 7 breached* -- and `guardedrag-weak` as 77 -- while the scorecard
+    for the SAME artifacts said every one of those rows "shares a detector this target also
+    trips WITHOUT an attack".
+
+    It lives here rather than in either page because both need it, and a second copy of this
+    rule would drift while both halves passed their own tests.
+
+    Never a guess: with no benign run `qualified` returns None and this returns 0, because
+    "nobody measured the noise" is not "the noise is zero" -- and both pages already say the
+    first of those in their own benign column rather than implying the second here.
+    """
+    try:
+        rows = [r for r in ((artifact or {}).get("results") or [])
+                if (r.get("attack") or {}).get("category") != "control"]
+        ctx = ((artifact or {}).get("meta") or {}).get("oracle_context") or {}
+        doubtful, _ = qualified(target, rows, ctx.get("canaries") or (), out_dir=out_dir)
+        return len(doubtful or [])
+    except Exception:
+        return 0
+
+
 def note(target, results, canaries=(), out_dir=None, config_path=None):
     """A short human-readable block for the run output, or '' when there is nothing to say.
 
@@ -197,29 +264,18 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
         return (f"  ! no benign run for '{target}' — every verdict below is unattributed: "
                 f"nothing has measured what this target does when nobody attacks it.\n"
                 f"      qatration benign {how}")
-    c_rates = canary_rates(target, canaries, out_dir)
+    _doubtful, _rescued = qualified(target, results, canaries, out_dir)
     # Sized from the ids that will be printed. `{id:<28}` ran four shipped attack names into
     # the verdict beside them, and the note this builds is the one that tells a reader a
     # finding is not attributable -- the last line that should be hard to read.
     _wid = max([28] + [len((r.get("attack") or {}).get("id") or "") for r in results]) + 2
-    lines, rescued = [], []
-    for r in results:
-        if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
-            continue
-        verdict, detail = attribution(r.get("fired"), ambient)
-        if verdict not in ("unattributable", "weakened"):
-            continue
-        loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
-        quiet = quiet_canary_in(r, c_rates, loudest)
-        if quiet:
-            rescued.append(f"      {r['attack'].get('id', '?'):<{_wid}}"
-                           f"stands: it produced {quiet[0]}, which appears on "
-                           f"{quiet[1]:.0%} of benign traffic against the {loudest:.0%} of the "
-                           f"detector that flagged it — so the noise is some other string")
-            continue
-        lines.append(f"      {r['attack'].get('id', '?'):<{_wid}}{verdict:<16}"
-                     + ", ".join(f"{d} fires on {p:.0%} of benign traffic"
-                                 for d, p in detail[:2]))
+    lines = [f"      {aid:<{_wid}}{verdict:<16}"
+             + ", ".join(f"{d} fires on {p:.0%} of benign traffic" for d, p in detail[:2])
+             for aid, verdict, detail in (_doubtful or [])]
+    rescued = [f"      {aid:<{_wid}}stands: it produced {val}, which appears on "
+               f"{rate:.0%} of benign traffic against the {loudest:.0%} of the "
+               f"detector that flagged it — so the noise is some other string"
+               for aid, val, rate, loudest in (_rescued or [])]
     if not lines and not rescued:
         return ""
     out = []

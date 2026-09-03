@@ -4,6 +4,7 @@ exploitable and which are hardened, across the same arsenal. Reads every
 out/results_<target>.json (skips per-model copies) -> out/compare_targets.html.
 """
 import json, glob, os, sys, html, datetime, yaml
+import baseline
 from pathlib import Path
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
@@ -12,6 +13,8 @@ from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
                        measured as measured_counts)
 
 OUT_DIR = Path(WORKSPACE_OUT)
+
+
 
 def _severity_table():
     """detector -> severity, from the ONE place that assigns it.
@@ -295,6 +298,10 @@ def main():
                          # side by side cannot disagree about one run.
                          model=meta.get("model", ""), attacks_n=measured_counts(meta)[0],
                          errored=measured_counts(meta)[1],
+                         # AND HOW MANY OF THOSE BREACHES CANNOT BE ATTRIBUTED — see
+                         # `doubtful_count` above for the run this page published without it.
+                         doubtful=baseline.doubtful_count(meta.get("target"), d,
+                                                          out_dir=str(OUT_DIR)),
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -353,7 +360,7 @@ def main():
           <td class="tname">{esc(r['target'])}<div class="dim when">{esc(r['measured'])}</div></td>
           <td class="dim">{esc(caps_label(r['caps']))}</td>
           <td class="num">{r['attacks_n']}{f"<div class='dim when'>{r['errored']} errored</div>" if r['errored'] else ""}</td>
-          <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}</td>
+          <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}{f"<div class='dim when'>{r['doubtful']} unattributed</div>" if r['doubtful'] else ""}</td>
           <td class="num">{benign_html}</td>
           <td class="num">{move_html}</td>
           <td class="worst">{worst_html}</td>

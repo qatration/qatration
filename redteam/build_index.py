@@ -6,6 +6,7 @@ its scorecard. One page to open after a sweep.
 import glob, json, os, html, datetime
 from target import target_configs
 from pathlib import Path
+import baseline
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact,
                        measured)
 
@@ -69,6 +70,11 @@ def load(known=None):
         m["_counted"] = sum(1 for r in d.get("results", [])
                             if r.get("headline") in BROKE
                             and (r.get("attack") or {}).get("category") != "control")
+        # AND HOW MANY OF THOSE BREACHES THE BENIGN BASELINE CANNOT ATTRIBUTE. This page
+        # publishes a fleet total of findings and said nothing about attribution, the same
+        # gap `compare_targets` had: one shared reader in `baseline` now, so the index, the
+        # fleet page and the scorecard cannot disagree about one artifact.
+        m["_doubtful"] = baseline.doubtful_count(m.get("target"), d, out_dir=str(OUT))
         m["_file"] = os.path.basename(str(fp))
         metas.append(m)
 
@@ -76,6 +82,7 @@ def load(known=None):
     orphans = [(m.get("_file"), m.get("target")) for m in dropped]
     for m in kept:
         m["broke_at_run"], m["broke"] = m.get("broke"), m.pop("_counted")
+        m["doubtful"] = m.pop("_doubtful", 0)
         m.pop("_file", None)
         rows.append(m)
     # UNREADABLE IS NOT ABSENT. A truncated artifact used to take this whole page down;
@@ -156,6 +163,7 @@ def main():
     rows.sort(key=lambda m: (-(m.get("broke", 0) / max(1, m.get("attacks_n", 1))), m["target"]))
     n_targets = len(rows)
     n_find = sum(m.get("broke", 0) for m in rows)
+    n_doubt = sum(m.get("doubtful", 0) for m in rows)
     hardened, unmeasured = classify(rows)
     prov = provenance()
     kinds = {}
@@ -258,7 +266,7 @@ that does not separate those is counting its own homework: {third_list}.</div>
 <div class="tiles">
   <div class="tile"><div class="n">{n_targets}</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">{n_third}</div><div class="l">third-party code</div></div>
-  <div class="tile"><div class="n" style="color:var(--accent)">{n_find}</div><div class="l">attacks breached</div></div>
+  <div class="tile"><div class="n" style="color:var(--accent)">{n_find}</div><div class="l">attacks breached</div>{f'<div class="l" style="color:var(--dim)">{n_doubt} the benign baseline cannot attribute</div>' if n_doubt else ""}</div>
   <div class="tile"><div class="n" style="color:{SEV['none']}">{len(hardened)}</div><div class="l">hardened (0 breaches)</div></div>
 </div>
 <div class="links">

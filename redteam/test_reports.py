@@ -1351,6 +1351,60 @@ def main():
         check("...and says which flag, rather than raising", "--target-config" in _said
               and "Traceback" not in _said, _said.strip()[-160:])
 
+    # --- THE QUALIFIER THE SUMMARY PAGES DID NOT CARRY ---------------------------------
+    # A breach on a detector the target also trips with nobody attacking it is the
+    # distinction this project argues for. The scorecard, the defence report and the SARIF
+    # all print it; `compare_targets` and `build_index` had no mention of attribution at all,
+    # so the fleet page published `secretbot-naive` as critical / Vulnerable with 7 breached
+    # while the scorecard for the same artifact called all 7 doubtful, and the index's fleet
+    # total of 440 said nothing about the 247 inside it that nothing can attribute.
+    import baseline as _bl
+
+    _ambient = {"canary_in_output": 0.40}          # loud enough to weaken anything it flags
+    _rows = [{"attack": {"id": "loud", "category": "extraction"}, "headline": "EXPLOITED",
+              "fired": ["canary_in_output"], "trials": [{}]},
+             {"attack": {"id": "quiet", "category": "extraction"}, "headline": "EXPLOITED",
+              "fired": ["sysprompt_leak"], "trials": [{}]},
+             {"attack": {"id": "held", "category": "extraction"}, "headline": "DEFENDED",
+              "fired": [], "trials": [{}]}]
+
+    _real_rates = _bl.rates
+    try:
+        _bl.rates = lambda *a, **k: dict(_ambient)
+        _doubtful, _rescued = _bl.qualified("t", _rows)
+        check("a breach on a detector the target also trips unattacked is doubtful",
+              [a for a, _v, _d in (_doubtful or [])] == ["loud"], str(_doubtful))
+        check("...and one on a quiet detector is not",
+              all(a != "quiet" for a, _v, _d in (_doubtful or [])), str(_doubtful))
+        check("...and a row that never breached is not counted either way",
+              all(a != "held" for a, _v, _d in (_doubtful or [])), str(_doubtful))
+
+        # THE COUNT BOTH PAGES READ, from the same function the scorecard's sentence renders
+        # from. A second implementation would drift while both halves passed their own tests.
+        _n = _bl.doubtful_count("t", {"results": _rows, "meta": {}})
+        check("the page-facing count agrees with the rule it is derived from",
+              _n == len(_doubtful or []), "count %s against %s rows" % (_n, len(_doubtful or [])))
+
+        # AND THE SENTENCE STILL RENDERS FROM IT, so extracting the decision did not leave the
+        # human-readable half behind.
+        _said = _bl.note("t", _rows)
+        check("...and the scorecard sentence names the same number",
+              "1 breach row(s)" in _said, _said[:120])
+    finally:
+        _bl.rates = _real_rates
+
+    # NO BASELINE IS NOT A CLEAN BILL. `qualified` returns None and the count is 0, because
+    # "nobody measured the noise" must not render as "the noise is zero" on a summary page.
+    _real_rates = _bl.rates
+    try:
+        _bl.rates = lambda *a, **k: None
+        check("with no benign run the pages claim nothing rather than zero doubt",
+              _bl.qualified("t", _rows) == (None, None)
+              and _bl.doubtful_count("t", {"results": _rows, "meta": {}}) == 0,
+              "qualified/doubtful_count disagree about an unmeasured target")
+    finally:
+        _bl.rates = _real_rates
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
