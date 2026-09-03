@@ -6,7 +6,7 @@ What changed, in the project's own words, newest first.
 
 ---
 
-## Twelve things the code could not show us (0.4.1, 2026-09-03)
+## Twelve things the code could not show us (0.4.1, 2026-09-02)
 
 **Every defect here was found the same way: install the published package, point it at a live
 endpoint, and read what comes out.** Not one of them fails a suite, and ten of the twelve are
