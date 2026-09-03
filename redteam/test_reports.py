@@ -1405,6 +1405,35 @@ def main():
     finally:
         _bl.rates = _real_rates
 
+    # --- "SAME ARSENAL" WAS A CLAIM THE PAGE NEVER CHECKED -----------------------------
+    # The fleet header asserted it while the shipped evidence held six named arsenals and
+    # thirty-two artifacts with no stamp at all. `history.diff()` refuses a before/after
+    # across two arsenals in so many words -- "measured with different instruments, so
+    # neither a pass nor a failure would mean anything" -- and the same comparison across
+    # targets, on a page built for comparing, had no such check.
+    from compare_targets import arsenal_claim as _claim
+
+    _same = [{"target": "a", "arsenal": "attacks_generic.yaml"},
+             {"target": "b", "arsenal": "attacks_generic.yaml"}]
+    _phrase, _odd = _claim(_same)
+    check("one arsenal everywhere still says so", _phrase == "Same arsenal", _phrase)
+    check("...and names nobody", _odd == [], str(_odd))
+
+    _mixed = _same + [{"target": "c", "arsenal": "attacks_refusal.yaml"}]
+    _phrase, _odd = _claim(_mixed)
+    check("two arsenals is not 'Same arsenal'", "Same arsenal" not in _phrase, _phrase)
+    check("...and it says how many there are", "2 different arsenals" in _phrase, _phrase)
+    check("...and names the row that differs from the majority",
+          [r["target"] for r in _odd] == ["c"], str(_odd))
+
+    # AN ABSENCE IS NOT A DISAGREEMENT. Artifacts written before the field existed cannot be
+    # called different, and counting them as such would be a claim this page cannot support.
+    _blank = _same + [{"target": "d"}]
+    _phrase, _odd = _claim(_blank)
+    check("an unstamped artifact is reported as unrecorded, not as a difference",
+          "do not say" in _phrase and _odd == [], "%s / %s" % (_phrase, _odd))
+
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

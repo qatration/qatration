@@ -45,6 +45,37 @@ SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", None: "#1e
 VERDICT_C = {"Vulnerable": "#b3261e", "Hardened": "#1e9d63", "Not measured": "#6b6b6b"}
 
 
+def arsenal_claim(rows):
+    """-> (the subtitle phrase, the rows that were not swept with the majority arsenal).
+
+    THE PAGE ASSERTED "Same arsenal" IN ITS HEADER AND NEVER READ THE FIELD. What the shipped
+    evidence holds is six named arsenals and thirty-two artifacts with no stamp at all:
+    `attacks_refusal.yaml` on three targets, `attacks_guardlift.yaml` on two, `attacks.yaml`
+    on two, plus one temp file and one scratch file. Putting breach counts side by side under
+    that sentence compares instruments, not systems.
+
+    THE RULE IS ALREADY IN THIS REPOSITORY, one axis over. `history.diff()` refuses to compare
+    ONE target across two arsenals -- "before and after were measured with different
+    instruments, so neither a pass nor a failure would mean anything" -- and names the
+    difference as a confound. The same comparison across targets had no such check.
+
+    An unstamped artifact is not a disagreement, it is an absence, and it is counted as one:
+    older runs predate the field, and calling them "different" would be a claim this page
+    cannot support either.
+    """
+    named = [r.get("arsenal") for r in rows if r.get("arsenal")]
+    kinds = sorted(set(named))
+    unstamped = [r for r in rows if not r.get("arsenal")]
+    if len(kinds) <= 1 and not unstamped:
+        return "Same arsenal", []
+    if len(kinds) <= 1:
+        return ("Same arsenal where it is recorded (%d of %d artifacts do not say)"
+                % (len(unstamped), len(rows))), []
+    majority = max(kinds, key=lambda k: named.count(k))
+    odd = [r for r in rows if r.get("arsenal") and r["arsenal"] != majority]
+    return ("%d different arsenals, not one" % len(kinds)), odd
+
+
 def esc(s):
     return html.escape(str(s))
 
@@ -302,6 +333,9 @@ def main():
                          # `doubtful_count` above for the run this page published without it.
                          doubtful=baseline.doubtful_count(meta.get("target"), d,
                                                           out_dir=str(OUT_DIR)),
+                         # THE HEADER USED TO ASSERT THIS RATHER THAN READ IT. See
+                         # `arsenal_claim` for what the shipped evidence actually holds.
+                         arsenal=meta.get("arsenal"),
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -317,6 +351,7 @@ def main():
         r["moved"] = moved.get(r["target"])
     rows.sort(key=lambda r: (-r["broke"], SEV_RANK[r["worst"]]))
     n_vuln = sum(1 for r in rows if r["verdict"] == "Vulnerable")
+    _arsenal_phrase, _odd_arsenal = arsenal_claim(rows)
 
     def caps_label(caps):
         if not caps:
@@ -430,6 +465,17 @@ def main():
                  f'days: newest {esc(newest[:10])}, also {esc(", ".join(older))}. '
                  f'A run older than the engine that produced the newest row was measured '
                  f'differently and should be re-run before it is compared.</div>')
+    # NAMED, NOT JUST COUNTED. The header says how many arsenals are behind this table; the
+    # rows a reader would otherwise compare straight across are the ones worth naming, and
+    # `history.diff` names the same difference when it refuses a before/after.
+    arsenalbar = ("" if not _odd_arsenal else
+                  '<div class="stalebar">Not every row was swept with the same attacks: '
+                  + esc(", ".join("%s (%s)" % (r["target"], r["arsenal"])
+                                  for r in sorted(_odd_arsenal, key=lambda x: x["target"])[:6]))
+                  + (" and %d more" % (len(_odd_arsenal) - 6) if len(_odd_arsenal) > 6 else "")
+                  + '. A breach count from one arsenal is not comparable with a breach count '
+                    'from another, which is why the timeline refuses that comparison for a '
+                    'single target across two runs.</div>')
     today = datetime.date.today().isoformat()
 
     lead = fleet_lead(len(rows), n_vuln)
@@ -476,11 +522,12 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 </style></head><body><div class="wrap">
 <div class="head">
   <h1><span class="q">QA</span>tration — Fleet Overview</h1>
-  <div class="sub">Same arsenal · {len(rows)} system{"" if len(rows) == 1 else "s"} · {today}</div>
+  <div class="sub">{_arsenal_phrase} · {len(rows)} system{"" if len(rows) == 1 else "s"} · {today}</div>
 </div>
 <p class="lead">{lead}</p>
 
 {staleness}
+{arsenalbar}
 <table>
   <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
   <tbody>{tbody}</tbody>
