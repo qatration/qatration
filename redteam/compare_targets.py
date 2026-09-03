@@ -45,6 +45,32 @@ SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", None: "#1e
 VERDICT_C = {"Vulnerable": "#b3261e", "Hardened": "#1e9d63", "Not measured": "#6b6b6b"}
 
 
+def odd_on(rows, field):
+    """-> (rows differing from the majority on `field`, the values seen).
+
+    ONE IMPLEMENTATION FOR TWO INSTRUMENTS. `history.diff()` treats a changed arsenal and a
+    changed trial count as two entries in one list of confounds, for the same reason: both
+    make before and after two different measurements. This page needs the same question
+    asked across targets rather than across time, and asking it twice in two shapes is how
+    the two answers drift.
+
+    A row that does not record the field is not a row that disagrees, so it is left out of
+    both halves and counted by the caller as unrecorded.
+    """
+    vals = [r.get(field) for r in rows if r.get(field) is not None]
+    # SORTED AS WHAT THEY ARE. `key=str` put 10 before 3 and the rendered bar read
+    # "1 trial(s) ... 10 trial(s) ... 2 trial(s) ... 3 trial(s)", which is a list of numbers
+    # ordered as text. Numbers sort as numbers; anything else falls back to text.
+    try:
+        kinds = sorted(set(vals))
+    except TypeError:
+        kinds = sorted(set(vals), key=str)
+    if len(kinds) <= 1:
+        return [], kinds
+    majority = max(kinds, key=lambda k: vals.count(k))
+    return [r for r in rows if r.get(field) is not None and r[field] != majority], kinds
+
+
 def arsenal_claim(rows):
     """-> (the subtitle phrase, the rows that were not swept with the majority arsenal).
 
@@ -63,16 +89,13 @@ def arsenal_claim(rows):
     older runs predate the field, and calling them "different" would be a claim this page
     cannot support either.
     """
-    named = [r.get("arsenal") for r in rows if r.get("arsenal")]
-    kinds = sorted(set(named))
+    odd, kinds = odd_on(rows, "arsenal")
     unstamped = [r for r in rows if not r.get("arsenal")]
     if len(kinds) <= 1 and not unstamped:
         return "Same arsenal", []
     if len(kinds) <= 1:
         return ("Same arsenal where it is recorded (%d of %d artifacts do not say)"
                 % (len(unstamped), len(rows))), []
-    majority = max(kinds, key=lambda k: named.count(k))
-    odd = [r for r in rows if r.get("arsenal") and r["arsenal"] != majority]
     return ("%d different arsenals, not one" % len(kinds)), odd
 
 
@@ -336,6 +359,7 @@ def main():
                          # THE HEADER USED TO ASSERT THIS RATHER THAN READ IT. See
                          # `arsenal_claim` for what the shipped evidence actually holds.
                          arsenal=meta.get("arsenal"), when_said=_when_said,
+                         trials=meta.get("trials"),
                          broke=broke, worst=worst,
                          # `verdict_for`, not `broke > 0`: this column called httpbot
                          # Hardened off a run that sent zero attacks, while the index page —
@@ -487,6 +511,19 @@ def main():
                   + '. A breach count from one arsenal is not comparable with a breach count '
                     'from another, which is why the timeline refuses that comparison for a '
                     'single target across two runs.</div>')
+    # THE OTHER INSTRUMENT IN THE SAME COLUMN. A run at ten trials gives every flaky attack
+    # ten chances to land and a run at one gives it one, so their breach counts are not the
+    # same measurement -- which is exactly why `history.diff()` refuses a before/after across
+    # a changed trial count, in those words. This page sorts targets BY that count.
+    _odd_trials, _trial_kinds = odd_on(rows, "trials")
+    trialbar = ("" if len(_trial_kinds) <= 1 else
+                '<div class="stalebar">These rows did not all get the same number of '
+                'attempts: ' + esc(", ".join("%s trial(s) for %s" % (k, ", ".join(
+                    sorted(r["target"] for r in rows if r.get("trials") == k)[:3]))
+                    for k in _trial_kinds))
+                + '. More attempts give a flaky attack more chances to land, so a breach '
+                  'count from ten trials is not comparable with one from a single try -- the '
+                  'timeline refuses that comparison for one target across two runs.</div>')
     today = datetime.date.today().isoformat()
 
     lead = fleet_lead(len(rows), n_vuln)
@@ -540,6 +577,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 {staleness}
 {undatedbar}
 {arsenalbar}
+{trialbar}
 <table>
   <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
   <tbody>{tbody}</tbody>

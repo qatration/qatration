@@ -1411,6 +1411,27 @@ def main():
     # across two arsenals in so many words -- "measured with different instruments, so
     # neither a pass nor a failure would mean anything" -- and the same comparison across
     # targets, on a page built for comparing, had no such check.
+    # AND THE SAME QUESTION ON THE OTHER INSTRUMENT. The page sorts targets by breach count
+    # while those counts came from runs at 1, 2, 3 and 10 trials: ten attempts give a flaky
+    # attack ten chances to land. `history.diff()` refuses that comparison across time in so
+    # many words; across targets, in the column it sorts by, nothing asked.
+    from compare_targets import odd_on as _odd_on
+
+    _t = [{"target": "a", "trials": 3}, {"target": "b", "trials": 3}, {"target": "c", "trials": 10}]
+    _odd, _kinds = _odd_on(_t, "trials")
+    check("a row measured with more attempts than the rest is named",
+          [r["target"] for r in _odd] == ["c"], str(_odd))
+    check("...and the values seen are reported", _kinds == [3, 10], str(_kinds))
+    check("one trial count everywhere names nobody",
+          _odd_on([{"target": "a", "trials": 3}], "trials") == ([], [3]),
+          str(_odd_on([{"target": "a", "trials": 3}], "trials")))
+    # A ROW THAT DOES NOT RECORD IT IS NOT A ROW THAT DISAGREES, the same rule the arsenal
+    # half applies to an unstamped artifact.
+    _odd, _kinds = _odd_on([{"target": "a", "trials": 3}, {"target": "b"}], "trials")
+    check("an unrecorded trial count is not counted as a difference",
+          _odd == [] and _kinds == [3], "%s / %s" % (_odd, _kinds))
+
+
     from compare_targets import arsenal_claim as _claim
 
     _same = [{"target": "a", "arsenal": "attacks_generic.yaml"},
