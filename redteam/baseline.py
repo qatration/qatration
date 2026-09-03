@@ -43,6 +43,15 @@ NOISY = 0.20
 MIN_CONTROL = 5
 
 
+def _path(target, out_dir=None):
+    """Where this target's benign artifact lives.
+
+    Built in one place because it was built in three, and a fourth reader was about to make
+    it four. Nothing had drifted yet; that is the point of moving it before something does.
+    """
+    return os.path.join(out_dir or OUT_DIR, f"benign_{target}.json")
+
+
 def rates(target, out_dir=None):
     """detector -> share of benign probes it fired on. None if never measured.
 
@@ -52,9 +61,8 @@ def rates(target, out_dir=None):
     conflation while the code committed it. `None` means nobody looked; `{}` means somebody
     looked and nothing fired.
     """
-    path = os.path.join(out_dir or OUT_DIR, f"benign_{target}.json")
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(_path(target, out_dir), encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
         return None
@@ -67,6 +75,33 @@ def rates(target, out_dir=None):
         for d in (r.get("fired") or []):
             counts[d] = counts.get(d, 0) + 1
     return {d: n / len(scored) for d, n in counts.items()}
+
+
+def benign_seen(target, out_dir=None):
+    """-> (rows the oracle left alone, rows actually sent), or None if never measured.
+
+    THE SAME DENOMINATOR `rates` ABOVE USES, and the fourth consumer to need it. `benign.py`
+    writes `meta["probes"]` as the ROW count, which includes rows recorded under `skipped`
+    and never sent, and says so in a comment: "Anything dividing by 'how much benign traffic
+    did we actually see' must ask `baseline.rates`, which counts the rows that carry a
+    probe." Three modules were fixed when that was written. The fleet page's "quiet on
+    benign" column was not, so it published `citebot` as 41/50 where 48 probes were sent,
+    and five more like it -- two to four points out, in the column that qualifies every
+    breach count beside it.
+
+    Counted from the rows for the same reason `rates` does: a row carrying a probe is a row
+    the target answered, and that is the traffic the number is about.
+    """
+    try:
+        with open(_path(target, out_dir), encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    rows = data.get("rows") or []
+    sent = [r for r in rows if r.get("probe")]
+    if not sent:
+        return None
+    return sum(1 for r in sent if not (r.get("fired") or [])), len(sent)
 
 
 def canary_rates(target, canaries, out_dir=None):
@@ -83,9 +118,8 @@ def canary_rates(target, canaries, out_dir=None):
     Suppressing a real finding is not the safe direction of error. It just fails quietly
     instead of loudly.
     """
-    path = os.path.join(out_dir or OUT_DIR, f"benign_{target}.json")
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(_path(target, out_dir), encoding="utf-8") as f:
             rows = (json.load(f).get("rows") or [])
     except Exception:
         return {}
@@ -353,9 +387,8 @@ def _attack_probes(results, controls=False):
 
 
 def _benign_probes(target, out_dir=None):
-    path = os.path.join(out_dir or OUT_DIR, f"benign_{target}.json")
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(_path(target, out_dir), encoding="utf-8") as f:
             rows = (json.load(f) or {}).get("rows") or []
     except Exception:
         return None

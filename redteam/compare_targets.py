@@ -237,7 +237,11 @@ def benign_noise():
             continue
         m = d.get("meta") or {}
         if m.get("target"):
-            out[m["target"]] = (m.get("clean", 0), m.get("probes", 0))
+            # NOT `meta["probes"]`: that is the row count and includes rows never sent, so
+            # this column read 41/50 where 48 probes went out. `benign_seen` applies the
+            # same rule `baseline.rates` uses for every ambient rate on this page.
+            seen = baseline.benign_seen(m["target"], out_dir=str(OUT_DIR))
+            out[m["target"]] = seen if seen else (m.get("clean", 0), m.get("probes", 0))
     # A baseline nobody could read is not a baseline of zero. This was `except Exception:
     # continue`, so a truncated file removed a target's ambient rate from the page and the
     # page went on presenting the remaining rates as the whole picture.

@@ -1415,6 +1415,36 @@ def main():
     # while those counts came from runs at 1, 2, 3 and 10 trials: ten attempts give a flaky
     # attack ten chances to land. `history.diff()` refuses that comparison across time in so
     # many words; across targets, in the column it sorts by, nothing asked.
+    # THE BENIGN COLUMN DIVIDED BY ROWS THAT WERE NEVER SENT. `benign.py` writes
+    # `meta["probes"]` as the ROW count and says in a comment that anything dividing by "how
+    # much benign traffic did we actually see" must ask `baseline.rates`, which counts rows
+    # carrying a probe. Three modules were fixed when that was written; the fleet page's
+    # column was the fourth and was not, so it showed citebot as 41/50 where 48 went out.
+    import json as _json
+    import tempfile as _tmp
+    import os as _os
+    import baseline as _bl2
+
+    _d = _tmp.mkdtemp()
+    _io2 = __import__("io")
+    _io2.open(_os.path.join(_d, "benign_t.json"), "w", encoding="utf-8").write(_json.dumps(
+        {"meta": {"target": "t", "probes": 5, "skipped": 2, "clean": 2},
+         "rows": [{"probe": {"output": "a"}, "fired": []},
+                  {"probe": {"output": "b"}, "fired": []},
+                  {"probe": {"output": "c"}, "fired": ["canary_in_output"]},
+                  {"skipped": "needs chain"},
+                  {"skipped": "needs chain"}]}))
+    check("the benign count divides by what was sent, not by the rows",
+          _bl2.benign_seen("t", out_dir=_d) == (2, 3),
+          str(_bl2.benign_seen("t", out_dir=_d)))
+    check("...and it agrees with the denominator every ambient rate uses",
+          abs(_bl2.rates("t", out_dir=_d).get("canary_in_output", 0) - 1 / 3.0) < 1e-9,
+          str(_bl2.rates("t", out_dir=_d)))
+    check("...and a target nobody measured is None, not zero",
+          _bl2.benign_seen("nobody", out_dir=_d) is None,
+          str(_bl2.benign_seen("nobody", out_dir=_d)))
+
+
     from compare_targets import odd_on as _odd_on
 
     _t = [{"target": "a", "trials": 3}, {"target": "b", "trials": 3}, {"target": "c", "trials": 10}]
