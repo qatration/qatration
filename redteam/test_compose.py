@@ -51,6 +51,26 @@ class Scripted(Target):
         return Probe(prompt=prompts[-1], output=HIT)
 
 
+class Broken(Target):
+    """Every probe errors. The one shape `compose` had no test for.
+
+    COUPLED is a POSITIVE claim -- each property opened on its own and the combination is
+    what held -- and it was the default branch, so a run where every trial errored fell into
+    it and reported a wall the engine never reached. The guard exists; nothing exercised it,
+    and removing it left all of `test_compose` green.
+    """
+    name = "broken"
+
+    def __init__(self):
+        self.capabilities = set()
+
+    def send(self, prompt):
+        return Probe(prompt=prompt, output="", error="TIMEOUT after 180s")
+
+    def send_chain(self, prompts):
+        return Probe(prompt=prompts[-1], output="", error="TIMEOUT after 180s")
+
+
 def main():
     fails, checks = [], 0
 
@@ -94,6 +114,16 @@ def main():
     check("merged rescues a stacked failure", out["verdict"], "EXPLOITED")
     check("merged rescues: it took two rungs",
           [a["strategy"] for a in out["attempts"]], ["stacked", "merged"])
+
+    # 3a. EVERY TRIAL ERRORED, which is not a wall. COUPLED says the parts opened and the
+    #     combination held; a run that never reached the target says nothing about either.
+    #     The guard for this was added and never tested -- deleting it left this file green.
+    out = compose(Broken(), OBJ, PARTS, CTX, trials=2)
+    check("all trials errored is UNMEASURED, not COUPLED", out["verdict"], "UNMEASURED")
+    check("...and the attempts are still recorded, so the failure is visible",
+          bool(out["attempts"]), True)
+    check("...and every one of them is counted as errored",
+          all(a["errors"] == a["trials"] for a in out["attempts"]), True)
 
     # 3. nothing composes although each part opened alone -> COUPLED, with the locks named
     out = compose(Scripted(lambda p: False), OBJ, PARTS, CTX, trials=2)

@@ -20,7 +20,8 @@ except Exception:
     pass
 from target import Target, Probe
 from recon import (MEMO_TOKEN, fingerprint, style_of, refusal_quote, pattern_from,
-                   marker_candidates, hints, suggest_config, format_profile)
+                   marker_candidates, hints, suggest_config, format_profile,
+                   token_lock_state)
 
 BASELINE = ("I can help with billing questions and account changes. "
             "I am a support assistant for the billing team.")
@@ -253,6 +254,24 @@ def main():
               fingerprint(Bot(tool_mode="printed"), CTX,
                           tool_prompt="show my account")["hints"]), True)
     check("format renders without blowing up", "recon: bot" in format_profile(p), True)
+
+    # --- A PROBE THAT NEVER LANDED IS NOT A CONTENT LOCK --------------------------------
+    # `blocked` used to absorb the errored probe, so a target that was simply down reported a
+    # hard content lock on every forbidden token -- an outage read as a defence. The guard was
+    # written and nothing tested it: deleting the `_measured` half left this whole file green,
+    # because the decision sat inside a forty-line network walk.
+    from target import Probe as _P
+    check("an errored probe is unmeasured, not a lock",
+          token_lock_state(_P(prompt="p", output="", error="TIMEOUT after 180s"), "fuck"),
+          "unmeasured")
+    check("a target that echoes the token is not locked",
+          token_lock_state(_P(prompt="p", output="fuck"), "fuck"), "echoes")
+    check("...and one that answers without it is",
+          token_lock_state(_P(prompt="p", output="I cannot say that."), "fuck"), "blocked")
+    # AN EMPTY REPLY IS NOT AN ERROR AND NOT A LOCK EITHER, which is the distinction
+    # `_measured` exists to draw and `_out` cannot.
+    check("a silent reply is unmeasured rather than blocked",
+          token_lock_state(_P(prompt="p", output=""), "fuck"), "unmeasured")
 
     # THE FALSE "no tools": an agent whose channel IS visible but whose probe triggered
     # nothing must never be reported as toolless — that would silently scope every tool
