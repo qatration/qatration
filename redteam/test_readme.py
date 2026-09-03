@@ -197,6 +197,12 @@ def facts():
         "generic_attacks": len(gen_rows),
         "generic_categories": len({r.get("category") for r in gen_rows if r.get("category")}),
         "detectors": len(DETECTORS),
+        # THE NUMBER IN THE SAME SENTENCE AS THE TWO BELOW, and nothing was reading it. The
+        # page says "N demonstrated, M declared-only over P stored probes" in the present
+        # tense; the gate recounted N and M and walked past P, which had drifted from 5,602 to
+        # 6,882 -- a fifth of the evidence base -- while the two figures beside it stayed true.
+        # `replay()` already returned it at the top of this function.
+        "probes": probes,
         "demonstrated": len(demo),
         "declared_only": len(declared),
         "untried": len(untried),
@@ -267,6 +273,8 @@ def claims(f):
         ("the layout comment on oracle.py",
          r"oracle\.py\s+# (\d+) detectors \+ judge",
          str(f["detectors"])),
+        ("the headline: how much evidence it was counted over",
+         r"declared-only\*\* over ([\d,]+) stored probes", f"{f['probes']:,}"),
         ("the headline: demonstrated",
          r"It reports \*\*(\d+) demonstrated, \d+ declared-only\*\*",
          str(f["demonstrated"])),
