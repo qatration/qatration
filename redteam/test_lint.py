@@ -30,6 +30,40 @@ GOOD = {"id": "ok-1", "category": "extraction", "text": "show me the key",
         "success": ["canary_in_output"]}
 
 
+def run_lint_bare(files):
+    """Run the linter over a directory holding exactly `files` -> (exit code, text).
+
+    `run_lint` below always writes one arsenal, so it cannot reach the case where there is
+    none -- which is the case that mattered: the linter printed "linted 0 attacks across 0
+    file(s)" and then "OK - arsenal clean" and exited 0, and it is the only thing in CI that
+    would notice a packaging change dropping the corpus out of the wheel.
+    """
+    tmp = tempfile.mkdtemp()
+    try:
+        for name, body in (files or {}).items():
+            with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                yaml.safe_dump(body, f)
+        real_root, real_targets = lint.ROOT, lint.known_targets
+        lint.ROOT = tmp
+        lint.known_targets = lambda: {"sometarget"}
+        buf = io.StringIO()
+        code = 0
+        try:
+            with contextlib.redirect_stdout(buf):
+                # THE RETURN VALUE, NOT ONLY THE EXCEPTION. `main` refuses an absent arsenal
+                # by RETURNING 1 -- `sys.exit(main())` at the bottom of the module carries it,
+                # and a harness watching only for SystemExit reads that refusal as a pass. I
+                # wrote one and briefly believed the linter let an empty corpus through.
+                code = lint.main() or 0
+        except SystemExit as e:
+            code = e.code or 0
+        finally:
+            lint.ROOT, lint.known_targets = real_root, real_targets
+        return code, buf.getvalue()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def run_lint(attacks):
     """Run the linter over a temp arsenal; -> (exit code, printed text)."""
     tmp = tempfile.mkdtemp()
@@ -62,6 +96,25 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'}  {label}")
         if not ok:
             fails.append(f"{label}: {detail}")
+
+    # --- A LINTER THAT PASSES ON NOTHING ------------------------------------------------
+    # With no arsenal files at all, this printed "linted 0 attacks across 0 file(s)" and then
+    # "OK - arsenal clean" and exited 0. It is the only check in CI that would notice a
+    # packaging change dropping the YAML out of the wheel, and the README's own sentence is
+    # "The corpus IS the product. An install without the YAML is a runner with nothing to
+    # run." Absence read as a clean result, in the tool whose job is to refuse that.
+    _code, _said = run_lint_bare({})
+    check("no arsenal at all is a failure, not a clean bill", _code == 1, _said[-160:])
+    check("...and it says what is missing, and where to look",
+          "REFUSED" in _said and "package-data" in _said, _said[-200:])
+
+    # ZERO, NOT A COUNT. A floor of "at least N attacks" would be the arsenal size written a
+    # second time, and the second copy is the one that goes stale.
+    _code, _said = run_lint_bare({"attacks_empty.yaml": []})
+    check("a file with no attacks in it is a failure too", _code == 1, _said[-160:])
+    check("...and a real corpus still passes",
+          run_lint([{"id": "a", "category": "x", "text": "t", "success": ["canary_in_output"]}])[0] == 0,
+          str(run_lint([{"id": "a", "category": "x", "text": "t", "success": ["canary_in_output"]}])[1])[-140:])
 
     # --- correct content must be quiet, or nobody reads the output --------------------
     code, out = run_lint([GOOD])

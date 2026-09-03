@@ -213,6 +213,19 @@ def main():
                 if t not in targets:
                     warns.append(f"{fname}: {aid}: applies_to names '{t}' — no such target config")
 
+    # A LINTER THAT PASSES ON NOTHING IS THE DEFECT IT EXISTS TO CATCH. With no files, or
+    # files holding no attacks, this printed "linted 0 attacks across 0 file(s)" and then
+    # "OK - arsenal clean" and exited 0 -- and it is the only thing in CI that would notice a
+    # packaging change dropping the YAML out of the wheel. The README's own sentence: "The
+    # corpus IS the product. An install without the YAML is a runner with nothing to run."
+    #
+    # ZERO, never a specific count. A floor of "at least 300 attacks" would be the arsenal
+    # size written a second time, and the second copy is the one that goes stale.
+    # The no-FILES case is refused above, before anything is read. This is the other half:
+    # files that exist and hold nothing between them, which that guard does not reach.
+    if not total:
+        errors.append(f"{len(files)} arsenal file(s) and not one attack between them")
+
     print(f"linted {total} attacks across {len(files)} file(s) · {len(DETECTORS)} detectors · {len(targets)} targets")
     for w in warns:
         print(f"  WARN  {w}")
