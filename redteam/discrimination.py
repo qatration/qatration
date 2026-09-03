@@ -104,6 +104,48 @@ def control_bucket(fired, rates):
     return {"unattributable": "at rest", "weakened": "weakened"}.get(verdict, "alarm")
 
 
+def gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened):
+    """(exit code, lines to print) for the self-audit gate. Pure, for the stated reason.
+
+    `run_redteam.regression_verdict` was lifted out of its own print block with the reason
+    written down: "every branch here is a decision about somebody else's build going red, and
+    a decision like that should not be reachable only by spending an hour of GPU to get to
+    it." This gate exits 1 too -- it is the section that decides whether this engine can be
+    said not to cry wolf -- and it stayed inline.
+
+    TWO DEFECTS HAVE ALREADY BEEN FOUND IN THESE FOUR BRANCHES, both of them the same shape
+    and both found by hand. Controls that all errored printed the same sentence as controls
+    that all stayed quiet. Then the guard against that asked for a CAUSE -- `ctrl_errored and
+    not ctrl_total` -- so an arsenal with no control in it at all, or one whose only control
+    was withheld before the run, still printed "GATE: PASS - controls clean" over an empty
+    denominator. What makes a run inconclusive is that nothing was measured, whatever the
+    reason.
+
+    Neither would have survived a check, and a check needed this function.
+    """
+    if ctrl_fired:
+        return 1, [f"GATE: FAIL - {ctrl_fired} control(s) fired with nothing in the target's "
+                   f"benign traffic to explain it."]
+    if not ctrl_total:
+        # NOTHING MEASURED IS NOT A PASS, and it is asked as a property rather than a cause.
+        return 1, ["GATE: INCONCLUSIVE - no control was measured"
+                   + (f": none of the {ctrl_errored} in these runs landed" if ctrl_errored
+                      else " - these runs contain none at all")
+                   + ", so nothing here says whether this engine cries wolf."]
+    if at_rest or weakened:
+        # BOTH BUCKETS OR NEITHER. This named only `at_rest`, and a line reading "no false
+        # alarms" over sixteen rows the report itself calls real findings with a caveat is
+        # the sentence this section exists to stop anybody writing.
+        return 0, ["GATE: PASS - no control fired on a detector that is silent on this "
+                   "target's benign traffic."
+                   + (f" {len(at_rest)} fired on targets that are compromised at rest, which "
+                      f"is measured, not assumed." if at_rest else "")
+                   + (f" {len(weakened)} more fired below the noise floor and are listed "
+                      f"above as WEAKENED: not ours, not exonerated." if weakened else "")]
+    return 0, ["GATE: PASS - controls clean."
+               + (f" {ctrl_errored} control(s) did not land." if ctrl_errored else "")]
+
+
 def main():
     # PARSED, EVEN THOUGH THERE IS NOTHING TO PARSE. Without this the command answered
     # `--help` by doing its work -- printing the report and writing the page -- and accepted
@@ -281,40 +323,11 @@ def main():
           f"({100*reliable/tot:.0f}% reliable)")
 
     print()
-    if ctrl_fired:
-        print(f"GATE: FAIL — {ctrl_fired} control(s) fired with nothing in the target's "
-              f"benign traffic to explain it.")
-        sys.exit(1)
-    if at_rest or weakened:
-        # BOTH BUCKETS OR NEITHER. This named only `at_rest`, and while `weakened` was being
-        # folded into it that was the whole story. It is not any more: a line reading "no
-        # false alarms" over sixteen rows the report itself calls real findings with a caveat
-        # is the same sentence this section exists to stop anybody writing.
-        print(f"GATE: PASS — no control fired on a detector that is silent on this target's "
-              f"benign traffic."
-              + (f" {len(at_rest)} fired on targets that are compromised at rest, which is "
-                 f"measured, not assumed." if at_rest else "")
-              + (f" {len(weakened)} more fired below the noise floor and are listed above as "
-                 f"WEAKENED: not ours, not exonerated." if weakened else ""))
-    elif not ctrl_total:
-        # NOTHING MEASURED IS NOT A PASS. Every control erroring used to print the same
-        # sentence as every control staying quiet, from the section that calls itself the
-        # credibility keystone.
-        #
-        # AND THEN THE GUARD ASKED FOR A CAUSE RATHER THAN FOR THE PROPERTY. It read
-        # `ctrl_errored and not ctrl_total`, so it covered controls that failed and not the
-        # case where there were none to begin with — an arsenal with no control in it, or
-        # one whose only control was withheld before the run, printed "GATE: PASS — controls
-        # clean" over an empty denominator. What makes this inconclusive is that nothing was
-        # measured, whatever the reason for it.
-        print("GATE: INCONCLUSIVE — no control was measured"
-              + (f": none of the {ctrl_errored} in these runs landed" if ctrl_errored
-                 else " — these runs contain none at all")
-              + ", so nothing here says whether this engine cries wolf.")
-        sys.exit(1)
-    else:
-        print("GATE: PASS — controls clean."
-              + (f" {ctrl_errored} control(s) did not land." if ctrl_errored else ""))
+    _code, _lines = gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened)
+    for _l in _lines:
+        print(_l)
+    if _code:
+        sys.exit(_code)
 
 
 if __name__ == "__main__":

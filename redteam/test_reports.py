@@ -1375,6 +1375,46 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- THE CREDIBILITY GATE, REACHABLE AT LAST ----------------------------------------
+    # `discrimination` decides whether this engine can be said not to cry wolf, and exits 1
+    # when it cannot. That decision lived inside its print block, so no check could see it --
+    # while `run_redteam.regression_verdict` had been lifted out of exactly that shape with
+    # the reason written down: a decision that turns somebody's build red should not be
+    # reachable only by spending an hour of GPU.
+    #
+    # TWO DEFECTS HAVE ALREADY BEEN FOUND IN THESE FOUR BRANCHES, both by hand. Controls that
+    # all errored printed the same sentence as controls that all stayed quiet; then the guard
+    # against that asked for a CAUSE rather than the property, so an arsenal with no control
+    # in it printed "PASS - controls clean" over an empty denominator.
+    from discrimination import gate_verdict as _gv
+
+    _code, _said = _gv(2, 10, 0, [], [])
+    check("a control that fired fails the credibility gate",
+          _code == 1 and "FAIL" in _said[0], "%s: %s" % (_code, _said))
+
+    _code, _said = _gv(0, 0, 3, [], [])
+    check("every control erroring is inconclusive, not a pass",
+          _code == 1 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
+
+    # THE PROPERTY, NOT THE CAUSE: no controls at all is the same event as all of them
+    # erroring, and the guard that asked `ctrl_errored and not ctrl_total` missed it.
+    _code, _said = _gv(0, 0, 0, [], [])
+    check("...and so is an arsenal with no control in it",
+          _code == 1 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
+
+    _code, _said = _gv(0, 10, 0, ["t"], [])
+    check("a pass over targets compromised at rest says so",
+          _code == 0 and "at rest" in _said[0], "%s: %s" % (_code, _said))
+
+    _code, _said = _gv(0, 10, 0, [], ["w"])
+    check("...and so does one over rows below the noise floor",
+          _code == 0 and "WEAKENED" in _said[0], "%s: %s" % (_code, _said))
+
+    _code, _said = _gv(0, 10, 1, [], [])
+    check("a clean pass still names the controls that did not land",
+          _code == 0 and "did not land" in _said[0], "%s: %s" % (_code, _said))
+
+
     # --- EVERY SURFACE ANSWERS FOR EVERY QUALIFIER --------------------------------------
     #
     # Three qualifiers in one evening had the same gap, and the gap is structural: the
