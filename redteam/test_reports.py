@@ -1351,6 +1351,30 @@ def main():
         check("...and says which flag, rather than raising", "--target-config" in _said
               and "Traceback" not in _said, _said.strip()[-160:])
 
+    # --- HOW MUCH OF THE ORACLE COULD ANSWER, on the page a team acts on ----------------
+    # `meta["inert"]` names the detectors that could not fire on a target for want of a
+    # config key. The run records it, the scorecard and the SARIF print it, and the defence
+    # report -- the client-facing one, with the remediation text in it -- did not. Measured:
+    # a median of 21 of 66 mute per target on this fleet, and `memorybot` published with ZERO
+    # breaches while 30 could not speak. That is the scan the README warns about, on the
+    # human artifact instead of the machine one.
+    import defense_report as _dr2
+
+    _rows2 = {"a": (5, 0, "x.yaml", 0, 0, 7), "b": (5, 0, "x.yaml", 0, 0, None)}
+    _muted = {t: v[5] for t, v in _rows2.items() if isinstance(v[5], int) and v[5]}
+    check("a target whose run recorded mute detectors is counted",
+          _muted == {"a": 7}, str(_muted))
+    check("...and one whose run predates the field is not given a zero",
+          "b" not in _muted, str(_muted))
+    # NOT THE SHAPE, THE CONTENT. Checking the tuple is six long passed with the count
+    # replaced by None -- six slots, one of them empty. Eleven shipped artifacts record
+    # `inert`, so at least one row must come back with a real number or nothing is reading it.
+    _real = [v[5] for v in _dr2.arsenal_ran().values() if isinstance(v[5], int)]
+    check("the coverage reader carries a real mute count from the shipped evidence",
+          bool(_real) and max(_real) > 0,
+          "no target came back with a mute count: %s" % _real[:5])
+
+
     # --- THE QUALIFIER THE SUMMARY PAGES DID NOT CARRY ---------------------------------
     # A breach on a detector the target also trips with nobody attacking it is the
     # distinction this project argues for. The scorecard, the defence report and the SARIF

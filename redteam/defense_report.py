@@ -920,8 +920,18 @@ def arsenal_ran():
         # page called all of them "scoped out" and explained them as written for other
         # systems, which was true of none. `not_sent` is None on artifacts written before the
         # counters were separated, and the caller says so rather than guessing a split.
+        # AND HOW MUCH OF THE INSTRUMENT COULD SPEAK. `meta["inert"]` names the detectors
+        # that could not fire on this target for want of a config key -- the run records it,
+        # the scorecard and the SARIF print it, and this page, the one a team acts on, did
+        # not. Measured on the shipped fleet: a median of 21 of 66 detectors mute per target,
+        # and `memorybot` published with ZERO breaches while 30 could not speak. That is the
+        # scan the README warns about, on the human artifact rather than the machine one.
+        # None where the run predates the field, which is 34 of the 45 shipped: "cannot say"
+        # is not "all of them spoke".
+        _inert = m.get("inert")
         out[stem] = (sent, skipped, m.get("arsenal"),
-                     m.get("not_applicable"), m.get("not_sent"))
+                     m.get("not_applicable"), m.get("not_sent"),
+                     len(_inert) if isinstance(_inert, dict) else None)
     return out
 
 
@@ -1321,8 +1331,19 @@ def main():
             f'<td>{_ns if isinstance(_ns, int) else "—"}</td>'
             f'<td>{skipped}</td>'
             f'<td class="mono dim">{esc(arsenal or "—")}</td></tr>'
-            for t, (sent, skipped, arsenal, _na, _ns) in sorted(ran.items()))
+            for t, (sent, skipped, arsenal, _na, _ns, _in) in sorted(ran.items()))
         fewest = min(v[0] for v in ran.values())
+        # THE OTHER HALF OF COVERAGE: not how much of the arsenal was sent, but how much of
+        # the ORACLE could answer. A detector with no config key to arm it is silent on every
+        # probe, and silence from something that could not speak is the one thing this
+        # project refuses to read as a defence.
+        _mute = {t: v[5] for t, v in ran.items() if isinstance(v[5], int) and v[5]}
+        _mutetext = ("" if not _mute else
+                     " Detectors that could not speak here at all, for want of a config key: "
+                     + ", ".join("%s on %s" % (n, t) for t, n in sorted(_mute.items())[:4])
+                     + (" and %d more" % (len(_mute) - 4) if len(_mute) > 4 else "")
+                     + ". Their silence is a gap in the instrument, not a defence by the "
+                       "target, and nothing below rules out what they look for.")
         _held = sum(v[4] for v in ran.values() if isinstance(v[4], int))
         _short = (f" A further {_held} were not sent because the run was asked to be a short "
                   f"one: <code>--scope quick</code> sends one attack per category, and a "
@@ -1335,7 +1356,7 @@ def main():
           <div class="fix"><span class="fixlabel">Read this before the counts</span>an attack
             that was never sent is a GAP, not a finding that came back clean — the same sentence this engine
             applies to a budget that runs out. The smallest run on this page sent
-            {fewest} attack(s).{_short} The rest of the file was scoped to other systems, so
+            {fewest} attack(s).{_short}{_mutetext} The rest of the file was scoped to other systems, so
             those were never candidates here; that is only reassuring if the arsenal named
             below is the one written for a system like yours. Deliveries your configuration
             cannot carry were skipped as well — a transcript for multi-turn work, a
