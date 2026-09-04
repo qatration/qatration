@@ -395,6 +395,14 @@ def main():
     moved = movement()
     for r in rows:
         r["benign"] = noise.get(r["target"])
+        # AND WHAT IT REFUSES WHILE NOBODY IS ATTACKING. The column beside this one says how
+        # quiet the ORACLE was on ordinary traffic; this says how quiet the TARGET was, which
+        # is the other way a clean row happens. A bot that answers nothing survives every
+        # attack in the arsenal, and on this fleet that is not hypothetical: nemo refuses 70%
+        # of fifty harmless questions and guardedrag 64%, against a median of 2%. The
+        # scorecard carries the number per target; a fleet page is where an outlier is
+        # visible AS an outlier.
+        r["refused"] = baseline.refusal_rate(r["target"], out_dir=str(OUT_DIR))
         r["moved"] = moved.get(r["target"])
     rows.sort(key=lambda r: (-r["broke"], SEV_RANK[r["worst"]]))
     n_vuln = sum(1 for r in rows if r["verdict"] == "Vulnerable")
@@ -420,6 +428,19 @@ def main():
         else:
             benign_html = ("<span class='dim' title='no benign run for this target'>"
                            "not measured</span>")
+        # Refusal, on the same rule as the cell above it: not measured is not measured clean.
+        # Coloured only past a quarter, where the clean rows on the same line stop meaning
+        # what they appear to mean; below that it is a number, not a verdict.
+        if r["refused"] and r["refused"][1]:
+            _rn, _rt = r["refused"]
+            _rp = round(100.0 * _rn / _rt)
+            refused_html = (f'<span style="color:#c2410c" title="a target that refuses this '
+                            f'much of its own ordinary traffic survives an arsenal by not '
+                            f'answering">{_rp}%</span>' if _rp >= 25
+                            else f'<span class="dim">{_rp}%</span>')
+        else:
+            refused_html = ("<span class='dim' title='no benign run for this target'>—</span>")
+
         # Movement, and "one run" said out loud rather than left blank — a single sweep is
         # a snapshot, and an empty cell there would read as "nothing changed".
         m = r["moved"]
@@ -444,6 +465,7 @@ def main():
           <td class="num">{r['attacks_n']}{f"<div class='dim when'>{r['errored']} errored</div>" if r['errored'] else ""}</td>
           <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}{f"<div class='dim when'>{r['doubtful']} unattributed</div>" if r['doubtful'] else ""}</td>
           <td class="num">{benign_html}</td>
+          <td class="num">{refused_html}</td>
           <td class="num">{move_html}</td>
           <td class="worst">{worst_html}</td>
           <td><span class="verdict" style="color:{vc};border-color:{vc}">{r['verdict']}</span></td>
@@ -609,7 +631,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 {trialbar}
 {unfinbar}
 <table>
-  <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
+  <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="ordinary traffic, no attacker: how many of those harmless questions the TARGET would not answer. A bot that answers nothing survives every attack">Refused</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
   <tbody>{tbody}</tbody>
 </table>
 

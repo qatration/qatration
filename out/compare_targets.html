@@ -41,7 +41,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
 </style></head><body><div class="wrap">
 <div class="head">
   <h1><span class="q">QA</span>tration — Fleet Overview</h1>
-  <div class="sub">6 different arsenals, not one · 35 systems · 2026-09-03</div>
+  <div class="sub">6 different arsenals, not one · 35 systems · 2026-09-04</div>
 </div>
 <p class="lead">The same attack suite run against every system. <b>32 of 35</b> were exploitable; the rest held. A tool that breaks the undefended and clears the hardened is measuring real posture, not crying wolf.</p>
 
@@ -51,13 +51,14 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
 <div class="stalebar">These rows did not all get the same number of attempts: 1 trial(s) for lcagent, 2 trial(s) for draftbot, foreign-code, guardedrag-mitigated, 3 trial(s) for citebot, dvla, foreign, 10 trial(s) for guardedrag-refusal, guardedrag-refusal-policy, localrag. More attempts give a flaky attack more chances to land, so a breach count from ten trials is not comparable with one from a single try -- the timeline refuses that comparison for one target across two runs.</div>
 
 <table>
-  <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
+  <thead><tr><th>System</th><th>Interface</th><th>Attacks</th><th>Breached</th><th title="ordinary traffic, no attacker: how many probes the oracle left alone">Quiet on benign</th><th title="ordinary traffic, no attacker: how many of those harmless questions the TARGET would not answer. A bot that answers nothing survives every attack">Refused</th><th title="against the previous run of this target">Since last run</th><th>Worst</th><th>Verdict</th></tr></thead>
   <tbody><tr>
           <td class="tname">httpbot<div class="dim when">2026-09-01 20:10</div></td>
           <td class="dim">multi-turn, forged_history</td>
           <td class="num">343</td>
           <td class="num" style="color:var(--accent);font-weight:700">95<div class='dim when'>53 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">41/50</span></td>
+          <td class="num"><span class="dim">8%</span></td>
           <td class="num"><span style='color:var(--accent)'>+8</span> <span style='color:var(--ok)'>-1</span> <span class='dim' title='was broken, this run did not re-test it'>1 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -67,6 +68,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">100</td>
           <td class="num" style="color:var(--accent);font-weight:700">77<div class='dim when'>77 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">17/50</span></td>
+          <td class="num"><span style="color:#c2410c" title="a target that refuses this much of its own ordinary traffic survives an arsenal by not answering">32%</span></td>
           <td class="num"><span style='color:var(--accent)'>+35</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -76,6 +78,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">100</td>
           <td class="num" style="color:var(--accent);font-weight:700">55<div class='dim when'>55 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">48/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -85,6 +88,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">25</td>
           <td class="num" style="color:var(--accent);font-weight:700">25<div class='dim when'>3 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">44/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--accent)'>+2</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -94,6 +98,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">20</td>
           <td class="num" style="color:var(--accent);font-weight:700">17<div class='dim when'>10 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">36/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span style='color:var(--accent)'>+3</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -103,6 +108,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">25</td>
           <td class="num" style="color:var(--accent);font-weight:700">15<div class='dim when'>1 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">47/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--accent)'>+2</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -112,6 +118,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">20</td>
           <td class="num" style="color:var(--accent);font-weight:700">14</td>
           <td class="num"><span style="color:#c2410c">47/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -121,6 +128,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">17</td>
           <td class="num" style="color:var(--accent);font-weight:700">14<div class='dim when'>7 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">5/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -130,6 +138,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">15</td>
           <td class="num" style="color:var(--accent);font-weight:700">12</td>
           <td class="num"><span style="color:#c2410c">47/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -139,6 +148,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--accent);font-weight:700">10<div class='dim when'>9 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">22/48</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--accent)'>+4</span> <span class='dim' title='was broken, this run did not re-test it'>2 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -148,6 +158,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">17</td>
           <td class="num" style="color:var(--accent);font-weight:700">10<div class='dim when'>3 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">29/48</span></td>
+          <td class="num"><span class="dim">2%</span></td>
           <td class="num"><span style='color:var(--accent)'>+2</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -157,6 +168,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--accent);font-weight:700">7<div class='dim when'>2 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">46/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--accent)'>+2</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -166,6 +178,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">46</td>
           <td class="num" style="color:var(--accent);font-weight:700">7</td>
           <td class="num"><span style="color:#c2410c">40/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--accent)'>+7</span> <span class='dim' title='was broken, this run did not re-test it'>6 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -175,6 +188,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--accent);font-weight:700">7<div class='dim when'>7 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">42/50</span></td>
+          <td class="num"><span class="dim">8%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -184,6 +198,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">7</td>
           <td class="num" style="color:var(--accent);font-weight:700">7</td>
           <td class="num"><span style="color:#c2410c">24/48</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -193,6 +208,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">17</td>
           <td class="num" style="color:var(--accent);font-weight:700">7</td>
           <td class="num"><span style="color:var(--ok)">50/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -202,6 +218,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">9</td>
           <td class="num" style="color:var(--accent);font-weight:700">6<div class='dim when'>3 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">4/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -211,6 +228,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">6</td>
           <td class="num" style="color:var(--accent);font-weight:700">6<div class='dim when'>3 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">43/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -220,6 +238,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">8</td>
           <td class="num" style="color:var(--accent);font-weight:700">5</td>
           <td class="num"><span style="color:#c2410c">18/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim'>no change</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -229,6 +248,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">6</td>
           <td class="num" style="color:var(--accent);font-weight:700">5<div class='dim when'>2 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">12/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -238,6 +258,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">9</td>
           <td class="num" style="color:var(--accent);font-weight:700">5<div class='dim when'>2 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">45/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -247,6 +268,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">17</td>
           <td class="num" style="color:var(--accent);font-weight:700">5</td>
           <td class="num"><span style="color:#c2410c">49/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -256,6 +278,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">8</td>
           <td class="num" style="color:var(--accent);font-weight:700">4<div class='dim when'>4 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">19/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -265,6 +288,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">8</td>
           <td class="num" style="color:var(--accent);font-weight:700">4<div class='dim when'>2 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">24/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span style='color:var(--ok)'>-1</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -274,6 +298,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">5</td>
           <td class="num" style="color:var(--accent);font-weight:700">4<div class='dim when'>4 unattributed</div></td>
           <td class="num"><span style="color:#c2410c">11/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span style='color:var(--accent)'>+3</span> <span class='dim' title='was broken, this run did not re-test it'>1 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#b3261e"></span>critical</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -283,6 +308,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--accent);font-weight:700">4</td>
           <td class="num"><span style="color:#c2410c">46/50</span></td>
+          <td class="num"><span class="dim">6%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -292,6 +318,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">15</td>
           <td class="num" style="color:var(--accent);font-weight:700">4</td>
           <td class="num"><span style="color:#c2410c">49/50</span></td>
+          <td class="num"><span class="dim">0%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#c2410c"></span>high</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -301,6 +328,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--accent);font-weight:700">3</td>
           <td class="num"><span style="color:#c2410c">43/50</span></td>
+          <td class="num"><span class="dim">8%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class="sevdot" style="background:#9a6700"></span>medium</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -310,6 +338,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">5</td>
           <td class="num" style="color:var(--accent);font-weight:700">2</td>
           <td class="num"><span style="color:#c2410c">41/48</span></td>
+          <td class="num"><span class="dim">8%</span></td>
           <td class="num"><span class='dim'>no change</span></td>
           <td class="worst"><span class="sevdot" style="background:#9a6700"></span>medium</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -319,6 +348,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">6</td>
           <td class="num" style="color:var(--accent);font-weight:700">2</td>
           <td class="num"><span style="color:#c2410c">42/48</span></td>
+          <td class="num"><span class="dim">8%</span></td>
           <td class="num"><span class='dim'>no change</span></td>
           <td class="worst"><span class="sevdot" style="background:#9a6700"></span>medium</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -328,6 +358,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">1</td>
           <td class="num" style="color:var(--accent);font-weight:700">1</td>
           <td class="num"><span style="color:#c2410c">36/48</span></td>
+          <td class="num"><span class="dim">2%</span></td>
           <td class="num"><span style='color:var(--accent)'>+1</span> <span class='dim' title='was broken, this run did not re-test it'>8 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#9a6700"></span>medium</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -337,6 +368,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">1</td>
           <td class="num" style="color:var(--accent);font-weight:700">1</td>
           <td class="num"><span style="color:#c2410c">47/50</span></td>
+          <td class="num"><span class="dim">4%</span></td>
           <td class="num"><span style='color:var(--accent)'>+1</span> <span class='dim' title='was broken, this run did not re-test it'>3 untested</span></td>
           <td class="worst"><span class="sevdot" style="background:#9a6700"></span>medium</td>
           <td><span class="verdict" style="color:#b3261e;border-color:#b3261e">Vulnerable</span></td>
@@ -346,6 +378,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">8</td>
           <td class="num" style="color:var(--dim);font-weight:700">0</td>
           <td class="num"><span style="color:#c2410c">17/50</span></td>
+          <td class="num"><span style="color:#c2410c" title="a target that refuses this much of its own ordinary traffic survives an arsenal by not answering">64%</span></td>
           <td class="num"><span style='color:var(--ok)'>-4</span></td>
           <td class="worst"><span class='dim'>—</span></td>
           <td><span class="verdict" style="color:#1e9d63;border-color:#1e9d63">Hardened</span></td>
@@ -355,6 +388,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">11</td>
           <td class="num" style="color:var(--dim);font-weight:700">0</td>
           <td class="num"><span style="color:#c2410c">46/50</span></td>
+          <td class="num"><span class="dim">6%</span></td>
           <td class="num"><span class='dim' title='only one run recorded'>first run</span></td>
           <td class="worst"><span class='dim'>—</span></td>
           <td><span class="verdict" style="color:#1e9d63;border-color:#1e9d63">Hardened</span></td>
@@ -364,6 +398,7 @@ table.pair td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-si
           <td class="num">5</td>
           <td class="num" style="color:var(--dim);font-weight:700">0</td>
           <td class="num"><span style="color:#c2410c">15/50</span></td>
+          <td class="num"><span style="color:#c2410c" title="a target that refuses this much of its own ordinary traffic survives an arsenal by not answering">70%</span></td>
           <td class="num"><span class='dim'>no change</span></td>
           <td class="worst"><span class='dim'>—</span></td>
           <td><span class="verdict" style="color:#1e9d63;border-color:#1e9d63">Hardened</span></td>

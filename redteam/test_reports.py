@@ -1375,6 +1375,76 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- THE FLEET PAGE IS WHERE AN OUTLIER IS VISIBLE AS ONE ---------------------------
+    #
+    # The scorecard carries the refusal rate per target. On this fleet the rows that need it
+    # are `guardedrag` — 8 attacks, 0 breached, 64% of ordinary questions refused — and `nemo`
+    # — 5 attacks, 0 breached, 70% refused. Both read as clean until the number is beside them.
+    import tempfile as _tf4, shutil as _sh4, json as _js4, importlib as _il4
+    _fw = _tf4.mkdtemp()
+    try:
+        def _fleet_row(name, refused, sent):
+            _js4.dump({"meta": {"target": name, "attacks_n": 4, "broke": 0, "errors": 0,
+                                "trials": 3, "when": "2026-09-04 10:00"},
+                       "results": [{"headline": "DEFENDED", "rate": "0/3",
+                                    "attack": {"id": "a", "category": "x"},
+                                    "fired": [], "locks": {}, "trials": [{}]}]},
+                      io.open(os.path.join(_fw, "results_%s.json" % name), "w",
+                              encoding="utf-8", newline=""))
+            _js4.dump({"meta": {"target": name, "probes": sent},
+                       "rows": [{"probe": {"output": "x"}, "fired": [],
+                                 "refused": i < refused} for i in range(sent)]},
+                      io.open(os.path.join(_fw, "benign_%s.json" % name), "w",
+                              encoding="utf-8", newline=""))
+
+        _fleet_row("wallbot", 35, 50)     # refuses most of its own traffic
+        _fleet_row("talkbot", 1, 50)      # answers it
+        _was = os.environ.get("QATRATION_OUT")
+        os.environ["QATRATION_OUT"] = _fw
+        try:
+            import workspace as _w5, compare_targets as _ct5
+            _il4.reload(_w5)
+            _il4.reload(_ct5)
+            with contextlib.redirect_stdout(io.StringIO()):
+                _ct5.main()
+            _page = io.open(os.path.join(_fw, "compare_targets.html"),
+                            encoding="utf-8").read()
+        finally:
+            if _was is None:
+                os.environ.pop("QATRATION_OUT", None)
+            else:
+                os.environ["QATRATION_OUT"] = _was
+            import workspace as _w6, compare_targets as _ct6
+            _il4.reload(_w6)
+            _il4.reload(_ct6)
+
+        def _row_of(name):
+            for r in re.findall(r"<tr>(?:(?!</tr>).)*?</tr>", _page, re.S):
+                if ">%s" % name in r:
+                    return r
+            return ""
+
+        _wall, _talk = _row_of("wallbot"), _row_of("talkbot")
+        check("the fleet page carries what each target refuses",
+              "70%" in _wall and "2%" in _talk, "wall=%s talk=%s" % (bool(_wall), bool(_talk)))
+        # COLOURED ONLY WHERE IT CHANGES THE READING. Below a quarter it is a number; past it
+        # the clean row on the same line stops meaning what it appears to mean.
+        check("...and marks the one whose clean row is worth less",
+              "#c2410c" in _wall and "#c2410c" not in _talk,
+              "wall coloured=%s talk coloured=%s" % ("#c2410c" in _wall, "#c2410c" in _talk))
+
+        # AND THE TABLE STILL HAS ONE HEADING PER CELL. A `<td>` added without a `<th>` shifts
+        # every column to its right and every number lands under the wrong name — silently,
+        # because the page still renders. Quantified over the rows so the next column is
+        # covered by existing.
+        _thead = re.search(r"<thead><tr>(.*?)</tr></thead>", _page, re.S)
+        _n_th = len(re.findall(r"<th", _thead.group(1))) if _thead else 0
+        _bodies = [len(re.findall(r"<td", r)) for r in (_wall, _talk) if r]
+        check("the fleet table has one heading per cell", bool(_bodies) and
+              all(n == _n_th for n in _bodies), "%d heading(s), rows %s" % (_n_th, _bodies))
+    finally:
+        _sh4.rmtree(_fw, ignore_errors=True)
+
     # --- WHAT IT REFUSES WHILE NOBODY IS ATTACKING --------------------------------------
     #
     # A bot that refuses everything survives the whole arsenal and is useless. The benign
