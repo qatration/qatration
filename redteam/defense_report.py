@@ -1040,6 +1040,47 @@ def attribution_index():
     return out, unmeasured
 
 
+# The root causes whose remedy really is "stop asking the model to enforce it": a rule written
+# in the prompt, which an attacker can argue with. Named here rather than assumed of all eight,
+# because the other four are missing server-side checks and a prompt has nothing to do with them.
+PROMPT_ENFORCED = {"secret-out", "credential-out", "sysprompt-as-secret"}
+
+
+def common_thread(ordered, unmapped=()):
+    """The sentence under "Executive summary", derived from what was actually found.
+
+    IT WAS A CONSTANT. Every render of this page told the client "The common thread: security
+    was delegated to the model's judgment -- prompt rules like 'never reveal' or 'only fetch
+    the docs site'", whatever the findings were, and printed it above a list that frequently
+    contradicted it: `object-authz` is "object-level authorization is not enforced at the data
+    layer", which is a missing server-side check that no prompt was ever asked to do. Four of
+    the eight root causes are that shape.
+
+    Over an empty page it was worse still -- an assessment of nothing, diagnosing a cause.
+    That case now refuses to render at all, and this is the other half: a page that DID find
+    something must describe what it found rather than the thing this tool most often finds.
+
+    What is true of every entry, and is kept, is the remedy: each fix moves a control out of
+    somewhere the attacker can talk to and into code. That is a property of the fixes below,
+    which are on the page, rather than a claim about a deployment nobody here has seen.
+    """
+    keys = [k for k, _ in ordered]
+    if not keys and not unmapped:
+        return ""
+    prompt_side = [k for k in keys if k in PROMPT_ENFORCED]
+    if keys and len(prompt_side) == len(keys):
+        return ("The common thread: <b>security was delegated to the model's judgment</b> — "
+                "prompt rules like “never reveal” or “only fetch the docs site.” That "
+                "judgment is manipulable. Each fix below moves the control out of the prompt "
+                "and into code the attacker can't talk their way past.")
+    named = ", ".join(entry(k)["title"][0].lower() + entry(k)["title"][1:] for k in keys[:3])
+    more = "" if len(keys) <= 3 else ", and %d more below" % (len(keys) - 3)
+    lead = ("What was found" if not prompt_side else
+            "What was found, and not all of it is a prompt problem")
+    return ("%s: %s%s. Each fix below moves a control out of somewhere the attacker can talk "
+            "to and into code that does not negotiate." % (lead, named, more))
+
+
 def rank_for_reader(findings, ambient=None):
     """All of them, ordered by what a stranger can check first. Nothing is dropped.
 
@@ -1731,10 +1772,7 @@ one exploitable finding.</p>
 <div class="exec"><b>Executive summary.</b> This assessment found {n_roots} distinct exploitable
 weaknesses, seen {n_breaches} times in total.
 {n_mapped} of them reduce to {len(ordered)} root-cause fixes below, prioritized by severity{
-"" if not unmapped else f"; the remaining {len(unmapped)} are listed at the end, confirmed on live traffic with no remediation text written for them yet"}. The common thread:
-<b>security was delegated to the model's judgment</b> — prompt rules like “never reveal” or “only fetch the
-docs site.” That judgment is manipulable. Each fix below moves the control out of the prompt and into code
-the attacker can't talk their way past.</div>
+"" if not unmapped else f"; the remaining {len(unmapped)} are listed at the end, confirmed on live traffic with no remediation text written for them yet"}. {common_thread(ordered, unmapped)}</div>
 {controls_html}
 {arsenal_html}
 {unattributed_html}

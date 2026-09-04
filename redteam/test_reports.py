@@ -1375,6 +1375,41 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- THE COMMON THREAD WAS A CONSTANT -----------------------------------------------
+    #
+    # Every render of the defence report told the client "The common thread: security was
+    # delegated to the model's judgment — prompt rules like 'never reveal'", whatever the
+    # findings were, and printed it above a list that often contradicted it. Four of the
+    # eight root causes are missing SERVER-SIDE checks: `object-authz` is "object-level
+    # authorization is not enforced at the data layer", which no prompt was ever asked to do.
+    # A diagnosis of somebody's architecture, in the executive summary of a client-facing
+    # document, derived from nothing.
+    _ct2 = dr.common_thread
+    _mk = lambda ks: [(k, [1]) for k in ks]
+
+    _prompted = _ct2(_mk(["secret-out", "sysprompt-as-secret"]))
+    check("findings that really are prompt rules keep the sentence that says so",
+          "delegated to the model" in _prompted, _prompted[:60])
+    _mixed = _ct2(_mk(["object-authz", "secret-out"]))
+    check("...and a data-layer finding is not called a prompt problem",
+          "delegated to the model" not in _mixed
+          and "not all of it is a prompt problem" in _mixed, _mixed[:80])
+    check("...and the sentence names what was actually found",
+          "object-level authorization" in _mixed, _mixed[:80])
+    _serverside = _ct2(_mk(["object-authz", "outbound-on-render"]))
+    check("findings with no prompt rule among them are described plainly",
+          "prompt problem" not in _serverside and "What was found:" in _serverside,
+          _serverside[:80])
+    check("a page with no findings asserts no thread at all", _ct2([]) == "", _ct2([]))
+    # AND EVERY NAME IN THE SET IS A ROOT CAUSE. A list of keys beside a table of keys is the
+    # shape that goes stale silently: the first draft of this one named `instruction-follow`,
+    # which is not one, so a finding could never match it and nothing would have said so.
+    check("the prompt-enforced list names only real root causes",
+          dr.PROMPT_ENFORCED <= set(dr.ROOT_CAUSES),
+          str(sorted(dr.PROMPT_ENFORCED - set(dr.ROOT_CAUSES))))
+    check("...and is not all of them, or the distinction it draws is empty",
+          dr.PROMPT_ENFORCED != set(dr.ROOT_CAUSES), "every root cause is called a prompt rule")
+
     # --- HOW OLD IS THE NUMBER THAT DEMOTED THE FINDING ---------------------------------
     #
     # Every sentence in the attribution panel, and every demotion in the SARIF, rests on a

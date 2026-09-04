@@ -53,7 +53,7 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-monos
 </style></head><body><div class="wrap">
 <div class="rpt-head">
   <h1><span class="q">QA</span>tration — Security Assessment</h1>
-  <div class="sub">Adversarial test of AI features · 2026-09-03 · 35 systems tested</div>
+  <div class="sub">Adversarial test of AI features · 2026-09-04 · 35 systems tested</div>
 </div>
 
 <div class="summary">
@@ -73,10 +73,7 @@ one exploitable finding.</p>
 <div class="stalebar"><b>Mixed measurement dates.</b> Newest run 2026-09-03; measured earlier: citebot (2026-08-20), draftbot (2026-09-01), dvla (2026-08-20), foreign (2026-08-20), foreign-code (2026-09-01), guardbot (2026-08-20), guardedrag (2026-08-28), guardedrag-mitigated (2026-09-01), guardedrag-naive (2026-09-01), guardedrag-refusal (2026-08-28), guardedrag-refusal-policy (2026-08-28), guardedrag-weak (2026-09-01), httpbot (2026-09-01), lcagent (2026-08-20), localrag (2026-09-01), localrag-refusal (2026-09-01), mcpagent (2026-09-01), mcpagent-naive (2026-09-01), mcpagent-rugpull (2026-09-01), mcpagent-shadow (2026-09-01), memorybot (2026-08-20), memorybot-naive (2026-08-20), nemo (2026-08-20), nemo-inputonly (2026-09-01), opsbot (2026-08-20), portalagent (2026-08-20), portalagent-naive (2026-08-20), ragbot (2026-08-20), rangebot (2026-09-01), rangebot-sources (2026-09-01), secretbot (2026-08-20), secretbot-naive (2026-09-01), toolagent (2026-08-20), toolagent-naive (2026-09-01). Findings from an earlier run were produced by an earlier engine and may already be fixed, or may be wrong — re-run before acting on them.</div>
 <div class="exec"><b>Executive summary.</b> This assessment found 38 distinct exploitable
 weaknesses, seen 440 times in total.
-440 of them reduce to 38 root-cause fixes below, prioritized by severity. The common thread:
-<b>security was delegated to the model's judgment</b> — prompt rules like “never reveal” or “only fetch the
-docs site.” That judgment is manipulable. Each fix below moves the control out of the prompt and into code
-the attacker can't talk their way past.</div>
+440 of them reduce to 38 root-cause fixes below, prioritized by severity. What was found, and not all of it is a prompt problem: a planted secret reached an output channel, secret exfiltrated via a poisoned tool description (MCP tool poisoning), agent coerced into running an arbitrary command (RCE), and 35 more below. Each fix below moves a control out of somewhere the attacker can talk to and into code that does not negotiate.</div>
 
         <section class="finding">
           <div class="fhead">
