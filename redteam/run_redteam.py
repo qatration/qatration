@@ -1005,6 +1005,24 @@ def main():
               f"history diff would read it as five findings fixed.", file=sys.stderr)
         sys.exit(3)
 
+    # AND THE ONES NO CONFIG KEY DESCRIBES. `inert_for` asks whether a detector could speak
+    # on this TARGET, from the keys its config supplies. Twenty-one detectors read the tool
+    # side and nothing else, so a run whose probes carry no tool call silenced those by
+    # construction, and no key says so: measured on forty-six probes with not one tool call
+    # among them, the scorecard named fourteen and twelve more were equally mute -- including
+    # `secret_material_access`, whose silence on a bot with no tools is not a defence.
+    #
+    # PER RUN, NOT PER CONFIG, which is why it is computed here rather than in `inert_for`:
+    # the same target answering with a tool call tomorrow arms every one of them.
+    from oracle import tool_only as _tool_only, DETECTORS as _ALL_DETECTORS
+    _any_tool_call = any((t.get("probe") or {}).get("tool_calls")
+                         for r in results for t in (r.get("trials") or []))
+    _dead_here = dict(dead)
+    if not _any_tool_call:
+        for _d in _ALL_DETECTORS:
+            if _tool_only(_d) and _d not in _dead_here:
+                _dead_here[_d] = ["a tool call, and this run recorded none"]
+
     # --- step 4: write JSON + HTML scorecard to out/ -------------------------
     os.makedirs(OUT_DIR, exist_ok=True)
     # THROUGH `workspace.config_model`, which reads the config the way the adapter does.
@@ -1072,7 +1090,7 @@ def main():
             # exists to draw, surviving exactly as long as the terminal scrollback. Every later
             # reader needs it: the SARIF export turns it into a tool notification, and a
             # replay a year from now has no console to consult.
-            "inert": {name: list(keys) for name, keys in sorted(dead.items())}}
+            "inert": {name: list(keys) for name, keys in sorted(_dead_here.items())}}
     # a --model override writes results_<target>_<model>.json (2 underscores) so it
     # sits BESIDE the canonical single-model run and is skipped by the fleet aggregates
     # (which key on the 1-underscore name) — this is what makes a model matrix possible.

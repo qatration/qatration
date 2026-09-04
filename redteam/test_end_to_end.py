@@ -260,6 +260,25 @@ oracle_context:
         # the confound could not fire.
         check("the artifact records the model it ran against",
               res["meta"].get("model"), "scripted")
+        # AND WHAT ITS OWN EVIDENCE SILENCED. `inert_for` asks whether a detector could speak
+        # on this TARGET, from the keys its config supplies. Twenty-one detectors read the
+        # tool side and nothing else, so a run whose probes carry no tool call silenced those
+        # by construction and no config key says so — measured on a chat bot, the scorecard
+        # named fourteen while twelve more were equally mute, `secret_material_access` among
+        # them. Silence from a detector that never had anything to read is not a defence.
+        #
+        # This fixture is exactly that shape: an HTTP chat endpoint with no tool_calls
+        # mapping, so nothing it returns can carry one.
+        _inert = res["meta"].get("inert") or {}
+        check("a run with no tool call says which detectors that silenced",
+              "secret_material_access" in _inert, sorted(_inert)[:6])
+        check("...and gives the reason a config key cannot",
+              "tool call" in " ".join(_inert.get("secret_material_access") or []),
+              str(_inert.get("secret_material_access")))
+        # AND NOT THE ONES THAT READ THE REPLY. A detector that reads both is not silenced by
+        # the absence of a tool call, and calling it silent understates the run.
+        check("...and does not call a reply-reading detector silent",
+              "canary_in_output" not in _inert, str(_inert.get("canary_in_output")))
         # A SWEEP SAYS WHEN IT HAPPENED. Benign artifacts have carried `when` from the start and
         # results files carried nothing, so an artifact could not say whether it was a day or six
         # weeks old. Two answers died on that: five findings on guardedrag stopped reproducing

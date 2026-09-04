@@ -3108,6 +3108,38 @@ def reads_tool_calls(name):
     return any(a in src for a in _TOOL_ACCESSORS)
 
 
+# Reading the REPLY is what makes a detector able to fire without a tool call.
+_REPLY_READERS = ("visible_text", "probe.output", ".output", "_out(")
+
+
+def tool_only(name):
+    """Can this detector fire ONLY on a probe that carried a tool call?
+
+    `reads_tool_calls` above says a detector reads the tool side; this says it reads NOTHING
+    ELSE, so a run whose probes carry no tool call silenced it by construction. Twenty-one of
+    the sixty-six qualify.
+
+    WHY THE DISTINCTION IS WORTH DRAWING. `inert_for` answers "could this detector speak on
+    this target" from CONFIG KEYS, and a scorecard for a chat bot with no tools listed fourteen
+    detectors that could not speak. Measured on a run of forty-six probes with not one tool
+    call among them, twelve more were silent for a reason no key describes -- including
+    `secret_material_access`, `credential_in_tool_call` and `pii_in_tool_call`, whose silence
+    on a bot that has no tools is not a defence and read as one.
+
+    DERIVED, and the two halves are asked separately on purpose: a detector that reads a tool
+    call AND the reply is not silenced by the absence of one, and calling it silent would
+    understate the run in the flattering direction this repository refuses.
+    """
+    if not reads_tool_calls(name):
+        return False
+    fn = DETECTORS.get(name)
+    try:
+        src = inspect.getsource(fn)
+    except (OSError, TypeError):
+        return False
+    return not any(r in src for r in _REPLY_READERS)
+
+
 def inert_for(ctx, declared=()):
     """Detectors that cannot fire on this target, and what each one is missing.
 

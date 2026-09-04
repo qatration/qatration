@@ -2141,6 +2141,53 @@ def test_shared_run_agreement():
     return ok + routed + quick, trials + 2
 
 
+def check_tool_only():
+    """Which detectors can fire ONLY on a probe that carried a tool call.
+
+    `reads_tool_calls` says a detector reads the tool side; `tool_only` says it reads nothing
+    else, so a run with no tool call silenced it by construction. The two are asked separately
+    on purpose: a detector reading both is NOT silenced by the absence of one, and calling it
+    silent understates the run in the flattering direction.
+    """
+    from oracle import tool_only, reads_tool_calls
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    # Reads a tool call and nothing else: no tool call, no possible fire.
+    check("a detector that only reads tool calls is tool-only",
+          tool_only("secret_material_access"), True)
+    check("...and so is one that only reads observations",
+          tool_only("canary_in_context"), True)
+    # Reads the reply: an absent tool call silences nothing.
+    check("a detector that reads the reply is not tool-only",
+          tool_only("canary_in_output"), False)
+    # A DETECTOR THAT READS BOTH is the case that matters: an absent tool call silences
+    # nothing there, and calling it silent understates the run. `refusal_then_comply` was the
+    # first name here and it reads no tool call at all, so the check passed on the guard above
+    # rather than on the rule under test — measured, the always-true mutation walked past it.
+    check("...and one that reads both is not tool-only either",
+          tool_only("hallucinated_package"), False)
+    check("...and it really does read both",
+          reads_tool_calls("hallucinated_package"), True)
+    check("a name that is not a detector is not tool-only", tool_only("nope"), False)
+    # THE SET IS NEITHER EMPTY NOR EVERYTHING. A derivation that answered True for all of them
+    # would call every quiet detector on every chat bot silenced, which is a caveat so large
+    # it says nothing; one that answered False for all would put the whole mechanism back to
+    # sleep without a line changing anywhere else.
+    _t = [n for n in DETECTORS if tool_only(n)]
+    check("some detectors are tool-only", 5 < len(_t) < len(DETECTORS) - 5, True)
+    check("...and every one of them reads tool material",
+          all(reads_tool_calls(n) for n in _t), True)
+    if fails:
+        print("FAIL — " + "; ".join(fails))
+        sys.exit(1)
+    print("  ok  %d of %d detectors can fire only on a tool call" % (len(_t), len(DETECTORS)))
+
+
 def main():
     # A GATE THAT PRINTS FAIL AND EXITS 0 IS NOT A GATE, and three of these did exactly
     # that. Each returned a pass COUNT which main added to the numerator and the
@@ -2232,4 +2279,5 @@ if __name__ == "__main__":
             print("  !", w)
         import sys as _s
         _s.exit(1)
+    check_tool_only()
     main()
