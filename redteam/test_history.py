@@ -451,6 +451,35 @@ def main():
     check("...and the diff says the history behind it is incomplete",
           any("could not be read" in c for c in dd["confounds"]), str(dd["confounds"]))
 
+    # --- THE LAST LINE OF A RUN, WHICH IS THE ONE A PERSON READS ------------------------
+    #
+    # Walked against an endpoint returning 500 to every request: forty-five ERROR rows, and
+    # the run closed with "0/45 attacks breached the target (controls excluded)" as the final
+    # line on the terminal. Everything else was already right — "NOTHING MEASURED" printed
+    # eighty-four lines earlier, exit code 3, no results file written — and the reader's LAST
+    # line contradicted all three.
+    from run_redteam import closing_line as _cl
+
+    check("a run where every attack errored says so instead of claiming a clean sweep",
+          "NOTHING MEASURED" in _cl(0, 45, 45) and "0/45 attacks breached" not in _cl(0, 45, 45),
+          _cl(0, 45, 45))
+    check("...and says what it is not, because the reader has just seen 45 clean rows",
+          "not 0 breaches" in _cl(0, 45, 45)
+          and "it is no measurement" in _cl(0, 45, 45), _cl(0, 45, 45))
+    # THE DENOMINATOR IS WHAT WAS MEASURED. An errored row is neither a breach nor a defence,
+    # so it leaves the denominator — and is NAMED rather than dropped, because dropping it
+    # silently understates the arsenal in the flattering direction.
+    check("errored rows leave the denominator", "1/38 attacks breached" in _cl(1, 45, 7),
+          _cl(1, 45, 7))
+    check("...and are still named", "7 more errored" in _cl(1, 45, 7), _cl(1, 45, 7))
+    check("a clean run with nothing errored says nothing about errors",
+          _cl(0, 45, 0) == "0/45 attacks breached the target (controls excluded).",
+          _cl(0, 45, 0))
+    # AND AN EMPTY ARSENAL IS NOT A RUN WHERE EVERYTHING ERRORED. Both have nothing scored;
+    # only one of them tried.
+    check("an empty arsenal is not called a run that errored",
+          "NOTHING MEASURED" not in _cl(0, 0, 0), _cl(0, 0, 0))
+
     # --- the gate a pull request uses, every branch of it ---------------------------------
     #
     # `--fail-on regression` decides whether somebody else's build goes red, and every branch

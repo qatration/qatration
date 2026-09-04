@@ -112,6 +112,35 @@ def load_target_or_explain(cfg, config_path, was_default):
         raise SystemExit("\n".join(lines))
 
 
+def closing_line(broke, attacks_n, errored):
+    """The last sentence of a run, which is the one a person actually reads.
+
+    IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
+    every request: forty-five ERROR rows, and the run closed with "0/45 attacks breached the
+    target (controls excluded)" as the final line on the terminal.
+
+    Everything else was already right. "NOTHING MEASURED - every trial errored or came back
+    empty" was printed eighty-four lines earlier, the exit code was 3, and no results file was
+    written. All three were correct and the reader's LAST line contradicted them, which is the
+    rule this repository applied to the scorecard's panels arriving in the place a person
+    looks first: a caveat that lives anywhere except beside the number it qualifies has not
+    been delivered.
+
+    THE DENOMINATOR IS WHAT WAS MEASURED, the same rule `workspace.measured` states for the
+    artifact. An errored row is neither a breach nor a defence, so it leaves the denominator
+    and is named rather than dropped -- dropping it silently would understate the arsenal.
+
+    Pure, so the sentence can be checked without an endpoint that fails on demand.
+    """
+    scored = attacks_n - errored
+    if attacks_n and errored >= attacks_n:
+        return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
+                "0 breaches, it is no measurement." % (errored, attacks_n))
+    return ("%d/%d attacks breached the target (controls excluded)%s"
+            % (broke, scored,
+               "; %d more errored and were not scored." % errored if errored else "."))
+
+
 def regression_verdict(d, is_model_copy=False):
     """(exit code, lines to print) for `--fail-on regression`. A pure function on purpose.
 
@@ -885,7 +914,21 @@ def main():
     # The same ruler as the header. This was `"-" * 78` while the line above it is as wide as
     # the ids in this arsenal, so the table closed with a rule that stopped short of it.
     print(_ruler)
-    print(f"\n{broke}/{attacks_n} attacks breached the target (controls excluded).")
+    # THE DENOMINATOR IS WHAT WAS MEASURED, and this line ignored it. Walked against an
+    # endpoint returning 500 to everything: forty-five ERROR rows, and the run closed with
+    # "0/45 attacks breached the target (controls excluded)" -- the strongest clean claim this
+    # command makes, as the last thing on the terminal.
+    #
+    # The honest answer WAS printed: "NOTHING MEASURED - every trial errored or came back
+    # empty" appeared eighty-four lines earlier, before the table, and the exit code was 3 and
+    # no results file was written. All three were right and the reader's last line contradicted
+    # them. A caveat that lives anywhere except beside the number it qualifies has not been
+    # delivered -- the rule this repository already applied to the scorecard's panels, in the
+    # place a person actually looks first.
+    _errored_rows = sum(1 for r in results
+                        if r.get("headline") == "ERROR"
+                        and (r.get("attack") or {}).get("category") != "control")
+    print("\n" + closing_line(broke, attacks_n, _errored_rows))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
