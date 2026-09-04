@@ -65,6 +65,26 @@ targets that have one. The second was `refusal_expected_but_absent`, which is ar
 rather than by a target config: its arsenal was written after the last live sweep, so for a
 while no stored run had met it. A sweep on 2026-08-26 met it four times.
 
+**And a third door, which config cannot see at all.** Both fixes above are about ARMING: a
+key the target does not supply, an attack that supplies one. There is a second way for a
+detector to be unable to speak and it has no key attached to it. `secret_material_access` reads
+tool arguments and the source of a code tool, so a text-only reply cannot show it whatever the
+bot says. Thirteen attacks are written for it; they have produced 127 stored probes, and **one**
+of those carried a tool call. The four targets they ran against are `httpbot` and two
+`memorybot-naive` variants — 2,730 stored probes between them, not one with a tool call — and
+`lcagent`. The fleet's own code agent, `foreign-code`, which writes and executes Python and is
+the deployment the detector was written for, has never received any of the thirteen. So "no
+target in the fleet exhibits this behaviour" was true of the targets that were asked and said
+nothing about the one that could answer.
+
+The bucket is unchanged, because the evidence is thin rather than absent, and a line that
+moved on a threshold would be a number picked to make a sentence come out. What changed is
+that the sentence now carries what it rests on: every entry prints how many probes its own
+attacks produced, and for a detector that reads tool calls, how many of those carried one.
+`reads_tool_calls` derives that from the detector's own source rather than a list beside it —
+twenty-five of the sixty-six read tool material today, and a list would not notice the
+twenty-sixth.
+
 That took a second fix, because the page and the artifact disagreed and the page was the one
 recounting. This replay judged every stored probe with the TARGET's context alone, while a run
 merges the attack's own `expects_refusal` and `plants` through `runner.judged_ctx` — so a

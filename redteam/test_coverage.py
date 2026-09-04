@@ -71,6 +71,60 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # --- HOW MUCH EVIDENCE THE CLAIM RESTS ON -------------------------------------------
+    #
+    # `buckets` asks whether a detector COULD speak, from config keys, and a detector that
+    # reads tool arguments needs no key and can still be unable to speak: the probes it was
+    # replayed over came from targets with no tools. `secret_material_access` sat under "no
+    # target in the fleet exhibits this behaviour" on 127 probes from its own thirteen
+    # attacks, ONE of which carried a tool call -- and the fleet's only code agent, the
+    # deployment the detector was written for, has never received one of the thirteen.
+    #
+    # THE RULE IS DERIVED FROM THE DETECTOR, so arm it before trusting it: a `reads_tool_calls`
+    # that answered False for everything, or True for everything, would leave the count below
+    # printed under the wrong sentence with nothing to notice.
+    from oracle import reads_tool_calls as _reads
+    check("the rule can tell a detector that reads tool calls", _reads("secret_material_access"))
+    check("...from one that reads only the reply", not _reads("divergent_repetition"))
+    check("...and answers False for a name that is not a detector", not _reads("no_such_thing"))
+
+    tmp3 = tempfile.mkdtemp()
+    try:
+        # Two attacks naming one detector, two probes each: one carrying a tool call and one
+        # not. The count has to separate them, because "127 probes" and "1 of them could
+        # show anything" are different sentences about the same run.
+        art = {"meta": {"target": "cov-fake"}, "results": [
+            {"attack": {"id": "a1", "category": "x", "success": ["_cov_named"]},
+             "trials": [{"probe": {"output": "no", "tool_calls": [], "observations": [],
+                                   "seconds": 0, "turns": []}},
+                        {"probe": {"output": "no", "tool_calls": [["run", "ls"]],
+                                   "observations": [], "seconds": 0, "turns": []}}]},
+            {"attack": {"id": "a2", "category": "x", "partial": ["_cov_named"]},
+             "trials": [{"probe": {"output": "no", "tool_calls": [], "observations": [],
+                                   "seconds": 0, "turns": []}}]},
+            {"attack": {"id": "a3", "category": "x", "success": ["_cov_other"]},
+             "trials": [{"probe": {"output": "no", "tool_calls": [["run", "ls"]],
+                                   "observations": [], "seconds": 0, "turns": []}}]}]}
+        with open(os.path.join(tmp3, "results_cov-fake.json"), "w", encoding="utf-8") as f:
+            json.dump(art, f)
+        real_out, real_ctx = dc.OUT, dc.contexts
+        dc.OUT = tmp3
+        dc.contexts = lambda: {"cov-fake": {}}
+        sup = {}
+        dc.replay(support_out=sup)
+        dc.OUT, dc.contexts = real_out, real_ctx
+    finally:
+        shutil.rmtree(tmp3, ignore_errors=True)
+
+    check("a detector's own attacks are counted whether they name it to succeed or partly",
+          sup.get("_cov_named", [0, 0])[0] == 3, f"support: {sup}")
+    check("...and the probes that carried something it could read are counted apart",
+          sup.get("_cov_named", [0, 0])[1] == 1, f"support: {sup}")
+    check("...and a detector no attack named gets no credit for another one's probes",
+          sup.get("_cov_named", [0, 0]) != sup.get("_cov_other", [0, 0]), f"support: {sup}")
+    check("a detector nothing aimed at has no support at all",
+          "_cov_unnamed" not in sup, f"support: {sup}")
+
     check("a multi-step attack replays with every turn the attacker typed", n == 1)
     check("the attacker's own canary is not credited as a catch",
           not hits.get("canary_transformed") and not hits.get("canary_in_tool_call"),

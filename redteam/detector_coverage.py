@@ -29,7 +29,7 @@ except Exception:
 import yaml
 from target import Probe, target_configs
 from runner import judged_ctx   # one definition of "what did this attack declare"
-from oracle import DETECTORS, inert_for
+from oracle import DETECTORS, inert_for, reads_tool_calls
 from target import engine_version
 from rejudge import _prompt_of
 
@@ -58,7 +58,7 @@ def contexts(collisions=None):
 
 
 def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
-           scanned_out=None):
+           scanned_out=None, support_out=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
 
     `unresolved` collects artifacts whose target could not be matched to any config. They
@@ -68,6 +68,14 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
     `scanned_out` collects every target a probe was actually read for, which is a different
     set from the targets that HAVE a config and the one `buckets` needs to tell "no target
     does this" apart from "no target where this could speak was ever run".
+
+    `support_out` collects, per detector, HOW MUCH EVIDENCE ITS OWN ATTACKS PRODUCED: probes
+    from attacks that name it, and how many of those carried a tool call. `buckets` answers
+    "could it speak here" from config keys, and there is a second way to be unable to speak
+    with no key attached to it -- a detector that reads tool arguments, replayed over probes
+    from targets that have no tools. Read off the STORED attack rather than the arsenal on
+    disk, because the artifact carries the success and partial lists the run actually used,
+    and an arsenal edited since would answer about a different run.
     """
     ctxs = contexts()
     hits, where, n = collections.Counter(), collections.defaultdict(set), 0
@@ -140,13 +148,20 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                 # `refusal_expected_but_absent` fired four times in results_httpbot.json and
                 # this page went on printing it under "never yet seen to fire". Two of our own
                 # outputs contradicting each other, and the one that recounts was wrong.
-                scan(Probe(prompt=_prompt_of(r["attack"], pd.get("prompt")),
-                           output=pd.get("output") or "",
-                           tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
-                           observations=pd.get("observations") or [],
-                           turns=pd.get("turns") or [], error=pd.get("error"),
-                           seconds=pd.get("seconds") or 0),
-                     judged_ctx(r.get("attack") or {}, ctx), tgt)
+                _pr = Probe(prompt=_prompt_of(r["attack"], pd.get("prompt")),
+                            output=pd.get("output") or "",
+                            tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
+                            observations=pd.get("observations") or [],
+                            turns=pd.get("turns") or [], error=pd.get("error"),
+                            seconds=pd.get("seconds") or 0)
+                if support_out is not None:
+                    _at = r.get("attack") or {}
+                    for _nm in set((_at.get("success") or []) + (_at.get("partial") or [])):
+                        _row = support_out.setdefault(_nm, [0, 0])
+                        _row[0] += 1
+                        if _pr.tool_calls:
+                            _row[1] += 1
+                scan(_pr, judged_ctx(r.get("attack") or {}, ctx), tgt)
         note_engine(d, os.path.basename(fp), n - before)
 
     # THE BENIGN CORPUS WAS NOT READ AT ALL, and it is the larger body of evidence: 1,392
@@ -283,8 +298,9 @@ def main():
     sent = set()
     _unreadable_seen = []
     _scanned = set()
+    _support = {}
     hits, where, n, broke, sources = replay(unresolved, engines, sent, _unreadable_seen,
-                                            scanned_out=_scanned)
+                                            scanned_out=_scanned, support_out=_support)
     demo = sorted(k for k in DETECTORS if hits[k])
     # Demonstrated ONLY on traffic nobody attacked is a different claim from demonstrated by
     # an attack, and the difference is the interesting one: the detector works, and what it
@@ -347,7 +363,23 @@ def main():
     if untried:
         print("  no target in the fleet exhibits this behaviour:")
         for k in untried:
-            print(f"    {k}")
+            # AND WHAT THAT SENTENCE RESTS ON, for the detectors where it can be thin without
+            # anything above noticing. `buckets` asks whether a detector could speak, from
+            # config keys; a detector that reads tool arguments needs no key and can still be
+            # unable to speak, because the probes it was replayed over came from targets with
+            # no tools at all.
+            #
+            # `secret_material_access` is why this line exists. Thirteen attacks are written
+            # for it and produced 127 stored probes, ONE of which carried a tool call -- and
+            # the fleet's only code agent, the deployment the detector was written for, has
+            # never received any of the thirteen. The sentence above was true of the targets
+            # that were asked and says nothing about the one that could answer.
+            _aimed, _carried = _support.get(k, [0, 0])
+            if reads_tool_calls(k):
+                print(f"    {k}  (reads tool calls; {_carried} of {_aimed} probe(s) from "
+                      f"attacks that name it carried one)")
+            else:
+                print(f"    {k}  ({_aimed} probe(s) from attacks that name it)")
     if unevidenced:
         # "NEVER RUN" WAS ONE OF TWO WAYS TO GET HERE and the label named only that one. A
         # target that ran and had no config reaches this bucket too, and saying it was never

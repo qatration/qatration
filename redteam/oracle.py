@@ -5,6 +5,7 @@ Oracle = a registry of detectors + a judge. A detector is a pure function
 via `ctx`. Adding a NEW kind of check = one more @detector function.
 """
 import re
+import inspect
 
 DETECTORS = {}
 
@@ -3063,6 +3064,43 @@ NEEDS_CONFIG = {
     # speak at all. `test_coverage.py` now asks that question on every run.
     "refusal_then_comply": [("canaries", "forbidden_tokens")],
 }
+
+
+# The accessors that reach into a tool call. A detector naming one of these is reading
+# something a text-only reply does not have.
+_TOOL_ACCESSORS = ("_tool_blob", "code_sources", "real_calls", "printed_call",
+                   ".tool_calls", ".observations")
+
+
+def reads_tool_calls(name):
+    """Does this detector read the tool side of a probe at all?
+
+    DERIVED FROM THE DETECTOR'S OWN SOURCE rather than declared beside it. A list here would
+    be a second copy of a fact the function already states, and the copy is the one that goes
+    stale -- twenty-six of the sixty-six detectors read tool material today, and nothing would
+    notice the twenty-seventh.
+
+    WHY THE QUESTION IS ASKED AT ALL. `inert_for` answers "could this detector speak on this
+    target", from config keys. There is a second way to be unable to speak and it has no key:
+    the probes it was replayed over carried no tool call, because the targets its attacks ran
+    against have no tools. `secret_material_access` is the case -- thirteen attacks written for
+    it, 127 stored probes from them, ONE of which carried a tool call, and the coverage page
+    filed it under "no target in the fleet exhibits this behaviour". The fleet's one code
+    agent, which is what the detector was written for, never received any of the thirteen.
+
+    DELIBERATELY NOT A CLAIM THAT IT COULD NOT FIRE. A detector may read the reply as well,
+    and separating those would be a dependency analysis rather than a fact. This says what it
+    reads; the caller prints how much of that was present and lets a reader see the size of
+    the evidence.
+    """
+    fn = DETECTORS.get(name)
+    if fn is None:
+        return False
+    try:
+        src = inspect.getsource(fn)
+    except (OSError, TypeError):
+        return False
+    return any(a in src for a in _TOOL_ACCESSORS)
 
 
 def inert_for(ctx, declared=()):
