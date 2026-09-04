@@ -13,7 +13,7 @@ except Exception:
     pass
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
-from workspace import (OUT as WORKSPACE_OUT, safe_target_name,
+from workspace import (config_model, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence)   # one place decides where output goes
 OUT_DIR = WORKSPACE_OUT
 
@@ -948,7 +948,11 @@ def main():
 
     # --- step 4: write JSON + HTML scorecard to out/ -------------------------
     os.makedirs(OUT_DIR, exist_ok=True)
-    meta = {"target": target.name, "model": tcfg.get("model", ""),
+    # THROUGH `workspace.config_model`, which reads the config the way the adapter does.
+    # `tcfg.get("model", "")` is the top-level key the practice bots carry; an http target
+    # keeps its model at `request.model`, so every artifact a stranger produced recorded none
+    # -- including the ones `--model` had just named the FILE after.
+    meta = {"target": target.name, "model": config_model(tcfg),
             # WHEN, which every benign artifact has carried from the start and no results file
             # did. `engine` says which build of OUR code produced this; nothing said how old
             # the measurement is, and the target is the half that moves. Two answers this

@@ -228,6 +228,40 @@ def verdict_for(meta):
     return "Hardened"
 
 
+def config_model(cfg):
+    """Which model a target config runs against, whatever shape the config is.
+
+    THE ARTIFACT WAS NAMED AFTER ONE AND RECORDED NONE. `meta["model"]` read `cfg["model"]`,
+    a top-level key the practice bots have and an `adapter: http` config does not -- there the
+    model lives at `request.model`, because every OpenAI-shaped body carries it there and
+    `qatration init` has written it there since 0.4.0. Measured on a live run from a fresh
+    install: `results_mybot_llama3.2-3b.json`, whose meta says `model: ""`. One artifact, two
+    answers, and the meta is the half every page reads.
+
+    `--model` does not save it either. On an http target the override is substituted into
+    `request.model` and `cfg["model"]` is never touched, so the flag whose entire purpose is
+    running one target across several models produced files that could not say which.
+
+    WHAT IT COSTS IS `history`. That module treats the model as part of a run's IDENTITY --
+    "the model, the trial count and the finding set" -- so two sweeps against different models
+    with the same trials and the same findings collapse into one and the second is dropped.
+    And its confound list warns "model 'a' -> 'b'" when a comparison spans a model change;
+    with both sides empty the warning cannot fire. A confound detector blind to its confound,
+    on the one adapter every outside user has.
+
+    Reading the config the way the ADAPTER reads it is the whole rule, and it is one rule now
+    rather than two that disagree.
+    """
+    cfg = cfg or {}
+    top = str(cfg.get("model") or "").strip()
+    if top:
+        return top
+    req = cfg.get("request")
+    if isinstance(req, dict):
+        return str(req.get("model") or "").strip()
+    return ""
+
+
 def config_name(path, cfg=None):
     """What target a config file defines, whether or not it says so.
 

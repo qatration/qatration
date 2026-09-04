@@ -251,6 +251,15 @@ oracle_context:
         res = json.load(open(os.path.join(work, "results_e2e-bot.json"), encoding="utf-8"))
         broke = [r for r in res["results"] if r["headline"] in ("EXPLOITED", "PARTIAL")]
         check("a bot that hands over its key is caught", len(broke) >= 2, str(len(broke)))
+        # AND THE ARTIFACT SAYS WHICH MODEL PRODUCED IT. This fixture is `adapter: http` with
+        # `request: {model: scripted}`, which is the shape every outside user has, and the
+        # meta read a top-level `model:` key that shape does not carry. Every artifact written
+        # outside this repository recorded an empty string, and `history` treats the model as
+        # part of a run's identity and warns when a comparison spans a model change: with the
+        # field always empty, two sweeps against different models collapsed into one run and
+        # the confound could not fire.
+        check("the artifact records the model it ran against",
+              res["meta"].get("model"), "scripted")
         # A SWEEP SAYS WHEN IT HAPPENED. Benign artifacts have carried `when` from the start and
         # results files carried nothing, so an artifact could not say whether it was a day or six
         # weeks old. Two answers died on that: five findings on guardedrag stopped reproducing

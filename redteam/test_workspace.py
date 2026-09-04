@@ -66,6 +66,52 @@ def builds_its_own_root(src):
     return found
 
 
+def check_config_model():
+    """Which model a config runs against, read the way the adapter reads it.
+
+    `meta["model"]` asked for a top-level `model:` key. The practice bots have one; an
+    `adapter: http` config -- the only kind an outside user writes -- keeps it at
+    `request.model`, where every OpenAI-shaped body carries it and where `qatration init` has
+    written it since 0.4.0. So every artifact produced outside this repository recorded no
+    model at all, including the ones `--model` had just named the FILE after.
+    """
+    from workspace import config_model
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    check("a practice bot's top-level key is the model", config_model({"model": "nemo"}), "nemo")
+    check("an http target's model lives under request",
+          config_model({"adapter": "http", "request": {"model": "llama3.2:3b"}}), "llama3.2:3b")
+    # THE TOP LEVEL WINS, because that is the branch `--model` writes for every adapter that
+    # is not http, and a config carrying both must not answer with the one nobody set.
+    check("...and a config with both answers with the top-level one",
+          config_model({"model": "chosen", "request": {"model": "stale"}}), "chosen")
+    check("...but an empty top-level key is not an answer",
+          config_model({"model": "  ", "request": {"model": "real"}}), "real")
+    check("a config that names no model says so", config_model({"request": {}}), "")
+    check("...and so does one with no request block at all", config_model({}), "")
+    check("...and nothing at all does not raise", config_model(None), "")
+    # A REQUEST THAT IS NOT A MAPPING. Some shapes carry a template string or a list here,
+    # and `.get` on either is an AttributeError in the line that builds every artifact.
+    # CAUGHT, NOT CALLED BARE. The property here is that it does not raise, and a check that
+    # calls it plainly cannot assert that: the exception escapes, the suite dies with a
+    # traceback, and the label that would have named the defect never prints. Measured -- the
+    # mutation that drops the isinstance guard reddened this file under no name at all.
+    try:
+        _got = config_model({"request": "POST {prompt}"})
+    except Exception as _e:
+        _got = type(_e).__name__
+    check("a request that is not a mapping is not a crash", _got, "")
+    if fails:
+        print("\nFAIL — " + "; ".join(fails))
+        sys.exit(1)
+    print("  ok  config_model reads a model out of either shape")
+
+
 def main():
     fails, checks = [], 0
 
@@ -449,4 +495,5 @@ if __name__ == "__main__":
         for _b in _bad:
             print('  !', _b)
         sys.exit(1)
+    check_config_model()
     main()
