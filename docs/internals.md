@@ -259,6 +259,8 @@ qatration/
   foreign-agent/      # :8130 tool-calling and :8131 code agent, on somebody else's scaffold
   foreign-langchain/  # a LangChain agent, same idea on a second framework
   tools/              # the gates: guard, licences, the suite runner, the fleet launcher
+                      #   and `unguarded.py`, which deletes each documented guard and
+                      #   each detector rule in turn to find the ones no suite misses
   docs/               # this file and its siblings
   site/               # the landing page and the drop-in PDF fixtures
   .github/            # workflows and templates      .githooks/  # the commit and push gates
