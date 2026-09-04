@@ -112,7 +112,7 @@ def load_target_or_explain(cfg, config_path, was_default):
         raise SystemExit("\n".join(lines))
 
 
-def closing_line(broke, attacks_n, errored):
+def closing_line(broke, attacks_n, errored, stopped=""):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -130,15 +130,28 @@ def closing_line(broke, attacks_n, errored):
     artifact. An errored row is neither a breach nor a defence, so it leaves the denominator
     and is named rather than dropped -- dropping it silently would understate the arsenal.
 
+    AND A ROW THAT WAS NEVER SENT DID NOT ERROR. `stopped` carries the budget's own words when
+    the run ran out of one. Walked: a forty-request budget against a forty-five attack sweep
+    left seven rows headed ERROR whose error was "this run's request budget was spent before
+    this probe; it was never sent", and the closing line called them errored -- a failure of
+    the target rather than a limit the operator set. The run record says `stopped` with the
+    reason; the terminal said a finished run, and the terminal is read first.
+
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
     scored = attacks_n - errored
+    _rest = ("%d more were never sent: the run stopped on its budget (%s)."
+             % (errored, stopped) if stopped and errored else
+             "%d more errored and were not scored." % errored if errored else "")
     if attacks_n and errored >= attacks_n:
+        if stopped:
+            return ("NOTHING MEASURED: the run stopped on its budget (%s) before scoring any "
+                    "of %d attacks. This is not 0 breaches, it is no measurement."
+                    % (stopped, attacks_n))
         return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
                 "0 breaches, it is no measurement." % (errored, attacks_n))
     return ("%d/%d attacks breached the target (controls excluded)%s"
-            % (broke, scored,
-               "; %d more errored and were not scored." % errored if errored else "."))
+            % (broke, scored, ("; " + _rest) if _rest else "."))
 
 
 def regression_verdict(d, is_model_copy=False):
@@ -928,7 +941,10 @@ def main():
     _errored_rows = sum(1 for r in results
                         if r.get("headline") == "ERROR"
                         and (r.get("attack") or {}).get("category") != "control")
-    print("\n" + closing_line(broke, attacks_n, _errored_rows))
+    # THE BUDGET'S OWN WORDS, read here rather than at the record two hundred lines below,
+    # because this is where the number is stated and the caveat belongs beside it.
+    _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
+    print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it

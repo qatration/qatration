@@ -480,6 +480,27 @@ def main():
     check("an empty arsenal is not called a run that errored",
           "NOTHING MEASURED" not in _cl(0, 0, 0), _cl(0, 0, 0))
 
+    # A ROW THAT WAS NEVER SENT DID NOT ERROR EITHER. Walked: a forty-request budget against a
+    # forty-five attack sweep left seven rows headed ERROR whose error reads "this run's
+    # request budget was spent before this probe; it was never sent". Calling those errors
+    # blames the target for a limit the operator set, and the run record two hundred lines
+    # below says `stopped` while the terminal closed as a finished run.
+    check("attacks the budget stopped are never sent, not errored",
+          "never sent" in _cl(1, 45, 7, stopped="requests")
+          and "errored" not in _cl(1, 45, 7, stopped="requests"),
+          _cl(1, 45, 7, stopped="requests"))
+    check("...and the budget that stopped them is named",
+          "stopped on its budget (requests)" in _cl(1, 45, 7, stopped="requests"),
+          _cl(1, 45, 7, stopped="requests"))
+    check("...while a run with no budget trouble still calls an error an error",
+          "errored" in _cl(1, 45, 7), _cl(1, 45, 7))
+    check("a run the budget stopped before it scored anything says which",
+          "stopped on its budget" in _cl(0, 45, 45, stopped="seconds")
+          and "NOTHING MEASURED" in _cl(0, 45, 45, stopped="seconds"),
+          _cl(0, 45, 45, stopped="seconds"))
+    check("...and a clean run says nothing about a budget",
+          "budget" not in _cl(3, 45, 0, stopped="requests"), _cl(3, 45, 0, stopped="requests"))
+
     # --- the gate a pull request uses, every branch of it ---------------------------------
     #
     # `--fail-on regression` decides whether somebody else's build goes red, and every branch
