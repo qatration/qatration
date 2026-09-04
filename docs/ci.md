@@ -380,9 +380,18 @@ when nobody is attacking it — without that baseline, nothing in the log can be
 the export says so.
 
 A detector that could not fire becomes a SARIF **tool notification** rather than a silence, and
-an attack that was never sent makes the whole invocation unsuccessful. A short list of findings
-because the run stopped early must never read like a short list of findings because there was
-little to find.
+so does every attack that was not sent, with the reason. **The invocation itself is marked
+unsuccessful when the run could not do its job**: a row that errored, a run whose record says it
+did not finish, or a sweep that measured nothing at all. Attacks held back by `--scope quick`
+are not that - you asked for a short run and got one - so they are counted and named rather than
+reported as a failure. A short list of findings because the run stopped early must never read
+like a short list of findings because there was little to find, and the difference between the
+two is which of those lines the log carries.
+
+That sentence used to say a never-sent attack made the invocation unsuccessful, which the code
+did not do and should not: it would mark every `--scope quick` run in every pull request as a
+failed analysis, which is how a team learns to ignore a check. What the code was missing was the
+other half - a run that stopped by itself - and that half is now read from the run record.
 
 ## Nothing leaves your side
 

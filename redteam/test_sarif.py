@@ -299,6 +299,24 @@ check("a run with nothing to say exports no such note",
       not _dlv_notes({"meta": {k: v for k, v in _DLV["meta"].items() if k != "delivery"},
                       "results": _DLV["results"]}))
 
+# AND A SHORT RUN YOU ASKED FOR IS NOT A FAILED ONE. `docs/ci.md` said for a while that an
+# attack never sent made the whole invocation unsuccessful, which the code did not do and should
+# not: `--scope quick` holds most of the arsenal back on purpose, and marking every per-PR run a
+# failed analysis is how a team learns to ignore the check. The unsent attacks are counted and
+# named in a notification instead. Checked here so that nobody closes the gap from the wrong end.
+_SCOPED = {"meta": {"target": "quickbot", "attacks_n": 45, "errors": 0, "broke": 1,
+                    "skipped": 333, "not_sent": 319, "not_applicable": 14},
+           "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                        "attack": {"id": "a", "category": "x"},
+                        "fired": ["canary_in_output"], "locks": {}, "trials": [{}]}]}
+_scoped_inv = sarif.build(_SCOPED)["runs"][0]["invocations"][0]
+check("a run that held attacks back on purpose is still a successful analysis",
+      _scoped_inv["executionSuccessful"] is True, str(_scoped_inv["executionSuccessful"]))
+check("...and says how many it held back, rather than staying quiet about them",
+      "coverage/incomplete" in [n["descriptor"]["id"]
+                                for n in _scoped_inv.get("toolExecutionNotifications", [])],
+      str([n["descriptor"]["id"] for n in _scoped_inv.get("toolExecutionNotifications", [])]))
+
 # --- A RUN THAT DID NOT FINISH IS NOT A SUCCESSFUL ANALYSIS ------------------------------
 #
 # Everything else in this export reasons from ROWS: an attack that errored leaves one behind
