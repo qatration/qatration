@@ -520,6 +520,46 @@ def load_adjudication(path=None):
     return {(r["target"], r["detector"]): r for r in rows if r.get("target") and r.get("detector")}
 
 
+def adjudication_gaps(rows_by_target=None, path=None):
+    """-> (fired pairs nobody settled, settled pairs that no longer fire).
+
+    THE JUDGEMENT FILE HAD NO GATE AT ALL. A hundred and forty-two rows, each a person's
+    verdict on whether one detector firing on one target's ordinary traffic is a real finding
+    or a false alarm, and nothing checked that the names were real, that every fire had been
+    settled, or that a settled pair still happens.
+
+    Both gaps are worth saying and they say opposite things. A fire nobody has settled is a
+    candidate false alarm sitting in the evidence with no decision on it -- three of them
+    here, all `over_refusal`. A verdict for a pair that no longer fires is a decision about
+    something that has stopped happening -- twenty-two, from oracle fixes and target changes
+    since -- and the risk there is the sharper one: a stale `false_positive` goes on
+    suppressing a pair that may start firing again for an entirely different reason.
+
+    Neither is an error. This reports; a person settles. That is the same division the file
+    itself is built on.
+    """
+    adjudged = load_adjudication(path)
+    fired = set()
+    if rows_by_target is None:
+        rows_by_target = {}
+        for fp in glob.glob(os.path.join(OUT_DIR, "benign_*.json")):
+            try:
+                with open(fp, encoding="utf-8") as f:
+                    d = json.load(f)
+            except Exception:
+                # An unreadable baseline is `roll_up`'s business to report; skipping it here
+                # understates both gaps, which keeps this quiet rather than wrong.
+                continue
+            tgt = (d.get("meta") or {}).get("target")
+            if tgt:
+                rows_by_target[tgt] = d.get("rows") or []
+    for tgt, rows in rows_by_target.items():
+        for r in rows:
+            for det in (r.get("fired") or []):
+                fired.add((tgt, det))
+    return sorted(fired - set(adjudged)), sorted(set(adjudged) - fired)
+
+
 def roll_up():
     """Every stored benign run, folded into one per-detector rate.
 
@@ -794,6 +834,28 @@ def main():
               f"reach every channel. "
               f"Untested, not exonerated:")
         print("    " + ", ".join(quiet))
+
+        # AND HOW MUCH OF THE JUDGEMENT FILE IS CURRENT. Every number above rests on
+        # `benign_adjudication.yaml` -- a hundred and forty-two verdicts, each a person
+        # deciding whether one detector firing on one target's ordinary traffic is a real
+        # finding or a false alarm -- and nothing said how much of it still matches the
+        # evidence. Both directions are worth saying and they say opposite things.
+        _unsettled, _stale = adjudication_gaps()
+        if _unsettled:
+            print(f"\n{len(_unsettled)} (target, detector) pair(s) fire here and nobody has "
+                  f"settled them:")
+            print("    " + ", ".join("%s/%s" % p for p in _unsettled[:8])
+                  + (" +%d" % (len(_unsettled) - 8) if len(_unsettled) > 8 else ""))
+            print("    Until somebody does, each is a candidate false alarm counted as one.")
+        if _stale:
+            # THE SHARPER OF THE TWO. A `false_positive` verdict for a pair that has stopped
+            # firing goes on suppressing it, and the next time it fires it may be firing for
+            # an entirely different reason than the one somebody dismissed.
+            print(f"\n{len(_stale)} adjudication(s) are about pairs that no longer fire:")
+            print("    " + ", ".join("%s/%s" % p for p in _stale[:8])
+                  + (" +%d" % (len(_stale) - 8) if len(_stale) > 8 else ""))
+            print("    A verdict outlives the fire it was written about; re-read before "
+                  "trusting one.")
         return
 
     # A CONFIGURED TARGET COULD NOT GET A BASELINE AT ALL, which quietly hollowed out the

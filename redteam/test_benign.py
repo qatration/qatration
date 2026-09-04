@@ -61,6 +61,51 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- THE JUDGEMENT FILE HAD NO GATE AT ALL ------------------------------------------
+    #
+    # `benign_adjudication.yaml` holds a hundred and forty-two verdicts, each a person
+    # deciding whether one detector firing on one target's ordinary traffic is a real finding
+    # or a false alarm. Every attribution number in this package rests on them, and nothing
+    # checked that the names were real, that every fire had been settled, or that a settled
+    # pair still happens.
+    import yaml as _y4
+    from oracle import DETECTORS as _DETS
+    from workspace import config_name as _cname
+    from target import target_configs as _tcfgs
+
+    _rows = _y4.safe_load(open(os.path.join(HERE, "benign_adjudication.yaml"), encoding="utf-8").read()) or []
+    check("there are adjudications to check", len(_rows) > 20, str(len(_rows)))
+    _names = {_cname(p, None) for p in _tcfgs(HERE)}
+    _bad_det = sorted({r.get("detector") for r in _rows if r.get("detector") not in _DETS})
+    check("every adjudication names a real detector", not _bad_det, str(_bad_det))
+    _bad_tgt = sorted({r.get("target") for r in _rows if r.get("target") not in _names})
+    check("...and a target that has a config", not _bad_tgt, str(_bad_tgt))
+    # A VERDICT WITHOUT A REASON IS A PREFERENCE. The file's own shape is (target, detector,
+    # verdict, why), and the `why` is the half that makes it reviewable by somebody else.
+    _no_why = [f"{r.get('target')}/{r.get('detector')}" for r in _rows
+               if not str(r.get("why") or "").strip()]
+    check("...and says why", not _no_why, str(_no_why[:4]))
+    _odd = sorted({r.get("verdict") for r in _rows} - {"finding", "false_positive"})
+    check("...with one of the two verdicts this file has", not _odd, str(_odd))
+
+    # AND THE TWO GAPS ARE COMPUTED, not assumed. A fire nobody settled and a verdict about a
+    # fire that stopped are opposite problems; the roll-up reports both and neither is an
+    # error, so what is checked here is that the function can tell them apart.
+    import benign as _B4
+    _un, _st = _B4.adjudication_gaps(
+        rows_by_target={"t1": [{"fired": ["canary_in_output"]}, {"fired": []}]},
+        path=os.path.join(HERE, "benign_adjudication.yaml"))
+    check("a fire with no verdict is reported as unsettled",
+          ("t1", "canary_in_output") in _un, str(_un[:3]))
+    # `or True` IS A CHECK THAT CANNOT FAIL, and the first version of this line had one. The
+    # fixture's only fire is `t1/canary_in_output`, so every real adjudication in the file is
+    # about a pair that did not fire here — which is what "stale" means and what to assert.
+    check("...and a verdict with no fire is reported as stale",
+          len(_st) >= 20 and ("t1", "canary_in_output") not in _st, str(len(_st)))
+    _un2, _st2 = _B4.adjudication_gaps(rows_by_target={}, path=os.path.join(HERE, "nope.yaml"))
+    check("with no judgement file, nothing is settled rather than everything",
+          _un2 == [] and _st2 == [], "%s %s" % (_un2[:2], _st2[:2]))
+
     # --- the corpus itself is well formed ---------------------------------------------
     ids = [c[0] for c in CORPUS] + [c[0] for c in CONVERSATIONS]
     check("corpus ids are unique", len(ids) == len(set(ids)),
