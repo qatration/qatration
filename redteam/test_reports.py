@@ -1375,6 +1375,70 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- A SENTENCE THAT ENDED IN A COLON AND NOTHING ------------------------------------
+    #
+    # The dashboard's lead said "A fleet count that does not separate those is counting its
+    # own homework: ." on every fleet with no third-party target in it — which is every fleet
+    # an outside user has, since the practice bots are ours. Found by rendering the page twice
+    # with opposite findings and reading which sentences stayed identical.
+    #
+    # The sentence still has to be said when the list is empty: that is when it applies
+    # hardest, because a fleet of nothing but this engine's own bots is exactly the one whose
+    # count is its own homework.
+    # ON THE RENDERED PAGE, not on the source. A grep for the format string would pass on any
+    # rewrite that produced the same dangling text a different way.
+    import tempfile as _tf6, shutil as _sh6, json as _js6, importlib as _il6
+    _dw = _tf6.mkdtemp()
+    try:
+        def _dash(third):
+            for _f in os.listdir(_dw):
+                os.remove(os.path.join(_dw, _f))
+            _js6.dump({"meta": {"target": "ownbot", "attacks_n": 2, "broke": 1, "errors": 0,
+                                "trials": 3, "when": "2026-09-04 10:00"},
+                       "results": [{"headline": "EXPLOITED", "rate": "3/3",
+                                    "attack": {"id": "a", "category": "x"},
+                                    "fired": ["canary_in_output"], "locks": {},
+                                    "trials": [{}]}]},
+                      io.open(os.path.join(_dw, "results_ownbot.json"), "w",
+                              encoding="utf-8", newline=""))
+            _cfg = os.path.join(_dw, "targets_ownbot.yaml")
+            _prov = "third-party" if third else "first-party"
+            io.open(_cfg, "w", encoding="utf-8", newline="").write(
+                "\n".join(["adapter: http", "name: ownbot",
+                           'url: "http://127.0.0.1:1/x"', "provenance: " + _prov, ""]))
+            _was, _wasc = os.environ.get("QATRATION_OUT"), os.environ.get("QATRATION_CONFIGS")
+            os.environ["QATRATION_OUT"] = _dw
+            os.environ["QATRATION_CONFIGS"] = _cfg
+            try:
+                import workspace as _w9, build_index as _bi9
+                _il6.reload(_w9)
+                _il6.reload(_bi9)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _bi9.main()
+                return io.open(os.path.join(_dw, "index.html"), encoding="utf-8").read()
+            finally:
+                for _k, _v in (("QATRATION_OUT", _was), ("QATRATION_CONFIGS", _wasc)):
+                    if _v is None:
+                        os.environ.pop(_k, None)
+                    else:
+                        os.environ[_k] = _v
+                import workspace as _wa, build_index as _bia
+                _il6.reload(_wa)
+                _il6.reload(_bia)
+
+        _own_only = _dash(False)
+        check("the dashboard does not end that sentence with a bare colon",
+              "own homework: ." not in _own_only and "homework: <" not in _own_only,
+              "the empty list still renders as a colon and a full stop")
+        check("...and says what an all-our-own fleet means instead",
+              "none of these is" in _own_only, "the sentence trailed off")
+        _has_third = _dash(True)
+        check("...and names the third-party targets when there are some",
+              "homework — ownbot" in _has_third,
+              "the names went missing when there were some")
+    finally:
+        _sh6.rmtree(_dw, ignore_errors=True)
+
     # --- THE COMMON THREAD WAS A CONSTANT -----------------------------------------------
     #
     # Every render of the defence report told the client "The common thread: security was

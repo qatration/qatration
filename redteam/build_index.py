@@ -199,8 +199,20 @@ def main():
     n_practice = n_targets - n_third
     # esc(): a target name reaches this page from a config file, and every page this tool
     # produces is a rendering of attacker-influenced input by construction.
-    third_list = ", ".join(esc(t) for t in sorted(t for k, v in kinds.items()
-                                                  if k.startswith("third-party") for t in v))
+    _third_names = sorted(t for k, v in kinds.items()
+                          if k.startswith("third-party") for t in v)
+    # A COLON WITH NOTHING AFTER IT. This joined the names and the sentence ended
+    # `counting its own homework: .` whenever a fleet had no third-party target in it --
+    # which is every fleet an outside user has, since the practice bots are ours. Found by
+    # rendering the page twice with opposite findings and reading what stayed identical.
+    #
+    # The sentence still has to be said when the list is empty, because that is when it
+    # applies hardest: a fleet of nothing but our own bots is exactly the fleet whose count
+    # is its own homework. So the naming is the part that becomes conditional, not the point.
+    third_list = ", ".join(esc(t) for t in _third_names)
+    third_said = (" — %s" % third_list if third_list
+                  else " — and none of these is, so every finding below is a fact about this "
+                       "engine rather than about software in the world")
     # Where the recount disagrees with what the sweep stored, the difference is a fact about
     # the evidence: the stored verdicts have moved since the run that wrote them, usually
     # because an oracle fix was replayed over them. Said on the page rather than resolved
@@ -285,7 +297,7 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
 <div class="sub">Adversarial test of AI features · {today} · {n_targets} targets</div>
 <div class="sub">{n_third} of them are somebody else's software and carry {n_third_find} of the
 findings; the other {n_practice} are bots written here to exercise the engine. A fleet count
-that does not separate those is counting its own homework: {third_list}.</div>
+that does not separate those is counting its own homework{third_said}.</div>
 <div class="tiles">
   <div class="tile"><div class="n">{n_targets}</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">{n_third}</div><div class="l">third-party code</div></div>
