@@ -229,6 +229,70 @@ def verdict_for(meta):
 
 
 _CTX_KEYS = None
+_CFG_KEYS = None
+
+
+def config_keys_read(root=None):
+    """Every TOP-LEVEL target-config key some part of this engine reads.
+
+    THE http ADAPTER REFUSES WHAT IT CANNOT READ and the twelve built-in ones never look.
+    `HttpConfiguredTarget.__init__` names its parameters and ends in `**unknown`, which it
+    raises on, with the defect written beside it: a config saying `respones:` built a target
+    with no response mapping, every reply read as empty, every attack scored DEFENDED, and the
+    run looked like a hardened deployment. The practice bots are constructed from a table that
+    reads named keys off the config -- `guard=cfg.get("guard", True)` -- so a config saying
+    `gaurd: false` is not refused and not applied. The bot silently stays guarded, and the
+    fleet's published numbers are about a different deployment from the one the file describes.
+
+    TWO SOURCES, because neither alone is the answer: the literal reads (`cfg.get("guard")`)
+    and every adapter constructor's parameter names, which is how the table's keys are spelled
+    at the other end. Seventy-three keys, and the forty-three shipped configs use none outside
+    them.
+
+    A hand-typed list would be the copy that goes stale -- the same reason `context_keys_read`
+    beside it scans instead of listing.
+    """
+    global _CFG_KEYS
+    if _CFG_KEYS is not None and root is None:
+        return _CFG_KEYS
+    import glob as _glob
+    import importlib as _il
+    import inspect as _inspect
+    import io as _io
+    import re as _re
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pats = (r'cfg\.get\(\s*["\']([a-z_]+)["\']',
+            r'cfg\[["\']([a-z_]+)["\']\]',
+            r'tcfg\.get\(\s*["\']([a-z_]+)["\']',
+            r'c\.get\(\s*["\']([a-z_]+)["\']')
+    for fn in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        try:
+            src = _io.open(fn, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in pats:
+            keys |= set(_re.findall(p, src))
+    for fn in sorted(_glob.glob(os.path.join(here, "targets_*.py"))):
+        try:
+            mod = _il.import_module(os.path.basename(fn)[:-3])
+        except Exception:
+            # An adapter that will not import is `test_packaging`'s business. Skipping it
+            # here returns fewer keys, which makes the caller's complaint louder rather than
+            # quieter -- the safe direction for a check that can be wrong.
+            continue
+        for nm in dir(mod):
+            obj = getattr(mod, nm)
+            if _inspect.isclass(obj):
+                try:
+                    keys |= set(_inspect.signature(obj.__init__).parameters) - {"self"}
+                except (TypeError, ValueError):
+                    pass
+    if root is None:
+        _CFG_KEYS = keys
+    return keys
 
 
 def context_keys_read(root=None):

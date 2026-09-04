@@ -97,6 +97,32 @@ def main():
     # silence, which is this file's own subject one level up.
     check("...over a real number of configs", _seen >= 5, str(_seen))
 
+    # --- AND THE TWELVE ADAPTERS THAT NEVER LOOK ----------------------------------------
+    #
+    # The refusal above belongs to this adapter. The built-in targets are constructed from a
+    # table that reads named keys off the config — `guard=cfg.get("guard", True)` — so a
+    # config saying `gaurd: false` is not refused and not applied: the bot stays guarded, and
+    # the fleet's published numbers describe a different deployment from the file. Nothing
+    # anywhere would say so, because nothing reads the key at all.
+    #
+    # `workspace.config_keys_read` answers what the engine reads, from two sources: the
+    # literal `cfg.get("guard")` reads, and every adapter constructor's parameter names, which
+    # is how the table's keys are spelled at the other end.
+    from workspace import config_keys_read as _cfg_keys
+    _readable = _cfg_keys()
+    check("the engine's config keys can be enumerated", len(_readable) > 20, str(len(_readable)))
+    check("...and a real one is among them", "guard" in _readable, "guard is not readable")
+    check("...and a misspelling is not", "gaurd" not in _readable, "the scan is too generous")
+    _unread, _n = {}, 0
+    for _fp in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+        _c = _y.safe_load(open(_fp, encoding="utf-8").read()) or {}
+        _n += 1
+        _u = [k for k in _c if k not in _readable]
+        if _u:
+            _unread[os.path.basename(_fp)] = _u
+    check("no shipped config declares a top-level key nothing reads", not _unread, str(_unread))
+    check("...over every config that ships", _n >= 20, str(_n))
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()

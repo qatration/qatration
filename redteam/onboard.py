@@ -115,6 +115,12 @@ def check(cfg_path, probe_text=PROBE):
     except Exception as e:
         rep["problems"].append(f"the config file could not be read: {type(e).__name__}: {e}")
         return False, rep
+    # ONLY THE CONTEXT LEVEL HERE. The top level is already refused by the adapter this
+    # command onboards — `HttpConfiguredTarget` raises on a key it does not know — so a note
+    # would repeat the PROBLEM printed below it. The built-in adapters have no such refusal,
+    # and this command does not accept them: it onboards `adapter: http` configs. Their guard
+    # is a check over the shipped configs, in `test_http_adapter`, where it can run without a
+    # target at all.
     rep["unread_keys"] = unread_context_keys(cfg)
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
