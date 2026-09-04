@@ -935,6 +935,121 @@ def main():
         check("...and lists nothing robots.txt tells crawlers to skip",
               not _contra, f"the sitemap offers {_contra}, robots.txt disallows {_disallowed}")
 
+    # --- HOW THE SITE IS SERVED, AND NOT ONLY WHAT IS IN IT --------------------------------
+    #
+    # Everything above this reads the pages. Nothing read the two files that decide what a
+    # browser does with them, and both of them turned out to be carrying an unmeasured claim.
+    #
+    # THE DOCTYPE. This site went live and stayed live without one, so every page rendered in
+    # quirks mode -- `document.compatMode` reading "BackCompat", checked against the deployed
+    # page rather than the file. Nothing looked wrong, because the three things quirks mode
+    # changes are a table's inherited font size, the line-height gap under an image, and a
+    # percentage height, and this page has none of the three. That is the whole problem with
+    # it: it is a defect that waits for an unrelated change to become visible, and then looks
+    # like a bug in the change.
+    #
+    # Quantified over the generated pages AND the 404, because the 404 is written by hand and
+    # is therefore the one that can drift away from the rule the generator now enforces.
+    _pages = [(_c, _i18n.page_path(_c)) for _c in _langs]
+    _404_p = os.path.join(ROOT, "site", "404.html")
+    if os.path.exists(_404_p):
+        _pages.append(("404", _404_p))
+    for _label, _p in _pages:
+        _first = io.open(_p, encoding="utf-8").read().lstrip()[:40].lower()
+        check("the %s page opens with a doctype" % _label,
+              _first.startswith("<!doctype html"),
+              "starts %r, so the browser renders it in quirks mode" % _first[:20])
+
+    # THE DEPLOY CONFIG. `wrangler.jsonc` carries thirty lines of reasoning for three settings
+    # and nothing checked that the settings were still the ones the reasoning describes -- a
+    # decision written down where only a person can read it, which is the shape this file
+    # exists to catch. `workers_dev` and `preview_urls` in particular DEFAULT TO TRUE, so
+    # deleting either line is not a no-op: it publishes the site a second and third time, at
+    # `qatration.workers.dev` and at a permanent per-version URL for every build ever made.
+    _wr_p = os.path.join(ROOT, "wrangler.jsonc")
+    check("the deploy configuration is a tracked file", os.path.exists(_wr_p),
+          "the site's settings live in a dashboard where a diff cannot see them")
+    if os.path.exists(_wr_p):
+        _wr_raw = io.open(_wr_p, encoding="utf-8").read()
+        # LINE COMMENTS ONLY, and only where the line is nothing but a comment. Stripping every
+        # `//` would cut a URL in half the first time one appears in a value.
+        _wr_txt = "\n".join("" if _l.lstrip().startswith("//") else _l
+                            for _l in _wr_raw.split("\n"))
+        try:
+            _wr = json.loads(_wr_txt)
+        except ValueError as _e:
+            _wr = {}
+            check("wrangler.jsonc is valid JSON once its comments are removed", False,
+                  "%s - wrangler will refuse to deploy" % _e)
+        else:
+            check("wrangler.jsonc is valid JSON once its comments are removed", True)
+        _assets = _wr.get("assets") or {}
+        check("the deploy publishes site/ and not the repository",
+              _assets.get("directory") == "./site",
+              "assets.directory is %r; pointing it at the root would publish out/ and every "
+              "source file to a public domain" % _assets.get("directory"))
+        for _k in ("workers_dev", "preview_urls"):
+            check("the deploy keeps %s off" % _k, _wr.get(_k) is False,
+                  "%s is %r, and its default is true: the site would answer at a second "
+                  "address as well as its own" % (_k, _wr.get(_k)))
+
+        # BOTH HALVES OR NEITHER, and this is the point of checking it at all. A 404.html with
+        # no `not_found_handling` is a file Cloudflare serves with status 200 to anyone who
+        # asks for it by name and to nobody else -- a page that says "this page does not
+        # exist" and returns "here it is". `not_found_handling` with no 404.html is a setting
+        # pointing at nothing. Each is silent on its own.
+        _nfh = _assets.get("not_found_handling")
+        check("a custom 404 page is either wired up or absent, never half of each",
+              (_nfh == "404-page") == os.path.exists(_404_p),
+              "not_found_handling is %r and site/404.html %s"
+              % (_nfh, "exists" if os.path.exists(_404_p) else "does not exist"))
+
+    if os.path.exists(_404_p):
+        _404 = io.open(_404_p, encoding="utf-8").read()
+        check("the 404 page asks not to be indexed",
+              re.search(r'(?i)<meta\s+name="robots"\s+content="[^"]*noindex', _404) is not None,
+              "a soft 404 in a search index is a result that promises a page and delivers this")
+        # READ AGAIN RATHER THAN REUSED. The sitemap block above binds its text inside an
+        # `if both files exist`, so a reference to it here would be a NameError on the one
+        # run where the sitemap is missing -- a check that crashes instead of failing.
+        _map_txt = (io.open(_map_p, encoding="utf-8").read()
+                    if os.path.exists(_map_p) else "")
+        check("...and is not offered in the sitemap", "404" not in _map_txt,
+              "the sitemap invites crawlers to a page that answers 404")
+        check("...and offers a way back to a page that exists",
+              'href="/"' in _404, "a dead end with nothing on it")
+
+    # THE REDIRECTS. Same rule as the sitemap two blocks up: a file that names addresses is
+    # only as good as whether the addresses are there. A redirect to a missing page is two
+    # requests to reach the same nothing; a redirect standing in front of a page that exists
+    # is how a page disappears without anybody deleting it, and neither shows up as an error.
+    _red_p = os.path.join(ROOT, "site", "_redirects")
+    if os.path.exists(_red_p):
+        def _asset_for(_url):
+            _rel = _url.strip("/")
+            return os.path.join(ROOT, "site", *( _rel.split("/") if _rel else [] ),
+                                *(["index.html"] if _url.endswith("/") or not _rel else []))
+        _rules = []
+        for _l in io.open(_red_p, encoding="utf-8").read().split("\n"):
+            _l = _l.strip()
+            if not _l or _l.startswith("#"):
+                continue
+            _parts = _l.split()
+            check("every redirect line is `from to status`", len(_parts) == 3, repr(_l))
+            if len(_parts) == 3:
+                _rules.append(_parts)
+        check("the redirect file has rules in it", bool(_rules),
+              "a file of nothing but comments is a decision that does not happen")
+        for _src, _dst, _st in _rules:
+            check("%s redirects with a status spelled out" % _src, _st.isdigit() and _st != "302",
+                  "status is %r, and 302 is the default a crawler re-asks about forever" % _st)
+            check("...and %s arrives somewhere that exists" % _dst,
+                  os.path.exists(_asset_for(_dst)), "%s is not a page" % _dst)
+            check("...and %s does not stand in front of a real page" % _src,
+                  not os.path.exists(_asset_for(_src)),
+                  "%s is a page on this site, and this rule hides it" % _src)
+
+
     # --- ONE PROJECT, ONE SENTENCE -----------------------------------------------------------
     #
     # See the note at the top of this block's history: four surfaces, four different
@@ -1744,7 +1859,14 @@ def main():
     #    voice the visitor happens to have set.
     for _lang in _langs:
         _page = io.open(_i18n.page_path(_lang), encoding="utf-8").read()
-        _decl = re.findall(r"(?is)\A<html[^>]*\blang=\"([^\"]+)\"", _page)
+        # STILL ANCHORED AT THE TOP, with room for exactly one thing in front of it. The
+        # anchor is the point of this check -- it is the ROOT element that has to declare
+        # the language, and an unanchored search would be satisfied by an `<html lang>`
+        # quoted inside a code sample halfway down the page. What the anchor may not do
+        # is refuse a doctype, which is what happened the day one was added: sixteen
+        # pages went red for gaining a line every one of them needed.
+        _decl = re.findall(r"(?is)\A(?:<!doctype[^>]*>\s*)?<html[^>]*\blang=\"([^\"]+)\"",
+                           _page)
         check("the %s page declares its own language" % _lang, _decl == [_lang],
               "the root element declares %s" % (_decl or "nothing"))
 

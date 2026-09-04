@@ -349,7 +349,13 @@ def page_path(lang):
 
 # The English page IS the source, so it carries whatever the last build wrote at the top of it.
 # Stripped before anything else runs, or every build prepends another `<html>` start tag.
-HTML_OPEN = re.compile(r"(?is)\A<html[^>]*>\s*")
+# THE DOCTYPE COMES OFF WITH THE `<html>` TAG, because both are re-emitted below and
+# `site/index.html` is an OUTPUT of this generator as well as its input. Write the doctype into
+# the source by hand instead and it survives this strip, so the next build prepends
+# `<html lang="en">` in front of it: a document whose first tag is `<html>` and whose second
+# line is a doctype, which every browser reads as no doctype at all. Measured, not reasoned --
+# that is what the first attempt at this fix actually produced in all sixteen pages.
+HTML_OPEN = re.compile(r"(?is)\A(?:<!doctype[^>]*>\s*)?<html[^>]*>\s*")
 
 
 def build(write=True):
@@ -369,7 +375,14 @@ def build(write=True):
         # visitor happens to have set.
         out = (with_switcher(with_alternates(src, langs), lang, langs) if lang == DEFAULT
                else render(src, lang, load(lang), langs))
-        out = '<html lang="%s">\n' % lang + out
+        # AND EVERY PAGE DECLARES A DOCTYPE. Without one the browser renders in quirks mode:
+        # `document.compatMode` read "BackCompat" on the live site, on every page, since the day
+        # it went up. Quirks mode is not a cosmetic label -- a table stops inheriting the body's
+        # font size, an image gains a line-height gap beneath it, a percentage height resolves
+        # against nothing. This page has no table, no image and no percentage height, so nothing
+        # looked wrong and nothing was: the first table anyone adds would have rendered a size
+        # out and read as a CSS bug, in a file where the CSS was right.
+        out = '<!DOCTYPE html>\n<html lang="%s">\n' % lang + out
         path = page_path(lang)
         old = io.open(path, encoding="utf-8").read() if os.path.exists(path) else None
         done.append((path, old != out))

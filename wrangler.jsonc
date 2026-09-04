@@ -36,6 +36,17 @@
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
-    "directory": "./site"
+    "directory": "./site",
+    // WITHOUT THIS LINE, `site/404.html` IS A FILE AND NOT A PAGE. The default is `"none"`:
+    // Cloudflare answers anything that does not match an asset with its own bare 404, and a
+    // 404.html sitting in the directory is served only to somebody who asks for it by name --
+    // at which point it returns 200 and tells them the page they are looking at does not
+    // exist. Two halves of one decision, in two files, and each is inert without the other,
+    // so `redteam/test_readme.py` refuses either one alone.
+    //
+    // It resolves upwards: a miss under `/uk/` takes `/uk/404.html` if that exists and this
+    // one otherwise. There is one page here on purpose -- see the note in `site/404.html`
+    // about what sixteen hand-written copies of a language list would cost.
+    "not_found_handling": "404-page"
   }
 }

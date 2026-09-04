@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<title>No page at this address: QAtration</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- KEPT OUT OF SEARCH RESULTS. Cloudflare serves this file with a 404 status, which is
+     already enough for every crawler that reads one, and this line is for the ones that do
+     not: a soft-404 in an index is a result that promises a page and delivers this. -->
+<meta name="robots" content="noindex">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64" type="image/x-icon">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<!-- NOT GENERATED, AND THEREFORE NOT TRANSLATED, and the two facts are the same fact.
+     `tools/i18n.py` builds one page from one source; this is a second source, and putting it
+     through the generator would add sixteen more files to keep in step for a page whose whole
+     job is to hand somebody a link back to a real one.
+
+     WHICH IS ALSO WHY THERE IS NO LANGUAGE LIST HERE. Sixteen links written by hand are a
+     second copy of a list that lives in `site/i18n/`, and a copy is what goes stale: add a
+     language and this page advertises fifteen. The front page carries the switcher, so one
+     link to the front page reaches every one of them, and there is nothing here to drift.
+
+     NO STYLESHEET SHARED WITH THE FRONT PAGE either. The site is one hand-written file with
+     its CSS inline; extracting a stylesheet so that this page could import it would rewrite
+     the page this one exists to apologise for. The four tokens below are copied deliberately
+     and they are the only four, so a palette change that misses this file is a slightly
+     different blue on a page nobody should be reading for long. -->
+<style>
+  :root{
+    color-scheme: dark;
+    --ground:#060b16; --ink:#e4ecf9; --muted:#8496b6; --accent:#5c9bff;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){ color-scheme: light;
+      --ground:#eef2fa; --ink:#0b1424; --muted:#4d5b76; --accent:#1b57d6;
+    }
+  }
+  :root[data-theme="light"]{ color-scheme: light;
+    --ground:#eef2fa; --ink:#0b1424; --muted:#4d5b76; --accent:#1b57d6;
+  }
+  :root[data-theme="dark"]{ color-scheme: dark;
+    --ground:#060b16; --ink:#e4ecf9; --muted:#8496b6; --accent:#5c9bff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+       font-size:17px;line-height:1.6;display:flex;min-height:100vh;
+       align-items:center;justify-content:center;padding:24px}
+  main{max-width:52ch}
+  .code{font-family:var(--mono);font-size:13px;letter-spacing:.08em;
+        text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+  h1{font-size:clamp(24px,4vw,34px);line-height:1.2;letter-spacing:-.01em;margin:0 0 16px}
+  p{margin:0 0 16px;color:var(--muted)}
+  a{color:var(--accent)}
+  .path{font-family:var(--mono);font-size:14px;color:var(--ink);word-break:break-all}
+</style>
+
+<main>
+  <p class="code">404</p>
+  <h1>There is no page at this address.</h1>
+  <p id="addr">The address you asked for is <span class="path" id="here"></span>, and nothing
+     is published there. It may never have been, or it may have been a typo.</p>
+  <p><a href="/">Go to the front page</a>, which lists the sixteen languages this site is
+     written in, or read the source at
+     <a href="https://github.com/qatration/qatration">github.com/qatration/qatration</a>.</p>
+</main>
+
+<script>
+  /* The stored theme, applied the same way and from the same key as the front page, so a
+     visitor who chose light there does not get a dark page thrown at them on a mistake. */
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('qat-theme'); } catch (e) {}
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  })();
+
+  /* THE ADDRESS AS TEXT, never as markup. `location.pathname` is attacker-controlled -- it is
+     whatever was typed or linked -- so it goes in through `textContent`, which cannot open a
+     tag. Written as `innerHTML` this would be a reflected XSS on the one page of the site
+     that is reachable by inventing a URL, which is the shape of thing this project exists to
+     find in other people's software.
+
+     AND BOUNDED, because "whatever was typed" has no length. Rendered unbounded in a local
+     preview, where the URL was a data: blob, this one line filled the page and pushed the
+     link out of the viewport: the address became the content, on a page whose only job is to
+     hand somebody a link. A scanner asking for two kilobytes of query string would do the
+     same to a real visitor arriving right after it. */
+  (function () {
+    var el = document.getElementById('here'), row = document.getElementById('addr');
+    var p = (location.pathname || '') + (location.search || '');
+    if (!el || !row) return;
+    if (!p || p === '/') { row.hidden = true; return; }
+    el.textContent = p.length > 80 ? p.slice(0, 80) + '…' : p;
+  })();
+</script>

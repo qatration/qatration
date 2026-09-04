@@ -1,0 +1,47 @@
+# Addresses a reader can derive from this site's own pattern and not find.
+#
+# Parsed by Cloudflare Workers, never served as an asset — the file itself returns 404, which
+# is why it does not appear in the sitemap and does not need a robots rule. Format is
+# `from to status`, one per line, and 302 is the default status, so every line here says 301
+# out loud: these are permanent facts about how this site is laid out, not a temporary move,
+# and a 302 would have crawlers re-ask forever.
+#
+# WHY THESE AND NOT MORE. A redirect is a promise that an address means something, so each one
+# has to be derivable rather than guessed. Two families qualify:
+#
+# 1. THE GAP IN THE PATTERN. Fifteen languages live in a directory named after them and the
+#    sixteenth, English, lives at the root. A reader who has seen /uk/ and /de/ will type /en/,
+#    and it is the one address the site's own layout invites and does not answer.
+#
+# 2. THE COUNTRY CODE FOR THE LANGUAGE CODE. The directories are ISO 639-1 language codes. The
+#    two-letter code most people actually know is the country: cz, jp, kr, cn, br, ua. Each of
+#    these differs from its language code, and each has exactly one language on this site it
+#    could mean.
+#
+# WHAT IS DELIBERATELY ABSENT. /tw/ and /hk/ are not redirected to /zh/: this site's Chinese is
+# zh_CN, simplified, and sending a Taiwanese or Hong Kong reader to it is a wrong answer with a
+# political edge on it, not a near miss. And nothing is done about /uk/ meaning Ukrainian here
+# while meaning Britain to most of the people who will type it — `uk` is the language code for
+# Ukrainian and the page it serves is correct. A redirect cannot fix an ambiguity; it can only
+# pick a side, and the side already picked is the one that is right.
+#
+# Every target below exists as a real page, and no source below shadows one:
+# `redteam/test_readme.py` refuses this file otherwise. A redirect pointing at a 404 is two
+# requests to arrive at the same nothing, and a redirect standing in front of a live page is
+# how a page disappears without anybody deleting it.
+
+/en/  /       301
+/en   /       301
+
+/ua/  /uk/    301
+/ua   /uk/    301
+/cz/  /cs/    301
+/cz   /cs/    301
+/jp/  /ja/    301
+/jp   /ja/    301
+/kr/  /ko/    301
+/kr   /ko/    301
+/cn/  /zh/    301
+/cn   /zh/    301
+/br/  /pt/    301
+/br   /pt/    301
