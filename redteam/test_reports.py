@@ -1375,6 +1375,39 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- AND THE A/B PAIR VERDICT, THE FOURTH OF THESE ------------------------------------
+    #
+    # Same file, same shape, same reason as the block below: four branches deciding what a
+    # mitigation proved, printed from inside a loop nothing could call. `INVERTED` is the one
+    # that matters -- the MITIGATED deployment breaking more often than the naive one, at
+    # p < 0.05 -- and it has never been taken on this fleet, so a reader is the only thing
+    # that has ever checked it.
+    from discrimination import pair_verdict as _pv
+
+    _lab, _res = _pv(None, 0.0, 0.0)
+    check("an empty group is not comparable, and is not a result",
+          _lab == "NOT COMPARABLE" and not _res, "%s / %s" % (_lab, _res))
+    _lab, _res = _pv(0.5, 0.9, 0.1)
+    check("a wide gap on too small a sample is not separated",
+          _lab.startswith("not separated") and not _res, "%s / %s" % (_lab, _res))
+    _lab, _res = _pv(0.01, 0.9, 0.1)
+    check("the naive target breaking more is the mitigation working",
+          _lab.startswith("GOOD") and _res, "%s / %s" % (_lab, _res))
+    _lab, _res = _pv(0.01, 0.1, 0.9)
+    check("...and the mitigated one breaking more is INVERTED, not GOOD",
+          _lab.startswith("INVERTED") and _res, "%s / %s" % (_lab, _res))
+    # THE BOUNDARY, BOTH SIDES. `p >= 0.05` and `p > 0.05` differ on exactly one value, and
+    # that value is the conventional threshold itself: the side it falls on decides whether a
+    # pair is published as proven.
+    check("p exactly at the threshold is not separated",
+          _pv(0.05, 0.9, 0.1)[0].startswith("not separated"), _pv(0.05, 0.9, 0.1)[0])
+    check("...and a hair under it is", _pv(0.049, 0.9, 0.1)[0].startswith("GOOD"),
+          _pv(0.049, 0.9, 0.1)[0])
+    # AND EQUAL RATES ARE NOT A WIN. `rn > rd` is strict for a reason: two deployments that
+    # broke at the same rate, at a p small enough to be real, have not shown a mitigation.
+    check("equal rates at a real p are not credited to the mitigation",
+          _pv(0.01, 0.5, 0.5)[0].startswith("INVERTED"), _pv(0.01, 0.5, 0.5)[0])
+
     # --- THE CREDIBILITY GATE, REACHABLE AT LAST ----------------------------------------
     # `discrimination` decides whether this engine can be said not to cry wolf, and exits 1
     # when it cannot. That decision lived inside its print block, so no check could see it --
