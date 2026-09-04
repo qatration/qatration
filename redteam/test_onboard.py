@@ -66,6 +66,56 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- A KEY NOTHING READS IS A DETECTOR NOBODY ARMED ---------------------------------
+    #
+    # `canaries` misspelled `canarys` parses, sweeps, and disarms every canary detector in
+    # the oracle — a clean bill for checks that could not fire, out of the one file an
+    # operator edits by hand. This command exists to catch a config that would otherwise
+    # produce a clean report from a broken mapping, and it read the reply path only.
+    from workspace import context_keys_read as _keys_read
+
+    _known = _keys_read()
+    check("the engine's context keys can be enumerated", len(_known) > 20, str(len(_known)))
+    check("...and a real key is among them", "canaries" in _known, sorted(_known)[:6])
+    check("...and a misspelling is not", "canarys" not in _known, "the scan is too generous")
+
+    check("a misspelled context key is named",
+          onboard.unread_context_keys({"oracle_context": {"canarys": ["X"]}}) == ["canarys"],
+          str(onboard.unread_context_keys({"oracle_context": {"canarys": ["X"]}})))
+    check("...and a real one is not",
+          onboard.unread_context_keys({"oracle_context": {"canaries": ["X"]}}) == [],
+          str(onboard.unread_context_keys({"oracle_context": {"canaries": ["X"]}})))
+    check("a config with no oracle_context is not accused of anything",
+          onboard.unread_context_keys({}) == [], "an empty config produced a complaint")
+    # AND A BROKEN SCAN ACCUSES NOTHING. If the source scan ever comes back empty — a
+    # packaging change, a rename, a read that fails — every key in every config would look
+    # unknown and the note would be worse than useless. The guard for that is unreachable in
+    # a healthy tree, so it is reached here on purpose.
+    import workspace as _wsk
+    _real = _wsk.context_keys_read
+    _wsk.context_keys_read = lambda root=None: set()
+    try:
+        check("a scan that came back empty accuses no key",
+              onboard.unread_context_keys({"oracle_context": {"canarys": ["X"]}}) == [],
+              "an empty scan reported every key as unknown")
+    finally:
+        _wsk.context_keys_read = _real
+
+    # AND THE SHIPPED CONFIGS ARE CLEAN, which is the half that protects this repository's own
+    # fleet: a typo in one of forty-three configs would disarm a detector on that target and
+    # the sweep would report a clean bill for it.
+    import glob as _g, yaml as _y
+    _bad = {}
+    for _f in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+        try:
+            _c = _y.safe_load(io.open(_f, encoding="utf-8").read()) or {}
+        except Exception:
+            continue
+        _u = onboard.unread_context_keys(_c)
+        if _u:
+            _bad[os.path.basename(_f)] = _u
+    check("no shipped config declares a context key nothing reads", not _bad, str(_bad))
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Bot)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()

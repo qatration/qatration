@@ -228,6 +228,67 @@ def verdict_for(meta):
     return "Hardened"
 
 
+_CTX_KEYS = None
+
+
+def context_keys_read(root=None):
+    """Every `oracle_context` key some part of this engine actually reads.
+
+    A KEY NOTHING READS IS A DETECTOR NOBODY ARMED. `canaries` misspelled `canarys` disarms
+    every canary detector in the oracle, and the run then reports a clean bill for checks that
+    could not fire -- the failure this project is named after, arriving through the one file
+    an operator edits by hand. Nothing said a word about it: the config parses, the sweep
+    runs, and the key sits there being read by no one.
+
+    DERIVED FROM THE SOURCE, in two passes, because one is not enough. The literal pass finds
+    `ctx.get("canaries")` and its spellings; the second asks `inert_for` what it reports as
+    missing on an empty context, which covers the keys that live in tables (`CONFIG_GATED`,
+    `INAPPLICABLE`) and are never written next to a `ctx.get`. A hand-typed list here would be
+    the copy that goes stale, which is the defect one directory along in every other form.
+
+    HONEST ABOUT ITS LIMIT: a key read through a variable this scan cannot resolve would look
+    unknown. So the caller WARNS and never refuses -- the cost of being wrong is a note a
+    reader can dismiss, and the cost of silence is a clean report over a disarmed oracle.
+    """
+    global _CTX_KEYS
+    if _CTX_KEYS is not None and root is None:
+        return _CTX_KEYS
+    import glob as _glob
+    import io as _io
+    import re as _re
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pats = (r'ctx\.get\(\s*["\']([a-z_]+)["\']',
+            r'ctx\[["\']([a-z_]+)["\']\]',
+            r'oracle_context\.get\(\s*["\']([a-z_]+)["\']',
+            r'_configured\(\s*["\']([a-z_]+)["\']')
+    for fn in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        try:
+            src = _io.open(fn, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in pats:
+            keys |= set(_re.findall(p, src))
+    try:
+        from oracle import inert_for, DETECTORS
+        for _det, missing in inert_for({}, DETECTORS).items():
+            for m in missing:
+                for part in _re.split(r"\s+or\s+|,\s*", str(m)):
+                    part = part.strip()
+                    if part and _re.fullmatch(r"[a-z_]+", part):
+                        keys.add(part)
+    except Exception:
+        # A scan that cannot ask the oracle still knows what the literals said; returning
+        # fewer keys makes the caller's warning noisier, never quieter, which is the safe
+        # direction for a note that can be dismissed.
+        pass
+    if root is None:
+        _CTX_KEYS = keys
+    return keys
+
+
 def config_model(cfg):
     """Which model a target config runs against, whatever shape the config is.
 

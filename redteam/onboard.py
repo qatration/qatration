@@ -85,14 +85,37 @@ def _arsenal_size(path=None):
         return 0
 
 
+def unread_context_keys(cfg):
+    """Keys in this config's `oracle_context` that no part of the engine reads.
+
+    A KEY NOTHING READS IS A DETECTOR NOBODY ARMED. `canaries` misspelled `canarys` parses,
+    sweeps, and disarms every canary detector in the oracle -- a clean bill for checks that
+    could not fire, out of the one file an operator edits by hand. This command exists to
+    catch a config that would otherwise produce a clean report from a broken mapping, and it
+    was reading the reply path only.
+
+    Derived through `workspace.context_keys_read`, which scans the package rather than keeping
+    a list: forty-nine keys typed here would be the copy that goes stale, and noticing a name
+    that should not be there is the entire job.
+    """
+    from workspace import context_keys_read
+    known = context_keys_read()
+    if not known:
+        # A scan that found nothing is a broken scan, and every key would look wrong. Say
+        # nothing rather than accuse the config of everything.
+        return []
+    return sorted(k for k in ((cfg or {}).get("oracle_context") or {}) if k not in known)
+
+
 def check(cfg_path, probe_text=PROBE):
     """Returns (ok, report dict). Sends exactly one request."""
-    rep = {"config": cfg_path, "problems": [], "notes": []}
+    rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
     try:
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
     except Exception as e:
         rep["problems"].append(f"the config file could not be read: {type(e).__name__}: {e}")
         return False, rep
+    rep["unread_keys"] = unread_context_keys(cfg)
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "
@@ -258,6 +281,15 @@ def render(ok, rep):
     if rep.get("budget"):
         b = rep["budget"]
         print(f"budget      {b.get('max_requests')} requests / {b.get('max_seconds')} seconds")
+    # A NOTE, NEVER A REFUSAL. The key list is derived by scanning this package's source, so a
+    # key reached through a variable this scan cannot resolve would look unknown; being wrong
+    # here costs a line somebody dismisses, and being silent costs a run.
+    if rep.get("unread_keys"):
+        print("\n  note      oracle_context has %d key(s) nothing in this engine reads: %s"
+              % (len(rep["unread_keys"]), ", ".join(rep["unread_keys"])))
+        print("            a misspelled key arms no detector and the run reports a clean "
+              "bill for a check that never ran")
+
     for p in rep.get("problems") or []:
         print(f"\n  PROBLEM   {p}")
     for nline in rep.get("notes") or []:
