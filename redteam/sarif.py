@@ -358,6 +358,18 @@ def build(results, target_config=None, out_dir=None):
     # NONE IS NOT NO. `record_for` returns None for an artifact written before run records
     # existed, and "cannot say" is not "it did not finish" -- flipping on None would mark
     # every one of those unsuccessful. Only a record that exists and does not say `finished`.
+    # DELIVERY AND EFFECT, in the export a CI reader actually opens. This log already carries
+    # the other caveat -- `attribution` caps a finding's level and is spelled out per result --
+    # and its twin, which asks whether the attack achieved anything once the payload was in
+    # front of the model, reached the terminal and the scorecard and stopped there. A note
+    # reading "83% effect against an 85% background" belongs beside the findings it qualifies.
+    _delivery = (meta.get("delivery") or "").strip()
+    if _delivery:
+        notifications.append({
+            "level": "warning" if _delivery.lstrip().startswith("!") else "note",
+            "message": {"text": " ".join(l.strip() for l in _delivery.splitlines() if l.strip())},
+            "descriptor": {"id": "attribution/delivery-and-effect"}})
+
     _rec = runs.record_for(meta, out_dir or workspace.OUT)
     _unfinished = bool(_rec) and _rec.get("state") != "finished"
     if _unfinished:

@@ -25,6 +25,8 @@ from workspace import BROKE   # one definition of what counts as a breach
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
+    "delivery": "this page links to the scorecard, which carries the note in full; a fleet "
+                "index that repeated one run's paragraph would be quoting out of context",
     "arsenal": "the fleet page carries the instrument spread; this one links to it",
     "trials": "same, and this page publishes a fleet total rather than a per-row count",
     "when": "rows here are dated by the fleet page they link to",

@@ -17,6 +17,10 @@ OUT_DIR = Path(WORKSPACE_OUT)
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
+    "delivery": "a per-run paragraph does not fit a one-row-per-target table; the column "
+                "this page does carry is the unattributed count, which is the other caveat",
+    "attribution": "carried as the unattributed count, computed from the baseline rather than "
+                   "copied from the run's note -- one row per target has no room for prose",
     "inert": "named per target on the scorecard, and this page has one row per target",
     "not_applicable": "the split is the defence report's coverage panel",
     "not_sent": "same panel",

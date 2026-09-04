@@ -257,6 +257,48 @@ check("...and the log says why it points nowhere",
                                  "toolExecutionNotifications", [])],
       str([n["descriptor"]["id"]
            for n in _anch["invocations"][0].get("toolExecutionNotifications", [])]))
+# --- THE DELIVERY CAVEAT REACHES THE CODE-SCANNING TAB ------------------------------------
+#
+# This log already carries the other half: `attribution` caps a finding's level and is spelled
+# out per result. Its twin -- whether the ATTACK achieved anything once the payload was in
+# front of the model, as opposed to the target answering that way regardless -- reached the
+# terminal and the scorecard and stopped. A note reading "83% effect against an 85% background"
+# belongs beside the findings it qualifies.
+#
+# CHECKED ON THE OUTPUT, not by grepping the source for the word. `workspace.QUALIFIERS` makes
+# every surface answer for this field, and that check reads source, which is a spellcheck: the
+# module named the qualifier while exporting nothing, and only this told the difference.
+_DLV = {"meta": {"target": "dbot", "attacks_n": 2, "errors": 0, "broke": 1,
+                 "delivery": "  DELIVERY AND EFFECT, measured separately (carrier: rag)\n"
+                             "      attacked   delivered 9/10 (90%)   acted 8/9 (89%)"},
+        "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                     "attack": {"id": "a", "category": "x"},
+                     "fired": ["canary_in_output"], "locks": {}, "trials": [{}]}]}
+
+
+def _dlv_notes(doc):
+    inv = sarif.build(doc)["runs"][0]["invocations"][0]
+    return [n for n in inv.get("toolExecutionNotifications", [])
+            if n["descriptor"]["id"] == "attribution/delivery-and-effect"]
+
+
+_got = _dlv_notes(_DLV)
+check("the delivery caveat is exported, not only printed", len(_got) == 1, str(len(_got)))
+check("...carrying the measurement itself", _got and "delivered 9/10 (90%)" in
+      _got[0]["message"]["text"], _got[0]["message"]["text"][:80] if _got else "nothing")
+check("...as a note when it is a measurement",
+      _got and _got[0]["level"] == "note", _got[0]["level"] if _got else "nothing")
+_warned = _dlv_notes({"meta": dict(_DLV["meta"],
+                                   delivery="  ! delivery and effect were not separated: "
+                                            "no payload reached the model."),
+                      "results": _DLV["results"]})
+check("...and as a warning when they could not be separated",
+      _warned and _warned[0]["level"] == "warning",
+      _warned[0]["level"] if _warned else "nothing")
+check("a run with nothing to say exports no such note",
+      not _dlv_notes({"meta": {k: v for k, v in _DLV["meta"].items() if k != "delivery"},
+                      "results": _DLV["results"]}))
+
 # --- A RUN THAT DID NOT FINISH IS NOT A SUCCESSFUL ANALYSIS ------------------------------
 #
 # Everything else in this export reasons from ROWS: an attack that errored leaves one behind

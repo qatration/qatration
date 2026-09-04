@@ -22,6 +22,9 @@ OUT_DIR = Path(WORKSPACE_OUT)
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
+    "delivery": "the note is one run's own prose about one target; this page ranks root "
+                "causes across every stored run, and there is no honest way to average it. "
+                "The rows it qualifies carry `attribution` here instead",
     "trials": "findings are listed per row with their rate, not compared across targets",
     "when": "each finding carries its target's measurement date in the table above it",
     "run_id": "the fleet page names an unfinished run; this one is about the findings",

@@ -444,6 +444,16 @@ QUALIFIERS = {
     "when": ("when the run happened, not when the file was last touched", ("measured_when",)),
     "run_id": ("which run produced this, and therefore how it ended",
                ("unfinished_note", "record_for")),
+    # THE TWO CAVEATS THAT CAN INVERT A COUNT, added after the second of them was found by a
+    # different method entirely -- a table of which module reads which meta field. This list
+    # exists so the FOURTH qualifier would not be missed the way the first three were, and
+    # `delivery` was missed anyway, because the list was built from the fields the pages
+    # already argued about rather than from everything that qualifies a number.
+    "attribution": ("whether the target does this anyway, without anybody attacking",
+                    ("attribution", "doubtful_count", "rates")),
+    "delivery": ("whether the ATTACK did anything once the payload was in front of the "
+                 "model, as opposed to the target answering that way regardless",
+                 ("two_factor", "two_factor_note")),
 }
 
 
