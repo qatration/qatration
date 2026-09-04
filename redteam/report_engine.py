@@ -242,6 +242,21 @@ def _isolation_panel(iso):
 </div>"""
 
 
+def _days_between(then, now):
+    """Whole days from one stamp to another, or None when either cannot be read.
+
+    None rather than 0, because "cannot say how old" and "measured the same day" are the two
+    answers this file keeps apart everywhere else.
+    """
+    import datetime
+    try:
+        a = datetime.date.fromisoformat(str(then)[:10])
+        b = datetime.date.fromisoformat(str(now)[:10])
+    except (TypeError, ValueError):
+        return None
+    return (b - a).days
+
+
 def build_html(meta, results, recon=None, isolation=None):
     # WHAT WAS MEASURED, and what errored said beside it. The big number on this page was
     # `attacks_n` under the label "attacks fired", and `meta["errors"]` — written by the
@@ -321,7 +336,7 @@ def build_html(meta, results, recon=None, isolation=None):
         # Nothing is withheld either way, so the reader is not depending on where the line is.
         # IMPORTED UNDER A NAME, because `baseline` is already a local variable in this
         # function -- the config's declared tool-input baseline, a different thing entirely.
-        from baseline import refusal_rate as _refusal_rate
+        from baseline import refusal_rate as _refusal_rate, measured_on as _measured_on
         from workspace import OUT as _OUT
         _rr = _refusal_rate(meta.get("target"), out_dir=_OUT)
         if _rr and _rr[1]:
@@ -334,6 +349,22 @@ def build_html(meta, results, recon=None, isolation=None):
                          "than it looks" if _pct >= 25 else ""))
             if _pct >= 25:
                 cls = "warn"
+        # AND WHEN THAT WAS MEASURED. Every sentence in this panel, and every demotion in the
+        # SARIF beside it, rests on a benign run whose age nothing stated. `benign --summary`
+        # warns about exactly this in the command that WRITES the file -- "an oracle fix since
+        # then is not reflected in those rows" -- and the warning reached whoever ran the
+        # roll-up and nobody who reads a report. On the stored fleet `shipdesk`'s baseline is
+        # thirteen days older than the sweep it qualifies, and the gap grows on a deployment
+        # where the honest pattern is one baseline at setup and a sweep on every pull request.
+        _on = _measured_on(meta.get("target"), out_dir=_OUT)
+        if _on:
+            _bdate, _bsaid = _on
+            _age = _days_between(_bdate, meta.get("when"))
+            lines += ('<div>baseline measured %s%s%s</div>'
+                      % (esc(_bdate[:16]),
+                         "" if _bsaid else " (from the file's timestamp; the run did not say)",
+                         "" if _age is None or _age < 7 else
+                         " — %d days before this run, and the oracle has moved since" % _age))
         attribution_html = (f'<div class="panel"><div class="ptitle">what this target does '
                             f'unattacked</div><div class="{cls}">{lines}</div></div>')
 

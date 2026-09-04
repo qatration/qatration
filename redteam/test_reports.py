@@ -1375,6 +1375,57 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- HOW OLD IS THE NUMBER THAT DEMOTED THE FINDING ---------------------------------
+    #
+    # Every sentence in the attribution panel, and every demotion in the SARIF, rests on a
+    # benign run whose age nothing stated. `benign --summary` warns about it in the command
+    # that WRITES the file -- "an oracle fix since then is not reflected in those rows" -- so
+    # the warning reached whoever ran the roll-up and nobody who read a report. On the stored
+    # fleet `shipdesk`'s baseline is thirteen days older than the sweep it qualifies, and the
+    # gap grows on a deployment where one baseline at setup serves a sweep on every PR.
+    import tempfile as _tf5, shutil as _sh5, json as _js5, importlib as _il5
+    _aw = _tf5.mkdtemp()
+    try:
+        def _dated_panel(bwhen, rwhen):
+            _js5.dump({"meta": {"target": "agebot", "probes": 2, "when": bwhen},
+                       "rows": [{"probe": {"output": "x"}, "fired": [], "refused": False}] * 2},
+                      io.open(os.path.join(_aw, "benign_agebot.json"), "w",
+                              encoding="utf-8", newline=""))
+            _was = os.environ.get("QATRATION_OUT")
+            os.environ["QATRATION_OUT"] = _aw
+            try:
+                import workspace as _w7, report_engine as _r7
+                _il5.reload(_w7)
+                _il5.reload(_r7)
+                return _r7.build_html({"target": "agebot", "attribution": "  measured.",
+                                       "when": rwhen}, [])
+            finally:
+                if _was is None:
+                    os.environ.pop("QATRATION_OUT", None)
+                else:
+                    os.environ["QATRATION_OUT"] = _was
+                import workspace as _w8, report_engine as _r8
+                _il5.reload(_w8)
+                _il5.reload(_r8)
+
+        _old = _dated_panel("2026-08-21 17:28", "2026-09-03 10:00")
+        check("the page says when the baseline behind its caveats was measured",
+              "baseline measured 2026-08-21" in _old, "no date on the panel")
+        check("...and that it is older than the run it qualifies",
+              "13 days before this run" in _old, "the age was not stated")
+        _same = _dated_panel("2026-09-03 08:00", "2026-09-03 10:00")
+        check("a baseline measured the same day is dated and not scolded",
+              "baseline measured 2026-09-03" in _same
+              and "days before this run" not in _same, "a same-day baseline was flagged")
+        # AN MTIME IS NOT A MEASUREMENT. `workspace.measured_when` exists because git does not
+        # preserve mtimes, and a date read off the filesystem must say so rather than pass as
+        # something the run recorded.
+        _nodate = _dated_panel(None, "2026-09-03 10:00")
+        check("a baseline whose run recorded no date says where the date came from",
+              "the run did not say" in _nodate, "an mtime was presented as a measurement")
+    finally:
+        _sh5.rmtree(_aw, ignore_errors=True)
+
     # --- THE FLEET PAGE IS WHERE AN OUTLIER IS VISIBLE AS ONE ---------------------------
     #
     # The scorecard carries the refusal rate per target. On this fleet the rows that need it

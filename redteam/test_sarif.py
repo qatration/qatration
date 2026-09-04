@@ -257,6 +257,55 @@ check("...and the log says why it points nowhere",
                                  "toolExecutionNotifications", [])],
       str([n["descriptor"]["id"]
            for n in _anch["invocations"][0].get("toolExecutionNotifications", [])]))
+# --- AND SO DOES THE AGE OF THE RATE THAT DEMOTED IT --------------------------------------
+#
+# This log lowers a finding's level from the ambient rate and says the rate; it never said when
+# the rate was measured. A rate from a benign run weeks older than the sweep, judged by an
+# oracle that has changed since, is the difference between a demotion and a guess.
+with tempfile.TemporaryDirectory() as _bdir:
+    io.open(os.path.join(_bdir, "benign_datebot.json"), "w", encoding="utf-8",
+            newline="").write(json.dumps(
+                {"meta": {"target": "datebot", "probes": 2, "when": "2026-08-21 17:28"},
+                 "rows": [{"probe": {"output": "x"}, "fired": []}] * 2}))
+    _dated = sarif.build({"meta": {"target": "datebot", "attacks_n": 1, "errors": 0, "broke": 1},
+                          "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                       "attack": {"id": "a", "category": "x"},
+                                       "fired": ["canary_in_output"], "locks": {},
+                                       "trials": [{}]}]}, out_dir=_bdir)
+    _dn = [n for n in notifications(_dated)
+           if n["descriptor"]["id"] == "baseline/measured-on"]
+    check("the export says when the baseline behind its demotions was measured",
+          len(_dn) == 1 and "2026-08-21" in _dn[0]["message"]["text"],
+          str([n["descriptor"]["id"] for n in notifications(_dated)]))
+    # A target with no baseline already gets `baseline/missing`; it must not also be told a
+    # date, and it must not be told nothing at all.
+    _none = sarif.build({"meta": {"target": "nobaseline", "attacks_n": 1, "errors": 0,
+                                  "broke": 1},
+                         "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                      "attack": {"id": "a", "category": "x"},
+                                      "fired": ["canary_in_output"], "locks": {},
+                                      "trials": [{}]}]}, out_dir=_bdir)
+    _ids = [n["descriptor"]["id"] for n in notifications(_none)]
+    check("...and a target with no baseline is told that instead of a date",
+          "baseline/measured-on" not in _ids and any("baseline" in i for i in _ids), str(_ids))
+    # A BENIGN FILE THAT MEASURED NOTHING is the case the missing-file case cannot reach: the
+    # rows are all skipped, so the artifact exists, has a date on it, and stands for no
+    # traffic at all. Measured -- the mutation that drops the "were any rows sent" guard
+    # passed against the missing-file fixture, because `open()` failed either way.
+    io.open(os.path.join(_bdir, "benign_emptybot.json"), "w", encoding="utf-8",
+            newline="").write(json.dumps(
+                {"meta": {"target": "emptybot", "probes": 2, "when": "2026-08-21 17:28"},
+                 "rows": [{"skipped": "no chain capability"}] * 2}))
+    _empty = sarif.build({"meta": {"target": "emptybot", "attacks_n": 1, "errors": 0,
+                                   "broke": 1},
+                          "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                       "attack": {"id": "a", "category": "x"},
+                                       "fired": ["canary_in_output"], "locks": {},
+                                       "trials": [{}]}]}, out_dir=_bdir)
+    _eids = [n["descriptor"]["id"] for n in notifications(_empty)]
+    check("...and a baseline file that measured nothing is not dated either",
+          "baseline/measured-on" not in _eids, str(_eids))
+
 # --- THE DELIVERY CAVEAT REACHES THE CODE-SCANNING TAB ------------------------------------
 #
 # This log already carries the other half: `attribution` caps a finding's level and is spelled

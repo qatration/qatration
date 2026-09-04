@@ -77,6 +77,36 @@ def rates(target, out_dir=None):
     return {d: n / len(scored) for d, n in counts.items()}
 
 
+def measured_on(target, out_dir=None):
+    """-> (date string, True if the BENIGN RUN said so), or None when there is no baseline.
+
+    THE AGE OF THE NUMBER EVERY DEMOTION RESTS ON. `rates()` is read by the SARIF export to
+    demote a finding, by the scorecard to qualify it and by two summary pages to count what
+    cannot be attributed -- and not one of them says when the baseline behind it was measured.
+    `benign --summary` does say it, in the command that produces the file: "not one snapshot,
+    31 targets measured on an earlier day; an oracle fix since then is not reflected in those
+    rows". That warning reaches whoever runs the roll-up and nobody who reads a report.
+
+    It is not academic on the stored fleet -- `shipdesk`'s baseline is thirteen days older
+    than the sweep it qualifies -- and it grows on somebody else's deployment, where the
+    honest pattern is one `qatration benign` at setup and a sweep on every pull request.
+
+    THROUGH `workspace.measured_when`, which is where this rule lives: an mtime is not when a
+    run happened, git does not preserve mtimes, and a fresh clone stamps every artifact with
+    the clone time. The second element says which of the two answers this is.
+    """
+    from workspace import measured_when
+    path = _path(target, out_dir)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    if not [r for r in (data.get("rows") or []) if r.get("probe")]:
+        return None
+    return measured_when(data.get("meta") or {}, path)
+
+
 def refusal_rate(target, out_dir=None):
     """-> (ordinary questions refused, questions actually sent), or None if never measured.
 

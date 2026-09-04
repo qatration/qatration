@@ -363,6 +363,21 @@ def build(results, target_config=None, out_dir=None):
     # and its twin, which asks whether the attack achieved anything once the payload was in
     # front of the model, reached the terminal and the scorecard and stopped there. A note
     # reading "83% effect against an 85% background" belongs beside the findings it qualifies.
+    # AND HOW OLD THE BASELINE BEHIND EVERY DEMOTION IS. This log lowers a finding's level
+    # from the ambient rate and says the rate; it never said when the rate was measured. A
+    # rate from a benign run weeks older than the sweep, judged by an oracle that has changed
+    # since, is the difference between a demotion and a guess.
+    _on = baseline.measured_on(target, out_dir=out_dir or workspace.OUT)
+    if _on:
+        _bdate, _bsaid = _on
+        notifications.append({
+            "level": "note",
+            "message": {"text": "The ambient rates that demote findings in this log come from "
+                                "a benign run measured %s%s." %
+                                (_bdate, "" if _bsaid else
+                                 " (read from the file's timestamp; the run did not record one)")},
+            "descriptor": {"id": "baseline/measured-on"}})
+
     _delivery = (meta.get("delivery") or "").strip()
     if _delivery:
         notifications.append({
