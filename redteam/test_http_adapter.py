@@ -62,6 +62,41 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- EVERY SHIPPED CONFIG SATISFIES THE RULE THIS ADAPTER ENFORCES ------------------
+    #
+    # `HttpConfiguredTarget.__init__` refuses a key it does not know, with the reason written
+    # beside it: a config saying `respones:` built a target with no response mapping, every
+    # reply read as empty, every attack scored DEFENDED, and the run looked like a hardened
+    # deployment. That refusal happens at CONSTRUCTION, so it protects a config the moment
+    # somebody sweeps it — and a config nobody has swept yet carries the typo silently, which
+    # for a repository shipping forty-three of them is a gap between writing one and running it.
+    #
+    # Asked as two derived sets against each other: the adapter's own signature, and the keys
+    # the harness strips before construction. Neither is typed here, so a new parameter or a
+    # new harness key joins by existing.
+    import glob as _g, yaml as _y, inspect as _i
+    from targets_http import CONFIG_ONLY_KEYS as _HARNESS
+    _accepts = set(_i.signature(HttpConfiguredTarget.__init__).parameters) - {"self", "unknown"}
+    check("the adapter's own signature can be read", len(_accepts) > 5, str(sorted(_accepts)))
+    _refused, _seen = {}, 0
+    for _fp in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+        # NOT INSIDE A BARE `except: continue`. The first version read the file with `io.open`
+        # in a file that does not import `io`, so every config raised NameError, every one was
+        # skipped, and the check passed over nothing. The non-emptiness line below caught it —
+        # which is the only reason it is there.
+        _c = _y.safe_load(open(_fp, encoding="utf-8").read()) or {}
+        if (_c.get("adapter") or "") != "http":
+            continue
+        _seen += 1
+        _un = [k for k in _c if k not in _accepts and k not in _HARNESS]
+        if _un:
+            _refused[os.path.basename(_fp)] = _un
+    check("every shipped http config would build rather than be refused",
+          not _refused, str(_refused))
+    # AND THERE WERE SOME TO CHECK. A glob that stopped matching would pass the line above in
+    # silence, which is this file's own subject one level up.
+    check("...over a real number of configs", _seen >= 5, str(_seen))
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
