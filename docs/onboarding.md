@@ -27,6 +27,8 @@ response:
   reply: "choices.0.message.content"
   tool_calls: "trace.tools"                 # optional
   resolved: "trace.resolved"                # optional, and the one worth asking for
+  observations: "trace.observations"        # optional: what the agent was shown
+  error: "error"                            # optional: a fault reported inside a 200
 history:
   field: history                            # omit if the API is stateless per request
 rate:
@@ -47,7 +49,16 @@ yields empty replies, which reads as a bot that refuses everything — the most 
 possible misreading of the system under test — so it comes back as `ExtractionFailed` naming
 the keys that were actually there. An unset `${TOKEN}` would send the literal and produce a
 run of 401s that reads as hardened, so it fails before the first probe. A spent request
-budget is reported as *never sent* rather than as a defence.
+budget is reported as *never sent* rather than as a defence. An endpoint that reports a
+failed tool call or a model timeout in the body with a 200 status leaves `reply` empty, and an
+empty reply is a bot that said nothing, which scores as a bot that held — so if your API does
+that, map `error:` and those probes come back as errors rather than as defences.
+
+**A key this adapter does not read is refused, at every level.** `respones:` at the top,
+`tool_call:` inside `response:`, `feild:` inside `history:` — all three used to build a target
+that ran the whole arsenal and reported a clean bill, because the mapping they were meant to
+set was simply never set. The five response channels and the seven history keys above are the
+whole list; anything else stops the run before the first probe, naming what it does accept.
 
 **A request budget does not bound TIME**, and on a shared endpoint that is the gap that
 matters. Two of the generic attacks ask the model to generate until something stops it, so

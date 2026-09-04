@@ -278,6 +278,24 @@ class RateLimit:
 # Keys that belong to the HARNESS rather than to the adapter: they are read elsewhere and are
 # stripped before construction. Kept here, beside the adapter that rejects everything else, so
 # that "what may appear in a target config" has exactly one answer.
+# EVERY CHANNEL A `response:` MAPPING MAY NAME, and every key a `history:` mapping may.
+#
+# `__init__` refuses an unknown TOP-LEVEL key, with the reason written beside it: a key this
+# adapter does not read is a key that does nothing, and a config that silently does nothing
+# produces a clean report. The two nested mappings were then read with `.get()` and nothing
+# else, so the same defect lived one level down and was worse there -- `tool_call:` for
+# `tool_calls:` builds a target that records no tool call on any probe, every tool-reading
+# detector is reported INERT for want of one, and that reads as a fact about the target
+# rather than a transposed letter. `history: {feild:, mdoe:}` discarded BOTH keys and ran the
+# multi-turn arsenal against the defaults.
+#
+# Written out rather than scanned off this file at import: a scan that stops matching returns
+# an empty set, and an empty set here refuses every config in existence. `test_http_adapter`
+# does the scan instead and fails if these tuples and the `.get()` calls above disagree --
+# the derivation belongs where a mismatch is a red build, not where it is a broken install.
+RESPONSE_KEYS = ("reply", "tool_calls", "resolved", "observations", "error")
+HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "insert_before")
+
 CONFIG_ONLY_KEYS = ("adapter", "skip_in_fleet", "oracle_context", "authorization",
                     "provenance", "provenance_note", "expect_build",
                     # `--model` is injected into the config by the sweep. For an http target the
@@ -419,10 +437,24 @@ class HttpConfiguredTarget(Target):
                 f"mapping of channel to path, e.g. `response: {{reply: choices.0.message."
                 f"content}}`.")
         resp = response or {}
+        _bad = sorted(k for k in resp if k not in RESPONSE_KEYS)
+        if _bad:
+            raise SystemExit(
+                "targets_http: `response:` for %r names %s, which this adapter does not read. "
+                "It maps: %s. A channel mapped to a key nothing reads is a channel that stays "
+                "empty, and an empty channel scores as a target that did not use it."
+                % (name, ", ".join(repr(k) for k in _bad), ", ".join(RESPONSE_KEYS)))
         self.reply_path = resp.get("reply", "reply")
         self.calls_path = resp.get("tool_calls")
         self.resolved_path = resp.get("resolved")
         self.observations_path = resp.get("observations")
+        # AN ERROR IN A 200 IS STILL AN ERROR. `targets_lcagent.yaml` has mapped
+        # `error: "error"` since the day it was written and nothing has ever read it: the
+        # deployment reports a failed tool call or a model timeout in the body with a 200
+        # status, this adapter took whatever `reply` held -- usually "" -- and an empty reply
+        # is scored as a target that said nothing, which is scored as a target that held.
+        # A run of those is the shape of a hardened deployment.
+        self.error_path = resp.get("error")
         # HOW OFTEN EACH OPTIONAL PATH ACTUALLY RESOLVED. A capability is added below because a
         # path is configured, which says what the operator INTENDED. This says what happened.
         # Zero across a whole sweep means the mapping is wrong and every detector that reads
@@ -434,6 +466,15 @@ class HttpConfiguredTarget(Target):
                 f"targets_http: `history:` for {name!r} is {type(history).__name__}, not a "
                 f"mapping. It takes `field:` (where the transcript goes) and `mode:` "
                 f"(splice or replace).")
+        if isinstance(history, dict):
+            _bad = sorted(k for k in history if k not in HISTORY_KEYS)
+            if _bad:
+                raise SystemExit(
+                    "targets_http: `history:` for %r names %s, which this adapter does not "
+                    "read. It takes: %s. An unread key here is not refused by the server and "
+                    "not applied by us: the transcript goes to the default field in the "
+                    "default mode, and a third of the arsenal runs against a shape nobody "
+                    "chose." % (name, ", ".join(repr(k) for k in _bad), ", ".join(HISTORY_KEYS)))
         self.history = history or None
         # `mode` DECIDES WHETHER THE ATTACK IS IN THE REQUEST, so an unrecognised value cannot
         # fall through to a default. `replace` overwrites the request's message list with the
@@ -629,6 +670,19 @@ class HttpConfiguredTarget(Target):
                         pass
                     return _big
                 raw = json.loads(_body.decode("utf-8", "replace"))
+            # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
+            # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
+            # would send the operator to re-map a path that is correct.
+            _err = dig(raw, self.error_path) if self.error_path else None
+            if _err not in (None, "", [], {}):
+                self._seen_success = True      # the credential worked; the request did not
+                # The remote's own words, bounded and never parsed: this is text from a target
+                # we do not trust, on the same footing as the HTTPError body below.
+                _said = " ".join(str(_err).split())[:300]
+                return Probe(prompt=prompt, output="",
+                             error="TargetError: the endpoint answered 200 and reported an "
+                                   "error at response.error=%r (%s)" % (self.error_path, _said),
+                             seconds=round(time.time() - t0, 1))
             reply = dig(raw, self.reply_path)
             if reply is None:
                 # The path is wrong or the API changed shape. A run of empty replies looks

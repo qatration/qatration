@@ -28,6 +28,7 @@ sys.path.insert(0, HERE)
 from targets_http import HttpConfiguredTarget, dig, _pairs, expand_env, RateLimit
 
 SEEN = []          # every request body the server received, for the history assertions
+EXTRA = {}         # merged into the reply, so one test can make the endpoint report a fault
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -35,13 +36,15 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0) or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
         SEEN.append({"body": body, "auth": self.headers.get("Authorization")})
-        out = json.dumps({
+        reply = {
             "choices": [{"message": {"content": f"you said: {body.get('message', '')}"}}],
             "trace": {
                 "tools": [{"function": {"name": "GetOrder"}, "arguments": {"id": "1001"}}],
                 "resolved": [["GetOrder", "id=1001 customer=CUST-77"]],
             },
-        }).encode()
+        }
+        reply.update(EXTRA)
+        out = json.dumps(reply).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(out)))
@@ -123,6 +126,57 @@ def main():
     check("no shipped config declares a top-level key nothing reads", not _unread, str(_unread))
     check("...over every config that ships", _n >= 20, str(_n))
 
+    # --- AND ONE LEVEL DOWN, WHERE THE SAME DEFECT WAS WORSE -----------------------------
+    #
+    # The top-level refusal above exists because a key this adapter does not read is a key
+    # that does nothing. `response:` and `history:` were then read with `.get()` and nothing
+    # else, so `tool_call:` for `tool_calls:` built a target that records no tool call on any
+    # probe -- every tool-reading detector reported INERT "for want of a tool call", which
+    # reads as a fact about the target rather than a transposed letter. `history:` was worse
+    # again: `{feild:, mdoe:}` discarded both keys and ran the multi-turn arsenal against the
+    # defaults. And a shipped config was already carrying one -- `targets_lcagent.yaml` has
+    # mapped `error: "error"` since the day it was written, and nothing read it.
+    #
+    # THE TUPLES ARE DERIVED HERE, NOT THERE. `targets_http` writes them out, because a scan
+    # that stops matching returns an empty set and an empty set inside the adapter refuses
+    # every config in existence. The scan belongs where a mismatch is a red build.
+    import re as _re
+    from targets_http import RESPONSE_KEYS as _RK, HISTORY_KEYS as _HK
+    _src = _i.getsource(_i.getmodule(HttpConfiguredTarget))
+
+    def _scan(recv):
+        return set(_re.findall(r"\b(?:%s)\.get\(\s*[\"']([a-z_]+)[\"']" % recv, _src))
+
+    _resp_read, _hist_read = _scan("resp"), _scan(r"h|self\.history")
+    check("the response channels this file reads can be scanned", len(_resp_read) >= 4,
+          str(sorted(_resp_read)))
+    check("every response channel the code reads is one the config may name",
+          _resp_read == set(_RK), str(sorted(_resp_read ^ set(_RK))))
+    check("the history keys this file reads can be scanned", len(_hist_read) >= 5,
+          str(sorted(_hist_read)))
+    check("every history key the code reads is one the config may name",
+          _hist_read == set(_HK), str(sorted(_hist_read ^ set(_HK))))
+
+    def _refused(**kw):
+        try:
+            HttpConfiguredTarget(url="http://127.0.0.1:1/x", name="t", **kw)
+        except SystemExit as e:
+            return str(e)
+        return ""
+
+    _r = _refused(response={"reply": "reply", "tool_call": "trace.tools"})
+    check("a misspelled response channel is refused, not ignored", "tool_call" in _r, _r[:90])
+    check("...and the message names what it does accept", "tool_calls" in _r, _r[:90])
+    check("a correctly spelled response mapping still builds",
+          not _refused(response={"reply": "r", "tool_calls": "t", "resolved": "s",
+                                 "observations": "o", "error": "e"}), "refused a valid mapping")
+    _r = _refused(response={"reply": "r"}, history={"feild": "history", "mdoe": "append"})
+    check("a misspelled history key is refused", "feild" in _r and "mdoe" in _r, _r[:90])
+    check("a correctly spelled history mapping still builds",
+          not _refused(response={"reply": "r"}, history={"field": "h", "mode": "splice",
+                                                         "insert_before": 1}),
+          "refused a valid history")
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -145,6 +199,50 @@ def main():
               p.resolved == [("GetOrder", "id=1001 customer=CUST-77")], str(p.resolved))
         check("the constant part of the request template survives",
               SEEN[-1]["body"].get("session") == "q", str(SEEN[-1]["body"]))
+
+        # --- A 200 THAT CARRIES AN ERROR --------------------------------------------------
+        #
+        # A deployment reports a failed tool call or a model timeout in the body with a 200
+        # status, which is the ordinary shape for an agent behind an API gateway. Before
+        # `response.error` was read, `reply` held "" on those, and an empty reply is scored
+        # as a target that said nothing, which is scored as a target that held. A run of them
+        # is indistinguishable from a hardened deployment.
+        EXTRA["error"] = "tool 'send_email' timed out after 30s\n\n  retries: 3"
+        try:
+            t2 = HttpConfiguredTarget(url=url, name="err", request={"message": "{prompt}"},
+                                      response={"reply": "choices.0.message.content",
+                                                "error": "error"})
+            p = t2.send("hello")
+            check("a 200 carrying an error becomes an errored probe",
+                  (p.error or "").startswith("TargetError:"), str(p.error))
+            check("...naming the path it was read from", "'error'" in (p.error or ""),
+                  str(p.error))
+            check("...quoting the endpoint on one line", "retries: 3" in (p.error or "")
+                  and "\n" not in (p.error or ""), repr(p.error))
+            check("...and carrying no output, so no detector scores it as a reply",
+                  p.output == "", repr(p.output))
+
+            # AND THE SAME ENDPOINT WITH THE CHANNEL UNMAPPED still answers the old way, so
+            # the check above is about the mapping rather than about the server's body.
+            t3 = HttpConfiguredTarget(url=url, name="unmapped", request={"message": "{prompt}"},
+                                      response={"reply": "choices.0.message.content"})
+            check("an unmapped error channel is not invented from the body",
+                  t3.send("hello").error is None, "an error appeared without a mapping")
+        finally:
+            EXTRA.clear()
+
+        # A NULL IS NOT AN ERROR. Endpoints that always carry the key and leave it null on
+        # success are the common case; reading truthiness rather than presence is what keeps
+        # every successful probe from becoming an error.
+        for _empty in (None, "", [], {}):
+            EXTRA["error"] = _empty
+            try:
+                p = t2.send("hello")
+                check("error=%r is a success, not a fault" % (_empty,),
+                      p.error is None and p.output == "you said: hello",
+                      "%r / %r" % (p.error, p.output))
+            finally:
+                EXTRA.clear()
 
         # --- capabilities are DERIVED, never claimed ---------------------------------------
         # A config that claims chain on an API with nowhere to put the transcript makes every
