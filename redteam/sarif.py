@@ -38,6 +38,7 @@ import re
 import yaml
 
 import baseline
+import runs
 import workspace
 from target import target_configs
 
@@ -46,7 +47,10 @@ QUALIFIERS_NOT_CARRIED = {
     "arsenal": "SARIF describes one run; there is no second run in it to be comparable with",
     "trials": "the rate rides on each finding's message rather than the invocation summary",
     "when": "the consumer stamps its own upload time, and a second date invites the wrong one",
-    "run_id": "a code-scanning tab has no way to open a run record, so the id would be noise",
+    "run_id": "the id itself is noise in a code-scanning tab, which has no way to open a run "
+              "record -- but the record's ENDING is read, and an unfinished run makes the "
+              "invocation unsuccessful. The exemption was right about the field and was "
+              "quietly covering not asking the question",
 }
 
 
@@ -340,7 +344,31 @@ def build(results, target_config=None, out_dir=None):
                                 % (meta.get("attacks_n") or 0, target)},
             "descriptor": {"id": "coverage/nothing-measured"}})
 
-    invocation = {"executionSuccessful": not unrun and not unmeasured}
+    # AND WHETHER THE RUN FINISHED AT ALL, which this never asked. Everything above reasons
+    # from ROWS: an attack that errored leaves one behind. A run stopped by its BUDGET does
+    # not -- `run_redteam` writes the results file and then closes the record as "stopped",
+    # noting that the remaining attacks were never sent -- so a truncated sweep with no
+    # errored row exported `executionSuccessful: true`. Measured: a record saying `stopped`,
+    # 350 attacks never sent, one finding, and the field a code-scanning tab reads to decide
+    # whether the analysis completed said it had.
+    #
+    # `docs/ci.md` promises the opposite in as many words, and so does the comment forty lines
+    # up in this file. Neither was the code.
+    #
+    # NONE IS NOT NO. `record_for` returns None for an artifact written before run records
+    # existed, and "cannot say" is not "it did not finish" -- flipping on None would mark
+    # every one of those unsuccessful. Only a record that exists and does not say `finished`.
+    _rec = runs.record_for(meta, out_dir or workspace.OUT)
+    _unfinished = bool(_rec) and _rec.get("state") != "finished"
+    if _unfinished:
+        notifications.append({
+            "level": "error",
+            "message": {"text": (runs.unfinished_note(meta, out_dir or workspace.OUT)
+                                 or "the run behind this evidence did not finish")
+                        + ". The findings below are what it reached, not what it looked for."},
+            "descriptor": {"id": "run/unfinished"}})
+
+    invocation = {"executionSuccessful": not unrun and not unmeasured and not _unfinished}
     if notifications:
         invocation["toolExecutionNotifications"] = notifications
 

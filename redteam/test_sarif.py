@@ -257,6 +257,60 @@ check("...and the log says why it points nowhere",
                                  "toolExecutionNotifications", [])],
       str([n["descriptor"]["id"]
            for n in _anch["invocations"][0].get("toolExecutionNotifications", [])]))
+# --- A RUN THAT DID NOT FINISH IS NOT A SUCCESSFUL ANALYSIS ------------------------------
+#
+# Everything else in this export reasons from ROWS: an attack that errored leaves one behind
+# and makes the invocation unsuccessful. A run stopped by its BUDGET leaves none -- it writes
+# the results file and then closes its record as "stopped", noting that the remaining attacks
+# were never sent -- so a truncated sweep with no errored row exported
+# `executionSuccessful: true`, and the field a code-scanning tab reads to decide whether the
+# analysis completed said it had. `docs/ci.md` promises the opposite in as many words.
+#
+# Three states, because the third is the one that must NOT flip: an artifact written before
+# run records existed has no id, `record_for` returns None, and "cannot say" is not "it did
+# not finish". Flipping on None would mark every legacy artifact unsuccessful.
+import runs as _runs
+
+with tempfile.TemporaryDirectory() as _rdir:
+    _rid = "2026-09-04T1800-gatecheck"
+    _rec_path = _runs._path(_rdir, _rid)
+    os.makedirs(os.path.dirname(_rec_path), exist_ok=True)
+    _doc = {"meta": {"target": "budgetbot", "attacks_n": 7, "errors": 0, "broke": 1,
+                     "skipped": 350, "not_sent": 350, "run_id": _rid,
+                     "when": "2026-09-04 18:00:00"},
+            "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                         "attack": {"id": "a", "category": "x"},
+                         "fired": ["canary_in_output"], "locks": {}, "trials": [{}]}]}
+
+    def _invocation(state):
+        if state is not None:
+            io.open(_rec_path, "w", encoding="utf-8", newline="").write(json.dumps(
+                {"run_id": _rid, "state": state, "target": "budgetbot",
+                 "note": "budget spent (1800s); the remaining attacks were never sent"}))
+        doc = _doc if state is not None else {"meta": {k: v for k, v in _doc["meta"].items()
+                                                       if k != "run_id"},
+                                              "results": _doc["results"]}
+        return sarif.build(doc, out_dir=_rdir)["runs"][0]["invocations"][0]
+
+    _seen = _invocation("stopped")
+    check("a run its own record calls stopped is not a successful invocation",
+          _seen["executionSuccessful"] is False, str(_seen["executionSuccessful"]))
+    _ids = [n["descriptor"]["id"] for n in _seen.get("toolExecutionNotifications", [])]
+    check("...and the log says how it ended", "run/unfinished" in _ids, str(_ids))
+    # A RECORD LEFT OPEN is a run that died, and is no more finished than one that stopped.
+    check("a record still saying `started` is not finished either",
+          _invocation("started")["executionSuccessful"] is False)
+
+    _seen = _invocation("finished")
+    check("...while a run that finished is successful",
+          _seen["executionSuccessful"] is True, str(_seen["executionSuccessful"]))
+    check("...and carries no unfinished note",
+          "run/unfinished" not in [n["descriptor"]["id"]
+                                   for n in _seen.get("toolExecutionNotifications", [])])
+    # CANNOT SAY IS NOT DID NOT FINISH.
+    check("an artifact with no run id is not called unfinished",
+          _invocation(None)["executionSuccessful"] is True)
+
 # AND FOUND THROUGH `workspace.config_name`, WHICH IS WHERE THAT RULE LIVES. Eleven of the
 # shipped configs omit `name:` and take the filename between `targets_` and `.yaml`; comparing
 # `cfg["name"]` alone could never match one of them, so every finding for those targets
