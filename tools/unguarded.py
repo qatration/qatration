@@ -3,7 +3,8 @@
 
 Mutation asks whether a check can fail. This asks the reverse, and it is the question that
 found most of the defects of 2026-09-04: **a rule nothing keeps**. Delete it, run the suites
-that could see it, and read the exit code. Two sweeps, because a decision hides in two shapes:
+that could see it, and read the exit code. Three sweeps, because a decision hides in three
+shapes -- and the third carries the filter that makes any of this readable:
 
   * A DOCUMENTED GUARD -- `if <cond>: return/raise/sys.exit` with a comment above it. The
     comment means somebody paid for that branch once, usually by shipping the defect it now
@@ -16,14 +17,31 @@ that could see it, and read the exit code. Two sweeps, because a decision hides 
     every positive fixture also carried a shell metacharacter, and `exfil_via_url` had three
     rules and one input that satisfied all of them.
 
+  * A GUARD AGAINST A FALSE POSITIVE -- every early `return False` in a `d_*` function is a
+    reason NOT to call something a finding: echo subtraction, an unarmed config, the caller's
+    own id, a value the user supplied rather than the target. Delete one and a false positive
+    should appear. `verbatim_replay` was calling the user's own quoted text a replay by the
+    target, and `sysprompt_paraphrase`'s length floor was the only thing between a two-word
+    reply and a leak verdict; neither had a fixture.
+
+AND THE THIRD SWEEP FILTERS ITSELF, which is the part worth stealing. Forty-nine such guards,
+thirty-two removable with `test_oracle` green -- a list nobody reads, because most are
+empty-input exits whose removal changes nothing (the code below them returns False anyway).
+Replay the stored probes in `out/` with each guard removed and the list sorts itself: thirty
+moved no verdict across 6,882 probes, two moved one. A sweep is only as useful as the number
+it reports, and evidence is what takes that number from thirty-two to two. Where `out/` holds
+nothing, the sweep says so and reports the unfiltered list rather than pretending to have
+filtered it.
+
 NOT PART OF `tools/check.py`, deliberately. It rewrites source files and runs the suites
 dozens of times over -- minutes rather than seconds -- and a check that edits the tree is not
 something to have running on every push. Run it after a stretch of work, the way you would run
 a profiler.
 
-    python tools/unguarded.py            # both sweeps
+    python tools/unguarded.py            # all three sweeps
     python tools/unguarded.py --guards   # documented guards only
     python tools/unguarded.py --rules    # detector rules only
+    python tools/unguarded.py --refusals # the guards that PREVENT a finding
 
 Every mutation is reverted immediately after its run, and the tree is verified green at the
 end. `PYTHONDONTWRITEBYTECODE=1` is set for every child: a same-length edit written in the
@@ -137,13 +155,95 @@ def sweep_rules():
     return len(sites), free
 
 
+_REPLAY = r"""
+import sys, os, json
+sys.path.insert(0, %r)
+os.environ.setdefault("QATRATION_OUT", %r)
+import detector_coverage as dc
+hits, where, n, broke, sources = dc.replay()
+print(json.dumps({"n": n, "hits": dict(hits), "broke": dict(broke)}))
+"""
+
+
+def _replay():
+    """Every stored probe through every detector -> {detector: fires}. None if it raised."""
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+    code = _REPLAY % (RT, os.path.join(os.path.dirname(RT), "out"))
+    p = subprocess.run([sys.executable, "-c", code], cwd=RT, env=env,
+                       capture_output=True, text=True, errors="replace", timeout=900)
+    if p.returncode:
+        return None
+    import json as _json
+    return _json.loads(p.stdout.strip().split("\n")[-1])
+
+
+def sweep_refusals():
+    """Neutralise each early `return False` in a detector; report the ones that matter.
+
+    THE MIRROR OF `sweep_rules`. Every early `return False` is a reason NOT to call something
+    a finding -- echo subtraction, an unarmed config, the caller's own id, a value the user
+    supplied -- and deleting one should produce a false positive somewhere.
+
+    AND ITS OWN NOISE FILTER, which is why this sweep is worth running at all. Forty-nine
+    such guards, thirty-two of which can be removed with `test_oracle` green; that number
+    alone is a list nobody reads, because most are empty-input exits whose removal changes
+    nothing (the code after them returns False anyway). Replaying the stored evidence with
+    each one removed separates them: thirty changed no verdict across 6,882 probes, and two
+    moved one -- `verbatim_replay` 42 fires to 44, `sysprompt_paraphrase` 9 to 11. Those two
+    were rules doing real work with no fixture behind them.
+
+    Needs `out/` to hold evidence. With an empty workspace it reports every survivor, which
+    is the unfiltered list and is said rather than silently skipped.
+    """
+    path = os.path.join(RT, "oracle.py")
+    orig = io.open(path, encoding="utf-8").read()
+    sites = []
+    for node in ast.walk(ast.parse(orig)):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("d_"):
+            last = node.body[-1]
+            for c in ast.walk(node):
+                if (isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
+                        and c.value.value is False and c is not last):
+                    sites.append((node.name, c.lineno))
+    assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
+    base = _replay()
+    if base is None or not base.get("n"):
+        print("  ! no stored evidence in out/, so every survivor below is unfiltered")
+    lines = orig.split("\n")
+    moved = []
+    for name, lineno in sites:
+        idx = lineno - 1
+        stmt = lines[idx]
+        mutant = list(lines)
+        mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
+        io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
+        red = _run("test_oracle.py")
+        got = None if red else _replay()
+        io.open(path, "w", encoding="utf-8", newline="").write(orig)
+        if red:
+            continue
+        if base is None or got is None:
+            moved.append((name, lineno, "the replay could not answer"))
+            continue
+        diff = {k: (base["hits"].get(k, 0), got["hits"].get(k, 0))
+                for k in set(base["hits"]) | set(got["hits"])
+                if base["hits"].get(k, 0) != got["hits"].get(k, 0)}
+        if diff:
+            moved.append((name, lineno,
+                          "; ".join("%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
+    assert _run("test_oracle.py") == 0, "oracle.py was not restored"
+    return len(sites), moved
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="unguarded",
                                  description="decisions no suite would miss")
     ap.add_argument("--guards", action="store_true", help="documented guards only")
     ap.add_argument("--rules", action="store_true", help="detector rules only")
+    ap.add_argument("--refusals", action="store_true",
+                    help="guards against false positives only (needs evidence in out/)")
     args = ap.parse_args(argv)
-    both = not (args.guards or args.rules)
+    both = not (args.guards or args.rules or args.refusals)
     bad = 0
     if both or args.guards:
         print("=== documented guards ===")
@@ -159,6 +259,15 @@ def main(argv):
         for name, ln, src in free:
             print("  oracle.py:%d  %s  %s" % (ln, name, src[:60]))
         bad += len(free)
+    if both or args.refusals:
+        print("\n=== guards against false positives ===")
+        n, moved = sweep_refusals()
+        print("\n%d early refusal(s) tested, %d move a verdict on the stored evidence"
+              % (n, len(moved)))
+        for name, ln, what in moved:
+            print("  oracle.py:%-6d %-26s %s" % (ln, name, what[:80]))
+        bad += len(moved)
+
     # NOT AN EXIT CODE THAT FAILS A BUILD. Some survivors are equivalent mutations -- a guard
     # whose fallback reaches the same answer, an input bound whose effect is time rather than
     # a verdict -- and this tool cannot tell those from a real gap. It reports; a person reads.
