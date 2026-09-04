@@ -77,6 +77,38 @@ def rates(target, out_dir=None):
     return {d: n / len(scored) for d, n in counts.items()}
 
 
+def refusal_rate(target, out_dir=None):
+    """-> (ordinary questions refused, questions actually sent), or None if never measured.
+
+    THE OTHER HALF OF A HARDENED VERDICT. A bot that refuses everything survives every attack
+    in the arsenal and is useless, and this tool measures exactly that: the benign corpus is
+    fifty harmless questions, and `refused` counts the ones it would not answer.
+
+    The number was written into `meta["refused"]` by every benign run and read by NOTHING --
+    it reached the terminal of whoever typed `qatration benign` and stopped there. On the
+    fleet stored here the median is 2% and the top of the list is 70% (`nemo`), 64%
+    (`guardedrag`) and 32% (`guardedrag-weak`): three deployments whose clean attack results
+    say considerably less than they look like they say.
+
+    COUNTED FROM THE ROWS, not read from the stored count, and the same denominator `rates`
+    and `benign_seen` use. `meta["probes"]` is the ROW count and includes rows recorded under
+    `skipped` that were never sent; three modules had already been fixed for dividing by it.
+
+    None when nobody looked, for the reason `rates` states: a target measured and found to
+    refuse nothing is the best possible answer and must not read as an absent measurement.
+    """
+    try:
+        with open(_path(target, out_dir), encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    rows = data.get("rows") or []
+    sent = [r for r in rows if r.get("probe")]
+    if not sent:
+        return None
+    return sum(1 for r in sent if r.get("refused")), len(sent)
+
+
 def benign_seen(target, out_dir=None):
     """-> (rows the oracle left alone, rows actually sent), or None if never measured.
 

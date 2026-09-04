@@ -1375,6 +1375,71 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- WHAT IT REFUSES WHILE NOBODY IS ATTACKING --------------------------------------
+    #
+    # A bot that refuses everything survives the whole arsenal and is useless. The benign
+    # corpus is fifty harmless questions and `refused` counts the ones it would not answer --
+    # written into every benign artifact and read by NOTHING, so the number reached the
+    # terminal of whoever typed `qatration benign` and stopped there. On the fleet stored
+    # here the median is 2% and the top is 70% (nemo), 64% (guardedrag) and 32%
+    # (guardedrag-weak): three deployments whose clean attack results say much less than they
+    # look like they say, on a page whose panel is headed "what this target does unattacked".
+    import tempfile as _tf3, shutil as _sh3, json as _js3, importlib as _il3
+    _wk = _tf3.mkdtemp()
+    try:
+        def _panel(refused, sent, target="rbot", skipped_refused=0):
+            # SKIPPED ROWS THAT CLAIM A REFUSAL. `meta["probes"]` is the ROW count and
+            # includes rows never sent; three modules had already been fixed for dividing by
+            # it, and a fixture where every row carries a probe cannot tell the two apart --
+            # measured, the mutation that swapped `sent` for `rows` passed here first time.
+            _rows = [{"probe": {"output": "x"}, "fired": [], "refused": i < refused}
+                     for i in range(sent)]
+            _rows += [{"skipped": "no chain capability", "refused": True}
+                      for _ in range(skipped_refused)]
+            _js3.dump({"meta": {"target": target, "probes": len(_rows)}, "rows": _rows},
+                      io.open(os.path.join(_wk, "benign_%s.json" % target), "w",
+                              encoding="utf-8", newline=""))
+            _was = os.environ.get("QATRATION_OUT")
+            os.environ["QATRATION_OUT"] = _wk
+            try:
+                import workspace as _w3, report_engine as _r3
+                _il3.reload(_w3)
+                _il3.reload(_r3)
+                return _r3.build_html({"target": target, "attribution": "  measured."}, [])
+            finally:
+                if _was is None:
+                    os.environ.pop("QATRATION_OUT", None)
+                else:
+                    os.environ["QATRATION_OUT"] = _was
+                import workspace as _w4, report_engine as _r4
+                _il3.reload(_w4)
+                _il3.reload(_r4)
+
+        _hi = _panel(35, 50, skipped_refused=10)
+        check("the page says what the target refuses when nobody is attacking",
+              "refused 35 of 50 ordinary questions (70%)" in _hi, "not on the page")
+        check("...and says what that costs the clean result above it",
+              "worth less than it looks" in _hi, "the number without its meaning")
+        _lo = _panel(1, 50, target="qbot")
+        check("a target that answers its own traffic gets the number and no lecture",
+              "refused 1 of 50 ordinary questions (2%)" in _lo
+              and "worth less than it looks" not in _lo, "the caveat fires on a quiet target")
+        # NOBODY LOOKED IS NOT NOBODY REFUSED. A target with no benign run must not read as
+        # one measured and found to refuse nothing -- the same distinction `baseline.rates`
+        # was fixed for.
+        _none = _panel(0, 0, target="zbot")
+        check("a target with no benign run claims no refusal rate",
+              "ordinary questions" not in _none, "invented a rate from no measurement")
+        # ASKED OF THE READER TOO, because the page has a guard of its own and would hide a
+        # reader that answered (0, 0) for a target nobody measured. Two belts, and the
+        # contract belongs to the one the other pages will also call.
+        import baseline as _bl3
+        _rr_none = _bl3.refusal_rate("zbot", out_dir=_wk)
+        check("...and the reader says so rather than answering zero", _rr_none is None,
+              repr(_rr_none))
+    finally:
+        _sh3.rmtree(_wk, ignore_errors=True)
+
     # --- THE SECOND CAVEAT, WHICH NO PAGE CARRIED ---------------------------------------
     #
     # `two_factor_note` separates "the payload reached the model" from "the model acted on
