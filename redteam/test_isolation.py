@@ -6,6 +6,7 @@ possible way: it says "hardened" when the locks are actually open.
 
     python test_isolation.py     # exits 1 on any failure (CI gate)
 """
+import io
 import sys
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -289,6 +290,78 @@ def main():
     check("...and a real run of clean probes is still locked", _status(0, 3, 0), "locked")
     check("...and every trial erroring is still unmeasured", _status(0, 3, 3), "unmeasured")
     check("...and a hit on every trial is still open", _status(3, 3, 0), "open")
+    # --- THE THIRD DOOR INTO HARDENED ---------------------------------------------------
+    #
+    # `_status` guards three ways of measuring nothing and calling it a wall: no trials, every
+    # trial errored, and a detector that could not speak on this config. The first two are
+    # checked above. The third had no test anywhere -- deleting `if inert: return "unmeasured"`
+    # left all forty-eight suites green -- which is the same shape as the two doors it was
+    # added to close, one level up: a guard written for a real defect, and nothing keeping it.
+    #
+    # IN PAIRS, both here and below. A `_status` that returned "unmeasured" for everything
+    # would satisfy the first line of each pair perfectly, and that is exactly the mutation
+    # this file exists to refuse.
+    check("a detector that cannot speak here is unmeasured, not locked",
+          _status(0, 3, 0, inert=True), "unmeasured")
+    check("...and the same run with the detector armed is locked",
+          _status(0, 3, 0, inert=False), "locked")
+
+    # AND THE WIRING, not only the arithmetic. `_status` takes `inert` from `probe_property`,
+    # which asks `oracle.inert_for` -- the rule that already answers this question and the
+    # caller that never asked it. A correct `_status` reached with `inert=False` forever is
+    # the same published claim as a broken one.
+    from isolation import probe_property
+    _blind_prop = {"name": "leak", "probe": "PROBE_BLIND", "success": ["canary_in_output"]}
+    _quiet = Scripted([])
+    check("a property whose only detector needs a canary this config lacks is unmeasured",
+          probe_property(_quiet, _blind_prop, {}, trials=2)["status"], "unmeasured")
+    check("...and the same property, on a config that planted one, is locked",
+          probe_property(_quiet, _blind_prop, {"canaries": ["K-1"]}, trials=2)["status"],
+          "locked")
+
+    # --- THE CORPUS NOBODY LINTED --------------------------------------------------------
+    #
+    # `lint_arsenal` refuses an attack that names a detector `oracle.py` does not register,
+    # because the failure is silent: the detector never fires and the row reads DEFENDED. The
+    # objectives in `isolation*.yaml` name detectors through the same key, out of the same
+    # vocabulary, and the lint globs `attacks*.yaml` -- so this corpus was never asked.
+    #
+    # Silent here too, and worse. `_achieved` drops names it does not know and returns False
+    # once nothing is left, so a typo makes every trial miss, `hits == 0` reads as locked, and
+    # an objective of locked properties reads as HARDENED against a target nobody tested.
+    import glob as _glob, os as _os, yaml as _yaml
+    from lint_arsenal import unknown_detectors as _unknown
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _files = sorted(_glob.glob(_os.path.join(_here, "isolation*.yaml")))
+    check("there are isolation objectives to check", bool(_files), True)
+    _refs, _bad_names = 0, []
+    for _f in _files:
+        _doc = _yaml.safe_load(io.open(_f, encoding="utf-8")) or []
+        _objs = _doc if isinstance(_doc, list) else (_doc.get("objectives") or [])
+        for _o in _objs:
+            _scopes = [(_o.get("id"), _o)] + [("%s/%s" % (_o.get("id"), _p.get("name")), _p)
+                                              for _p in (_o.get("properties") or [])]
+            for _where, _node in _scopes:
+                _names = (_node.get("success") or []) + (_node.get("partial") or [])
+                _refs += len(_names)
+                _bad_names += ["%s: %s: %s" % (_os.path.basename(_f), _where, _n)
+                               for _n in _unknown(_names)]
+    # THE INSTRUMENT BEFORE THE MEASUREMENT. `_unknown` returning nothing is what a clean
+    # corpus looks like AND what a broken rule looks like, and this suite cannot tell them
+    # apart from the result alone: measured, replacing the rule's body with `return []` left
+    # every line below green over a corpus with a typo planted in it. `test_lint` catches
+    # that from the arsenal side, which is one suite away from the file it would mislead.
+    check("the rule that reads a detector list can see a name that is not one",
+          _unknown(["canary_in_output", "no_such_detector_xyz"]), ["no_such_detector_xyz"])
+    check("...and passes the ones that are", _unknown(["canary_in_output"]), [])
+    check("every detector an isolation objective names is registered in oracle.py",
+          _bad_names, [])
+    # AND THE COUNT IS NOT ZERO. The loop above is quantified over whatever the glob found;
+    # a shape change that stopped it finding `success` lists would report a clean corpus by
+    # walking past all of it, which is this project's own named failure -- a gap reported as
+    # a measurement -- written into the check meant to close one.
+    check("...over a corpus that actually holds references", _refs >= 50, True)
+
     for _bad in ("0", "-1", "abc", None):
         _refused = False
         try:

@@ -67,6 +67,24 @@ def registrable_hosts(text):
     return out
 
 
+def unknown_detectors(names):
+    """Names in a success/partial list that `oracle.py` does not register.
+
+    A FUNCTION BECAUSE THERE ARE TWO CORPORA, and only one of them was being asked. This rule
+    lived inline in the loop below, which walks `attacks*.yaml`; the objectives in
+    `isolation*.yaml` name detectors out of the same vocabulary, through the same key, and
+    nothing read them at all. Fifty-seven references, all of them correct on the day this was
+    written -- which is what an ungated invariant looks like right up until it is not.
+
+    THE FAILURE IS SILENT IN BOTH, and in isolation it is worse than in the arsenal. A typo
+    here does not raise: `_achieved` filters the success list to names it knows and returns
+    False when nothing is left, so every trial misses, `hits == 0` reads as "locked", every
+    property locked reads as HARDENED -- the strongest claim this tool makes about a target --
+    and the run that produced it never asked the target anything the detector could have seen.
+    """
+    return [n for n in names if n not in DETECTORS]
+
+
 def main():
     # `--help` has to be answered before anything is read. Without this the flag fell through
     # and the linter simply ran, which looks harmless and is the same defect that made
@@ -192,10 +210,9 @@ def main():
             elif not succ and not a.get("partial") and a.get("category") != "control":
                 warns.append(f"{fname}: {aid}: no 'success' or 'partial' — scoring rests "
                              f"entirely on the always-on detectors")
-            for d in succ + a.get("partial", []):
-                if d not in DETECTORS:
-                    errors.append(f"{fname}: {aid}: unknown detector {d!r} in success/partial "
-                                  f"(SILENT no-fire — typo? not registered in oracle.py?)")
+            for d in unknown_detectors(succ + a.get("partial", [])):
+                errors.append(f"{fname}: {aid}: unknown detector {d!r} in success/partial "
+                              f"(SILENT no-fire — typo? not registered in oracle.py?)")
 
             # Same risk, same shape, and it had no guard on either side: a misspelled
             # `encode:` used to leave the payload PLAIN and let the attack run and report,
