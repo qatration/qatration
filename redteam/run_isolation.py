@@ -52,6 +52,34 @@ def load_target(cfg_path, model=None):
     return target, tcfg.get("oracle_context", {})
 
 
+def objectives_path(name):
+    """Where a relative `--objectives` points: beside the reader, the workspace, the package.
+
+    IT RESOLVED AGAINST THE PACKAGE ALONE. So an operator who wrote objectives beside their
+    own config and passed the name got a FileNotFoundError naming a path inside
+    `site-packages` -- and `generate` had to WRITE there for its output to be reachable,
+    which it did, on every fresh install, into the installed package.
+
+    THE PACKAGE STAYS IN THE LIST AND STAYS LAST. `isolation_example.yaml` and the per-bot
+    objectives are package data and `--objectives` defaults to one of them.
+
+    A FUNCTION so the refusal can be reached without building a target and sending traffic:
+    the same reason `gate_verdict` and `regression_verdict` are functions. Resolution is not
+    a decision anyone should have to spend a run to check.
+    """
+    if os.path.isabs(name) or os.path.exists(name):
+        return name
+    for base in (WORKSPACE_OUT, HERE):
+        candidate = os.path.join(base, name)
+        if os.path.exists(candidate):
+            return candidate
+    raise SystemExit(
+        "isolation: no objectives file at %r. Looked beside you, in %s, and in the "
+        "objectives this package ships.\n"
+        "  `qatration generate --target-config <cfg>` writes one into the workspace."
+        % (name, WORKSPACE_OUT))
+
+
 def main():
     ap = argparse.ArgumentParser()
     # NO DEFAULT TARGET. This pointed at a practice bot shipped inside the package,
@@ -92,9 +120,7 @@ def main():
     if args.compose:
         args.keys = True          # composition needs the keys the search finds
 
-    path = args.objectives
-    if not os.path.isabs(path):
-        path = os.path.join(HERE, path)
+    path = objectives_path(args.objectives)
     with open(path, encoding="utf-8") as f:
         objectives = yaml.safe_load(f) or []
 

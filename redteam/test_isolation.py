@@ -290,6 +290,100 @@ def main():
     check("...and a real run of clean probes is still locked", _status(0, 3, 0), "locked")
     check("...and every trial erroring is still unmeasured", _status(0, 3, 3), "unmeasured")
     check("...and a hit on every trial is still open", _status(3, 3, 0), "open")
+    # --- WHERE A RELATIVE --objectives POINTS -------------------------------------------
+    #
+    # It resolved against the package directory and nothing else. So an operator who wrote
+    # objectives beside their own config and passed the name got a FileNotFoundError naming a
+    # path inside `site-packages`, and `generate` had to WRITE there for its output to be
+    # reachable at all -- which it did, into the installed package, on a fresh install.
+    #
+    # Three places now, in the order a reader means them: beside them, then the workspace
+    # (where `generate` writes), then the package (where the shipped objectives live, and
+    # `--objectives` still defaults to one of those).
+    import tempfile as _tf, shutil as _sh, os as _os, importlib as _il
+    import run_isolation as _ri
+
+    _OBJ_YAML = ("- id: pathcheck\n  properties:\n    - name: p\n      probe: x\n"
+                 "      success: [canary_in_output]\n  combined: x\n"
+                 "  success: [canary_in_output]\n")
+
+    def _resolve(name, cwd, ws):
+        """What `--objectives name` opens, with the caller standing in `cwd`.
+
+        Through `objectives_path` rather than the whole command: resolution is not a decision
+        anyone should have to build a target and send traffic to check.
+        """
+        _was_cwd, _was_out = _os.getcwd(), _os.environ.get("QATRATION_OUT")
+        try:
+            _os.chdir(cwd)
+            _os.environ["QATRATION_OUT"] = ws
+            import workspace as _wsm
+            _il.reload(_wsm)
+            _il.reload(_ri)
+            try:
+                # ABSOLUTE WHILE THE CWD IS STILL THE TEMPORARY ONE. A relative answer
+                # resolved after the `finally` below points at this repository instead, which
+                # is how this check first reported the package branch for the local file.
+                return _os.path.abspath(_ri.objectives_path(name))
+            except SystemExit as _e:
+                return "REFUSED: %s" % _e
+            except BaseException as _e:
+                # EVERY EXCEPTION, NOT JUST THE INTENDED ONE. The property here is WHICH
+                # failure: a refusal a reader can act on, or the traceback naming a path
+                # inside site-packages that this resolution exists to stop. Catching
+                # `SystemExit` alone lets the second escape and take the suite down under no
+                # label at all -- measured, twice, in the two checks written before this one.
+                return "%s: %s" % (type(_e).__name__, _e)
+        finally:
+            _os.chdir(_was_cwd)
+            if _was_out is None:
+                _os.environ.pop("QATRATION_OUT", None)
+            else:
+                _os.environ["QATRATION_OUT"] = _was_out
+            import workspace as _wsm2
+            _il.reload(_wsm2)
+            _il.reload(_ri)
+
+    _work = _tf.mkdtemp()
+    try:
+        _wsdir = _os.path.join(_work, "ws")
+        _os.makedirs(_wsdir)
+        _cfg = _os.path.join(_work, "pathbot.yaml")
+        io.open(_cfg, "w", encoding="utf-8", newline="").write(
+            'adapter: http\nname: pathbot\nurl: "http://127.0.0.1:1/x"\n'
+            'request:\n  model: scripted\n')
+        # A NAME THAT IS NOWHERE is refused by name, rather than raising a path nobody typed.
+        _got = _resolve("nowhere.yaml", _work, _wsdir)
+        check("objectives that are nowhere are refused, not raised",
+              _got.startswith("REFUSED") and "no objectives file" in _got, True)
+        check("...and the refusal names the workspace it looked in",
+              _wsdir in _got, True)
+
+        # BESIDE THE READER. The file the operator just wrote in their own directory.
+        io.open(_os.path.join(_work, "mine.yaml"), "w", encoding="utf-8",
+                newline="").write(_OBJ_YAML)
+        _got = _resolve("mine.yaml", _work, _wsdir)
+        _expect = _os.path.join(_work, "mine.yaml")
+        check("objectives beside the reader are found",
+              _os.path.realpath(_got), _os.path.realpath(_expect))
+
+        # AND IN THE WORKSPACE, where `generate` puts them.
+        io.open(_os.path.join(_wsdir, "generated.yaml"), "w", encoding="utf-8",
+                newline="").write(_OBJ_YAML)
+        _got = _resolve("generated.yaml", _work, _wsdir)
+        _expect = _os.path.join(_wsdir, "generated.yaml")
+        check("objectives in the workspace are found",
+              _os.path.realpath(_got), _os.path.realpath(_expect))
+
+        # AND THE SHIPPED ONES STILL ARE, which is why the package stays in the list.
+        _got = _resolve("isolation_example.yaml", _work, _wsdir)
+        _expect = _os.path.join(_os.path.dirname(_os.path.abspath(_ri.__file__)),
+                                "isolation_example.yaml")
+        check("...and the objectives this package ships are still found",
+              _os.path.realpath(_got), _os.path.realpath(_expect))
+    finally:
+        _sh.rmtree(_work, ignore_errors=True)
+
     # --- THE THIRD DOOR INTO HARDENED ---------------------------------------------------
     #
     # `_status` guards three ways of measuring nothing and calling it a wall: no trials, every
