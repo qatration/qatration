@@ -1375,6 +1375,40 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- ONE SENTENCE, ONE PLACE --------------------------------------------------------
+    #
+    # The empty-workspace sentence was written twice in the same hour, in `build_index` and
+    # in `discrimination`, as part of a change about naming the real path and a typeable
+    # command. Two copies of one sentence is the defect this repository spends its time
+    # finding, introduced by the fix for another instance of it. Found by asking which prose
+    # literals appear in more than one module — ast, not a grep, so a string is a string.
+    import ast as _ast4, glob as _g4
+    _dupes = {}
+    _seen4 = {}
+    for _f4 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):
+        if os.path.basename(_f4).startswith("test_"):
+            continue
+        try:
+            _tree = _ast4.parse(open(_f4, encoding="utf-8").read(), filename=_f4)
+        except SyntaxError:
+            continue
+        _docs = set()
+        for _n in _ast4.walk(_tree):
+            if isinstance(_n, (_ast4.Module, _ast4.FunctionDef, _ast4.AsyncFunctionDef,
+                               _ast4.ClassDef)):
+                _d = _ast4.get_docstring(_n, clean=False)
+                if _d:
+                    _docs.add(_d)
+        for _n in _ast4.walk(_tree):
+            if isinstance(_n, _ast4.Constant) and isinstance(_n.value, str):
+                _s = _n.value.strip()
+                if len(_s) >= 55 and " " in _s and _s not in _docs:
+                    _seen4.setdefault(_s, set()).add(os.path.basename(_f4))
+    _dupes = {k: sorted(v) for k, v in _seen4.items() if len(v) > 1}
+    check("no sentence of 55 characters or more is written in two modules",
+          not _dupes, "; ".join("%s: %r" % (v, k[:60]) for k, v in list(_dupes.items())[:2]))
+    check("...over a real number of literals", len(_seen4) > 100, str(len(_seen4)))
+
     # --- "COULD NOT BE READ" AND "DID NOT RECORD IT" ARE DIFFERENT FACTS ----------------
     #
     # `coverage()` gives up for two reasons: an artifact that cannot be READ, and one that

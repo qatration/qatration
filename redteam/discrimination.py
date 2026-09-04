@@ -8,6 +8,7 @@ prints exactly that. Exits 1 if any control fired (a false-alarm regression gate
     python discrimination.py
 """
 import sys, os, glob, json
+from workspace import no_results_note
 from workspace import (OUT as WORKSPACE_OUT, results_files, read_artifact,
                        NOT_MEASURED)
 try:
@@ -182,8 +183,7 @@ def main():
     if not data:
         # See the note in `build_index`: the path this run is using, and a command rather
         # than a description of one.
-        print("no results in %s — run a sweep first:\n"
-              "    qatration run --target-config <your-config>.yaml" % OUT)
+        print(no_results_note(OUT))
         # NOT A PASS. `docs/ci.md` reserves 3 for "the question could not be
         # answered", and a page built from no runs is the plainest case of it.
         return 3

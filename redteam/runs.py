@@ -43,14 +43,11 @@ def _path(root, run_id):
     return os.path.join(str(root), f"run_{run_id}.json")
 
 
-def _scope(rec):
-    """How wide a run this record was made at, or "?" when it does not say.
-
-    "?" rather than a guess: a record that does not name its scope was written by something
-    that did not record one, and printing a plausible value would make the record say
-    something nobody measured.
-    """
-    return rec.get("scope") or "?"
+# THE SAME FUNCTION LIVED HERE AND IN `jobqueue`, docstring and all. Found by asking which
+# prose literals appear in more than one module -- the answer was this docstring, twice.
+# `jobqueue.scope_of` keeps it because that module owns a job record and this one owns a run
+# record, and the field means the same thing in both: what the run was scoped to.
+from jobqueue import scope_of as _scope
 
 
 def record_for(meta, root):

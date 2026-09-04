@@ -232,6 +232,22 @@ _CTX_KEYS = None
 _CFG_KEYS = None
 
 
+def no_results_note(out_dir=None):
+    """What a page says when the workspace it was pointed at holds no run.
+
+    ONE SENTENCE, ONE PLACE. It was written twice this morning -- in `build_index` and in
+    `discrimination`, in the same hour, as part of a change about naming the real path and a
+    typeable command. Two copies of one sentence is the defect this repository spends its time
+    finding, introduced by the fix for another instance of it, and found by asking which prose
+    literals appear in more than one module.
+
+    Takes the directory rather than reading it, because the two callers already have it and a
+    third might be pointed somewhere else.
+    """
+    return ("no results in %s — run a sweep first:\n"
+            "    qatration run --target-config <your-config>.yaml" % (out_dir or OUT))
+
+
 def config_keys_read(root=None):
     """Every TOP-LEVEL target-config key some part of this engine reads.
 

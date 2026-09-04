@@ -7,6 +7,7 @@ import glob, json, os, sys, html, datetime
 from target import target_configs
 from pathlib import Path
 import baseline
+from workspace import no_results_note
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact,
                        measured)
 
@@ -178,8 +179,7 @@ def main():
         # whatever `$QATRATION_OUT` says, so this named a folder they do not have and a step
         # in words rather than a command they can type. `compare_targets` prints the real path
         # in the same situation, which is where the wording below comes from.
-        print("no results in %s — run a sweep first:\n"
-              "    qatration run --target-config <your-config>.yaml" % OUT)
+        print(no_results_note(OUT))
         # NOT A PASS. `docs/ci.md` reserves 3 for "the question could not be
         # answered", and a page built from no runs is the plainest case of it.
         return 3
