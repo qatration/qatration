@@ -180,7 +180,13 @@ def main():
     argparse.ArgumentParser(prog="qatration discrimination", description="the tool's own credibility: are the controls clean and the breaches reliable").parse_args()
     data = load()
     if not data:
-        print("no results in out/ — run a sweep first"); return
+        # See the note in `build_index`: the path this run is using, and a command rather
+        # than a description of one.
+        print("no results in %s — run a sweep first:\n"
+              "    qatration run --target-config <your-config>.yaml" % OUT)
+        # NOT A PASS. `docs/ci.md` reserves 3 for "the question could not be
+        # answered", and a page built from no runs is the plainest case of it.
+        return 3
 
     # 1) control integrity — and a control that fires has TWO causes, which this could not
     #    tell apart and failed the build on either. "The scanner cried wolf" is a defect in
@@ -349,4 +355,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The return value is the answer; `main()` alone drops it.
+    sys.exit(main() or 0)

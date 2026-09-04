@@ -1153,6 +1153,26 @@ def main():
     # SAID, not counted. "3 files skipped" tells nobody which run to re-do, and a
     # remediation page silently short of a target reads as a clean bill for it.
     say_unreadable(unreadable, "this report")
+
+    # NOTHING MEASURED IS NOT A CLEAN BILL, and this command was the one place left in the
+    # package that answered otherwise. Run against an empty workspace it wrote
+    # `defense_report.html` -- headed "Security Assessment", "0 systems tested" -- whose
+    # executive summary reads "This assessment found 0 distinct exploitable weaknesses",
+    # followed by the standing paragraph about security being delegated to the model's
+    # judgement. An assessment, a conclusion, and no evidence under either. It exited 0.
+    #
+    # `docs/ci.md` already says what that is worth: "a short list of findings because the run
+    # stopped early must never read like a short list of findings because there was little to
+    # find", and code 3 is "the question could not be answered - NOT A PASS". Its two
+    # neighbours over the same empty directory, `index` and `discrimination`, already print
+    # the remedy and write nothing; this one is now the third answering the same way.
+    #
+    # ON `all_targets`, NOT ON `findings`. Zero findings across four measured targets is a
+    # result and the page should say so. Zero targets is the absence of the measurement.
+    if not all_targets:
+        print("no results in %s — nothing has been measured, so there is nothing to fix:\n"
+              "    qatration run --target-config <your-config>.yaml" % OUT_DIR)
+        return 3
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
     ages, regressed = _timeline()
@@ -1737,4 +1757,7 @@ everything the model reads (prompts, retrieved documents, tool output) as untrus
 
 
 if __name__ == "__main__":
-    main()
+    # THE RETURN VALUE IS THE ANSWER. `main()` alone drops it, so the module invoked directly
+    # exits 0 whatever it concluded -- a second door onto the same wrong answer the CLI has
+    # just been taught to carry.
+    sys.exit(main() or 0)

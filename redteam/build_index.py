@@ -3,7 +3,7 @@ Build out/index.html — a single landing dashboard that ties the whole run toge
 headline numbers, links to the defense + fleet reports, and a card per target linking
 its scorecard. One page to open after a sweep.
 """
-import glob, json, os, html, datetime
+import glob, json, os, sys, html, datetime
 from target import target_configs
 from pathlib import Path
 import baseline
@@ -171,7 +171,16 @@ def main():
     # the target names are invented — lost all of its rows to the orphan filter.
     rows = load(known=set(provenance()))
     if not rows:
-        print("no results in out/ — run a sweep first"); return
+        # THE DIRECTORY THIS RUN IS ACTUALLY USING, and the command that fills it. `out/` is
+        # what a checkout has; a stranger who installed the package has `qatration-out/`, or
+        # whatever `$QATRATION_OUT` says, so this named a folder they do not have and a step
+        # in words rather than a command they can type. `compare_targets` prints the real path
+        # in the same situation, which is where the wording below comes from.
+        print("no results in %s — run a sweep first:\n"
+              "    qatration run --target-config <your-config>.yaml" % OUT)
+        # NOT A PASS. `docs/ci.md` reserves 3 for "the question could not be
+        # answered", and a page built from no runs is the plainest case of it.
+        return 3
     rows.sort(key=lambda m: (-(m.get("broke", 0) / max(1, m.get("attacks_n", 1))), m["target"]))
     n_targets = len(rows)
     n_find = sum(m.get("broke", 0) for m in rows)
@@ -303,4 +312,5 @@ that does not separate those is counting its own homework: {third_list}.</div>
 
 
 if __name__ == "__main__":
-    main()
+    # The return value is the answer; `main()` alone drops it.
+    sys.exit(main() or 0)

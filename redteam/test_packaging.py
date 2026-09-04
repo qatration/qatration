@@ -633,6 +633,99 @@ def _cli(args):
                           capture_output=True, text=True, timeout=120)
 
 
+def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
+    """Every command, run for real against a workspace with nothing in it.
+
+    THIS IS THE WALK, AS A CHECK. Installed from PyPI into a directory that is not this
+    repository, `qatration fixes` over an empty workspace wrote `defense_report.html` --
+    headed "Security Assessment", "0 systems tested" -- whose executive summary read "This
+    assessment found 0 distinct exploitable weaknesses, seen 0 times in total", followed by
+    the standing paragraph about security being delegated to the model's judgement. An
+    assessment, a conclusion, and nothing measured under either. It exited 0.
+
+    Three properties, all quantified over `cli.COMMANDS` so a command joins by existing:
+
+      1. NOTHING IS WRITTEN INTO A WORKSPACE THAT HAS NOTHING IN IT AND ANSWERED 0. A file
+         plus a zero exit is a published claim about a target nobody ran. This is the shape
+         that catches the next one, whatever it renders.
+      2. THE REMEDY IS TYPEABLE. `profiles` said "run run_recon.py first" -- a file that
+         exists in a checkout and nowhere in an installed package. Any `<name>.py` in the
+         output must not be a module of this package.
+      3. THE PATH IS THE REAL ONE. `index` and `discrimination` said "no results in out/",
+         which is what a checkout has; a stranger's workspace is `qatration-out/`, or
+         whatever `$QATRATION_OUT` says. Their neighbours printed the real path in the same
+         sentence, which is how the difference showed.
+
+    Run bare, with no config: every command answers in under two seconds and none reaches a
+    network, because each either refuses on a missing argument or has nothing to read.
+    """
+    import tempfile, shutil, glob as _glob
+    mods = {os.path.basename(p)[:-3] for p in _glob.glob(os.path.join(HERE, "*.py"))}
+    wrote_something, advised, looked = [], [], []
+    for name in cli.COMMANDS:
+        work = tempfile.mkdtemp()
+        ghost = os.path.join(work, "empty-workspace")
+        os.makedirs(ghost)
+        try:
+            # FROM THE TEMPORARY DIRECTORY, not from this one. `init` writes its config into
+            # the working directory, so a walk that inherits this suite's cwd drops
+            # `redteam/mybot.yaml` into the repository on every run -- in CI as well as here.
+            # It is also the truer walk: a stranger is not standing in a checkout.
+            p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name],
+                               capture_output=True, text=True, timeout=180, cwd=work,
+                               env=dict(os.environ, QATRATION_OUT=ghost,
+                                        PYTHONIOENCODING="utf-8"))
+            out = (p.stdout or "") + (p.stderr or "")
+            left = sorted(os.listdir(ghost))
+            if left:
+                wrote_something.append(name)
+            assert not (left and p.returncode == 0), (
+                "qatration %s wrote %s into an empty workspace and exited 0: a page built "
+                "from no runs, published as a result" % (name, left))
+
+            # (2) a file this package ships is not something a reader can run.
+            for hit in re.findall(r"\b([a-z_][a-z0-9_]*)\.py\b", out):
+                assert hit not in mods, (
+                    "qatration %s tells the reader to run %s.py, which exists in a checkout "
+                    "and nowhere in an installed package" % (name, hit))
+
+            # (3) `out/` is this repository's directory, not the reader's.
+            assert not re.search(r"(?<![\w/\\.-])out/(?![\w.-])", out), (
+                "qatration %s names `out/` while its workspace is %s" % (name, ghost))
+
+            # (4) AND LOOKING AND FINDING NOTHING IS NOT AN ANSWER. A command that names the
+            #     empty workspace in its output has read it and found nothing there, which
+            #     `docs/ci.md` gives code 3 -- "the question could not be answered", NOT A
+            #     PASS. `compare` returned 0 outright and `fixes` returned 0 while writing a
+            #     page; a CI step reads either as asked and answered.
+            #
+            #     Naming the workspace is the discriminator BECAUSE it is what looking leaves
+            #     behind. `init` and `mint` do their job and exit 0 without mentioning it; the
+            #     five that print the path are exactly the five that went to read it.
+            if ghost in out or os.path.basename(ghost) in out:
+                looked.append(name)
+                assert p.returncode != 0, (
+                    "qatration %s read an empty workspace, said so, and exited 0" % name)
+
+            if "qatration " in out:
+                advised.append(name)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    # AND THE LOOP REACHED SOMETHING. Every assertion above is a negative, so a run where
+    # every command crashed on startup would satisfy all three in silence -- this file's own
+    # named failure, one level up. Several commands must have printed advice a reader can act
+    # on, and the number is checked rather than the fact.
+    assert len(advised) >= 5, (
+        "only %d of %d commands offered the reader a command to type: %s"
+        % (len(advised), len(cli.COMMANDS), advised))
+    assert len(looked) >= 4, (
+        "only %d command(s) read the empty workspace and said so, so property (4) was "
+        "asserted about almost nothing: %s" % (len(looked), looked))
+    print("  ok  %d commands answer an empty workspace without publishing one"
+          % len(cli.COMMANDS))
+
+
 def test_every_command_answers_help_without_doing_the_work():
     """`--help` must describe the command, not run it.
 

@@ -148,7 +148,14 @@ def main():
     argparse.ArgumentParser(prog="qatration profiles", description='every profiled target in one table, worst first').parse_args()
     rows = collect()
     if not rows:
-        print(f"no recon_*.json in {OUT_DIR} — run run_recon.py first")
+        # NOT `run_recon.py`. That file exists in a checkout of this repository and nowhere
+        # in an installed package: `pip install qatration` puts the modules inside the package
+        # and gives the reader `qatration recon`. The path was already right here; the remedy
+        # was the half written for whoever wrote it.
+        print(f"no recon_*.json in {OUT_DIR} — profile a target first:\n"
+              f"    qatration recon --target-config <your-config>.yaml")
+        # NOT A PASS, for the reason `build_index` records.
+        return 3
         return
     w = max(len(r["target"]) for r in rows)
     print(f"{'target':<{w}}  {'channel':<15}{'memory':<26}{'disclosure':<12}"
@@ -169,4 +176,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The return value is the answer; `main()` alone drops it.
+    sys.exit(main() or 0)

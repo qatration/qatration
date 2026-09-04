@@ -326,9 +326,11 @@ def main():
         print(f"  ! {_name} could not be read ({_why}). It is not counted on this page, and "
               f"nothing here describes whatever it held.", file=sys.stderr)
     if not _all_metas:
-        print("no results in %s — run a sweep first, then this page has something to compare."
-              % OUT_DIR)
-        return 0
+        print("no results in %s — run a sweep first, then this page has something to "
+              "compare:\n    qatration run --target-config <your-config>.yaml" % OUT_DIR)
+        # NOT A PASS, the same as its four neighbours over the same empty directory. This
+        # returned 0 outright, which is the code a CI step reads as "asked and answered".
+        return 3
     _keep, _ = fleet_filter(_all_metas, fleet_names())
     _keep_names = {(m or {}).get("target") for m in _keep}
     for fp in results_files(OUT_DIR):
