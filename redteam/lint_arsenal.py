@@ -67,6 +67,34 @@ def registrable_hosts(text):
     return out
 
 
+def control_ids(root=None):
+    """Every attack in the shipped corpus whose category is `control`.
+
+    HERE BECAUSE THIS MODULE OWNS READING THE ARSENAL, and because the caller that needs it is
+    the one whose subject is coverage. `discrimination` counts the controls that RAN and says
+    "no control fired", which is the tool's claim not to cry wolf; it had no way to say how
+    much of the control corpus that claim rests on. Measured when this was written: 131
+    controls in the arsenals, 118 with at least one stored row, 13 that have never been sent
+    anywhere -- a self-audit reporting a pass over a subset, with the size of the subset
+    unstated. That is this repository's own named failure, in the section that exists to
+    police it.
+    """
+    import glob as _glob
+    out = set()
+    for fname in sorted(_glob.glob(os.path.join(root or ROOT, "attacks*.yaml"))):
+        try:
+            doc = yaml.safe_load(open(fname, encoding="utf-8")) or []
+        except Exception:
+            # A corpus file that will not parse is `lint`'s business, not this function's.
+            # Skipping it here understates the corpus, which keeps the caller's caveat small
+            # rather than inventing one.
+            continue
+        for a in (doc if isinstance(doc, list) else doc.get("attacks") or []):
+            if isinstance(a, dict) and a.get("category") == "control" and a.get("id"):
+                out.add(a["id"])
+    return out
+
+
 def unknown_detectors(names):
     """Names in a success/partial list that `oracle.py` does not register.
 

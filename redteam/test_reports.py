@@ -1830,6 +1830,32 @@ def main():
     check("equal rates at a real p are not credited to the mitigation",
           _pv(0.01, 0.5, 0.5)[0].startswith("INVERTED"), _pv(0.01, 0.5, 0.5)[0])
 
+    # --- AND HOW MUCH OF THE CONTROL CORPUS THE PASS RESTS ON ---------------------------
+    #
+    # The section counts the controls that RAN and concludes "no control fired", which is the
+    # tool's claim not to cry wolf. Nothing said how many controls EXIST: 131 in the shipped
+    # arsenals, 13 of which have never been sent to any target. A self-audit reporting a pass
+    # over a subset, with the size of the subset unstated — this repository's own named
+    # failure, in the section that exists to police it.
+    from lint_arsenal import control_ids as _control_ids
+
+    _corpus = _control_ids()
+    check("the control corpus can be enumerated", len(_corpus) > 50, str(len(_corpus)))
+    # EVERY ONE OF THEM IS REALLY A CONTROL, read back out of the arsenals rather than trusted
+    # from the set: a helper that returned every attack id would make the caveat enormous and
+    # meaningless, and a helper that returned none would make it silent.
+    import glob as _g2, yaml as _y2
+    _cats = {}
+    for _f2 in _g2.glob(os.path.join(HERE, "attacks*.yaml")):
+        _doc = _y2.safe_load(open(_f2, encoding="utf-8")) or []
+        for _a2 in (_doc if isinstance(_doc, list) else _doc.get("attacks") or []):
+            if isinstance(_a2, dict) and _a2.get("id"):
+                _cats.setdefault(_a2["id"], set()).add(_a2.get("category"))
+    _wrong = sorted(i for i in _corpus if "control" not in _cats.get(i, set()))
+    check("...and every id in it is a control", not _wrong, str(_wrong[:5]))
+    _missed = sorted(i for i, c in _cats.items() if c == {"control"} and i not in _corpus)
+    check("...and no control is left out of it", not _missed, str(_missed[:5]))
+
     # --- THE CREDIBILITY GATE, REACHABLE AT LAST ----------------------------------------
     # `discrimination` decides whether this engine can be said not to cry wolf, and exits 1
     # when it cannot. That decision lived inside its print block, so no check could see it --

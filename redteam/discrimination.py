@@ -199,6 +199,17 @@ def main():
     #    fires on the target's ordinary traffic, the control firing is attributable to the
     #    target, not to us. Same evidence `baseline.py` uses for the attribution caveat, asked
     #    the other way round.
+    # AND HOW MUCH OF THE CONTROL CORPUS THIS PASS RESTS ON. The section below counts the
+    # controls that RAN. Nothing said how many exist: 131 in the shipped arsenals, and 13 of
+    # them have never been sent to any target, so "no control fired" was a statement about a
+    # subset whose size was not on the page. The command whose subject is whether this engine
+    # cries wolf was not stating its own coverage.
+    from lint_arsenal import control_ids as _control_ids
+    _corpus = _control_ids()
+    _ran = {r["attack"].get("id") for rs in data.values() for r in rs
+            if r["attack"].get("category") == "control" and r["attack"].get("id")}
+    _never = sorted(_corpus - _ran)
+
     ctrl_total = ctrl_fired = ctrl_errored = 0
     # `attribution` and `NOISY` come from `baseline`, which owns what an ambient rate
     # means. Imported here rather than re-stated so the gate cannot drift from the
@@ -345,6 +356,14 @@ def main():
     print(f"\n3. BREACH REPRODUCIBILITY (reliable vs lucky)")
     print(f"   {reliable} reliable · {intermittent} intermittent · {single} single-trial "
           f"({100*reliable/tot:.0f}% reliable)")
+
+    if _never:
+        print()
+        print("   %d of the %d control(s) in the arsenals have never been sent to any target, "
+              "so" % (len(_never), len(_corpus)))
+        print("   the verdict below is about the %d that have: %s%s"
+              % (len(_corpus) - len(_never), ", ".join(_never[:6]),
+                 " +%d" % (len(_never) - 6) if len(_never) > 6 else ""))
 
     print()
     _code, _lines = gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened)
