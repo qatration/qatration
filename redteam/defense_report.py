@@ -1145,8 +1145,20 @@ def delivered():
     return sorted(seen), sorted(set(DELIVERY_NEEDS) - seen)
 
 
-def coverage():
+def coverage(why=None):
     """-> (measured, skipped, errored) across every run on the page, from what each recorded.
+
+    `why` is an out-parameter, the idiom this package already uses for `unresolved`, `engines`
+    and `scanned_out`: it collects `(reason, filename)` for the artifact that made the answer
+    None, so the caller can say WHICH of the two happened.
+
+    TWO REASONS RETURNED ONE ANSWER and the page named the wrong one. This gives up on an
+    artifact that cannot be READ, and on one that reads perfectly and simply does not record
+    `attacks_n` or `skipped` -- every results file written before those fields existed, which
+    is every artifact an 0.3.0 install produced. The page rendered "an artifact in this
+    workspace could not be read" for both, telling a client a file was corrupt when it was
+    merely older than a field. That is this module's own "None and empty are different
+    answers", one directory along from where `baseline.rates` was fixed for it.
 
     A page that lists findings promises coverage it may not have had, and the number that
     qualifies it already exists: `run_redteam` writes `attacks_n` and `skipped` into the meta
@@ -1165,9 +1177,13 @@ def coverage():
             # A results file that cannot be read is not a run that sent nothing. Say nothing
             # about it rather than counting it as zero, which would understate coverage in
             # exactly the direction that flatters the report.
+            if why is not None:
+                why.append(("unreadable", os.path.basename(str(fp))))
             return None
         n, sk = meta.get("attacks_n"), meta.get("skipped")
         if not isinstance(n, int) or not isinstance(sk, int):
+            if why is not None:
+                why.append(("unrecorded", os.path.basename(str(fp))))
             return None
         # AN ERRORED ROW IS NOT A SENT ATTACK. `measured` carries the reasoning; what it
         # means here is that a run whose budget stopped it after one probe can no longer
@@ -1503,7 +1519,8 @@ def main():
                      f'These delivery families sent nothing against these systems. That is a gap '
                      f'in what was measured, not a finding about the deployment:'
                      f'<ul class="trig">{_rows}</ul></div>')
-    _cov = coverage()
+    _cov_why = []
+    _cov = coverage(_cov_why)
     # EITHER REASON IS ENOUGH. This section used to render only when attacks were skipped, so a
     # run that sent everything it had but never exercised a whole delivery family said nothing
     # about the family — the statement was hostage to an unrelated count. Absence has two
@@ -1523,6 +1540,19 @@ def main():
         _sent, _skipped, _errored = _cov if _cov else (None, None, None)
         # Built here rather than inline, because the sentence it joins is already a nested
         # conditional inside an f-string and a fourth level in there is unreadable.
+        # WHICH ARTIFACT, AND WHICH OF THE TWO REASONS. Both end the coverage answer and only
+        # one of them is a broken file; saying "could not be read" about a run that simply
+        # predates the field tells a client their evidence is corrupt when it is old.
+        _wr, _wf = (_cov_why[0] if _cov_why else ("unknown", ""))
+        _cov_gap = (("%s could not be read, so how much of the arsenal ran cannot be stated "
+                     "here at all — that is a gap in this page, not a clean bill" % _wf)
+                    if _wr == "unreadable" else
+                    ("%s records no coverage counts — it was written before this engine "
+                     "recorded them, so how much of the arsenal ran cannot be stated here. "
+                     "The file is intact; re-running that target fills the gap" % _wf)
+                    if _wr == "unrecorded" else
+                    "how much of the arsenal ran cannot be stated here at all — that is a gap "
+                    "in this page, not a clean bill")
         _err_note = (f". A further {_errored} produced no measurement at all — the request "
                      f"failed, or the budget refused it before it was sent — so they are "
                      f"neither a breach nor a defence and are counted as neither"
@@ -1537,9 +1567,7 @@ def main():
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about
-            these systems: {"an artifact in this workspace could not be read, so how much of "
-            "the arsenal ran cannot be stated here at all — that is a gap in this page, not a "
-            "clean bill" if _skipped is None else
+            these systems: {_cov_gap if _skipped is None else
             f"{_skipped} attack(s) in the arsenal were not sent, either because "
             "they do not apply to the target or because the run was scoped to send one attack "
             "from each category rather than all of them"}{_err_note}. A category that was covered once was

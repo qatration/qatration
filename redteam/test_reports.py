@@ -1375,6 +1375,95 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- "COULD NOT BE READ" AND "DID NOT RECORD IT" ARE DIFFERENT FACTS ----------------
+    #
+    # `coverage()` gives up for two reasons: an artifact that cannot be READ, and one that
+    # reads perfectly and simply does not record `attacks_n` or `skipped` — every results file
+    # written before those fields existed, which is every artifact an 0.3.0 install produced.
+    # The client page rendered one sentence for both and it named the wrong one: "an artifact
+    # in this workspace could not be read", told to somebody whose file is intact and merely
+    # older than a field. This module's own "None and empty are different answers", one
+    # directory along from where `baseline.rates` was fixed for it.
+    import tempfile as _tf7, shutil as _sh7, json as _js7, importlib as _il7
+    _cw = _tf7.mkdtemp()
+    try:
+        def _cov_why(meta_extra, corrupt=False):
+            for _f in os.listdir(_cw):
+                os.remove(os.path.join(_cw, _f))
+            _m = {"target": "cbot", "attacks_n": 3, "broke": 0, "errors": 0, "trials": 3,
+                  "when": "2026-09-04 10:00"}
+            _m.update(meta_extra)
+            _js7.dump({"meta": _m, "results": []},
+                      io.open(os.path.join(_cw, "results_cbot.json"), "w",
+                              encoding="utf-8", newline=""))
+            if corrupt:
+                io.open(os.path.join(_cw, "results_torn.json"), "w",
+                        encoding="utf-8", newline="").write("{oops")
+            _was = os.environ.get("QATRATION_OUT")
+            os.environ["QATRATION_OUT"] = _cw
+            try:
+                import workspace as _wb, defense_report as _drb
+                _il7.reload(_wb)
+                _il7.reload(_drb)
+                _out = []
+                return _drb.coverage(_out), _out
+            finally:
+                if _was is None:
+                    os.environ.pop("QATRATION_OUT", None)
+                else:
+                    os.environ["QATRATION_OUT"] = _was
+                import workspace as _wc, defense_report as _drc
+                _il7.reload(_wc)
+                _il7.reload(_drc)
+
+        _got, _wy = _cov_why({})
+        check("a meta with no coverage counts is reported as unrecorded, not unreadable",
+              _got is None and _wy and _wy[0][0] == "unrecorded", str(_wy))
+        check("...and names the artifact it gave up on",
+              _wy and _wy[0][1] == "results_cbot.json", str(_wy))
+        _got2, _wy2 = _cov_why({"skipped": 1}, corrupt=True)
+        check("a torn artifact is reported as unreadable",
+              _got2 is None and _wy2 and _wy2[0][0] == "unreadable", str(_wy2))
+        _got3, _wy3 = _cov_why({"skipped": 1})
+        check("...and a workspace where everything records it gives a number and no reason",
+              _got3 is not None and _wy3 == [], "%s %s" % (_got3, _wy3))
+
+        # AND THE PAGE SAYS THE RIGHT ONE. The reason exists so a client is not told their
+        # evidence is corrupt when it is merely older than a field, and that only happens if
+        # the sentence reads it.
+        def _cov_sentence(meta_extra, corrupt=False):
+            _cov_why(meta_extra, corrupt=corrupt)
+            _was = os.environ.get("QATRATION_OUT")
+            os.environ["QATRATION_OUT"] = _cw
+            try:
+                import workspace as _wd, defense_report as _drd
+                _il7.reload(_wd)
+                _il7.reload(_drd)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _drd.main()
+                _h = io.open(os.path.join(_cw, "defense_report.html"), encoding="utf-8").read()
+                _m = re.search(r"exhaustive statement about\s+these systems:(.{0,200})",
+                               re.sub(r"<[^>]+>", " ", _h), re.S)
+                return re.sub(r"\s+", " ", _m.group(1)).strip() if _m else ""
+            finally:
+                if _was is None:
+                    os.environ.pop("QATRATION_OUT", None)
+                else:
+                    os.environ["QATRATION_OUT"] = _was
+                import workspace as _we, defense_report as _dre
+                _il7.reload(_we)
+                _il7.reload(_dre)
+
+        _said = _cov_sentence({})
+        check("the page tells a client the file is intact, not corrupt",
+              "records no coverage counts" in _said and "could not be read" not in _said,
+              _said[:110])
+        _said2 = _cov_sentence({"skipped": 1}, corrupt=True)
+        check("...and still says corrupt when it is",
+              "could not be read" in _said2, _said2[:110])
+    finally:
+        _sh7.rmtree(_cw, ignore_errors=True)
+
     # --- A SENTENCE THAT ENDED IN A COLON AND NOTHING ------------------------------------
     #
     # The dashboard's lead said "A fleet count that does not separate those is counting its
