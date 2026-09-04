@@ -97,6 +97,37 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS --------------------------
+    #
+    # `encode: base64` typed `encoding:` leaves the attack in plain text while its id, its
+    # category and every layer downstream call it encoded — a transform that was never
+    # applied, reported as one that was. `paired_with` misspelled unpairs an A/B comparison;
+    # `plants` misspelled makes a finding unattributable. Only `success` was covered, and
+    # only because `lint` warns when an attack has neither `success` nor `partial`.
+    from lint_arsenal import attack_keys_read, WRITTEN_NOT_READ
+    _ak = attack_keys_read()
+    check("the attack keys the engine reads can be enumerated", len(_ak) > 10, str(len(_ak)))
+    check("...and a real one is among them", "encode" in _ak, "encode is not readable")
+    check("...and a misspelling is not", "encoding" not in _ak, "the scan is too generous")
+    # THE EXEMPTIONS ARE DECISIONS, so each carries a reason and none is a key the engine
+    # already reads — an exemption for something covered anyway is an exemption that hides
+    # nothing and will outlive the thing it was written for.
+    check("every written-not-read key carries a reason",
+           all(len(v) > 15 for v in WRITTEN_NOT_READ.values()), str(WRITTEN_NOT_READ))
+    # AND THE CORPUS REALLY USES THEM, so the exemptions are not five dead names. An
+    # exemption for a key nothing writes is the same stale copy as a list of keys.
+    import glob as _g3, yaml as _y3
+    _in_corpus = set()
+    for _f3 in _g3.glob(os.path.join(HERE, "attacks*.yaml")):
+        _d3 = _y3.safe_load(open(_f3, encoding="utf-8")) or []
+        for _a3 in (_d3 if isinstance(_d3, list) else _d3.get("attacks") or []):
+            if isinstance(_a3, dict):
+                _in_corpus |= set(_a3)
+    check("...and every exemption is a key the corpus actually carries",
+          set(WRITTEN_NOT_READ) <= _in_corpus,
+          str(sorted(set(WRITTEN_NOT_READ) - _in_corpus)))
+
+
     # --- A LINTER THAT PASSES ON NOTHING ------------------------------------------------
     # With no arsenal files at all, this printed "linted 0 attacks across 0 file(s)" and then
     # "OK - arsenal clean" and exited 0. It is the only check in CI that would notice a

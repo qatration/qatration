@@ -67,6 +67,59 @@ def registrable_hosts(text):
     return out
 
 
+# Keys an attack may carry that the ENGINE never reads, and why each is allowed. Written down
+# here because the alternative is a scan that finds them unread and a lint that calls them
+# typos -- somebody decided these belong in the corpus, and the decision lives beside the rule
+# it exempts, the way `QUALIFIERS_NOT_CARRIED` does in the surfaces.
+WRITTEN_NOT_READ = {
+    "found_on": "run_adaptive stamps the target an attack was discovered against",
+    "found_at": "and when, so a promoted attack carries its own provenance",
+    "found_after_iters": "how many iterations the search took to reach it",
+    "goal": "the objective the adaptive attacker was pursuing when it found this",
+    "confirmed_on": "targets a discovered attack has since been reproduced against",
+}
+
+
+def attack_keys_read(root=None):
+    """Every key some part of this engine reads off an attack.
+
+    A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS. `encode: base64` typed `encoding:`
+    leaves the attack in plain text while its id, its category and the report all call it
+    encoded -- a transform that was never applied, reported as one that was. `paired_with`
+    misspelled unpairs an A/B comparison; `plants` misspelled makes a finding unattributable;
+    `expects_refusal` misspelled turns a refusal test into an ordinary one.
+    `success` is the one spelling already covered, because `lint` warns when an attack has
+    neither `success` nor `partial`.
+
+    Derived from the source rather than listed, for the reason the other two scans in this
+    package are: a list of twenty-one keys beside a corpus of six hundred attacks is the copy
+    that goes stale.
+    """
+    import re as _re
+    # THE PACKAGE, NOT `ROOT`. `ROOT` is where the corpus is, and `test_lint` redirects it to
+    # a temporary directory holding two YAML files — so a scan rooted there finds no Python at
+    # all, returns nothing, and calls every key in every attack unknown. The suite caught that
+    # on the first run: `text` reported as a key nothing reads.
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pats = (r'\ba\.get\(\s*["\']([a-z_]+)["\']',
+            r'\ba\[["\']([a-z_]+)["\']\]',
+            r'attack\.get\(\s*["\']([a-z_]+)["\']',
+            r'attack\[["\']([a-z_]+)["\']\]',
+            r'atk\.get\(\s*["\']([a-z_]+)["\']',
+            r'_at\.get\(\s*["\']([a-z_]+)["\']')
+    for fname in sorted(glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(fname).startswith("test_"):
+            continue
+        try:
+            src = open(fname, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in pats:
+            keys |= set(_re.findall(p, src))
+    return keys | set(WRITTEN_NOT_READ)
+
+
 def control_ids(root=None):
     """Every attack in the shipped corpus whose category is `control`.
 
@@ -113,6 +166,9 @@ def unknown_detectors(names):
     return [n for n in names if n not in DETECTORS]
 
 
+_ATTACK_KEYS = None
+
+
 def main():
     # `--help` has to be answered before anything is read. Without this the flag fell through
     # and the linter simply ran, which looks harmless and is the same defect that made
@@ -128,6 +184,8 @@ def main():
     # lint EVERY arsenal file (attacks.yaml + every attacks_*.yaml focus file), not just
     # the baseline — an unlinted focus file with a typo'd detector is the same silent
     # no-fire trap, it just hid in a file the linter never opened.
+    global _ATTACK_KEYS
+    _ATTACK_KEYS = attack_keys_read()
     files = sorted(glob.glob(os.path.join(ROOT, "attacks*.yaml")))
     errors, warns = [], []
     total = 0
@@ -238,6 +296,13 @@ def main():
             elif not succ and not a.get("partial") and a.get("category") != "control":
                 warns.append(f"{fname}: {aid}: no 'success' or 'partial' — scoring rests "
                              f"entirely on the always-on detectors")
+            # A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS. See `attack_keys_read`:
+            # `encode:` typed `encoding:` sends the attack in plain text under an encoded name,
+            # and every layer downstream reports it as the encoded one.
+            for k in sorted(set(a) - _ATTACK_KEYS):
+                errors.append(f"{fname}: {aid}: unknown key {k!r} — nothing in this engine "
+                              f"reads it, so whatever it was meant to do does not happen")
+
             for d in unknown_detectors(succ + a.get("partial", [])):
                 errors.append(f"{fname}: {aid}: unknown detector {d!r} in success/partial "
                               f"(SILENT no-fire — typo? not registered in oracle.py?)")
