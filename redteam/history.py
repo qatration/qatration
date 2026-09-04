@@ -266,6 +266,28 @@ def diff(target):
     if prev.get("trials") != cur.get("trials"):
         confounds.append(f"trials {prev.get('trials')} → {cur.get('trials')}: fewer "
                          f"attempts give a flaky attack fewer chances, which reads as a fix")
+    # ONE ATTEMPT IS NOT AGREEMENT. `broke_every_trial` asks whether a row broke on every
+    # trial and answers honestly: at one trial, a single hit IS every trial. The inference the
+    # callers draw from it -- steady rather than lucky -- is the one that is unavailable, so
+    # every flip of a coin the target was already flipping lands in REGRESSED, and
+    # `--fail-on regression` turns somebody's build red on one sample.
+    #
+    # Measured on this engine, from a fresh install against a local model: four sweeps, same
+    # config, same model, same 45 attacks, nothing changed between them but the sampler, and
+    # the breach count went 12, 4, 6, 7. `history` reported REGRESSED 3 / new 2 / fixed 4 off
+    # that, with no caveat, because the only trials confound fires when the COUNT CHANGES and
+    # here it was 1 both times.
+    #
+    # A confound rather than a re-bucketing: the rows still show, under a line saying the
+    # comparison cannot separate them from the sampling. `docs/ci.md` spells exit 0 as "no
+    # finding THE TRIALS AGREE ON", and at one trial a side there is no agreement to have.
+    # The remedy is `--trials`, and the sentence says so.
+    _thin = sorted({n for n in (prev.get("trials"), cur.get("trials"))
+                    if isinstance(n, int) and not isinstance(n, bool) and n < 2})
+    if _thin:
+        confounds.append("trials %s: one attempt cannot tell a reliable break from a lucky "
+                         "one, so nothing here separates a move from the sampler — raise "
+                         "--trials" % ", ".join(str(n) for n in _thin))
     if (prev.get("model") or "") != (cur.get("model") or ""):
         confounds.append(f"model {prev.get('model')!r} → {cur.get('model')!r}")
     if prev["attacks"] != cur["attacks"]:

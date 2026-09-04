@@ -132,6 +132,50 @@ def main():
         check("two runs made the same way carry no confound",
               H.diff("cf3")["confounds"] == [], str(H.diff("cf3")))
 
+        # ONE ATTEMPT A SIDE IS NOT AGREEMENT. The confound above fires when the trial count
+        # CHANGES; at one trial in both runs it stays quiet, and `broke_every_trial` answers
+        # honestly that a single hit was every trial -- so a coin the target was already
+        # flipping lands in REGRESSED and `--fail-on regression` turns a build red on one
+        # sample. Measured from a fresh install against a local model: four sweeps, same
+        # config, same model, same 45 attacks, breach count 12 then 4 then 6 then 7, reported
+        # as REGRESSED 3 / new 2 / fixed 4 with no caveat at all.
+        H.record({"target": "cf4", "model": "m", "trials": 1}, R(a1="DEFENDED"),
+                 when="2026-08-01 10:00")
+        H.record({"target": "cf4", "model": "m", "trials": 1}, R(a1="EXPLOITED"),
+                 when="2026-08-02 10:00")
+        _d1 = H.diff("cf4")
+        check("one trial a side is a confound, however steady the rows look",
+              any("one attempt" in c for c in _d1["confounds"]), str(_d1["confounds"]))
+        # AND IT REACHES THE GATE, which is the half that matters: `regression_verdict`
+        # answers 3 -- "cannot answer" -- on any confounded diff, and 3 is documented as NOT
+        # A PASS. Without this the same diff returned 1 and failed somebody's build.
+        import run_redteam as _rr
+        check("...and the CI gate cannot answer rather than failing the build",
+              _rr.regression_verdict(_d1)[0], 3)
+
+        # THE DEFAULT IS UNTOUCHED. `--trials` defaults to 3, so the common path must not
+        # gain a caveat -- a confound on every run is a confound nobody reads.
+        H.record({"target": "cf5", "model": "m", "trials": 3}, R(a1="DEFENDED"),
+                 when="2026-08-01 10:00")
+        H.record({"target": "cf5", "model": "m", "trials": 3}, R(a1="EXPLOITED"),
+                 when="2026-08-02 10:00")
+        _d3 = H.diff("cf5")
+        check("three trials a side carries no such caveat",
+              not any("one attempt" in c for c in _d3["confounds"]), str(_d3["confounds"]))
+        check("...and that diff still fails the build", _rr.regression_verdict(_d3)[0], 1)
+
+        # A COUNT THAT IS NOT A NUMBER SAYS NOTHING. An artifact written before `trials` was
+        # recorded carries None, and inventing a caveat from a missing field would put one on
+        # every legacy timeline. `True` is an int in Python and would read as 1, which is the
+        # sort of accident that arrives through a hand-edited config.
+        H.record({"target": "cf6", "model": "m", "trials": None}, R(a1="DEFENDED"),
+                 when="2026-08-01 10:00")
+        H.record({"target": "cf6", "model": "m", "trials": None}, R(a1="EXPLOITED"),
+                 when="2026-08-02 10:00")
+        check("a missing trial count invents no caveat",
+              not any("one attempt" in c for c in H.diff("cf6")["confounds"]),
+              str(H.diff("cf6")["confounds"]))
+
         # --- the log is append-only, and survives damage ------------------------------
         p = H._path("t")
         n_before = len(H.load("t"))

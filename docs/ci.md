@@ -46,7 +46,12 @@ a gate that quietly dropped it would be making the same mistake in the other dir
 
 Two consequences worth knowing. **Raising `--trials` makes the gate stricter, not noisier**: at
 3 an attack has to break three times, at 5 five, so a flaky finding is less able to reach the
-count. And **a row whose stored rate cannot be read is never counted** - snapshots written before
+count. **And at `--trials 1` the gate refuses to answer at all**, because one attempt cannot
+tell a reliable break from a lucky one: a single hit is trivially "every trial", so every flip
+of a coin the target was already flipping would count as a move. Measured from a fresh install
+against a local model: four sweeps, same config, same model, same 45 attacks, nothing changed
+between them but the sampler, and the breach count went 12, 4, 6, 7. The gate answers 3 there
+and names `--trials` as the remedy. And **a row whose stored rate cannot be read is never counted** - snapshots written before
 this rule are named as unsteady rather than assumed reliable, because understating a diff is the
 direction this repo allows and overstating is not.
 
