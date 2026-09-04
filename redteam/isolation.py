@@ -211,11 +211,26 @@ def _excerpt(text, ctx, cap=600):
             + (f" … [+{len(text) - end} chars]" if end < len(text) else ""))
 
 
-def _tally(labels):
+def tally(labels):
+    """label -> count, commonest first and ties broken by name.
+
+    THE ONE COPY. This was written three times, identically, in `isolation`, `compose` and
+    `keysearch` -- the three modules of one family, each counting the locks a probe ran into.
+    Found by hashing every function body in the package and asking which appear in more than
+    one module.
+
+    The ordering is part of the rule, not a detail: these tallies are printed as "blocked by",
+    and a reader takes the first name as the commonest reason. Sorting by count alone would
+    make that first name depend on dict order, which is insertion order, which is the order
+    the trials happened to run in.
+    """
     out = {}
     for l in labels:
         out[l] = out.get(l, 0) + 1
     return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+_tally = tally      # the name its own module has always used
 
 
 def run_isolation(target, objective, ctx, trials=3):

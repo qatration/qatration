@@ -53,11 +53,8 @@ def _achieved(probe, objective, ctx):
     return achieved_combined(probe, objective, ctx)
 
 
-def _tally(labels):
-    out = {}
-    for l in labels:
-        out[l] = out.get(l, 0) + 1
-    return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+# One counter for the three modules of this family. See `isolation.tally`.
+from isolation import tally as _tally
 
 
 def _run(target, payload, objective, ctx, trials):

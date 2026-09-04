@@ -1375,6 +1375,48 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- AND ONE RULE, ONE IMPLEMENTATION -----------------------------------------------
+    #
+    # Two functions with the same body are one rule written twice, and the copy is the one
+    # that goes stale. Found by hashing every function body in the package — the docstring
+    # dropped, so the shape is the rule rather than the prose — and asking which appear in
+    # more than one module. `_tally` was written three times, identically, in the three
+    # modules of the isolation family, each counting the locks a probe ran into.
+    #
+    # THE PRACTICE-BOT ADAPTERS ARE EXEMPT, and it is a decision rather than an oversight:
+    # each `targets_*.py` is a separate deployment that exists to be different from its
+    # neighbours, and sharing a `send` between two of them couples two bots whose whole
+    # purpose is to differ. Declared here, with the pairs named, so the exemption is visible
+    # and a NEW duplicate outside that set still fails.
+    import ast as _ast5, glob as _g4
+    _SEPARATE_BY_DESIGN = "targets_"
+    _bodies = {}
+    for _f5 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):
+        _base = os.path.basename(_f5)
+        if _base.startswith("test_") or _base.startswith(_SEPARATE_BY_DESIGN):
+            continue
+        try:
+            _tr5 = _ast5.parse(open(_f5, encoding="utf-8").read(), filename=_f5)
+        except SyntaxError:
+            continue
+        for _n5 in _ast5.walk(_tr5):
+            if not isinstance(_n5, (_ast5.FunctionDef, _ast5.AsyncFunctionDef)):
+                continue
+            _st = list(_n5.body)
+            if (_st and isinstance(_st[0], _ast5.Expr)
+                    and isinstance(_st[0].value, _ast5.Constant)
+                    and isinstance(_st[0].value.value, str)):
+                _st = _st[1:]
+            if len(_st) < 2:
+                continue          # a one-liner is shared idiom, not a shared rule
+            _key = "|".join(_ast5.dump(_s, annotate_fields=False) for _s in _st)
+            _bodies.setdefault(_key, []).append("%s:%s" % (_base, _n5.name))
+    _twice = {k: v for k, v in _bodies.items()
+              if len({x.split(":")[0] for x in v}) > 1}
+    check("no engine function is implemented twice in two modules", not _twice,
+          "; ".join(", ".join(v) for v in list(_twice.values())[:2]))
+    check("...over a real number of functions", len(_bodies) > 100, str(len(_bodies)))
+
     # --- ONE SENTENCE, ONE PLACE --------------------------------------------------------
     #
     # The empty-workspace sentence was written twice in the same hour, in `build_index` and
@@ -1382,7 +1424,7 @@ def main():
     # command. Two copies of one sentence is the defect this repository spends its time
     # finding, introduced by the fix for another instance of it. Found by asking which prose
     # literals appear in more than one module — ast, not a grep, so a string is a string.
-    import ast as _ast4, glob as _g4
+    import ast as _ast4
     _dupes = {}
     _seen4 = {}
     for _f4 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):

@@ -48,11 +48,8 @@ def _achieved(probe, success, ctx):
     return any(DETECTORS[n](probe, ctx) for n in success if n in DETECTORS)
 
 
-def _tally(labels):
-    out = {}
-    for l in labels:
-        out[l] = out.get(l, 0) + 1
-    return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+# One counter for the three modules of this family. See `isolation.tally`.
+from isolation import tally as _tally
 
 
 # What a frame needs from the ask before it can mean anything. A frame whose mechanism is
