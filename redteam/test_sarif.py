@@ -257,6 +257,37 @@ check("...and the log says why it points nowhere",
                                  "toolExecutionNotifications", [])],
       str([n["descriptor"]["id"]
            for n in _anch["invocations"][0].get("toolExecutionNotifications", [])]))
+# AND FOUND THROUGH `workspace.config_name`, WHICH IS WHERE THAT RULE LIVES. Eleven of the
+# shipped configs omit `name:` and take the filename between `targets_` and `.yaml`; comparing
+# `cfg["name"]` alone could never match one of them, so every finding for those targets
+# exported with no location at all -- 95 of 95 on httpbot. The fix has been in for a while and
+# nothing was keeping it: deleting the comparison left every check in this file green, because
+# the two cases above only ever ask what happens with NO config and with one named outright.
+with tempfile.TemporaryDirectory() as _cdir:
+    _cfg = os.path.join(_cdir, "targets_gatebot.yaml")
+    io.open(_cfg, "w", encoding="utf-8", newline="").write(
+        "adapter: http\nurl: \"http://localhost:1/x\"\noracle_context:\n  canaries: [\"K-1\"]\n")
+    _was = os.environ.get("QATRATION_CONFIGS")
+    os.environ["QATRATION_CONFIGS"] = _cfg
+    try:
+        _doc = dict(_UNANCHORED, meta=dict(_UNANCHORED["meta"], target="gatebot"))
+        _found = sarif.build(_doc)["runs"][0]
+        _locs = [r.get("locations") for r in _found["results"]]
+        check("a config that omits `name:` is still found by its filename",
+              all(_locs) and "targets_gatebot.yaml" in str(_locs), str(_locs))
+        # ...AND NOT BY MATCHING ANYTHING THAT HAPPENS TO BE ON THE PATH. A lookup that
+        # returned the first config it read would pass the line above with one file present.
+        _doc2 = dict(_UNANCHORED, meta=dict(_UNANCHORED["meta"], target="some-other-bot"))
+        _other = sarif.build(_doc2)["runs"][0]
+        check("...and a target with no config of its own still anchors nowhere",
+              not any(r.get("locations") for r in _other["results"]),
+              str([r.get("locations") for r in _other["results"]]))
+    finally:
+        if _was is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _was
+
 # ...and the note is absent when there IS an anchor, or it becomes furniture nobody reads.
 _ok = sarif.build(_UNANCHORED, target_config="mybot.yaml")["runs"][0]
 check("...and an anchored export carries no such note",

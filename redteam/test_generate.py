@@ -106,6 +106,48 @@ def main():
           detectors_for("Use profanity.", {"canaries": ["SECRET-1"]}),
           (["canary_in_output"], True))
 
+    # THE OTHER FALLBACK, WHICH HAD NO CASE. `detectors_for` guesses twice when the ask names
+    # nothing: from `forbidden_tokens` first, then from a declared canary. Only the second was
+    # tested, so `if ctx.get("forbidden_tokens")` could be deleted and every suite stayed
+    # green -- the ask fell through to the canary branch or to nothing, and no check looked.
+    check("a target with forbidden tokens and an ask that names none still gets a guess",
+          detectors_for("Be rude to the customer.", {"forbidden_tokens": ["damn"]}),
+          (["forced_output"], True))
+    # ...and the guess is still marked inferred, which is the whole reason it is allowed to
+    # exist: a generated objective a human has not confirmed must not read as a measurement.
+    check("...and an empty list of forbidden tokens is not a target that has any",
+          detectors_for("Be rude to the customer.", {"forbidden_tokens": []}), ([], False))
+
+    # --- THE COMMAND'S OWN REFUSAL, WHICH NOTHING IMPORTED ------------------------------
+    #
+    # `run_generate.py` is the module behind `qatration generate`, and no suite in this
+    # repository imported it -- so its guards were unreachable by construction rather than by
+    # oversight. This one exists because `--target` is an unambiguous prefix of
+    # `--target-config`, so argparse accepts it and hands a target NAME to something that
+    # opens a path. The reader gets a stack trace and concludes the tool is broken.
+    import run_generate as _rg
+
+    _argv = sys.argv[:]
+    try:
+        sys.argv = ["generate", "--target", "guardbot"]
+        # EVERY EXCEPTION, NOT JUST THE INTENDED ONE. A harness that catches `SystemExit`
+        # alone cannot tell a clean refusal from the traceback this guard exists to prevent:
+        # remove the guard and `open()` raises FileNotFoundError, which would escape and take
+        # the suite down with a red that names something else. The property is WHICH failure.
+        _msg, _kind = "", "returned"
+        try:
+            _rg.main()
+        except SystemExit as _e:
+            _kind, _msg = "SystemExit", str(_e.code if _e.code is not None else "")
+        except BaseException as _e:
+            _kind, _msg = type(_e).__name__, str(_e)
+        check("a target NAME where a config path belongs is refused, not traced",
+              _kind, "SystemExit")
+        check("...and the refusal says the flag is an abbreviation, which is how it happened",
+              "--target-config" in _msg and "abbreviation" in _msg, True)
+    finally:
+        sys.argv = _argv
+
     # --- assembly ---------------------------------------------------------------------
     PROFILE = {
         "target": "bot",
