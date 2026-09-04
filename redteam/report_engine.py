@@ -310,6 +310,23 @@ def build_html(meta, results, recon=None, isolation=None):
         attribution_html = (f'<div class="panel"><div class="ptitle">what this target does '
                             f'unattacked</div><div class="{cls}">{lines}</div></div>')
 
+    # AND THE SECOND CAVEAT, FOR THE SAME REASON AS THE FIRST. `two_factor_note` separates
+    # "the payload reached the model" from "the model acted on it", which is the difference
+    # between an attack that achieved something and a question the target answers that way
+    # anyway. It was printed at the end of a run and stored in `meta["delivery"]` by
+    # `rejudge --write`, and no page anywhere read the field -- so the caveat that can invert
+    # a headline reached only whoever was watching the terminal.
+    delivery_html = ""
+    dnote = (meta.get("delivery") or "").strip()
+    if dnote:
+        dlines = "".join(f"<div>{esc(l.strip())}</div>"
+                         for l in dnote.splitlines() if l.strip())
+        # The `!` form is the one that says the two could NOT be separated; the table form is
+        # a measurement. Same rule the attribution panel uses, on the sentence this one has.
+        dcls = "warn" if dnote.lstrip().startswith("!") else "note"
+        delivery_html = (f'<div class="panel"><div class="ptitle">delivery and effect, '
+                         f'separately</div><div class="{dcls}">{dlines}</div></div>')
+
     # WHICH DETECTORS COULD NOT SPEAK HERE, on the page a customer actually opens. The sweep
     # writes `meta["inert"]` for exactly this reader, `sarif` exports it as a notification, and
     # this file — the one artifact anybody reads by choice — never mentioned it. So a scorecard
@@ -399,6 +416,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 </div>
 {baseline_html}
 {attribution_html}
+{delivery_html}
 {inert_html}
 {_recon_panel(recon)}
 <table>

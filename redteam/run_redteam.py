@@ -953,6 +953,19 @@ def main():
     # keeps its model at `request.model`, so every artifact a stranger produced recorded none
     # -- including the ones `--model` had just named the FILE after.
     meta = {"target": target.name, "model": config_model(tcfg),
+            # AND THE OTHER CAVEAT, WHICH ONLY THE TERMINAL EVER SAW. `attribution` was moved
+            # onto the scorecard with the reason written down -- "a caveat that lives anywhere
+            # except beside the number it qualifies has not been delivered" -- and its twin,
+            # computed twenty lines above by the same module and able to invert the same
+            # number, was printed and dropped. `rejudge --write` has been storing it in this
+            # very field since it was written; a fresh sweep left it empty, so the page had
+            # nothing to render even once somebody looked.
+            #
+            # It is the sharper of the two: attribution asks what the target does unattacked,
+            # this asks whether the ATTACK did anything once the payload was in front of the
+            # model. Against a third-party RAG app that answer was 83% effect against an 85%
+            # background, while the headline count read as a win.
+            "delivery": delivery_note,
             # WHEN, which every benign artifact has carried from the start and no results file
             # did. `engine` says which build of OUR code produced this; nothing said how old
             # the measurement is, and the target is the half that moves. Two answers this

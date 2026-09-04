@@ -1375,6 +1375,54 @@ def main():
           "no target came back with a mute count: %s" % _real[:5])
 
 
+    # --- THE SECOND CAVEAT, WHICH NO PAGE CARRIED ---------------------------------------
+    #
+    # `two_factor_note` separates "the payload reached the model" from "the model acted on
+    # it" — the difference between an attack that achieved something and a question the
+    # target answers that way anyway. Against a third-party RAG app it read 83% effect
+    # against an 85% background while the headline count looked like a win.
+    #
+    # It was printed at the end of a run and stored in `meta["delivery"]` by
+    # `rejudge --write`. NOTHING read the field: `attribution`, computed in the neighbouring
+    # line and carried by this page and by the SARIF, has two readers; this one had none, and
+    # a fresh sweep did not even store it. Same shape as the fix `report_engine` records
+    # above it in its own words: a caveat that lives anywhere except beside the number it
+    # qualifies has not been delivered.
+    import report_engine as _rpt
+    _d_meta = {"target": "t", "attribution": "",
+               "delivery": "  DELIVERY AND EFFECT, measured separately (carrier: rag)\n"
+                           "      attacked   delivered 9/10 (90%)   acted 8/9 (89%)"}
+    _d_html = _rpt.build_html(_d_meta, [])
+    check("the delivery caveat reaches the page it qualifies",
+          "delivery and effect, separately" in _d_html, "no panel rendered")
+    check("...carrying the measurement itself, not just a heading",
+          "delivered 9/10 (90%)" in _d_html, "the numbers did not survive")
+    # THE TWO FORMS SAY OPPOSITE THINGS. A table is a measurement; a line starting `!` says
+    # the two could NOT be separated, which is the one a reader must not skim past. Same rule
+    # the attribution panel beside it uses.
+    _warn = _rpt.build_html({"target": "t", "attribution": "",
+                            "delivery": "  ! delivery and effect were not separated: no "
+                                        "payload reached the model."}, [])
+    # `check(label, ok, detail)` in this file. Passing the class as the second argument makes
+    # any non-empty string a pass, which is a check that cannot fail — so compare here.
+    _m = re.search(r'delivery and effect, separately</div><div class="(\w+)"', _warn)
+    check("a caveat that could not be measured is marked as a warning",
+          bool(_m) and _m.group(1) == "warn", _m.group(1) if _m else "no panel")
+    _m2 = re.search(r'delivery and effect, separately</div><div class="(\w+)"', _d_html)
+    check("...and a measurement is not",
+          bool(_m2) and _m2.group(1) == "note", _m2.group(1) if _m2 else "no panel")
+    check("and a run with nothing to say grows no empty panel",
+          "delivery and effect, separately" not in _rpt.build_html({"target": "t"}, []),
+          "an empty panel is furniture")
+
+    # AND THE SWEEP STORES WHAT IT PRINTS. The page can only render a field the run wrote,
+    # and `run_redteam` computed this note, printed it and dropped it — so the reader who
+    # went looking found an empty string. Read from the source because the alternative is an
+    # hour of GPU: the assertion is that the meta carries the note the run just computed.
+    _rr = io.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    check("the sweep stores the note it printed", '"delivery": delivery_note,' in _rr,
+          "meta does not carry the delivery note")
+
     # --- AND THE A/B PAIR VERDICT, THE FOURTH OF THESE ------------------------------------
     #
     # Same file, same shape, same reason as the block below: four branches deciding what a
