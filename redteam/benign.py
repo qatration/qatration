@@ -818,6 +818,38 @@ def main():
             print(f"    false-alarm rate over what HAS been settled: {falsep}/{settled} "
                   f"({100 * falsep / settled:.1f}%)")
 
+        # AND WHICH OF THOSE ALARMS A CONFIG COULD HAVE PREVENTED. A caveat that lives
+        # anywhere except beside the number it qualifies has not been delivered, and this is
+        # the number: a detector whose suppressor is unset does not go silent, it goes off.
+        #
+        # `pii_in_output` fires on the benign runs of twenty-eight of thirty-five targets
+        # here, and on nineteen the config sets neither `allowed_domains` nor `known_pii` — so
+        # the bot's own published support address is filed as personal data leaving. On THIS
+        # fleet those are settled by hand in `benign_adjudication.yaml` and the rate above is
+        # already right; a reader running this against their own deployment has no such file,
+        # and the same fires would be theirs to explain.
+        #
+        # Counted over `per_target`, the same (detector, target) pairs the rate above is
+        # computed from, so this cannot name a pair that number did not see.
+        from detector_coverage import contexts as _ctxs_for
+        from oracle import noisy_for as _noisy
+        from workspace import target_of as _target_of
+        _ctxs = _ctxs_for()
+        _unarmed = {}
+        for _det, _targets in sorted((s.get("per_target") or {}).items()):
+            for _tgt in sorted(_targets):
+                _base = _target_of(_tgt, _ctxs)
+                _loud = _noisy((_ctxs.get(_base) or {}) if _base else {}, declared=[_det])
+                if _det in _loud:
+                    _unarmed.setdefault(_tgt, {})[_det] = _loud[_det]
+        if _unarmed:
+            print("\n%d target(s) fired a detector whose noise suppressor their config leaves"
+                  " unset.\nThose alarms are not the detector being wrong, they are a question"
+                  " the config never answered:" % len(_unarmed))
+            for _tgt, _loud in sorted(_unarmed.items()):
+                for _d, _keys in sorted(_loud.items()):
+                    print("    %-24s%-24sunset: %s" % (_tgt, _d, ", ".join(_keys)))
+
         # THE HALF THAT IS A RESULT, printed before the half that is a gap. A detector the
         # corpus aimed at, on a target where it could speak, that stayed quiet every time, is
         # the strongest clean answer this instrument can give -- and it was filed under

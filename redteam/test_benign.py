@@ -106,6 +106,77 @@ def main():
     check("with no judgement file, nothing is settled rather than everything",
           _un2 == [] and _st2 == [], "%s %s" % (_un2[:2], _st2[:2]))
 
+    # --- the rate, and what a config could have quieted --------------------------------
+    #
+    # A caveat that lives anywhere except beside the number it qualifies has not been
+    # delivered, and the false-alarm rate is that number. A detector whose suppressor is unset
+    # does not go silent — it goes off, and the alarms are a question the config never
+    # answered rather than the detector being wrong.
+    #
+    # This fleet settles them by hand in `benign_adjudication.yaml`, so the rate printed above
+    # them is already right; a reader running against their own deployment has no such file.
+    import glob as _g4, io as _io4, json as _json4, yaml as _y4
+    from detector_coverage import contexts as _ctxs_for
+    from oracle import noisy_for as _noisy4
+    from workspace import target_of as _target_of4
+
+    _ctxs4 = _ctxs_for()
+    check("the fleet's contexts can be read", len(_ctxs4) >= 10, str(len(_ctxs4)))
+    # THE MEASUREMENT THE SUMMARY REPORTS, recomputed here: `pii_in_output` fires on most of
+    # this fleet's benign runs, and on most of those the suppressor is unset.
+    _fired_pii, _unarmed_pii = set(), set()
+    for _fp in sorted(_g4.glob(os.path.join(HERE, "..", "out", "benign_*.json"))):
+        _name = os.path.basename(_fp)[len("benign_"):-len(".json")]
+        try:
+            _d4 = _json4.loads(_io4.open(_fp, encoding="utf-8").read())
+        except Exception:
+            continue
+        if not any("pii_in_output" in (_r.get("fired") or []) for _r in (_d4.get("rows") or [])):
+            continue
+        _fired_pii.add(_name)
+        _base4 = _target_of4(_name, _ctxs4)
+        if "pii_in_output" in _noisy4((_ctxs4.get(_base4) or {}) if _base4 else {},
+                                      declared=["pii_in_output"]):
+            _unarmed_pii.add(_name)
+    check("pii_in_output fires on this fleet's ordinary traffic", len(_fired_pii) >= 10,
+          str(len(_fired_pii)))
+    check("...and on most of those the suppressor is unset",
+          len(_unarmed_pii) >= len(_fired_pii) // 2,
+          "%d of %d" % (len(_unarmed_pii), len(_fired_pii)))
+    # AND A CONFIG THAT ARMS IT IS NOT NAMED, or the summary would tell every operator to set
+    # a key they have already set.
+    _armed = {"canaries": ["ACME-CANARY-9931"], "allowed_domains": ["shop.example"],
+              "known_pii": ["a@shop.example"]}
+    check("an armed config is not named",
+          "pii_in_output" not in _noisy4(_armed, declared=["pii_in_output"]),
+          str(_noisy4(_armed, declared=["pii_in_output"])))
+    # AND THOSE ALARMS ARE ALREADY SETTLED HERE, which is why the rate above them is right:
+    # the summary explains a number rather than correcting it.
+    _adj = _y4.safe_load(_io4.open(os.path.join(HERE, "benign_adjudication.yaml"),
+                                   encoding="utf-8").read()) or []
+    _pii_settled = [r for r in _adj if str(r.get("detector", "")).startswith("pii_")]
+    check("this fleet settles its pii alarms by hand", len(_pii_settled) >= 20,
+          str(len(_pii_settled)))
+    check("...and most of them as false alarms",
+          sum(1 for r in _pii_settled if r.get("verdict") == "false_positive")
+          > sum(1 for r in _pii_settled if r.get("verdict") == "finding"),
+          str([r.get("verdict") for r in _pii_settled[:4]]))
+
+    # AND THE SUMMARY ACTUALLY PRINTS IT. Every check above recomputes the measurement and
+    # none of them runs the command, so the whole section could be deleted with all of them
+    # green — which is the shape of the defect they describe, one level up.
+    import subprocess as _sp4
+    _out4 = _sp4.run([sys.executable, os.path.join(HERE, "cli.py"), "benign", "--summary"],
+                     capture_output=True, text=True, errors="replace", timeout=900,
+                     env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                              PYTHONDONTWRITEBYTECODE="1")).stdout
+    check("the summary reports the false-alarm rate at all",
+          "false-alarm rate over what HAS been settled" in _out4, _out4[-200:])
+    check("...and names the suppressors a config leaves unset",
+          "noise suppressor their config leaves unset" in _out4, _out4[-200:])
+    check("...naming the key rather than only the detector",
+          "unset: allowed_domains" in _out4 or "unset: known_pii" in _out4, _out4[-300:])
+
     # --- the corpus itself is well formed ---------------------------------------------
     ids = [c[0] for c in CORPUS] + [c[0] for c in CONVERSATIONS]
     check("corpus ids are unique", len(ids) == len(set(ids)),
