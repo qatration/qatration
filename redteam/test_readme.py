@@ -1421,6 +1421,75 @@ def main():
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
 
+    # --- AND THE FLEET FIGURES THE SAME PAGE QUOTES -------------------------------------
+    #
+    # `docs/onboarding.md` opens its provenance section with the dashboard's own headline --
+    # "N findings across M targets", and "K of the N" carried by third-party code -- and then
+    # says, in the same paragraph, that both numbers are counted rather than written down.
+    # They are, on the dashboard. In the prose they were typed, and they had drifted to about
+    # half: the page said 279 findings across 30 targets while `out/` held 436 across 35, and
+    # 56 of the 279 where the recount says 63. Nothing looked, because the sentence claiming
+    # the numbers are computed was itself the reassurance.
+    #
+    # Recounted through `build_index`'s own functions rather than a second walk of `out/`, so
+    # a change to what counts as a finding, or to how a target's provenance is read, moves the
+    # check and the dashboard together or fails here.
+    #
+    # DIGITS ARE A LIVE CLAIM, WORDS ARE HISTORY. The paragraph below this one deliberately
+    # recounts what the figure USED TO BE -- "six targets and thirty-four findings" -- and
+    # that sentence must not be dragged forward by a check; it is the record of a defect. The
+    # patterns here read digits only, which is the whole convention, and it is stated here
+    # because it is the sort of thing a later reader would otherwise undo by tidying.
+    import build_index as _bi
+    _rows = _bi.load(known=set(_bi.provenance()))
+    _prov = _bi.provenance()
+    _third = lambda name: _prov.get(name, ("", ""))[0].startswith("third-party")
+    _n_targets = len(_rows)
+    _n_third = sum(1 for m in _rows if _third(m["target"]))
+    _n_find = sum(m.get("broke", 0) for m in _rows)
+    _n_find_third = sum(m.get("broke", 0) for m in _rows if _third(m["target"]))
+    _onb = io.open(os.path.join(ROOT, "docs", "onboarding.md"), encoding="utf-8").read()
+
+    check("the fleet can be recounted at all", _n_targets > 0 and _n_find > 0,
+          "%d target(s), %d finding(s)" % (_n_targets, _n_find))
+
+    _m = re.search(r'"([\d,]+) findings across ([\d,]+) targets"', _onb)
+    check("docs/onboarding.md quotes the dashboard headline", bool(_m),
+          "the sentence is not there to be checked")
+    if _m:
+        _said = [int(g.replace(",", "")) for g in _m.groups()]
+        check("...and its finding count matches a recount of out/",
+              _said[0] == _n_find, "page %d, recount %d" % (_said[0], _n_find))
+        check("...and its target count does too",
+              _said[1] == _n_targets, "page %d, recount %d" % (_said[1], _n_targets))
+
+    _m = re.search(r"\*\*([\d,]+) of the ([\d,]+)\*\*", _onb)
+    check("docs/onboarding.md states the third-party share", bool(_m),
+          "the sentence is not there to be checked")
+    if _m:
+        _said = [int(g.replace(",", "")) for g in _m.groups()]
+        check("...and the third-party finding count matches a recount",
+              _said[0] == _n_find_third,
+              "page %d, recount %d" % (_said[0], _n_find_third))
+        check("...over the same total it quoted above",
+              _said[1] == _n_find, "page %d, recount %d" % (_said[1], _n_find))
+
+    _m = re.search(r"(\d+) of (\d+) targets", _onb)
+    check("docs/onboarding.md states how much of the fleet is somebody else's", bool(_m),
+          "the sentence is not there to be checked")
+    if _m:
+        _said = [int(g) for g in _m.groups()]
+        check("...and both halves match a recount",
+              _said == [_n_third, _n_targets],
+              "page %s, recount %s" % (_said, [_n_third, _n_targets]))
+
+    # AND THE HISTORY IS STILL THERE. A check that made the page consistent by deleting the
+    # sentence about what the number used to be would pass every line above and lose the only
+    # part a reader learns from.
+    check("...while the figure it USED to be is still on the page",
+          "six targets" in _onb and "thirty-four findings" in _onb,
+          "the record of the defect was tidied away")
+
     # --- HOW MANY ASSERTIONS THE SUITE CARRIES, RECOUNTED -------------------------------
     #
     # The README says one QA engineer wrote this with Claude, and in the next breath that no

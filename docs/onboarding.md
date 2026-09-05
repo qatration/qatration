@@ -122,12 +122,16 @@ describes a bot this repo already has an adapter for, and sweeps it with the gen
 `skip_in_fleet: true`, because a template swept as a target would put a second copy of an
 existing bot into every aggregate under a different name.
 
-**"279 findings across 30 targets" invites a reading that is not true, so the front page now
+**"436 findings across 35 targets" invites a reading that is not true, so the front page now
 says which.** Most of those targets are bots written here to exercise the engine. A finding on
 one of them is evidence that the engine works, which is worth having and is not the same claim
-as a finding on somebody else's code. Nine are third-party and carry **56 of the 279**:
+as a finding on somebody else's code. Nine are third-party and carry **63 of the 436**:
 smolagents two ways, LangChain, NeMo Guardrails with and without its output rail, and two
 cloned practice applications this repository does not ship.
+
+Those four figures are checked against a recount of `out/` on every build. They had drifted to
+half their value before that check existed — the page said 279 and 30 while the artifacts held
+436 and 35 — which is the ordinary fate of a number written down beside one that is computed.
 
 **Nine configs, eight systems.** `localrag` and `localrag-refusal` are the same cloned
 application under two arsenals, filed separately because the first artifact carries a paired
@@ -139,8 +143,9 @@ the dashboard leads with the split, and both numbers are counted rather than wri
 **That share was wrong until it was counted.** Two of the clones declared themselves `practice`
 with the note *written here to exercise the engine*, which they were not — so the field built
 to stop a fleet counting its own homework was doing it. The published figure was six targets
-and thirty-four findings. It is eight and fifty-six. Twenty-eight percent is the honest share,
-and it is the number a reader should be given before any other. A fleet count that does not separate the two is counting its own homework — the same
+and thirty-four findings at the time; the same recount now puts it at 9 of 35 targets. A
+quarter of the fleet is somebody else's code, and that is the number a reader should be given
+before any other. A fleet count that does not separate the two is counting its own homework — the same
 mistake as a benign fire nobody adjudicated, one level up: a real number that measures something
 other than what a reader will take it to measure.
 
