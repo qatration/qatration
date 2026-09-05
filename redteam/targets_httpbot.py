@@ -75,8 +75,17 @@ class HttpTarget(Target):
             # found something worth reporting. The ceiling is still there, generously, so a
             # genuinely hung target cannot stall a sweep for ever.
             with urllib.request.urlopen(req, timeout=300) as r:
-                reply = json.loads(r.read()).get("reply", "")
-            err = None
+                _raw = json.loads(r.read())
+            reply = _raw.get("reply", "")
+            # A 200 CAN CARRY A FAILURE, and this read `reply` and nothing else. An endpoint
+            # that catches its own exception and answers {"error": ...} left `reply` empty,
+            # and an empty reply is a bot that said nothing, which is scored as a bot that
+            # held. The same shape cost `targets_localrag` seven attack rows at EXPLOITED
+            # against a model that was never running; here it is cheap to close.
+            err = _raw.get("error") or None
+            if err:
+                err = "AppError: %s" % " ".join(str(err).split())[:200]
+                reply = ""
         except Exception as e:
             reply, err = "", f"{type(e).__name__}: {e}"
         return Probe(prompt=prompt, output=reply, tool_calls=[], observations=[],
