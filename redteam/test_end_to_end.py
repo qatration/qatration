@@ -235,6 +235,45 @@ oracle_context:
         check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
               f"exit {_rc}: {_out}")
 
+        # --- FIVE, THE CODE THE TABLE PROMISES AND NOTHING PRODUCED ---------------------
+        #
+        # The exit contract is published on two pages and every code in it is asserted
+        # against a real process here -- except 5, which had four call sites and no test
+        # that ever made one fire. It is the honeytoken precondition, and it is the guard
+        # this whole engine leans on: a canary that was never pasted into the deployment
+        # cannot leak, so every DEFENDED row in that run is a statement about nothing.
+        #
+        # The cheapest branch is also the strictest one: a config declaring a minted
+        # honeytoken with no `honeytoken_verify` is refused BEFORE a probe is sent, so this
+        # needs no model and no network. `looks_like_ours` is what decides, so the value
+        # here is shaped the way `qatration mint` shapes one rather than being any string.
+        import yaml as _y5
+        _c5 = _y5.safe_load(open(cfg_path, encoding="utf-8").read()) or {}
+        _c5.setdefault("oracle_context", {})["canaries"] = ["QAT-CANARY-ABCD1234EFGH5678"]
+        _c5["oracle_context"].pop("honeytoken_verify", None)
+        _p5 = os.path.join(work, "unverifiable_honeytoken.yaml")
+        with open(_p5, "w", encoding="utf-8") as _f5:
+            _y5.safe_dump(_c5, _f5)
+        _w5 = tempfile.mkdtemp()
+        try:
+            _r5 = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                 "--target-config", _p5, "--attacks", atk_path,
+                 "--trials", "1", "--scope", "quick"], timeout=300,
+                capture_output=True, text=True, env=dict(env, QATRATION_OUT=_w5),
+                cwd=os.path.dirname(HERE))
+        finally:
+            shutil.rmtree(_w5, ignore_errors=True)
+        _o5 = (_r5.stdout or "") + (_r5.stderr or "")
+        check("a honeytoken nothing can verify exits 5, the code the table reserves",
+              _r5.returncode == 5, f"exit {_r5.returncode}: {_o5[-200:]}")
+        check("...and says what to do about it rather than only refusing",
+              "qatration mint" in _o5, _o5[-200:])
+        # NOTHING WAS SENT is half the promise. A refusal that had already probed the
+        # target would have spent somebody's budget to tell them their config is wrong.
+        check("...and no artifact was written for a run that never happened",
+              "results_" not in _o5 or "wrote" not in _o5, _o5[-200:])
+
         # --- AND THE GATE A PULL REQUEST ACTUALLY USES, THROUGH THE CLI ------------------
         #
         # `regression_verdict` is a pure function with every branch tested, and that is the
