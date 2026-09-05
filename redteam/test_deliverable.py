@@ -34,6 +34,7 @@ from report_engine import build_html
 import defense_report as dr
 import build_index as bi
 import compare_targets as ct
+import compare_recon as cr
 
 # Two shapes: one that runs if it survives raw, and one that breaks OUT of an attribute if
 # the value is interpolated into a tag rather than into text.
@@ -72,6 +73,26 @@ def hostile_recon(pay):
             "when": "2026-01-01 00:00"}
 
 
+def hostile_profile(pay):
+    """The recon artifact as `compare_recon` finds it: the profile at TOP level.
+
+    `hostile_recon` above is the shape `report_engine` is handed -- {profile, when} --
+    and the file on disk is not that. Passing the wrapped one produces a row of empty
+    strings and a page with no payload in it, which is a gate that passes because
+    nothing was rendered.
+    """
+    return {
+        "target": pay, "tool_channel": pay, "tools_seen": [pay],
+        "self_description": pay, "style": {"tone": pay},
+        "refusal_vocab": [{"probe": pay, "class": pay, "reply": pay}],
+        "hints": [{"level": "warn", "text": pay}],
+        "token_lock": {pay: "blocked", pay + "2": "unmeasured"},
+        "new_patterns": {pay: [pay]},
+        "disclosure_open": True,
+        "remembers": True, "reset_clears": False,
+    }
+
+
 def main():
     fails, checks = [], 0
 
@@ -97,8 +118,12 @@ def main():
         try:
             with open(os.path.join(tmp, "results_hostile.json"), "w", encoding="utf-8") as f:
                 json.dump(run, f)
-            real = (dr.OUT_DIR, bi.OUT, ct.OUT_DIR)
-            dr.OUT_DIR = bi.OUT = ct.OUT_DIR = pathlib.Path(tmp)
+            # `compare_recon` reads a different file entirely, so without this it builds
+            # its page from nothing and renders every payload inert by having none.
+            with open(os.path.join(tmp, "recon_hostile.json"), "w", encoding="utf-8") as f:
+                json.dump(hostile_profile(pay), f)
+            real = (dr.OUT_DIR, bi.OUT, ct.OUT_DIR, cr.OUT_DIR)
+            dr.OUT_DIR = bi.OUT = ct.OUT_DIR = cr.OUT_DIR = pathlib.Path(tmp)
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     dr.main()
@@ -107,16 +132,31 @@ def main():
                         ct.main()
                     except SystemExit:
                         pass
+                    cr.main()
             finally:
-                dr.OUT_DIR, bi.OUT, ct.OUT_DIR = real
+                dr.OUT_DIR, bi.OUT, ct.OUT_DIR, cr.OUT_DIR = real
 
             built = sorted(f for f in os.listdir(tmp) if f.endswith(".html"))
-            check(f"the fleet pages were actually built for {short!r}", len(built) >= 2,
+            # THE NUMBER IS THE GATE. Every check below is `payload not in html`, which a
+            # builder that wrote nothing passes perfectly. `compare_recon` was the fifth
+            # page this tool produces and the only one this suite never opened.
+            check(f"the fleet pages were actually built for {short!r}", len(built) >= 4,
                   str(built))
             for name in built:
                 html = open(os.path.join(tmp, name), encoding="utf-8").read()
                 check(f"{name} renders {short!r} inert",
                       pay not in html, f"{html.count(pay)} raw occurrence(s)")
+
+            # AND ON THE ONE PAGE BUILT ENTIRELY FROM THE PROFILE, the payload has to be
+            # THERE. `pay not in html` is satisfied by a page that dropped the value, by a
+            # renderer that read the wrong file, and by an empty string -- the same
+            # absence-as-a-clean-result this repo keeps finding. Measured: the fleet recon
+            # page carries it three times, escaped.
+            fleet = os.path.join(tmp, "recon_fleet.html")
+            page = open(fleet, encoding="utf-8").read() if os.path.exists(fleet) else ""
+            check(f"...and recon_fleet.html still carries {short!r}, escaped",
+                  cr.esc(pay) in page,
+                  "the payload was dropped rather than escaped")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
