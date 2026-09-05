@@ -162,6 +162,62 @@ def main():
         got = verdict_for(meta)
         check(f"verdict_for: {why} -> {want}", got == want, f"got {got}")
 
+    # --- A KEY THAT IS SET, AND CANNOT MATCH --------------------------------------------
+    #
+    # Same shape as everything above, arriving through the config rather than through an
+    # outage. `sysprompt_leak` is inert without `sysprompt_markers`, and recon says so out
+    # loud -- "no sysprompt_markers configured" is a warning this suite already tests. A
+    # marker with a typo in it silences that warning and matches nothing: the config reads
+    # as armed, the detector can never fire, and every run publishes DEFENDED about a
+    # policy dump nobody looked for. Worse than the empty list, because the empty list
+    # complains.
+    #
+    # Only the bots whose prompt is HERE can be checked. `http`, `httpbot` and `foreign`
+    # point at an endpoint whose prompt lives on the far side, and `localrag`/`dvla` poison
+    # an external corpus on purpose -- for those the claim is unverifiable offline and
+    # saying so is the honest answer. The set is derived, so a tenth practice bot is
+    # covered without anybody adding it here.
+    import ast as _ast, glob as _glob, yaml as _yaml
+
+    def _prompt_of(path):
+        """Every string literal in the module, folded the way Python folds them.
+
+        Read as source rather than imported: these adapters build an LLM client in
+        `__init__`, so importing one needs a model running. Read as AST rather than as
+        text, because a system prompt is written as adjacent literals across a dozen
+        lines and a substring search finds none of it.
+        """
+        tree = _ast.parse(io.open(path, encoding="utf-8").read())
+        return "\n".join(n.value.lower() for n in _ast.walk(tree)
+                          if isinstance(n, _ast.Constant) and isinstance(n.value, str))
+
+    _local = {}
+    for _p in sorted(_glob.glob(os.path.join(HERE, "targets_*.py"))):
+        _s = _prompt_of(_p)
+        if "you are" in _s and len(max(_s.split("\n"), key=len)) > 120:
+            _local[os.path.basename(_p)[len("targets_"):-3]] = _s
+    check("the practice fleet carries its own prompts", len(_local) >= 7, str(sorted(_local)))
+
+    _unmatched, _checked = [], 0
+    for _p in sorted(_glob.glob(os.path.join(HERE, "targets_*.yaml"))):
+        _cfg = _yaml.safe_load(io.open(_p, encoding="utf-8")) or {}
+        _ad = _cfg.get("adapter")
+        if _ad not in _local:
+            continue
+        for _f in ("sysprompt_markers", "canaries"):
+            _vals = (_cfg.get("oracle_context") or {}).get(_f) or []
+            if isinstance(_vals, str):
+                _vals = [_vals]
+            for _v in _vals:
+                if not isinstance(_v, str):
+                    continue          # a scalar where a list belongs is lint_arsenal's job
+                _checked += 1
+                if _v.lower() not in _local[_ad]:
+                    _unmatched.append("%s: %s %r" % (os.path.basename(_p), _f, _v))
+    check("the fleet configs make claims worth checking", _checked >= 20, "only %d" % _checked)
+    check("...and every phrase they say a practice bot says, it says",
+          not _unmatched, "; ".join(_unmatched))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
