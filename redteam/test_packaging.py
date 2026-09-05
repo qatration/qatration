@@ -662,6 +662,7 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
     import tempfile, shutil, glob as _glob
     mods = {os.path.basename(p)[:-3] for p in _glob.glob(os.path.join(HERE, "*.py"))}
     wrote_something, advised, looked = [], [], []
+    rc_for = {}
     for name in cli.COMMANDS:
         work = tempfile.mkdtemp()
         ghost = os.path.join(work, "empty-workspace")
@@ -676,6 +677,7 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
                                env=dict(os.environ, QATRATION_OUT=ghost,
                                         PYTHONIOENCODING="utf-8"))
             out = (p.stdout or "") + (p.stderr or "")
+            rc_for[name] = p.returncode
             left = sorted(os.listdir(ghost))
             if left:
                 wrote_something.append(name)
@@ -722,6 +724,66 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
     assert len(looked) >= 4, (
         "only %d command(s) read the empty workspace and said so, so property (4) was "
         "asserted about almost nothing: %s" % (len(looked), looked))
+
+    # (5) AND THE CODE IS 3, ASKED OF THE COMMAND RATHER THAN OF ITS PROSE. Property (4)
+    #     above reaches a command only if it PRINTS THE WORKSPACE PATH, and then only asks
+    #     for non-zero. Both halves leaked. `history` answers "no history yet" without
+    #     naming the path, so its `return 3` was guarded by nothing and could be deleted with
+    #     every suite green. `rejudge` printed "would change 0 attack row(s) across 0 file(s)"
+    #     and returned 0 -- the same sentence it prints when every stored score is already
+    #     correct, so a pipeline could not tell "checked, all good" from "there was nothing to
+    #     check". `coverage` returned 0 under "66 detectors, 0 demonstrated, 66 declared
+    #     only", which reads as the worst possible result and exits like the best.
+    #
+    #     DERIVED, so the next command joins by existing. A command whose module reads the
+    #     workspace, and which did not refuse its invocation, has run and found nothing --
+    #     and `docs/ci.md` gives that code 3. Code 2 is the contract's own "config or
+    #     invocation refused", so it is the exemption, and it needs no list: the commands
+    #     that take a `--target-config` say so themselves by returning it.
+    _READS_WORKSPACE = re.compile(r"results_files|read_artifact|\bOUT\b|OUT_DIR|"
+                                  r"WORKSPACE_OUT|results_\*")
+    _answered = []
+    for name, (_mod, _blurb) in sorted(cli.COMMANDS.items()):
+        _src = io.open(os.path.join(HERE, _mod + ".py"), encoding="utf-8").read()
+        if not _READS_WORKSPACE.search(_src):
+            continue                       # `init`, `mint`, `lint`: nothing to read
+        _rc = rc_for.get(name)
+        if _rc == 2:
+            continue                       # refused the invocation before reading anything
+        _answered.append(name)
+        # Stated as the whole set the contract allows here rather than as `!= 0`, so a code
+        # nobody meant -- a 1 from an unhandled path, a 5 borrowed from another command --
+        # fails too instead of passing for not being zero.
+        assert _rc == 3, (
+            "qatration %s reads the workspace and exited %s over an empty one; a question "
+            "that could not be answered is code 3, and 0 tells a pipeline it was answered"
+            % (name, _rc))
+
+    # AND THE DERIVATION REACHED SOMETHING. Every line above is a skip or an assertion, so a
+    # regex that stopped matching would pass the whole loop in silence -- which is this file's
+    # own subject, and the reason the count is checked rather than the fact.
+    assert len(_answered) >= 6, (
+        "only %d command(s) got as far as reading an empty workspace, so property (5) was "
+        "asserted about almost nothing: %s" % (len(_answered), _answered))
+
+    # (6) AND THE SAME COMMANDS ANSWER 0 WHERE THERE IS EVIDENCE, which is the half that
+    #     makes (5) mean anything. A command hard-wired to return 3 satisfies every line
+    #     above perfectly, and that is not a hypothetical: the counter behind `rejudge`'s
+    #     new exit code could be deleted -- so it counted nothing, and returned 3 always --
+    #     with all of (5) green. A pipeline would then read "the question could not be
+    #     answered" over a workspace full of answers, which is the same defect facing the
+    #     other way.
+    #
+    #     Run against THIS REPOSITORY's `out/`, which ships in the tree and is what CI has.
+    for name in ("rejudge", "coverage"):
+        p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name],
+                           capture_output=True, text=True, timeout=900,
+                           env=dict(os.environ, QATRATION_OUT=os.path.join(os.path.dirname(HERE), "out"),
+                                    PYTHONIOENCODING="utf-8"))
+        assert p.returncode == 0, (
+            "qatration %s exited %d over a workspace with stored results; 3 says the question "
+            "could not be answered and it plainly could: %s"
+            % (name, p.returncode, (p.stdout + p.stderr)[-200:]))
     print("  ok  %d commands answer an empty workspace without publishing one"
           % len(cli.COMMANDS))
 

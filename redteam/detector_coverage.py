@@ -17,7 +17,8 @@ import sys, os, glob, json, argparse, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import OUT as WORKSPACE_OUT, target_of, read_artifact, config_name
+from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact, config_name,
+                       no_results_note)
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -440,6 +441,14 @@ def main():
         for fp, stem in unresolved:
             print(f"    {fp}  (looked for a target named {stem!r})")
 
+    if not n:
+        # NOT A PASS. "66 detectors, 0 demonstrated, 66 declared only" over an empty
+        # workspace is not a coverage measurement, it is the absence of one -- and it read
+        # as the worst possible result while exiting 0, which is the combination a pipeline
+        # cannot act on. `docs/ci.md` gives an unanswerable question code 3.
+        print("\n" + no_results_note(OUT))
+        return 3
+
     if args.json:
         path = args.json if os.path.isabs(args.json) else os.path.join(ROOT, args.json)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -452,4 +461,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

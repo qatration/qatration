@@ -22,7 +22,7 @@ import sys, os, glob, json, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import workspace
-from workspace import OUT as WORKSPACE_OUT, target_of
+from workspace import OUT as WORKSPACE_OUT, no_results_note, target_of
 from runner import judged_ctx   # one definition of "what did this attack declare"
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
@@ -218,6 +218,12 @@ def main():
     # runs next in the same process. The variable is the mechanism; `qatration init` prints the
     # line that sets it, and the message below names it.
     ctxs = contexts()
+    # HOW MANY ARTIFACTS WERE READ, which is a different number from how many CHANGED and the
+    # difference is the whole exit code. `files_touched` counts files this command rewrote, so
+    # "would change 0 attack row(s) across 0 file(s)" was printed both when every stored score
+    # was already correct and when there was nothing on disk to score at all -- and returned 0
+    # either way. A CI step reads that as "scoring is up to date".
+    examined = 0
     total_changed, files_touched, skipped = 0, 0, []
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
         name = os.path.basename(path)[len("results_"):-len(".json")]
@@ -231,6 +237,7 @@ def main():
         if base is None:
             skipped.append(name)                        # no config: cannot know its canaries
             continue
+        examined += 1
         data, changed = rescore(path, ctxs[base])
 
         # A STALE CAVEAT IS A CHANGE. `meta["attribution"]` is computed at sweep time against
@@ -336,7 +343,16 @@ def main():
         print(f"{verb} {maps_changed} lock-map objective(s) across {maps_touched} map file(s).")
     if (total_changed or files_touched or maps_touched) and not args.write:
         print("nothing was written — re-run with --write to apply")
+    if not examined:
+        # NOT A PASS. Nothing was re-scored because there was nothing to re-score, which is
+        # the question going unanswered rather than answered well. `docs/ci.md` gives that
+        # code 3; returning 0 told a pipeline the stored scores had been checked.
+        print(no_results_note(OUT_DIR) if not skipped else
+              "no artifact could be re-scored: every results file found is for a target with "
+              "no config, and re-scoring reads the canaries from the config.")
+        return 3
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
