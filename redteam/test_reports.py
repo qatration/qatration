@@ -647,6 +647,60 @@ def main():
     check("a skipped target's stale page is named as stale, not left to be inferred",
           "come from an EARLIER run" in ra)
 
+    # --- the credibility keystone, over what was RE-TESTED ------------------------------
+    #
+    # Section 3 answers "reliable vs lucky". Its percentage divided by every breach found,
+    # including the ones sent once — so it answered "how many of our breaks reproduce" with a
+    # number driven by how many we ASKED to reproduce. A fleet swept at `--trials 1` reported
+    # 0% RELIABLE on the line this project offers as its credibility keystone, about findings
+    # that were never re-tested rather than findings that failed to repeat.
+    #
+    # The same rule `workspace.measured` states for coverage and `closing_line` prints for a
+    # sweep: an attempt that measured nothing leaves the denominator and is NAMED.
+    import io as _io5, subprocess as _sp5, tempfile as _tf5, shutil as _sh5, json as _js5
+
+    def _audit(rows):
+        _w = _tf5.mkdtemp()
+        try:
+            with _io5.open(os.path.join(_w, "results_t.json"), "w", encoding="utf-8") as _f:
+                _js5.dump({"meta": {"target": "t", "attacks_n": len(rows)},
+                           "results": rows}, _f)
+            _p = _sp5.run([sys.executable, os.path.join(HERE, "cli.py"), "discrimination"],
+                          capture_output=True, text=True, timeout=600,
+                          env=dict(os.environ, QATRATION_OUT=_w, PYTHONIOENCODING="utf-8"))
+            return (_p.stdout or "") + (_p.stderr or "")
+        finally:
+            _sh5.rmtree(_w, ignore_errors=True)
+
+    def _row(aid, rate):
+        return {"attack": {"id": aid, "category": "jailbreak"}, "headline": "EXPLOITED",
+                "rate": rate, "fired": ["canary_in_output"], "locks": {},
+                "trials": [{"verdict": "EXPLOITED", "fired": ["canary_in_output"],
+                            "refusal": {"class": "none"},
+                            "probe": {"output": "x", "error": None, "tool_calls": [],
+                                      "observations": [], "prompt": "p", "seconds": 0.1,
+                                      "resolved": [], "turns": []}}]}
+
+    # EVERY BREACH SENT ONCE: the case that used to print 0% reliable.
+    _out5 = _audit([_row("a", "1/1"), _row("b", "1/1")])
+    check("a fleet of single-trial breaks does not report 0% reliable",
+          "0% " not in _out5, _out5[_out5.find("3. BREACH"):][:160])
+    check("...it says nothing was sent more than once",
+          "no breach was sent more than once" in _out5,
+          _out5[_out5.find("3. BREACH"):][:160])
+    check("...and names how many are waiting on a second ask",
+          "broke on a single trial" in _out5, _out5[_out5.find("3. BREACH"):][:160])
+
+    # AND A RE-TESTED FLEET IS SCORED OVER ITSELF, with the single-trial rows excluded from
+    # the denominator rather than dropped from the page.
+    _out6 = _audit([_row("a", "3/3"), _row("b", "1/3"), _row("c", "1/1")])
+    check("a re-tested fleet is scored over what was re-tested",
+          "50% of the 2 that were re-tested" in _out6,
+          _out6[_out6.find("3. BREACH"):][:180])
+    check("...and the single-trial row is still named",
+          "1 more broke on a single trial" in _out6,
+          _out6[_out6.find("3. BREACH"):][:180])
+
     # --- the pages have to agree with each other ---------------------------------------
     # Three loaders read the same fleet and each has its own filters — controls excluded,
     # per-model copies skipped, and until this release a remediation-table lookup that

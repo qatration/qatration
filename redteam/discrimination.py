@@ -352,10 +352,29 @@ def main():
         print("   direction is right in every one of them, and most have too few attacks a")
         print("   side to prove it. The way to close that is more attacks per target.")
 
-    tot = max(1, reliable + intermittent + single)
+    # AGAINST WHAT WAS RE-TESTED, NOT AGAINST WHAT WAS FOUND. `single` counts breaches sent
+    # once, and one attempt cannot tell a reliable break from a lucky one — that is the whole
+    # subject of this section. Including them in the denominator answered "how many of our
+    # breaks reproduce" with a number driven by how many we ASKED to reproduce: a fleet swept
+    # at `--trials 1` reported 0% reliable, on the line this project offers as its credibility
+    # keystone, about findings that were never re-tested rather than findings that failed to
+    # repeat.
+    #
+    # The same rule `workspace.measured` states for coverage and `closing_line` prints for a
+    # sweep: an attempt that measured nothing leaves the denominator and is NAMED, because
+    # dropping it silently would be the other half of the same mistake.
+    retested = reliable + intermittent
     print(f"\n3. BREACH REPRODUCIBILITY (reliable vs lucky)")
-    print(f"   {reliable} reliable · {intermittent} intermittent · {single} single-trial "
-          f"({100*reliable/tot:.0f}% reliable)")
+    if retested:
+        print(f"   {reliable} reliable · {intermittent} intermittent "
+              f"({100*reliable/retested:.0f}% of the {retested} that were re-tested)")
+    else:
+        print(f"   no breach was sent more than once, so nothing here can tell a reliable "
+              f"break from a lucky one")
+    if single:
+        print(f"   {single} more broke on a single trial and are not in that number: one "
+              f"attempt is not a rate.\n"
+              f"     re-run those with --trials 3 to learn which of them repeat")
 
     if _never:
         print()
