@@ -39,7 +39,7 @@ import yaml
 import authorization
 import jobqueue as q
 from targets_http import HttpConfiguredTarget, CONFIG_ONLY_KEYS, dig
-from workspace import OUT
+from workspace import OUT, safe_target_name
 
 PROBE = "Hello, I have a question about my recent order."
 
@@ -145,6 +145,27 @@ def check(cfg_path, probe_text=PROBE):
 
     rep["name"] = cfg.get("name") or "(unnamed)"
     rep["url"] = cfg.get("url")
+
+    # THE NAME, THROUGH THE RULE THAT ALREADY OWNS IT. `intake.submit` refuses a nameless
+    # submission and writes down why: the name becomes `results_<name>.json`,
+    # `report_<name>.html` and `history/<name>.jsonl`, so a default means every unnamed
+    # target writes the same files. This is the other door into the same queue and it
+    # invented `(unnamed)` instead, printed it, and said `ready to queue`.
+    #
+    # The default is not even the name the run would use. A nameless `adapter: http` config
+    # constructs as `http-target`, so the queue records one target and the artifacts are
+    # written under another -- and two different endpoints onboarded this way collide on
+    # one set of files.
+    #
+    # `safe_target_name` rather than a second copy of the rule: it already refuses the
+    # empty name AND the ones that cannot be part of a filename, which this accepted too.
+    # Every shipped `adapter: http` config carries a name and `qatration init` writes one,
+    # so nothing that worked before is refused now.
+    try:
+        rep["name"] = safe_target_name(cfg.get("name"), "target config")
+    except SystemExit as e:
+        rep["problems"].append(str(e))
+        return False, rep
 
     # AUTHORIZATION BEFORE THE PROBE. Even one request to somebody else's endpoint is a
     # request to somebody else's endpoint, so the gate cannot sit after the thing it gates.

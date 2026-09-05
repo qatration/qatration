@@ -278,6 +278,62 @@ def main():
         srv.shutdown()
         shutil.rmtree(work, ignore_errors=True)
 
+    # --- TWO DOORS INTO THE QUEUE, ONE RULE ---------------------------------------------
+    #
+    # `intake.submit` refuses a nameless config and says why: the name becomes
+    # `results_<name>.json`, `report_<name>.html` and `history/<name>.jsonl`, so a default
+    # means every unnamed target writes the same files. `onboard --submit` reaches the same
+    # queue and invented `(unnamed)`, printed it, and answered `ready to queue`.
+    #
+    # The invented default was not even the name the run would use: a nameless
+    # `adapter: http` config constructs as `http-target`, so the queue recorded one target
+    # and the artifacts were written under another.
+    #
+    # ASKED THROUGH `check()`, the function both the report and `--submit` go through, so
+    # this cannot pass by testing a helper the door does not call.
+    import tempfile as _tf8, shutil as _sh8, yaml as _y8
+    _d8 = _tf8.mkdtemp()
+    try:
+        def _write(cfg):
+            _p8 = os.path.join(_d8, "c.yaml")
+            with open(_p8, "w", encoding="utf-8") as _f8:
+                _y8.safe_dump(cfg, _f8)
+            return _p8
+
+        _base = {"adapter": "http", "url": "http://127.0.0.1:9/chat",
+                 "request": {"body": {"message": "{prompt}"}},
+                 "response": {"reply": "reply"}}
+        _ok8, _rep8 = onboard.check(_write(dict(_base)))
+        # ONE PROBLEM, AND IT IS THE NAME. `not _ok8` alone passes for the wrong reason:
+        # this config points at port 9, so a door that ignored the name would still refuse
+        # it on connectivity. The property is that it is refused BEFORE anything is sent,
+        # which is the reasoning `intake` wrote down for its own door.
+        check("a config with no name is refused before the endpoint is touched",
+              not any("endpoint" in p for p in _rep8.get("problems") or [])
+              and "reply" not in _rep8, str(_rep8.get("problems")))
+        check("...and the refusal says the name is required",
+              any("`name` is required" in p for p in _rep8.get("problems") or []),
+              str(_rep8.get("problems")))
+
+        # THE OTHER DIRECTION, or the check above is satisfied by a door that refuses
+        # everything. This config is unreachable on purpose -- port 9 -- so the run gets
+        # as far as the endpoint and no further; what matters is that the NAME is not what
+        # it complains about.
+        _ok9, _rep9 = onboard.check(_write(dict(_base, name="acme-bot")))
+        check("...and a named config gets past the name check",
+              not any("`name`" in p for p in _rep9.get("problems") or []),
+              str(_rep9.get("problems")))
+        check("...and keeps the name it was given", _rep9.get("name") == "acme-bot",
+              repr(_rep9.get("name")))
+
+        # AND THE REST OF THE RULE, not only the empty case: a name that cannot be part of
+        # a filename was accepted here too.
+        _okA, _repA = onboard.check(_write(dict(_base, name="../../etc/passwd")))
+        check("...and a name that is a path is refused", not _okA,
+              str(_repA.get("problems")))
+    finally:
+        _sh8.rmtree(_d8, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
