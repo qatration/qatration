@@ -298,6 +298,71 @@ def main():
     finally:
         _sh9.rmtree(_dir, ignore_errors=True)
 
+    # --- THE DOOR ITSELF, NOT ONLY WHAT IS BEHIND IT ------------------------------------
+    #
+    # Everything above calls `submit()` directly. `do_POST` is the part a stranger reaches,
+    # and its own comment records two bugs that lived there: `int(...)` raised on
+    # `Content-Length: abc` and answered a traceback and a 500, and a NEGATIVE length
+    # passed the `n > MAX_BODY` test and then reached `rfile.read(-1)`, which reads to EOF
+    # -- the one call the limit exists to prevent, reached through the limit itself.
+    #
+    # Both were fixed and neither was kept. Driven over a real socket, because the header
+    # is the input: `urlopen` computes Content-Length for you and can never send these.
+    import http.client as _hc, threading as _th2, tempfile as _tf2, shutil as _sh2
+
+    def _ask(port, length, body=b'{}', path='/runs', method='POST'):
+        c = _hc.HTTPConnection('127.0.0.1', port, timeout=10)
+        try:
+            c.putrequest(method, path, skip_accept_encoding=True)
+            if length is not None:
+                c.putheader('Content-Length', str(length))
+            c.putheader('Content-Type', 'application/json')
+            c.endheaders()
+            if body:
+                c.send(body)
+            r = c.getresponse()
+            return r.status, r.read(400).decode('utf-8', 'replace')
+        except Exception as e:
+            return None, '%s: %s' % (type(e).__name__, e)
+        finally:
+            c.close()
+
+    _iroot = _tf2.mkdtemp()
+    _isrv = ThreadingHTTPServer(('127.0.0.1', 0), intake.make_handler(_iroot))
+    _iport = _isrv.server_address[1]
+    _th2.Thread(target=_isrv.serve_forever, daemon=True).start()
+    try:
+        # THE DOOR IS ANSWERING AT ALL. Every check below is a refusal, and a server that
+        # refused everything -- or nothing, by not being up -- would satisfy them.
+        _st, _tx = _ask(_iport, 2)
+        check("the intake door answers a well-formed request",
+              _st == 400 and "config" in _tx, "%s %s" % (_st, _tx[:80]))
+
+        _st, _tx = _ask(_iport, 'abc')
+        check("...and a Content-Length that is not a number is a 400, not a traceback",
+              _st == 400 and "not a number" in _tx, "%s %s" % (_st, _tx[:80]))
+
+        _st, _tx = _ask(_iport, -1)
+        check("...and a negative one is refused before it reaches read(-1)",
+              _st == 400 and "negative" in _tx, "%s %s" % (_st, _tx[:80]))
+
+        _st, _tx = _ask(_iport, intake.MAX_BODY + 1)
+        check("...and a body over the cap is 413 rather than read",
+              _st == 413, "%s %s" % (_st, _tx[:80]))
+
+        # AND THE READ SIDE. `status` and `report` build a path from the job id, so the id
+        # is checked before it is joined to anything.
+        _st, _tx = _ask(_iport, None, b'', '/runs/..%2f..%2fetc', 'GET')
+        check("a job id that is a path is refused rather than joined",
+              _st == 400 and "bad job id" in _tx, "%s %s" % (_st, _tx[:80]))
+
+        _st, _tx = _ask(_iport, None, b'', '/runs', 'GET')
+        check("...while the ordinary listing still answers",
+              _st == 200 and "jobs" in _tx, "%s %s" % (_st, _tx[:80]))
+    finally:
+        _isrv.shutdown()
+        _sh2.rmtree(_iroot, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
