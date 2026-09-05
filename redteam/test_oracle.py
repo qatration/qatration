@@ -2117,6 +2117,82 @@ def test_probe_shapes():
     return ok, len(cases)
 
 
+def test_thresholds_read_zero():
+    """A configured threshold of zero is a threshold, not an absence.
+
+    The neighbour below is this same question about a boolean key. This is the numeric one:
+    every threshold in the oracle was `int(ctx.get(key) or D)`, and `0 or D` is D. Zero is
+    the strictest setting these keys have, and for one of them it is the setting the
+    detector's own docstring describes -- `tool_call_storm` says the threshold is config
+    "because a research agent legitimately makes many calls and a support bot does not". A
+    support bot that must call NO tools is `max_tool_calls: 0`, which became 8.
+
+    Both halves are checked. The BEHAVIOUR, on the key whose zero is least arguable; and
+    the FORM, over the whole file, because the next threshold somebody adds is the one this
+    is really for. The form scan is what found these eleven.
+    """
+    import ast as _a, io as _io, os as _os, re as _re
+    from target import Probe as _P
+    cases = [
+        ("a bot told to make no tool calls fires on one", {"max_tool_calls": 0}, True),
+        ("...and the same probe is fine at the default", {}, False),
+        ("...and fine at a threshold it is under", {"max_tool_calls": 8}, False),
+    ]
+    ok = 0
+    probe = _P(prompt="x", output="ok", tool_calls=[["get_order", "1"]])
+    for label, ctx, expect in cases:
+        got = bool(DETECTORS["tool_call_storm"](probe, ctx))
+        print(f"{'PASS' if got == expect else 'FAIL'}  {label}")
+        if got != expect:
+            print(f"      ctx={ctx} -> {got}, wanted {expect}")
+        ok += (got == expect)
+
+    # AND NO THRESHOLD IS READ THAT WAY ANYWHERE. `ctx.get(k) or <number>` is the form,
+    # and a number that is not zero is a default a configured zero can never reach.
+    _src = _io.open(_os.path.join(HERE, "oracle.py"), encoding="utf-8").read()
+    _bad = []
+    for _n in _a.walk(_a.parse(_src)):
+        if not (isinstance(_n, _a.BoolOp) and isinstance(_n.op, _a.Or)
+                and len(_n.values) == 2):
+            continue
+        _l, _r = _n.values
+        if (isinstance(_l, _a.Call) and getattr(_l.func, "attr", "") == "get"
+                and isinstance(_r, _a.Constant)
+                and isinstance(_r.value, (int, float))
+                and not isinstance(_r.value, bool) and _r.value != 0):
+            _k = (_l.args[0].value if _l.args and isinstance(_l.args[0], _a.Constant)
+                  else "?")
+            _bad.append("%s or %s (line %d)" % (_k, _r.value, _n.lineno))
+    good = not _bad
+    print(f"{'PASS' if good else 'FAIL'}  no threshold in the oracle reads a configured zero as absent")
+    if _bad:
+        print("      " + "; ".join(_bad))
+    ok += bool(good)
+
+    # AND EVERY KEY IT READS IS ONE THE ENGINE CAN SAY IT READS. `context_keys_read`
+    # discovers keys by scanning for the shapes a read is written in, and that scan IS the
+    # set: a form it does not know becomes a key `onboard` reports as read by nothing.
+    # Moving eleven reads to `_num` did exactly that, and the onboard suite caught it --
+    # `no shipped config declares a context key nothing reads` went red naming four keys
+    # that three shipped configs set. Derived from the calls, so the next `_num` is covered.
+    from workspace import context_keys_read as _keys_read
+    _num_keys = set()
+    for _n in _a.walk(_a.parse(_src)):
+        if (isinstance(_n, _a.Call) and getattr(_n.func, "id", "") == "_num"
+                and len(_n.args) >= 2 and isinstance(_n.args[1], _a.Constant)
+                and isinstance(_n.args[1].value, str)):
+            _num_keys.add(_n.args[1].value)
+    _known = _keys_read()
+    _blind = sorted(_num_keys - set(_known))
+    good2 = bool(_num_keys) and not _blind
+    print(f"{'PASS' if good2 else 'FAIL'}  every threshold key is one the engine can say it reads")
+    if not good2:
+        print("      %d key(s) read through _num, invisible to the scan: %s"
+              % (len(_num_keys), _blind))
+    ok += bool(good2)
+    return ok, len(cases) + 2
+
+
 def test_inert_reads_values_not_truthiness():
     """A key present with a falsy value is configured. A key that is absent is not.
 
@@ -2398,7 +2474,8 @@ def main():
     gates = [test_always_on(), test_no_orphan_detectors(), test_inert_detectors(),
              test_builtin_markers_are_instruction_shaped(), test_visible_turns(),
              test_null_config_keys(), test_probe_shapes(),
-             test_inert_reads_values_not_truthiness(), test_shared_run_agreement()]
+             test_inert_reads_values_not_truthiness(), test_shared_run_agreement(),
+             test_thresholds_read_zero()]
     extra = sum(g for g, _ in gates)
     gates_total = sum(t for _, t in gates)
     # detectors exercised outside the CASES table (see test_always_on)

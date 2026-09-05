@@ -579,7 +579,13 @@ def context_keys_read(root=None):
     pats = (r'ctx\.get\(\s*["\']([a-z_]+)["\']',
             r'ctx\[["\']([a-z_]+)["\']\]',
             r'oracle_context\.get\(\s*["\']([a-z_]+)["\']',
-            r'_configured\(\s*["\']([a-z_]+)["\']')
+            r'_configured\(\s*["\']([a-z_]+)["\']',
+            # `_num(ctx, "key", default)` is the numeric read, and it exists because
+            # `int(ctx.get(k) or D)` threw away a configured 0. Named here for the same
+            # reason `_configured` is: this scan IS the set of keys the engine reads, so a
+            # read it cannot see becomes a key `onboard` tells an operator nothing reads.
+            # That is exactly what it said about four of them the moment they moved.
+            r'_num\(\s*ctx\s*,\s*["\']([a-z_]+)["\']')
     for fn in _glob.glob(os.path.join(here, "*.py")):
         if os.path.basename(fn).startswith("test_"):
             continue
