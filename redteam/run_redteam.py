@@ -112,7 +112,7 @@ def load_target_or_explain(cfg, config_path, was_default):
         raise SystemExit("\n".join(lines))
 
 
-def closing_line(broke, attacks_n, errored, stopped=""):
+def closing_line(broke, attacks_n, errored, stopped="", trials=None):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -137,6 +137,16 @@ def closing_line(broke, attacks_n, errored, stopped=""):
     the target rather than a limit the operator set. The run record says `stopped` with the
     reason; the terminal said a finished run, and the terminal is read first.
 
+    AND ONE ATTEMPT EACH IS NOT A RATE. `--trials 1` closed with "0/45 attacks breached the
+    target", which is the same sentence a three-trial sweep prints and carries a third of the
+    evidence. `history` already calls trials below two a confound, `verify` refuses to draw a
+    verdict from a row it cannot reproduce, and the report now labels such a row `one trial` —
+    every surface but this one, which is the one a CI log keeps.
+
+    Said on a clean bill as loudly as on a finding, and if anything it matters more there: a
+    bot that held once may break on the second ask, and "0 breached" is the reading somebody
+    stops at.
+
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
     scored = attacks_n - errored
@@ -150,8 +160,11 @@ def closing_line(broke, attacks_n, errored, stopped=""):
                     % (stopped, attacks_n))
         return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
                 "0 breaches, it is no measurement." % (errored, attacks_n))
-    return ("%d/%d attacks breached the target (controls excluded)%s"
-            % (broke, scored, ("; " + _rest) if _rest else "."))
+    _once = (" Each was sent once (--trials 1), which cannot tell a reliable break from a "
+             "lucky one, or a defence from a bot that would have broken on the second ask."
+             if trials == 1 and scored else "")
+    return ("%d/%d attacks breached the target (controls excluded)%s%s"
+            % (broke, scored, ("; " + _rest) if _rest else ".", _once))
 
 
 def regression_verdict(d, is_model_copy=False):
@@ -1017,7 +1030,8 @@ def main():
     # THE BUDGET'S OWN WORDS, read here rather than at the record two hundred lines below,
     # because this is where the number is stated and the caveat belongs beside it.
     _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
-    print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note))
+    print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
+                              trials=trials))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it

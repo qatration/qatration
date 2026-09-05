@@ -480,6 +480,39 @@ def main():
     check("an empty arsenal is not called a run that errored",
           "NOTHING MEASURED" not in _cl(0, 0, 0), _cl(0, 0, 0))
 
+    # AND ONE ATTEMPT EACH IS NOT A RATE. `--trials 1` closed with the same sentence a
+    # three-trial sweep prints, carrying a third of the evidence. `history` calls trials below
+    # two a confound, `verify` refuses a verdict it cannot reproduce, and the report labels
+    # such a row `one trial` — every surface but this one, which is the one a CI log keeps.
+    check("a one-trial run says the sample was one",
+          "--trials 1" in _cl(2, 10, 0, trials=1), _cl(2, 10, 0, trials=1))
+    # LOUDEST ON A CLEAN BILL, where it matters most: a bot that held once may break on the
+    # second ask, and "0 breached" is the reading somebody stops at.
+    check("...on a clean bill as well as on a finding",
+          "--trials 1" in _cl(0, 10, 0, trials=1), _cl(0, 10, 0, trials=1))
+    check("a three-trial run is not qualified", "--trials 1" not in _cl(2, 10, 0, trials=3),
+          _cl(2, 10, 0, trials=3))
+    check("...nor is one that did not say how many it ran",
+          "--trials 1" not in _cl(2, 10, 0), _cl(2, 10, 0))
+    # A RUN THAT MEASURED NOTHING IS ALREADY SAYING SO. Adding a note about the sample size
+    # of a sample that does not exist would dilute the sentence that matters.
+    check("a run where everything errored is not told about its trials",
+          "--trials 1" not in _cl(0, 45, 45, trials=1), _cl(0, 45, 45, trials=1))
+    # AND NEITHER IS AN EMPTY ARSENAL, which reaches the ordinary sentence rather than the
+    # NOTHING MEASURED branch: nothing was sent once, so there is no sample size to qualify.
+    # Without this the `and scored` guard could be dropped with every check above green.
+    check("...nor is an empty arsenal", "--trials 1" not in _cl(0, 0, 0, trials=1),
+          _cl(0, 0, 0, trials=1))
+    # AND THE RUN ACTUALLY PASSES ITS TRIAL COUNT. `closing_line` is pure and every check
+    # above calls it directly, so the sentence can be perfect and the one caller can stop
+    # handing it the number — which is the shape of every defect this file records.
+    import inspect as _insp, re as _re2, run_redteam as _rr
+    _src = _insp.getsource(_rr.main)
+    _calls = _re2.findall(r"closing_line\((?:[^()]|\([^()]*\))*\)", _src)
+    check("the run has exactly one closing line to get right", len(_calls) == 1, str(_calls))
+    check("...and it tells it how many trials it ran",
+          bool(_calls) and "trials=" in _calls[0], str(_calls))
+
     # A ROW THAT WAS NEVER SENT DID NOT ERROR EITHER. Walked: a forty-request budget against a
     # forty-five attack sweep left seven rows headed ERROR whose error reads "this run's
     # request budget was spent before this probe; it was never sent". Calling those errors
