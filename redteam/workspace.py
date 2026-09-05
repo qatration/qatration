@@ -311,6 +311,30 @@ def config_keys_read(root=None):
     return keys
 
 
+def unread_context_keys(cfg):
+    """-> the `oracle_context` keys in this config that nothing in the engine reads.
+
+    A KEY NOTHING READS IS A DETECTOR NOBODY ARMED. `canaries` misspelled `canarys` parses,
+    sweeps, and disarms every canary detector in the oracle: a clean bill for checks that
+    could not fire, out of the one file an operator edits by hand.
+
+    HERE RATHER THAN IN `onboard`, WHERE IT WAS. Two commands need it -- `onboard` says so
+    before a sweep and `run` says it beside the detectors that came back inert, because
+    "canary_in_output needs canaries" over a config that plainly declares a canary is a riddle
+    and the misspelling is the answer. Reaching into the onboarding COMMAND to ask a question
+    about a config is the wrong direction, and it cost a silent one: the import sat behind a
+    bare `except Exception` in the caller and something in it raised, so the line never
+    printed and nothing said why. The rule belongs with the scan it consults.
+
+    Empty when the scan finds nothing, rather than accusing the config of everything: a broken
+    scan makes every key look wrong, and that is a worse answer than no answer.
+    """
+    known = context_keys_read()
+    if not known:
+        return []
+    return sorted(k for k in ((cfg or {}).get("oracle_context") or {}) if k not in known)
+
+
 def context_keys_read(root=None):
     """Every `oracle_context` key some part of this engine actually reads.
 

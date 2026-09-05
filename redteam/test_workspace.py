@@ -66,6 +66,59 @@ def builds_its_own_root(src):
     return found
 
 
+def check_unread_context_keys():
+    """A key nothing reads is a detector nobody armed, and TWO commands need to say so.
+
+    `canaries` misspelled `canarys` parses, sweeps, and disarms every canary detector in the
+    oracle. `onboard` has always reported it; a run reached without onboarding said only
+    "canary_in_output needs canaries", which over a config that plainly declares a canary is a
+    riddle -- the reader has written one, can see it in the file, and is being told there is
+    none. The misspelling is the answer and it was in the config all along.
+
+    THE RULE LIVES HERE NOW, beside the scan it consults, because `run` reaching into the
+    onboarding COMMAND for it is the wrong direction and cost a silence: the import sat behind
+    a bare `except Exception` and something in it raised, so the line never printed and
+    nothing said why.
+    """
+    from workspace import unread_context_keys
+    import workspace as _ws
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    check("a misspelled context key is named",
+          unread_context_keys({"oracle_context": {"canarys": ["X"]}}), ["canarys"])
+    check("...and the correct spelling is not",
+          unread_context_keys({"oracle_context": {"canaries": ["X"]}}), [])
+    check("a config with no oracle_context has nothing to report",
+          unread_context_keys({"adapter": "http"}), [])
+    check("neither does an empty one", unread_context_keys({"oracle_context": {}}), [])
+    check("nor does no config at all", unread_context_keys(None), [])
+    check("several are all named, in order",
+          unread_context_keys({"oracle_context": {"zzz": 1, "canarys": 2, "canaries": 3}}),
+          ["canarys", "zzz"])
+
+    # A BROKEN SCAN MUST ACCUSE NOTHING. If `context_keys_read` ever returns empty -- a
+    # packaging change, a source-less install -- every key in every config looks wrong, and a
+    # command that told an operator all forty-nine of their keys are unread would be worse
+    # than one that said nothing.
+    _real = _ws.context_keys_read
+    _ws.context_keys_read = lambda root=None: set()
+    try:
+        check("a scan that finds nothing accuses nothing",
+              unread_context_keys({"oracle_context": {"canarys": 1, "canaries": 2}}), [])
+    finally:
+        _ws.context_keys_read = _real
+
+    # AND THE SCAN IS NOT EMPTY IN A REAL TREE, or every check above passes over nothing.
+    check("...while the real scan knows a real key",
+          "canaries" in _ws.context_keys_read(), True)
+    return fails
+
+
 def check_config_model():
     """Which model a config runs against, read the way the adapter reads it.
 
@@ -496,4 +549,7 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
+    _f = check_unread_context_keys()
+    if _f:
+        raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()

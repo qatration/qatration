@@ -98,13 +98,11 @@ def unread_context_keys(cfg):
     a list: forty-nine keys typed here would be the copy that goes stale, and noticing a name
     that should not be there is the entire job.
     """
-    from workspace import context_keys_read
-    known = context_keys_read()
-    if not known:
-        # A scan that found nothing is a broken scan, and every key would look wrong. Say
-        # nothing rather than accuse the config of everything.
-        return []
-    return sorted(k for k in ((cfg or {}).get("oracle_context") or {}) if k not in known)
+    # ONE IMPLEMENTATION, in `workspace`, beside the scan it consults. `run` needs the same
+    # answer and used to reach into this command for it, which is the wrong direction between
+    # a command and the thing it onboards.
+    from workspace import unread_context_keys as _unread
+    return _unread(cfg)
 
 
 def check(cfg_path, probe_text=PROBE):

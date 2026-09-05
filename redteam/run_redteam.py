@@ -716,6 +716,27 @@ def main():
         _wn = max(26, *(len(n) for n in dead)) + 2
         for name, keys in sorted(dead.items()):
             print(f"      {name:<{_wn}}needs {', '.join(keys)}")
+        # AND WHETHER THE KEY IS MISSING OR MISSPELLED, because those read identically from
+        # here and only one of them is the operator's mistake. "canary_in_output needs
+        # canaries" over a config that says `canarys:` is a riddle: the reader has written a
+        # canary, can see it in the file, and is being told there isn't one. `onboard` says
+        # this — it is the command for it — and a run reached without onboarding says nothing,
+        # which is the path somebody takes exactly once.
+        #
+        # Named rather than refused: an unread key is not always an error at run time (a
+        # config may carry notes for a tool that is not this one), and the sweep below already
+        # refuses on the consequence, skipping every attack whose detectors are all inert.
+        from workspace import unread_context_keys as _unread
+        _stray = _unread(tcfg)
+        if _stray:
+            _needed = sorted({k for keys in dead.values() for k in keys})
+            print(f"      and this config declares {len(_stray)} oracle_context key(s) "
+                  f"nothing reads: {', '.join(repr(k) for k in _stray)}")
+            _near = [k for k in _stray if any(
+                k != n and (k in n or n in k or abs(len(k) - len(n)) <= 2) for n in _needed)]
+            if _near:
+                print(f"      which is worth reading beside the list above — a key spelled "
+                      f"{_near[0]!r} arms nothing that a key spelled correctly would.")
 
     # AN ATTACK WHOSE EVERY DECLARED DETECTOR IS INERT MUST NOT RUN. It used to: the console
     # said which detectors could not fire and the sweep sent the attacks anyway, so each came
