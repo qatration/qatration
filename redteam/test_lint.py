@@ -77,7 +77,18 @@ def run_lint(attacks):
         code = 0
         try:
             with contextlib.redirect_stdout(buf):
-                lint.main()
+                # THE RETURN VALUE, NOT ONLY THE EXCEPTION -- the same reading the sibling
+                # `run_lint_files` above already takes, and for the reason written there.
+                # `main` refuses on two paths: `sys.exit(1)` for the deep failures and
+                # `return 1` for an absent arsenal, and a harness watching only for
+                # SystemExit reports the second as 0.
+                #
+                # NOTHING IS SILENT TODAY, measured rather than assumed: moving a refusal
+                # to the return path was still caught, because these checks assert on the
+                # printed text as well as the code. This is the harness reading the wrong
+                # number, not a gate that has stopped gating -- fixed because two helpers
+                # in one file should not answer the same question differently.
+                code = lint.main() or 0
         except SystemExit as e:
             code = e.code or 0
         finally:
