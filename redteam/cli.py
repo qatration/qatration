@@ -148,6 +148,30 @@ def main(argv=None):
             raise
         print(str(e.code), file=sys.stderr)
         return 2
+    except Exception:
+        # AND SO DOES A CRASH, through the same door for the same reason. Python exits ONE on
+        # an unhandled exception, and one is the code this tool documents as "the target was
+        # exploited or breached" — so any bug in any command, and every YAML typo that reaches
+        # a `KeyError` instead of a refusal, arrives in a CI log as a security finding.
+        #
+        # That is not hypothetical and it is not rare: an unknown `encode:` raised KeyError out
+        # of the runner and exited 1, an uncompilable `refusal_patterns` regex raised
+        # `re.error` mid-sweep, and an arsenal that was a mapping rather than a list raised
+        # AttributeError. Each was found and refused separately; this is the door all three
+        # came through.
+        #
+        # NOTHING IS SWALLOWED. The traceback goes to stderr exactly as before, because a bug
+        # report needs it and hiding it would trade one bad outcome for another. Only the exit
+        # code changes, and it changes to the one the table already reserves for "a build
+        # problem rather than a security one".
+        import traceback
+        traceback.print_exc()
+        print("\nqatration: the command above crashed. This is a bug in qatration, not a\n"
+              "finding about your target and not a problem with your config — exit 2 rather\n"
+              "than 1 so a pipeline does not read it as a breach. The traceback above is the\n"
+              "whole of what happened; please send it with the command you ran.",
+              file=sys.stderr)
+        return 2
     finally:
         sys.argv = saved
 

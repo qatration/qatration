@@ -1108,6 +1108,49 @@ def test_cli_help_version_and_unknown_command():
     print("  ok  help, version and an unknown command all behave")
 
 
+def test_a_crash_is_not_reported_as_a_finding():
+    """Python exits ONE on an unhandled exception, and one is the code this tool documents as
+    "the target was exploited or breached".
+
+    So any bug in any command — and every YAML typo that reaches a `KeyError` instead of a
+    refusal — arrived in a CI log as a security finding. Not hypothetical and not rare: an
+    unknown `encode:` raised KeyError out of the runner, an uncompilable `refusal_patterns`
+    regex raised `re.error` mid-sweep, and an arsenal that was a mapping rather than a list
+    raised AttributeError. Each was found and refused separately; this is the door all three
+    came through.
+
+    Driven by making a real command raise, because the dispatcher is the thing under test and
+    calling `cli.main` in-process would not exercise the exit code a shell sees.
+    """
+    import shutil, tempfile
+    work = tempfile.mkdtemp()
+    try:
+        victim = os.path.join(HERE, "mint.py")
+        original = io.open(victim, encoding="utf-8").read()
+        shutil.copy2(victim, os.path.join(work, "mint.py.bak"))
+        try:
+            io.open(victim, "w", encoding="utf-8", newline="").write(
+                original.replace("def main():",
+                                 'def main():' + chr(10) +
+                                 '    raise KeyError("a bug, not a breach")', 1))
+            p = _cli(["mint"])
+        finally:
+            io.open(victim, "w", encoding="utf-8", newline="").write(original)
+
+        assert p.returncode == 2, (
+            "a crashing command exited %d; 1 is the code a pipeline reads as a breach"
+            % p.returncode)
+        # NOTHING IS SWALLOWED. A bug report needs the traceback, and hiding it would trade
+        # one bad outcome for another — only the exit code changes.
+        assert "Traceback" in p.stderr and "KeyError" in p.stderr,             "the traceback was swallowed: %s" % p.stderr[-200:]
+        assert "bug in qatration" in p.stderr,             "the reader is not told this is a bug rather than a finding: %s" % p.stderr[-200:]
+        # AND A HEALTHY COMMAND IS UNAFFECTED, or catching everything would be its own defect.
+        assert _cli(["mint"]).returncode == 0, "an ordinary command stopped working"
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    print("  ok  a crash exits 2 with its traceback, not 1")
+
+
 def test_a_subcommand_reaches_the_real_module():
     """--help through the dispatcher, because the dispatcher rewrites argv and could get it
     wrong in a way no import check would notice."""
