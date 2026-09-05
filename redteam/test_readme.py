@@ -1421,6 +1421,31 @@ def main():
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
 
+    # --- THE SAFETY DOCUMENT'S OWN NUMBERS ----------------------------------------------
+    #
+    # `AUTHORISED-USE.md` is the page a reader is sent to before pointing this at anything,
+    # and it makes claims about the gate in words: "Proofs expire after fourteen days". The
+    # code says `MAX_AGE_DAYS = 14`, `test_authorization` derives its fixture from that
+    # constant so it cannot drift — and the sentence a reader acts on was typed.
+    #
+    # Raising the constant to thirty would leave the safety document saying fourteen, which is
+    # the one page where a stale number is worse than no number.
+    from authorization import MAX_AGE_DAYS as _MAX_AGE
+    _auth_doc = io.open(os.path.join(ROOT, "AUTHORISED-USE.md"), encoding="utf-8").read()
+    check("the expiry is stated where a reader is sent",
+          "expire after" in _auth_doc, "the sentence is gone, so the check is blind")
+    check("...and it is the window the gate enforces",
+          "expire after %s days" % spell(_MAX_AGE) in _auth_doc,
+          "the page does not say %r" % spell(_MAX_AGE))
+
+    # AND THE PRACTICE FLEET IT POINTS AT EXISTS. "Start there" is the whole alternative to
+    # testing somebody else's system, and a directory renamed out from under that sentence
+    # sends a reader looking for a target that is not here.
+    _named = re.findall(r"`([a-z][a-z-]*)/`", _auth_doc)
+    check("the safety page names a practice fleet", len(_named) >= 3, str(_named))
+    _gone = [d for d in _named if not os.path.isdir(os.path.join(ROOT, d))]
+    check("...and every directory it names is in the tree", not _gone, str(_gone))
+
     # --- A DETECTOR COUNT ON FIVE PAGES, RECOUNTED ON ONE -------------------------------
     #
     # `CONTRIBUTING.md` multiplied "50 prompts x 42 oracle contexts x 64 detectors" while
