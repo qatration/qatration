@@ -605,6 +605,63 @@ def main():
     check("...and so does fleet_names", workspace.fleet_names() <= _by_helper,
           f"only in fleet_names: {sorted(workspace.fleet_names() - _by_helper)[:4]}")
 
+    # --- EVERY DOOR THAT WRITES EVIDENCE, NOT THE TWO THAT HAD THE GUARD ----------------
+    #
+    # `refuse_to_overwrite_evidence` was written after a `--attacks` run replaced a full
+    # sweep's `results_httpbot.json` with eight rows and `coverage` reported 958 fewer
+    # probes. It was wired into `run` and `benign`. Three more commands send probes and
+    # write a per-target artifact into `out/` -- `recon`, `isolation` and `adaptive` --
+    # and replaced a committed one in silence. The repository tracks 10 recon profiles,
+    # 11 isolation maps and 3 adaptive transcripts.
+    #
+    # THE PROPERTY IS `SENDS PROBES AND WRITES`, not `writes`. `rejudge --write` rewrites
+    # a committed results file on purpose -- that is the command -- and it recomputes from
+    # the SAME stored probes, so nothing is destroyed. `runs` only appends new timestamped
+    # records. Neither belongs here, and a gate that demanded the guard of everything that
+    # writes JSON would have said so about both.
+    #
+    # THE FAMILIES COME FROM WHAT IS COMMITTED, not from a list here, so a prefix somebody
+    # starts tracking tomorrow is covered without anybody editing this file.
+    import io, subprocess as _sp7, collections as _co7, re as _re7
+    _root = os.path.dirname(HERE)
+    try:
+        _ls = _sp7.run(["git", "ls-files", "out"], cwd=_root, capture_output=True,
+                       text=True, timeout=60)
+        _tracked = [l.strip() for l in (_ls.stdout or "").splitlines() if l.strip()]
+    except Exception:
+        _tracked = []
+
+    _pref = _co7.Counter()
+    for _f7 in _tracked:
+        _b7 = os.path.basename(_f7)
+        if not _b7.endswith(".json") or "_" not in _b7 or _b7.startswith("_"):
+            continue
+        _pref[_b7.split("_", 1)[0]] += 1
+    # A family is a prefix worn by more than one file: `results_<target>.json` is a family,
+    # `bench-nemo.json` is one page.
+    _families = sorted(k for k, n in _pref.items() if n >= 2)
+    check("the committed evidence families can be enumerated", len(_families) >= 4,
+          str(sorted(_pref.items())))
+
+    _writers, _unguarded = [], []
+    for _m7 in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+        if os.path.basename(_m7).startswith("test_"):
+            continue
+        _src7 = io.open(_m7, encoding="utf-8").read()
+        _builds = any(_re7.search(r'f"%s_\{' % _re7.escape(_fam), _src7)
+                      for _fam in _families)
+        _drives = ("safe_target_name(" in _src7) or ("load_target_or_explain(" in _src7)
+        _writes = ("json.dump(" in _src7) or ("write_maps(" in _src7)
+        if _builds and _drives and _writes:
+            _writers.append(os.path.basename(_m7))
+            if "refuse_to_overwrite_evidence(" not in _src7:
+                _unguarded.append(os.path.basename(_m7))
+    # A conjunction that matched nothing would satisfy the next check by having no subject.
+    check("...and every command that sends probes and writes one is found",
+          len(_writers) >= 5, str(_writers))
+    check("...and every one of them refuses to replace a committed file",
+          not _unguarded, "; ".join(_unguarded))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

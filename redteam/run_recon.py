@@ -25,7 +25,8 @@ except Exception:
 
 import yaml
 from recon import fingerprint, format_profile, suggest_config
-from workspace import OUT as WORKSPACE_OUT, safe_target_name
+from workspace import (OUT as WORKSPACE_OUT, safe_target_name,
+                       refuse_to_overwrite_evidence, OVERWRITE_HELP)
 
 
 def main():
@@ -38,6 +39,7 @@ def main():
     # exploited or breached". `benign`, `run` and `matrix` all ask for the config and
     # exit 2; these two were the ones that did not.
     ap.add_argument("--target-config", required=True)
+    ap.add_argument("--overwrite-evidence", action="store_true", help=OVERWRITE_HELP)
     ap.add_argument("--model", default=None, help="override the target's model")
     ap.add_argument("--tool-prompt", default=None,
                     help="a benign request that SHOULD make the target use a tool "
@@ -109,6 +111,24 @@ def main():
     out = args.json or os.path.join(WORKSPACE_OUT, f"recon_{target.name}.json")
     if out:
         out = out if os.path.isabs(out) else os.path.join(ROOT, out)
+        # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
+        # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
+        # with eight rows and `coverage` reported 958 fewer probes. It was then wired into
+        # two of the five commands that write evidence into `out/`. This is one of the
+        # other three: the repository tracks 11 recon profiles, 11 isolation maps and 3
+        # adaptive transcripts, every one of them a record of a real target's replies that
+        # something else recounts -- `compare_recon` builds the fleet page from these, and
+        # `run` folds them into a report.
+        #
+        # An untracked file is still overwritten in silence, which is the whole point: a
+        # person re-running their own sweep is not asked permission.
+        _refusal = refuse_to_overwrite_evidence(
+            out, force=getattr(args, "overwrite_evidence", False))
+        if _refusal:
+            # 2, THE SAME AS `run`: the invocation was refused, nothing was measured, and
+            # a pipeline must not read it as a finding.
+            print(_refusal, file=sys.stderr)
+            return 2
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "w", encoding="utf-8") as f:
             json.dump(profile, f, indent=2, ensure_ascii=False)

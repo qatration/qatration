@@ -116,6 +116,15 @@ def tracked_by_git(path):
         return False
 
 
+# The help for the flag that overrides the refusal below. Here because five commands offer
+# it and a sentence written five times is five things to keep in step -- `test_reports`
+# refuses a sentence of 55 characters or more that appears in two modules, and said so
+# about this one the moment the third command grew it.
+OVERWRITE_HELP = (
+    "replace a results file that is committed to a repository. Refused by default, "
+    "because published counts are recounted from those files")
+
+
 def refuse_to_overwrite_evidence(path, force=False):
     """-> a sentence explaining why this write must not happen, or ''.
 

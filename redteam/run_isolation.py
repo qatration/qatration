@@ -27,7 +27,8 @@ from compose import compose, format_compose
 
 
 from run_redteam import load_target as _build_target
-from workspace import OUT as WORKSPACE_OUT, safe_target_name
+from workspace import (OUT as WORKSPACE_OUT, safe_target_name,
+                       refuse_to_overwrite_evidence, OVERWRITE_HELP)
 
 
 def load_target(cfg_path, model=None):
@@ -92,6 +93,7 @@ def main():
     # exploited or breached". `benign`, `run` and `matrix` all ask for the config and
     # exit 2; these two were the ones that did not.
     ap.add_argument("--target-config", required=True)
+    ap.add_argument("--overwrite-evidence", action="store_true", help=OVERWRITE_HELP)
     ap.add_argument("--objectives", default="isolation_example.yaml")
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=3,
@@ -228,6 +230,22 @@ def main():
     out = args.json or os.path.join(WORKSPACE_OUT, f"isolation_{target.name}{tag}.json")
     if out:
         out = out if os.path.isabs(out) else os.path.join(ROOT, out)
+        # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
+        # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
+        # with eight rows and `coverage` reported 958 fewer probes. It was then wired into
+        # two of the five commands that write evidence into `out/`, and this is one of the
+        # other three: the repository tracks 11 isolation maps, each a record of a real
+        # target's replies that `run` folds into a report.
+        #
+        # An untracked file is still overwritten in silence, which is the point: a person
+        # re-running their own sweep is not asked permission.
+        _refusal = refuse_to_overwrite_evidence(
+            out, force=getattr(args, "overwrite_evidence", False))
+        if _refusal:
+            # 2, THE SAME AS `run`: the invocation was refused and nothing was measured,
+            # so a pipeline must not read it as a finding.
+            print(_refusal, file=sys.stderr)
+            return 2
         os.makedirs(os.path.dirname(out), exist_ok=True)
         # through write_maps, so the artifact carries the build that produced it — lock maps
         # were a bare list with no meta and could not be stamped even in principle
