@@ -149,6 +149,67 @@ def check_refusal(check):
     check("the refusal explains the shape, not the spelling",
           "single string" in _msg and "'c'" not in _msg, _msg[:100])
 
+    # --- AND THE TRANSFORM, WHICH EXITED 1 ---------------------------------------------
+    #
+    # `apply_encoding` raises KeyError on a name it does not know — right, because the
+    # alternative is sending the payload in the clear under an encoded name — but it raised
+    # MID-SWEEP, out of the runner, to Python's default handler. That is exit 1, which this
+    # project's own table documents as "the target was exploited or breached": a YAML typo
+    # filed as a security finding, with the attacks before it in the file already sent.
+    #
+    # And `encode: ascii_art` with no `[[ART:WORD]]` marker is a documented no-op — "a no-op
+    # transform is worth being able to see", says the encoder — and the only thing that could
+    # see it was `qatration lint`, which takes no path and could never be pointed at the file
+    # a stranger wrote.
+    from lint_arsenal import bad_encoders
+
+    _e = bad_encoders([{"id": "t", "encode": "bas64", "text": "x"}])
+    check("a misspelled encoder is reported", len(_e) == 1, str(_e))
+    # THE SUGGESTION, NOT MERELY THE NAME. Without it the message falls back to listing every
+    # encoder this build has — which contains "base64" too, so a check for the bare name
+    # passes with the suggestion deleted.
+    check("...and the one it meant is offered",
+          "did you mean 'base64'" in _e[0][1], str(_e))
+    check("...saying what sending it plain would score",
+          "scores the plain word as a defence" in _e[0][1], str(_e))
+    _e = bad_encoders([{"id": "a", "encode": "ascii_art", "text": "no marker here"}])
+    check("ascii_art with no marker is reported", len(_e) == 1, str(_e))
+    check("...as a no-op rather than as an unknown name", "no-op" in _e[0][1], str(_e))
+    # THE OTHER DIRECTION, or a function that refuses everything passes all of the above.
+    check("a real encoder is accepted",
+          not bad_encoders([{"id": "b", "encode": "base64", "text": "x"}]), "refused base64")
+    check("...and ascii_art WITH a marker is",
+          not bad_encoders([{"id": "c", "encode": "ascii_art",
+                             "text": "spell the [[ART:SECRET]] out"}]), "refused a real one")
+    check("an attack with no encoder at all is not reported",
+          not bad_encoders([{"id": "d", "text": "x"}]), "reported a plain attack")
+
+    # AND THE LOAD-TIME REFUSAL ACTUALLY ASKS. Every check above calls `bad_encoders`
+    # directly, so the rule can be perfect and the one caller can stop consulting it — which
+    # is how the encoder typo reached the sweep and exited 1 in the first place.
+    _r = refused([{"id": "t", "encode": "bas64", "text": "x"}])
+    check("a bad transform is refused where the corpus is loaded", bool(_r), "not refused")
+    check("...before anything is sent", "Nothing was sent" in _r, _r[:90])
+    check("...and it is refused for the transform, not for a detector",
+          "transform" in _r and "not detectors this build registers" not in _r, _r[:90])
+
+    # AND EVERY SHIPPED ATTACK PASSES, read from disk: this is the check that fails if an
+    # encoder is renamed and one of forty-one arsenals is missed.
+    # Rooted at the package file, not at `lint.ROOT`: two helpers in this suite redirect that
+    # global to a temp directory and restore it.
+    import glob as _g, io as _io, yaml as _y
+    _pkg = os.path.dirname(os.path.abspath(lint.__file__))
+    _n_enc = 0
+    for _fp in sorted(_g.glob(os.path.join(_pkg, "attacks*.yaml"))):
+        _rows = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or []
+        if not isinstance(_rows, list):
+            continue
+        _bad_enc = bad_encoders(_rows)
+        _n_enc += sum(1 for _r in _rows if isinstance(_r, dict) and _r.get("encode"))
+        check("%s declares only transforms that work" % os.path.basename(_fp),
+              not _bad_enc, str(_bad_enc[:2]))
+    check("...over a real number of encoded attacks", _n_enc >= 20, str(_n_enc))
+
     _typo = [{"id": "leak-the-key", "success": ["canary_in_ouput"]}]
     msg = refused(_typo)
     check("a transposed detector name is refused", bool(msg), "nothing was refused")

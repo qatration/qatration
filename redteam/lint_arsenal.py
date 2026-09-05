@@ -219,6 +219,49 @@ def bad_entry_shapes(entries):
     return out
 
 
+def bad_encoders(entries):
+    """-> [(id, why)] for attacks whose `encode:` cannot do what its name claims.
+
+    TWO SHAPES, AND THE FIRST ONE EXITS 1. `apply_encoding` raises `KeyError` on a name it
+    does not know -- right, because the alternative is sending the payload in the clear under
+    an encoded name -- but it raises MID-SWEEP, out of the runner, to Python's default handler.
+    That is exit 1, which this project's own table documents as "the target was exploited or
+    breached". A YAML typo filed as a security finding, and the attacks before it in the file
+    have already been sent.
+
+    The second is quieter and older: `encode: ascii_art` with no `[[ART:WORD]]` marker is a
+    documented no-op -- "a no-op transform is worth being able to see", says the encoder -- and
+    the only thing that could see it was `qatration lint`, which takes no path and so could
+    never be pointed at the file a stranger wrote.
+
+    Both were already known here. `lint` has carried an error for the first and a warning for
+    the second since they were written; neither could reach a corpus loaded with `--attacks`.
+    """
+    import difflib
+    known = sorted(ENCODERS)
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        enc = e.get("encode")
+        if not enc:
+            continue
+        who = e.get("id") or "?"
+        if enc not in ENCODERS:
+            near = difflib.get_close_matches(str(enc), known, n=1, cutoff=0.6)
+            out.append((who, "encode: %r is not an encoder this build has%s. The payload "
+                             "cannot be obfuscated, and sending it in the clear under an "
+                             "encoded name scores the plain word as a defence."
+                        % (enc, " — did you mean %r?" % near[0] if near else
+                           "; it has: %s" % ", ".join(known))))
+        elif enc == "ascii_art" and "[[ART:" not in str(e.get("text") or ""):
+            out.append((who, "encode: ascii_art has no [[ART:WORD]] marker in its text, so the "
+                             "transform is a no-op: the sensitive word goes out written "
+                             "normally and a DEFENDED verdict describes a target that was "
+                             "shown it in the clear."))
+    return out
+
+
 def refuse_unknown_detectors(entries, what, path):
     """Refuse a corpus whose success/partial lists name detectors that do not exist.
 
@@ -250,6 +293,14 @@ def refuse_unknown_detectors(entries, what, path):
             "%s: %d field(s) in %s are not the shape the engine reads. Nothing was sent.\n"
             % (what, len(shapes), path)
             + "\n".join("    %-22s %-12s %s" % (w, k, why) for w, k, why in shapes[:8]))
+    # AND THE TRANSFORM, before the names: an unknown encoder is refused by `apply_encoding`
+    # already, but it refuses mid-sweep as an uncaught KeyError and exit 1.
+    _enc = bad_encoders(entries)
+    if _enc:
+        raise SystemExit(
+            "%s: %d attack(s) in %s declare a transform that cannot be applied. Nothing was "
+            "sent.\n" % (what, len(_enc), path)
+            + "\n".join("    %-22s %s" % (who, why) for who, why in _enc[:8]))
     known = sorted(DETECTORS)
     bad = []
     for e in entries:
