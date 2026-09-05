@@ -27,6 +27,7 @@ a module-level constant is what the offline suites monkeypatch to point a script
 temp directory.
 """
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -393,6 +394,48 @@ def bad_context_shapes(cfg):
         else:
             out.append((k, "is %s; this key is read as a list" % type(v).__name__))
     return out
+
+
+# EVERY INVISIBLE CHARACTER A PAGE HERE MIGHT BE ASKED TO RENDER, in two families.
+#
+# The Unicode invisibles -- zero-width spaces and joiners, bidi overrides, the word joiner,
+# soft hyphen, the byte-order mark -- hide text inside text.
+#
+# AND THE C0 CONTROLS, which were missing, and which are the half this project attacks with.
+# `attacks_ansi.yaml` exists to plant ANSI and OSC-8 sequences, and every one of them is built
+# from ESC (0x1B) and BEL (0x07). A report quoting such a reply printed the escape raw: a
+# browser drops it, so the reader saw `click here` and not the terminal hyperlink that makes
+# it a finding -- the evidence rendered as ordinary prose, on the page whose whole job is to
+# show what came back.
+#
+# Tab, newline and carriage return are excluded: they are layout in a quoted reply, not
+# concealment, and rendering them as codepoints would turn every multi-line payload into
+# noise.
+CONTROL_CHARS = re.compile(
+    "[\u0000-\u0006\u0008\u000b\u000c\u000e-\u001f\u007f"
+    "\u0007"
+    "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+
+
+def esc(s):
+    """HTML-escape, and make an invisible character visible as its codepoint.
+
+    ONE IMPLEMENTATION. There were four -- `report_engine`, `build_index`, `compare_targets`,
+    `compare_recon` and `defense_report` each defined their own -- and only one of them did
+    anything about invisible characters. So the same payload rendered two ways: the per-target
+    report showed `&lt;U+200B&gt;`, and the index, the fleet comparison and the fix list showed
+    nothing at all, on pages built from the same artifact minutes apart.
+
+    Shown rather than stripped. Stripping would make the report disagree with the payload it
+    claims to be quoting, and the presence of the character IS the finding.
+
+    Here rather than in `report_engine` because all five pages already import this module and
+    it imports none of them; a shared rule living in one of the things that shares it is how
+    the fourth copy gets written.
+    """
+    import html as _html
+    return CONTROL_CHARS.sub(lambda m: "&lt;U+%04X&gt;" % ord(m.group(0)),
+                             _html.escape(str(s)))
 
 
 def unread_context_keys(cfg):

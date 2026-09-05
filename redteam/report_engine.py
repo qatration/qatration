@@ -40,18 +40,13 @@ ORDER = {"EXPLOITED": 0, "PARTIAL": 1, "DEFENDED": 2, "ERROR": 3, "SKIP": 4}
 _CONTROL = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2069\u00ad\ufeff]")
 
 
+from workspace import esc as _ws_esc
+
+
 def esc(s):
-    """HTML-escape, and make invisible control characters visible as their codepoint.
-
-    Every model-content interpolation in this file goes through here, which is why the fix
-    belongs here rather than at the call sites: there are forty-four of them and the next one
-    would not know.
-
-    Shown rather than stripped. Stripping would make the report disagree with the payload it
-    claims to be quoting, and the presence of the character IS the finding.
-    """
-    return _CONTROL.sub(lambda m: "&lt;U+%04X&gt;" % ord(m.group(0)),
-                        html.escape(str(s)))
+    """One implementation, in `workspace`: see the note there. Re-exported so the forty-four
+    call sites in this file keep reading the way they did."""
+    return _ws_esc(s)
 
 
 def _reliability(rate, head):

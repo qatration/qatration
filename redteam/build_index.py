@@ -18,8 +18,13 @@ SEV = {"critical": "#b3261e", "high": "#c2410c", "medium": "#9a6700", "none": "#
        "unknown": "#6b6b6b"}
 
 
+from workspace import esc as _ws_esc
+
+
 def esc(s):
-    return html.escape(str(s))
+    """One implementation, in `workspace`: see the note there. Re-exported so the forty-four
+    call sites in this file keep reading the way they did."""
+    return _ws_esc(s)
 
 
 from workspace import BROKE   # one definition of what counts as a breach

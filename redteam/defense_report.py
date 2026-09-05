@@ -703,8 +703,13 @@ SEV_RANK = {"critical": 0, "high": 1, "medium": 2}
 SEV_BG = {"critical": "rgba(179,38,30,.12)", "high": "rgba(194,65,12,.12)", "medium": "rgba(154,103,0,.12)"}
 
 
+from workspace import esc as _ws_esc
+
+
 def esc(s):
-    return html.escape(str(s))
+    """One implementation, in `workspace`: see the note there. Re-exported so the forty-four
+    call sites in this file keep reading the way they did."""
+    return _ws_esc(s)
 
 
 def _rate_frac(rate):

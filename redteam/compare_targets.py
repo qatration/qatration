@@ -112,8 +112,13 @@ def arsenal_claim(rows):
     return ("%d different arsenals, not one" % len(kinds)), odd
 
 
+from workspace import esc as _ws_esc
+
+
 def esc(s):
-    return html.escape(str(s))
+    """One implementation, in `workspace`: see the note there. Re-exported so the forty-four
+    call sites in this file keep reading the way they did."""
+    return _ws_esc(s)
 
 
 def _declared_pairs():

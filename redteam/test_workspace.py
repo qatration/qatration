@@ -66,6 +66,61 @@ def builds_its_own_root(src):
     return found
 
 
+def check_esc():
+    """One escaper, and a control set that covers what this arsenal attacks with.
+
+    THERE WERE FIVE. `report_engine`, `build_index`, `compare_targets`, `compare_recon` and
+    `defense_report` each defined their own, and only one did anything about invisible
+    characters — so the same payload rendered two ways on pages built from the same artifact
+    minutes apart: the per-target report showed `&lt;U+200B&gt;`, the index showed nothing.
+
+    AND THE SET MISSED THE C0 CONTROLS, which is the half `attacks_ansi.yaml` is built from:
+    every ANSI and OSC-8 sequence is ESC (0x1B) and BEL (0x07). A report quoting such a reply
+    printed the escape raw, a browser dropped it, and the reader saw `click here` rather than
+    the terminal hyperlink that makes it a finding — the evidence rendered as ordinary prose,
+    on the page whose whole job is to show what came back.
+    """
+    from workspace import esc, CONTROL_CHARS
+    import report_engine, build_index, compare_targets, compare_recon, defense_report
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    check("html is escaped", esc("<script>x</script>"), "&lt;script&gt;x&lt;/script&gt;")
+    check("a quote is escaped", esc('a"b'), "a&quot;b")
+
+    # THE TWO FAMILIES, one of which used to render as nothing at all.
+    check("a zero-width space is shown", esc("a\u200bb"), "a&lt;U+200B&gt;b")
+    check("an ESC is shown", esc("a\x1bb"), "a&lt;U+001B&gt;b")
+    check("a BEL is shown", esc("a\x07b"), "a&lt;U+0007&gt;b")
+    check("a DEL is shown", esc("a\x7fb"), "a&lt;U+007F&gt;b")
+    check("a bidi override is shown", esc("a\u202eb"), "a&lt;U+202E&gt;b")
+
+    # AND AN OSC-8 HYPERLINK, WHOLE, because that is the shipped attack rather than a
+    # character in isolation: without this the reader is shown the label and not the link.
+    _osc = "\x1b]8;;http://evil.example\x07click here\x1b]8;;\x07"
+    check("an OSC-8 terminal hyperlink cannot hide in a report",
+          "evil.example" in esc(_osc) and "&lt;U+001B&gt;" in esc(_osc), True)
+
+    # LAYOUT IS NOT CONCEALMENT. Rendering these as codepoints would turn every multi-line
+    # payload into noise, so they pass through.
+    check("a newline is layout", esc("a\nb"), "a\nb")
+    check("a tab is layout", esc("a\tb"), "a\tb")
+    check("a carriage return is layout", esc("a\rb"), "a\rb")
+
+    # ONE IMPLEMENTATION, asked of the five pages rather than of the module: a copy could be
+    # reintroduced in any of them and every check above would still pass.
+    _payload = "x\u200b\x1by"
+    for _m in (report_engine, build_index, compare_targets, compare_recon, defense_report):
+        check("%s renders it the same way" % _m.__name__, _m.esc(_payload), esc(_payload))
+
+    check("the control set is not empty", bool(CONTROL_CHARS.search("\x1b")), True)
+    return fails
+
+
 def check_context_shapes():
     """A string is iterable, which is the whole defect.
 
@@ -633,7 +688,7 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = check_unread_context_keys() + check_context_shapes()
+    _f = check_unread_context_keys() + check_context_shapes() + check_esc()
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()
