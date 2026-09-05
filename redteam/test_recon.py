@@ -89,6 +89,226 @@ def main():
         if not ok:
             fails.append(f"{label}: expected {want}, got {got}")
 
+    # --- a profile of a target that never answered -----------------------------------
+    #
+    # Every field in a profile already refuses to guess from an errored probe:
+    # `token_lock_state` has a third state for it, `_out` collapses silence rather than
+    # inventing a reply, `statefulness` carries "unreachable". And the PROFILE said nothing
+    # about how many probes landed — so a target that was down produced a complete-LOOKING
+    # profile, `recon_<name>.json` written to the workspace, exit 0, and `profiles` reading
+    # that file afterwards like any other.
+    #
+    # Walked against a dead port: `tool channel: unobservable`, `memory: not measured`, four
+    # refusal probes at `error` — every line honest, and the file on disk regardless. `run`
+    # refuses the same trade in the same words: "NOTHING MEASURABLE ... Leaving results
+    # untouched."
+    import recon as _rc
+    from target import Probe as _P2
+
+    class _Dead:
+        name = "deadbot"
+        capabilities = set()
+
+        def reset(self):
+            pass
+
+        def send(self, p):
+            return _P2(prompt=p, output="", error="ConnectionRefusedError")
+
+    class _Alive:
+        name = "alivebot"
+        capabilities = set()
+
+        def reset(self):
+            pass
+
+        def send(self, p):
+            return _P2(prompt=p, output="Standard shipping takes 3-5 business days.")
+
+    _dead = _rc.fingerprint(_Dead(), {})
+    check("a profile records how many probes it sent", _dead["probes"] > 0, True)
+    check("...and that none of them landed", _dead["errors"], _dead["probes"])
+    _alive = _rc.fingerprint(_Alive(), {})
+    check("a target that answers records no errors", _alive["errors"], 0)
+    check("...over the same number of probes", _alive["probes"], _dead["probes"])
+    # THE COUNTER IS PER RUN, not since the process started: without the reset at the top of
+    # `fingerprint` the second profile would carry the first one's probes and every recon
+    # after the first would look progressively worse.
+    _again = _rc.fingerprint(_Alive(), {})
+    check("the count is per profile rather than cumulative", _again["probes"], _alive["probes"])
+    # SILENCE COUNTS WITH THE ERRORS. A probe that came back empty told the profile nothing
+    # either, and every field reads it as unmeasured already.
+
+    class _Silent:
+        name = "silentbot"
+        capabilities = set()
+
+        def reset(self):
+            pass
+
+        def send(self, p):
+            return _P2(prompt=p, output="")
+
+    _silent = _rc.fingerprint(_Silent(), {})
+    check("a target that answers with nothing counts as unmeasured",
+          _silent["errors"], _silent["probes"])
+
+    # AND THE COMMAND REFUSES TO WRITE ONE. Every check above calls `fingerprint` directly,
+    # so the count can be perfect while `run_recon` writes the file and exits 0 anyway —
+    # which is what it did, and is the whole point of counting.
+    #
+    # Driven against a port with nothing on it: that is loopback, so it is allowed by the
+    # offline rule, and a refused connection is the failure being tested rather than a
+    # dependency on anything.
+    import io, os, recon, subprocess as _sp2, sys, tempfile as _tf2, shutil as _sh3
+    _w = _tf2.mkdtemp()
+    try:
+        _cfg = os.path.join(_w, "dead.yaml")
+        with io.open(_cfg, "w", encoding="utf-8") as _f:
+            _f.write(chr(10).join([
+                "adapter: http",
+                "name: deadbot",
+                'url: "http://127.0.0.1:9/chat"',
+                "request:",
+                '  message: "{prompt}"',
+                "response:",
+                '  reply: "reply"',
+                "oracle_context:",
+                '  canaries: ["ACME-CANARY-9931"]',
+            ]))
+        _out = os.path.join(_w, "out")
+        _p = _sp2.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(recon.__file__)), "cli.py"), "recon",
+                       "--target-config", _cfg],
+                      capture_output=True, text=True, timeout=900,
+                      env=dict(os.environ, QATRATION_OUT=_out, PYTHONIOENCODING="utf-8"))
+        _said = (_p.stdout or "") + (_p.stderr or "")
+        check("a recon of a target that never answered exits 3", _p.returncode, 3)
+        check("...saying nothing was measured", "NOTHING MEASURED" in _said, True)
+        check("...and calling it an outage rather than a target",
+              "outage to fix" in _said, True)
+        check("...and writing no profile at all",
+              sorted(os.listdir(_out)) if os.path.isdir(_out) else [], [])
+
+        # AND THE OTHER HALF, or the refusal could fire on every recon and the checks above
+        # would all still pass — which is exactly what a mutation to `if _probes:` did. Its
+        # own server on loopback, so this depends on nothing but the machine it runs on.
+        import json as _json3, threading as _th3
+        from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+
+        class _Alive2(_BH):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length") or 0))
+                _b = _json3.dumps({"reply": "Standard shipping takes 3-5 business days."}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            def log_message(self, *a):
+                pass
+
+        _srv3 = _TS(("127.0.0.1", 0), _Alive2)
+        _th3.Thread(target=_srv3.serve_forever, daemon=True).start()
+        try:
+            _cfg2 = os.path.join(_w, "alive.yaml")
+            with io.open(_cfg2, "w", encoding="utf-8") as _f:
+                _f.write(chr(10).join([
+                    "adapter: http",
+                    "name: alivebot",
+                    'url: "http://127.0.0.1:%d/chat"' % _srv3.server_address[1],
+                    "request:",
+                    '  message: "{prompt}"',
+                    "response:",
+                    '  reply: "reply"',
+                    "oracle_context:",
+                    '  canaries: ["ACME-CANARY-9931"]',
+                ]))
+            _out2 = os.path.join(_w, "out2")
+            _p2 = _sp2.run([sys.executable,
+                            os.path.join(os.path.dirname(os.path.abspath(recon.__file__)),
+                                         "cli.py"),
+                            "recon", "--target-config", _cfg2],
+                           capture_output=True, text=True, timeout=900,
+                           env=dict(os.environ, QATRATION_OUT=_out2,
+                                    PYTHONIOENCODING="utf-8"))
+            _said2 = (_p2.stdout or "") + (_p2.stderr or "")
+            check("a recon of a target that answers exits 0", _p2.returncode, 0)
+            check("...and does not claim nothing was measured",
+                  "NOTHING MEASURED" in _said2, False)
+            check("...and writes its profile",
+                  [f for f in os.listdir(_out2) if f.startswith("recon_")] != [], True)
+            # AND SAYS NOTHING ABOUT PROBES THAT DID NOT LAND, because none did not. A note
+            # that fires on every recon tells a reader their healthy target is degraded.
+            check("...and does not warn about probes that all landed",
+                  "did not land" in _said2, False)
+        finally:
+            _srv3.shutdown()
+
+        # AND THE MIDDLE CASE, which is the one a real target produces. Some probes land and
+        # some do not: the profile is worth keeping, and the fields the lost probes feed read
+        # as unmeasured rather than as a result — so the run says how many did not land
+        # instead of leaving the reader to assume all of them did.
+        _n = {"i": 0}
+
+        class _Flaky(_BH):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length") or 0))
+                # THE FIRST FEW PROBES OUTRIGHT, retries included. Alternating 500s do not
+                # produce a partial landing at all: `_resilient_send` retries once, the
+                # retry succeeds, and every probe lands — which is the retry doing its job
+                # and was the first version of this fixture measuring nothing.
+                _n["i"] += 1
+                if _n["i"] <= 6:
+                    self.send_response(500)
+                    self.send_header("content-length", "0")
+                    self.end_headers()
+                    return
+                _b = _json3.dumps({"reply": "Standard shipping takes 3-5 business days."}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            def log_message(self, *a):
+                pass
+
+        _srv4 = _TS(("127.0.0.1", 0), _Flaky)
+        _th3.Thread(target=_srv4.serve_forever, daemon=True).start()
+        try:
+            _cfg3 = os.path.join(_w, "flaky.yaml")
+            with io.open(_cfg3, "w", encoding="utf-8") as _f:
+                _f.write(chr(10).join([
+                    "adapter: http",
+                    "name: flakybot",
+                    'url: "http://127.0.0.1:%d/chat"' % _srv4.server_address[1],
+                    "request:",
+                    '  message: "{prompt}"',
+                    "response:",
+                    '  reply: "reply"',
+                    "oracle_context:",
+                    '  canaries: ["ACME-CANARY-9931"]',
+                ]))
+            _out3 = os.path.join(_w, "out3")
+            _p3 = _sp2.run([sys.executable,
+                            os.path.join(os.path.dirname(os.path.abspath(recon.__file__)),
+                                         "cli.py"),
+                            "recon", "--target-config", _cfg3],
+                           capture_output=True, text=True, timeout=900,
+                           env=dict(os.environ, QATRATION_OUT=_out3,
+                                    PYTHONIOENCODING="utf-8"))
+            _said3 = (_p3.stdout or "") + (_p3.stderr or "")
+            check("a partly reachable target is still a profile", _p3.returncode, 0)
+            check("...and says how many probes did not land",
+                  "did not land" in _said3, True)
+            check("...rather than claiming nothing was measured",
+                  "NOTHING MEASURED" in _said3, False)
+        finally:
+            _srv4.shutdown()
+    finally:
+        _sh3.rmtree(_w, ignore_errors=True)
+
     # --- pure parsing --------------------------------------------------------
     s = style_of('```json\n{"a": 1}\n```\n- one\n- two')
     check("style: shape flags", [s["code_fence"], s["json"], s["bullets"]],

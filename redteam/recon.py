@@ -310,10 +310,32 @@ def suggest_config(profile):
 
 
 # --- the probe loop (needs a live target) ------------------------------------
+# HOW MUCH OF THIS PROFILE WAS MEASURED, counted as it is built. Every field already refuses
+# to guess from an errored probe -- `token_lock_state` has a third state for it, `_out`
+# collapses silence rather than inventing a reply -- and the PROFILE said nothing about how
+# many probes landed. So a target that was down produced a complete-looking profile,
+# `recon_<name>.json` on disk, and exit 0; `profiles` then reads that file like any other.
+#
+# `run` already refuses the same trade in the same words: "NOTHING MEASURABLE ... Leaving
+# results untouched."
+_SENT = {"probes": 0, "errors": 0}
+
+
+def sent_so_far():
+    """-> (probes, errors) since the last `fingerprint` started."""
+    return _SENT["probes"], _SENT["errors"]
+
+
 def _send(target, text, reset=True):
     if reset:
         target.reset()
-    return _resilient_send(lambda: target.send(text), "recon")
+    probe = _resilient_send(lambda: target.send(text), "recon")
+    _SENT["probes"] += 1
+    if probe is None or probe.error or not (probe.output or "").strip():
+        # Silence counts with the errors: a probe that came back empty told this profile
+        # nothing either, and every field below reads it as "unmeasured" already.
+        _SENT["errors"] += 1
+    return probe
 
 
 def _out(probe):
@@ -361,7 +383,12 @@ def _measured(probe):
 
 
 def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_tokens=4):
-    """Run the recon probes and return the profile. ~10-14 sends, all benign."""
+    """Run the recon probes and return the profile. ~10-14 sends, all benign.
+
+    The profile carries `probes` and `errors`, so a reader -- and `run_recon`, which decides
+    whether to write the file at all -- can tell a bot that answered from one that was down.
+    """
+    _SENT["probes"] = _SENT["errors"] = 0
     ctx = ctx or {}
     profile = {"target": getattr(target, "name", "target"),
                "capabilities": sorted(getattr(target, "capabilities", set()))}
@@ -520,6 +547,9 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
     # asked to state its rules, did it state the secret the rule protects?
     profile["selfdesc_leaked_canary"] = [c for c in cans if c.lower() in desc.lower()]
 
+    # WRITTEN LAST, so it counts every probe this function sent rather than the ones before
+    # whichever line somebody adds next.
+    profile["probes"], profile["errors"] = sent_so_far()
     profile["hints"] = hints(profile)
     return profile
 

@@ -80,6 +80,26 @@ def main():
                           max_tokens=args.max_tokens)
     print(format_profile(profile))
 
+    # NOTHING LANDED IS NOT A PROFILE. Every field above already refuses to guess from an
+    # errored probe — `token_lock_state` has a third state for it, `_out` collapses silence
+    # rather than inventing a reply — and the result was a complete-LOOKING profile of a
+    # target that was down: `recon_<name>.json` written to the workspace, exit 0, and
+    # `profiles` reading that file afterwards like any other.
+    #
+    # `run` refuses the same trade in the same words: "NOTHING MEASURABLE ... Leaving results
+    # untouched." Walked against a dead port before this existed, and the profile it wrote said
+    # `tool channel: unobservable`, `memory: not measured`, four refusal probes at `error` —
+    # every line honest, and the file on disk regardless.
+    _probes, _errors = profile.get("probes") or 0, profile.get("errors") or 0
+    if _probes and _errors >= _probes:
+        print("\nNOTHING MEASURED: all %d recon probe(s) errored or came back empty, so none "
+              "of the profile above rests on an answer. This is an outage to fix rather than "
+              "a target to read. Leaving the workspace untouched." % _probes)
+        return 3
+    if _errors:
+        print("\n  ! %d of %d recon probe(s) did not land; the fields they feed read as "
+              "unmeasured above rather than as a result." % (_errors, _probes))
+
     frag = suggest_config(profile)
     if frag:
         print("\n--- proposed additions to " + os.path.basename(args.target_config) +
@@ -93,7 +113,8 @@ def main():
         with open(out, "w", encoding="utf-8") as f:
             json.dump(profile, f, indent=2, ensure_ascii=False)
         print(f"\nwrote {out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
