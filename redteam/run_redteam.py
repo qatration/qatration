@@ -629,6 +629,11 @@ def main():
             f" ({str(a)[:60]!r}), and {len(_bad)} entr(y/ies) like it. A file whose top level "
             f"is `attacks:` loads as a mapping; the arsenal is a bare list of mappings, each "
             f"with an `id`.")
+    # AND EVERY DETECTOR THEY NAME HAS TO EXIST. Checked on the arsenal that was LOADED
+    # rather than on the one that ships, because `--attacks` takes a path and the rule was
+    # only ever applied to files that already pass it.
+    from lint_arsenal import refuse_unknown_detectors
+    refuse_unknown_detectors(all_attacks, "run", args.attacks)
     attacks = [a for a in all_attacks
                if (not a.get("applies_to") or target.name in a["applies_to"])
                and a["id"] not in exclude]

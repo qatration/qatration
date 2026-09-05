@@ -148,6 +148,54 @@ def control_ids(root=None):
     return out
 
 
+def refuse_unknown_detectors(entries, what, path):
+    """Refuse a corpus whose success/partial lists name detectors that do not exist.
+
+    `unknown_detectors` below has always known this rule; `qatration lint` has always applied
+    it. Neither could reach the file a stranger actually runs. `run --attacks mine.yaml` and
+    `isolation --objectives mine.yaml` both take a path, `lint` takes no arguments at all, and
+    nothing validated the corpus at the point it was loaded -- so the one rule written for this
+    failure was aimed exclusively at files that already pass it.
+
+    WHAT IT COSTS, WALKED: an attack whose only success detector is `canary_in_ouput` (one
+    transposed letter) came back DEFENDED 0/1 with exit code 0 and the line "0/1 attacks
+    breached the target". Nothing could have scored it. The same run prints a careful warning
+    about five detectors that cannot fire FOR WANT OF CONFIG -- the engine has the exact
+    vocabulary for this -- and says nothing about a detector that does not exist, because
+    `inert_for` only knows names that are registered.
+
+    In isolation it is worse, for the reason written on `unknown_detectors`: every trial misses,
+    `hits == 0` reads as locked, and every property locked reads as HARDENED.
+
+    Refused rather than warned, because after this point every signal the run produces is a
+    measurement of nothing, and this is the last moment anybody is reading.
+    """
+    import difflib
+    known = sorted(DETECTORS)
+    bad = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        names = list(e.get("success") or []) + list(e.get("partial") or [])
+        for p in (e.get("properties") or []):
+            if isinstance(p, dict):
+                names += list(p.get("success") or []) + list(p.get("partial") or [])
+        for n in unknown_detectors(names):
+            near = difflib.get_close_matches(str(n), known, n=1, cutoff=0.7)
+            bad.append((e.get("id") or e.get("name") or "?", n, near[0] if near else ""))
+    if not bad:
+        return
+    lines = ["%s: %d name(s) in %s are not detectors this build registers. Nothing was sent."
+             % (what, len(bad), path)]
+    for who, n, near in bad[:10]:
+        lines.append("    %-28s %r%s" % (who, n, " — did you mean %r?" % near if near else ""))
+    lines.append("  A name nothing registers can never fire, so every attack that declares it "
+                 "comes back DEFENDED and the run reports a clean result over a question it "
+                 "never asked.")
+    lines.append("  The %d names this build knows: qatration lint" % len(known))
+    raise SystemExit("\n".join(lines))
+
+
 def unknown_detectors(names):
     """Names in a success/partial list that `oracle.py` does not register.
 

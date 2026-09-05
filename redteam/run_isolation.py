@@ -123,6 +123,11 @@ def main():
     path = objectives_path(args.objectives)
     with open(path, encoding="utf-8") as f:
         objectives = yaml.safe_load(f) or []
+    # The same rule, on the corpus where a typo is worst: an unknown name leaves nothing to
+    # evaluate, every trial misses, and an objective whose properties are all locked reads as
+    # HARDENED — the strongest claim this command makes.
+    from lint_arsenal import refuse_unknown_detectors
+    refuse_unknown_detectors(objectives, "isolation", path)
 
     target, ctx = load_target(args.target_config, args.model)
     objectives = [o for o in objectives

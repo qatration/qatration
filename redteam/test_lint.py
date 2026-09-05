@@ -87,6 +87,77 @@ def run_lint(attacks):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def check_refusal(check):
+    """The rule aimed at the file a stranger actually runs.
+
+    `unknown_detectors` has always known that a success list naming a detector nothing
+    registers can never fire, and `qatration lint` has always applied it — to the files that
+    ship. `run --attacks mine.yaml` and `isolation --objectives mine.yaml` both take a path and
+    `lint` takes no arguments at all, so the one rule written for this failure was aimed
+    exclusively at corpora that already pass it.
+
+    Walked before it was fixed: an attack whose only success detector was `canary_in_ouput`
+    came back DEFENDED 0/1, exit code 0, "0/1 attacks breached the target". The same run warns
+    carefully about five detectors that cannot fire FOR WANT OF CONFIG, and said nothing about
+    one that does not exist, because `inert_for` only knows registered names.
+    """
+    from lint_arsenal import refuse_unknown_detectors
+
+    def refused(entries):
+        try:
+            refuse_unknown_detectors(entries, "test", "mine.yaml")
+        except SystemExit as e:
+            return str(e)
+        return ""
+
+    _typo = [{"id": "leak-the-key", "success": ["canary_in_ouput"]}]
+    msg = refused(_typo)
+    check("a transposed detector name is refused", bool(msg), "nothing was refused")
+    check("...naming the attack that carries it", "leak-the-key" in msg, msg[:80])
+    check("...and the name it did not recognise", "canary_in_ouput" in msg, msg[:80])
+    check("...and offering the one it meant", "canary_in_output" in msg, msg[:120])
+    check("...and saying nothing was sent", "Nothing was sent" in msg, msg[:80])
+
+    # THE OTHER HALF, or the check above would pass against a function that refuses everything.
+    check("a correct arsenal is not refused",
+          not refused([{"id": "ok", "success": ["canary_in_output"], "partial": ["sysprompt_leak"]}]),
+          "a valid arsenal was refused")
+    check("an arsenal that names no detector at all is not refused",
+          not refused([{"id": "ok", "text": "hello"}]), "an empty success list was refused")
+
+    # AND THE NESTED SHAPE, which is the corpus where the failure is worse: an unknown name
+    # leaves nothing to evaluate, every trial misses, `hits == 0` reads as locked, and every
+    # property locked reads as HARDENED.
+    _obj = [{"id": "o", "properties": [{"name": "p", "success": ["bfla_cal"]}]}]
+    msg = refused(_obj)
+    check("an objective's property is read too", bool(msg), "nested success lists are not read")
+    check("...and it names the property's own detector", "bfla_cal" in msg, msg[:90])
+
+    # AND `partial` COUNTS. It decides PARTIAL rather than EXPLOITED, so a typo there loses a
+    # verdict rather than a finding — quieter, and the same silence.
+    check("a partial list is read as well",
+          bool(refused([{"id": "p", "success": ["canary_in_output"], "partial": ["xss_in_ouput"]}])),
+          "partial lists are not checked")
+
+    # AND THE CORPORA THAT SHIP PASS IT, which is what makes the refusal usable rather than a
+    # wall. Read from disk rather than trusted: this is the check that fails if a detector is
+    # renamed and one of forty-one arsenals is missed.
+    # ROOTED AT THE PACKAGE FILE, not at `lint.ROOT`: two helpers in this suite redirect
+    # that global to a temp directory and restore it, and a scan that read it would find no
+    # corpora and pass over nothing if the order of this file ever changed.
+    import glob as _g, yaml as _y
+    _pkg = os.path.dirname(os.path.abspath(lint.__file__))
+    _seen = 0
+    for _fp in sorted(_g.glob(os.path.join(_pkg, "attacks*.yaml"))
+                      + _g.glob(os.path.join(_pkg, "isolation*.yaml"))):
+        _rows = _y.safe_load(io.open(_fp, encoding="utf-8").read()) or []
+        if not isinstance(_rows, list):
+            continue
+        _seen += 1
+        check("%s passes the refusal" % os.path.basename(_fp), not refused(_rows), "refused")
+    check("...over every corpus that ships", _seen >= 40, str(_seen))
+
+
 def main():
     fails, checks = [], 0
 
@@ -256,6 +327,8 @@ def main():
           "no 'success' or 'partial'" in loud[1], loud[1])
     check("...and neither is an error: the arsenal still lints clean",
           silent[0] == 0 and loud[0] == 0, f"{silent[0]}, {loud[0]}")
+    check_refusal(check)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
