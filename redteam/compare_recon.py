@@ -15,6 +15,7 @@ warning means a measurement downstream cannot be trusted until it is fixed.
 import json, glob, os, html, sys
 from pathlib import Path
 from workspace import OUT as WORKSPACE_OUT
+from workspace import plain
 from recon import memory_phrase
 
 try:
@@ -59,7 +60,20 @@ def _row(profile, name, when):
     blocked = sum(1 for v in lock.values() if v == "blocked")
     unmeasured = sum(1 for v in lock.values() if v == "unmeasured")
     disc = profile.get("disclosure_open")
-    return {
+    # AT THE BOUNDARY, so both surfaces get it and the column widths are computed on what
+    # is actually printed. Every string below is the target describing itself -- the tool
+    # channel it named, the tools it listed, the hints its answers raised -- and this is
+    # the one renderer whose console output nothing had attacked. `esc` on the HTML side
+    # is `html.escape(plain(...))`, so a value that has already been through here escapes
+    # to the same string the page showed before.
+    def _v(x):
+        if isinstance(x, str):
+            return plain(x, oneline=True)
+        if isinstance(x, list):
+            return [plain(i, oneline=True) if isinstance(i, str) else i for i in x]
+        return x
+
+    return {k: _v(v) for k, v in {
         "target": name,
         "when": when,
         "channel": profile.get("tool_channel", "?"),
@@ -74,7 +88,7 @@ def _row(profile, name, when):
                          + (f" (+{unmeasured} unmeasured)" if unmeasured else "")) if lock else "—",
         "unlabelled": sum(len(v) for v in (profile.get("new_patterns") or {}).values()),
         "warnings": warns,
-    }
+    }.items()}
 
 
 def collect():

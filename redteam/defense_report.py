@@ -704,6 +704,7 @@ SEV_BG = {"critical": "rgba(179,38,30,.12)", "high": "rgba(194,65,12,.12)", "med
 
 
 from workspace import esc as _ws_esc
+from workspace import plain
 
 
 def esc(s):
@@ -1825,9 +1826,13 @@ everything the model reads (prompts, retrieved documents, tool output) as untrus
           f"seen {n_breaches} time(s), {len(ordered)} fixes, "
           f"{len(all_targets)} targets")
     if unmapped:
+        # `plain` for the same reason `esc` is on every page: these names come out of a
+        # stored artifact, and an artifact is a record of what a target said. A detector
+        # name carrying ESC[2K erases this warning line as it is printed.
         print(f"  ! {len(unmapped)} finding(s) have no remediation text and are listed without "
               f"one — {len({d for *_ , fired in unmapped for d in fired})} detector(s): "
-              + ", ".join(sorted({d for *_, fired in unmapped for d in fired})[:8]))
+              + plain(", ".join(sorted({d for *_, fired in unmapped for d in fired})[:8]),
+                      oneline=True))
 
 
 if __name__ == "__main__":

@@ -160,6 +160,87 @@ def main():
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    # --- AND THE OTHER DELIVERABLE: THE TERMINAL ----------------------------------------
+    #
+    # Everything above is a page. The console table is what an operator actually reads,
+    # and it had none of this. Three commands printed a target's own words to stdout with
+    # nothing between: `profiles`, `fixes` and `coverage`.
+    #
+    # Two different attacks, and the second is the one that matters. ANSI: a reply
+    # carrying ESC[2K and a carriage return erases the line the tool just printed and
+    # repaints it green. FORGERY: a newline in a single-line field prints an EXTRA ROW.
+    # A profile whose `tool_channel` was "real" + LF + a well-spaced row put a target
+    # named `safebot` in the fleet table, reading clean on every column, from a fleet
+    # that has no such target. That is the tool fabricating a finding about a bot that
+    # does not exist, which is the mirror of everything else this suite guards.
+    #
+    # DERIVED FROM `cli.COMMANDS`, so the fourteenth command is covered without anybody
+    # adding it here. A command that reads the workspace is one with an `OUT_DIR` or an
+    # `OUT`; those are the ones that can be pointed at a hostile artifact.
+    import importlib
+    import cli
+
+    ESC, BEL = chr(27), chr(7)
+    ANSI = ESC + "[2K\r" + ESC + "[32mDEFENDED 0/10" + ESC + "[0m" + ESC + "]8;;http://x" + BEL
+    ROW = "real\nsafebot         real           stateless                 held        0/0"
+
+    tmp = tempfile.mkdtemp()
+    try:
+        prof = hostile_profile(ANSI)
+        prof["tool_channel"] = ROW          # the forgery, in the column that prints first
+        for fn, obj in (("results_hostile.json", hostile_run(ANSI)),
+                        ("recon_hostile.json", prof)):
+            with open(os.path.join(tmp, fn), "w", encoding="utf-8") as f:
+                json.dump(obj, f)
+
+        driven, leaked, forged = [], [], []
+        for cmd, (modname, _) in cli.COMMANDS.items():
+            try:
+                m = importlib.import_module(modname)
+            except Exception:
+                continue
+            attrs = [a for a in ("OUT_DIR", "OUT") if hasattr(m, a)]
+            if not attrs:
+                continue        # takes no workspace, so there is nothing hostile to hand it
+            saved = {a: getattr(m, a) for a in attrs}
+            for a in attrs:
+                setattr(m, a, pathlib.Path(tmp))
+            buf = io.StringIO()
+            argv = sys.argv
+            sys.argv = [modname]
+            try:
+                with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                    try:
+                        m.main()
+                    except SystemExit:
+                        pass
+                    except Exception:
+                        pass       # a crash prints no table; `run` is what is under test
+            finally:
+                sys.argv = argv
+                for a, v in saved.items():
+                    setattr(m, a, v)
+            said = buf.getvalue()
+            if said.strip():
+                driven.append(cmd)
+            if ESC in said or BEL in said:
+                leaked.append("%s (%d)" % (cmd, said.count(ESC) + said.count(BEL)))
+            # THE PROPERTY IS WHERE IT LANDS, not whether it is there. Escaped, `safebot`
+            # sits inside the one cell it belongs to; forged, it begins a line of its own
+            # and reads as a row.
+            if any(l.lstrip().startswith("safebot") for l in said.splitlines()):
+                forged.append(cmd)
+
+        # SAY HOW MUCH WAS DRIVEN. Every assertion below is an absence, and an absence is
+        # what a command that printed nothing produces.
+        check("the console commands were actually driven", len(driven) >= 8, str(driven))
+        check("no command prints a target's control bytes to the terminal",
+              not leaked, ", ".join(leaked))
+        check("...and no target can forge a row in a console table",
+              not forged, ", ".join(forged))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
     # A gate that passes because nothing was rendered is not a gate. The payload has to
     # reach the page in its escaped form, or the checks above are satisfied by an empty file.
     run = hostile_run(PAYLOADS[0])

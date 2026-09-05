@@ -417,6 +417,51 @@ CONTROL_CHARS = re.compile(
     "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
 
 
+# Layout in a quoted reply, and the attack itself in a table cell -- which is why `plain`
+# takes an argument and `esc` does not. A page renders CR and LF as whitespace; a terminal
+# obeys them.
+LAYOUT = re.compile("[\t\n\r]")
+
+
+def plain(s, oneline=False):
+    """Make an invisible character visible as its codepoint. For a TERMINAL.
+
+    `esc` below is the same rule for a page, and the page was the only surface that had
+    it. The console is the one an operator actually watches -- `qatration profiles` and
+    `qatration fixes` print a target's own words to stdout -- and a reply carrying
+    ESC[2K and a carriage return erases the line the tool just printed and repaints it.
+    Measured, not imagined: a profile whose `tool_channel` was that payload put
+
+        ESC[2K CR ESC[32m "DEFENDED 0/10" ESC[0m  ESC]8;;http://evil BEL
+
+    into the fleet table and into the `!` warning line under it, where it reads as a
+    green verdict from the tool and hyperlinks the row somewhere the tool never mentioned.
+    `attacks_ansi.yaml` exists because this is a finding when somebody else's product does
+    it; the reports were hardened against it and the terminal was not.
+
+    Shown rather than stripped, for the reason `esc` gives: the presence of the character
+    IS the finding, and a tool that quietly deletes it disagrees with the evidence it is
+    quoting.
+
+    `oneline` for a value going into a SINGLE-LINE FIELD -- a table cell, a `!` line. The
+    character list `esc` uses deliberately keeps tab, newline and carriage return, because
+    on a page they are layout in a quoted reply. In a terminal table they are the attack,
+    and not a subtle one: a profile whose `tool_channel` was
+
+        "real" LF "safebot         real           stateless   held    0/0   -   -"
+
+    printed a second row in the fleet table for a target that does not exist, reading
+    clean on every column. A carriage return is the quieter version -- it returns the
+    cursor to column 0 and whatever follows overwrites the row the tool just wrote.
+
+    Off by default, so the multi-line reply a report quotes is still quoted as it came.
+    """
+    s = CONTROL_CHARS.sub(lambda m: "<U+%04X>" % ord(m.group(0)), str(s))
+    if oneline:
+        s = LAYOUT.sub(lambda m: "<U+%04X>" % ord(m.group(0)), s)
+    return s
+
+
 def esc(s):
     """HTML-escape, and make an invisible character visible as its codepoint.
 
@@ -433,9 +478,11 @@ def esc(s):
     it imports none of them; a shared rule living in one of the things that shares it is how
     the fourth copy gets written.
     """
+    # THROUGH `plain`, not beside it. Escaping the codepoint marker `plain` writes gives
+    # exactly the string this returned when it did its own substitution -- and there is
+    # then no second copy of the rule to update when the character list grows.
     import html as _html
-    return CONTROL_CHARS.sub(lambda m: "&lt;U+%04X&gt;" % ord(m.group(0)),
-                             _html.escape(str(s)))
+    return _html.escape(plain(s))
 
 
 def refuse_unusable_config(cfg, where):

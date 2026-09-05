@@ -18,7 +18,7 @@ import sys, os, glob, json, argparse, collections
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact, config_name,
-                       no_results_note)
+                       no_results_note, plain)
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -316,8 +316,11 @@ def main():
     # smaller number than the evidence supports and has no idea why.
     _no_config = sorted(_scanned - set(contexts()))
     if _no_config:
+        # A TARGET NAME IS A STRING FROM AN ARTIFACT, and an artifact is a record of what
+        # a target said. Printed raw, the name carrying ESC[2K and a carriage return
+        # erases this warning as it is written and repaints the line.
         print(f"  ! {len(_no_config)} target(s) have stored probes and no config here: "
-              f"{', '.join(_no_config[:4])}"
+              f"{', '.join(plain(_n, oneline=True) for _n in _no_config[:4])}"
               f"{' +%d' % (len(_no_config) - 4) if len(_no_config) > 4 else ''}. Their probes "
               f"were replayed with no canary to look for and no tool list to compare against, "
               f"so anything needing one could not speak for them. Export QATRATION_CONFIGS to "
@@ -349,7 +352,7 @@ def main():
     print()
     print("DEMONSTRATED — caught something on a live target")
     for k in sorted(demo, key=lambda x: -hits[x]):
-        tg = ", ".join(sorted(where[k])[:3])
+        tg = ", ".join(plain(_n, oneline=True) for _n in sorted(where[k])[:3])
         more = f" +{len(where[k]) - 3}" if len(where[k]) > 3 else ""
         tag = "  [clean traffic only]" if k in benign_only else ""
         print(f"  {k:<24}{hits[k]:>5}   {tg}{more}{tag}")
