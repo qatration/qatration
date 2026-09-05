@@ -226,10 +226,49 @@ def main():
 
         # --- and the service refuses to START in the dangerous configuration --------------
         src = open(os.path.join(HERE, "intake.py"), encoding="utf-8").read()
-        check("the intake refuses to start without the hosted flag",
-              "if not authorization.hosted():" in src and "sys.exit(" in src)
-        check("...and without an authorization secret",
-              "QATRATION_AUTH_SECRET" in src)
+        # RUN, NOT GREPPED. These asserted that `if not authorization.hosted():` appeared
+        # in the file and that the string `QATRATION_AUTH_SECRET` appeared anywhere in it --
+        # which a comment mentioning either satisfies. The refusal they stand for is the
+        # most consequential one in this module: without the hosted flag the authorization
+        # gate WAIVES local targets, and a service that waives its own machine is an SSRF
+        # proxy with an attack arsenal attached.
+        #
+        # Started as a process on a port nothing will reach, so a build that failed to
+        # refuse would bind and then be killed by the timeout rather than passing.
+        import subprocess as _sp3
+
+        def _start(env_extra):
+            _e = dict(os.environ)
+            _e.pop("QATRATION_HOSTED", None)
+            _e.pop("QATRATION_AUTH_SECRET", None)
+            _e.update(env_extra)
+            _e["PYTHONIOENCODING"] = "utf-8"
+            try:
+                _r = _sp3.run(
+                    [sys.executable, os.path.join(HERE, "intake.py"), "--port", "0",
+                     "--root", tempfile.mkdtemp()],
+                    capture_output=True, text=True, timeout=25, env=_e,
+                    cwd=os.path.dirname(HERE))
+                return _r.returncode, (_r.stdout or "") + (_r.stderr or "")
+            except _sp3.TimeoutExpired:
+                # It did not refuse: it started serving and had to be stopped.
+                return 0, "STARTED AND KEPT RUNNING"
+
+        # ONE VARIABLE AT A TIME. With both unset, removing the hosted guard still exits
+        # on the secret guard below it, so `_rc != 0` passed for the wrong reason and only
+        # the message check caught the mutation. The secret is supplied here so the hosted
+        # flag is the only thing missing.
+        _rc, _out = _start({"QATRATION_AUTH_SECRET": "x"})
+        check("the intake refuses to start without the hosted flag", _rc != 0,
+              "exit %s: %s" % (_rc, _out[-160:]))
+        check("...and says that waiving localhost is what makes it dangerous",
+              "SSRF" in _out or "localhost" in _out, _out[-160:])
+
+        _rc, _out = _start({"QATRATION_HOSTED": "1"})
+        check("...and refuses without an authorization secret too", _rc != 0,
+              "exit %s: %s" % (_rc, _out[-160:]))
+        check("...naming the variable a reader has to set",
+              "QATRATION_AUTH_SECRET" in _out, _out[-160:])
         # Two properties, and the second one is why this check exists in this shape. The path
         # must be built from the validated job id and nothing the caller sent — and the
         # FILENAME must be the one the report writer actually produces. Asserting only the
