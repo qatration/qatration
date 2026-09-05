@@ -1421,6 +1421,67 @@ def main():
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
 
+    # --- THE EXIT CONTRACT IS PUBLISHED TWICE ------------------------------------------
+    #
+    # The README states it for somebody deciding whether to adopt the tool, `docs/ci.md` for
+    # somebody wiring a pipeline. Different audiences, deliberately different wording — and
+    # the same CONTRACT, which nothing kept equal. A code added to one table and not the other
+    # is a pipeline reading a number that its documentation does not describe; a code the
+    # engine emits and neither table lists is worse.
+    #
+    # The SET is what is checked, not the prose. Derived from the engine rather than from
+    # either page: a `sys.exit(n)`, a `raise SystemExit(n)` or a `return n` in any shipped
+    # module is a code somebody can receive.
+    import ast as _ast_x
+    _emitted = set()
+    for _fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+        if os.path.basename(_fp).startswith("test_"):
+            continue
+        try:
+            _tree = _ast_x.parse(io.open(_fp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        # THE NAME `sys` IS BOUND, NOT GIVEN. `workspace.py` already writes `import sys as
+        # _sys`, and a scan looking for the literal word is blind to it — proved by adding a
+        # `sys.exit(6)` under an alias and watching this check pass. The aliases are read out
+        # of the file's own imports.
+        _aliases = {"sys"}
+        for _n in _ast_x.walk(_tree):
+            if isinstance(_n, _ast_x.Import):
+                for _a in _n.names:
+                    if _a.name == "sys":
+                        _aliases.add(_a.asname or "sys")
+        for _n in _ast_x.walk(_tree):
+            _v = None
+            if (isinstance(_n, _ast_x.Call)
+                    and getattr(getattr(_n.func, "value", None), "id", "") in _aliases
+                    and getattr(_n.func, "attr", "") == "exit"):
+                _v = _n.args[0] if _n.args else None
+            elif (isinstance(_n, _ast_x.Raise) and isinstance(_n.exc, _ast_x.Call)
+                  and getattr(_n.exc.func, "id", "") == "SystemExit"):
+                _v = _n.exc.args[0] if _n.exc.args else None
+            elif isinstance(_n, _ast_x.Return) and isinstance(_n.value, _ast_x.Constant):
+                _v = _n.value
+            if (isinstance(_v, _ast_x.Constant) and isinstance(_v.value, int)
+                    and not isinstance(_v.value, bool) and 0 <= _v.value <= 9):
+                _emitted.add(_v.value)
+
+    def _documented(path):
+        return {int(m.group(1)) for m in
+                re.finditer(r"^\| `(\d)` \| ", io.open(path, encoding="utf-8").read(), re.M)}
+
+    _readme_codes = _documented(README)
+    _ci_codes = _documented(os.path.join(ROOT, "docs", "ci.md"))
+    check("the engine emits a real set of exit codes", len(_emitted) >= 4, str(sorted(_emitted)))
+    check("the README documents an exit table", len(_readme_codes) >= 4, str(sorted(_readme_codes)))
+    check("docs/ci.md documents one too", len(_ci_codes) >= 4, str(sorted(_ci_codes)))
+    check("the two published tables describe the same codes",
+          not (_readme_codes ^ _ci_codes), str(sorted(_readme_codes ^ _ci_codes)))
+    check("...and every code the engine can emit is in them",
+          not (_emitted - _readme_codes), str(sorted(_emitted - _readme_codes)))
+    check("...and neither documents a code nothing emits",
+          not (_readme_codes - _emitted), str(sorted(_readme_codes - _emitted)))
+
     # --- AND THE FLEET FIGURES THE SAME PAGE QUOTES -------------------------------------
     #
     # `docs/onboarding.md` opens its provenance section with the dashboard's own headline --
