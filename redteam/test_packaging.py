@@ -776,15 +776,46 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
     #     other way.
     #
     #     Run against THIS REPOSITORY's `out/`, which ships in the tree and is what CI has.
-    for name in ("rejudge", "coverage"):
+    # THE SAME DERIVED SET, not a pair of names. `rejudge` and `coverage` were listed here
+    # because they were the two whose exit code had just been fixed, which is how a check
+    # ends up asserting a property of the fix rather than of the rule. Every command that
+    # reads the workspace and answered 3 over an empty one must answer 0 over a full one,
+    # and there are eight of them.
+    #
+    # AND IT IS THE ONLY THING THAT RUNS THESE COMMANDS FOR REAL. Sixteen of twenty are never
+    # invoked with arguments by any suite: their modules are imported and their functions
+    # called directly, so a command can keep a perfect function and stop calling it. That is
+    # this file's own subject and it happened twice in one day — a printed diagnostic whose
+    # rule was tested and whose caller was not.
+    # A COPY OF THE WORKSPACE, NOT THE WORKSPACE. Several of these commands BUILD a page —
+    # that is what they are for — so driving them against the repository's own `out/` rewrote
+    # three tracked HTML files on every run of this suite. A check that dirties the tree it is
+    # checking teaches everyone to ignore `git status`, and these artifacts are the evidence
+    # the published counts are recounted from.
+    import shutil as _sh
+    _src = os.path.join(os.path.dirname(HERE), "out")
+    _work = tempfile.mkdtemp()
+    _full = os.path.join(_work, "out")
+    _sh.copytree(_src, _full)
+    _ran = []
+    for name in sorted(_answered):
         p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name],
                            capture_output=True, text=True, timeout=900,
-                           env=dict(os.environ, QATRATION_OUT=os.path.join(os.path.dirname(HERE), "out"),
+                           env=dict(os.environ, QATRATION_OUT=_full,
                                     PYTHONIOENCODING="utf-8"))
         assert p.returncode == 0, (
             "qatration %s exited %d over a workspace with stored results; 3 says the question "
             "could not be answered and it plainly could: %s"
-            % (name, p.returncode, (p.stdout + p.stderr)[-200:]))
+            % (name, p.returncode, (p.stdout + p.stderr)[-300:]))
+        # AND IT SAID SOMETHING. A command that exits 0 having printed nothing is the same
+        # silence one code over, and every one of these exists to produce a page or a table.
+        assert (p.stdout or "").strip(), (
+            "qatration %s exited 0 over real evidence and printed nothing" % name)
+        _ran.append(name)
+    _sh.rmtree(_work, ignore_errors=True)
+    assert len(_ran) >= 5, (
+        "only %d command(s) were driven over real evidence, so this property was asserted "
+        "about almost nothing: %s" % (len(_ran), _ran))
     print("  ok  %d commands answer an empty workspace without publishing one"
           % len(cli.COMMANDS))
 
