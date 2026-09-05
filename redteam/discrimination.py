@@ -380,8 +380,24 @@ def main():
         print()
         print("   %d of the %d control(s) in the arsenals have never been sent to any target, "
               "so" % (len(_never), len(_corpus)))
-        print("   the verdict below is about the %d that have: %s%s"
-              % (len(_corpus) - len(_never), ", ".join(_never[:6]),
+        # COUNTED ONE SET AND NAMED THE OTHER. The number was the controls that RAN and
+        # the names after the colon were the ones that never did, so a reader was handed
+        # a list of unsent controls under the words `the N that have`. On the practice
+        # fleet that read as `the verdict below is about the 1 that have:` followed by six
+        # ids and `+124` -- a claim that 130 controls had been exercised, in the section
+        # whose entire subject is whether this engine's claims can be believed.
+        _sent = sorted(_corpus & _ran)
+        if _sent:
+            print("   the verdict below is about the %d that have: %s%s"
+                  % (len(_sent), ", ".join(_sent[:6]),
+                     " +%d" % (len(_sent) - 6) if len(_sent) > 6 else ""))
+        else:
+            # Not a pass over a small subset: a pass over nothing. `_never` being the
+            # whole corpus is the one case where the sentence above has no subject.
+            print("   NOT ONE of them has ever been sent, so nothing below rests on a "
+                  "control at all.")
+        print("   never sent: %s%s"
+              % (", ".join(_never[:6]),
                  " +%d" % (len(_never) - 6) if len(_never) > 6 else ""))
 
     print()

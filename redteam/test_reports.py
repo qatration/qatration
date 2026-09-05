@@ -2042,6 +2042,37 @@ def main():
     _missed = sorted(i for i, c in _cats.items() if c == {"control"} and i not in _corpus)
     check("...and no control is left out of it", not _missed, str(_missed[:5]))
 
+    # AND THE CAVEAT NAMES THE SET IT COUNTS. The block above is checked; the SENTENCE was
+    # not, and it counted one set and printed the other:
+    #
+    #     the verdict below is about the 1 that have: cap-control-correct, ... +124
+    #
+    # The number is the controls that RAN. The names after the colon were `_never` -- the
+    # ones that never did. So the line claimed 130 controls had been exercised, in the
+    # section whose whole subject is whether this engine's claims can be believed. Found
+    # by running the tool against a live practice bot and reading what it said, which is
+    # the only way a wrong sentence over right numbers ever shows up.
+    _ctrl_ids = sorted(_corpus)[:2]
+    _ctrl_rows = [{"attack": {"id": _cid, "category": "control"}, "headline": "DEFENDED",
+                   "rate": "0/1", "fired": [], "locks": {},
+                   "trials": [{"verdict": "DEFENDED", "fired": [], "refusal": {"class": "none"},
+                               "probe": {"output": "x", "error": None, "tool_calls": [],
+                                         "prompt": "p"}}]}
+                  for _cid in _ctrl_ids]
+    _cav = _audit(_ctrl_rows + [_row("a", "1/1")])
+    _line = next((l for l in _cav.splitlines() if "that have:" in l), "")
+    check("the credibility caveat says which controls the verdict rests on",
+          bool(_line), _cav[-400:])
+    _named = [s.strip() for s in _line.split("that have:", 1)[-1].split("+")[0].split(",")
+              if s.strip()]
+    check("...and every control it names is one that actually ran",
+          sorted(_named) == sorted(_ctrl_ids), "%s vs %s" % (sorted(_named), sorted(_ctrl_ids)))
+    # THE OTHER DIRECTION. Naming the right ids is half of it: a line that also lists them
+    # under `never sent` is still telling the reader they were not exercised.
+    _nline = next((l for l in _cav.splitlines() if l.strip().startswith("never sent:")), "")
+    check("...and none of them is also listed as never sent",
+          not [c for c in _ctrl_ids if c in _nline], _nline)
+
     # --- THE CREDIBILITY GATE, REACHABLE AT LAST ----------------------------------------
     # `discrimination` decides whether this engine can be said not to cry wolf, and exits 1
     # when it cannot. That decision lived inside its print block, so no check could see it --
