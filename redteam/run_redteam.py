@@ -610,6 +610,7 @@ def main():
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
     # be a clean baseline on a target that's compromised at rest — see targets_localrag.yaml).
+    from refusal import bad_patterns as _bad_patterns
     exclude = set(tcfg.get("exclude_attacks", []))
     # THE ARSENAL HAS TO BE A LIST OF ATTACKS BEFORE IT CAN BE FILTERED. Without this, an entry
     # that is not a mapping raises AttributeError out of `a.get` and an entry with no `id`
@@ -634,6 +635,18 @@ def main():
     # only ever applied to files that already pass it.
     from lint_arsenal import refuse_unknown_detectors
     refuse_unknown_detectors(all_attacks, "run", args.attacks)
+    # AND THE TARGET'S OWN REFUSAL VOCABULARY. A misspelled class name under
+    # `refusal_patterns` is not refused and not applied, so the operator's phrasings never
+    # join the classifier and their bot reads as one that never refuses; an uncompilable
+    # pattern raises out of `classify` mid-sweep and reaches Python's default handler as
+    # exit 1, which this project's own table documents as "exploited or breached".
+    _bad_pats = _bad_patterns(ctx)
+    if _bad_pats:
+        raise SystemExit(
+            "run: this target's `refusal_patterns` cannot be used. Nothing was sent.\n"
+            + "\n".join("    %-34s %s" % (w, why) for w, why in _bad_pats[:8])
+            + "\n  A class nothing names is a list nothing applies, and a pattern that does "
+              "not compile stops the sweep part way through scoring it.")
     attacks = [a for a in all_attacks
                if (not a.get("applies_to") or target.name in a["applies_to"])
                and a["id"] not in exclude]

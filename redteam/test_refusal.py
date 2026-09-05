@@ -263,6 +263,68 @@ def main():
     check("an errored probe is not a bypass", declined(P(output="", error="Timeout")),
           "error read as a comply")
 
+    # --- A TARGET'S OWN REFUSAL VOCABULARY, AND THE TWO WAYS IT DOES NOTHING -----------
+    #
+    # `refusal_patterns` rides in ctx so a deployment can teach the classifier its own
+    # phrasings, and `recon` generates the block for an operator to paste. `_extra` reads
+    # `refusal_patterns[cls]` WITH A DEFAULT, so a class name nothing recognises is neither
+    # refused nor applied: the whole list under it is silently inert, the bot reads as one
+    # that never refuses, and that inflates compliance everywhere it is counted.
+    #
+    # And a pattern that does not compile raises `re.error` out of `classify`, through the
+    # runner, to Python's default handler and exit 1 — the code this project's own table
+    # documents as "the target was exploited or breached". A YAML typo filed as a security
+    # finding.
+    from refusal import bad_patterns, pattern_classes
+
+    _classes = pattern_classes()
+    check("the class names can be scanned", len(_classes) >= 6, str(sorted(_classes)))
+    # THE TWO THAT ARE EASY TO FORGET. Four come from `CLASSES`; these two are passed to
+    # `_extra` as literals from the branches that do not loop over it, and a hand-typed list
+    # is exactly where they would go missing.
+    check("...including the two that are not in CLASSES",
+          {"deflection", "tool_denied"} <= _classes, str(sorted(_classes)))
+    check("...and not a name nobody uses", "refusal_contnet" not in _classes, "too generous")
+
+    def _bad(pats):
+        return bad_patterns({"refusal_patterns": pats})
+
+    _b = _bad({"refusal_contnet": ["computer says no"]})
+    check("a misspelled class is reported", len(_b) == 1, str(_b))
+    check("...naming the key as written", "refusal_contnet" in _b[0][0], str(_b))
+    check("...and the class it meant", "refusal_content" in _b[0][1], str(_b))
+
+    _b = _bad({"refusal_content": ["unclosed (group"]})
+    check("a pattern that will not compile is reported", len(_b) == 1, str(_b))
+    check("...before a sweep can raise on it", "not a regular expression" in _b[0][1], str(_b))
+
+    check("a list given as a bare string is reported",
+          len(_bad({"tool_denied": "not a list"})) == 1, str(_bad({"tool_denied": "x"})))
+    check("refusal_patterns that is not a mapping at all is reported",
+          len(bad_patterns({"refusal_patterns": ["oops"]})) == 1, "not caught")
+
+    # THE OTHER DIRECTION, or every check above passes against a function that rejects
+    # everything — including the case a target actually ships.
+    _ok = _bad({"refusal_content": [r"computer says no"], "deflection": [r"instead,? i"]})
+    check("a correct vocabulary is accepted", not _ok, str(_ok))
+    check("no refusal_patterns at all is not a problem", not bad_patterns({}), "reported")
+    check("...nor is an empty one", not _bad({}), str(_bad({})))
+
+    # AND THE ONE THAT SHIPS PASSES IT. `targets_dvla.yaml` carries a real block; if this
+    # rule and that file ever disagree, one of them is wrong and this says so.
+    import glob as _g, io as _io, os as _os, yaml as _y
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _checked = 0
+    for _fp in sorted(_g.glob(_os.path.join(_here, "targets_*.yaml"))):
+        _c = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or {}
+        _oc = (_c.get("oracle_context") or {}) if isinstance(_c, dict) else {}
+        if "refusal_patterns" not in _oc:
+            continue
+        _checked += 1
+        _sh = bad_patterns(_oc)
+        check("%s ships a usable vocabulary" % _os.path.basename(_fp), not _sh, str(_sh))
+    check("...and at least one config ships one", _checked >= 1, str(_checked))
+
     # summarize(): counts per lock across trials, compliance excluded from the tally.
     # A BREACHED trial is skipped even though its reply carries refusal language — a breach
     # is not evidence about the wall, and counting it makes a row read as both exploited and

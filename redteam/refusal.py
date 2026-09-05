@@ -131,6 +131,72 @@ def _hits(text, patterns):
     return [p for p in patterns if re.search(p, text, re.I | re.S)]
 
 
+def pattern_classes():
+    """Every class name `refusal_patterns` may carry -- SCANNED, never listed.
+
+    Four come from `CLASSES`; `deflection` and `tool_denied` are passed to `_extra` as
+    literals from the two branches that do not loop over it. A hand-typed tuple would miss
+    exactly that asymmetry, which is what makes it worth scanning: the two that are easy to
+    forget are the two a reader would forget.
+    """
+    import inspect as _inspect
+    import re as _re
+    src = _inspect.getsource(_inspect.getmodule(_extra))
+    literal = set(_re.findall(r'_extra\(\s*ctx\s*,\s*["\']([a-z_]+)["\']', src))
+    return {c for c, _ in CLASSES} | literal
+
+
+def bad_patterns(ctx):
+    """-> [(where, what is wrong)] for a target's own refusal vocabulary.
+
+    TWO FAILURES, BOTH SILENT UNTIL THEY ARE NOT.
+
+    A MISSPELLED CLASS NAME DISARMS THE WHOLE LIST. `_extra` reads `refusal_patterns[cls]`
+    with a default, so `refusal_contnet:` is not refused and not applied: the operator's own
+    phrasings never join the classifier, their bot reads as one that never refuses, and that
+    inflates compliance everywhere it is counted. `recon` GENERATES this block for them to
+    paste, so the names arrive correct and stay correct only until somebody edits one.
+
+    AN UNCOMPILABLE REGEX RAISES MID-SWEEP. `re.search` on `unclosed (group` throws
+    `re.error` out of `classify`, through the runner, to Python's default handler and exit 1 --
+    the code this project's own table documents as "the target was exploited or breached". A
+    YAML typo filed as a security finding, which is the failure the arsenal-shape guard in
+    `run_redteam` was written for, one file over.
+
+    Checked where the config is loaded rather than where the pattern is used, because by then
+    a sweep is running and half its rows are scored.
+    """
+    import re as _re
+    out = []
+    pats = (ctx or {}).get("refusal_patterns")
+    if pats is None:
+        return out
+    if not isinstance(pats, dict):
+        return [("refusal_patterns", "is %s, not a mapping of class name to patterns"
+                 % type(pats).__name__)]
+    known = pattern_classes()
+    for cls, rules in pats.items():
+        if cls not in known:
+            import difflib
+            near = difflib.get_close_matches(str(cls), sorted(known), n=1, cutoff=0.7)
+            out.append(("refusal_patterns.%s" % cls,
+                        "is not a class this classifier names%s"
+                        % (" — did you mean %r?" % near[0] if near else
+                           "; it takes %s" % ", ".join(sorted(known)))))
+            continue
+        if isinstance(rules, str) or not isinstance(rules, (list, tuple)):
+            out.append(("refusal_patterns.%s" % cls,
+                        "is %s, not a list of patterns" % type(rules).__name__))
+            continue
+        for r in rules:
+            try:
+                _re.compile(str(r))
+            except _re.error as e:
+                out.append(("refusal_patterns.%s" % cls,
+                            "%r is not a regular expression: %s" % (str(r)[:40], e)))
+    return out
+
+
 def _extra(ctx, cls):
     return list((ctx.get("refusal_patterns") or {}).get(cls, []))
 

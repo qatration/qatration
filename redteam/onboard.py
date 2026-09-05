@@ -120,6 +120,12 @@ def check(cfg_path, probe_text=PROBE):
     # is a check over the shipped configs, in `test_http_adapter`, where it can run without a
     # target at all.
     rep["unread_keys"] = unread_context_keys(cfg)
+    # THE SAME QUESTION ONE LEVEL DOWN. `refusal_patterns` is a key the engine reads, so the
+    # check above passes it; what it CONTAINS is a second vocabulary with its own spellings,
+    # and a class name nothing names disarms the whole list under it in silence.
+    from refusal import bad_patterns as _bad_patterns
+    for _where, _why in _bad_patterns((cfg or {}).get("oracle_context") or {}):
+        rep["problems"].append("%s %s" % (_where, _why))
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "
