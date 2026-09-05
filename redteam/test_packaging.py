@@ -820,6 +820,82 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
           % len(cli.COMMANDS))
 
 
+def test_the_offline_claim_is_enforced_rather_than_stated():
+    """`tools/check.py` opens by saying these suites are offline "asserted rather than
+    assumed". It was assumed.
+
+    Nothing looked, and the claim is why the whole suite is expected to pass on a runner with
+    no GPU and no fleet: a suite that quietly reaches a real host passes on the machine that
+    has one and fails on the machine that does not, which is the worst place to learn it.
+
+    LOOPBACK IS NOT THE NETWORK, and that half matters as much. Nine suites bind a socket and
+    drive their own HTTP server on 127.0.0.1 — that is how `test_http_adapter` proves an
+    adapter reads a reply. Blocking those would delete the checks rather than the dependency.
+
+    Driven as a child process with the same environment `check.py` gives a suite, because the
+    mechanism IS the environment: importing the module here would prove the patch works and
+    say nothing about whether a suite ever gets it.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "check_offline", os.path.join(ROOT_DIR, "tools", "check.py"))
+    chk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chk)
+
+    env = chk.child_env()
+    assert chk.OFFLINE in env.get("PYTHONPATH", ""), \
+        "check.py does not put the offline rule on a suite's PYTHONPATH"
+    assert os.path.exists(os.path.join(chk.OFFLINE, "sitecustomize.py")), \
+        "the offline rule is on the path but the file is not there"
+
+    def _try(host, port):
+        code = ("import socket\ns = socket.socket()\ns.settimeout(2)\n"
+                "try:\n    s.connect((%r, %d))\n    print('CONNECTED')\n"
+                "except OSError as e:\n    print(type(e).__name__ + ': ' + str(e)[:120])\n"
+                % (host, port))
+        p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           timeout=60, env=env)
+        return (p.stdout or "") + (p.stderr or "")
+
+    out = _try("example.com", 80)
+    assert "QATRATION_OFFLINE" in out, \
+        "a suite could reach a real host: %s" % out.strip()[:200]
+    assert "example.com" in out, \
+        "the refusal does not name the address, so it reads like a firewall: %s" % out[:200]
+
+    # AND LOOPBACK STILL WORKS. A rule that refuses everything passes the assertion above and
+    # takes nine suites with it.
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class _H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        out = _try("127.0.0.1", srv.server_address[1])
+        assert "CONNECTED" in out, \
+            "the offline rule blocks loopback, which nine suites depend on: %s" % out[:200]
+        assert "QATRATION_OFFLINE" not in out, "loopback was refused"
+    finally:
+        srv.shutdown()
+
+    # A UNIX SOCKET IS A PATH, NOT A HOST, and refusing one would be refusing the filesystem.
+    _spec = importlib.util.spec_from_file_location(
+        "offline_rule", os.path.join(chk.OFFLINE, "sitecustomize.py"))
+    _rule = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_rule)
+    assert _rule._local("/tmp/some.sock"), "a unix socket path was treated as a host"
+    assert _rule._local(("127.0.0.1", 80)) and not _rule._local(("example.com", 80)),         "the rule does not separate this machine from anywhere else"
+    print("  ok  a suite may reach this machine and nowhere else")
+
+
 def test_the_runner_refuses_a_tree_with_no_suites():
     """`tools/check.py` is how every other check in this repository is run. Asked to run
     nothing, it used to say so and exit 0.

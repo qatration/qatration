@@ -75,6 +75,23 @@ def kill_tree(proc):
         pass
 
 
+OFFLINE = os.path.join(HERE, "_offline")
+
+
+def child_env():
+    """The environment a suite runs in, with the offline rule armed.
+
+    The docstring at the top of this file says these suites are offline "asserted rather than
+    assumed". It was assumed. `_offline/sitecustomize.py` is imported by every child on
+    startup because this puts its directory on PYTHONPATH, and it refuses a connection to
+    anywhere but this machine — loopback stays open, because nine suites drive their own HTTP
+    server on 127.0.0.1 and blocking those would delete the checks rather than the dependency.
+    """
+    env = dict(os.environ)
+    env["PYTHONPATH"] = OFFLINE + os.pathsep + env.get("PYTHONPATH", "")
+    return env
+
+
 def run_suite(path):
     """-> (returncode, output, hung, orphaned). returncode is None when it had to be killed."""
     # Its own process group, so one signal reaches everything it started. The cost is that
@@ -82,7 +99,8 @@ def run_suite(path):
     # and turned into the same tree kill.
     opts = {} if os.name == "nt" else {"start_new_session": True}
     proc = subprocess.Popen([sys.executable, path], stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, cwd=ROOT, **opts)
+                            stderr=subprocess.PIPE, text=True, cwd=ROOT,
+                            env=child_env(), **opts)
     try:
         out, err = proc.communicate(timeout=DEADLINE)
         return proc.returncode, (out or "") + (err or ""), False, False
