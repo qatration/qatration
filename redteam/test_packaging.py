@@ -23,6 +23,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(HERE)
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
@@ -786,6 +787,96 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
             % (name, p.returncode, (p.stdout + p.stderr)[-200:]))
     print("  ok  %d commands answer an empty workspace without publishing one"
           % len(cli.COMMANDS))
+
+
+def test_the_runner_refuses_a_tree_with_no_suites():
+    """`tools/check.py` is how every other check in this repository is run. Asked to run
+    nothing, it used to say so and exit 0.
+
+    `suites()` already refuses an argument that matches no suite, and the comment beside that
+    refusal is the whole reason: "a typo that silently runs nothing is a green build that
+    checked nothing, which is the failure this whole repository is about". Run with NO
+    arguments in a tree where the suites are not where it expects them -- a renamed directory,
+    an sdist built without them, a half-finished checkout -- and the list came back empty, the
+    loop ran zero times, and it printed "0 suite(s), 0 failed" and returned 0.
+
+    One rule, implemented once and needed twice. Driven by pointing the runner at an empty
+    directory rather than by reading its source, because the question is what it EXITS with.
+    """
+    import importlib.util, tempfile, shutil
+    spec = importlib.util.spec_from_file_location(
+        "check_under_test", os.path.join(ROOT_DIR, "tools", "check.py"))
+    chk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chk)
+
+    real, work = chk.SUITES, tempfile.mkdtemp()
+    try:
+        chk.SUITES = work
+        for argv, what in (([], "with no arguments"), (["--list"], "asked to --list")):
+            try:
+                rc = chk.main(argv)
+            except SystemExit as e:
+                rc = e.code
+            assert rc == 2, (
+                "tools/check.py %s over a tree with no suites returned %r; running nothing "
+                "is not a pass" % (what, rc))
+    finally:
+        chk.SUITES = real
+        shutil.rmtree(work, ignore_errors=True)
+
+    # AND THE REFUSAL DOES NOT REFUSE THE REAL TREE, which is the half that makes it usable.
+    found = chk.suites([])
+    assert len(found) >= 20, "only %d suite(s) found in the real tree" % len(found)
+    assert chk.refuse_if_empty(found) == found, "the guard altered a real list"
+    print("  ok  the runner refuses an empty tree and passes %d real suites through"
+          % len(found))
+
+
+def test_the_mutation_tool_puts_the_file_back_when_it_is_killed():
+    """`tools/unguarded.py` writes a mutant over a real source file and writes the original
+    back a few lines later. Interrupted in that gap, the mutant is what stays on disk.
+
+    Ctrl-C, a killed background job, a CI step hitting its own limit -- each lands wherever it
+    lands, and the pairs were bare sequences with nothing holding them together. A tool that
+    reports which decisions nobody would miss has no business being able to leave a deleted
+    decision behind and say nothing about it.
+
+    Noticed after killing a run of it and checking `git status` out of habit: the tree was
+    clean, which was luck about where the signal fell rather than a property of the code.
+    Asserted here by causing the interrupt rather than by reading the `finally`.
+    """
+    import importlib.util, tempfile, shutil
+    spec = importlib.util.spec_from_file_location(
+        "unguarded_under_test", os.path.join(ROOT_DIR, "tools", "unguarded.py"))
+    ung = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ung)
+
+    work = tempfile.mkdtemp()
+    try:
+        victim = os.path.join(work, "subject.py")
+        original = "def f():\n    return 1\n"
+        io.open(victim, "w", encoding="utf-8", newline="").write(original)
+
+        for boom, what in ((KeyboardInterrupt, "an interrupt"),
+                           (RuntimeError, "a failure inside the sweep")):
+            try:
+                with ung.source_restored(victim):
+                    io.open(victim, "w", encoding="utf-8", newline="").write("MUTANT\n")
+                    assert io.open(victim, encoding="utf-8").read() == "MUTANT\n", \
+                        "the fixture never mutated the file, so this proves nothing"
+                    raise boom("killed here")
+            except boom:
+                pass
+            assert io.open(victim, encoding="utf-8").read() == original, (
+                "tools/unguarded.py left a mutant on disk after %s" % what)
+
+        # AND IT LEAVES A CLEAN RUN ALONE rather than rewriting every file it touches.
+        with ung.source_restored(victim) as held:
+            assert held == original, "the helper handed back the wrong text"
+        assert io.open(victim, encoding="utf-8").read() == original
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    print("  ok  the mutation tool restores its subject on an interrupt and on an error")
 
 
 def test_every_command_answers_help_without_doing_the_work():

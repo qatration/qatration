@@ -134,13 +134,33 @@ def suites(patterns):
     return chosen
 
 
+def refuse_if_empty(names):
+    """The same rule as above, for the case it did not cover: NO suites at all.
+
+    The refusal beside `unmatched` is written against a typo in an argument. Run with no
+    arguments in a tree where the suites are not where this expects them -- a renamed
+    directory, an sdist built without them, a checkout half-done -- and `names` comes back
+    empty, the loop runs zero times, and this printed "0 suite(s), 0 failed" and exited 0.
+
+    That is a green build that ran nothing, produced by the command every other check in this
+    repository is run through, and it is the failure the file's own comment four lines up
+    names. One rule; it was implemented once and needed twice.
+    """
+    if not names:
+        print("no suites found in %s — nothing was run, and nothing is not a pass.\n"
+              "  This directory should hold the `test_*.py` files. If the tree moved, say\n"
+              "  where: python tools/check.py --list" % SUITES, file=sys.stderr)
+        raise SystemExit(2)
+    return names
+
+
 def main(argv):
     if "--list" in argv:
-        for n in suites([]):
+        for n in refuse_if_empty(suites([])):
             print("  " + n[5:-3])
         return 0
 
-    names = suites([a for a in argv if not a.startswith("-")])
+    names = refuse_if_empty(suites([a for a in argv if not a.startswith("-")]))
     started = time.time()
     failed = []
 

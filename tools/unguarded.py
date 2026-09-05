@@ -50,6 +50,7 @@ against the wrong check before now.
 """
 import argparse
 import ast
+import contextlib
 import io
 import os
 import re
@@ -58,6 +59,28 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RT = os.path.join(os.path.dirname(HERE), "redteam")
+
+
+@contextlib.contextmanager
+def source_restored(path):
+    """Hold a file's original text and put it back, whatever happens in between.
+
+    THE ONE FAILURE THIS TOOL CAN CAUSE. Every sweep here writes a mutant over a real source
+    file and writes the original back a few lines later, and each of those pairs was a bare
+    sequence: interrupt it in the gap -- Ctrl-C, a killed background job, a suite that hangs
+    past a deadline someone else is enforcing -- and the mutant is what stays on disk. A tool
+    that reports which decisions nobody would miss should not be able to leave a deleted
+    decision behind and say nothing.
+
+    Found by killing a run of this file and then checking `git status` out of habit. It was
+    clean, which was luck about where the signal landed rather than a property of the code.
+    """
+    orig = io.open(path, encoding="utf-8").read()
+    try:
+        yield orig
+    finally:
+        if io.open(path, encoding="utf-8").read() != orig:
+            io.open(path, "w", encoding="utf-8", newline="").write(orig)
 
 GUARD = re.compile(r"^(\s+)if\s+.+:\s*$")
 BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\))\s*$")
@@ -110,16 +133,17 @@ def sweep_guards():
             print("%-24s SKIPPED (its suites are not green to begin with)" % mod)
             continue
         caught = 0
-        for i in hits:
-            tested += 1
-            io.open(path, "w", encoding="utf-8", newline="").write(
-                "\n".join(lines[:i] + lines[i + 2:]))
-            red = any(_run(s) for s in suites)
-            io.open(path, "w", encoding="utf-8", newline="").write(orig)
-            if red:
-                caught += 1
-            else:
-                survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
+        with source_restored(path):
+            for i in hits:
+                tested += 1
+                io.open(path, "w", encoding="utf-8", newline="").write(
+                    "\n".join(lines[:i] + lines[i + 2:]))
+                red = any(_run(s) for s in suites)
+                io.open(path, "w", encoding="utf-8", newline="").write(orig)
+                if red:
+                    caught += 1
+                else:
+                    survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
         assert not any(_run(s) for s in suites), "%s was not restored" % mod
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
     return tested, survivors
@@ -140,17 +164,19 @@ def sweep_rules():
     assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
     lines = orig.split("\n")
     free = []
-    for name, lineno in sites:
-        idx = lineno - 1
-        stmt = lines[idx]
-        mutant = list(lines)
-        mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-        io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
-        red = _run("test_oracle.py")
-        io.open(path, "w", encoding="utf-8", newline="").write(orig)
-        print("  %-28s line %-5d %s" % (name, lineno, "kept" if red else "NO CASE OF ITS OWN"))
-        if not red:
-            free.append((name, lineno, stmt.strip()))
+    with source_restored(path):
+        for name, lineno in sites:
+            idx = lineno - 1
+            stmt = lines[idx]
+            mutant = list(lines)
+            mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
+            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
+            red = _run("test_oracle.py")
+            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            print("  %-28s line %-5d %s"
+                  % (name, lineno, "kept" if red else "NO CASE OF ITS OWN"))
+            if not red:
+                free.append((name, lineno, stmt.strip()))
     assert _run("test_oracle.py") == 0, "oracle.py was not restored"
     return len(sites), free
 
@@ -211,26 +237,27 @@ def sweep_refusals():
         print("  ! no stored evidence in out/, so every survivor below is unfiltered")
     lines = orig.split("\n")
     moved = []
-    for name, lineno in sites:
-        idx = lineno - 1
-        stmt = lines[idx]
-        mutant = list(lines)
-        mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-        io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
-        red = _run("test_oracle.py")
-        got = None if red else _replay()
-        io.open(path, "w", encoding="utf-8", newline="").write(orig)
-        if red:
-            continue
-        if base is None or got is None:
-            moved.append((name, lineno, "the replay could not answer"))
-            continue
-        diff = {k: (base["hits"].get(k, 0), got["hits"].get(k, 0))
-                for k in set(base["hits"]) | set(got["hits"])
-                if base["hits"].get(k, 0) != got["hits"].get(k, 0)}
-        if diff:
-            moved.append((name, lineno,
-                          "; ".join("%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
+    with source_restored(path):
+        for name, lineno in sites:
+            idx = lineno - 1
+            stmt = lines[idx]
+            mutant = list(lines)
+            mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
+            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
+            red = _run("test_oracle.py")
+            got = None if red else _replay()
+            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            if red:
+                continue
+            if base is None or got is None:
+                moved.append((name, lineno, "the replay could not answer"))
+                continue
+            diff = {k: (base["hits"].get(k, 0), got["hits"].get(k, 0))
+                    for k in set(base["hits"]) | set(got["hits"])
+                    if base["hits"].get(k, 0) != got["hits"].get(k, 0)}
+            if diff:
+                moved.append((name, lineno, "; ".join(
+                    "%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
     assert _run("test_oracle.py") == 0, "oracle.py was not restored"
     return len(sites), moved
 
