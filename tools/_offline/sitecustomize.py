@@ -22,7 +22,35 @@ Refused with the address in the message, because "connection refused" from a pat
 and one from a firewall look identical in a traceback, and the difference decides whether
 somebody spends an afternoon on their proxy settings.
 """
+import os
 import socket
+import sys
+
+# AND WHATEVER SITECUSTOMIZE WAS ALREADY THERE STILL RUNS. Python imports the FIRST
+# `sitecustomize` it finds, so putting this directory on PYTHONPATH shadows any the machine
+# already has — and some CI images ship one that sets up coverage or a proxy. Shadowing it
+# silently would make this file a second defect wearing the costume of the first: a mechanism
+# that breaks the environment it was added to protect.
+#
+# There is none on this machine, which is exactly why it is worth handling here rather than
+# discovering on somebody else's runner.
+_here = os.path.dirname(os.path.abspath(__file__))
+for _entry in [p for p in sys.path if p and os.path.abspath(p) != _here]:
+    _other = os.path.join(_entry, "sitecustomize.py")
+    if os.path.isfile(_other):
+        try:
+            with open(_other, encoding="utf-8") as _f:
+                exec(compile(_f.read(), _other, "exec"),
+                     {"__file__": _other, "__name__": "sitecustomize"})
+        except Exception as _e:
+            # A broken sitecustomize belonging to somebody else is not this file's to fix, and
+            # refusing to arm the network rule because of it would be the wrong trade. But it
+            # is SAID: a bare `except: pass` here hid a chaining failure from its own author
+            # within a minute of being written, which is the third time in one day that a
+            # swallowed exception cost more than the error would have.
+            print("qatration: the sitecustomize at %s raised %s: %s"
+                  % (_other, type(_e).__name__, _e), file=sys.stderr)
+        break
 
 _ALLOWED = {"127.0.0.1", "::1", "localhost", "", "0.0.0.0", "::"}
 _real_connect = socket.socket.connect

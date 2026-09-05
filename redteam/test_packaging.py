@@ -837,6 +837,7 @@ def test_the_offline_claim_is_enforced_rather_than_stated():
     say nothing about whether a suite ever gets it.
     """
     import importlib.util
+    import tempfile
     spec = importlib.util.spec_from_file_location(
         "check_offline", os.path.join(ROOT_DIR, "tools", "check.py"))
     chk = importlib.util.module_from_spec(spec)
@@ -893,6 +894,32 @@ def test_the_offline_claim_is_enforced_rather_than_stated():
     _spec.loader.exec_module(_rule)
     assert _rule._local("/tmp/some.sock"), "a unix socket path was treated as a host"
     assert _rule._local(("127.0.0.1", 80)) and not _rule._local(("example.com", 80)),         "the rule does not separate this machine from anywhere else"
+
+    # AND IT DOES NOT SHADOW A SITECUSTOMIZE THE MACHINE ALREADY HAS. Python imports the FIRST
+    # one it finds, and some CI images ship one that sets up coverage or a proxy. Replacing it
+    # silently would make this file a second defect wearing the costume of the first: a
+    # mechanism that breaks the environment it was added to protect. There is none on this
+    # machine, which is why it is worth checking here rather than on somebody else's runner.
+    import shutil as _sh2
+    _other_dir = tempfile.mkdtemp()
+    try:
+        with io.open(os.path.join(_other_dir, "sitecustomize.py"), "w",
+                     encoding="utf-8") as _f:
+            _f.write("import builtins\nbuiltins.OTHER_SITECUSTOMIZE_RAN = True\n")
+        _chain_env = dict(env)
+        _chain_env["PYTHONPATH"] = chk.OFFLINE + os.pathsep + _other_dir
+        _code = ("import builtins, socket\n"
+                 "print('chained:', getattr(builtins, 'OTHER_SITECUSTOMIZE_RAN', False))\n"
+                 "s = socket.socket(); s.settimeout(2)\n"
+                 "try:\n    s.connect(('example.com', 80)); print('CONNECTED')\n"
+                 "except OSError as e:\n    print('refused:', 'QATRATION_OFFLINE' in str(e))\n")
+        _p = subprocess.run([sys.executable, "-c", _code], capture_output=True, text=True,
+                            timeout=60, env=_chain_env)
+        _o = (_p.stdout or "") + (_p.stderr or "")
+        assert "chained: True" in _o,             "the offline rule shadowed the machine's own sitecustomize: %s" % _o[:200]
+        assert "refused: True" in _o,             "chaining to another sitecustomize disarmed the network rule: %s" % _o[:200]
+    finally:
+        _sh2.rmtree(_other_dir, ignore_errors=True)
     print("  ok  a suite may reach this machine and nowhere else")
 
 
