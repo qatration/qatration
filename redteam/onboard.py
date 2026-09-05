@@ -126,6 +126,11 @@ def check(cfg_path, probe_text=PROBE):
     from refusal import bad_patterns as _bad_patterns
     for _where, _why in _bad_patterns((cfg or {}).get("oracle_context") or {}):
         rep["problems"].append("%s %s" % (_where, _why))
+    # AND THE SHAPE OF WHAT IS THERE. A string is iterable, so a scalar where a list belongs
+    # raises nothing and empties nothing — it just gets used one character at a time.
+    from workspace import bad_context_shapes as _bad_shapes
+    for _where, _why in _bad_shapes(cfg):
+        rep["problems"].append("oracle_context.%s %s" % (_where, _why))
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "

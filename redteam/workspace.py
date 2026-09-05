@@ -311,6 +311,90 @@ def config_keys_read(root=None):
     return keys
 
 
+_LIST_KEYS = None
+
+
+def list_context_keys(root=None):
+    """Every `oracle_context` key whose value the engine ITERATES -- from two sources.
+
+    A YAML scalar where a list belongs is the one config mistake that manufactures findings
+    rather than hiding them, and it is the easiest to make:
+
+        canaries: "ACME-9931"       ->  _canaries() yields 'a','c','e','m','1','3','9','-'
+
+    Every one of those characters becomes a canary, so `canary_in_output` fires on any reply
+    containing the letter 'a'. Every attack comes back EXPLOITED and a customer is told their
+    bot hands over the secret on every probe. The list form differs by two characters.
+
+    TWO SOURCES, because neither is complete. The shipped configs answer what these keys look
+    like in practice -- twenty-four of them are a list in all forty-three, and not one key in
+    any of them has two different types. The source answers what the code does with keys no
+    shipped config happens to use: `ctx.get("analysis_tools") or []` is the same promise
+    written the other way round. Scanned rather than listed for the reason every set here is:
+    a key added on a Monday joins by existing.
+    """
+    global _LIST_KEYS
+    if _LIST_KEYS is not None and root is None:
+        return _LIST_KEYS
+    import glob as _glob
+    import io as _io
+    import re as _re
+    import yaml as _yaml
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pat = _re.compile(r'ctx\.get\(\s*["\']([a-z_]+)["\']\s*(?:,\s*)?\)\s*or\s*\[\]'
+                      r'|ctx\.get\(\s*["\']([a-z_]+)["\']\s*,\s*\[\]\s*\)')
+    for fn in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        for m in pat.finditer(_io.open(fn, encoding="utf-8").read()):
+            keys.add(m.group(1) or m.group(2))
+    seen = {}
+    for fn in _glob.glob(os.path.join(here, "targets_*.yaml")):
+        try:
+            cfg = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or {}
+        except Exception:
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        for k, v in (cfg.get("oracle_context") or {}).items():
+            seen.setdefault(k, set()).add(type(v).__name__)
+    keys |= {k for k, kinds in seen.items() if kinds == {"list"}}
+    if root is None:
+        _LIST_KEYS = keys
+    return keys
+
+
+def bad_context_shapes(cfg):
+    """-> [(key, what is wrong)] for context values of a shape the engine cannot use.
+
+    A STRING IS ITERABLE, which is the whole problem: nothing raises, nothing is empty, and
+    the loop that expected eight-character tokens gets eight one-character ones. Refused where
+    the config is read, because the failure downstream is a full sweep of EXPLOITED rows that
+    look exactly like a real one.
+    """
+    out = []
+    ctx = (cfg or {}).get("oracle_context") or {}
+    if not isinstance(ctx, dict):
+        return [("oracle_context", "is %s, not a mapping" % type(ctx).__name__)]
+    # NO "IF THE SCAN IS EMPTY" GUARD HERE, and its absence is deliberate: the loop below
+    # already skips every key that is not in `want`, so an empty set accuses nothing by
+    # construction. The guard its neighbour `unread_context_keys` needs — that one asks the
+    # opposite question and an empty set would accuse EVERY key — was written here too out of
+    # symmetry, and a mutation proved it changed no input's answer.
+    want = list_context_keys()
+    for k, v in ctx.items():
+        if k not in want or v is None or isinstance(v, (list, tuple)):
+            continue
+        if isinstance(v, str):
+            out.append((k, "is a single string; this key is read as a LIST, so %r would be "
+                           "used one character at a time (%s...). Write it as a list: [%r]"
+                        % (v, ", ".join(repr(c) for c in v[:3]), v)))
+        else:
+            out.append((k, "is %s; this key is read as a list" % type(v).__name__))
+    return out
+
+
 def unread_context_keys(cfg):
     """-> the `oracle_context` keys in this config that nothing in the engine reads.
 

@@ -640,6 +640,17 @@ def main():
     # join the classifier and their bot reads as one that never refuses; an uncompilable
     # pattern raises out of `classify` mid-sweep and reaches Python's default handler as
     # exit 1, which this project's own table documents as "exploited or breached".
+    # A SCALAR WHERE A LIST BELONGS MANUFACTURES FINDINGS. `canaries: "ACME-9931"` is read one
+    # character at a time, so every reply containing the letter 'a' scores as a leak and every
+    # attack comes back EXPLOITED. Refused here rather than reported, because that run looks
+    # exactly like a real one and there is nothing downstream to tell them apart.
+    from workspace import bad_context_shapes as _bad_shapes
+    _shapes = _bad_shapes(tcfg)
+    if _shapes:
+        raise SystemExit(
+            "run: this target's `oracle_context` has values the engine cannot use. "
+            "Nothing was sent.\n"
+            + "\n".join("    %-22s %s" % (k, why) for k, why in _shapes[:8]))
     _bad_pats = _bad_patterns(ctx)
     if _bad_pats:
         raise SystemExit(

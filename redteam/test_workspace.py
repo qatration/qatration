@@ -66,6 +66,90 @@ def builds_its_own_root(src):
     return found
 
 
+def check_context_shapes():
+    """A string is iterable, which is the whole defect.
+
+        canaries: "ACME-9931"      ->  'a', 'c', 'e', 'm', '1', '3', '9', '-'
+
+    Nothing raises and nothing is empty; the loop that expected one eight-character token gets
+    eight one-character ones, and `canary_in_output` fires on any reply containing the letter
+    'a'. Walked against a live endpoint before this existed: a bot answering "Standard shipping
+    takes 3-5 business days" came back EXPLOITED 1/1 on `canary_in_output,canary_transformed`,
+    "1/1 attacks breached the target", exit 0. Two characters of YAML between that and the
+    truth.
+
+    It is the mirror of this project's usual failure -- a finding manufactured rather than a
+    gap concealed -- and worse for the reader, who has no way to tell it from a real one.
+    """
+    from workspace import bad_context_shapes, list_context_keys
+    import workspace as _ws
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    _keys = list_context_keys()
+    check("the list-valued keys can be derived", len(_keys) >= 20, True)
+    check("...including the one that manufactures findings", "canaries" in _keys, True)
+    # AND NOT A KEY THAT IS A SCALAR BY DESIGN, or every correct config would be refused.
+    check("...and not a genuinely scalar one", "caller_id" in _keys, False)
+    check("...nor one that is a bool", "pii_expect_phone" in _keys, False)
+    # ONE FROM EACH SOURCE, or dropping either scan leaves the other's keys and every check
+    # above still passes. `privileged_fields` is a list in the shipped configs and is read by
+    # a line this scan's pattern does not match; `own_names` is the reverse.
+    check("...a key only the shipped configs show", "privileged_fields" in _keys, True)
+    check("...and a key only the source shows", "own_names" in _keys, True)
+
+    _b = bad_context_shapes({"oracle_context": {"canaries": "ACME-9931"}})
+    check("a scalar where a list belongs is reported", len(_b), 1)
+    check("...naming the key", _b[0][0] if _b else "", "canaries")
+    check("...and showing what it would be used as",
+          "one character at a time" in (_b[0][1] if _b else ""), True)
+    check("...and giving the corrected line",
+          "['ACME-9931']" in (_b[0][1] if _b else ""), True)
+
+    check("a list is accepted",
+          bad_context_shapes({"oracle_context": {"canaries": ["ACME-9931"]}}), [])
+    check("a scalar key that is meant to be scalar is accepted",
+          bad_context_shapes({"oracle_context": {"caller_id": "2001"}}), [])
+    check("a number where a list belongs is reported too",
+          len(bad_context_shapes({"oracle_context": {"canaries": 5}})), 1)
+    check("a null is left alone",
+          bad_context_shapes({"oracle_context": {"canaries": None}}), [])
+    check("no oracle_context is nothing to report", bad_context_shapes({}), [])
+    check("an oracle_context that is not a mapping is itself the problem",
+          len(bad_context_shapes({"oracle_context": ["oops"]})), 1)
+
+    # A SCAN THAT FOUND NOTHING ACCUSES NOTHING HERE BY CONSTRUCTION, which is why there is
+    # no guard for it in `bad_context_shapes` and no check for one: the loop skips every key
+    # not in the set, so an empty set skips everything. Its neighbour `unread_context_keys`
+    # asks the opposite question and does need the guard — an empty set there would accuse
+    # every key in the config — and has a check that fails without it.
+    _real = _ws.list_context_keys
+    _ws.list_context_keys = lambda root=None: set()
+    try:
+        check("an empty scan is a no-op rather than an accusation",
+              bad_context_shapes({"oracle_context": {"canaries": "X"}}), [])
+    finally:
+        _ws.list_context_keys = _real
+
+    # AND EVERY SHIPPED CONFIG PASSES, which is what makes the refusal usable rather than a
+    # wall — and what fails if a key changes shape and one of forty-three is missed.
+    import glob as _g, io as _io, os as _os, yaml as _y
+    _here = _os.path.dirname(_os.path.abspath(_ws.__file__))
+    _n = 0
+    for _fp in sorted(_g.glob(_os.path.join(_here, "targets_*.yaml"))):
+        _c = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or {}
+        if not isinstance(_c, dict):
+            continue
+        _n += 1
+        check("%s has a usable context" % _os.path.basename(_fp), bad_context_shapes(_c), [])
+    check("...over every config that ships", _n >= 20, True)
+    return fails
+
+
 def check_unread_context_keys():
     """A key nothing reads is a detector nobody armed, and TWO commands need to say so.
 
@@ -549,7 +633,7 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = check_unread_context_keys()
+    _f = check_unread_context_keys() + check_context_shapes()
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()
