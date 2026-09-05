@@ -359,6 +359,57 @@ def main():
         _st, _tx = _ask(_iport, None, b'', '/runs', 'GET')
         check("...while the ordinary listing still answers",
               _st == 200 and "jobs" in _tx, "%s %s" % (_st, _tx[:80]))
+
+        # --- AND THE ONE ENDPOINT THAT HANDS SOMEBODY A CONCLUSION ----------------------
+        #
+        # `report()` serves the fix list only for a job that FINISHED, and its docstring
+        # says why: a sweep that stopped early renders the same shape of page as one that
+        # ran to the end -- findings, counts, a fix list -- and what differs is the attacks
+        # that never ran, which look exactly like attacks that held. `status()` withholds
+        # the link until then, and this used to serve the file to anyone who typed the URL.
+        #
+        # The headers matter for the other half: the page is a rendering of a target's own
+        # words. It is escaped at build time and `test_deliverable` attacks every builder,
+        # and these say so to the browser as well rather than resting on that alone.
+        import jobqueue as _q2
+        _cfgp = os.path.join(_iroot, 'c.yaml')
+        with open(_cfgp, 'w', encoding='utf-8') as _f2:
+            _f2.write('adapter: http\n')
+        _job = _q2.submit(_iroot, 't', _cfgp)
+        _jid = _job['job_id']
+        _rd = os.path.join(_iroot, 'runs', _jid)
+        os.makedirs(_rd, exist_ok=True)
+        _mark = '<h1>the fix list</h1>'
+        with open(os.path.join(_rd, 'defense_report.html'), 'w', encoding='utf-8') as _f2:
+            _f2.write(_mark)
+
+        _st, _tx = _ask(_iport, None, b'', '/runs/%s/report' % _jid, 'GET')
+        check("a report is withheld while the job has not finished",
+              _st == 409, "%s %s" % (_st, _tx[:80]))
+        check("...and says why, rather than 404ing a job that exists",
+              'not done' in _tx, _tx[:120])
+
+        _claimed, _ = _q2.claim(_iroot, 'w1')
+        _q2.release(_iroot, _claimed or _job, state='done')
+        _hdrs = {}
+        _c3 = _hc.HTTPConnection('127.0.0.1', _iport, timeout=10)
+        try:
+            _c3.request('GET', '/runs/%s/report' % _jid)
+            _r3 = _c3.getresponse()
+            _st, _hdrs = _r3.status, dict(_r3.getheaders())
+            _tx = _r3.read(400).decode('utf-8', 'replace')
+        finally:
+            _c3.close()
+        # THE FIXTURE HAS TO REACH IT: if the finished report is not served, every header
+        # assertion below is about a response that was never a report.
+        check("...and is served once it has", _st == 200 and _mark in _tx,
+              "%s %s" % (_st, _tx[:80]))
+        check("...with a policy that forbids script on a page built from a target's words",
+              "default-src 'none'" in (_hdrs.get('Content-Security-Policy') or ''),
+              str(_hdrs.get('Content-Security-Policy')))
+        check("...and with nosniff, so the type is not guessed",
+              (_hdrs.get('X-Content-Type-Options') or '') == 'nosniff',
+              str(_hdrs.get('X-Content-Type-Options')))
     finally:
         _isrv.shutdown()
         _sh2.rmtree(_iroot, ignore_errors=True)
