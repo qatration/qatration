@@ -42,6 +42,62 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- one trial is the case that most needs qualifying ------------------------------
+    #
+    # The reproducibility chip read `if d <= 1: return ""`, under the comment "single trial →
+    # nothing to qualify". Exactly backwards: one attempt cannot tell a reliable break from a
+    # lucky one, so it is the row that most needs a word — and an empty chip sits in the same
+    # column as `reliable`, so a `--trials 1` run published EXPLOITED rows whose only
+    # difference from a reproducible finding was a missing badge.
+    #
+    # The same sentence `history` prints as a confound and `verify` refuses to draw a verdict
+    # from, in the surface a customer reads.
+    from report_engine import _reliability as _rel
+    check("a single trial says it was a single trial",
+          "one trial" in _rel("1/1", "EXPLOITED"), _rel("1/1", "EXPLOITED"))
+    check("...and a partial one too", "one trial" in _rel("1/1", "PARTIAL"),
+          _rel("1/1", "PARTIAL"))
+    check("every trial breaking is still reliable",
+          "reliable" in _rel("3/3", "EXPLOITED"), _rel("3/3", "EXPLOITED"))
+    check("some but not all is still intermittent",
+          "intermittent" in _rel("1/3", "EXPLOITED"), _rel("1/3", "EXPLOITED"))
+    # NOTHING BROKE, SO THERE IS NOTHING TO REPRODUCE. Chipping these would put a
+    # reproducibility claim on a row that has nothing to reproduce.
+    check("a defended row is not qualified",
+          _rel("0/1", "DEFENDED") == "" and _rel("0/3", "DEFENDED") == "",
+          repr(_rel("0/1", "DEFENDED")))
+    check("...nor an errored or skipped one",
+          _rel("0/1", "ERROR") == "" and _rel("0/1", "SKIP") == "", "one of them was chipped")
+    check("a malformed rate is silent rather than a crash",
+          _rel("", "EXPLOITED") == "" and _rel(None, "EXPLOITED") == "", "raised or chipped")
+    # AND THE THREE CHIPS ARE DISTINGUISHABLE ON THE PAGE, which is the point of adding a
+    # third: a class the stylesheet does not know renders as unstyled text beside two styled
+    # ones, and the reader cannot tell "one trial" from "reliable" by looking. Asked of a
+    # RENDERED page rather than of the module, because that is where the rule has to arrive.
+    _once_meta = {"target": "t", "trials": 1, "attacks_n": 1}
+    _once_rows = [{"attack": {"id": "a", "category": "jailbreak"}, "headline": "EXPLOITED",
+                   "rate": "1/1", "fired": ["canary_in_output"], "locks": {},
+                   "trials": [{"verdict": "EXPLOITED", "fired": ["canary_in_output"],
+                               "refusal": {"class": "none"},
+                               "probe": {"output": "ACME-CANARY-9931", "error": None,
+                                         "tool_calls": [], "observations": [], "prompt": "x",
+                                         "seconds": 0.1, "resolved": [], "turns": []}}]}]
+    import report_engine as _re_once
+    _once_page = _re_once.build_html(_once_meta, _once_rows)
+    check("a one-trial finding is labelled on the rendered page",
+          "one trial" in _once_page, "the chip never reached the HTML")
+    # AS MANY RULES AS THE CHIPS THAT WERE ALREADY THERE, rather than "at least one". These
+    # are styled twice — once for light and once inside the dark-scheme block — so a check for
+    # mere presence passes with either half deleted, and half a rule means the chip renders
+    # correctly in one theme and as bare text in the other. The count comes from `reliable`
+    # rather than from a number typed here, so the day a third theme is added it moves.
+    _want = _once_page.count(".rel.reliable{")
+    check("the established chip is styled in every theme", _want >= 2, str(_want))
+    for _cls in ("once", "flaky"):
+        check("the page styles .rel.%s as fully as .rel.reliable" % _cls,
+              _once_page.count(".rel.%s{" % _cls) == _want,
+              "%d rule(s), expected %d" % (_once_page.count(".rel.%s{" % _cls), _want))
+
     # --- defense_report: what a client is handed --------------------------------------
     check("a rate leads with the most reproducible example",
           dr._rate_frac("3/3") > dr._rate_frac("1/3") > dr._rate_frac("0/3"))
