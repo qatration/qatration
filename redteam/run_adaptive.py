@@ -49,6 +49,37 @@ HEADER = """# Payloads DISCOVERED by the adaptive attacker, not written by hand.
 """
 
 
+def outcome_line(res):
+    """-> (the sentence, the exit code) for a finished loop.
+
+    HELD IS A WORD ABOUT THE BOT, and an errored loop was getting it. A dead socket, or an
+    attacker model that is not running, returned `success: False` with an `error`, and the
+    report read "HELD after 1 iteration(s) — ERROR: ..." — the verdict first and the reason
+    appended, which is the order a skimmer reads in reverse. `run`'s closing line was fixed
+    for exactly this and says "NOTHING MEASURED: ... This is not 0 breaches, it is no
+    measurement."
+
+    AND IT EXITED 0 EITHER WAY. `main` returned None, so a loop that never reached the target
+    and a loop that spent its whole budget being resisted were the same answer to anything
+    reading the code — the same defect `rejudge` and `coverage` had, and `docs/ci.md` gives an
+    unanswerable question 3.
+
+    Pure, so the sentence can be checked without a dead socket to produce on demand.
+    """
+    if res.get("error"):
+        return ("NOTHING MEASURED: the loop stopped after %s iteration(s) — %s. This is not a "
+                "bot that held, it is a question that was never asked."
+                % (res.get("iterations"), res["error"]), 3)
+    if res.get("success"):
+        # `aimed` is False when the break the loop found is not the one the goal named — a
+        # real finding either way, and a different sentence to write in a report.
+        side = "" if res.get("aimed", True) else "  (NOT the goal it was aimed at)"
+        return ("BROKEN in %s iteration(s) — detectors %s%s  (%ss)"
+                % (res.get("iterations"), res.get("fired"), side, res.get("seconds")), 0)
+    return ("HELD after %s iteration(s)  (%ss) — the adaptive loop found no bypass within "
+            "budget." % (res.get("iterations"), res.get("seconds")), 0)
+
+
 def promote(res, target_name, goal, success):
     """Append a winning payload as a reusable attack, with where it came from."""
     import datetime
@@ -125,19 +156,10 @@ def main():
                           attacker_model=args.attacker_model, max_iters=args.iters,
                           constraints=args.constraints)
     print("-" * 78)
-    if res["success"]:
-        # `aimed` is False when the break the loop found is not the one the goal named — a
-        # real finding either way, and a different sentence to write in a report. The loop
-        # runs the always-on detectors now, so an unaimed break is something it can report
-        # rather than something it walks past while telling the attacker it failed.
-        side = "" if res.get("aimed", True) else "  (NOT the goal it was aimed at)"
-        print(f"BROKEN in {res['iterations']} iteration(s) — detectors {res['fired']}{side}  "
-              f"({res['seconds']}s)")
+    _line, _code = outcome_line(res)
+    print(_line)
+    if res.get("success"):
         print(f"winning prompt: {res['winning_prompt']!r}")
-    else:
-        err = res.get("error")
-        print(f"HELD after {res['iterations']} iteration(s){' — ERROR: ' + err if err else ''}  "
-              f"({res.get('seconds')}s) — the adaptive loop found no bypass within budget.")
 
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, f"adaptive_{target.name}.json")
@@ -153,7 +175,8 @@ def main():
                   f"status by working on another")
         elif res.get("success"):
             print("already in attacks_learned.yaml — the arsenal is not a log")
+    return _code
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
