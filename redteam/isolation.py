@@ -26,7 +26,7 @@ reuse the same detectors as the arsenal, and refusals are labelled by refusal.py
 this module only sequences probes and compares outcomes.
 """
 import json
-from oracle import DETECTORS, inert_for
+from oracle import DETECTORS, inert_for, visible_text
 from refusal import classify
 from target import payload
 from runner import _resilient_send
@@ -183,7 +183,11 @@ def _sample(probes, hits, prop, ctx):
     if pick is None:
         return None
     return {"achieved": bool(hits and _achieved(pick, prop, ctx)),
-            "output": _excerpt(pick.output or "", prop_ctx(prop, ctx)),
+            # `visible_text`, not `.output`: `_achieved` below judges this probe with the
+            # detectors, which read every turn. Taking the proof from the last reply is the
+            # same failure `_excerpt` was written for -- a stored proof that does not
+            # contain the breach -- arriving one turn earlier instead of 81 characters late.
+            "output": _excerpt(visible_text(pick), prop_ctx(prop, ctx)),
             "tool_calls": [[n, str(a)[:120]] for n, a in (pick.tool_calls or [])]}
 
 

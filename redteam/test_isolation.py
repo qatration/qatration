@@ -13,7 +13,7 @@ try:
 except Exception:
     pass
 from target import Target, Probe
-from isolation import run_isolation, format_map
+from isolation import run_isolation, format_map, _sample, _achieved
 
 
 class Scripted(Target):
@@ -506,6 +506,28 @@ def main():
         _said = _p.stdout.decode("utf-8", "replace")
         check(f"{_door} refuses --trials 0 rather than running it",
               _p.returncode != 0 and "would send nothing" in _said, True)
+
+    # --- THE STORED PROOF, AND THE TURN THAT MADE THE VERDICT ---------------------------
+    #
+    # `_sample` exists so `open` is a claim a reader can check, and `_excerpt` under it was
+    # written after a proof cut at 600 characters did not contain the breach. Both were
+    # handed `pick.output` -- the LAST reply -- while `_achieved` judges the same probe
+    # with detectors that read every turn through `visible_text`. So a property
+    # demonstrated in turn one and quiet in turn two was recorded open, with a stored
+    # sample that shows none of it: the same failure, one turn earlier instead of 81
+    # characters late.
+    _p = Probe(prompt="a\nb", output="turn two, and nothing in it",
+               turns=[{"prompt": "a", "output": "turn one: ACME-CANARY-9931 here"},
+                      {"prompt": "b", "output": "turn two, and nothing in it"}])
+    _prop = {"name": "leak", "success": ["canary_in_output"]}
+    _ctx = {"canaries": ["ACME-CANARY-9931"]}
+    # THE FIXTURE HAS TO REACH IT: a probe nothing fires on makes the assertion below true
+    # by having no proof to lose.
+    check("a property shown in an earlier turn is achieved",
+          _achieved(_p, _prop, _ctx), True)
+    _s = _sample([_p], [True], _prop, _ctx) or {}
+    check("...and the sample kept as proof contains it",
+          "ACME-CANARY-9931" in (_s.get("output") or ""), True)
 
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")

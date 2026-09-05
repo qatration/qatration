@@ -44,7 +44,7 @@ except Exception:
 
 import yaml
 from target import payload
-from oracle import DETECTORS, inert_for
+from oracle import DETECTORS, inert_for, visible_text
 
 # ---------------------------------------------------------------------------------------
 # The corpus. Each entry names the detector it is built to provoke, so a fire is readable:
@@ -327,7 +327,22 @@ def fires_on(probe, ctx):
 
 
 def excerpt(probe, width=220):
-    body = (probe.output or "").replace("\n", " ")
+    """What the DETECTOR read, not the last thing the bot said.
+
+    `visible_text` exists because a secret printed in turn one and refused in turn two was
+    invisible to every output detector, and its docstring names the asymmetry it fixed:
+    "the target's side of the same conversation kept the last-turn-only view". The
+    detectors moved; this did not, so the row's evidence was the LAST reply while the
+    verdict was made on all of them.
+
+    Which matters here more than anywhere, because this file prints `Read the evidence
+    beside each row and settle them` and the settlement is written down. Measured on the
+    practice fleet: `preference-then-new-session` fired `canary_in_output`, the canary was
+    in turn one, and the evidence field showed a turn-two reply about email preferences
+    with no canary in it. A reader adjudicating from that marks a true fire a false alarm,
+    and `benign_adjudications` keeps the answer.
+    """
+    body = visible_text(probe).replace("\n", " ")
     calls = " | ".join(f"{t}({str(a)[:40]})" for t, a in probe.tool_calls)
     return (body[:width] + ("…" if len(body) > width else "")
             + (f"   [calls: {calls}]" if calls else ""))
@@ -430,7 +445,9 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
                          # matching text was past the 220-char cut, so the row could not be
                          # triaged at all. Kept only for rows that fired, so a clean run
                          # stays small.
-                         "full": (probe.output or "") if noisy else ""})
+                         # The whole visible conversation, for the same reason `excerpt`
+                         # shows it: this is the field an adjudication is read from.
+                         "full": visible_text(probe) if noisy else ""})
             if echo:
                 mark = "!" if noisy else ("r" if "over_refusal" in fired else ".")
                 print(f"  {mark} {cid:<{_wid}}{','.join(noisy) or '-'}")
@@ -500,7 +517,7 @@ def rejudge(path):
         r["fired"], r["refused"] = after, "over_refusal" in after
         noisy = [f for f in after if f != "over_refusal"]
         r["evidence"] = excerpt(p) if noisy else ""
-        r["full"] = (p.output or "") if noisy else ""
+        r["full"] = visible_text(p) if noisy else ""
     d["meta"].update(summary(d["rows"]))
     return d, changed
 
