@@ -10,6 +10,12 @@ something else.
     python tools/check.py oracle benign      # just those (prefix match, no test_ needed)
     python tools/check.py --list
 
+A NAMED SUBSET IS NOT ENOUGH WHEN YOU ADD OR REMOVE A CHECK. The README publishes how many
+assertions this suite carries and `readme` recounts it, so any commit that changes the number
+of checks -- in any file -- turns that suite red. Run `readme` alongside whatever you touched,
+or run everything. This is written here because it was learned the other way: a commit that
+added five checks to `test_onboard` passed its own suites and failed CI on all four platforms.
+
 Every suite here is offline: no model, no network, no practice fleet. That is the property that
 lets this run on a runner with no GPU, and it is asserted rather than assumed — a suite that
 starts needing a fleet will fail here first, which is the right place to find out.
