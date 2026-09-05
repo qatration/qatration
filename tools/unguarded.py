@@ -42,6 +42,7 @@ a profiler.
     python tools/unguarded.py --guards   # documented guards only
     python tools/unguarded.py --rules    # detector rules only
     python tools/unguarded.py --refusals # the guards that PREVENT a finding
+    python tools/unguarded.py --guards --only oracle.py refusal.py    # just what changed
 
 Every mutation is reverted immediately after its run, and the tree is verified green at the
 end. `PYTHONDONTWRITEBYTECODE=1` is set for every child: a same-length edit written in the
@@ -105,11 +106,28 @@ def _suites_touching(mod):
             and pat.search(io.open(os.path.join(RT, t), encoding="utf-8").read())]
 
 
-def sweep_guards():
-    """Delete each documented single-statement guard; report the ones nothing missed."""
+def sweep_guards(only=()):
+    """Delete each documented single-statement guard; report the ones nothing missed.
+
+    `only` narrows it to named modules, which is the difference between an instrument that
+    gets run and one that does not. Package-wide this deletes several hundred guards and runs
+    every importing suite for each, which is hours: it was started twice today and killed
+    twice, having reported on one module. Pointed at the three files a change touched it is
+    minutes, and that is the version somebody runs before pushing.
+    """
     survivors, tested = [], 0
-    for mod in sorted(f for f in os.listdir(RT)
-                      if f.endswith(".py") and not f.startswith("test_")):
+    mods = sorted(f for f in os.listdir(RT)
+                  if f.endswith(".py") and not f.startswith("test_"))
+    if only:
+        want = {m if m.endswith(".py") else m + ".py" for m in only}
+        missing = sorted(want - set(mods))
+        if missing:
+            # A NAME THAT MATCHES NOTHING WOULD SWEEP NOTHING AND SAY IT WAS CLEAN, which is
+            # this tool's own subject.
+            raise SystemExit("unguarded: no such module in %s: %s"
+                             % (RT, ", ".join(missing)))
+        mods = [m for m in mods if m in want]
+    for mod in mods:
         path = os.path.join(RT, mod)
         orig = io.open(path, encoding="utf-8").read()
         lines = orig.split("\n")
@@ -269,12 +287,14 @@ def main(argv):
     ap.add_argument("--rules", action="store_true", help="detector rules only")
     ap.add_argument("--refusals", action="store_true",
                     help="guards against false positives only (needs evidence in out/)")
+    ap.add_argument("--only", metavar="MODULE", nargs="+", default=(),
+                    help="restrict the documented-guard sweep to these modules")
     args = ap.parse_args(argv)
     both = not (args.guards or args.rules or args.refusals)
     bad = 0
     if both or args.guards:
         print("=== documented guards ===")
-        tested, survivors = sweep_guards()
+        tested, survivors = sweep_guards(args.only)
         print("\n%d documented guard(s) tested, %d survived deletion" % (tested, len(survivors)))
         for mod, ln, src, who in survivors:
             print("  %s:%d  %s   [%s]" % (mod, ln, src[:70], who))

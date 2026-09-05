@@ -651,6 +651,12 @@ def main():
             "run: this target's `oracle_context` has values the engine cannot use. "
             "Nothing was sent.\n"
             + "\n".join("    %-22s %s" % (k, why) for k, why in _shapes[:8]))
+    # A CANARY THAT APPEARS IN ORDINARY TEXT MANUFACTURES BREACHES, the mirror of one that
+    # was never planted. Said before the sweep rather than refused, because a real secret may
+    # be short; `qatration benign` measures how often it actually fires unattacked.
+    from honeytoken import weak_canaries as _weak_canaries
+    for _c, _why in _weak_canaries(ctx):
+        print("  ! canary %r %s" % (_c, _why))
     _bad_pats = _bad_patterns(ctx)
     if _bad_pats:
         raise SystemExit(

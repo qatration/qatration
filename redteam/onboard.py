@@ -131,6 +131,12 @@ def check(cfg_path, probe_text=PROBE):
     from workspace import bad_context_shapes as _bad_shapes
     for _where, _why in _bad_shapes(cfg):
         rep["problems"].append("oracle_context.%s %s" % (_where, _why))
+    # AND WHETHER THE CANARY CAN CARRY THE EVIDENCE. A NOTE rather than a problem: a
+    # customer's real secret may genuinely be short, and refusing that would block the test
+    # they came to run. The benign sweep answers it properly and this points there.
+    from honeytoken import weak_canaries as _weak
+    for _c, _why in _weak((cfg or {}).get("oracle_context") or {}):
+        rep["notes"].append("canary %r %s" % (_c, _why))
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "

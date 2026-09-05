@@ -29,6 +29,61 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- A CANARY THAT APPEARS IN ORDINARY TEXT ----------------------------------------
+    #
+    # THE MIRROR OF AN UNPLANTED TOKEN, which this file is otherwise about. That one is
+    # invisible and every attack reads as defended; this one is everywhere and every attack
+    # reads as a breach. An operator who writes `canaries: ["ACME"]` — thinking of the shop,
+    # not of the string — gets `canary_in_output` firing on the bot's own greeting.
+    #
+    # Measured rather than asserted: "Welcome to AcmeShop! Standard shipping takes 3-5
+    # business days." fires the detector on `ACME`, on `shop` and on `3-5`.
+    from target import Probe as _P
+    from oracle import DETECTORS as _D
+    _innocent = _P(prompt="x", output="Welcome to AcmeShop! Standard shipping takes 3-5 "
+                                      "business days.")
+    check("a short canary fires on an innocent reply",
+          bool(_D["canary_in_output"](_innocent, {"canaries": ["ACME"]})),
+          "the premise of the rule below does not hold")
+    check("...while a real one does not",
+          not _D["canary_in_output"](_innocent, {"canaries": ["ACME-CANARY-9931"]}),
+          "even a full canary fires, so this reply is the wrong fixture")
+
+    _floor = ht._shipped_floor()
+    check("the floor is read off the configs that ship", _floor >= 8, str(_floor))
+
+    def _weak(*cs):
+        return ht.weak_canaries({"canaries": list(cs)})
+
+    check("a four-character canary is called out", len(_weak("ACME")) == 1, str(_weak("ACME")))
+    check("...saying how short it is and what to run",
+          "qatration benign" in _weak("ACME")[0][1], str(_weak("ACME")))
+    # THE SECOND SIGNAL, and the certain one: the corpus is text nobody attacked with, so a
+    # canary already inside it cannot tell a leak from a bot answering normally.
+    check("a canary that is an ordinary customer's word is called out",
+          len(_weak("order")) == 1, str(_weak("order")))
+    check("...for that reason rather than for its length",
+          "ordinary customer question" in _weak("order")[0][1], str(_weak("order")))
+
+    # AND EVERY CANARY THIS PROJECT SHIPS IS ACCEPTED, or the rule is a wall. Read from the
+    # configs rather than typed, so a shorter one added later fails here first.
+    import glob as _g, io as _io, os as _os, yaml as _y
+    _here = _os.path.dirname(_os.path.abspath(ht.__file__))
+    _seen = 0
+    for _fp in sorted(_g.glob(_os.path.join(_here, "targets_*.yaml"))):
+        _c = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or {}
+        _oc = (_c.get("oracle_context") or {}) if isinstance(_c, dict) else {}
+        if not _oc.get("canaries"):
+            continue
+        _seen += 1
+        _w = ht.weak_canaries(_oc)
+        check("%s ships a usable canary" % _os.path.basename(_fp), not _w, str(_w))
+    check("...over a real number of configs", _seen >= 10, str(_seen))
+    # AND WHAT THE TOOL ITSELF MINTS, which is the shape an operator is told to use.
+    _minted, _ = ht.mint()
+    check("a minted canary is never called weak",
+          not ht.weak_canaries({"canaries": [_minted]}), _minted)
+
     secret, verify = ht.mint()
 
     # --- the pair -------------------------------------------------------------------------
