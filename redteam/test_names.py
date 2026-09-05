@@ -316,6 +316,32 @@ def main():
     check("...and there were assertions to scan", _n_checks > 500 and len(_suites) > 20,
           f"{_n_checks} check() calls in {len(_suites)} suites")
 
+    # --- THE NUMBER A SUITE PRINTS IS THE NUMBER IT RAN ---------------------------------
+    #
+    # `test_isolation` counts its checks as they run, with the reason written above the
+    # counter: "Counted as they run, not declared. A hardcoded total is a coverage claim."
+    # It then snapshots that counter into `total` before the last few checks, and prints
+    # the snapshot. Two checks added after that line ran, passed, and were invisible: the
+    # suite said 63/63 both before and after they existed.
+    #
+    # A snapshot taken before the end IS a hardcoded total, arrived at by a different
+    # route. Failures still turn the suite red -- `fails` is read at print time -- so this
+    # is a coverage claim that understates itself, which is the direction that makes
+    # somebody stop adding checks to a file that never seems to grow.
+    import glob as _g9, re as _r9
+    _snapped = []
+    for _p9 in sorted(_g9.glob(os.path.join(HERE, "test_*.py"))):
+        _lines = io.open(_p9, encoding="utf-8").read().splitlines()
+        _snaps = [i for i, l in enumerate(_lines) if _r9.match(r"\s*total\s*=\s*checks\s*$", l)]
+        if not _snaps:
+            continue
+        _after = [i for i, l in enumerate(_lines) if i > _snaps[-1] and _r9.match(r"\s*check\(", l)]
+        if _after:
+            _snapped.append("%s: %d check(s) after line %d"
+                            % (os.path.basename(_p9), len(_after), _snaps[-1] + 1))
+    check("no suite keeps checking after it has counted its checks",
+          not _snapped, "; ".join(_snapped))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
