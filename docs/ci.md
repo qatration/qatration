@@ -362,13 +362,19 @@ not exist in yours.
 | `0` | this change introduced no finding the trials agree on. Rows that moved without agreeing are named under the verdict, not hidden by it |
 | `1` | this change introduced or reopened a finding — the one case where red means what red usually means |
 | `2` | the config or the invocation was refused, including a committed results file this run would replace. Nothing was sent, and this is a build problem rather than a security one |
-| `3` | the question could not be answered: no baseline yet, or the comparison was confounded. **Not a pass** |
+| `3` | the question could not be answered: no baseline yet, the comparison was confounded, or the command read the workspace and found nothing in it — `rejudge` with no stored results to re-score, `coverage` with no probes to replay, `history` before a second sweep. **Not a pass** |
 | `4` | not authorised: the target is not localhost and control of it was not proved |
 | `5` | a precondition failed — usually the canary was never planted, so nothing could have been detected |
 
 Only `1` is a finding. Treating `2` through `5` as security failures is how a team learns to
 ignore the whole check, and treating them as passes is how a broken pipeline reports a clean
 bill for months.
+
+The distinction that matters in `3` is between a question answered with "nothing" and a
+question that could not be asked. `rejudge` prints the same sentence either way — *would change
+0 attack row(s) across 0 file(s)* — when every stored score is already correct and when there
+was nothing on disk to score, and it used to return `0` for both. A command that reads the
+workspace, finds it empty and exits `0` tells a pipeline the check ran.
 
 ## What the SARIF will and will not say
 
