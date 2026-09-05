@@ -605,6 +605,39 @@ def main():
     check("...and so does fleet_names", workspace.fleet_names() <= _by_helper,
           f"only in fleet_names: {sorted(workspace.fleet_names() - _by_helper)[:4]}")
 
+    # --- ONE NAME, ONE TARGET ------------------------------------------------------------
+    #
+    # The name is the target's identity on disk: `results_<name>.json`,
+    # `benign_<name>.json`, `report_<name>.html`, `history/<name>.jsonl`. Two configs
+    # sharing one are one target as far as every artifact is concerned, and the second run
+    # replaces the first's evidence.
+    #
+    # `targets_nemo.yaml` and `targets_nemo_key.yaml` both declared `name: nemo`. They are
+    # deliberately different -- the first arms both canaries, the second only the staff key,
+    # which is the `one canary per question` discipline the NeMo configs were written for --
+    # and `detector_coverage` had been reporting it for as long as they both existed: TWO
+    # CONFIGS, ONE TARGET NAME, the first used and the others not, their stored probes
+    # scored against the first config's oracle_context. Reported by the tool, gated by
+    # nothing. Every sibling already had a distinct name.
+    import yaml as _y6, glob as _g6, collections as _c6
+    _by = _c6.defaultdict(list)
+    for _p6 in sorted(_g6.glob(os.path.join(HERE, "targets_*.yaml"))):
+        try:
+            _c = _y6.safe_load(open(_p6, encoding="utf-8").read()) or {}
+        except (OSError, _y6.YAMLError):
+            # NARROW ON PURPOSE. This was `except Exception` and it swallowed a NameError
+            # from the line above, so the scan read nothing and reported no duplicates --
+            # the check below would have passed over an empty set. The check that asks
+            # whether anything was read is what caught it.
+            continue          # a config that will not parse is another suite's business
+        if isinstance(_c, dict) and _c.get("name"):
+            _by[str(_c["name"])].append(os.path.basename(_p6))
+    # A scan that read no config would find no duplicate and say so.
+    check("the shipped configs declare names that can be enumerated", len(_by) >= 20,
+          str(len(_by)))
+    _dupes = sorted((n, f) for n, f in _by.items() if len(f) > 1)
+    check("...and no two of them claim the same one", not _dupes, str(_dupes))
+
     # --- EVERY DOOR THAT WRITES EVIDENCE, NOT THE TWO THAT HAD THE GUARD ----------------
     #
     # `refuse_to_overwrite_evidence` was written after a `--attacks` run replaced a full

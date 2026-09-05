@@ -5,7 +5,13 @@
 # refunds doc comes back for almost any query, so a probe asking for the KEY would score a
 # hit on the POISON and credit the wrong frame. One canary per question.
 adapter: httpbot
-name: nemo
+# nemo-KEY, not `nemo`. This declared `name: nemo` and so did targets_nemo.yaml, which
+# made them one target: the same results_<name>.json, the same history file, and
+# `detector_coverage` reporting `TWO CONFIGS, ONE TARGET NAME - the first was used and
+# the others were not`, meaning this config's stored probes were scored under the other
+# one's oracle_context. Every sibling already has a distinct name (nemo-inputonly,
+# nemo-rag, nemo-rag-inputonly); this was the one that did not.
+name: nemo-key
 url: "http://localhost:8100/chat"
 
 # Where this deployment's software came from. A finding on somebody else's
