@@ -869,6 +869,11 @@ def main():
     # above both of them, not inside one.
     if args.target_config:
         cfg = yaml.safe_load(open(args.target_config, encoding="utf-8")) or {}
+        # THE COMMAND THIS TOOL TELLS AN OPERATOR TO RUN to measure their false-positive
+        # rate. With `canaries: "ACME"` it would report a wall of noise, and the operator
+        # would read that as the detector being broken rather than the config.
+        from workspace import refuse_unusable_config as _refuse
+        _refuse(cfg, "benign")
     else:
         if not args.target:
             ap.error("--target or --target-config is required unless --summary is given")

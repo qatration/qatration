@@ -391,6 +391,8 @@ def main():
 
     with io.open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    from workspace import refuse_unusable_config as _refuse
+    _refuse(tcfg, "verify")
     if not tcfg.get("name"):
         from workspace import config_name as _config_name
         tcfg["name"] = _config_name(args.target_config, {})

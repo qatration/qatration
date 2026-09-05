@@ -35,6 +35,8 @@ def load_target(cfg_path, model=None):
     to add a target, both entry points get it."""
     with open(cfg_path, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    from workspace import refuse_unusable_config as _refuse
+    _refuse(tcfg, "isolation")
     # AUTHORISATION FIRST, before a target is even built. Isolation sends real traffic — a
     # separate probe per defence, several trials each — so it is exactly as much somebody
     # else's system as a sweep is. The gate lived in the sweep and the benign run and not

@@ -51,6 +51,8 @@ def main():
 
     with open(args.target_config, encoding="utf-8") as f:
         tcfg = yaml.safe_load(f) or {}
+    from workspace import refuse_unusable_config as _refuse
+    _refuse(tcfg, "recon")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
     # config names, so it is exactly as much somebody else's system as a sweep is. The gate
     # was in the sweep and the benign run and not here, while the documentation said "any

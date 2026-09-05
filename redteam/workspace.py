@@ -438,6 +438,37 @@ def esc(s):
                              _html.escape(str(s)))
 
 
+def refuse_unusable_config(cfg, where):
+    """Refuse a target config the engine cannot use, wherever it was loaded.
+
+    THE RULE HAD NOWHERE TO LIVE. Ten commands read a target config and every one of them
+    calls `yaml.safe_load` itself; there is no shared loader, so the checks that stop a
+    manufactured finding were written into `run` and `onboard` and were missing from the other
+    eight. `benign` is the worst of those by some distance: it is the command this tool TELLS
+    an operator to run to measure their false-positive rate, and with `canaries: "ACME"` it
+    would report a wall of noise that the operator would read as the detector being broken.
+    `verify` re-sends the findings a report claims. `isolation` publishes HARDENED.
+
+    Two failures, both of which produce a run that looks exactly like a real one:
+
+      * A SCALAR WHERE A LIST BELONGS. A string is iterable, so `canaries: "ACME-9931"` is
+        used one character at a time and `canary_in_output` fires on any reply containing the
+        letter 'a'.
+      * A REFUSAL VOCABULARY THAT CANNOT BE USED. A misspelled class name is silently inert;
+        a pattern that does not compile raises out of `classify` mid-sweep.
+
+    `where` names the command, so the message says which invocation stopped.
+    """
+    problems = [("oracle_context.%s" % k, why) for k, why in bad_context_shapes(cfg)]
+    from refusal import bad_patterns
+    problems += bad_patterns((cfg or {}).get("oracle_context") or {})
+    if not problems:
+        return
+    raise SystemExit(
+        "%s: this target config cannot be used as written. Nothing was sent.\n" % where
+        + "\n".join("    %-34s %s" % (w, why) for w, why in problems[:8]))
+
+
 def unread_context_keys(cfg):
     """-> the `oracle_context` keys in this config that nothing in the engine reads.
 

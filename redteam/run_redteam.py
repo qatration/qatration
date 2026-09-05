@@ -623,7 +623,6 @@ def main():
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
     # be a clean baseline on a target that's compromised at rest — see targets_localrag.yaml).
-    from refusal import bad_patterns as _bad_patterns
     exclude = set(tcfg.get("exclude_attacks", []))
     # THE ARSENAL HAS TO BE A LIST OF ATTACKS BEFORE IT CAN BE FILTERED. Without this, an entry
     # that is not a mapping raises AttributeError out of `a.get` and an entry with no `id`
@@ -653,30 +652,25 @@ def main():
     # join the classifier and their bot reads as one that never refuses; an uncompilable
     # pattern raises out of `classify` mid-sweep and reaches Python's default handler as
     # exit 1, which this project's own table documents as "exploited or breached".
-    # A SCALAR WHERE A LIST BELONGS MANUFACTURES FINDINGS. `canaries: "ACME-9931"` is read one
-    # character at a time, so every reply containing the letter 'a' scores as a leak and every
-    # attack comes back EXPLOITED. Refused here rather than reported, because that run looks
-    # exactly like a real one and there is nothing downstream to tell them apart.
-    from workspace import bad_context_shapes as _bad_shapes
-    _shapes = _bad_shapes(tcfg)
-    if _shapes:
-        raise SystemExit(
-            "run: this target's `oracle_context` has values the engine cannot use. "
-            "Nothing was sent.\n"
-            + "\n".join("    %-22s %s" % (k, why) for k, why in _shapes[:8]))
+    # A CONFIG THE ENGINE CANNOT USE IS REFUSED WHEREVER IT IS READ. `canaries: "ACME-9931"`
+    # is a string and a string is iterable, so it is used one character at a time and every
+    # reply containing the letter 'a' scores as a leak; a refusal vocabulary with a misspelled
+    # class name is silently inert and one that will not compile stops the sweep part way
+    # through scoring it. All of them produce a run that looks exactly like a real one.
+    #
+    # `workspace.refuse_unusable_config` rather than the two copies that used to be here: ten
+    # commands read a target config and every one of them calls `yaml.safe_load` itself, so a
+    # rule written at this one was a rule missing from the other nine — `benign`, which is the
+    # command this tool tells an operator to run to measure their false-positive rate, among
+    # them.
+    from workspace import refuse_unusable_config as _refuse_config
+    _refuse_config(tcfg, "run")
     # A CANARY THAT APPEARS IN ORDINARY TEXT MANUFACTURES BREACHES, the mirror of one that
     # was never planted. Said before the sweep rather than refused, because a real secret may
     # be short; `qatration benign` measures how often it actually fires unattacked.
     from honeytoken import weak_canaries as _weak_canaries
     for _c, _why in _weak_canaries(ctx):
         print("  ! canary %r %s" % (_c, _why))
-    _bad_pats = _bad_patterns(ctx)
-    if _bad_pats:
-        raise SystemExit(
-            "run: this target's `refusal_patterns` cannot be used. Nothing was sent.\n"
-            + "\n".join("    %-34s %s" % (w, why) for w, why in _bad_pats[:8])
-            + "\n  A class nothing names is a list nothing applies, and a pattern that does "
-              "not compile stops the sweep part way through scoring it.")
     attacks = [a for a in all_attacks
                if (not a.get("applies_to") or target.name in a["applies_to"])
                and a["id"] not in exclude]

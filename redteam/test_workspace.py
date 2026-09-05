@@ -66,6 +66,107 @@ def builds_its_own_root(src):
     return found
 
 
+def check_every_command_refuses():
+    """The rule had nowhere to live, so eight commands were missing it.
+
+    Ten commands read a target config and every one calls `yaml.safe_load` itself: there is no
+    shared loader, so the checks that stop a manufactured finding were written into `run` and
+    `onboard` and were absent from the rest. `benign` is the worst of those by some distance —
+    it is the command this tool TELLS an operator to run to measure their false-positive rate,
+    and with `canaries: "ACME"` it would report a wall of noise the operator would read as the
+    detector being broken. `verify` re-sends the findings a report claims. `isolation`
+    publishes HARDENED.
+
+    THE SET IS SCANNED, not listed, so a command added on a Monday joins by existing. A module
+    that takes `--target-config` and parses YAML is one of these, and it must name the shared
+    refusal; anything else is a module that reads a config and cannot tell a usable one from a
+    config that manufactures breaches.
+    """
+    import glob as _g
+    import io as _io
+    import os as _os
+    import workspace as _ws
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    _here = _os.path.dirname(_os.path.abspath(_ws.__file__))
+    _readers, _missing = [], []
+    for _fp in sorted(_g.glob(_os.path.join(_here, "*.py"))):
+        _name = _os.path.basename(_fp)
+        if _name.startswith("test_"):
+            continue
+        _src = _io.open(_fp, encoding="utf-8").read()
+        # THE ARGPARSE FLAG, not a mention of the word. A first attempt matched any module
+        # holding "target_config" and "yaml.safe_load", which is nine modules that merely SCAN
+        # every shipped config — `build_index`, `rejudge`, `detector_coverage` — and refusing
+        # there would fail a report over a config the run already used. A command that
+        # declares `--target-config` is one a person points at a file.
+        if 'add_argument("--target-config"' not in _src:
+            continue
+        _readers.append(_name)
+        # THE CALL, NOT THE IMPORT. A first version looked for the name in the source, and
+        # deleting the call while leaving `from workspace import refuse_unusable_config`
+        # passed it — an import that nothing invokes is exactly the shape of the defect.
+        import ast as _ast
+        _alias, _called = None, False
+        try:
+            _tree = _ast.parse(_src)
+        except SyntaxError:
+            _tree = None
+        for _node in _ast.walk(_tree) if _tree else []:
+            if isinstance(_node, _ast.ImportFrom) and _node.module == "workspace":
+                for _a in _node.names:
+                    if _a.name == "refuse_unusable_config":
+                        _alias = _a.asname or _a.name
+            elif (isinstance(_node, _ast.Call) and isinstance(_node.func, _ast.Name)
+                  and _alias and _node.func.id == _alias):
+                _called = True
+        if not (_alias and _called):
+            _missing.append(_name)
+
+    check("the commands that read a target config can be found", len(_readers) >= 8, True)
+    # `onboard` reports these as problems rather than raising, because refusing is the whole
+    # job of the command and it has its own report to put them in; `sarif` reads a config only
+    # to look up canaries for a run that already happened, and refusing there would fail an
+    # export over evidence already on disk.
+    _EXEMPT = {
+        "onboard.py": "reports them in its own problem list rather than raising; refusing a "
+                      "config IS this command, and it must say everything wrong at once",
+        "sarif.py": "reads a config to look up the canaries of a run that already happened; "
+                    "refusing would fail an export over evidence already recorded",
+    }
+    check("every exemption names a file that still reads a config",
+          sorted(set(_EXEMPT) - set(_readers)), [])
+    check("...and gives a reason", all(_EXEMPT.values()), True)
+    check("no command reads a target config without the shared refusal",
+          sorted(set(_missing) - set(_EXEMPT)), [])
+
+    # AND THE REFUSAL REFUSES. A scan asserting a call exists in ten files says nothing about
+    # what the call does.
+    def _refused(cfg):
+        try:
+            _ws.refuse_unusable_config(cfg, "test")
+        except SystemExit as e:
+            return str(e)
+        return ""
+
+    check("a scalar canary is refused",
+          "one character at a time" in _refused({"oracle_context": {"canaries": "ACME"}}), True)
+    check("a broken refusal vocabulary is refused",
+          "not a class this classifier names" in _refused(
+              {"oracle_context": {"refusal_patterns": {"refusal_contnet": ["x"]}}}), True)
+    check("...and the message names the command that stopped",
+          _refused({"oracle_context": {"canaries": "A"}}).startswith("test:"), True)
+    check("a usable config is not refused",
+          _refused({"oracle_context": {"canaries": ["ACME-CANARY-9931"]}}), "")
+    check("...nor is one with no oracle_context at all", _refused({"adapter": "http"}), "")
+    return fails
+
+
 def check_esc():
     """One escaper, and a control set that covers what this arsenal attacks with.
 
@@ -688,7 +789,8 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = check_unread_context_keys() + check_context_shapes() + check_esc()
+    _f = (check_unread_context_keys() + check_context_shapes() + check_esc()
+          + check_every_command_refuses())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()
