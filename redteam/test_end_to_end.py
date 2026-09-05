@@ -234,6 +234,56 @@ oracle_context:
         _rc, _out = _code(_empty)
         check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
               f"exit {_rc}: {_out}")
+
+        # --- AND THE GATE A PULL REQUEST ACTUALLY USES, THROUGH THE CLI ------------------
+        #
+        # `regression_verdict` is a pure function with every branch tested, and that is the
+        # half `test_history` covers. This is the other half: the wiring. The call site is
+        # `regression_verdict(locals().get("d"), ...)` followed by `if code: sys.exit(code)`,
+        # and none of that is a branch any suite walked -- a lost `sys.exit`, a swallowed
+        # code, or a rename of `d` leaves every branch of the function correct and the
+        # build green regardless.
+        #
+        # TWO RUNS IN ONE WORKSPACE, because the answer depends on there being a timeline:
+        # the first has nothing to compare against and must say so rather than pass, and
+        # the second has one. Same target, same arsenal, so the only thing that changed
+        # between them is that a previous run now exists.
+        _rw = tempfile.mkdtemp()
+        try:
+            _renv = dict(env, QATRATION_OUT=_rw)
+
+            def _reg():
+                r = subprocess.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                     "--target-config", cfg_path, "--attacks", atk_path,
+                     # TWO TRIALS, because at one the gate correctly refuses to answer:
+                     # "one attempt cannot tell a reliable break from a lucky one" is a
+                     # confound `diff()` names, and it exits 3 on the second run too.
+                     # A wiring test that never gets past the first branch tests one
+                     # branch of the wiring.
+                     "--trials", "2", "--scope", "quick",
+                     "--fail-on", "regression", "--overwrite-evidence"], timeout=300,
+                    capture_output=True, text=True, env=_renv,
+                    cwd=os.path.dirname(HERE))
+                return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+            _c1, _o1 = _reg()
+            check("a first run cannot answer `did I make it worse` and exits 3",
+                  _c1 == 3, f"exit {_c1}: {_o1[-200:]}")
+            check("...and the exit is explained rather than bare",
+                  "CANNOT ANSWER" in _o1, _o1[-200:])
+            _c2, _o2 = _reg()
+            # Not asserted as 0: the fixture target is a real model-free bot but the
+            # arsenal is judged per run, and a flapping row would make this flaky. What is
+            # asserted is that a SECOND run reaches a different answer from the first --
+            # the timeline was read -- and that whatever it decides, it decides through
+            # the exit code rather than printing and exiting 0 regardless.
+            check("a second run has a timeline to read and stops saying it cannot answer",
+                  "CANNOT ANSWER" not in _o2, _o2[-200:])
+            check("...and the gate reports its decision in the exit code",
+                  _c2 in (0, 1), f"exit {_c2}: {_o2[-200:]}")
+        finally:
+            shutil.rmtree(_rw, ignore_errors=True)
         _rc2, _out2 = _code(_malformed)
         check("an arsenal that is not a list is refused with exit 2, not raised as exit 1",
               _rc2 == 2, f"exit {_rc2}: {_out2}")
