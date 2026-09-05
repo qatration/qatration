@@ -115,7 +115,7 @@ def sweep_guards(only=()):
     twice, having reported on one module. Pointed at the three files a change touched it is
     minutes, and that is the version somebody runs before pushing.
     """
-    survivors, tested = [], 0
+    survivors, tested, undocumented = [], 0, 0
     mods = sorted(f for f in os.listdir(RT)
                   if f.endswith(".py") and not f.startswith("test_"))
     if only:
@@ -138,8 +138,14 @@ def sweep_guards(only=()):
                 continue
             if len(lines[i + 1]) - len(lines[i + 1].lstrip()) <= len(g.group(1)):
                 continue
-            if i and lines[i - 1].strip().startswith("#"):
-                hits.append(i)
+            # A GUARD WITH NO COMMENT IS SKIPPED, and skipping it silently is this tool's
+            # own subject. `workspace.py` has 21 branches of this shape and one of them
+            # carries a comment, so the sweep tested one and the summary said `Every
+            # decision here is kept`. Counted so the denominator reaches the reader.
+            if not (i and lines[i - 1].strip().startswith("#")):
+                undocumented += 1
+                continue
+            hits.append(i)
         if not hits:
             continue
         suites = _suites_touching(mod)
@@ -164,7 +170,7 @@ def sweep_guards(only=()):
                     survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
         assert not any(_run(s) for s in suites), "%s was not restored" % mod
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
-    return tested, survivors
+    return tested, survivors, undocumented
 
 
 def sweep_rules():
@@ -294,8 +300,14 @@ def main(argv):
     bad = 0
     if both or args.guards:
         print("=== documented guards ===")
-        tested, survivors = sweep_guards(args.only)
+        tested, survivors, undocumented = sweep_guards(args.only)
         print("\n%d documented guard(s) tested, %d survived deletion" % (tested, len(survivors)))
+        if undocumented:
+            # SAY WHAT WAS NOT LOOKED AT. The scope is deliberate -- a comment means
+            # somebody paid for that branch once -- but a reader takes "0 survived" for a
+            # verdict on the file, and on `workspace.py` that was one branch of twenty-one.
+            print("  %d more guard(s) of the same shape carry no comment and were not "
+                  "touched. Their silence here is not a result." % undocumented)
         for mod, ln, src, who in survivors:
             print("  %s:%d  %s   [%s]" % (mod, ln, src[:70], who))
         bad += len(survivors)
@@ -318,7 +330,7 @@ def main(argv):
     # NOT AN EXIT CODE THAT FAILS A BUILD. Some survivors are equivalent mutations -- a guard
     # whose fallback reaches the same answer, an input bound whose effect is time rather than
     # a verdict -- and this tool cannot tell those from a real gap. It reports; a person reads.
-    print("\n%d decision(s) to look at." % bad if bad else "\nEvery decision here is kept.")
+    print("\n%d decision(s) to look at." % bad if bad else "\nNothing this sweep deleted went unnoticed.")
     return 0
 
 
