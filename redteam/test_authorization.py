@@ -492,6 +492,82 @@ def main():
     finally:
         os.unlink(_cfgp)
 
+    # --- THE PROOF FETCH RUNS BEFORE ANYBODY HAS VOUCHED FOR THE HOST -------------------
+    #
+    # `_http_get` reads /.well-known/qatration-authorization from the target itself, and it
+    # is the one request this module makes before it knows whether the target may be
+    # touched at all. Two rules protect it and both were written with a reason and kept by
+    # nothing:
+    #
+    #   `_NoRedirect` -- a proof has to come from the origin it is a proof about. Following
+    #   a redirect means the fetch lands somewhere the config never named, on the
+    #   instruction of the host being checked. The token is an HMAC over the origin, so a
+    #   forged one still needs the signing secret, but a pre-authorisation request steered
+    #   by the target is the shape `unreachable_by_policy` calls an SSRF proxy.
+    #
+    #   `_MAX_WELL_KNOWN` -- reading to EOF lets the origin under test decide how much
+    #   memory the gate uses, before the gate has decided anything about it.
+    #
+    # Driven through `_http_get` against a real server, so this covers the opener the code
+    # actually uses rather than the handler class in isolation.
+    import threading as _th, io as _io2
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+
+    _mode = {"m": "ok", "to": ""}
+
+    class _WK(_BH):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if _mode["m"] == "redirect":
+                self.send_response(302)
+                self.send_header("location", _mode["to"])
+                self.send_header("content-length", "0")
+                self.end_headers()
+                return
+            _b = (b"token-from-the-origin" if _mode["m"] == "ok"
+                  else b"A" * (az._MAX_WELL_KNOWN * 50))
+            self.send_response(200)
+            self.send_header("content-type", "text/plain")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+    _s1 = _TS(("127.0.0.1", 0), _WK)
+    _s2 = _TS(("127.0.0.1", 0), _WK)
+    for _s in (_s1, _s2):
+        _th.Thread(target=_s.serve_forever, daemon=True).start()
+    try:
+        _url = "http://127.0.0.1:%d%s" % (_s1.server_address[1], az.WELL_KNOWN)
+
+        # THE FIXTURE HAS TO REACH THE PROPERTY: a fetch that cannot succeed would make
+        # both refusals below true for the wrong reason.
+        _mode["m"] = "ok"
+        _got = az._http_get(_url)
+        check("the proof fetch reads what the origin serves",
+              "token-from-the-origin" in _got, repr(_got[:60]))
+
+        _mode["m"] = "huge"
+        _big = az._http_get(_url)
+        check("...and a body the origin sizes is capped rather than read to EOF",
+              len(_big) == az._MAX_WELL_KNOWN, str(len(_big)))
+
+        _mode["m"] = "redirect"
+        _mode["to"] = "http://127.0.0.1:%d/elsewhere" % _s2.server_address[1]
+        try:
+            _r = az._http_get(_url)
+            _why = "FOLLOWED: %r" % (_r[:60],)
+        except Exception as _e:
+            _why = "%s: %s" % (type(_e).__name__, _e)
+        check("...and a redirect off the origin is refused, not followed",
+              "redirected to" in _why, _why[:120])
+    finally:
+        _s1.shutdown()
+        _s2.shutdown()
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
