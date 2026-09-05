@@ -110,6 +110,45 @@ def check_refusal(check):
             return str(e)
         return ""
 
+    # --- SHAPE BEFORE SPELLING ---------------------------------------------------------
+    #
+    # A string is iterable, and the two list fields an operator writes by hand iterate it
+    # differently. `success: canary_in_output` — no brackets — makes the name check below read
+    # the value one character at a time, so the run is refused for `'c'` being an unknown
+    # detector: correct outcome, useless sentence. `applies_to: httpbot` was refused by
+    # nothing at all, and scoping asks `target.name in a["applies_to"]`, which on a string is a
+    # SUBSTRING test — so an attack written for `httpbot` also runs against a target called
+    # `bot`, is judged there, and its rows read as coverage of a bot it was never written for.
+    from lint_arsenal import bad_entry_shapes, list_attack_fields
+
+    _fields = list_attack_fields()
+    check("the list-valued attack fields can be derived", len(_fields) >= 5, str(sorted(_fields)))
+    check("...including the one an operator writes by hand", "success" in _fields, str(_fields))
+    check("...and the one that scopes an attack", "applies_to" in _fields, str(_fields))
+    # NOT `id`, `text` or `category`, which are scalars by design; a rule that demanded a list
+    # of those would refuse every attack in the arsenal.
+    check("...and not a field that is a scalar by design",
+          not ({"id", "text", "category"} & _fields), str(sorted(_fields)))
+
+    check("a success list written without brackets is reported",
+          len(bad_entry_shapes([{"id": "a", "success": "canary_in_output"}])) == 1, "not caught")
+    check("...and so is an applies_to that nothing else would refuse",
+          len(bad_entry_shapes([{"id": "b", "applies_to": "httpbot"}])) == 1, "not caught")
+    check("...naming the field rather than a letter from inside it",
+          bad_entry_shapes([{"id": "a", "success": "x"}])[0][1] == "success", "wrong field")
+    check("a correct entry is not reported",
+          not bad_entry_shapes([{"id": "c", "success": ["canary_in_output"],
+                                 "applies_to": ["httpbot"]}]), "a valid entry was reported")
+    check("...nor is a scalar field that is meant to be one",
+          not bad_entry_shapes([{"id": "d", "text": "hello", "category": "jailbreak"}]),
+          "a scalar field was reported")
+
+    # AND THE REFUSAL LEADS WITH IT, so the operator is told about brackets rather than about
+    # a letter. Both orderings refuse; only one of them says why.
+    _msg = refused([{"id": "e", "success": "canary_in_output"}])
+    check("the refusal explains the shape, not the spelling",
+          "single string" in _msg and "'c'" not in _msg, _msg[:100])
+
     _typo = [{"id": "leak-the-key", "success": ["canary_in_ouput"]}]
     msg = refused(_typo)
     check("a transposed detector name is refused", bool(msg), "nothing was refused")

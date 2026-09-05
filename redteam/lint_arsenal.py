@@ -148,6 +148,77 @@ def control_ids(root=None):
     return out
 
 
+_LIST_FIELDS = None
+
+
+def list_attack_fields(root=None):
+    """Every attack field the engine reads as a LIST — derived from the arsenals that ship.
+
+    Seven of them, and not one of the 1,060 shipped attacks writes any field with two
+    different types, which is what makes this derivable rather than a matter of opinion. A
+    field added on a Monday joins by being a list in the file that introduces it.
+    """
+    global _LIST_FIELDS
+    if _LIST_FIELDS is not None and root is None:
+        return _LIST_FIELDS
+    import glob as _glob
+    import io as _io
+    import yaml as _yaml
+    here = root or ROOT
+    seen = {}
+    for fn in _glob.glob(os.path.join(here, "attacks*.yaml")):
+        try:
+            rows = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or []
+        except Exception:
+            continue
+        if not isinstance(rows, list):
+            continue
+        for a in rows:
+            if isinstance(a, dict):
+                for k, v in a.items():
+                    seen.setdefault(k, set()).add(type(v).__name__)
+    out = {k for k, kinds in seen.items() if kinds == {"list"}}
+    if root is None:
+        _LIST_FIELDS = out
+    return out
+
+
+def bad_entry_shapes(entries):
+    """-> [(id, field, why)] for entries whose list fields are not lists.
+
+    A STRING IS ITERABLE, AND THESE TWO ITERATE IT DIFFERENTLY.
+
+    `success: canary_in_output` — no brackets — makes the name check below read the value one
+    character at a time, so the run is refused (right) for `'c'` being an unknown detector
+    (useless). The operator sees a letter and their problem is a missing pair of brackets.
+
+    `applies_to: httpbot` is worse, because nothing refuses it at all. Scoping asks
+    `target.name in a["applies_to"]`, which on a string is a SUBSTRING test: an attack written
+    for `httpbot` also runs against a target called `bot`, or `http`. It is judged there, it
+    produces rows there, and those rows read as coverage of a bot the attack was never
+    written for.
+    """
+    want = list_attack_fields()
+    out = []
+    if not want:
+        return out
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        who = e.get("id") or e.get("name") or "?"
+        for k, v in e.items():
+            if k not in want or v is None or isinstance(v, (list, tuple)):
+                continue
+            if isinstance(v, str):
+                out.append((who, k, "is a single string; this field is read as a LIST, so %r "
+                                    "would be used one character at a time. Write it as "
+                                    "[%r]" % (v, v)))
+            else:
+                out.append((who, k, "is %s; this field is read as a list"
+                            % type(v).__name__))
+    return out
+
+
 def refuse_unknown_detectors(entries, what, path):
     """Refuse a corpus whose success/partial lists name detectors that do not exist.
 
@@ -171,6 +242,14 @@ def refuse_unknown_detectors(entries, what, path):
     measurement of nothing, and this is the last moment anybody is reading.
     """
     import difflib
+    # SHAPE BEFORE SPELLING, because a `success:` written without brackets fails the spelling
+    # check one character at a time and the message names a letter.
+    shapes = bad_entry_shapes(entries)
+    if shapes:
+        raise SystemExit(
+            "%s: %d field(s) in %s are not the shape the engine reads. Nothing was sent.\n"
+            % (what, len(shapes), path)
+            + "\n".join("    %-22s %-12s %s" % (w, k, why) for w, k, why in shapes[:8]))
     known = sorted(DETECTORS)
     bad = []
     for e in entries:
