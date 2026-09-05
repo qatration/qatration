@@ -2293,6 +2293,101 @@ def check_tool_only():
     print("  ok  %d of %d detectors can fire only on a tool call" % (len(_t), len(DETECTORS)))
 
 
+def check_noisy_for():
+    """The mirror of `inert_for`, and the half that had no answer at all.
+
+    `inert_for` names a detector that cannot fire for want of a key, because silence from a
+    check that never ran reads as a defence. A detector whose SUPPRESSOR is unset does not go
+    silent: it goes off, and a page of findings about nothing looks exactly like a page of
+    findings.
+
+    MEASURED ON THE EVIDENCE THIS REPOSITORY SHIPS, which is what makes it a defect rather
+    than a tidiness argument. `pii_in_output` fires on the benign runs of TWENTY-EIGHT of
+    thirty-five targets -- 124 times over 1,750 probes nobody attacked with -- and on nineteen
+    of those the config sets neither `allowed_domains` nor `known_pii`. The replies say why in
+    one line: "You can reach us at support@ourstore.com", "call us at 1-800-123-4567". A
+    support bot publishing its own contact details, filed as personal data leaving. `_own_pii`
+    has excluded exactly that since it was written; nothing said it was unarmed.
+    """
+    import inspect as _inspect
+    import re as _re
+    from oracle import quieted_by, noisy_for, inert_for, NEEDS_CONFIG, WIDENS, DETECTORS
+    from workspace import list_context_keys as _lk
+    fails = []
+
+    def check(label, got, want):
+        print("%s  %s -> %r" % ("PASS" if got == want else "FAIL", label, got))
+        if got != want:
+            fails.append("%s: %r != %r" % (label, got, want))
+
+    check("a suppressor is found where one exists",
+          quieted_by("pii_in_output"), ["allowed_domains", "known_pii"])
+    # THE SAME KEY, THE OTHER RELATIONSHIP. `lookalike_domain` cannot fire without
+    # `allowed_domains` and `inert_for` already says so; naming it here too would tell an
+    # operator to set one key twice for opposite reasons.
+    check("a key a detector REQUIRES is not called a suppressor",
+          quieted_by("lookalike_domain"), [])
+    check("...and `inert_for` is the one that names it",
+          "lookalike_domain" in inert_for({}, ["lookalike_domain"]), True)
+    # A LIST THAT WIDENS IS NOT A SUPPRESSOR: `sysprompt_markers` is added to the built-in
+    # set, so an absent one makes the detector quieter -- the opposite direction.
+    check("a widening list is excluded", quieted_by("sysprompt_leak"), [])
+    check("...and a threshold is not mistaken for one", quieted_by("degenerate_output"), [])
+
+    # THE EXEMPTION IS CHECKED IN BOTH DIRECTIONS. An entry naming a detector the scan no
+    # longer finds is as wrong as a widening key nobody excluded, and both go stale in silence.
+    _pat = _re.compile(r'ctx\.get\(\s*["\']([a-z_]+)["\']')
+    _candidates = set()
+    import oracle as _o
+    for _n, _fn in DETECTORS.items():
+        try:
+            _src = _inspect.getsource(_fn)
+        except Exception:
+            continue
+        if "_own_pii" in _src:
+            _src += _inspect.getsource(_o._own_pii)
+        _needs = set()
+        for _e in NEEDS_CONFIG.get(_n, []):
+            _needs |= set(_e) if isinstance(_e, (tuple, list)) else {_e}
+        if (set(_pat.findall(_src)) & _lk()) - _needs:
+            _candidates.add(_n)
+    check("the derivation finds detectors to reason about", len(_candidates) >= 5, True)
+    check("every WIDENS entry is one the scan actually finds",
+          sorted(set(WIDENS) - _candidates), [])
+    check("...and each names a reason", all(WIDENS.values()), True)
+
+    # NOTHING TO SUBTRACT vs NOTHING TO SET.
+    check("an unarmed suppressor is reported",
+          "pii_in_output" in noisy_for({"canaries": ["ACME-CANARY-9931"]},
+                                       declared=["pii_in_output"]), True)
+    check("...and an armed one is not",
+          "pii_in_output" in noisy_for({"canaries": ["ACME-CANARY-9931"],
+                                        "allowed_domains": ["shop.example"],
+                                        "known_pii": ["a@shop.example"]},
+                                       declared=["pii_in_output"]), False)
+    # A DETECTOR THAT CANNOT RUN HERE IS NOT ADVICE: naming a suppressor for an inert check
+    # would tell an operator to quiet something that is not happening.
+    # `ssrf_call` is BOTH: inert without `fetch_tools`, and quieted by `fetch_allowed_hosts`.
+    # A detector with no suppressor at all cannot see this rule, and `lookalike_domain` —
+    # the first fixture here — was one, so the filter could be deleted with this file green.
+    check("the fixture is a detector that has a suppressor to report",
+          quieted_by("ssrf_call"), ["fetch_allowed_hosts"])
+    check("...and one that is inert on this config", "ssrf_call" in inert_for({}, ["ssrf_call"]),
+          True)
+    check("an inert detector is not named as noisy",
+          "ssrf_call" in noisy_for({}, declared=["ssrf_call"]), False)
+    # AND THE DECLARED PATH RUNS AT ALL. Written once with a name for the always-on set that
+    # does not exist in oracle.py, it raised NameError on the only path a run takes -- the
+    # empty-`declared` call in a scratch check short-circuited before reaching it, and passed.
+    check("the declared path does not raise",
+          isinstance(noisy_for({"canaries": ["X"]}, declared=["pii_in_output"]), dict), True)
+
+    if fails:
+        print("FAIL — " + "; ".join(fails))
+        sys.exit(1)
+    print("  ok  the suppressor map is derived and its one exemption is current")
+
+
 def main():
     # A GATE THAT PRINTS FAIL AND EXITS 0 IS NOT A GATE, and three of these did exactly
     # that. Each returned a pass COUNT which main added to the numerator and the
@@ -2385,4 +2480,5 @@ if __name__ == "__main__":
         import sys as _s
         _s.exit(1)
     check_tool_only()
+    check_noisy_for()
     main()

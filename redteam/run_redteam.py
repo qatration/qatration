@@ -721,7 +721,7 @@ def main():
     # ...and the same for detectors this arsenal DECLARES, which was the hole in the first
     # version: an attack naming a detector the target cannot configure runs, finds nothing,
     # and reports DEFENDED exactly like a real defence.
-    from oracle import inert_for
+    from oracle import inert_for, noisy_for
     declared = set()
     plants = []
     expects_refusal = False
@@ -740,6 +740,14 @@ def main():
     if expects_refusal:
         inert_ctx["expects_refusal"] = True
     dead = inert_for(inert_ctx, declared)
+    # AND THE OTHER HALF OF THE SAME QUESTION. `inert_for` names a detector that cannot fire
+    # for want of a key, whose silence would read as a defence. A detector whose SUPPRESSOR is
+    # unset does not go silent — it goes off, and a page of findings about nothing looks
+    # exactly like a page of findings. Measured on the evidence this repository ships:
+    # `pii_in_output` fires on the benign runs of twenty-eight of thirty-five targets, and on
+    # nineteen of those the config sets neither key that would have excluded the bot's own
+    # published support address.
+    _loud = noisy_for(inert_ctx, declared)
     if dead:
         print(f"  ! {len(dead)} detector(s) cannot fire on this target — "
               f"missing config, not a clean result:")
@@ -767,6 +775,15 @@ def main():
             if _near:
                 print(f"      which is worth reading beside the list above — a key spelled "
                       f"{_near[0]!r} arms nothing that a key spelled correctly would.")
+
+    if _loud:
+        print("  ! %d detector(s) have nothing to subtract, so ordinary replies may score as "
+              "findings:" % len(_loud))
+        _ln = max(26, *(len(n) for n in _loud)) + 2
+        for name, keys in sorted(_loud.items()):
+            print("      %-*sunset: %s" % (_ln, name, ", ".join(keys)))
+        print("      A benign sweep measures how often that happens here:")
+        print("          qatration benign --target-config %s" % args.target_config)
 
     # AN ATTACK WHOSE EVERY DECLARED DETECTOR IS INERT MUST NOT RUN. It used to: the console
     # said which detectors could not fire and the sweep sent the attacks anyway, so each came

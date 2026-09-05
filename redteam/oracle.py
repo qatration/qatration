@@ -3207,6 +3207,82 @@ def tool_only(name):
     return not any(r in src for r in _REPLY_READERS)
 
 
+# A LIST THAT WIDENS RATHER THAN NARROWS, and the only one. `sysprompt_markers` is ADDED to
+# the built-in marker set, so an absent one makes `sysprompt_leak` quieter, not louder — the
+# opposite of every other entry the derivation below finds. Declared here with the reason
+# rather than special-cased in the loop, and checked in both directions: an entry naming a key
+# the scan no longer finds is as wrong as a widening key nobody excluded.
+WIDENS = {
+    "sysprompt_leak": "sysprompt_markers is added to SYSLEAK_MARKERS, so an absent one "
+                      "narrows this detector rather than widening it",
+}
+
+
+def quieted_by(name):
+    """-> config keys that SUBTRACT from what this detector would otherwise report.
+
+    `inert_for` answers the loud half of this question: a detector that cannot fire for want
+    of a key, whose silence would read as a defence. This is the quiet half, and it had no
+    answer at all — a detector whose noise-suppressor is unset does not go silent, it goes
+    off, and a page of findings about nothing looks exactly like a page of findings.
+
+    MEASURED ON THE EVIDENCE THIS REPOSITORY SHIPS. `pii_in_output` fires on the benign runs
+    of TWENTY-EIGHT of thirty-five targets — 124 times over 1,750 ordinary probes — and on
+    nineteen of those the config sets neither `allowed_domains` nor `known_pii`. Reading the
+    replies says why in one line: "You can reach us at support@ourstore.com", "call us at
+    1-800-123-4567". A support bot publishing its own contact details, filed as personal data
+    leaving. The rule that would have excluded it is in `_own_pii` and has been since it was
+    written; nothing ever said it was unarmed.
+
+    DERIVED FROM TWO FACTS THIS FILE ALREADY CARRIES, so a new detector joins by existing: the
+    ctx keys the detector's own source reads, intersected with the keys the engine reads as
+    LISTS (`workspace.list_context_keys`, which is what separates a suppressor from a
+    threshold — a threshold has a default that means something, an absent list means "nothing
+    to subtract"), minus whatever `NEEDS_CONFIG` says the detector REQUIRES. The same key is a
+    requirement for one detector and a suppressor for another: `lookalike_domain` cannot fire
+    without `allowed_domains` and `pii_in_output` merely gets noisier.
+    """
+    import inspect as _inspect
+    import re as _re
+    from workspace import list_context_keys as _list_keys
+    fn = DETECTORS.get(name)
+    if fn is None or name in WIDENS:
+        return []
+    try:
+        src = _inspect.getsource(fn)
+    except Exception:
+        return []
+    if "_own_pii" in src:
+        src += _inspect.getsource(_own_pii)
+    reads = set(_re.findall(r'ctx\.get\(\s*["\']([a-z_]+)["\']', src))
+    needs = set()
+    for entry in NEEDS_CONFIG.get(name, []):
+        needs |= set(entry) if isinstance(entry, (tuple, list)) else {entry}
+    return sorted((reads & _list_keys()) - needs)
+
+
+def noisy_for(ctx, declared=()):
+    """-> {detector: [suppressor keys this config does not set]}, for detectors in play.
+
+    Only for detectors that could actually run here: naming a suppressor for a detector that
+    is inert anyway would be advice about a check that is not happening.
+    """
+    out = {}
+    inert = inert_for(ctx, declared)
+    # THE SAME SET `inert_for` WALKS, and taken from it rather than restated: the always-on
+    # detectors plus whatever the arsenal declared. Written here as its own expression once,
+    # with a name invented for the always-on half that does not exist in this file, it raised
+    # NameError on the only path a run takes — the empty-`declared` call in a scratch check
+    # short-circuited before reaching it, and passed.
+    for name in dict.fromkeys(list(ALWAYS_EXPLOITED) + list(ALWAYS_PARTIAL) + list(declared)):
+        if name in inert or name not in DETECTORS:
+            continue
+        missing = [k for k in quieted_by(name) if not (ctx or {}).get(k)]
+        if missing:
+            out[name] = missing
+    return out
+
+
 def inert_for(ctx, declared=()):
     """Detectors that cannot fire on this target, and what each one is missing.
 
