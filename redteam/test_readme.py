@@ -1421,6 +1421,32 @@ def main():
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
 
+    # --- A DETECTOR COUNT ON FIVE PAGES, RECOUNTED ON ONE -------------------------------
+    #
+    # `CONTRIBUTING.md` multiplied "50 prompts x 42 oracle contexts x 64 detectors" while
+    # `docs/oracle.md` multiplied the same thing by 66 — the same computation of the same
+    # corpus, two pages apart, one of them two detectors out of date. The README's own count
+    # was recounted; nothing looked at the others.
+    #
+    # ONLY THE WHOLE-SET FORMS. `docs/attribution.md` legitimately says "15 detectors" and
+    # "7 detectors" about subsets, and `docs/oracle.md` says "63 detectors" about the ones
+    # that had ever fired — a gate over every `N detectors` would fail on all three and be
+    # deleted within a week. `x N detectors`, `all N detectors` and a bolded `**N detectors**`
+    # are the forms that mean the whole vocabulary.
+    from oracle import DETECTORS as _ALL_DETS
+    _whole = re.compile(r"(?:[x×]|all)\s+(\d+)\s+detectors|\*\*(\d+)\s+detectors\*\*")
+    _claims = []
+    for _rel in ["README.md", "CONTRIBUTING.md"] + sorted(
+            os.path.relpath(_p, ROOT).replace("\\", "/")
+            for _p in glob.glob(os.path.join(ROOT, "docs", "*.md"))):
+        _txt = io.open(os.path.join(ROOT, _rel), encoding="utf-8").read()
+        for _m in _whole.finditer(_txt):
+            _claims.append((_rel, int(_m.group(1) or _m.group(2))))
+    check("the pages state the whole detector set somewhere", len(_claims) >= 3, str(_claims))
+    _wrong = [(f, n) for f, n in _claims if n != len(_ALL_DETS)]
+    check("...and every one of them agrees with the oracle",
+          not _wrong, "%s, oracle has %d" % (_wrong, len(_ALL_DETS)))
+
     # --- THE EXIT CONTRACT IS PUBLISHED TWICE ------------------------------------------
     #
     # The README states it for somebody deciding whether to adopt the tool, `docs/ci.md` for
