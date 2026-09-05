@@ -463,6 +463,91 @@ def main():
     finally:
         srv.shutdown()
 
+    # --- A TARGET MAY NOT STEER THE TOOL SOMEWHERE ELSE ---------------------------------
+    #
+    # `_GuardedRedirect` refuses a redirect that leaves the host and re-checks the network
+    # policy on the one that stays. It is the difference between a scanner and an SSRF
+    # proxy with an attack arsenal attached: a hosted worker probing an approved endpoint
+    # that answers `302 -> http://169.254.169.254/latest/meta-data/` would otherwise fetch
+    # its own operator's cloud metadata, on the target's instruction, and score the reply.
+    #
+    # The rule was written and nothing kept it. `_OPENER` is a module global and the call
+    # site is one line; replacing it with a plain `urllib.request.urlopen` restores the
+    # default redirect handler and no suite would have noticed. Driven through
+    # `target.send()` for exactly that reason -- this tests the call site, not the class.
+    _to = {"u": "http://example.com/"}
+
+    class _Redirector(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _moved(self):
+            _b = json.dumps({"reply": "answered after the redirect"}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def do_GET(self):
+            # A 302 turns a POST into a GET -- urllib does what browsers do -- so the
+            # redirect target has to answer one, or `followed` reads as `501`.
+            if self.path == "/moved":
+                return self._moved()
+            self.send_response(404)
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            # The redirect TARGET answers normally, so a followed redirect is visible as a
+            # reply rather than as the absence of one particular error string.
+            if self.path == "/moved":
+                return self._moved()
+            self.send_response(302)
+            self.send_header("location", _to["u"])
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+    _rsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Redirector)
+    _rport = _rsrv.server_address[1]
+    threading.Thread(target=_rsrv.serve_forever, daemon=True).start()
+    try:
+        _rt = HttpConfiguredTarget(
+            url="http://127.0.0.1:%d/chat" % _rport, name="redirector",
+            request={"body": {"message": "{prompt}"}},
+            response={"reply": "reply"}, timeout_s=5)
+
+        _away = [
+            ("another host entirely", "http://example.com/"),
+            ("the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data/"),
+            # A DIFFERENT SPELLING OF THE SAME MACHINE is still a different host to this
+            # rule, and that is the conservative direction.
+            ("localhost, spelled differently", "http://localhost:9/gone"),
+        ]
+        for _why, _dest in _away:
+            _to["u"] = _dest
+            _err = str(getattr(_rt.send("hi"), "error", None) or "")
+            check("a redirect to %s is refused" % _why,
+                  "different host refused" in _err, _err[:120])
+
+        # AND NOT BY REFUSING EVERYTHING. A guard that blocked same-host redirects too
+        # would pass every check above and break ordinary endpoints that redirect /chat
+        # to /chat/.
+        #
+        # ASSERTED AS A REPLY, not as the absence of one error string: `redirect_request`
+        # returning None refuses every redirect with a different message, which the
+        # absence test passed. The mutation is what showed that.
+        _to["u"] = "http://127.0.0.1:%d/moved" % _rport
+        _p = _rt.send("hi")
+        check("...and a redirect that stays on the host is still followed",
+              "answered after the redirect" in (_p.output or ""),
+              "output=%r error=%r" % ((_p.output or "")[:60], getattr(_p, "error", None)))
+    finally:
+        _rsrv.shutdown()
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
