@@ -70,7 +70,18 @@ MAX_BODY = 64 * 1024          # a target config, not a payload
 #                    (they are `2026-08-21T1645-a1b2c3`), and on Windows `job_x:y.json` writes
 #                    an NTFS alternate data stream: a file that exists, holds what was written,
 #                    and does not appear in a directory listing.
-ID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}$")
+# `\A` and `\Z`, not `^` and `$`. In Python `$` also matches immediately BEFORE a trailing
+# newline, so `httpbot\n` satisfied this and the message beside it says the value becomes a
+# filename. It does: `configs/<name>-<uuid>.yaml`, `results_<name>.json`,
+# `history/<name>.jsonl`. A newline is not a filename character on Windows -- the write
+# raises OSError 22 and the endpoint answers a traceback to a submission it had just
+# accepted -- and on Linux it succeeds, which is worse: `httpbot` and `httpbot\n` are two
+# targets that render identically in every report built from those names.
+#
+# Nothing else in the repo has this shape. `authorization.TOKEN_RE` is anchored the same
+# way and is safe, because a token that passes its shape check is then compared exactly
+# with `hmac.compare_digest`, so the trailing newline fails closed.
+ID_RE = re.compile(r"\A[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}\Z")
 
 # The scopes `run_redteam.py` accepts. Checked HERE, at submission, because argparse rejecting
 # it later means the API answered 202 for a job that cannot run — an acceptance is not a

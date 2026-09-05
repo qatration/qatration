@@ -262,6 +262,42 @@ def main():
             os.environ["QATRATION_HOSTED"] = old_env
         shutil.rmtree(root, ignore_errors=True)
 
+    # --- WHAT PASSES THE FILENAME CHECK MUST BE A FILENAME -------------------------------
+    #
+    # `ID_RE` guards the one field this service turns into paths, and says so in its own
+    # refusal: `results_<name>.json` and `history/<name>.jsonl`. It was anchored with `$`,
+    # and in Python `$` also matches immediately before a trailing newline -- so
+    # `httpbot\n` was accepted. On Windows the config write then raises OSError 22 and the
+    # endpoint answers a traceback to a submission it had just validated. On Linux it
+    # succeeds, which is worse: two targets whose reports are titled identically.
+    #
+    # ASKED THROUGH THE FILESYSTEM, not against the pattern. A test that spells the regex
+    # out a second time passes whenever both copies are wrong the same way; this one takes
+    # every accepted name and tries to create the file the service would create.
+    from intake import ID_RE as _ID
+    import tempfile as _tf9, shutil as _sh9
+    _dir = _tf9.mkdtemp()
+    try:
+        _ok = ["httpbot", "a.b-c_1", "X9", "a" * 64]
+        _no = ["httpbot\n", "..", "a/b", "a\\b", "", ".hidden", "a" * 65, " lead"]
+        _wrong = [n for n in _ok if not _ID.match(n)]
+        check("every ordinary target name is still accepted", not _wrong, str(_wrong))
+        _slipped = [n for n in _no if _ID.match(n)]
+        check("...and nothing that cannot be a filename is", not _slipped, str(_slipped))
+
+        _broke = []
+        for _n in _ok:
+            try:
+                _p9 = os.path.join(_dir, "%s-abc123.yaml" % _n)
+                with open(_p9, "w", encoding="utf-8") as _f9:
+                    _f9.write("x")
+            except OSError as _e9:
+                _broke.append("%r: %s" % (_n, _e9))
+        check("...and each accepted name really can be written to disk",
+              not _broke, "; ".join(_broke))
+    finally:
+        _sh9.rmtree(_dir, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
