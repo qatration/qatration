@@ -200,6 +200,11 @@ def main():
             i += 1
         return "".join(outc)
 
+    # THE REGISTRY IS THE ENCODERS' OWN, not a second copy here. `lint` needs the same
+    # answer -- an attack that plants a marker and encodes it with a transform that
+    # cannot carry it sends a string the target will never echo -- and two modules
+    # guessing separately is how the hand-written list came to name seven of twenty.
+    from encoders import DECODERS as _DEC, ONE_WAY as _ONE, LOSSY as _LOSSY, decode
     import quopri as _qp
     REVERSIBLE = {
         "base64": lambda o: _b.b64decode(o).decode(),
@@ -228,13 +233,27 @@ def main():
         "ascii_art": "renders a word as a picture; there is nothing to decode",
         "morse": "Morse has no case, so it folds it. Survivable ONLY because the detector's comparison is case-insensitive: `_canaries` lower-cases both sides.",
     }
+    # THE ENGINE'S OWN CLASSIFICATION, checked against a second one written here from
+    # the codecs' documented behaviour. Asserting `encoders.DECODERS` against itself
+    # would pass whatever it says; these two lists were written from different things
+    # and have to agree.
     check("every registered encoding is either reversible or declared one-way",
-          sorted(set(ENCODERS) - set(REVERSIBLE) - set(ONE_WAY)) == [],
-          "unclassified: %s" % sorted(set(ENCODERS) - set(REVERSIBLE) - set(ONE_WAY)))
+          sorted(set(ENCODERS) - set(_DEC) - set(_ONE)) == [],
+          "unclassified: %s" % sorted(set(ENCODERS) - set(_DEC) - set(_ONE)))
     check("...and nothing is declared that is not registered",
-          sorted((set(REVERSIBLE) | set(ONE_WAY)) - set(ENCODERS)) == [],
-          str(sorted((set(REVERSIBLE) | set(ONE_WAY)) - set(ENCODERS))))
-    check("...and every one-way declaration gives a reason", all(ONE_WAY.values()), True)
+          sorted((set(_DEC) | set(_ONE)) - set(ENCODERS)) == [],
+          str(sorted((set(_DEC) | set(_ONE)) - set(ENCODERS))))
+    check("...and no strategy is called both", sorted(set(_DEC) & set(_ONE)) == [],
+          str(sorted(set(_DEC) & set(_ONE))))
+    check("...and every one-way declaration gives a reason", all(_ONE.values()), True)
+    check("...and every declared loss names what is lost", all(_LOSSY.values()), True)
+    check("...and a loss is only declared for something that HAS an inverse",
+          sorted(set(_LOSSY) - set(_DEC)) == [], str(sorted(set(_LOSSY) - set(_DEC))))
+    # AND THE TWO LISTS AGREE. This one is written from what the codecs do; a strategy
+    # the engine calls reversible and this one does not is a disagreement worth failing.
+    check("the engine and this suite agree about what can be read back",
+          sorted(set(REVERSIBLE) ^ (set(_DEC) - set(_LOSSY))) == [],
+          str(sorted(set(REVERSIBLE) ^ (set(_DEC) - set(_LOSSY)))))
 
     for _name in sorted(REVERSIBLE):
         _out = apply_encoding(CANARY_MSG, _name)
@@ -245,13 +264,25 @@ def main():
         check("%s round-trips a canary exactly" % _name, _got == CANARY_MSG,
               "%r != %r" % (_got, CANARY_MSG))
 
-    # MORSE IS THE ONE-WAY ONE THAT STILL HAS TO CARRY THE TOKEN. It folds case and nothing
-    # can change that, but every other character must survive -- a hyphen passed through as
-    # itself becomes the letter T, which is how `ACME-CANARY-9931` became `acmetcanaryt9931`.
-    _m_back = _morse_back(payload(apply_encoding(CANARY_MSG, "morse")))
+    # MORSE LOSES EXACTLY CASE AND NOTHING ELSE. It is declared lossy rather than
+    # one-way, which is a claim: everything but case must survive, and a hyphen passed
+    # through as itself becomes the letter T, which is how `ACME-CANARY-9931` became
+    # `acmetcanaryt9931`. Driven through the engine's own `decode`, so this asserts the
+    # thing `lint` will act on rather than a copy of it.
+    _m_back = decode(apply_encoding(CANARY_MSG, "morse"), "morse")
     check("morse round-trips a canary apart from its case",
           _m_back == CANARY_MSG.lower(),
           "%r != %r" % (_m_back, CANARY_MSG.lower()))
+    check("...and case is the only loss it declares",
+          _LOSSY.get("morse") == "case", repr(_LOSSY.get("morse")))
+    # AND THE LOSS IS SURVIVABLE ONLY BECAUSE OF HOW THE ORACLE COMPARES. Both
+    # `_canaries` and `_markers` lower-case each side, so a folded case changes no
+    # verdict -- and if either stopped doing that, this stops being true.
+    import oracle as _or
+    _ctx = {"canaries": ["QAT-CANARY-9931"], "planted_markers": ["ZULU-77"]}
+    check("the oracle compares a planted string case-insensitively, canaries",
+          _or._canaries(_ctx) == ["qat-canary-9931"], str(_or._canaries(_ctx)))
+    check("...and markers", _or._markers(_ctx) == ["zulu-77"], str(_or._markers(_ctx)))
     check("...and the table has no duplicate codes, which would make it ambiguous",
           len(set(_MT.values())) == len(_MT),
           "%d codes for %d characters" % (len(set(_MT.values())), len(_MT)))

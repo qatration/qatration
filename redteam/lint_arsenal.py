@@ -238,6 +238,7 @@ def bad_encoders(entries):
     the second since they were written; neither could reach a corpus loaded with `--attacks`.
     """
     import difflib
+    from encoders import apply_encoding, decode, ONE_WAY
     known = sorted(ENCODERS)
     out = []
     for e in entries:
@@ -259,6 +260,43 @@ def bad_encoders(entries):
                              "transform is a no-op: the sensitive word goes out written "
                              "normally and a DEFENDED verdict describes a target that was "
                              "shown it in the clear."))
+        else:
+            # AND A MARKER THE ENCODING DESTROYS. `plants:` names a string the attack puts
+            # into the target and later asks it to repeat, and `marker_echoed` is the
+            # detector that decides whether it did. Encoding the text encodes the marker
+            # with it: a strategy that cannot be read back cannot carry one, so the model
+            # echoes something else, the detector cannot fire, and the run reports
+            # DEFENDED against an attack that was never asked properly.
+            #
+            # Nothing in the shipped corpus does this today. It is legal in the schema and
+            # silent when it happens, which is the combination worth refusing before the
+            # probes are sent rather than reading in a report afterwards.
+            _plants = e.get("plants")
+            _marks = [str(m) for m in (_plants if isinstance(_plants, list)
+                                       else [_plants] if _plants else [])]
+            if _marks:
+                _sent = apply_encoding(str(e.get("text") or ""), enc)
+                # COMPARED THE WAY THE ORACLE COMPARES: `_markers` lower-cases both
+                # sides, so a strategy that only folds case carries a marker fine and
+                # refusing it would block an attack that works.
+                _back = decode(_sent, enc)
+                _back = _back.lower() if _back is not None else None
+                if _back is None:
+                    out.append((who, "encode: %s cannot be read back (%s), and this attack "
+                                     "plants %s. The marker is encoded along with the text, "
+                                     "so the target echoes something else and "
+                                     "`marker_echoed` cannot fire: the attack scores as a "
+                                     "defence."
+                                % (enc, ONE_WAY.get(enc, "no inverse"),
+                                   ", ".join(repr(m) for m in _marks))))
+                else:
+                    _lost = [m for m in _marks if m.lower() not in _back]
+                    if _lost:
+                        out.append((who, "encode: %s does not carry %s through intact "
+                                         "(it comes back as %r). The target is asked to "
+                                         "repeat a string that was never sent, so a perfect "
+                                         "echo scores as a defence."
+                                    % (enc, ", ".join(repr(m) for m in _lost), _back[:80])))
     return out
 
 
