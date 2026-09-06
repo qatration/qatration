@@ -130,8 +130,13 @@ def main():
         # a live system, and a working endpoint mapping somebody spent an afternoon on.
         again = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init",
                                 "--out", out], capture_output=True, text=True, env=env)
-        check("a second init refuses to overwrite", again.returncode != 0,
-              "it silently replaced a config that may hold a planted canary")
+        # THE CODE, not merely non-zero. It was 1, which the exit table reserves for the
+        # target having been exploited or breached -- and there is no target here yet. A
+        # refused invocation is 2, which is the reading `run` applies to its own overwrite
+        # refusal, and `!= 0` could not tell the two apart.
+        check("a second init refuses to overwrite", again.returncode == 2,
+              "exit %s: it must refuse, and as a refused invocation rather than a finding"
+              % again.returncode)
         forced = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init",
                                  "--out", out, "--force"],
                                 capture_output=True, text=True, env=env)

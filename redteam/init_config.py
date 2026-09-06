@@ -196,7 +196,11 @@ def main():
         print("%s already exists. Pass --force to overwrite it, or --out to write elsewhere.\n"
               "Nothing was written -- that file may hold a canary you have already planted."
               % args.out, file=sys.stderr)
-        return 1
+        # TWO, NOT ONE, by the same reading `run` applies to its own overwrite refusal:
+        # 1 is documented as the target having been exploited or breached, and this is the
+        # invocation being refused. The act that clears it is a flag or a different --out,
+        # not anything about a target -- there is no target here yet.
+        return 2
 
     secret, verify = _ht.mint()
     io.open(args.out, "w", encoding="utf-8", newline="\n").write(
