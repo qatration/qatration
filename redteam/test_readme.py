@@ -2130,6 +2130,78 @@ def main():
     # `Disallow: /u` and `Disallow: /uk/index.html` alike. The copy written second had the more
     # confident name, which is how a weaker rule ends up looking like the authority.
 
+    # --- THE FOUR-STAND TABLE, RECOUNTED ------------------------------------------------
+    #
+    # `docs/attribution.md` publishes what a framing adds against four defences, and says
+    # underneath that "tools/paired_score.py recounts every figure here from the
+    # artifacts". It does, and nothing runs it. Every other number on that page is
+    # recounted by this suite, so the one table whose subject is statistical care was the
+    # one checked by somebody remembering to type a command.
+    #
+    # THE PAIR IS THE UNIT, which is why a rate cannot do this. Each question appears
+    # twice, plain and framed, and `paired_with` on the framed row names its twin.
+    import json as _js8
+    from stats import mcnemar_exact as _mcx
+
+    _SUP = {ord(a): b for a, b in zip("\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076"
+                                      "\u2077\u2078\u2079\u207b", "0123456789-")}
+
+    def _stand(fn, last=None):
+        """-> (plain_through, framed_through, n_pairs, p) for one stand.
+
+        `last` keeps only the final N pairs by id. The filter axis was run as sixty
+        exploratory pairs and then forty fresh ones, written to test a grouping that had
+        been read off the first sixty, and the page publishes the FORTY. The sixty are
+        explicitly not a result there, because the hypothesis came out of them.
+        """
+        _d = _js8.load(io.open(os.path.join(ROOT, "out", fn), encoding="utf-8"))
+        _by = {_r["attack"]["id"]: (_r["attack"].get("paired_with"),
+                                    _r.get("headline") in ("PARTIAL", "EXPLOITED"))
+               for _r in _d["results"]}
+        _pairs = sorted((_tw, _i) for _i, (_tw, _b) in _by.items() if _tw)
+        if last:
+            _pairs = _pairs[-last:]
+        _pl = sum(1 for _tw, _f in _pairs if _by[_tw][1])
+        _fr = sum(1 for _tw, _f in _pairs if _by[_f][1])
+        _b = sum(1 for _tw, _f in _pairs if _by[_f][1] and not _by[_tw][1])
+        _c = sum(1 for _tw, _f in _pairs if _by[_tw][1] and not _by[_f][1])
+        return _pl, _fr, len(_pairs), _mcx(_b, _c)
+
+    _attr = io.open(os.path.join(ROOT, "docs", "attribution.md"),
+                    encoding="utf-8").read()
+
+    def _row(marker):
+        """The published cells for one stand: (plain, framed, n, exponent of p)."""
+        _line = next((l for l in _attr.splitlines()
+                      if l.startswith("|") and marker in l), "")
+        _fr = re.findall(r"(\d+)/(\d+)", _line)
+        _ex = re.search(r"10([\u2070\u00b9\u00b2\u00b3\u2074-\u2079\u207b]+)", _line)
+        return _fr, (int(_ex.group(1).translate(_SUP)) if _ex else None)
+
+    for _marker, _fn, _last in (("MITIGATION=firm", "results_guardedrag-mitigated.json",
+                                 None),
+                                ("GUARD=weak", "results_guardedrag-weak.json", 40)):
+        _cells, _exp = _row(_marker)
+        # THE PAGE HAS TO STILL SAY IT. A row that was reworded out of this shape would
+        # otherwise make every assertion below true by having nothing to compare.
+        check("the %s row still publishes a plain and a framed count" % _marker,
+              len(_cells) == 2 and _exp is not None, str((_cells, _exp)))
+        if len(_cells) != 2 or _exp is None:
+            continue
+        _pl, _fr2, _n, _p = _stand(_fn, _last)
+        check("...and the plain arm recounts from the artifact" ,
+              (int(_cells[0][0]), int(_cells[0][1])) == (_pl, _n),
+              "page %s/%s, artifact %d/%d" % (_cells[0][0], _cells[0][1], _pl, _n))
+        check("...and so does the framed arm",
+              (int(_cells[1][0]), int(_cells[1][1])) == (_fr2, _n),
+              "page %s/%s, artifact %d/%d" % (_cells[1][0], _cells[1][1], _fr2, _n))
+        # The p is checked at its ORDER OF MAGNITUDE. The page rounds to two figures and
+        # this is about the claim moving, not about the last digit of a rounding.
+        import math as _m8
+        check("...and the p-value is the one the pairs produce",
+              _p and _m8.floor(_m8.log10(_p)) == _exp,
+              "page 10^%s, artifact %.3g" % (_exp, _p or 0))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for x in fails:
