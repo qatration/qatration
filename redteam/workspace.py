@@ -1121,9 +1121,55 @@ def read_artifact(path):
     import json
     try:
         with open(path, encoding="utf-8") as fh:
-            return json.load(fh), None
+            data = json.load(fh)
     except (OSError, ValueError) as e:
         return None, f"{type(e).__name__}: {e}"
+    why = _unusable_results(data)
+    return (None, why) if why else (data, None)
+
+
+# Keys the pages SUBSCRIPT rather than `.get`, with what happens when one is absent.
+# Measured by dropping each key from a real artifact in turn and running all five
+# consumers: twelve crashes across these four, every one arriving as `this is a bug in
+# qatration, please send it` for a variation in somebody's data.
+_RESULTS_REQUIRE = {
+    "meta.target": "`index`, `compare` and `coverage` key every page by it",
+    "results[].headline": "`fixes`, `compare` and `discrimination` sort and count on it",
+    "results[].attack": "`compare`, `coverage` and `discrimination` read its id",
+    "results[].fired": "`compare` reads the detector list off it",
+}
+
+
+def _unusable_results(data):
+    """-> why a parsed results artifact still cannot be used, or None.
+
+    THE OTHER HALF OF THE RULE ABOVE. `read_artifact` was written because five tools each
+    opened this directory alone and one truncated file took all five down; it catches the
+    file that will not PARSE. A file that parses and is missing a key the pages subscript
+    does the same thing by the same route -- `KeyError` out of a comprehension, no page, no
+    index, no coverage number, and the crash handler telling the reader it is a bug in this
+    tool rather than a fact about their file.
+
+    Not hypothetical either: an artifact written by a newer build, one repaired by hand
+    after an interrupted write, or one from a fork. The 45 stored here all carry every key,
+    which is exactly why nothing noticed.
+
+    RESULTS FILES ONLY. Benign baselines, lock maps and recon profiles come through this
+    same reader with their own shapes, and a rule that guessed at those would refuse them.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+        return None
+    if not (data.get("meta") or {}).get("target"):
+        return ("a results file with no meta.target: %s"
+                % _RESULTS_REQUIRE["meta.target"])
+    for i, r in enumerate(data["results"]):
+        if not isinstance(r, dict):
+            return "results[%d] is %s, not a mapping" % (i, type(r).__name__)
+        for k in ("headline", "attack", "fired"):
+            if k not in r:
+                return ("a results file whose results[%d] has no %r: %s"
+                        % (i, k, _RESULTS_REQUIRE["results[].%s" % k]))
+    return None
 
 
 def read_artifacts(paths):

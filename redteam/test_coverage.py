@@ -55,7 +55,7 @@ def main():
     tmp = tempfile.mkdtemp()
     try:
         chain = {"meta": {"target": "cov-fake"},
-                 "results": [{"attack": {"id": "c1", "category": "x", "delivery": "chain",
+                 "results": [{"headline": "DEFENDED", "fired": [], "attack": {"id": "c1", "category": "x", "delivery": "chain",
                                          "steps": [f"remember {CANARY}", "what is it?"]},
                               "trials": [{"probe": {"output": f"you said {CANARY}",
                                                     "tool_calls": [], "observations": [],
@@ -93,16 +93,22 @@ def main():
         # Two attacks naming one detector, two probes each: one carrying a tool call and one
         # not. The count has to separate them, because "127 probes" and "1 of them could
         # show anything" are different sentences about the same run.
+        # `headline` and `fired` on every row, because `workspace.read_artifact` refuses a
+        # results file without them: three pages subscript those keys, and a file that parses
+        # but lacks one used to reach them as a KeyError reported as a bug in this tool.
         art = {"meta": {"target": "cov-fake"}, "results": [
-            {"attack": {"id": "a1", "category": "x", "success": ["_cov_named"]},
+            {"headline": "DEFENDED", "fired": [],
+             "attack": {"id": "a1", "category": "x", "success": ["_cov_named"]},
              "trials": [{"probe": {"output": "no", "tool_calls": [], "observations": [],
                                    "seconds": 0, "turns": []}},
                         {"probe": {"output": "no", "tool_calls": [["run", "ls"]],
                                    "observations": [], "seconds": 0, "turns": []}}]},
-            {"attack": {"id": "a2", "category": "x", "partial": ["_cov_named"]},
+            {"headline": "DEFENDED", "fired": [],
+             "attack": {"id": "a2", "category": "x", "partial": ["_cov_named"]},
              "trials": [{"probe": {"output": "no", "tool_calls": [], "observations": [],
                                    "seconds": 0, "turns": []}}]},
-            {"attack": {"id": "a3", "category": "x", "success": ["_cov_other"]},
+            {"headline": "DEFENDED", "fired": [],
+             "attack": {"id": "a3", "category": "x", "success": ["_cov_other"]},
              "trials": [{"probe": {"output": "no", "tool_calls": [["run", "ls"]],
                                    "observations": [], "seconds": 0, "turns": []}}]}]}
         with open(os.path.join(tmp3, "results_cov-fake.json"), "w", encoding="utf-8") as f:
@@ -138,7 +144,7 @@ def main():
     tmp = tempfile.mkdtemp()
     try:
         data = {"meta": {"target": "cov-fake"},
-                "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                "results": [{"headline": "DEFENDED", "fired": [], "attack": {"id": "a", "category": "x", "text": "hi"},
                              "trials": [{"probe": {"output": "ok", "tool_calls": [],
                                                    "observations": [], "seconds": 0,
                                                    "turns": []}}]}]}
@@ -392,7 +398,7 @@ def main():
     tmp = tempfile.mkdtemp()
     try:
         orphan = {"meta": {"target": "a-bot-with-no-config"},
-                  "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                  "results": [{"headline": "DEFENDED", "fired": [], "attack": {"id": "a", "category": "x", "text": "hi"},
                                "trials": [{"probe": {"output": f"key is {CANARY}",
                                                      "tool_calls": [], "observations": [],
                                                      "seconds": 0, "turns": []}}]}]}
@@ -506,7 +512,7 @@ def main():
         tmp = tempfile.mkdtemp()
         try:
             data = {"meta": dict({"target": "cov-fake"}, **meta_extra),
-                    "results": [{"attack": {"id": "a", "category": "x", "text": "hi"},
+                    "results": [{"headline": "DEFENDED", "fired": [], "attack": {"id": "a", "category": "x", "text": "hi"},
                                  "trials": [{"probe": {"output": "ok", "tool_calls": [],
                                                        "observations": [], "seconds": 0,
                                                        "turns": []}}]}]}

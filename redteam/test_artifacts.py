@@ -60,14 +60,28 @@ SCANNERS = ["defense_report.py", "build_index.py", "compare_targets.py",
 
 
 def _workspace(corrupt):
+    """`corrupt` is False, "truncated" (or True) or "shape".
+
+    Two kinds of bad file reach the pages by the same route. One will not parse; the other
+    parses and is missing a key the pages subscript, which is a `KeyError` out of a
+    comprehension and looks to the reader like a bug in this tool.
+    """
+    import copy as _cp
     work = tempfile.mkdtemp()
     io.open(os.path.join(work, "results_httpbot.json"), "w",
             encoding="utf-8").write(json.dumps(GOOD))
     io.open(os.path.join(work, "benign_httpbot.json"), "w",
             encoding="utf-8").write(json.dumps(BENIGN))
     text = json.dumps(GOOD)
+    if corrupt == "shape":
+        _d = _cp.deepcopy(GOOD)
+        _d["meta"] = dict(_d.get("meta") or {}, target="opsbot")
+        _d["results"][0].pop("headline", None)
+        text = json.dumps(_d)
+    elif corrupt:
+        text = text[:len(text) // 2]
     io.open(os.path.join(work, "results_opsbot.json"), "w",
-            encoding="utf-8").write(text[:len(text) // 2] if corrupt else text)
+            encoding="utf-8").write(text)
     return work
 
 
@@ -106,7 +120,85 @@ def main():
     check("read_artifacts returns the failures instead of dropping them",
           not parsed and len(bad) == 2, f"{len(parsed)} parsed, {len(bad)} failed")
 
+    # --- AND THE SECOND KIND OF BAD FILE: ONE THAT PARSES --------------------------------
+    #
+    # `read_artifact` was written because a truncated artifact took all five tools down
+    # with a JSONDecodeError. A file that PARSES and is missing a key the pages subscript
+    # does the same thing by the same route: a `KeyError` out of a comprehension, no page,
+    # no index, no coverage number, and the crash handler telling the reader it is a bug in
+    # this tool rather than a fact about their file.
+    #
+    # MEASURED, one key at a time, by dropping it from a real artifact and running all five
+    # consumers: twelve crashes across four keys. The 45 artifacts stored here carry every
+    # one of them, which is exactly why nothing noticed -- an artifact from a newer build, a
+    # file repaired by hand after an interrupted write, or one from a fork does not.
+    import copy as _cp
+
+    def _minus(where, key):
+        d = _cp.deepcopy(GOOD)
+        (d["results"][0] if where == "result" else d["meta"]).pop(key, None)
+        _fp = os.path.join(tempfile.mkdtemp(), "results_x.json")
+        io.open(_fp, "w", encoding="utf-8").write(json.dumps(d))
+        return read_artifact(_fp)
+
+    for _w, _k in (("meta", "target"), ("result", "headline"),
+                   ("result", "attack"), ("result", "fired")):
+        _d, _why = _minus(_w, _k)
+        check("a results file with no %s.%s is not handed to the pages" % (_w, _k),
+              _d is None and _why is not None, str(_why))
+        check("...and the reason names the key", _why and repr(_k) in _why or
+              (_why and _k in _why), str(_why))
+    # AND THE REASON SAYS WHO NEEDED IT, because `results[0] has no 'fired'` is a fact and
+    # not yet a reason to care.
+    check("...and says which page would have died on it",
+          "`compare`" in (_minus("result", "fired")[1] or ""),
+          str(_minus("result", "fired")[1]))
+
+    # NOT THE FILE THAT IS FINE, and not the other artifact families: benign baselines, lock
+    # maps and recon profiles come through this same reader with their own shapes, and a
+    # rule that guessed at those would refuse them.
+    _okfp = os.path.join(tempfile.mkdtemp(), "results_x.json")
+    io.open(_okfp, "w", encoding="utf-8").write(json.dumps(GOOD))
+    check("a complete results file still parses", read_artifact(_okfp)[1] is None,
+          str(read_artifact(_okfp)[1]))
+    _bfp = os.path.join(tempfile.mkdtemp(), "benign_x.json")
+    io.open(_bfp, "w", encoding="utf-8").write(json.dumps(BENIGN))
+    check("...and a benign baseline is not judged by the results rule",
+          read_artifact(_bfp)[1] is None, str(read_artifact(_bfp)[1]))
+    _mfp = os.path.join(tempfile.mkdtemp(), "isolation_x.json")
+    io.open(_mfp, "w", encoding="utf-8").write(json.dumps({"meta": {"target": "x"},
+                                                           "maps": []}))
+    check("...nor is a lock map", read_artifact(_mfp)[1] is None,
+          str(read_artifact(_mfp)[1]))
+
+    # AND EVERY SHIPPED ARTIFACT STILL READS, or the rule is one this repository fails.
+    import glob as _g_a
+    _refused = {os.path.basename(_p): read_artifact(_p)[1]
+               for _p in _g_a.glob(os.path.join(ROOT, "out", "results_*.json"))
+               if read_artifact(_p)[1]}
+    check("no artifact this repository ships is refused by the shape rule",
+          _refused == {}, str(_refused))
+
     # --- and every tool that reads the directory --------------------------------------------
+    # BOTH KINDS, over the same drivers. `corrupt="truncated"` is the file that will not
+    # parse; `corrupt="shape"` is the one that parses and is missing a key the pages
+    # subscript. The consumers cannot tell them apart and must not need to.
+    for _kind in ("truncated", "shape"):
+        work = _workspace(corrupt=_kind)
+        try:
+            for script in SCANNERS:
+                code, out = _run(script, work)
+                name = script[:-3]
+                check("%s survives one %s artifact" % (name, _kind),
+                      code == 0 and "Traceback" not in out,
+                      "exit %s%s" % (code, " with a traceback" if "Traceback" in out
+                                     else ""))
+                check("...and names the file it could not read (%s)" % _kind,
+                      "results_opsbot.json" in out,
+                      "it carried on as though the file were not there")
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
     work = _workspace(corrupt=True)
     try:
         for script in SCANNERS:
