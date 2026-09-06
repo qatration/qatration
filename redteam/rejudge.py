@@ -327,9 +327,8 @@ def main():
                     rd = json.load(f)
                 # THE SAME RULE AS `run`'s panel: the artifact's own date where it has
                 # one, and marked as the filesystem's where it does not.
-                from workspace import measured_when as _mw
-                _mwhen, _msaid = _mw(_map_meta.get(path) or {}, path)
-                when = _mwhen if _msaid else _mwhen + " (file)"
+                from workspace import dated as _dated_fn
+                when, _msaid = _dated_fn(_map_meta.get(path) or {}, path)
                 html = os.path.join(OUT_DIR, f"report_{tgt}.html")
                 with open(html, "w", encoding="utf-8") as f:
                     f.write(build_html(rd["meta"], rd["results"],

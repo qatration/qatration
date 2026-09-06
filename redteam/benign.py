@@ -44,7 +44,7 @@ except Exception:
 
 import yaml
 from target import payload, engine_version
-from workspace import measured_when
+from workspace import measured_when, FILE_DATED
 from oracle import DETECTORS, inert_for, visible_text
 
 # ---------------------------------------------------------------------------------------
@@ -617,8 +617,11 @@ def roll_up():
         # no difference and the `not one snapshot` warning never renders on the checkout
         # a stranger has. That warning is the precedent `report_engine` and `baseline`
         # both cite for saying a baseline is old, and it was silent everywhere but here.
+        # THE FLAG TRAVELS WITH THE TEXT. `stale` below needs to know which rows can be
+        # compared, and recovering that by looking for the marker in the string this
+        # line just built is reading a boolean back out of prose.
         _when, _said = measured_when(d.get("meta") or {}, fp)
-        ages[t] = (_when[5:16] if _said else _when[5:16] + " (file)")
+        ages[t] = (_when[5:16] + ("" if _said else FILE_DATED), _said)
         probes += d["meta"]["probes"]
         # WHAT THE CORPUS AIMED AT, which is not the same as what fired. Every clean prompt
         # carries `provokes`: the detector it was written to tempt. `sql-in-question` is
@@ -792,13 +795,14 @@ def main():
         # OVER DATES THE RUNS RECORDED. A date read off a file cannot support this
         # comparison: in a clone they are all equal and nothing is ever stale, and
         # after a copy or a restore two files differ by a month that no run measured.
-        _dated = {t: a for t, a in s["ages"].items() if "(file)" not in a}
+        _dated = {t: a for t, (a, said) in s["ages"].items() if said}
         newest = max(_dated.values(), default="")
         stale = sorted(t for t, a in _dated.items() if a[:5] != newest[:5])
-        _undated = sorted(t for t, a in s["ages"].items() if "(file)" in a)
+        _undated = sorted(t for t, (a, said) in s["ages"].items() if not said)
         print(f"{s['probes']} benign probes across {len(s['targets'])} targets: "
               f"{', '.join(s['targets'])}")
-        print("measured: " + ", ".join(f"{t} {a}" for t, a in sorted(s["ages"].items())))
+        print("measured: " + ", ".join(f"{t} {a}"
+                                       for t, (a, _) in sorted(s["ages"].items())))
         if stale:
             print(f"  ! not one snapshot — {', '.join(stale)} measured on an earlier day; "
                   f"an oracle fix since then is not reflected in those rows")

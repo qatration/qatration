@@ -936,6 +936,29 @@ def measured_when(meta, path=None):
     return _dt.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M"), False
 
 
+FILE_DATED = " (file)"
+
+
+def dated(meta, path=None):
+    """-> (a date to show a reader, True if the RUN recorded it).
+
+    `measured_when` answers the question; this is how five surfaces SAY the answer, and
+    they were saying it five times. The marker matters because the sentence beside it
+    changes meaning without it -- `measured 09-01` is a claim about a run and
+    `measured 09-01 (file)` is a claim about a filesystem -- so the two must not drift
+    apart across the roll-up, the fleet page, the matrix, the report panel and the
+    rebuilt page.
+
+    AND THE BOOLEAN COMES BACK WITH IT, which is the point. `benign --summary` needed to
+    know which rows could join its staleness comparison and recovered that by testing
+    the display string for the marker -- reading a flag it had held two lines earlier
+    out of prose it had just formatted. A renamed marker would have silently put every
+    file-dated baseline back into the comparison it must stay out of.
+    """
+    when, said = measured_when(meta, path)
+    return (when if said else when + FILE_DATED), said
+
+
 def named_build(engine):
     """-> the build string when it names one, "" when it does not.
 

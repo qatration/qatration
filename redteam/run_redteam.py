@@ -301,10 +301,10 @@ def _side_artifact(explicit, default_name, key):
     # map written before `write_maps` existed is a bare LIST with nowhere to keep one. All
     # three reach here, so the shape is asked rather than assumed: `data.get` on the list
     # would raise, and the report would be built without the panel it did have.
-    from workspace import measured_when as _mw
+    from workspace import dated as _dated_fn
     _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
-    _when, _said = _mw(_said_by, path)
-    return {key: data, "when": _when if _said else _when + " (file)"}
+    _when, _said = _dated_fn(_said_by, path)
+    return {key: data, "when": _when}
 
 
 def breadth_slice(attacks):

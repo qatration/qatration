@@ -824,6 +824,94 @@ def check_measured_when():
 
 
 
+def check_dated():
+    """One marker for a date that came off the filesystem, and the flag beside it.
+
+    `measured_when` answers the question and five surfaces SAY the answer: the benign
+    roll-up, the recon fleet page, the model matrix, the report's side panel and the page
+    `rejudge --write` rebuilds. Each formatted it separately, so `measured 09-01` -- a claim
+    about a run -- and `measured 09-01 (file)` -- a claim about a filesystem -- were one
+    edit away from drifting apart.
+
+    AND THE FLAG COMES BACK WITH THE TEXT. `benign --summary` needs to know which rows may
+    join its staleness comparison, and it recovered that by testing the formatted string for
+    the marker: a boolean it had held two lines earlier, read back out of its own prose. A
+    renamed marker would have silently returned every file-dated baseline to the comparison
+    it must stay out of, and nothing would have failed.
+    """
+    import io as _io_d
+    import os as _os_d
+    import re as _re_d
+    import glob as _g_d
+    import tempfile as _tf_d
+    from workspace import dated, FILE_DATED
+    bad = []
+
+    def want(label, ok, detail=""):
+        print(f"{'PASS' if ok else 'FAIL'}  {label}")
+        if not ok:
+            bad.append(f"{label}: {detail}")
+
+    _shown, _said = dated({"when": "2026-08-18 19:08:29"}, None)
+    want("a run that recorded its date is shown it, unmarked",
+         _said and _shown == "2026-08-18 19:08", "%r / %r" % (_shown, _said))
+
+    _d = _tf_d.mkdtemp()
+    _fp = _os_d.path.join(_d, "results_x.json")
+    _io_d.open(_fp, "w", encoding="utf-8").write("{}")
+    _shown, _said = dated({}, _fp)
+    want("a run that did not is marked, so the sentence changes meaning",
+         _said is False and _shown.endswith(FILE_DATED), "%r / %r" % (_shown, _said))
+    want("...and the date is still there to read",
+         _re_d.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", _shown), _shown)
+
+    _shown, _said = dated({}, None)
+    want("with neither, it claims nothing but is still marked",
+         _said is False and _shown == FILE_DATED, repr(_shown))
+
+    # AND THE MARKER IS VISIBLE. An empty one satisfies every `endswith` above and would
+    # leave a file's timestamp reading exactly like a measurement -- a check that passes
+    # because the property it tests cannot be reached is the defect this project names.
+    want("the marker is something a reader can see", FILE_DATED.strip() != "",
+         repr(FILE_DATED))
+
+    # AND NOBODY PARSES IT BACK. The marker is a thing to SHOW; every caller that needs to
+    # know already has the boolean returned beside it. Scanned rather than remembered,
+    # because this is a habit rather than one line: it was written once and would be
+    # written again by the next surface that needs the same distinction.
+    _here_d = _os_d.path.dirname(_os_d.path.abspath(_io_d.__file__ or "."))
+    _mod_dir = _os_d.path.dirname(_os_d.path.abspath(__file__))
+    _parsers = []
+    for _fp2 in sorted(_g_d.glob(_os_d.path.join(_mod_dir, "*.py"))):
+        _nm = _os_d.path.basename(_fp2)
+        if _nm.startswith("test_") or _nm == "workspace.py":
+            continue
+        _src = _io_d.open(_fp2, encoding="utf-8").read()
+        for _line in _src.splitlines():
+            if _line.lstrip().startswith("#"):
+                continue
+            if "(file)" in _line and ("in " in _line or "==" in _line or "find(" in _line):
+                _parsers.append("%s: %s" % (_nm, _line.strip()[:70]))
+    want("no surface recovers the flag by searching its own output",
+         _parsers == [], "; ".join(_parsers))
+
+    # AND THE MARKER IS WRITTEN IN ONE PLACE, or the five surfaces drift again.
+    _literals = []
+    for _fp3 in sorted(_g_d.glob(_os_d.path.join(_mod_dir, "*.py"))):
+        _nm = _os_d.path.basename(_fp3)
+        if _nm.startswith("test_") or _nm == "workspace.py":
+            continue
+        for _line in _io_d.open(_fp3, encoding="utf-8").read().splitlines():
+            _s = _line.strip()
+            if _s.startswith("#"):
+                continue
+            if '" (file)"' in _s or "' (file)'" in _s:
+                _literals.append("%s: %s" % (_nm, _s[:70]))
+    want("...and no surface writes the marker itself", _literals == [],
+         "; ".join(_literals))
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -979,7 +1067,8 @@ def check_evidence_guard():
 
 
 if __name__ == "__main__":
-    _bad = check_evidence_guard() + check_measured_when() + check_named_build()
+    _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
+            + check_dated())
     if _bad:
         for _b in _bad:
             print('  !', _b)

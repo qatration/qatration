@@ -15,7 +15,7 @@ except Exception:
     pass
 import yaml
 from workspace import OUT as WORKSPACE_OUT, read_artifact, NOT_MEASURED
-from workspace import measured_when, named_build
+from workspace import dated, named_build
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
@@ -84,8 +84,8 @@ def main():
             # is the exact defect `workspace.measured_when` was written for, and this
             # was the last reader still asking the filesystem -- in the command whose
             # own `--from-disk` help calls the dates and the builds `the whole risk`.
-            _said_when, _from_run = measured_when(meta, fp)
-            when[m] = (_said_when, named_build(meta.get("engine")),
+            _shown, _from_run = dated(meta, fp)
+            when[m] = (_shown, named_build(meta.get("engine")),
                        meta.get("arsenal") or "?", meta.get("trials"), _from_run)
         if len(per_model) < 2:
             # 3, NOT 0. A comparison needs two things to compare and there are not two, so
@@ -95,8 +95,9 @@ def main():
                   f"2+. Nothing was compared.")
             return 3
         print(f"\nSTORED RUNS — not measured together. Judge the comparison against these:")
+        _tw = max([4] + [len(v[0]) for v in when.values()]) + 2
         for m, (t, eng, ars, tr, said) in sorted(when.items()):
-            print(f"  {m:<18}{t}{'' if said else ' (file)':<7}  build {eng or 'unstamped':<16}{ars}  x{tr}")
+            print(f"  {m:<18}{t:<{_tw}}build {eng or 'unstamped':<16}{ars}  x{tr}")
         if not all(v[4] for v in when.values()):
             print("    (file) — that run recorded no date, so this one is the artifact's "
                   "timestamp:\n    a clone or a copy resets it, and it is not when the run "
