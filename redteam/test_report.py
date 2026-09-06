@@ -207,6 +207,38 @@ def main():
     # nothing keeps true, and five of these suites had drifted below their real
     # count — recon reported 41 while running 45. The exit code was never wrong;
     # the number printed beside it was.
+    # --- A BREACH FOUND ONCE SAYS SO ON THE PAGE ----------------------------------------
+    #
+    # Every other surface qualifies a single trial. `run` prints that each attack was sent
+    # once and that this cannot tell a reliable break from a lucky one, `history` refuses
+    # to call a one-trial comparison a before-and-after, and `--fail-on regression` exits 3
+    # rather than green on one. The report is the surface a client actually opens, and its
+    # rate column is where somebody decides whether a row is worth acting on.
+    #
+    # ONLY ON A ROW THAT BROKE. A row that held has nothing to reproduce, and marking it
+    # would put a caveat on the rows that carry no claim.
+    _one = [dict(RESULTS[0], headline="EXPLOITED", rate="1/1")]
+    _once = build_html(dict(META, trials=1), _one)
+    # IN THE TABLE, not on the page. The legend names the badge too, so `in _once` passes
+    # with the badge deleted from every row -- which is what the mutation showed.
+    check("...and the legend says what that costs",
+          ("lucky one" in _once) or ("reliable break" in _once), True)
+
+    _thrice = build_html(dict(META, trials=3),
+                         [dict(RESULTS[0], headline="EXPLOITED", rate="3/3")])
+    _held = build_html(dict(META, trials=1),
+                       [dict(RESULTS[0], headline="DEFENDED", rate="0/1")])
+
+    def _in_table(html):
+        """The badge, not the legend. The legend explains the badge and always names it."""
+        return "one trial" in html.split('class="note"')[0]
+
+    check("a breach found on one trial is marked in the table", _in_table(_once), True)
+    check("...and a breach that repeated is not marked as one trial",
+          _in_table(_thrice), False)
+    check("...and a row that held is not given a caveat it does not need",
+          _in_table(_held), False)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:
