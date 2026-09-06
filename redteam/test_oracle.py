@@ -2117,6 +2117,45 @@ def test_probe_shapes():
     return ok, len(cases)
 
 
+def test_insecure_code_is_paired():
+    """Every dangerous pattern has a safe form that exonerates it.
+
+    The client deliverable says so in as many words: "The detector is paired -- it stays
+    silent on the safe version of every one of these, which is what makes a quiet result
+    mean something." The detector implements it as `danger.search(body) and not
+    safe.search(body)`, and its docstring gives the reason: a detector that fires on any
+    database call measures nothing about the code and would rank a careful model level
+    with a careless one.
+
+    The five pairs each have two cases in the table above, written by hand. A SIXTH added
+    without them is the gap this closes: the pairing would be missing, nothing would fail,
+    and the sentence on a customer's page would quietly stop being true.
+
+    Two ways it can be missing. A safe form that is absent, and one so broad it matches
+    anything -- which disarms the pattern rather than pairing it, and is the direction
+    that leaves no trace at all because the detector simply never fires.
+    """
+    from oracle import _INSECURE_CODE
+    cases = []
+    for label, danger, safe in _INSECURE_CODE:
+        cases.append((label, bool(danger and danger.pattern),
+                      bool(safe and safe.pattern),
+                      safe is None or safe.search("") is None))
+    ok = 0
+    good = len(_INSECURE_CODE) >= 5
+    print(f"{'PASS' if good else 'FAIL'}  the paired patterns can be enumerated")
+    if not good:
+        print("      %d pattern(s)" % len(_INSECURE_CODE))
+    ok += bool(good)
+    for label, has_d, has_s, narrow in cases:
+        good = has_d and has_s and narrow
+        print(f"{'PASS' if good else 'FAIL'}  {label[:52]} is paired")
+        if not good:
+            print("      danger=%s safe=%s narrow=%s" % (has_d, has_s, narrow))
+        ok += bool(good)
+    return ok, len(cases) + 1
+
+
 def test_thresholds_read_zero():
     """A configured threshold of zero is a threshold, not an absence.
 
@@ -2475,7 +2514,7 @@ def main():
              test_builtin_markers_are_instruction_shaped(), test_visible_turns(),
              test_null_config_keys(), test_probe_shapes(),
              test_inert_reads_values_not_truthiness(), test_shared_run_agreement(),
-             test_thresholds_read_zero()]
+             test_thresholds_read_zero(), test_insecure_code_is_paired()]
     extra = sum(g for g, _ in gates)
     gates_total = sum(t for _, t in gates)
     # detectors exercised outside the CASES table (see test_always_on)
