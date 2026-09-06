@@ -195,6 +195,76 @@ def check_refusal(check):
     check("an attack with no encoder at all is not reported",
           not bad_encoders([{"id": "d", "text": "x"}]), "reported a plain attack")
 
+    # --- A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS ---------------------------
+    #
+    # `lint.main` has refused unknown keys since it was written, and `lint` takes no
+    # arguments: it walks this package's own directory, so the one corpus it checks is
+    # the one that never has the problem. Walked through `run --attacks mine.yaml`: an
+    # arsenal with `encoding:`, `plnts:` and `expects_refusl:` ran to completion, sent
+    # the attack in plain text under an encoded name, planted nothing, expected no
+    # refusal, and said none of it.
+    from lint_arsenal import misspelt_keys as _mk, MISSPELT_CUTOFF as _CUT
+    _base = {"id": "a", "category": "c", "text": "x"}
+
+    def _typo(**kw):
+        _o = _mk(dict(_base, **kw), "mine.yaml")
+        return _o[0] if _o else ""
+
+    check("a misspelt `encode:` is caught", "looks like 'encode'" in _typo(encoding="b"),
+          _typo(encoding="b"))
+    check("...and a misspelt `plants:`", "looks like 'plants'" in _typo(plnts=["Z"]),
+          _typo(plnts=["Z"]))
+    check("...and a misspelt `expects_refusal:`",
+          "looks like 'expects_refusal'" in _typo(expects_refusl=True),
+          _typo(expects_refusl=True))
+    check("...and the message says nothing would follow it",
+          "the field is simply never looked at" in _typo(encoding="b"),
+          _typo(encoding="b"))
+
+    # A CUSTOMER'S OWN ANNOTATIONS ARE THEIRS. `main` refuses any key it does not read,
+    # which is right for a curated corpus and hostile at this door: refusing `owner:`
+    # would make the rule one nobody could adopt, which is the same damage as missing
+    # the typo, pointed the other way.
+    for _ann in ("owner", "ticket", "jira", "notes", "author", "severity", "tags"):
+        check("an annotation %r is not refused" % _ann, _typo(**{_ann: "x"}) == "",
+              _typo(**{_ann: "x"}))
+    # AND A KEY BESIDE THE ONE IT RESEMBLES IS AN ANNOTATION, not a misspelling.
+    check("...and neither is `encoding:` beside a real `encode:`",
+          _typo(encode="base64", encoding="utf-8") == "",
+          _typo(encode="base64", encoding="utf-8"))
+
+    # THE CUTOFF IS MEASURED, NOT CHOSEN, and both ends of it are pinned: over this
+    # engine's key set the typos score 0.71 to 0.97 against their intended key and
+    # plausible annotations score 0.44 to 0.62. The line sits between `encoding` ->
+    # `encode` and `severity` -> `delivery`, and a cutoff nobody measured is one that
+    # drifts until it catches everything or nothing.
+    import difflib as _dl
+    from lint_arsenal import attack_keys_read as _akr
+    _known = sorted(_akr())
+
+    def _ratio(k):
+        _m = _dl.get_close_matches(k, _known, n=1, cutoff=0.0)
+        return _dl.SequenceMatcher(None, k, _m[0]).ratio() if _m else 0.0
+
+    check("the tightest typo still scores above the cutoff",
+          _ratio("encoding") >= _CUT, "%.2f vs %.2f" % (_ratio("encoding"), _CUT))
+    check("...and the loosest annotation stays below it",
+          _ratio("severity") < _CUT, "%.2f vs %.2f" % (_ratio("severity"), _CUT))
+    check("...with room between them, or the line is a coincidence",
+          _ratio("encoding") - _ratio("severity") > 0.05,
+          "%.2f vs %.2f" % (_ratio("encoding"), _ratio("severity")))
+
+    # AND THE DOOR ASKS. Every check above calls the rule directly, which is how the
+    # rule came to be perfect and unreachable in the first place.
+    from lint_arsenal import unusable_entries as _ue2
+    check("the load-time door refuses a misspelt key",
+          any("looks like" in s for s in
+              _ue2([dict(_base, encoding="b")], "mine.yaml")),
+          str(_ue2([dict(_base, encoding="b")], "mine.yaml")))
+    check("...and lets an annotated arsenal through",
+          _ue2([dict(_base, owner="sec")], "mine.yaml") == [],
+          str(_ue2([dict(_base, owner="sec")], "mine.yaml")))
+
     # --- A DELIVERY THIS BUILD DOES NOT HAVE ---------------------------------------------
     #
     # The shape checks lived in `lint.main`, which only ever sees the shipped corpus.

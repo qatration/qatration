@@ -428,6 +428,48 @@ def unknown_detectors(names):
 _ATTACK_KEYS = None
 
 
+MISSPELT_CUTOFF = 0.7
+
+
+def misspelt_keys(a, fname="arsenal"):
+    """-> sentences for keys that look like a typo of a key this engine reads.
+
+    A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS, and `lint.main` has said so
+    since it was written -- about the shipped corpus, which is the one file that never
+    has the problem. `run --attacks mine.yaml` takes any path. Walked: an arsenal with
+    `encoding:`, `plnts:` and `expects_refusl:` ran, sent the attack in plain text
+    under an encoded name, planted nothing, expected no refusal, and said none of it.
+
+    A NEAR MISS, NOT AN UNKNOWN KEY, and the difference matters at this door. `main`
+    refuses any key it does not read, which is right for a curated corpus and hostile
+    to a customer who annotates their own file with `owner:` or `ticket:`. Measured
+    over this engine's 32 keys: the typos score 0.71 to 0.97 against their intended
+    key and plausible annotations score 0.44 to 0.62, so the line sits between
+    `encoding` -> `encode` at 0.71 and `severity` -> `delivery` at 0.62. Both ends are
+    pinned in `test_lint`, because a cutoff nobody measured is a cutoff that drifts.
+
+    AND THE INTENDED KEY MUST BE ABSENT. An attack carrying both `encode: base64` and
+    its own `encoding: utf-8` is annotating, not misspelling, and nothing here should
+    have an opinion about it.
+    """
+    import difflib
+    if not isinstance(a, dict):
+        return []
+    known = attack_keys_read()
+    aid = a.get("id") or "??"
+    out = []
+    for k in sorted(set(a) - known):
+        near = difflib.get_close_matches(str(k), sorted(known), n=1,
+                                         cutoff=MISSPELT_CUTOFF)
+        if not near or near[0] in a:
+            continue
+        out.append("%s: %s: %r is not a key this engine reads, and it looks like "
+                   "%r. Nothing would follow it: the field is simply never looked at, "
+                   "and every layer downstream describes the attack as though it had "
+                   "been." % (fname, aid, k, near[0]))
+    return out
+
+
 def unusable_entries(attacks, fname="arsenal"):
     """The entry faults a RUN cannot survive, as a list of sentences.
 
@@ -457,6 +499,7 @@ def unusable_entries(attacks, fname="arsenal"):
         if not a.get("category"):
             out.append("%s: %s: missing 'category'" % (fname, aid))
         out += bad_delivery(a, fname)
+        out += misspelt_keys(a, fname)
     return out
 
 
@@ -617,6 +660,10 @@ def main():
             # A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS. See `attack_keys_read`:
             # `encode:` typed `encoding:` sends the attack in plain text under an encoded name,
             # and every layer downstream reports it as the encoded one.
+            # STRICTER HERE THAN AT THE DOOR, deliberately. This walks the corpus this
+            # repository ships, where a key nothing reads is a mistake rather than an
+            # annotation; `unusable_entries` refuses only the NEAR MISSES, because a
+            # customer's own file may carry `owner:` or `ticket:` and that is theirs.
             for k in sorted(set(a) - _ATTACK_KEYS):
                 errors.append(f"{fname}: {aid}: unknown key {k!r} — nothing in this engine "
                               f"reads it, so whatever it was meant to do does not happen")
