@@ -586,6 +586,41 @@ def main():
     finally:
         _sh_w.rmtree(_wd, ignore_errors=True)
 
+    # --- A STORED MAP MISSING A KEY THE RE-SCORING READS -------------------------------
+    #
+    # `rejudge` exists to re-score lock maps that are already on disk, and it died on three
+    # of the keys it re-scores: `apply_keysearch` subscripted `properties`, `_verdict`
+    # subscripted `combined["status"]`, and the diff line formatted a `verdict` that could
+    # be None. All three arrived as a crash under the message telling the reader it is a bug
+    # in this tool, for a file from another build or one repaired by hand after an
+    # interrupted write. The eleven maps stored here carry every key, which is why nothing
+    # noticed.
+    from isolation import apply_keysearch as _ak, _verdict as _vd
+    _full = {"objective": "o", "verdict": "HARDENED", "coupling": [],
+             "properties": [{"name": "a", "status": "locked",
+                             "keysearch": {"verdict": "KEYED"}}],
+             "combined": {"status": "locked", "hits": "0/1", "locks": {}}}
+    check("a map with everything still downgrades a keyed HARDENED",
+          _ak(dict(_full))["verdict"], "PARTIAL")
+    check("a map with no properties keys nothing rather than raising",
+          _ak({"objective": "o", "verdict": "HARDENED"})["keyed"], [])
+    check("...and keeps the verdict it had, since nothing was keyed",
+          _ak({"objective": "o", "verdict": "HARDENED"})["verdict"], "HARDENED")
+    check("a map with no verdict at all does not raise either",
+          _ak({"objective": "o", "properties": []})["keyed"], [])
+    # WITH SOMETHING KEYED, or the `and` short-circuits before the verdict is read and the
+    # check passes without ever reaching the line it is about.
+    _nov = {"objective": "o",
+            "properties": [{"name": "a", "keysearch": {"verdict": "KEYED"}}]}
+    check("...even when a property WAS keyed, which is what reads the verdict",
+          _ak(dict(_nov))["keyed"], ["a"])
+    check("...and it stays absent rather than being invented",
+          _ak(dict(_nov)).get("verdict"), None)
+    # AN ABSENT COMBINED RESULT DID NOT DEMONSTRATE THE COMBINATION, so the safe answer is
+    # anything but EXPLOITED -- the direction this engine must never drift in.
+    check("an absent combined result is not read as the combination being open",
+          _vd([], {}, []), "UNMEASURED")
+
     # --- A MAP NOBODY COULD MEASURE IS NOT A MAP OF LOCKS -----------------------------
     #
     # `_verdict` learned to answer UNMEASURED after a dead target came back HARDENED,

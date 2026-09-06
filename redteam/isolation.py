@@ -302,16 +302,25 @@ def apply_keysearch(result):
     the objective is not hardened, it is one composition away. Reporting it as hardened is
     the most expensive kind of wrong this tool can be: the reader stops looking.
     """
-    keyed = [p["name"] for p in result["properties"]
-             if (p.get("keysearch") or {}).get("verdict") == "KEYED"]
+    # `.get`, BECAUSE THIS READS A FILE. `rejudge` re-scores stored lock maps, and a
+    # map without `properties` -- one from another build, or repaired by hand after an
+    # interrupted write -- arrived here as a KeyError under the message telling the
+    # reader it is a bug in this tool. No properties means nothing was keyed, which is
+    # the honest answer and the conservative one.
+    keyed = [p["name"] for p in (result.get("properties") or [])
+             if isinstance(p, dict) and (p.get("keysearch") or {}).get("verdict")
+             == "KEYED"]
     result["keyed"] = keyed
-    if keyed and result["verdict"] == "HARDENED":
+    if keyed and result.get("verdict") == "HARDENED":
         result["verdict"] = "PARTIAL"
     return result
 
 
 def _verdict(props, combined, coupling):
-    if combined["status"] == "open":
+    # `.get` FOR THE SAME REASON, and in the safe direction: an absent combined result
+    # did not demonstrate the combination, so it is not EXPLOITED. `rejudge` hands this
+    # `{}` for a stored map that has no `combined` at all.
+    if combined.get("status") == "open":
         return "EXPLOITED"
     if coupling:
         return "COUPLED"          # every lock open alone; the combination is the wall

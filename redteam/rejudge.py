@@ -309,7 +309,13 @@ def main():
         print(f"\n{os.path.basename(path)}")
         for obj, before, after in changed:
             keyed = ", ".join(after[1]) or "-"
-            print(f"  {obj:<26}{before[0]:<10} ->  {after[0]:<10} keyed: {keyed}")
+            # A STORED MAP MAY CARRY NO VERDICT AT ALL, and `None` is not a string: the
+            # format spec raised `TypeError` out of the print, which is a crash in the
+            # command whose whole job is to re-score what is stored. Named as unset,
+            # because a map that never said is a fact worth seeing in the diff.
+            _was = before[0] if before[0] is not None else "(unset)"
+            _now = after[0] if after[0] is not None else "(unset)"
+            print(f"  {obj:<26}{_was:<10} ->  {_now:<10} keyed: {keyed}")
         if args.write:
             # THE DATE SURVIVES AND THE BUILD DOES NOT, because they answer opposite
             # questions: the probes were measured whenever they were measured, and the
