@@ -2073,6 +2073,70 @@ def main():
     check("...and none of them is also listed as never sent",
           not [c for c in _ctrl_ids if c in _nline], _nline)
 
+    # --- A COVERAGE CLAIM THAT FOLLOWS THE RUN ------------------------------------------
+    #
+    # The fix list is the page a client acts from, and its coverage sentence named six
+    # OWASP areas from a template. A run of ONE attack in ONE category published
+    # "exercised across prompt injection, sensitive-data disclosure, excessive agency (tool
+    # abuse, SSRF, command injection, broken object/function-level authorization), improper
+    # output handling, and system-prompt leakage" -- six claims about a scan that made one.
+    #
+    # It says DEMONSTRATED now, not exercised, and the difference is stated on the page
+    # rather than blurred: the artifact records what fired, not what each attack was
+    # watching for, so where the findings fall is the honest claim available.
+    import contextlib as _cx, pathlib as _pl
+    import defense_report as _dr2
+
+    def _fixlist(dets):
+        _w = _tf5.mkdtemp()
+        _rows = [{"attack": {"id": "a-" + d, "category": "jailbreak"},
+                  "headline": "EXPLOITED", "rate": "1/1", "fired": [d], "locks": {},
+                  "trials": [{"verdict": "EXPLOITED", "fired": [d],
+                              "refusal": {"class": "none"},
+                              "probe": {"output": "x", "error": None,
+                                        "tool_calls": [], "prompt": "p"}}]} for d in dets]
+        try:
+            with _io5.open(os.path.join(_w, "results_t.json"), "w", encoding="utf-8") as _f:
+                _js5.dump({"meta": {"target": "t", "attacks_n": len(_rows), "trials": 1,
+                                    "broke": len(_rows)}, "results": _rows}, _f)
+            _real = _dr2.OUT_DIR
+            _dr2.OUT_DIR = _pl.Path(_w)
+            try:
+                with _cx.redirect_stdout(_io5.StringIO()):
+                    _dr2.main()
+                return _io5.open(os.path.join(_w, "defense_report.html"),
+                                 encoding="utf-8").read()
+            finally:
+                _dr2.OUT_DIR = _real
+        finally:
+            _sh5.rmtree(_w, ignore_errors=True)
+
+    def _cov(page):
+        """The coverage SENTENCE, not the page.
+
+        Every root cause below it carries its own OWASP tag, so `LLM06 in page` is true on
+        a page whose coverage line never mentions it -- which is how the first version of
+        these checks passed under a mutation that put the old six-area template back.
+        """
+        _i = page.find("Coverage:")
+        return page[_i:page.find("</p>", _i)] if _i >= 0 else ""
+
+    _one = _cov(_fixlist(["canary_in_output"]))
+    # THE SENTENCE HAS TO EXIST, or every absence below is satisfied by an empty string.
+    check("the fix list states its coverage", _one.startswith("Coverage:"), _one[:200])
+    check("...and names the area the one finding is in", "LLM02" in _one, _one[:240])
+    check("...and does NOT name areas the run never reached",
+          not any(a in _one for a in ("LLM06", "LLM07", "Excessive Agency",
+                                      "System Prompt Leakage")), _one[:300])
+    check("...and says an unnamed area was not cleared",
+          "not the same as one it cleared" in _one, _one[:300])
+
+    # AND IT GROWS WITH THE RUN, so the first check is not passing on a page that names
+    # nothing at all.
+    _three = _cov(_fixlist(["canary_in_output", "ssrf_call", "sysprompt_leak"]))
+    check("a run reaching three areas names three",
+          all(a in _three for a in ("LLM02", "LLM06", "LLM07")), _three[:300])
+
     # --- THE DESIGN CHOOSES THE TEST ----------------------------------------------------
     #
     # An A/B pair is the same arsenal sent to a naive target and to its defended twin, so

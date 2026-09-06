@@ -1312,6 +1312,30 @@ def main():
         sev_count[entry(det)["sev"]] += len(items)
     total = max(1, n_breaches)
 
+    # WHICH AREAS THIS RUN ACTUALLY REACHED. The sentence below used to name six OWASP
+    # areas from a template, so a run of ONE attack in ONE category published `exercised
+    # across prompt injection, sensitive-data disclosure, excessive agency (tool abuse,
+    # SSRF, command injection, broken object/function-level authorization), improper output
+    # handling, and system-prompt leakage` -- six claims about a scan that made one. That
+    # is a gap reported as a measurement, on the page a client acts from.
+    #
+    # DEMONSTRATED, NOT EXERCISED, and the difference is said out loud rather than blurred:
+    # the artifact records what fired, not what each attack was watching for, so the honest
+    # claim available here is where the findings fall. An area missing from it was not
+    # shown, which is not the same as an area that held.
+    # FROM THE MAPPED FINDINGS ONLY. `unmapped` is the rows whose detector has no
+    # remediation entry, so `entry()` raises on them by construction -- and a finding with
+    # no remediation has no area to contribute either. They are counted and listed
+    # elsewhere on the page; they cannot widen a coverage claim.
+    _areas = sorted({entry(_d)["owasp"] for _d in groups
+                     if (_d in ROOT_CAUSES or _d in REMEDIATION)
+                     and entry(_d).get("owasp")})
+    if _areas:
+        coverage_line = ("The findings below fall in %s. An area not named is one this run did not demonstrate, which is not the same as one it cleared."
+                         % ", ".join(_areas))
+    else:
+        coverage_line = ("No area is named below, because nothing was demonstrated. That is a statement about this run rather than about the systems in it.")
+
     # THE HEADLINE USED TO BE OCCURRENCES, AND NOBODY BELIEVES IT. "117 CRITICAL" was 15
     # distinct root causes spread across thirty systems, and 65 of the 117 were one detector
     # counted 65 times. A reader who has seen one scanner report has seen that number before
@@ -1797,10 +1821,8 @@ problems were seen <b>{n_breaches} times</b> across {len(all_targets)} systems. 
 occurrences answers "how often", which is not the question a fix is chosen by. One
 detector accounting for dozens of rows is one problem with a wide blast radius rather than
 dozens of problems.{prov_line}</p>
-<p class="coverage">Coverage: {len(all_targets)} target{'s' if len(all_targets)!=1 else ''} exercised across prompt injection,
-sensitive-data disclosure, excessive agency (tool abuse, SSRF, command injection, broken object/function-level
-authorization), improper output handling, and system-prompt leakage. {len(breached_targets)} showed at least
-one exploitable finding.</p>
+<p class="coverage">Coverage: {len(all_targets)} target{'s' if len(all_targets)!=1 else ''}, {len(breached_targets)} with at least
+one exploitable finding. {coverage_line}</p>
 
 {staleness}
 <div class="exec"><b>Executive summary.</b> This assessment found {n_roots} distinct exploitable
