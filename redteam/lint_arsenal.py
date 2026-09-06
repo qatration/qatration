@@ -335,7 +335,7 @@ def unscored_properties(entries):
     return out
 
 
-def refuse_unknown_detectors(entries, what, path):
+def refuse_unknown_detectors(entries, what, path, nested=False):
     """Refuse a corpus whose success/partial lists name detectors that do not exist.
 
     `unknown_detectors` below has always known this rule; `qatration lint` has always applied
@@ -374,6 +374,34 @@ def refuse_unknown_detectors(entries, what, path):
             "%s: %d attack(s) in %s declare a transform that cannot be applied. Nothing was "
             "sent.\n" % (what, len(_enc), path)
             + "\n".join("    %-22s %s" % (who, why) for who, why in _enc[:8]))
+    # AND A KEY THAT LOOKS LIKE ONE THIS ENGINE READS. `unusable_entries` does this for
+    # an arsenal against the tighter attack vocabulary; an objective's readers are named
+    # too many ways to derive a set that precisely, so it is asked against the whole
+    # engine's vocabulary here. Walked, one typo at a time: `properites:` and `probe:`
+    # misspelt come out as a traceback telling the customer it is a bug in this tool,
+    # `combind:` silently drops the combined probe and turns EXPLOITED into PARTIAL, and
+    # `applies_too:` runs an objective written for one bot against every one of them.
+    # ASKED OF THE CALLER, NOT OF THE DATA. The first version of this looked for
+    # entries that HAVE `properties`, which is defeated by exactly the typo that
+    # matters most: misspell `properties:` and there are no objectives to check, so the
+    # check that would have named it does not run. A corpus knows what it is; a corpus
+    # with a typo in it does not.
+    _objs = [e for e in entries if isinstance(e, dict)] if nested else []
+    if _objs:
+        _vocab = engine_keys()
+        _typos = []
+        for e in _objs:
+            _typos += misspelt_keys(e, what, _vocab)
+            for _p in (e.get("properties") or []):
+                _typos += misspelt_keys(
+                    _p, what, _vocab,
+                    "property %r" % (_p.get("name") or "??") if isinstance(_p, dict)
+                    else "")
+        if _typos:
+            raise SystemExit(
+                "%s: %d key(s) in %s look like keys this engine reads and are not. Nothing was sent.\n" % (what, len(_typos), path)
+                + "\n".join("    " + s for s in _typos[:8]))
+
     # AND A COMBINED TEST THAT DROPS HALF ITS OWN CONDITIONS. Refused here rather than
     # warned, for the reason above it: after this point every signal is a measurement
     # of something narrower than the objective says it is.
@@ -431,7 +459,40 @@ _ATTACK_KEYS = None
 MISSPELT_CUTOFF = 0.7
 
 
-def misspelt_keys(a, fname="arsenal"):
+def engine_keys(root=None):
+    """Every string this package ever reads off a mapping, as one vocabulary.
+
+    `attack_keys_read` is precise about ATTACKS because their readers are named `a`,
+    `attack`, `atk`. An objective's readers are not: `objective`, `obj`, `o`, `spec`,
+    `prop`, `p`, `tasks`, and `task_self` is reached as `tasks[key]` with the key held
+    in a variable. A precise set for objectives would be a guess, and a guess that
+    misses a real key refuses a valid file -- the wrong direction to be wrong in.
+
+    So this is deliberately WIDE: every `x.get("k")` and `x["k"]` literal in the
+    package, which over-collects on purpose. Over-collecting only ever costs a missed
+    typo (`probes:` in an objective is a real key elsewhere, so it passes), and never
+    refuses a key some part of this engine actually reads.
+    """
+    import re as _re
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pats = (r'\b[A-Za-z_][A-Za-z_0-9]*\.get\(\s*["\']([a-z_][a-z_0-9]*)["\']',
+            r'\b[A-Za-z_][A-Za-z_0-9]*\[\s*["\']([a-z_][a-z_0-9]*)["\']\s*\]')
+    for fname in sorted(glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(fname).startswith("test_"):
+            continue
+        try:
+            src = open(fname, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in pats:
+            keys |= set(_re.findall(p, src))
+    # Reached with a variable key, so no literal scan can find it. Named here rather
+    # than in a comment, because a key this rule cannot see is a file it would refuse.
+    return keys | {"task_self"} | set(WRITTEN_NOT_READ)
+
+
+def misspelt_keys(a, fname="arsenal", known=None, where=""):
     """-> sentences for keys that look like a typo of a key this engine reads.
 
     A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS, and `lint.main` has said so
@@ -455,8 +516,10 @@ def misspelt_keys(a, fname="arsenal"):
     import difflib
     if not isinstance(a, dict):
         return []
-    known = attack_keys_read()
-    aid = a.get("id") or "??"
+    known = attack_keys_read() if known is None else known
+    aid = (a.get("id") or a.get("name") or "??")
+    if where:
+        aid = "%s: %s" % (aid, where)
     out = []
     for k in sorted(set(a) - known):
         near = difflib.get_close_matches(str(k), sorted(known), n=1,

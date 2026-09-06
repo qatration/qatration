@@ -265,6 +265,81 @@ def check_refusal(check):
           _ue2([dict(_base, owner="sec")], "mine.yaml") == [],
           str(_ue2([dict(_base, owner="sec")], "mine.yaml")))
 
+    # --- AND THE SAME DOOR FOR AN OBJECTIVES FILE ----------------------------------------
+    #
+    # `isolation --objectives mine.yaml` takes any path too, and each typo fails its own
+    # way. Walked against a scripted endpoint, one at a time: `properites:` and a misspelt
+    # `probe:` come out as a TRACEBACK telling the customer this is a bug in qatration;
+    # `combind:` silently drops the combined probe and turns EXPLOITED into PARTIAL; and
+    # `applies_too:` runs an objective written for one bot against every bot in the fleet
+    # and files its findings under each.
+    #
+    # A WIDER VOCABULARY THAN THE ARSENAL'S, because an objective's readers are named
+    # `objective`, `obj`, `o`, `spec`, `prop`, `p`, `tasks` -- and `task_self` is reached as
+    # `tasks[key]` with the key in a variable, which no literal scan can find. A precise set
+    # would be a guess, and a guess that misses a real key refuses a valid file.
+    from lint_arsenal import engine_keys as _ek, refuse_unknown_detectors as _rud
+    _OBJ = {"id": "o", "applies_to": ["b"], "combined": "x",
+            "success": ["canary_in_output"],
+            "properties": [{"name": "a", "task": "t", "probe": "p",
+                            "success": ["canary_in_output"]}]}
+
+    def _swap(d, old, new):
+        e = dict(d)
+        e[new] = e.pop(old)
+        return e
+
+    def _obj_refused(o):
+        try:
+            _rud([o], "isolation", "mine.yaml", nested=True)
+            return ""
+        except SystemExit as _e:
+            return str(_e)
+
+    for _lbl, _o in (("properties", _swap(_OBJ, "properties", "properites")),
+                     ("combined", _swap(_OBJ, "combined", "combind")),
+                     ("applies_to", _swap(_OBJ, "applies_to", "applies_too"))):
+        check("a misspelt `%s:` in an objectives file is refused" % _lbl,
+              "looks like %r" % _lbl in _obj_refused(_o), _obj_refused(_o)[:160])
+    # AND INSIDE A PROPERTY, which is a second level nothing was looking at.
+    _pn = {**_OBJ, "properties": [_swap(_OBJ["properties"][0], "success", "sucess")]}
+    check("...and one inside a property is refused too",
+          "looks like 'success'" in _obj_refused(_pn), _obj_refused(_pn)[:160])
+    check("...naming which property it was in", "property 'a'" in _obj_refused(_pn),
+          _obj_refused(_pn)[:160])
+
+    # THE TYPO THAT DEFEATS A SHAPE TEST. The first version of this rule looked for entries
+    # that HAVE `properties`, so misspelling `properties:` left nothing to check and the
+    # check that would have named it did not run. The caller says which corpus this is.
+    check("...including the one that removes the key the check would have keyed on",
+          "looks like 'properties'" in _obj_refused(_swap(_OBJ, "properties",
+                                                          "properites")), True)
+
+    # NOT THE FILE THAT IS FINE, and not the shipped fleet, or this is a rule nobody could
+    # adopt. `task_self` is the one that would break it: it is read with a variable key, so
+    # `engine_keys` names it explicitly rather than hoping a scan finds it.
+    check("a well-formed objective is accepted", _obj_refused(_OBJ) == "",
+          _obj_refused(_OBJ)[:160])
+    check("...and an annotated one", _obj_refused({**_OBJ, "owner": "sec"}) == "",
+          _obj_refused({**_OBJ, "owner": "sec"})[:160])
+    import glob as _g_l, yaml as _y_l
+    _fleet = []
+    for _fp in sorted(_g_l.glob(os.path.join(HERE, "isolation*.yaml"))):
+        _fleet += _y_l.safe_load(io.open(_fp, encoding="utf-8")) or []
+    # NOT `_rud(...) or True`, which is a check that cannot fail: the function returns None
+    # on success and RAISES on failure, so the assertion would be True or the suite would die
+    # with a SystemExit instead of a named FAIL.
+    _fleet_said = ""
+    try:
+        _rud(_fleet, "isolation", "shipped", nested=True)
+    except SystemExit as _e:
+        _fleet_said = str(_e)
+    check("every objective shipped here passes the same door", _fleet_said == "",
+          _fleet_said[:200])
+    check("...and there were objectives to check", len(_fleet) > 5, True)
+    check("`task_self` is in the vocabulary, being read with a variable key",
+          "task_self" in _ek(), True)
+
     # --- A DELIVERY THIS BUILD DOES NOT HAVE ---------------------------------------------
     #
     # The shape checks lived in `lint.main`, which only ever sees the shipped corpus.

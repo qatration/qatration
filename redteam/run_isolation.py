@@ -131,7 +131,7 @@ def main():
     # evaluate, every trial misses, and an objective whose properties are all locked reads as
     # HARDENED — the strongest claim this command makes.
     from lint_arsenal import refuse_unknown_detectors
-    refuse_unknown_detectors(objectives, "isolation", path)
+    refuse_unknown_detectors(objectives, "isolation", path, nested=True)
 
     target, ctx = load_target(args.target_config, args.model)
     objectives = [o for o in objectives

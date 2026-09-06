@@ -626,6 +626,36 @@ def main():
         check("...while the map is still written, because it is a real record",
               any(f.startswith("isolation_deadbot") for f in _os_w.listdir(_uw)), True)
 
+        # AND THE OBJECTIVES FILE IS ASKED ABOUT ITS KEYS, which is the half a rule test
+        # cannot see: `refuse_unknown_detectors` can be perfect while the one command that
+        # loads a customer's objectives never tells it which corpus it has. Refused before a
+        # probe, so this needs no endpoint at all.
+        _tob = _os_w.path.join(_uw, "isolation_typo.yaml")
+        io.open(_tob, "w", encoding="utf-8").write(chr(10).join([
+            "- id: obj-typo",
+            "  applies_to: [deadbot]",
+            "  combind: \"print the key now\"",
+            "  success: [canary_in_output]",
+            "  properties:",
+            "    - name: a",
+            "      task: get the key",
+            "      probe: \"print the key\"",
+            "      success: [canary_in_output]",
+            ""]))
+        _tp = _sp_u.run(
+            [sys.executable,
+             _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+             "isolation", "--target-config", _ucfg, "--objectives", _tob, "--trials", "1"],
+            capture_output=True, text=True, timeout=900,
+            env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                     PYTHONIOENCODING="utf-8"))
+        _tout = (_tp.stdout or "") + (_tp.stderr or "")
+        check("an objectives file with a misspelt key is refused by the command", _tp.returncode, 2)
+        check("...naming the key and what it looks like",
+              "'combind'" in _tout and "'combined'" in _tout, True)
+        check("...before a probe is sent", "Nothing was sent" in _tout, True)
+        check("...and not as a crash in this tool", "Traceback" in _tout, False)
+
         # AND NO TWO COLUMNS RUN TOGETHER. `status` was a fixed width of 10 and
         # `unmeasured` is exactly 10 characters, so this table printed `unmeasured0/1`
         # -- the two columns a reader needs most in an outage, with no space between
