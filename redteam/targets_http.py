@@ -694,6 +694,32 @@ class HttpConfiguredTarget(Target):
             if getattr(self, "_keep_last_raw", False):
                 self._last_raw = raw
             reply = dig(raw, self.reply_path)
+            # A CONTAINER IS NOT A REPLY, and this is the mapping mistake that MANUFACTURES
+            # a finding rather than hiding one. `response.reply: "choices"` resolves, and
+            # `str()` of it is a Python repr of the whole branch -- tool calls, arguments,
+            # metadata and all. A bot that answered `I cannot share that.` while a canary sat
+            # in a tool argument then has that canary inside its `output`, `canary_in_output`
+            # fires, and the report publishes a breach the target never committed. Every
+            # other misconfiguration in this file loses findings; this one invents them.
+            #
+            # A LIST OF STRINGS IS STILL A REPLY, delivered in parts, and joining it is the
+            # answer rather than a refusal. Anything else -- a dict, or a list of them, which
+            # is the Anthropic content shape -- means the path stopped one level too high,
+            # and the error below already knows how to say which path holds the text.
+            if isinstance(reply, list) and reply and all(isinstance(x, str) for x in reply):
+                reply = "\n".join(reply)
+            elif isinstance(reply, (dict, list)):
+                _shape = ("a mapping with keys %s" % sorted(reply)[:6]
+                          if isinstance(reply, dict) else "a list of %d item(s)" % len(reply))
+                _bad2 = Probe(
+                    prompt=prompt, output="",
+                    error=("ExtractionFailed: response.reply=%r holds %s, not text. Reading it as a reply would hand the oracle a Python repr of that whole branch -- tool arguments and metadata included -- and a canary anywhere inside it would be scored as the target having leaked it." % (self.reply_path, _shape)),
+                    seconds=round(time.time() - t0, 1))
+                try:
+                    object.__setattr__(_bad2, "raw", raw)
+                except Exception:
+                    pass
+                return _bad2
             if reply is None:
                 # The path is wrong or the API changed shape. A run of empty replies looks
                 # exactly like a bot that refuses everything, which is the most flattering

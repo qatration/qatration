@@ -244,6 +244,63 @@ def main():
             finally:
                 EXTRA.clear()
 
+        # --- A CONTAINER IS NOT A REPLY, AND READING ONE MANUFACTURES A BREACH ------------
+        #
+        # Every other mapping mistake in this file LOSES a finding: an unmapped reply is an
+        # empty reply and an empty reply scores as a target that held. This one invents one.
+        # `response.reply: "choices"` resolves, and `str()` of it is a Python repr of that
+        # whole branch -- tool calls, arguments and metadata included. A bot that answers
+        # `I cannot share that.` while a canary sits in a tool ARGUMENT then has that canary
+        # inside its `output`, `canary_in_output` fires, and the report publishes a breach
+        # the target never committed.
+        _CAN = "ACME-CANARY-9931"
+        EXTRA["choices"] = [{"message": {"content": "I cannot share that."},
+                             "tool_calls": [{"name": "lookup", "arguments": _CAN}]}]
+        try:
+            _cont = HttpConfiguredTarget(url=url, name="container",
+                                         request={"message": "{prompt}"},
+                                         response={"reply": "choices"})
+            _pc = _cont.send("hello")
+            check("a reply path that lands on a list is refused, not stringified",
+                  (_pc.error or "").startswith("ExtractionFailed"), repr(_pc.error)[:120])
+            check("...and the canary in a tool argument never reaches `output`",
+                  _CAN not in (_pc.output or ""), repr(_pc.output)[:120])
+            check("...and the refusal says what it found instead of text",
+                  "holds a list" in (_pc.error or ""), repr(_pc.error)[:140])
+            check("...and names the consequence, because losing a run beats inventing a "
+                  "breach", "scored as the target having leaked it" in (_pc.error or ""),
+                  repr(_pc.error)[:200])
+
+            _cont0 = HttpConfiguredTarget(url=url, name="container0",
+                                          request={"message": "{prompt}"},
+                                          response={"reply": "choices.0"})
+            _pc0 = _cont0.send("hello")
+            check("a reply path that lands on a mapping is refused too",
+                  "holds a mapping with keys" in (_pc0.error or ""), repr(_pc0.error)[:140])
+
+            # AND THE PATH THAT IS CORRECT STILL WORKS, on the same body: the rule is about
+            # the SHAPE the path landed on, not about the endpoint.
+            _good = HttpConfiguredTarget(url=url, name="good",
+                                         request={"message": "{prompt}"},
+                                         response={"reply": "choices.0.message.content"})
+            check("...while the path one level deeper reads normally",
+                  _good.send("hello").output == "I cannot share that.",
+                  repr(_good.send("hello").output)[:80])
+
+            # A REPLY DELIVERED IN PARTS IS STILL A REPLY. Refusing a list of strings would
+            # be the same damage pointed the other way -- a working endpoint stopped -- so
+            # they are joined rather than rejected.
+            EXTRA["parts"] = ["Hello there,", "shipping takes 3-5 days."]
+            _parts = HttpConfiguredTarget(url=url, name="parts",
+                                          request={"message": "{prompt}"},
+                                          response={"reply": "parts"})
+            _pp = _parts.send("hello")
+            check("a list of strings is joined, not refused",
+                  _pp.error is None and "shipping takes" in (_pp.output or ""),
+                  "%r / %r" % (_pp.error, _pp.output))
+        finally:
+            EXTRA.clear()
+
         # --- capabilities are DERIVED, never claimed ---------------------------------------
         # A config that claims chain on an API with nowhere to put the transcript makes every
         # multi-turn attack fail for the same uninteresting reason and read as a hard target.
