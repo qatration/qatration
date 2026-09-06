@@ -77,6 +77,24 @@ def rates(target, out_dir=None):
     return {d: n / len(scored) for d, n in counts.items()}
 
 
+def days_between(then, now):
+    """Whole days from one stamp to another, or None when either cannot be read.
+
+    None rather than 0, because "cannot say how old" and "measured the same day" are the
+    two answers this file keeps apart everywhere else.
+
+    Here rather than in `report_engine`, which is where it was written: the console says
+    how old a baseline is now as well, and the renderer already imports this module.
+    """
+    import datetime
+    try:
+        a = datetime.date.fromisoformat(str(then)[:10])
+        b = datetime.date.fromisoformat(str(now)[:10])
+    except (TypeError, ValueError):
+        return None
+    return (b - a).days
+
+
 def measured_on(target, out_dir=None):
     """-> (date string, True if the BENIGN RUN said so), or None when there is no baseline.
 
@@ -114,6 +132,12 @@ def measured_on(target, out_dir=None):
 # pipeline that will never open the report. On the stored fleet three deployments are
 # over it, at 70%, 64% and 32%.
 OVER_REFUSING = 25
+
+# How many days a baseline may lag the sweep it qualifies before that is worth saying. The
+# report has said it since it learned to; a week is the point where an oracle change or a
+# deployment change between the two stops being unlikely. Named here because the console
+# says it now too, and a threshold in two renderers is two thresholds.
+STALE_AFTER_DAYS = 7
 
 
 def refusal_rate(target, out_dir=None):
@@ -381,8 +405,28 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
                f"{rate:.0%} of benign traffic against the {loudest:.0%} of the "
                f"detector that flagged it — so the noise is some other string"
                for aid, val, rate, loudest in (_rescued or [])]
+    # HOW OLD THE THING THESE REST ON IS. Every verdict above is computed from the benign
+    # run, and nothing in the sweep's own output said when that was measured. The report
+    # says it and `benign --summary` warns about it in the command that WRITES the file,
+    # so it reached whoever ran the roll-up and whoever opens a page, and not the operator
+    # watching the sweep they are running now. On the stored fleet `shipdesk`'s baseline is
+    # thirteen days older than the sweep it qualifies, and the gap grows on a deployment
+    # whose honest pattern is one baseline at setup and a sweep on every pull request.
+    #
+    # SAID EVEN WHEN NOTHING WAS DOUBTFUL, which is the case it matters in most: a clean
+    # run attributed against a stale baseline is the one nobody goes back to check.
+    stale = ""
+    _on = measured_on(target, out_dir=out_dir)
+    if _on:
+        _bdate, _bsaid = _on
+        import datetime as _dt
+        _age = days_between(_bdate, _dt.date.today().isoformat())
+        if _age is not None and _age >= STALE_AFTER_DAYS:
+            stale = ("  ! the benign baseline these rest on was measured %s, %d days ago. An oracle or deployment change since then is not reflected in the attribution above."
+                     % (_bdate[:10], _age))
+
     if not lines and not rescued:
-        return ""
+        return stale
     out = []
     if lines:
         out.append(f"  ! {len(lines)} breach row(s) share a detector this target also trips "
@@ -392,6 +436,8 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
         out.append(f"  · {len(rescued)} row(s) survive that check on the specific value they "
                    f"produced, not on the detector that noticed:")
         out += rescued
+    if stale:
+        out.append(stale)
     return "\n".join(out)
 
 

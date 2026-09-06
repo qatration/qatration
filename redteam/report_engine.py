@@ -254,19 +254,10 @@ def _isolation_panel(iso):
 </div>"""
 
 
-def _days_between(then, now):
-    """Whole days from one stamp to another, or None when either cannot be read.
-
-    None rather than 0, because "cannot say how old" and "measured the same day" are the two
-    answers this file keeps apart everywhere else.
-    """
-    import datetime
-    try:
-        a = datetime.date.fromisoformat(str(then)[:10])
-        b = datetime.date.fromisoformat(str(now)[:10])
-    except (TypeError, ValueError):
-        return None
-    return (b - a).days
+# MOVED TO `baseline`, where the other caller is. The console now says how old a baseline
+# is too, and `report_engine` already imports `baseline`, so the helper going the other way
+# would be a cycle. Re-exported under its old name so the call sites below read unchanged.
+from baseline import days_between as _days_between   # noqa: E402
 
 
 def build_html(meta, results, recon=None, isolation=None):

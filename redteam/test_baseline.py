@@ -195,6 +195,54 @@ def main():
           "--target-config <the config you swept>" in _n2
           and "--target no-such-target-anywhere" in _n2, repr(_n2)[-120:])
 
+    # --- HOW OLD THE THING THESE VERDICTS REST ON IS ------------------------------------
+    #
+    # Every attribution above is computed from the benign run, and the sweep's own output
+    # never said when that was measured. The report says it and `benign --summary` warns
+    # about it in the command that WRITES the file, so it reached whoever opens a page and
+    # whoever ran the roll-up, and not the operator watching the sweep they are running.
+    # On the stored fleet `shipdesk`'s baseline is thirteen days older than the sweep it
+    # qualifies.
+    #
+    # SAID EVEN WHEN NOTHING WAS DOUBTFUL. A clean run attributed against a stale baseline
+    # is the one nobody goes back to check, so the line cannot be attached to the caveats.
+    import datetime as _dt, json as _js7
+    from baseline import STALE_AFTER_DAYS as _STALE, days_between as _db
+
+    def _aged(days):
+        """A workspace whose benign run is `days` old, and the note it produces."""
+        _w = tempfile.mkdtemp()
+        _when = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
+        with open(os.path.join(_w, "benign_aged.json"), "w", encoding="utf-8") as _f:
+            _js7.dump({"meta": {"target": "aged", "when": _when + " 10:00:00"},
+                       "rows": [{"id": "p1", "fired": [], "refused": False,
+                                 "probe": {"output": "hello"}}]}, _f)
+        return note("aged", [], (), _w)
+
+    check("days_between reads two stamps", _db("2026-08-21", "2026-09-06") == 16,
+          str(_db("2026-08-21", "2026-09-06")))
+    check("...and says nothing rather than zero when it cannot",
+          _db("not a date", "2026-09-06") is None, str(_db("not a date", "2026-09-06")))
+
+    _old = _aged(_STALE + 9)
+    check("a stale baseline is named in the console note", "days ago" in _old, _old[:140])
+    check("...with the date, so it can be checked", "20" in _old, _old[:140])
+    check("...and it appears with no doubtful rows at all, which is the case that hides",
+          "the benign baseline these rest on" in _old, _old[:140])
+
+    # NOT ON A FRESH ONE. A line on every run is a line nobody reads.
+    check("a baseline measured today is not called stale", _aged(0) == "", _aged(0)[:140])
+    # AND THE BOUNDARY IS THE DECLARED ONE, not a number retyped here. These two read the
+    # constant, so they prove the renderers and this test agree and they move with it: a
+    # threshold changed to four hundred passes both. The value itself is a judgement about
+    # when an oracle change stops being unlikely, so it is pinned once, here, and changing
+    # it has to be deliberate.
+    check("a week is the declared boundary", _STALE == 7, str(_STALE))
+    check("the threshold is the shared one", "days ago" in _aged(_STALE),
+          "%d days did not trip it" % _STALE)
+    check("...and a day under it is not", _aged(_STALE - 1) == "",
+          _aged(_STALE - 1)[:140])
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
