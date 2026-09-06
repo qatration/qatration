@@ -55,6 +55,14 @@ def snapshot(meta, results, when=None, note=None):
                                    "fired": sorted(r.get("fired") or [])}
     return {"run": when or datetime.datetime.now().isoformat(" ", "seconds"),
             "target": meta.get("target"), "model": meta.get("model", ""),
+            # THE BUILD THAT JUDGED IT, for the same reason `model` is here. A verdict is
+            # the product of the target and the oracle, and this file compares verdicts. An
+            # oracle fix that makes a detector stricter turns DEFENDED into EXPLOITED
+            # across a target, and without this the diff reads that as the target getting
+            # worse -- and `--fail-on regression` fails somebody's build for a change in
+            # ours. `detector_coverage` keeps a whole provenance section about exactly this
+            # and the timeline could not answer it.
+            "engine": meta.get("engine", ""),
             "trials": meta.get("trials"), "attacks": len(rows),
             "broke": sum(1 for x in rows.values() if x["v"] in BROKE),
             "note": note, "rows": rows}
@@ -290,6 +298,12 @@ def diff(target):
                          "--trials" % ", ".join(str(n) for n in _thin))
     if (prev.get("model") or "") != (cur.get("model") or ""):
         confounds.append(f"model {prev.get('model')!r} → {cur.get('model')!r}")
+    # BOTH SIDES OR NOTHING. Runs recorded before the build travelled with them cannot
+    # answer this, and a confound raised on every old timeline is one nobody reads. A
+    # missing stamp is not a matching stamp, so it says nothing rather than agreeing.
+    if (prev.get("engine") and cur.get("engine")
+            and prev["engine"] != cur["engine"]):
+        confounds.append(f"engine {prev['engine']} → {cur['engine']}: the oracle that judged these two runs is not the same one, so a verdict that moved may be ours rather than the target's")
     if prev["attacks"] != cur["attacks"]:
         confounds.append(f"arsenal {prev['attacks']} → {cur['attacks']} attacks")
     if torn:

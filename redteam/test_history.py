@@ -132,6 +132,40 @@ def main():
         check("two runs made the same way carry no confound",
               H.diff("cf3")["confounds"] == [], str(H.diff("cf3")))
 
+        # AND THE OTHER HALF OF A VERDICT. A verdict is the product of the target and the
+        # oracle, and this file compares verdicts. An oracle fix that makes a detector
+        # stricter turns DEFENDED into EXPLOITED across a target, and without the build in
+        # the timeline the diff reads that as the target getting worse -- and `--fail-on
+        # regression` fails somebody's build for a change in ours.
+        H.record({"target": "cf5", "model": "m", "trials": 3, "engine": "aaa111"},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf5", "model": "m", "trials": 3, "engine": "bbb222"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        _de = H.diff("cf5")
+        check("a run judged by a different build is flagged as a confound",
+              any("engine" in c for c in _de["confounds"]), str(_de))
+        check("...and says the moved verdict may be ours rather than the target's",
+              any("rather than the target" in c for c in _de["confounds"]), str(_de))
+
+        # THE SAME BUILD IS NOT A CONFOUND, or the caveat lands on every honest comparison.
+        H.record({"target": "cf6", "model": "m", "trials": 3, "engine": "aaa111"},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf6", "model": "m", "trials": 3, "engine": "aaa111"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...and two runs from one build are not",
+              H.diff("cf6")["confounds"] == [], str(H.diff("cf6")))
+
+        # A MISSING STAMP IS NOT A MATCHING STAMP. Every timeline written before the build
+        # travelled with a run has none, and a confound raised on all of them is one
+        # nobody reads -- but it must not read as agreement either, so it says nothing.
+        H.record({"target": "cf7", "model": "m", "trials": 3},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf7", "model": "m", "trials": 3, "engine": "bbb222"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...and an older run with no build recorded raises nothing",
+              not any("engine" in c for c in H.diff("cf7")["confounds"]),
+              str(H.diff("cf7")))
+
         # ONE ATTEMPT A SIDE IS NOT AGREEMENT. The confound above fires when the trial count
         # CHANGES; at one trial in both runs it stays quiet, and `broke_every_trial` answers
         # honestly that a single hit was every trial -- so a coin the target was already
