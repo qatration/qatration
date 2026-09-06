@@ -203,7 +203,8 @@ def check_refusal(check):
     # arsenal with `encoding:`, `plnts:` and `expects_refusl:` ran to completion, sent
     # the attack in plain text under an encoded name, planted nothing, expected no
     # refusal, and said none of it.
-    from lint_arsenal import misspelt_keys as _mk, MISSPELT_CUTOFF as _CUT
+    from lint_arsenal import misspelt_keys as _mk
+    from workspace import MISSPELT_CUTOFF as _CUT
     _base = {"id": "a", "category": "c", "text": "x"}
 
     def _typo(**kw):

@@ -542,6 +542,107 @@ def load_yaml_or_refuse(path, what="target config", where=""):
     raise SystemExit("\n".join(lines))
 
 
+MISSPELT_CUTOFF = 0.7
+
+
+_CFG_SUSPECTS = None
+
+
+def config_key_suspects(root=None):
+    """The keys a mistyped config key could have been AIMING at.
+
+    Not the same question as `config_keys_read`, and the difference is what makes a
+    near-miss rule usable. That one asks IS THIS KEY KNOWN and is deliberately wide: it
+    scans `c.get("...")` too, which is how `provenance` is read, and which also sweeps in
+    `note`, `state`, `spent` and `verdict` from readers of run records that happen to use
+    the same variable name. Membership only ever gets quieter from extra entries.
+
+    A near-miss test is the opposite: a spurious entry there INVENTS a refusal. `notes:` on
+    a config is a plausible annotation, and against the wide set it reads as a misspelling
+    of `note` -- a key no config has ever had, in a message that would send the reader
+    looking for it. So the suggestion side is the tight derivation: what a config reader
+    names (`cfg`, `tcfg`) and what an adapter constructor takes.
+
+    A key missing from HERE costs nothing: it is still known, so it is never a candidate.
+    """
+    global _CFG_SUSPECTS
+    if _CFG_SUSPECTS is not None and root is None:
+        return _CFG_SUSPECTS
+    import glob as _glob
+    import importlib as _il
+    import inspect as _inspect
+    import io as _io
+    import re as _re
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    pats = (r'cfg\.get\(\s*["\']([a-z_]+)["\']',
+            r'cfg\[["\']([a-z_]+)["\']\]',
+            r'tcfg\.get\(\s*["\']([a-z_]+)["\']')
+    for fn in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        try:
+            src = _io.open(fn, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in pats:
+            keys |= set(_re.findall(p, src))
+    for fn in sorted(_glob.glob(os.path.join(here, "targets_*.py"))):
+        try:
+            mod = _il.import_module(os.path.basename(fn)[:-3])
+        except Exception:
+            continue
+        for nm in dir(mod):
+            obj = getattr(mod, nm)
+            if _inspect.isclass(obj):
+                try:
+                    keys |= set(_inspect.signature(obj.__init__).parameters) - {"self"}
+                except (TypeError, ValueError):
+                    pass
+    # PYTHON PLUMBING IS NOT A CONFIG KEY. `*args` and `**kwargs` are in every constructor
+    # signature and in no config, and leaving them here made `tags:` read as a misspelling of
+    # `args` -- a suggestion pointing at something that cannot be written in a YAML file.
+    if root is None:
+        _CFG_SUSPECTS = keys - {"args", "kwargs", "unknown", "_"}
+        return _CFG_SUSPECTS
+    return keys - {"args", "kwargs", "unknown", "_"}
+
+
+def near_miss_keys(mapping, known, cutoff=None, suspects=None):
+    """-> [(key, the key it looks like)] for keys that read as a typo of a known one.
+
+    ONE RULE FOR THREE CORPORA. An arsenal, an objectives file and a target config all
+    arrive from a path somebody typed, and each had a check for keys nothing reads that
+    lived where only the SHIPPED copy of that corpus reaches it. This is the shared
+    half; the three doors supply their own vocabulary.
+
+    A NEAR MISS, NOT AN UNKNOWN KEY. Refusing every key the engine does not read is
+    right for a curated corpus and hostile to somebody annotating their own file with
+    `owner:` or `ticket:`. Measured over this engine's vocabularies: typos score 0.71
+    to 0.97 against the key they meant and plausible annotations score 0.44 to 0.62,
+    so the line sits between `encoding` -> `encode` and `severity` -> `delivery`.
+
+    AND THE INTENDED KEY MUST BE ABSENT: a config carrying both `guard:` and its own
+    `guards:` note is annotating, not misspelling, and nothing here should have an
+    opinion about it.
+    """
+    import difflib
+    if not isinstance(mapping, dict):
+        return []
+    # TWO SETS, because they answer different questions. `known` decides whether a key is
+    # a candidate at all, and being wide there only ever means fewer complaints. `suspects`
+    # is what the suggestion is drawn from, and a spurious entry THERE invents a refusal --
+    # so a caller with a looser membership set passes a tighter one for the naming.
+    aim = sorted(set(known) if suspects is None else set(suspects))
+    out = []
+    for k in sorted(set(mapping) - set(known)):
+        near = difflib.get_close_matches(str(k), aim, n=1,
+                                         cutoff=cutoff or MISSPELT_CUTOFF)
+        if near and near[0] not in mapping:
+            out.append((k, near[0]))
+    return out
+
+
 def refuse_unusable_config(cfg, where):
     """Refuse a target config the engine cannot use, wherever it was loaded.
 
@@ -563,7 +664,19 @@ def refuse_unusable_config(cfg, where):
 
     `where` names the command, so the message says which invocation stopped.
     """
-    problems = [("oracle_context.%s" % k, why) for k, why in bad_context_shapes(cfg)]
+    # A KEY THIS ENGINE DOES NOT READ DOES NOTHING, and a key that LOOKS like one it
+    # reads does nothing while looking like it did. `gaurd: false` is not refused and
+    # not applied: the bot stays guarded and the published numbers describe a different
+    # deployment from the file. `test_http_adapter` has asked this of the SHIPPED
+    # configs since it was written, and every command takes `--target-config <a path
+    # somebody typed>`, which is the copy that never reaches it.
+    problems = [(k, "is not a key this engine reads, and it looks like %r. Nothing "
+                    "follows it: the field is never looked at, and the run describes a "
+                    "deployment configured the way you meant rather than the way it is."
+                 % near)
+                for k, near in near_miss_keys(cfg, config_keys_read(),
+                                              suspects=config_key_suspects())]
+    problems += [("oracle_context.%s" % k, why) for k, why in bad_context_shapes(cfg)]
     from refusal import bad_patterns
     problems += bad_patterns((cfg or {}).get("oracle_context") or {})
     if not problems:

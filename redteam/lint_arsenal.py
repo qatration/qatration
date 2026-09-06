@@ -456,7 +456,6 @@ def unknown_detectors(names):
 _ATTACK_KEYS = None
 
 
-MISSPELT_CUTOFF = 0.7
 
 
 def engine_keys(root=None):
@@ -513,7 +512,7 @@ def misspelt_keys(a, fname="arsenal", known=None, where=""):
     its own `encoding: utf-8` is annotating, not misspelling, and nothing here should
     have an opinion about it.
     """
-    import difflib
+    from workspace import near_miss_keys
     if not isinstance(a, dict):
         return []
     known = attack_keys_read() if known is None else known
@@ -521,15 +520,11 @@ def misspelt_keys(a, fname="arsenal", known=None, where=""):
     if where:
         aid = "%s: %s" % (aid, where)
     out = []
-    for k in sorted(set(a) - known):
-        near = difflib.get_close_matches(str(k), sorted(known), n=1,
-                                         cutoff=MISSPELT_CUTOFF)
-        if not near or near[0] in a:
-            continue
+    for k, near in near_miss_keys(a, known):
         out.append("%s: %s: %r is not a key this engine reads, and it looks like "
                    "%r. Nothing would follow it: the field is simply never looked at, "
                    "and every layer downstream describes the attack as though it had "
-                   "been." % (fname, aid, k, near[0]))
+                   "been." % (fname, aid, k, near))
     return out
 
 

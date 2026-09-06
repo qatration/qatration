@@ -145,6 +145,88 @@ def check_every_command_refuses():
     check("no command reads a target config without the shared refusal",
           sorted(set(_missing) - set(_EXEMPT)), [])
 
+    # --- AND A KEY THAT LOOKS LIKE ONE THE ENGINE READS ---------------------------------
+    #
+    # `test_http_adapter` has asked since it was written that no SHIPPED config declares a
+    # top-level key nothing reads, and it wrote the consequence down: a config saying
+    # `gaurd: false` is not refused and not applied, so the bot stays guarded and the
+    # published numbers describe a different deployment from the file. Every command takes
+    # `--target-config <a path somebody typed>`, and that copy never reached the rule --
+    # the fifth time in this engine that a check was aimed only at files already passing it.
+    import glob as _g_c, io as _io_c, os as _os_c, yaml as _y_c
+    _here_ws = _os_c.path.dirname(_os_c.path.abspath(_ws.__file__))
+    _CFG = {"adapter": "http", "name": "b", "url": "http://127.0.0.1:9/x",
+            "request": {"message": "{prompt}"}, "response": {"reply": "reply"},
+            "oracle_context": {"canaries": ["ACME-CANARY-9931"]}}
+
+    def _cfg_refused(c):
+        try:
+            _ws.refuse_unusable_config(c, "run")
+            return ""
+        except SystemExit as e:
+            return str(e)
+
+    def _swapk(d, old, new):
+        e = dict(d)
+        e[new] = e.pop(old)
+        return e
+
+    for _bad, _meant in (("gaurd", "guard"), ("adaptor", "adapter"),
+                         ("respons", "response"), ("histroy", "history"),
+                         ("rat", "rate")):
+        _c = (_swapk(_CFG, _meant, _bad) if _meant in _CFG
+              else dict(_CFG, **{_bad: True}))
+        check("a config key %r is refused" % _bad,
+              "looks like %r" % _meant in _cfg_refused(_c), True)
+    check("...and the message says the run would describe the wrong deployment",
+          "rather than the way it is" in _cfg_refused(dict(_CFG, gaurd=False)), True)
+
+    # NOT THE ANNOTATIONS, and `notes:` is the one that decides the design. Against the WIDE
+    # membership set it reads as a misspelling of `note` -- a key no config has ever had,
+    # swept in from readers of run records that use the same variable name -- and the
+    # message would send the reader looking for it. So the suggestion is drawn from a
+    # tighter set than the membership test.
+    # `author` IS NOT ON THIS LIST, and that is a measured cost rather than an oversight:
+    # `auth:` is a real config key, so `author:` beside no `auth:` reads as a misspelling of
+    # it and is refused. Naming the collision here rather than widening the rule until it
+    # catches nothing.
+    for _ann in ("owner", "ticket", "notes", "severity", "tags", "comment"):
+        check("a config annotation %r is not refused" % _ann,
+              _cfg_refused(dict(_CFG, **{_ann: "x"})), "")
+    check("a well-formed config is not refused", _cfg_refused(_CFG), "")
+    # AND A KEY BESIDE THE ONE IT RESEMBLES IS AN ANNOTATION. A config carrying `guard:` and
+    # its own `guards:` note is not misspelling anything, and nothing here should have an
+    # opinion about it.
+    check("...nor one whose near-miss sits beside the real key",
+          _cfg_refused(dict(_CFG, guard=True, guards="two of them")), "")
+
+    # AND EVERY CONFIG THIS REPOSITORY SHIPS PASSES, or the rule is one nobody could adopt.
+    _refused = {}
+    for _fp in sorted(_g_c.glob(_os_c.path.join(_here_ws, "targets_*.yaml"))):
+        try:
+            _said = _cfg_refused(
+                _y_c.safe_load(_io_c.open(_fp, encoding="utf-8")) or {})
+        except Exception as _e:
+            _said = "%s: %s" % (type(_e).__name__, _e)
+        if _said:
+            _refused[_os_c.path.basename(_fp)] = _said[:120]
+    check("no config this repository ships is refused by the rule", _refused, {})
+
+    # THE TWO SETS ARE DIFFERENT AND BOTH ARE NEEDED. A key missing from the suggestion set
+    # costs nothing -- it is still known, so never a candidate -- and a key spuriously IN it
+    # invents a refusal.
+    _wide, _tight = _ws.config_keys_read(), _ws.config_key_suspects()
+    check("the suggestion set is a subset of what counts as known",
+          sorted(_tight - _wide), [])
+    check("...and is genuinely tighter, or the distinction is decorative",
+          len(_wide) > len(_tight), True)
+    check("...with `note` out of it, which is the entry that invented a refusal",
+          "note" in _wide and "note" not in _tight, True)
+    check("...and every key a shipped config uses still counts as known",
+          sorted({_k for _fp in _g_c.glob(_os_c.path.join(_here_ws, "targets_*.yaml"))
+                  for _k in (_y_c.safe_load(_io_c.open(_fp, encoding="utf-8")) or {})}
+                 - _wide), [])
+
     # AND THE REFUSAL REFUSES. A scan asserting a call exists in ten files says nothing about
     # what the call does.
     def _refused(cfg):
