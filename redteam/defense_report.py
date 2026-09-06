@@ -1327,6 +1327,17 @@ def main():
     # remediation entry, so `entry()` raises on them by construction -- and a finding with
     # no remediation has no area to contribute either. They are counted and listed
     # elsewhere on the page; they cannot widen a coverage claim.
+    # FULLY EXPLOITED IS NOT THE SAME AS PARTIAL, and this page was the only surface that
+    # folded them together. `run` reports them apart, SARIF gives PARTIAL `warning` against
+    # EXPLOITED's `error`, and its own docstring calls PARTIAL "something moved, short of
+    # the full objective". The executive summary called every one of them an `exploitable
+    # weakness`, so a run whose only finding was PARTIAL opened with `1 distinct
+    # exploitable weaknesses`.
+    _full = sum(1 for _f in findings if _f[2] == "EXPLOITED")
+    _part = n_breaches - _full
+    _split = ("" if not _part else
+              " %d of those occurrences were fully exploited and %d moved something short of the objective." % (_full, _part))
+
     _areas = sorted({entry(_d)["owasp"] for _d in groups
                      if (_d in ROOT_CAUSES or _d in REMEDIATION)
                      and entry(_d).get("owasp")})
@@ -1825,9 +1836,9 @@ dozens of problems.{prov_line}</p>
 one exploitable finding. {coverage_line}</p>
 
 {staleness}
-<div class="exec"><b>Executive summary.</b> This assessment found {n_roots} distinct exploitable
-weaknesses, seen {n_breaches} times in total.
-{n_mapped} of them reduce to {len(ordered)} root-cause fixes below, prioritized by severity{
+<div class="exec"><b>Executive summary.</b> This assessment found {n_roots} distinct
+weakness{'' if n_roots == 1 else 'es'}, seen {n_breaches} time{'' if n_breaches == 1 else 's'} in total.{_split}
+{n_mapped} of them reduce{'s' if n_mapped == 1 else ''} to {len(ordered)} root-cause fix{'' if len(ordered) == 1 else 'es'} below, prioritized by severity{
 "" if not unmapped else f"; the remaining {len(unmapped)} are listed at the end, confirmed on live traffic with no remediation text written for them yet"}. {common_thread(ordered, unmapped)}</div>
 {controls_html}
 {arsenal_html}

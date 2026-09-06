@@ -377,9 +377,12 @@ def main():
     printed2, page2 = _render([mapped])
     check("a fleet with every finding mapped shows no unmapped section",
           "NO FIX WRITTEN" not in page2 and "no remediation text" not in printed2)
+    # THE COUNT, not the wording around it. This pinned `seen 1 times in total` and so
+    # asserted the plural bug: the sentence reads `seen 1 time` now, and what this check
+    # is about is that the headline counts what was read. The grammar has its own check.
     check("...and its headline still counts what was read",
-          "seen 1 times in total" in page2,
-          [l for l in page2.splitlines() if "exploitable" in l][:1])
+          bool(re.search(r"seen 1 times? in total", page2)),
+          [l for l in page2.splitlines() if "assessment found" in l][:1])
 
     # --- a config that names a build must be able to check it --------------------------
     # guardedrag's pair point at ONE port and differ only in an environment variable set when
@@ -2136,6 +2139,56 @@ def main():
     _three = _cov(_fixlist(["canary_in_output", "ssrf_call", "sysprompt_leak"]))
     check("a run reaching three areas names three",
           all(a in _three for a in ("LLM02", "LLM06", "LLM07")), _three[:300])
+
+    # --- FULLY EXPLOITED IS NOT THE SAME AS PARTIAL -------------------------------------
+    #
+    # `run` reports them apart, SARIF gives PARTIAL `warning` against EXPLOITED's `error`,
+    # and its docstring calls PARTIAL "something moved, short of the full objective". The
+    # executive summary on the client deliverable called every one of them an `exploitable
+    # weakness`, so a run whose only finding was PARTIAL opened with `1 distinct
+    # exploitable weaknesses`.
+    def _exec(page):
+        _i = page.find("Executive summary")
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", page[_i:_i + 700])) if _i >= 0 else ""
+
+    def _fixlist_h(heads):
+        _w = _tf5.mkdtemp()
+        _rows = [{"attack": {"id": "a%d" % _i, "category": "jailbreak"},
+                  "headline": _h, "rate": "1/1", "fired": ["canary_in_output"],
+                  "locks": {},
+                  "trials": [{"verdict": _h, "fired": ["canary_in_output"],
+                              "refusal": {"class": "none"},
+                              "probe": {"output": "x", "error": None,
+                                        "tool_calls": [], "prompt": "p"}}]}
+                 for _i, _h in enumerate(heads)]
+        try:
+            with _io5.open(os.path.join(_w, "results_t.json"), "w", encoding="utf-8") as _f:
+                _js5.dump({"meta": {"target": "t", "attacks_n": len(_rows), "trials": 1,
+                                    "broke": len(_rows)}, "results": _rows}, _f)
+            _real = _dr2.OUT_DIR
+            _dr2.OUT_DIR = _pl.Path(_w)
+            try:
+                with _cx.redirect_stdout(_io5.StringIO()):
+                    _dr2.main()
+                return _io5.open(os.path.join(_w, "defense_report.html"),
+                                 encoding="utf-8").read()
+            finally:
+                _dr2.OUT_DIR = _real
+        finally:
+            _sh5.rmtree(_w, ignore_errors=True)
+
+    _p_only = _exec(_fixlist_h(["PARTIAL"]))
+    check("the summary exists to be read", "assessment found" in _p_only, _p_only[:160])
+    check("...and a PARTIAL-only run is not called exploitable",
+          "exploitable" not in _p_only, _p_only[:200])
+    check("...and says what moved short of the objective",
+          "short of the objective" in _p_only, _p_only[:200])
+    _e_only = _exec(_fixlist_h(["EXPLOITED"]))
+    check("...while a run with nothing partial does not add the split",
+          "short of the objective" not in _e_only, _e_only[:200])
+    # AND ONE IS NOT PLURAL. It is the first sentence a client reads.
+    check("one finding reads as one", "1 distinct weakness," in _e_only
+          and "seen 1 time in" in _e_only, _e_only[:160])
 
     # --- THE DESIGN CHOOSES THE TEST ----------------------------------------------------
     #
