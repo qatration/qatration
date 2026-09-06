@@ -653,6 +653,70 @@ def main():
           _wide.splitlines()[1].index("hits")
           == _wide.splitlines()[2].index("1000/1000"), True)
 
+    # --- A COMBINED TEST THAT DROPS HALF ITS OWN CONDITIONS ----------------------------
+    #
+    # `achieved_combined` requires EVERY property's own condition to hold on the combined
+    # payload -- that is what `combined` means -- and it builds that list as the properties
+    # which declare a `success:`. A property without one is not judged strictly, it is
+    # DROPPED, and `all()` over fewer conditions is easier to satisfy.
+    #
+    # Which way it fails is the point. `combined` open is what `_verdict` reads as
+    # EXPLOITED, so an objective with two properties and one scoring list reports the
+    # combination as achieved when half of it held: a manufactured finding, in the one
+    # direction this engine must never drift.
+    from isolation import achieved_combined as _ac
+    from target import Probe as _Pr
+    _cx = {"canaries": ["ACME-CANARY-9931"]}
+    _leak = _Pr(prompt="x", output="here: ACME-CANARY-9931")
+    _both = {"properties": [{"name": "a", "success": ["canary_in_output"]},
+                            {"name": "b", "success": ["sysprompt_leak"]}]}
+    _mixed = {"properties": [{"name": "a", "success": ["canary_in_output"]},
+                             {"name": "b"}]}
+    check("a combined payload satisfying one of two properties is not the combination",
+          _ac(_leak, _both, _cx), False)
+    # THE BEHAVIOUR ITSELF STAYS AS IT IS -- the shape is refused at the door rather than
+    # quietly reinterpreted here, because either reinterpretation is wrong: counting an
+    # undeclared property as held over-reports, and as unheld makes the objective
+    # undemonstrable. This pins what the door is protecting against.
+    check("...while an undeclared property is silently dropped from that test",
+          _ac(_leak, _mixed, _cx), True)
+
+    # SO THE DOOR REFUSES IT, at the same point `isolation --objectives mine.yaml` loads a
+    # corpus nobody linted -- `lint` takes no arguments and cannot be pointed at it.
+    from lint_arsenal import unscored_properties as _up, refuse_unknown_detectors as _rud
+    check("an objective mixing scored and unscored properties is reported",
+          len(_up([dict(_mixed, id="o1")])), 1)
+    check("...naming the property that declares nothing",
+          "(b)" in _up([dict(_mixed, id="o1")])[0][1], True)
+    check("...and saying which way the verdict would move",
+          "reads as EXPLOITED" in _up([dict(_mixed, id="o1")])[0][1], True)
+    _said = ""
+    try:
+        _rud([dict(_mixed, id="o1")], "objectives", "mine.yaml")
+    except SystemExit as _e:
+        _said = str(_e)
+    check("...and the corpus is refused before a probe is sent",
+          "Nothing was sent" in _said, True)
+
+    # NOT THE SHAPES THAT ARE FINE, or this refuses every objective in the repository.
+    check("an objective whose properties all declare scoring is accepted",
+          _up([dict(_both, id="o2")]), [])
+    # ALL-OR-NOTHING IS THE DOCUMENTED OLDER SHAPE: no property declares scoring, so the
+    # objective's own `success:` list is used and the test is whole.
+    check("...and so is one where no property declares any, which falls back whole",
+          _up([{"id": "o3", "success": ["canary_in_output"],
+                "properties": [{"name": "a"}, {"name": "b"}]}]), [])
+    check("...and an objective with no properties at all is not asked",
+          _up([{"id": "o4", "success": ["canary_in_output"]}]), [])
+    # AND THE REAL CORPUS PASSES, or the rule is one nobody could adopt.
+    import glob as _g_i, yaml as _y_i
+    _fleet = []
+    for _fp in sorted(_g_i.glob(_os_w.path.join(
+            _os_w.path.dirname(_os_w.path.abspath(__file__)), "isolation*.yaml"))):
+        _fleet += _y_i.safe_load(io.open(_fp, encoding="utf-8")) or []
+    check("every objective shipped here declares scoring all-or-nothing", _up(_fleet), [])
+    check("...and there were objectives to check", len(_fleet) > 5, True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

@@ -299,6 +299,42 @@ def bad_encoders(entries):
     return out
 
 
+def unscored_properties(entries):
+    """-> [(id, why)] for objectives whose combined test silently drops a property.
+
+    `achieved_combined` requires EVERY property's own condition to hold on the combined
+    payload -- that is what "combined" means -- and it builds that list as the
+    properties which declare a `success:`. A property without one is not judged
+    strictly; it is dropped, and `all()` over fewer conditions is EASIER to satisfy.
+
+    Which way that fails is the point. `combined` open is what `_verdict` reads as
+    EXPLOITED, so an objective with three properties and two scoring lists reports the
+    combination as achieved when two thirds of it held. A manufactured finding, in the
+    one direction this engine must never drift.
+
+    The mirror is safe and stays that way: `_achieved` returns False for a property with
+    no usable detector names, so a property is never demonstrated by having nothing to
+    demonstrate.
+
+    ALL-OR-NOTHING IS NOT REFUSED. An objective whose properties declare no scoring at
+    all falls back to the objective's own `success:` list, which is the documented older
+    shape and is judged whole. Only the MIXED one narrows the test without saying so.
+    """
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        props = [p for p in (e.get("properties") or []) if isinstance(p, dict)]
+        scored = [p for p in props if p.get("success")]
+        if not props or not scored or len(scored) == len(props):
+            continue
+        _blank = [str(p.get("name") or "??") for p in props if not p.get("success")]
+        out.append((e.get("id") or "?",
+                    "%d of %d properties declare no `success:` (%s), and the combined test requires every property that DOES. A property with none is dropped from it, so the combination is judged on the rest -- and a combined payload that satisfied only those reads as EXPLOITED."
+                    % (len(_blank), len(props), ", ".join(_blank[:4]))))
+    return out
+
+
 def refuse_unknown_detectors(entries, what, path):
     """Refuse a corpus whose success/partial lists name detectors that do not exist.
 
@@ -338,6 +374,14 @@ def refuse_unknown_detectors(entries, what, path):
             "%s: %d attack(s) in %s declare a transform that cannot be applied. Nothing was "
             "sent.\n" % (what, len(_enc), path)
             + "\n".join("    %-22s %s" % (who, why) for who, why in _enc[:8]))
+    # AND A COMBINED TEST THAT DROPS HALF ITS OWN CONDITIONS. Refused here rather than
+    # warned, for the reason above it: after this point every signal is a measurement
+    # of something narrower than the objective says it is.
+    _unscored = unscored_properties(entries)
+    if _unscored:
+        raise SystemExit(
+            "%s: %d objective(s) in %s would be judged on fewer properties than they declare. Nothing was sent.\n" % (what, len(_unscored), path)
+            + "\n".join("    %-22s %s" % (who, why) for who, why in _unscored[:8]))
     known = sorted(DETECTORS)
     bad = []
     for e in entries:
