@@ -295,6 +295,48 @@ def main():
         check("backfilling twice does not duplicate the entry",
               H.backfill() == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
 
+        # AND THE DATE COMES FROM THE RUN WHERE THE RUN SAID IT. This read the mtime
+        # unconditionally, which is a filesystem event: git does not preserve mtimes, so on
+        # a fresh clone every artifact carries the clone time and a whole fleet's timeline
+        # is seeded at one instant -- `diff` then reports zero days between two runs on the
+        # checkout a stranger has. `meta["when"]` exists for exactly this, and preferring
+        # the guess over the record is the shape this project keeps finding.
+        with open(os.path.join(tmp, "results_bfw.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "bfw", "when": "2026-07-04 09:30"},
+                       "results": R(x1="EXPLOITED")}, f)
+        check("backfill seeds a run that recorded its own date", H.backfill() == 1)
+        _dated = H.load("bfw")
+        check("...using that date rather than the file's timestamp",
+              _dated and _dated[0]["run"].startswith("2026-07-04"), str(_dated))
+        check("...and says the date is the run's, not the filesystem's",
+              _dated and _dated[0].get("dated_by_run") is True, str(_dated))
+        # AND THE OTHER ONE STILL SAYS IT IS NOT, or the distinction is decorative.
+        check("a run that recorded no date is marked as dated by the file",
+              H.load("bf")[0].get("dated_by_run") is False, str(H.load("bf")))
+
+        # THE TWO FACTS ARE SEPARATE ON THE PAGE TOO. `backfilled` says the entry was
+        # seeded from a file; `dated by the file` says its date is a filesystem event. An
+        # entry written before this field existed carries no answer, and reading that as
+        # `no` is right about every one of them.
+        import io as _io_h, contextlib as _cx_h
+        def _listing(target):
+            _argv = sys.argv[:]
+            _buf = _io_h.StringIO()
+            try:
+                sys.argv = ["history", "--target", target]
+                with _cx_h.redirect_stdout(_buf):
+                    H.main()
+            finally:
+                sys.argv = _argv
+            return _buf.getvalue()
+
+        _page = _listing("bfw")
+        check("a backfilled entry with a real date is not called file-dated",
+              "(backfilled)" in _page and "dated by the file" not in _page, _page[:300])
+        _page = _listing("bf")
+        check("...and one without a date says where its date came from",
+              "dated by the file" in _page, _page[:300])
+
         # THE CASE THAT MATTERED AND WAS NOT COVERED. The check above backfills the same file
         # twice, so both passes read one mtime and the old clock-based key matched. A run the
         # SWEEP recorded carries `datetime.now()`, taken when the snapshot was built; the file

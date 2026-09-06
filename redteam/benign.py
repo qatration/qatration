@@ -44,6 +44,7 @@ except Exception:
 
 import yaml
 from target import payload, engine_version
+from workspace import measured_when
 from oracle import DETECTORS, inert_for, visible_text
 
 # ---------------------------------------------------------------------------------------
@@ -609,7 +610,15 @@ def roll_up():
         # files are written hours apart and an oracle fix lands between them. dvla's run
         # still showed three sysprompt_leak fires that a marker change had already removed.
         # The matrix page learned this once; the roll-up had not.
-        ages[t] = datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%m-%d %H:%M")
+        # THE DATE THE RUN RECORDED. Every one of the 35 benign artifacts stored here
+        # carries `meta["when"]`, and this read the file's mtime instead. Measured by
+        # cloning this repository: the recorded dates span four days and the mtimes
+        # collapse to one, because git does not preserve them -- so `stale` below finds
+        # no difference and the `not one snapshot` warning never renders on the checkout
+        # a stranger has. That warning is the precedent `report_engine` and `baseline`
+        # both cite for saying a baseline is old, and it was silent everywhere but here.
+        _when, _said = measured_when(d.get("meta") or {}, fp)
+        ages[t] = (_when[5:16] if _said else _when[5:16] + " (file)")
         probes += d["meta"]["probes"]
         # WHAT THE CORPUS AIMED AT, which is not the same as what fired. Every clean prompt
         # carries `provokes`: the detector it was written to tempt. `sql-in-question` is
@@ -780,14 +789,24 @@ def main():
         # files are written hours apart and an oracle fix lands between them. dvla's row
         # still shows three sysprompt_leak fires that a marker change has already removed.
         # The matrix page learned this once; the roll-up had not.
-        newest = max(s["ages"].values(), default="")
-        stale = sorted(t for t, a in s["ages"].items() if a[:5] != newest[:5])
+        # OVER DATES THE RUNS RECORDED. A date read off a file cannot support this
+        # comparison: in a clone they are all equal and nothing is ever stale, and
+        # after a copy or a restore two files differ by a month that no run measured.
+        _dated = {t: a for t, a in s["ages"].items() if "(file)" not in a}
+        newest = max(_dated.values(), default="")
+        stale = sorted(t for t, a in _dated.items() if a[:5] != newest[:5])
+        _undated = sorted(t for t, a in s["ages"].items() if "(file)" in a)
         print(f"{s['probes']} benign probes across {len(s['targets'])} targets: "
               f"{', '.join(s['targets'])}")
         print("measured: " + ", ".join(f"{t} {a}" for t, a in sorted(s["ages"].items())))
         if stale:
             print(f"  ! not one snapshot — {', '.join(stale)} measured on an earlier day; "
                   f"an oracle fix since then is not reflected in those rows")
+        if _undated:
+            # NOT SILENCE. A run that recorded no date has not been shown to be recent,
+            # and no warning is what agreement looks like.
+            print(f"  ! {', '.join(_undated)} recorded no date, so the age shown is the "
+                  f"file's and they are not compared above")
         print()
         print(f"fired on clean traffic ({len(s['fires'])} of {len(DETECTORS)} detectors):")
         for d, v in s["fires"].items():

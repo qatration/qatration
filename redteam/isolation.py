@@ -367,8 +367,16 @@ def read_maps(path):
 
 
 def write_maps(path, maps, meta=None):
-    """Write a lock map WITH its provenance. One writer, so the shape cannot fork."""
+    """Write a lock map WITH its provenance. One writer, so the shape cannot fork.
+
+    AND WITH ITS DATE. The build was recorded here and the moment was not, so every
+    reader of a lock map dated it by `os.path.getmtime` -- a filesystem event that a
+    clone, a copy or a `git checkout` resets. The report prints that date beside the
+    HARDENED verdicts it qualifies.
+    """
+    import datetime as _dt
     from target import engine_version
-    body = {"meta": {**(meta or {}), "engine": engine_version()}, "maps": maps}
+    body = {"meta": {"when": _dt.datetime.now().isoformat(" ", "seconds")[:16],
+                     **(meta or {}), "engine": engine_version()}, "maps": maps}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)

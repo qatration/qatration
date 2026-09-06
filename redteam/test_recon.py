@@ -242,6 +242,18 @@ def main():
             # that fires on every recon tells a reader their healthy target is degraded.
             check("...and does not warn about probes that all landed",
                   "did not land" in _said2, False)
+            # AND THE PROFILE RECORDS WHEN IT WAS MEASURED. The fleet page dates every recon
+            # profile, and nothing on disk could answer it, so `compare_recon` used the
+            # file's mtime -- which git does not preserve, so in a clone all ten profiles
+            # carry the clone time and the page's dates say only when it was cloned.
+            import json as _json4
+            _prof = _json4.load(io.open(
+                os.path.join(_out2, [f for f in os.listdir(_out2)
+                                     if f.startswith("recon_")][0]), encoding="utf-8"))
+            check("a recon profile records when it was measured",
+                  bool(_prof.get("when")), True)
+            check("...in a shape `measured_when` reads as the run's own",
+                  __import__("workspace").measured_when(_prof, None)[1], True)
         finally:
             _srv3.shutdown()
 

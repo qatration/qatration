@@ -40,14 +40,23 @@ except Exception:
 
 from workspace import BROKE   # one definition of what counts as a breach
 from workspace import named_build   # and one definition of what counts as a build
+from workspace import measured_when # and one definition of when a run happened
 
 
 def _path(target):
     return os.path.join(HIST, f"{target}.jsonl")
 
 
-def snapshot(meta, results, when=None, note=None):
-    """One run, reduced to what a later comparison needs and nothing else."""
+def snapshot(meta, results, when=None, note=None, dated_by_run=True):
+    """One run, reduced to what a later comparison needs and nothing else.
+
+    `dated_by_run` is False when the date in `run` came off the filesystem rather than
+    from the sweep. `backfill` is the only caller that can be in that position and it
+    is not always: a results file written by a current build records its own date, and
+    reading the mtime instead throws away the answer to keep the guess. Entries written
+    before this field existed have none, and a reader treating that as False is right
+    about every one of them.
+    """
     rows = {}
     for r in results:
         if r["attack"].get("category") == "control":
@@ -77,7 +86,7 @@ def snapshot(meta, results, when=None, note=None):
                       else None),
             "trials": meta.get("trials"), "attacks": len(rows),
             "broke": sum(1 for x in rows.values() if x["v"] in BROKE),
-            "note": note, "rows": rows}
+            "note": note, "dated_by_run": bool(dated_by_run), "rows": rows}
 
 
 def _append(snap):
@@ -88,7 +97,7 @@ def _append(snap):
     return snap
 
 
-def record(meta, results, when=None, note=None):
+def record(meta, results, when=None, note=None, dated_by_run=True):
     """Append one run. Never rewrites a line, so a regression cannot be edited away.
 
     NOT DEDUPED, deliberately. A live run that reproduces the previous result exactly is a
@@ -96,7 +105,7 @@ def record(meta, results, when=None, note=None):
     held". Only `backfill` dedupes, and only because it is re-reading a run the timeline may
     already hold.
     """
-    return _append(snapshot(meta, results, when, note))
+    return _append(snapshot(meta, results, when, note, dated_by_run))
 
 
 def same_run(a, b):
@@ -372,11 +381,22 @@ def first_seen(target):
 
 
 def backfill():
-    """Seed the timeline from the results already on disk, stamped with their file time.
+    """Seed the timeline from the results already on disk.
 
     Without this the feature is useless until someone re-runs everything, which is the
-    cost that stopped it being built. A backfilled entry is marked as such, because its
-    run time is a file's mtime rather than something the engine recorded.
+    cost that stopped it being built.
+
+    DATED BY THE RUN WHERE THE RUN SAID. This read `os.path.getmtime` unconditionally,
+    which is a filesystem event and not a measurement: git does not preserve mtimes, so
+    on a fresh clone every artifact carries the clone time and a whole fleet's timeline
+    is seeded at one instant -- and `diff` then reports the interval between two runs
+    as zero days on the checkout a stranger has. `meta["when"]` exists for exactly this
+    and 44 of the 45 artifacts stored here predate it, so the mtime is still the answer
+    for most of them; it is not the answer for anything a current build writes, and
+    this preferred the guess over the record on every one of those.
+
+    A backfilled entry is still marked as backfilled either way, and the ones whose
+    date came off the filesystem say so separately, because those are two facts.
     """
     made = 0
     for fp in results_files(OUT):   # per-model copies are the same run, twice
@@ -390,13 +410,13 @@ def backfill():
         target = (d.get("meta") or {}).get("target")
         if not target:
             continue
-        when = datetime.datetime.fromtimestamp(
-            os.path.getmtime(fp)).isoformat(" ", "seconds")
         # ON THE RUN, NOT ON THE CLOCK. See `same_run`: this compared the file's mtime
         # against a stamp `record` took from `datetime.now()`, so it never matched and
         # re-seeded 28 of the 35 targets that already had a timeline.
+        when, dated_by_run = measured_when(d.get("meta") or {}, fp)
         snap = snapshot(d["meta"], d["results"], when=when,
-                        note="backfilled from results file")
+                        note="backfilled from results file",
+                        dated_by_run=dated_by_run)
         if any(same_run(snap, r) for r in load(target)):
             continue                       # already seeded; append-only must stay honest
         _append(snap)
@@ -434,7 +454,15 @@ def main():
         print(f"\n{t}  ({len(runs)} run(s))")
         if args.target:
             for r in runs:
-                mark = " (backfilled)" if r.get("note") else ""
+                # TWO FACTS, NOT ONE. `backfilled` says the entry was seeded from a
+                # file rather than written by a sweep; the file time says its DATE is
+                # a filesystem event. A results file that recorded its own date gives
+                # a backfilled entry a real one, and an entry written before this
+                # field existed carries no answer, which is the same as no.
+                mark = ""
+                if r.get("note"):
+                    mark = (" (backfilled)" if r.get("dated_by_run")
+                            else " (backfilled, dated by the file)")
                 print(f"  {r['run']}  {r['broke']:>3}/{r['attacks']} broken  "
                       f"{r.get('model') or ''}{mark}")
         if "reason" in d:

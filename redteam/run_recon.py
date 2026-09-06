@@ -130,6 +130,11 @@ def main():
             print(_refusal, file=sys.stderr)
             return 2
         os.makedirs(os.path.dirname(out), exist_ok=True)
+        # AND WHEN IT WAS MEASURED. The fleet page dates every recon profile by the
+        # file's mtime, which git does not preserve: in a clone all ten carry the clone
+        # time. Nothing on disk could answer it, so the writer answers it.
+        import datetime as _dt
+        profile.setdefault("when", _dt.datetime.now().isoformat(" ", "seconds")[:16])
         with open(out, "w", encoding="utf-8") as f:
             json.dump(profile, f, indent=2, ensure_ascii=False)
         print(f"\nwrote {out}")

@@ -177,6 +177,55 @@ def main():
     check("...naming the key rather than only the detector",
           "unset: allowed_domains" in _out4 or "unset: known_pii" in _out4, _out4[-300:])
 
+    # --- AND `NOT ONE SNAPSHOT` IS COMPUTED FROM WHAT THE RUNS RECORDED ------------------
+    #
+    # This warning is the precedent two other surfaces cite for saying a baseline is old:
+    # `report_engine` prints the baseline's date and `baseline.note` calls it stale, and
+    # both point here. It was computed from `os.path.getmtime`, which git does not preserve.
+    # Measured by cloning this repository: the 35 stored baselines record four distinct days
+    # and their mtimes collapse to one, so on the checkout a stranger has the warning finds
+    # no difference and never renders -- while every one of those 35 artifacts carries the
+    # date in `meta` and nothing read it.
+    #
+    # THE FIXTURE IS WRITTEN IN ONE INSTANT on purpose, which is exactly the clone's state:
+    # only the recorded dates can separate these rows.
+    import json as _js8, tempfile as _tf8, shutil as _sh8
+    _sw = _tf8.mkdtemp()
+    try:
+        for _t8, _w8 in (("oldbot", "2026-08-01 09:00:00"),
+                         ("newbot", "2026-09-01 09:00:00"),
+                         ("mutebot", None)):
+            _meta = {"target": _t8, "probes": 1}
+            if _w8:
+                _meta["when"] = _w8
+            with open(os.path.join(_sw, "benign_%s.json" % _t8), "w",
+                      encoding="utf-8") as _f8:
+                _js8.dump({"meta": _meta,
+                           "rows": [{"id": "p1", "fired": [], "refused": False,
+                                     "probe": {"output": "ok"}}]}, _f8)
+        _roll = _sp4.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--summary"],
+                         capture_output=True, text=True, errors="replace", timeout=900,
+                         env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                                  PYTHONDONTWRITEBYTECODE="1",
+                                  QATRATION_OUT=_sw)).stdout
+        _line = next((l for l in _roll.splitlines() if "not one snapshot" in l), "")
+        check("the roll-up separates two baselines measured a month apart",
+              "oldbot" in _line, _roll[:400])
+        check("...by the dates the runs recorded, not by the files' timestamps",
+              "08-01" in _roll, _roll[:400])
+        check("...and does not call the newest one stale", "newbot" not in _line, _line)
+        # A RUN THAT RECORDED NOTHING IS NOT A RUN MEASURED TODAY. It cannot join the
+        # comparison, and leaving it out silently is the same absence-as-agreement one
+        # level down.
+        check("...nor the one that recorded no date, which cannot be compared",
+              "mutebot" not in _line, _line)
+        check("...which is said out loud rather than left as silence",
+              "mutebot recorded no date" in _roll, _roll[:400])
+        check("...and its age is marked as the file's", "(file)" in _roll, _roll[:400])
+    finally:
+        _sh8.rmtree(_sw, ignore_errors=True)
+
     # --- the corpus itself is well formed ---------------------------------------------
     ids = [c[0] for c in CORPUS] + [c[0] for c in CONVERSATIONS]
     check("corpus ids are unique", len(ids) == len(set(ids)),

@@ -529,6 +529,39 @@ def main():
     check("...and the sample kept as proof contains it",
           "ACME-CANARY-9931" in (_s.get("output") or ""), True)
 
+    # --- A LOCK MAP RECORDS WHEN IT WAS WRITTEN ---------------------------------------
+    #
+    # It recorded the build and not the moment, so both readers -- `run`'s report and
+    # `rejudge --write` -- dated it by `os.path.getmtime` and printed that beside the
+    # HARDENED verdicts it qualifies. Git does not preserve mtimes: a clone stamps every
+    # artifact with the clone time, and a `git checkout` of one file and not its
+    # neighbour invents a gap no run measured. Nothing on disk could answer it, so the
+    # writer answers it.
+    import json as _js_w, os as _os_w, tempfile as _tf_w, shutil as _sh_w
+    from isolation import write_maps as _wm, read_maps as _rm
+    _wd = _tf_w.mkdtemp()
+    try:
+        _mp = _os_w.path.join(_wd, "isolation_when.json")
+        _wm(_mp, [{"objective": "o", "verdict": "HARDENED", "coupling": [],
+                   "properties": {}}], {"target": "when"})
+        _body = _js_w.load(io.open(_mp, encoding="utf-8"))
+        check("a lock map records when it was written",
+              bool((_body.get("meta") or {}).get("when")), True)
+        check("...in a shape `measured_when` reads as the run's own",
+              __import__("workspace").measured_when(_body["meta"], _mp)[1], True)
+        # AND THE BUILD IS STILL THERE, because a writer that answers one question by
+        # dropping another has not improved anything.
+        check("...beside the build that produced it",
+              bool((_body.get("meta") or {}).get("engine")), True)
+        # A CALLER'S OWN DATE WINS, so a re-write that knows the real moment can say it.
+        _mp2 = _os_w.path.join(_wd, "isolation_when2.json")
+        _wm(_mp2, [], {"target": "when2", "when": "2026-01-02 03:04"})
+        check("...and a caller that knows the moment is not overwritten",
+              _js_w.load(io.open(_mp2, encoding="utf-8"))["meta"]["when"],
+              "2026-01-02 03:04")
+    finally:
+        _sh_w.rmtree(_wd, ignore_errors=True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

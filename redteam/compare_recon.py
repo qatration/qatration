@@ -101,9 +101,12 @@ def collect():
         except Exception as e:
             print(f"  ! skipping {os.path.basename(fp)}: {e}", file=sys.stderr)
             continue
-        when = __import__("datetime").datetime.fromtimestamp(
-            os.path.getmtime(fp)).strftime("%Y-%m-%d %H:%M")
-        rows.append(_row(profile, name, when))
+        # THROUGH `measured_when`, which says which of the two answers this is. All ten
+        # profiles stored here predate the writer recording one, so they still show a
+        # file time -- marked as one, rather than passing as a measurement.
+        from workspace import measured_when as _mw
+        _when, _said = _mw(profile if isinstance(profile, dict) else {}, fp)
+        rows.append(_row(profile, name, _when if _said else _when + " (file)"))
     # worst first: a warning invalidates measurements, so it outranks everything else
     rows.sort(key=lambda r: (-len(r["warnings"]), -r["unlabelled"], r["target"]))
     return rows
