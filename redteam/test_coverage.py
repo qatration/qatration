@@ -526,7 +526,7 @@ def main():
 
     got = _engines({})
     check("an artifact with no stamp is reported as unstamped, not as the current build",
-          got == [("results_cov-fake.json", "unstamped", 1)], str(got))
+          got == [("results_cov-fake.json", "", 1)], str(got))
     got = _engines({"engine": "deadbee"})
     check("a stamped artifact reports the build that wrote it",
           got == [("results_cov-fake.json", "deadbee", 1)], str(got))
@@ -559,7 +559,7 @@ def main():
     check("a lock map's probes are replayed", n5 == 2 and hits5.get("canary_in_output") == 2,
           f"n={n5} hits={dict(hits5)}")
     check("...and the map reports the build that wrote it",
-          len(seen) == 1 and seen[0][1] not in ("unstamped", None) and seen[0][2] == 2,
+          len(seen) == 1 and seen[0][1] not in ("", "unknown", None) and seen[0][2] == 2,
           str(seen))
 
     # a legacy bare-list map still reads, and reports itself as unstamped rather than vanishing
@@ -578,7 +578,7 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     check("a lock map written before stamps existed still reads, and says it has none",
-          seen2 == [("isolation_cov-fake.json", "unstamped", 2)], str(seen2))
+          seen2 == [("isolation_cov-fake.json", "", 2)], str(seen2))
 
     # --- the headline itself ------------------------------------------------------------
     hits3, where3, n3, broke3, _src = dc.replay()
@@ -622,6 +622,85 @@ def main():
           not missed, "recorded firing but absent from the replay: %s" % ", ".join(missed))
     check("...and the artifacts really do record some, so this can fail",
           len(recorded) > 20, "%d detector(s) recorded across the fleet" % len(recorded))
+
+    # --- WHICH BUILD WROTE THE EVIDENCE, AND WHICH DID NOT SAY --------------------------
+    #
+    # This page's whole output is a coverage number replayed over stored probes, and a
+    # stored probe is a statement about the engine that WROTE it. The block keeps two states
+    # apart on purpose -- "I do not know which build wrote this" and "I know, and it was
+    # that one" -- and the sentinel walked between them: `engine_version` stamps the literal
+    # "unknown" where there is no repository to ask, so an artifact carrying it printed as
+    # `earlier build unknown`, a claim that it predates this one, and counted among the
+    # probes that carry a stamp.
+    from detector_coverage import provenance as _prov_fn
+
+    _now, _un, _earl, _blind = _prov_fn(
+        [("a.json", "", 3), ("b.json", "unknown", 4), ("c.json", "deadbee", 5),
+         ("d.json", "cafe123", 6)], "cafe123")
+    check("the build this replay ran under is named", _now == "cafe123", repr(_now))
+    check("an `unknown` stamp is filed with the artifacts that recorded no build",
+          sorted(_un) == [("a.json", 3), ("b.json", 4)], str(sorted(_un)))
+    check("...and is not reported as a build that predates this one",
+          [a for a, e, c in _earl] == ["c.json"], str(_earl))
+    check("...and an artifact from THIS build is not called earlier either",
+          "d.json" not in [a for a, e, c in _earl], str(_earl))
+    check("nothing is unplaceable while this checkout can name itself", _blind == [],
+          str(_blind))
+
+    # AND THIS CHECKOUT CAN BE THE ONE THAT CANNOT ANSWER, in a tarball with no git history
+    # and no installed release. Nothing can be called earlier than a build there is no name
+    # for, and the comparison called every stamped artifact earlier than the string
+    # "unknown". This state is unreachable from a checkout with a repository, which is why
+    # the classification is a function and not four lines inside a print block.
+    _now2, _un2, _earl2, _blind2 = _prov_fn(
+        [("a.json", "", 3), ("b.json", "deadbee", 5)], "unknown")
+    check("a checkout that cannot name its own build says so rather than guessing",
+          _now2 == "", repr(_now2))
+    check("...and calls nothing earlier than a build it cannot name", _earl2 == [],
+          str(_earl2))
+    check("...while the artifacts that DO name theirs are still accounted for",
+          _blind2 == [("b.json", "deadbee", 5)], str(_blind2))
+    check("...and are not silently folded in with the ones that recorded nothing",
+          sorted(_un2) == [("a.json", 3)], str(sorted(_un2)))
+
+    # AND THE COMMAND PRINTS WHAT THE FUNCTION DECIDED. A classification nothing renders is
+    # a classification nobody reads, so the page is driven as a process over a fixture
+    # workspace holding one artifact of each kind.
+    import json as _js9, subprocess as _sp9, tempfile as _tf9, shutil as _sh9
+    _w9 = _tf9.mkdtemp()
+    try:
+        for _i, _e in enumerate([None, "unknown", "deadbee"]):
+            _m = {"target": "httpbot", "attacks_n": 1, "errors": 0, "trials": 1,
+                  "when": "2026-09-01 10:00"}
+            if _e is not None:
+                _m["engine"] = _e
+            _r = {"headline": "DEFENDED", "rate": "0/1",
+                  "attack": {"id": "a1", "category": "x"}, "fired": [], "locks": {},
+                  "trials": [{"probe": {"prompt": "hi", "output": "hello"}}]}
+            with open(os.path.join(_w9, "results_p%d.json" % _i), "w",
+                      encoding="utf-8") as _f:
+                _js9.dump({"meta": _m, "results": [_r]}, _f)
+        _p9 = _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
+                       capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, QATRATION_OUT=_w9,
+                                PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"),
+                       cwd=os.path.dirname(HERE))
+        _o9 = (_p9.stdout or "") + (_p9.stderr or "")
+        _o9 = _o9[_o9.find("ENGINE PROVENANCE"):] if "ENGINE PROVENANCE" in _o9 else ""
+        check("the page prints a provenance block for this workspace", bool(_o9),
+              _p9.stdout[-300:])
+        check("...and does not print `earlier build unknown`",
+              "earlier build unknown" not in _o9, _o9[:400])
+        check("...while a real earlier build is still named",
+              "earlier build deadbee" in _o9, _o9[:400])
+        check("...and the unknown one is counted with the artifacts that said nothing",
+          "2 of 3 probes" in _o9, _o9[:400])
+        check("...so the count that DO carry a build excludes it",
+              "(1 probe(s) carry one)" in _o9, _o9[:400])
+        check("...and the bucket no longer claims all of it predates the stamp",
+              "no build recorded" in _o9, _o9[:400])
+    finally:
+        _sh9.rmtree(_w9, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

@@ -15,6 +15,7 @@ except Exception:
     pass
 import yaml
 from workspace import OUT as WORKSPACE_OUT, read_artifact, NOT_MEASURED
+from workspace import measured_when, named_build
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
@@ -76,9 +77,16 @@ def main():
                 continue
             per_model[m] = {r["attack"]["id"]: r for r in d.get("results") or []}
             meta = d.get("meta") or {}
-            when[m] = (time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(fp))),
-                       meta.get("engine") or "unstamped",
-                       meta.get("arsenal") or "?", meta.get("trials"))
+            # THE DATE THE RUN RECORDED, WHERE IT RECORDED ONE. `os.path.getmtime` is a
+            # filesystem event, not a measurement: git does not preserve mtimes, so a
+            # fresh clone stamps every artifact with the clone time and the `measured on
+            # different days` warning below finds no difference and never renders. That
+            # is the exact defect `workspace.measured_when` was written for, and this
+            # was the last reader still asking the filesystem -- in the command whose
+            # own `--from-disk` help calls the dates and the builds `the whole risk`.
+            _said_when, _from_run = measured_when(meta, fp)
+            when[m] = (_said_when, named_build(meta.get("engine")),
+                       meta.get("arsenal") or "?", meta.get("trials"), _from_run)
         if len(per_model) < 2:
             # 3, NOT 0. A comparison needs two things to compare and there are not two, so
             # nothing was measured. `regression_verdict` reaches the same answer for the
@@ -87,14 +95,32 @@ def main():
                   f"2+. Nothing was compared.")
             return 3
         print(f"\nSTORED RUNS — not measured together. Judge the comparison against these:")
-        for m, (t, eng, ars, tr) in sorted(when.items()):
-            print(f"  {m:<18}{t}   build {eng:<16}{ars}  x{tr}")
-        builds = {v[1] for v in when.values()}
+        for m, (t, eng, ars, tr, said) in sorted(when.items()):
+            print(f"  {m:<18}{t}{'' if said else ' (file)':<7}  build {eng or 'unstamped':<16}{ars}  x{tr}")
+        if not all(v[4] for v in when.values()):
+            print("    (file) — that run recorded no date, so this one is the artifact's "
+                  "timestamp:\n    a clone or a copy resets it, and it is not when the run "
+                  "happened.")
+        # BOTH SIDES OR NOTHING, over NAMED builds only. `engine_version` stamps the
+        # literal "unknown" where there is no repository to ask, and that string is
+        # truthy: a set of {'unknown', 'a1b2c3'} has two members and this warned about a
+        # different oracle nobody had measured, while two unknowns compared equal and
+        # withdrew the warning as though they had been shown to agree.
+        builds = {v[1] for v in when.values() if v[1]}
         if len(builds) > 1:
             print("  ! these runs were scored by DIFFERENT builds of the oracle, so a "
                   "difference below\n    may be a change in the detectors rather than in the "
                   "models.")
-        days = {v[0][:10] for v in when.values()}
+        elif not all(v[1] for v in when.values()):
+            # NOT SILENCE. A run with no build has not been shown to match the others,
+            # and no warning is what agreement looks like.
+            print("  ! at least one of these runs did not record which build scored it, "
+                  "so whether\n    the same oracle judged them is not answerable from "
+                  "what is stored.")
+        # AND THE DAYS, over dates the RUNS recorded. Comparing mtimes answers a
+        # question about the filesystem: in a fresh clone they are all equal and this
+        # never fires, which is the same absence-read-as-agreement one line up.
+        days = {v[0][:10] for v in when.values() if v[4]}
         if len(days) > 1:
             print(f"  ! measured on different days ({', '.join(sorted(days))}); a target or its "
                   f"model\n    may have moved in between.")

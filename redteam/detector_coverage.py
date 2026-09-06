@@ -18,7 +18,7 @@ import sys, os, glob, json, argparse, collections
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact, config_name,
-                       no_results_note, plain)
+                       no_results_note, plain, named_build)
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -58,6 +58,41 @@ def contexts(collisions=None):
     return out
 
 
+def provenance(engines, engine_now):
+    """Sort stored artifacts by what is known about the build that wrote them.
+
+    -> (this build or "", [(artifact, probes)] with no build, [(artifact, build, probes)]
+    from a different one, [(artifact, build, probes)] that cannot be placed).
+
+    A stored probe is a statement about the engine that WROTE it, and it gets read as one
+    about the engine now: `tool_call_storm` sat in the demonstrated column on a probe whose
+    eleven tool calls were each concrete call recorded twice, by an adapter fixed the same
+    day. The fix landed, the file it had already written did not move, and nothing here
+    could tell.
+
+    TWO STATES KEPT APART, for the usual reason: "I do not know which build wrote this" and
+    "I know, and it was that one" are different answers and one line for both says neither.
+    The sentinel walked between them. `engine_version` stamps the literal "unknown" where
+    there is no repository to ask, so an artifact carrying it printed as `earlier build
+    unknown` -- a claim that it predates this one -- and counted among the probes that
+    carry a stamp. `named_build` is where that string stops being a build.
+
+    AND THIS CHECKOUT CAN BE THE ONE THAT CANNOT ANSWER, in a tarball with no git history
+    and no installed release. Nothing can be called earlier than a build there is no name
+    for, and the comparison called every stamped artifact earlier than the string
+    "unknown". A caller in that state gets the fourth list rather than a false one.
+
+    A function rather than four lines inside a print block, because the fourth state is one
+    a checkout with a repository cannot produce and so could not be tested where it lived.
+    """
+    now = named_build(engine_now)
+    named = [(a, named_build(e), c) for a, e, c in engines]
+    unstamped = [(a, c) for a, e, c in named if not e]
+    earlier = [(a, e, c) for a, e, c in named if e and now and e != now]
+    unplaceable = [] if now else [(a, e, c) for a, e, c in named if e]
+    return now, unstamped, earlier, unplaceable
+
+
 def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
            scanned_out=None, support_out=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
@@ -91,8 +126,14 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
     sources = collections.defaultdict(set)
 
     def note_engine(d, artifact, n_probes):
+        # WHAT THE FILE SAID, VERBATIM. Deciding here what counts as a build would put
+        # half of one rule in a recorder and half in `provenance`, and a caller
+        # assembling this list by hand would get a different answer from the same
+        # input. The empty string means the artifact carried no `engine` key at all;
+        # a literal "unknown" is a thing the file does say, and `provenance` is where
+        # it stops counting as a build.
         if engines is not None and n_probes:
-            engines.append((artifact, (d.get("meta") or {}).get("engine") or "unstamped",
+            engines.append((artifact, (d.get("meta") or {}).get("engine") or "",
                             n_probes))
 
     def ctx_for(name, artifact):
@@ -421,23 +462,31 @@ def main():
     #
     # Two states, kept apart for the usual reason: "I do not know which build wrote this" and
     # "I know, and it was that one" are different answers, and one line for both says neither.
-    now = engine_version()
-    unstamped = [(a, c) for a, e, c in engines if e == "unstamped"]
-    earlier = [(a, e, c) for a, e, c in engines if e not in ("unstamped", now)]
-    if unstamped or earlier:
-        print(f"\nENGINE PROVENANCE — replayed against build {now}. The oracle applied here is"
-              f"\ncurrent; what these probes RECORDED is whatever the adapter of the day stored,"
-              f"\nand that is not re-derivable without running the target again.")
+    # AND THIS CHECKOUT MAY NOT BE ABLE TO NAME ITSELF EITHER, in a tarball with no git
+    # history and no installed release. Nothing can be called `earlier` than a build
+    # there is no name for, and the old comparison called EVERY stamped artifact
+    # earlier than the literal string "unknown".
+    now, unstamped, earlier, unplaceable = provenance(engines, engine_version())
+    if unstamped or earlier or unplaceable:
+        print(f"\nENGINE PROVENANCE — replayed against build "
+              f"{now or 'a build this checkout cannot name'}. The oracle applied here"
+              f"\nis current; what these probes RECORDED is whatever the adapter of the day"
+              f"\nstored, and that is not re-derivable without running the target again.")
     if unstamped:
         # `X of n` used to read as though the remaining probes had known provenance. They did
         # not: nothing on disk carried a stamp, and the difference was the isolation
         # artifacts, which this loop could not ask. Both numbers are named now.
         stamped = n - sum(c for _, c in unstamped)
-        print(f"  no stamp, written before results carried one:  "
+        print(f"  no build recorded (written before results carried one, or by a "
+              f"checkout\n  that could not name itself):  "
               f"{sum(c for _, c in unstamped)} of {n} probes, {len(unstamped)} artifact(s)"
               + (f"  ({stamped} probe(s) carry one)" if stamped else "  (none carry one)"))
     for a, e, c in sorted(earlier, key=lambda x: -x[2]):
         print(f"  earlier build {e:<16}{a:<42}{c} probe(s)")
+    if unplaceable:
+        print(f"  {sum(c for _, _, c in unplaceable)} probe(s) in "
+              f"{len(unplaceable)} artifact(s) DO name their build, and this checkout"
+              f"\n  cannot name its own, so none of them can be placed against it.")
     if unresolved:
         print("\nARTIFACTS WHOSE TARGET DID NOT RESOLVE — scanned with an empty context, so\n"
               "every detector needing one was inert on them:")
