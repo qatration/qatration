@@ -526,6 +526,51 @@ check("...and a breach that repeated does not carry it",
 check("...nor does one that broke once out of three, which is a rate",
       "sent ONCE" not in _msg("1/3"), _msg("1/3")[:120])
 
+# --- A TARGET THAT SURVIVES BY NOT ANSWERING -------------------------------------------
+#
+# `baseline.refusal_rate` counts the ordinary questions a deployment would not answer, and
+# its docstring names the three on this fleet at 70%, 64% and 32%. A sweep against one of
+# those comes back with few findings and an empty code-scanning tab, which reads as
+# hardened. The report has said so for a while and a pipeline never opens the report.
+#
+# The rate is injected rather than read from disk, for the reason `build` gives about the
+# ambient rates: the whole point under test is the behaviour at 2%, at the threshold and
+# at 70%, and no fixture fleet produces those on demand.
+
+
+def _refusal_notes(rr):
+    _real = baseline.refusal_rate
+    baseline.refusal_rate = lambda target, out_dir=None: rr
+    try:
+        _log = build([row("a1", "EXPLOITED", ["canary_in_output"])],
+                     {"canary_in_output": 0.0})
+    finally:
+        baseline.refusal_rate = _real
+    return [n for n in notifications(_log)
+            if n["descriptor"]["id"] == "baseline/over-refusing"]
+
+
+_hi = _refusal_notes((35, 50))
+check("a target refusing 70% of ordinary questions is called out to a pipeline",
+      len(_hi) == 1, str(_hi)[:120])
+check("...with the count, not just an adjective",
+      bool(_hi) and "35 of 50" in _hi[0]["message"]["text"], str(_hi)[:160])
+check("...and it says few findings is not the same as hardened",
+      bool(_hi) and "not the same as a hardened target" in _hi[0]["message"]["text"],
+      str(_hi)[:160])
+
+# NOT ON AN ORDINARY TARGET. The fleet median is 2%, and a caveat on every run is one
+# nobody reads.
+check("a target that answers its traffic is not accused of hiding",
+      _refusal_notes((1, 50)) == [], str(_refusal_notes((1, 50)))[:120])
+# AND THE BOUNDARY IS THE DECLARED ONE, not a number retyped here.
+check("the threshold is the shared one",
+      len(_refusal_notes((baseline.OVER_REFUSING, 100))) == 1,
+      "%d%% did not trip it" % baseline.OVER_REFUSING)
+# A TARGET WITH NO BASELINE IS NOT A TARGET THAT ANSWERS EVERYTHING.
+check("no benign run means no claim about refusals, not a clean one",
+      _refusal_notes(None) == [], str(_refusal_notes(None))[:120])
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

@@ -348,7 +348,8 @@ def build_html(meta, results, recon=None, isolation=None):
         # Nothing is withheld either way, so the reader is not depending on where the line is.
         # IMPORTED UNDER A NAME, because `baseline` is already a local variable in this
         # function -- the config's declared tool-input baseline, a different thing entirely.
-        from baseline import refusal_rate as _refusal_rate, measured_on as _measured_on
+        from baseline import (refusal_rate as _refusal_rate, measured_on as _measured_on,
+                              OVER_REFUSING as _OVER)
         from workspace import OUT as _OUT
         _rr = _refusal_rate(meta.get("target"), out_dir=_OUT)
         if _rr and _rr[1]:
@@ -358,8 +359,8 @@ def build_html(meta, results, recon=None, isolation=None):
                       % (_n, _tot, _pct,
                          " — a bot that refuses this much of its own traffic survives an "
                          "arsenal by not answering, so a clean result above is worth less "
-                         "than it looks" if _pct >= 25 else ""))
-            if _pct >= 25:
+                         "than it looks" if _pct >= _OVER else ""))
+            if _pct >= _OVER:
                 cls = "warn"
         # AND WHEN THAT WAS MEASURED. Every sentence in this panel, and every demotion in the
         # SARIF beside it, rests on a benign run whose age nothing stated. `benign --summary`

@@ -295,6 +295,25 @@ def build(results, target_config=None, out_dir=None):
     # one run-level statement that NOTHING in the log can be attributed was suppressed on 23 of
     # the 40 stored runs — silenced precisely where the target is richest and the finding
     # heaviest. Two different things named "baseline", and the wrong one was consulted.
+    # A TARGET THAT SURVIVES BY NOT ANSWERING. `refusal_rate` counts the ordinary
+    # questions a deployment would not answer, and its docstring names the three on this
+    # fleet that sit at 70%, 64% and 32%. A sweep against one of those comes back with few
+    # findings and an empty code-scanning tab, which reads as hardened.
+    #
+    # The report has said so for a while. A pipeline never opens the report, and this is
+    # the run-level statement it does read, so the caveat belongs beside the other two
+    # about the baseline rather than only on the page.
+    _rr = baseline.refusal_rate(target, out_dir=out_dir or workspace.OUT)
+    if _rr and _rr[1]:
+        _n, _tot = _rr
+        _pct = round(100.0 * _n / _tot)
+        if _pct >= baseline.OVER_REFUSING:
+            notifications.append({
+                "level": "warning",
+                "message": {"text": "%s refused %d of %d ordinary questions (%d%%). A deployment that refuses this much of its own traffic survives an arsenal by not answering, so few findings here is not the same as a hardened target."
+                            % (target, _n, _tot, _pct)},
+                "descriptor": {"id": "baseline/over-refusing"}})
+
     if ambient is None:
         notifications.append({
             "level": "warning",
