@@ -1807,6 +1807,41 @@ def main():
         # AN MTIME IS NOT A MEASUREMENT. `workspace.measured_when` exists because git does not
         # preserve mtimes, and a date read off the filesystem must say so rather than pass as
         # something the run recorded.
+        # AND THE SIDE PANELS, on the same rule and through the same reader. `run` and
+        # `rejudge` both date the lock map, and both took it from `os.path.getmtime` until
+        # `write_maps` started recording one -- so the report printed the clone time beside
+        # the HARDENED verdicts the panel qualifies. Three shapes reach this reader and it
+        # must not assume one: a lock map keeps its date in `meta`, a recon profile at the
+        # top level, and a lock map written before `write_maps` is a bare LIST with nowhere
+        # to keep one at all.
+        import run_redteam as _rr9
+        _iw = _tf5.mkdtemp()
+        try:
+            def _panel_date(body):
+                _fp9 = os.path.join(_iw, "isolation_x.json")
+                _js5.dump(body, io.open(_fp9, "w", encoding="utf-8", newline=""))
+                _g9 = _rr9._side_artifact(_fp9, "isolation_x.json", "maps")
+                return (_g9 or {}).get("when") or ""
+
+            _dated = _panel_date({"meta": {"target": "x", "when": "2026-05-06 07:08"},
+                                  "maps": []})
+            check("a lock map that recorded its date is dated by it",
+                  _dated == "2026-05-06 07:08", _dated)
+            _undated = _panel_date({"meta": {"target": "x"}, "maps": []})
+            check("...and one that did not says the date is the file's",
+                  _undated.endswith("(file)"), _undated)
+            # A RECON PROFILE KEEPS ITS DATE AT THE TOP LEVEL, which is the shape it already
+            # had; reading only `meta` here would mark every one of them as file-dated.
+            _prof = _panel_date({"target": "x", "when": "2026-05-06 07:08"})
+            check("a recon profile that recorded its date is dated by it",
+                  _prof == "2026-05-06 07:08", _prof)
+            # AND THE BARE LIST STILL READS. `data.get` on a list raises, and the panel the
+            # report did have would vanish with a caught exception and no message.
+            _bare = _panel_date([])
+            check("a legacy bare-list lock map is still folded in, and marked",
+                  _bare.endswith("(file)"), _bare)
+        finally:
+            _sh5.rmtree(_iw, ignore_errors=True)
         _nodate = _dated_panel(None, "2026-09-03 10:00")
         check("a baseline whose run recorded no date says where the date came from",
               "the run did not say" in _nodate, "an mtime was presented as a measurement")

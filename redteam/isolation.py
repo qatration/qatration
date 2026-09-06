@@ -366,17 +366,29 @@ def read_maps(path):
     return list(data or []), {}
 
 
-def write_maps(path, maps, meta=None):
+def write_maps(path, maps, meta=None, when=None):
     """Write a lock map WITH its provenance. One writer, so the shape cannot fork.
 
     AND WITH ITS DATE. The build was recorded here and the moment was not, so every
     reader of a lock map dated it by `os.path.getmtime` -- a filesystem event that a
     clone, a copy or a `git checkout` resets. The report prints that date beside the
     HARDENED verdicts it qualifies.
+
+    `when` IS THE CALLER'S TO GIVE, and defaulting it to now() here would be the defect
+    one level in. Two callers write these: `isolation`, which has just measured and
+    knows the moment, and `rejudge --write`, which re-scores probes recorded weeks ago
+    and must not stamp today onto them. The eleven maps stored here carry no date at
+    all, so a default would manufacture one for every re-score. No date is written when
+    nobody can name it, and a reader gets an absence rather than a wrong answer.
+
+    The BUILD is the opposite case and is stamped unconditionally: it describes the
+    oracle that produced the verdicts in this file, which is always the one running now.
     """
-    import datetime as _dt
     from target import engine_version
-    body = {"meta": {"when": _dt.datetime.now().isoformat(" ", "seconds")[:16],
-                     **(meta or {}), "engine": engine_version()}, "maps": maps}
+    # `meta` carries a stored date through untouched -- that is what `rejudge --write` hands
+    # back -- and an explicit `when` overrides it, which is what a fresh measurement does.
+    body = {"meta": {**(meta or {}),
+                     **({"when": when} if when else {}),
+                     "engine": engine_version()}, "maps": maps}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)

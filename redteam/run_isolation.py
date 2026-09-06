@@ -254,7 +254,12 @@ def main():
         os.makedirs(os.path.dirname(out), exist_ok=True)
         # through write_maps, so the artifact carries the build that produced it — lock maps
         # were a bare list with no meta and could not be stamped even in principle
-        write_maps(out, maps, {"target": target.name, "objectives": os.path.basename(path)})
+        # THE MOMENT THIS MEASURED, said here because this is what knows it. `write_maps`
+        # will not invent one: `rejudge --write` rewrites these files for probes recorded
+        # weeks earlier, and a default would stamp today onto that evidence.
+        import datetime as _dt_i
+        write_maps(out, maps, {"target": target.name, "objectives": os.path.basename(path)},
+                   when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
         print(f"\nwrote {out}")
 
 

@@ -266,9 +266,14 @@ def _spend(target):
 def _side_artifact(explicit, default_name, key):
     """Fold a recon profile / isolation map into the report if one exists.
 
-    Stamped with its own mtime rather than the run's: a fingerprint from last week silently
-    presented as today's is worse than no fingerprint, so the age travels with the data and
-    the reader can see it.
+    Dated by ITSELF rather than by the run: a fingerprint from last week silently presented
+    as today's is worse than no fingerprint, so the age travels with the data.
+
+    THE ARTIFACT'S OWN DATE WHERE IT HAS ONE. This was `os.path.getmtime`, a filesystem
+    event git does not preserve, so in a clone the panel printed the clone time beside the
+    HARDENED verdicts it qualifies. Both families record a date now -- a lock map in `meta`,
+    a recon profile at the top level, because that is the shape each already had -- and the
+    ones written before that say so instead of passing a file time off as a measurement.
     """
     path = explicit or os.path.join(OUT_DIR, default_name)
     if not path or not os.path.exists(path):
@@ -287,8 +292,19 @@ def _side_artifact(explicit, default_name, key):
     except Exception as e:
         print(f"  ! ignoring {os.path.basename(path)}: {e}", file=sys.stderr)
         return None
-    when = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
-    return {key: data, "when": when}
+    # DATED BY THE ARTIFACT WHERE THE ARTIFACT SAID. An mtime is a filesystem event and
+    # git does not preserve it, so in a clone this printed the clone time beside the
+    # HARDENED verdicts the panel qualifies. Lock maps record their own date since
+    # `write_maps` started writing one; the eleven stored here predate it and are marked
+    # rather than passed off as measurements.
+    # A LOCK MAP KEEPS ITS DATE IN `meta` AND A RECON PROFILE AT THE TOP LEVEL, and a lock
+    # map written before `write_maps` existed is a bare LIST with nowhere to keep one. All
+    # three reach here, so the shape is asked rather than assumed: `data.get` on the list
+    # would raise, and the report would be built without the panel it did have.
+    from workspace import measured_when as _mw
+    _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
+    _when, _said = _mw(_said_by, path)
+    return {key: data, "when": _when if _said else _when + " (file)"}
 
 
 def breadth_slice(attacks):

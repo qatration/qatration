@@ -311,6 +311,10 @@ def main():
             keyed = ", ".join(after[1]) or "-"
             print(f"  {obj:<26}{before[0]:<10} ->  {after[0]:<10} keyed: {keyed}")
         if args.write:
+            # THE DATE SURVIVES AND THE BUILD DOES NOT, because they answer opposite
+            # questions: the probes were measured whenever they were measured, and the
+            # verdicts in this file were produced by the oracle running now. Dropping
+            # `when` here would leave `write_maps` to invent one, which it refuses to.
             write_maps(path, maps, {k: v for k, v in _map_meta.get(path, {}).items()
                                     if k != "engine"})
             # AND the page, or the correction stops at the JSON. The scorecard renders the
@@ -321,8 +325,11 @@ def main():
             if results and os.path.exists(results):
                 with open(results, encoding="utf-8") as f:
                     rd = json.load(f)
-                when = datetime.datetime.fromtimestamp(
-                    os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
+                # THE SAME RULE AS `run`'s panel: the artifact's own date where it has
+                # one, and marked as the filesystem's where it does not.
+                from workspace import measured_when as _mw
+                _mwhen, _msaid = _mw(_map_meta.get(path) or {}, path)
+                when = _mwhen if _msaid else _mwhen + " (file)"
                 html = os.path.join(OUT_DIR, f"report_{tgt}.html")
                 with open(html, "w", encoding="utf-8") as f:
                     f.write(build_html(rd["meta"], rd["results"],

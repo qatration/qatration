@@ -545,10 +545,34 @@ def main():
         _wm(_mp, [{"objective": "o", "verdict": "HARDENED", "coupling": [],
                    "properties": {}}], {"target": "when"})
         _body = _js_w.load(io.open(_mp, encoding="utf-8"))
-        check("a lock map records when it was written",
-              bool((_body.get("meta") or {}).get("when")), True)
+        # AND IT REFUSES TO INVENT ONE. `rejudge --write` rewrites these files for probes
+        # recorded weeks earlier, so a default of now() here would stamp today onto that
+        # evidence -- the defect this whole change is about, one level in. An absence is
+        # written instead, and `measured_when` then says the date is the file's.
+        check("a writer with no date records none rather than today's",
+              "when" in (_body.get("meta") or {}), False)
+        check("...so a reader is told the date came from the file",
+              __import__("workspace").measured_when(_body["meta"], _mp)[1], False)
+        _mp3 = _os_w.path.join(_wd, "isolation_when3.json")
+        _wm(_mp3, [], {"target": "when3"}, when="2026-03-04 05:06")
+        _b3 = _js_w.load(io.open(_mp3, encoding="utf-8"))
+        check("a writer that knows the moment records it",
+              (_b3.get("meta") or {}).get("when"), "2026-03-04 05:06")
         check("...in a shape `measured_when` reads as the run's own",
-              __import__("workspace").measured_when(_body["meta"], _mp)[1], True)
+              __import__("workspace").measured_when(_b3["meta"], _mp3)[1], True)
+
+        # AND THE COMMAND THAT MEASURES PASSES ONE, which is the half a writer test cannot
+        # see: `write_maps` can be perfect while the one caller that knows the moment never
+        # tells it. Read off the call site rather than a live run, because a lock map costs
+        # a target and several trials per property.
+        import ast as _ast_w
+        _src_w = io.open(_os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "run_isolation.py"), encoding="utf-8").read()
+        _passes = False
+        for _n_w in _ast_w.walk(_ast_w.parse(_src_w)):
+            if (isinstance(_n_w, _ast_w.Call) and isinstance(_n_w.func, _ast_w.Name)
+                    and _n_w.func.id == "write_maps"):
+                _passes = any(_k.arg == "when" for _k in _n_w.keywords)
+        check("the command that measured the map tells the writer when", _passes, True)
         # AND THE BUILD IS STILL THERE, because a writer that answers one question by
         # dropping another has not improved anything.
         check("...beside the build that produced it",
