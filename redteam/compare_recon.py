@@ -175,7 +175,6 @@ def main():
               f"    qatration recon --target-config <your-config>.yaml")
         # NOT A PASS, for the reason `build_index` records.
         return 3
-        return
     w = max(len(r["target"]) for r in rows)
     print(f"{'target':<{w}}  {'channel':<15}{'memory':<26}{'disclosure':<12}"
           f"{'tokens':<8}{'unlabelled':<12}warnings")

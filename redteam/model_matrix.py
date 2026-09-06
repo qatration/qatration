@@ -79,8 +79,12 @@ def main():
                        meta.get("engine") or "unstamped",
                        meta.get("arsenal") or "?", meta.get("trials"))
         if len(per_model) < 2:
-            print(f"\nfound {len(per_model)} stored per-model run(s) for {tname}; need 2+.")
-            return
+            # 3, NOT 0. A comparison needs two things to compare and there are not two, so
+            # nothing was measured. `regression_verdict` reaches the same answer for the
+            # same shortage -- a first run is a baseline, not a verdict -- and exits 3.
+            print(f"\nfound {len(per_model)} stored per-model run(s) for {tname}; need "
+                  f"2+. Nothing was compared.")
+            return 3
         print(f"\nSTORED RUNS — not measured together. Judge the comparison against these:")
         for m, (t, eng, ars, tr) in sorted(when.items()):
             print(f"  {m:<18}{t}   build {eng:<16}{ars}  x{tr}")

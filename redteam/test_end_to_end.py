@@ -235,6 +235,42 @@ oracle_context:
         check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
               f"exit {_rc}: {_out}")
 
+        # --- NOTHING MEASURED IS NOT SUCCESS, IN EVERY COMMAND THAT CAN SAY IT ----------
+        #
+        # `run` has exited 3 for an arsenal with no applicable attack since somebody
+        # noticed it was exiting 0, and the same shape sat in three siblings: they printed
+        # a sentence about nothing having happened and returned None, which `cli` turns
+        # into 0. A pipeline reads that as asked-and-answered.
+        #
+        # `isolation` with objectives that match nothing measured no property. `matrix`
+        # with fewer than two stored runs compared nothing. Both are walked here rather
+        # than asserted from the source, because the code a pipeline sees is the process's,
+        # not the function's.
+        def _run_cmd(*argv):
+            _w = tempfile.mkdtemp()
+            try:
+                r = subprocess.run(
+                    [sys.executable, os.path.join(HERE, "cli.py")] + list(argv),
+                    capture_output=True, text=True, timeout=300,
+                    env=dict(env, QATRATION_OUT=_w), cwd=os.path.dirname(HERE))
+                return r.returncode, (r.stdout or "") + (r.stderr or "")
+            finally:
+                shutil.rmtree(_w, ignore_errors=True)
+
+        _ri, _oi = _run_cmd("isolation", "--target-config", cfg_path,
+                            "--objectives", os.path.join(HERE, "isolation_example.yaml"),
+                            "--only", "no-such-objective-id", "--trials", "1")
+        check("isolation that measured no property exits 3, not 0", _ri == 3,
+              "exit %s: %s" % (_ri, _oi[-200:]))
+        check("...and says nothing measured is not nothing open",
+              "not the same as nothing being open" in _oi, _oi[-200:])
+
+        _rm, _om = _run_cmd("matrix", "--target-config", cfg_path, "--from-disk")
+        check("a matrix with nothing to compare exits 3, not 0", _rm == 3,
+              "exit %s: %s" % (_rm, _om[-200:]))
+        check("...and says nothing was compared", "Nothing was compared" in _om,
+              _om[-200:])
+
         # --- AN ARSENAL A CUSTOMER WROTE, WITH THE FAULTS A RUN CANNOT SURVIVE ----------
         #
         # `--attacks` takes any path. The rules for a missing `category`, a missing `id`

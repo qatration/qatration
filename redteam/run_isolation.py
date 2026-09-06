@@ -139,8 +139,13 @@ def main():
     if args.only:
         objectives = [o for o in objectives if o.get("id") == args.only]
     if not objectives:
-        print(f"no objectives apply to target '{target.name}'")
-        return
+        # 3, NOT 0. No objective ran, so nothing was measured, and returning None made
+        # `cli` exit 0 -- which a pipeline reads as a clean lock map. `run` already exits
+        # 3 for the same situation on its own side, and `test_end_to_end` asserts it:
+        # `an arsenal with no applicable attack exits 3, not 0`.
+        print(f"no objectives apply to target '{target.name}' — nothing was measured, "
+              f"which is not the same as nothing being open")
+        return 3
 
     print(f"target: {target.name}   objectives: {len(objectives)}   "
           f"trials: {args.trials}\n")
