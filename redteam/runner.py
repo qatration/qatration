@@ -117,6 +117,13 @@ def _run_sessions(target, steps):
 # the sweep reads it before the first request so an attack it cannot deliver is counted as
 # NOT SENT rather than as fired. `sessions` is deliberately absent — it needs nothing beyond
 # send(), since reset() is the thing it tests (see `_run_sessions`).
+# THE DELIVERIES THIS ENGINE HAS, beside the branch chain that implements them. The
+# linter kept its own copy and the two could drift: a delivery added here and not
+# there is refused as a typo, and one removed here and not there is accepted and then
+# silently sent as something else. `test_lint` reads the branches back out of
+# `run_attack` and requires them to agree.
+DELIVERIES = ("direct", "indirect", "chain", "sessions", "forged_history")
+
 DELIVERY_CAPABILITY = {
     "indirect": "seed",
     "chain": "chain",

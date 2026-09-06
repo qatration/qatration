@@ -229,7 +229,11 @@ oracle_context:
                     capture_output=True, text=True, env=_env, cwd=os.path.dirname(HERE))
             finally:
                 shutil.rmtree(_w, ignore_errors=True)
-            return r.returncode, (r.stderr or r.stdout or "")[-160:]
+            # A WINDOW IS A SET, and this one was 160 characters: a refusal longer than
+            # that fell outside it, so a check asserting the reason would fail while the
+            # reason was printed correctly. Bounded still -- a whole sweep's output in a
+            # failure message helps nobody -- but wide enough to hold a refusal.
+            return r.returncode, (r.stderr or r.stdout or "")[-800:]
 
         _rc, _out = _code(_empty)
         check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
@@ -299,6 +303,24 @@ oracle_context:
         # NOTHING WAS SENT is the half that matters: the crash used to happen after the
         # probes, so the refusal has to come before them or it saves nobody anything.
         check("...and says nothing was sent", "Nothing was sent" in _outb, _outb)
+
+        # AND A DELIVERY THE BUILD DOES NOT HAVE, which is the same door and the
+        # quieter fault. `delivery: chian` with a `text` beside it does not crash: the
+        # unknown name falls through to the direct branch, a multi-turn attack goes out
+        # as one prompt, and DEFENDED describes an attack that was never delivered that
+        # way. Driven as a process because the silence is the runner's, not the rule's.
+        _dl = os.path.join(work, "customer_delivery.yaml")
+        with open(_dl, "w", encoding="utf-8") as f:
+            f.write("- id: mine-4\n  category: jailbreak\n  delivery: chian\n"
+                    "  text: one shot\n  steps: [\"a\", \"b\"]\n"
+                    "  success: [canary_in_output]\n")
+        _rcd, _outd = _code(_dl)
+        check("an arsenal naming a delivery this build lacks is refused with 2",
+              _rcd == 2, "exit %s: %s" % (_rcd, _outd))
+        check("...naming the delivery and the near miss",
+              "chian" in _outd and "chain" in _outd, _outd)
+        check("...before anything is sent", "Nothing was sent" in _outd, _outd)
+        check("...and not as a crash in this tool", "Traceback" not in _outd, _outd)
 
         # --- FIVE, THE CODE THE TABLE PROMISES AND NOTHING PRODUCED ---------------------
         #

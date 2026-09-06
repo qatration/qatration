@@ -22,7 +22,6 @@ from oracle import DETECTORS
 from encoders import ENCODERS
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-VALID_DELIVERY = {"direct", "indirect", "chain", "sessions", "forged_history"}
 
 
 def known_targets():
@@ -413,7 +412,52 @@ def unusable_entries(attacks, fname="arsenal"):
         seen[aid] = i
         if not a.get("category"):
             out.append("%s: %s: missing 'category'" % (fname, aid))
+        out += bad_delivery(a, fname)
     return out
+
+
+def bad_delivery(a, fname="arsenal"):
+    """The delivery faults a RUN cannot survive, for one entry, as sentences.
+
+    THE RULE WAS HERE AND THE DOOR WAS NOT. `main` has checked delivery shapes since
+    they were written, and `main` only ever sees the shipped corpus. `run --attacks
+    mine.yaml` takes any file, and a customer who types `delivery: chian` gets one of
+    two things, both bad:
+
+      * with `steps` and no `text`, a `KeyError: 'text'` out of the runner, mid-sweep,
+        after the attacks before it in the file have already been sent -- and the
+        crash handler tells them this is a bug in qatration and not a problem with
+        their config, which is wrong on the second clause;
+      * with a `text` as well, SILENCE. The unknown name falls through to the direct
+        branch, so a multi-turn attack is delivered as a single prompt, DEFENDED
+        describes an attack that was never delivered the way it was written, and
+        nothing anywhere says so. That is the worse one.
+
+    The shape checks come with it, for the same reason: `chain` with no `steps` reaches
+    the same `KeyError` by the other route.
+    """
+    from runner import DELIVERIES
+    import difflib
+    aid = a.get("id") or "??"
+    d = a.get("delivery", "direct")
+    if d not in DELIVERIES:
+        near = difflib.get_close_matches(str(d), list(DELIVERIES), n=1, cutoff=0.6)
+        return ["%s: %s: delivery %r is not one this build has%s. An unknown name is not refused by the runner -- it falls through to the direct branch, so a multi-turn attack is sent as a single prompt and a DEFENDED verdict describes an attack that was never delivered." % (fname, aid, d,
+                                   " -- did you mean %r?" % near[0] if near else
+                                   "; it has: %s" % ", ".join(sorted(DELIVERIES)))]
+    # EMPTY IS NOT ABSENT. `text: ""` is falsy, and the one probe whose payload IS the
+    # empty string has to be writable: a deployment that answers nothing with its whole
+    # system prompt has a bug nobody had to attack it to find.
+    need = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
+            "chain": ("steps",), "sessions": ("steps",),
+            "forged_history": ("history", "text")}[d]
+    missing = [k for k in need
+               if (a.get(k) is None if k == "text" else not a.get(k))]
+    if missing:
+        return ["%s: %s: %s delivery needs %s, and the run reads it without checking -- a missing one is a KeyError mid-sweep, after the attacks before it have been sent%s" % (fname, aid, d, " + ".join("'%s'" % k for k in need),
+                   " (use `text: \"\"` if the empty prompt is the point)"
+                   if d == "direct" else "")]
+    return []
 
 
 def main():
@@ -479,32 +523,16 @@ def main():
             seen[aid] = i
 
 
-            delivery = a.get("delivery", "direct")
-            if delivery not in VALID_DELIVERY:
-                errors.append(f"{fname}: {aid}: bad delivery {delivery!r} (want {sorted(VALID_DELIVERY)})")
-            # EMPTY IS NOT ABSENT, which is the distinction this whole project is organised
-            # around, and the rule had it collapsed: `text: ""` is falsy, so the one probe whose
-            # payload IS the empty string could not be written. A deployment that answers
-            # nothing with its entire system prompt has a bug nobody had to attack it to find,
-            # and it is the case a template renderer is least likely to have been tested on.
-            # `is None` keeps the real error — a `text:` key with nothing after it — an error.
-            elif delivery == "direct" and a.get("text") is None:
-                errors.append(f"{fname}: {aid}: direct delivery needs 'text' "
-                              f"(use `text: \"\"` if the empty prompt is the point)")
-            elif delivery == "indirect" and not (a.get("seed") and a.get("user_prompt")):
-                errors.append(f"{fname}: {aid}: indirect delivery needs 'seed' + 'user_prompt'")
-            elif delivery == "chain" and not a.get("steps"):
-                errors.append(f"{fname}: {aid}: chain delivery needs 'steps'")
-
-            elif delivery == "sessions" and not a.get("steps"):
-                errors.append(f"{fname}: {aid}: sessions delivery needs 'steps'")
-
-            elif delivery == "forged_history":
-                hist = a.get("history")
-                if not a.get("text") or not hist:
-                    errors.append(f"{fname}: {aid}: forged_history delivery needs "
-                                  f"'history' + 'text'")
-                elif not any(h.get("role") == "assistant" for h in hist):
+            # THE DELIVERY SHAPE IS NOT CHECKED HERE ANY MORE. It was written out in this
+            # loop, where only the shipped corpus reaches it, and it now lives in
+            # `unusable_entries` -- the door a customer's `--attacks` file comes through --
+            # which this function already calls for every file above. Checking again here
+            # would report each fault twice.
+            if a.get("delivery") == "forged_history":
+                # `unusable_entries` has already refused a forged_history with no `history`
+                # at all, so this asks only about the shape of one that has entries.
+                hist = a.get("history") or []
+                if hist and not any(h.get("role") == "assistant" for h in hist):
                     # A forged history with no assistant turn is a chain written the long
                     # way round. The entire mechanism is that the model reads a reply it
                     # never gave, so an attack lacking one measures something else while

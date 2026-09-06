@@ -195,6 +195,91 @@ def check_refusal(check):
     check("an attack with no encoder at all is not reported",
           not bad_encoders([{"id": "d", "text": "x"}]), "reported a plain attack")
 
+    # --- A DELIVERY THIS BUILD DOES NOT HAVE ---------------------------------------------
+    #
+    # The shape checks lived in `lint.main`, which only ever sees the shipped corpus.
+    # `run --attacks mine.yaml` takes any path, and `delivery: chian` there gets one of
+    # two things: with `steps` and no `text`, a `KeyError: 'text'` out of the runner
+    # mid-sweep, after the attacks before it have been sent, under a crash message
+    # telling the customer this is a bug in qatration and not a problem with their
+    # config; and with a `text` as well, SILENCE -- the unknown name falls through to
+    # the direct branch, a multi-turn attack goes out as a single prompt, and DEFENDED
+    # describes an attack that was never delivered the way it was written.
+    from lint_arsenal import unusable_entries as _ue
+
+    def _refuse(entry):
+        _o = _ue([dict({"id": "d", "category": "c"}, **entry)], "mine.yaml")
+        return " ".join(_o)
+
+    check("a delivery this build does not have is refused",
+          "is not one this build has" in _refuse({"delivery": "chian",
+                                                  "steps": ["a"]}),
+          _refuse({"delivery": "chian", "steps": ["a"]}))
+    check("...with the near miss named, because that is what it always is",
+          "did you mean 'chain'" in _refuse({"delivery": "chian", "steps": ["a"]}),
+          _refuse({"delivery": "chian", "steps": ["a"]}))
+    # THE SILENT ONE. A `text` alongside the bad name means no crash, so nothing would
+    # have said anything at all.
+    check("...even when a `text` would have let it run as a direct attack",
+          "is not one this build has" in _refuse({"delivery": "chian", "text": "x",
+                                                  "steps": ["a"]}),
+          _refuse({"delivery": "chian", "text": "x", "steps": ["a"]}))
+    check("...and says what the runner would have done with it instead",
+          "falls through to the direct branch" in _refuse({"delivery": "chian",
+                                                          "text": "x"}),
+          _refuse({"delivery": "chian", "text": "x"}))
+
+    # AND THE SHAPE EACH DELIVERY NEEDS, which reaches the same KeyError by the other
+    # route: the runner reads `attack["steps"]` without checking.
+    for _d, _has in (("chain", {}), ("sessions", {}), ("direct", {}),
+                     ("indirect", {"seed": {"text": "x"}}),
+                     ("forged_history", {"text": "x"})):
+        check("%s delivery without its fields is refused" % _d,
+              "delivery needs" in _refuse(dict(_has, delivery=_d)),
+              _refuse(dict(_has, delivery=_d)))
+
+    # NOT THE ONES THAT ARE FINE, or a door that refuses everything passes all of that.
+    for _ok in ({"delivery": "chain", "steps": ["a"]},
+                {"delivery": "sessions", "steps": ["a"]},
+                {"delivery": "direct", "text": "x"},
+                {"text": "x"},
+                {"delivery": "indirect", "seed": {"text": "s"}, "user_prompt": "u"},
+                {"delivery": "forged_history", "text": "x",
+                 "history": [{"role": "assistant", "content": "y"}]}):
+        check("a well-formed %s attack is not refused" % (_ok.get("delivery") or "direct"),
+              _refuse(_ok) == "", _refuse(_ok))
+    # EMPTY IS NOT ABSENT: the one probe whose payload IS the empty string has to be
+    # writable, and `text: ""` is falsy.
+    check("...including one whose whole payload is the empty string",
+          _refuse({"text": ""}) == "", _refuse({"text": ""}))
+
+    # AND THE VOCABULARY IS THE RUNNER'S. `lint` kept its own copy of the delivery
+    # names, so a delivery added in one and not the other is either refused as a typo
+    # or accepted and then silently sent as something else. Read back out of the
+    # branch chain that implements them, because that chain is the authority.
+    import ast as _ast_d, io as _io_d, os as _os_d
+    from runner import DELIVERIES as _DELIV
+    _rsrc = _io_d.open(_os_d.path.join(
+        _os_d.path.dirname(_os_d.path.abspath(__file__)), "runner.py"),
+        encoding="utf-8").read()
+    _branch = set()
+    for _n in _ast_d.walk(_ast_d.parse(_rsrc)):
+        if not (isinstance(_n, _ast_d.Compare) and isinstance(_n.left, _ast_d.Name)
+                and _n.left.id == "delivery"):
+            continue
+        for _c in _n.comparators:
+            if isinstance(_c, _ast_d.Constant) and isinstance(_c.value, str):
+                _branch.add(_c.value)
+    check("the runner really does branch on delivery names", len(_branch) >= 4,
+          str(sorted(_branch)))
+    check("...and every branch it has is a delivery the linter accepts",
+          sorted(_branch - set(_DELIV)) == [], str(sorted(_branch - set(_DELIV))))
+    # `direct` is the fall-through and so has no branch of its own, which is exactly
+    # why an unknown name became one.
+    check("...and every name the linter accepts is a branch, or the default",
+          sorted(set(_DELIV) - _branch - {"direct"}) == [],
+          str(sorted(set(_DELIV) - _branch - {"direct"})))
+
     # --- AND A MARKER THE ENCODING DESTROYS ----------------------------------------------
     #
     # `plants:` names a string the attack puts into the target and later asks it to repeat,
