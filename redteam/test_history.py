@@ -166,6 +166,47 @@ def main():
               not any("engine" in c for c in H.diff("cf7")["confounds"]),
               str(H.diff("cf7")))
 
+        # THE THIRD INPUT TO A VERDICT. Target, oracle, and the config that arms the
+        # oracle: adding `sysprompt_markers` between two runs takes `sysprompt_leak` from
+        # silent to armed, and the findings it then produces are not the target getting
+        # worse. Removing a key does the reverse and hides findings as a clean bill.
+        H.record({"target": "cf8", "model": "m", "trials": 3,
+                  "inert": {"sysprompt_leak": ["sysprompt_markers"]}},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf8", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        _di = H.diff("cf8")
+        check("a detector armed between two runs is flagged as a confound",
+              any("armed a different set" in c for c in _di["confounds"]), str(_di))
+        check("...naming the detector that can speak now",
+              any("sysprompt_leak can speak now" in c for c in _di["confounds"]), str(_di))
+
+        # AND THE OTHER DIRECTION, which hides findings rather than adding them.
+        H.record({"target": "cf9", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="EXPLOITED"), when="2026-08-01 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3,
+                  "inert": {"sysprompt_leak": ["sysprompt_markers"]}},
+                 R(a1="DEFENDED"), when="2026-08-02 10:00")
+        check("...and a detector silenced between them is too",
+              any("cannot speak now" in c for c in H.diff("cf9")["confounds"]),
+              str(H.diff("cf9")))
+
+        # EMPTY IS NOT ABSENT. `{}` is a run that looked and found nothing inert, which is
+        # a measurement; `None` is a run that never recorded it, which is not.
+        H.record({"target": "cfa", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cfa", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...while two runs arming the same set raise nothing",
+              H.diff("cfa")["confounds"] == [], str(H.diff("cfa")))
+        H.record({"target": "cfb", "model": "m", "trials": 3},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cfb", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...and a run that never recorded it is not read as agreement",
+              not any("armed a different set" in c
+                      for c in H.diff("cfb")["confounds"]), str(H.diff("cfb")))
+
         # ONE ATTEMPT A SIDE IS NOT AGREEMENT. The confound above fires when the trial count
         # CHANGES; at one trial in both runs it stays quiet, and `broke_every_trial` answers
         # honestly that a single hit was every trial -- so a coin the target was already

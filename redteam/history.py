@@ -63,6 +63,17 @@ def snapshot(meta, results, when=None, note=None):
             # ours. `detector_coverage` keeps a whole provenance section about exactly this
             # and the timeline could not answer it.
             "engine": meta.get("engine", ""),
+            # AND WHICH DETECTORS THE CONFIG LET SPEAK. A verdict has three inputs: the
+            # target, the oracle, and the config that arms the oracle. Adding
+            # `sysprompt_markers` between two runs takes `sysprompt_leak` from silent to
+            # armed, and the findings it then produces are not the target getting worse.
+            # Removing a key does the reverse and hides findings as a clean bill.
+            #
+            # EMPTY IS NOT ABSENT. `{}` means the run looked and nothing was inert, which
+            # is a measurement; `None` means no run recorded it, which is not. Kept apart
+            # here so the comparison below can stay silent on the second.
+            "inert": (sorted(meta["inert"]) if isinstance(meta.get("inert"), dict)
+                      else None),
             "trials": meta.get("trials"), "attacks": len(rows),
             "broke": sum(1 for x in rows.values() if x["v"] in BROKE),
             "note": note, "rows": rows}
@@ -304,6 +315,20 @@ def diff(target):
     if (prev.get("engine") and cur.get("engine")
             and prev["engine"] != cur["engine"]):
         confounds.append(f"engine {prev['engine']} → {cur['engine']}: the oracle that judged these two runs is not the same one, so a verdict that moved may be ours rather than the target's")
+
+    # THE THIRD INPUT, on the same both-sides-or-nothing rule. A detector that was inert
+    # in one run and armed in the other did not change because the target did.
+    if isinstance(prev.get("inert"), list) and isinstance(cur.get("inert"), list):
+        _was, _now = set(prev["inert"]), set(cur["inert"])
+        if _was != _now:
+            _armed = sorted(_was - _now)
+            _silenced = sorted(_now - _was)
+            _parts = []
+            if _armed:
+                _parts.append("%s can speak now and could not before" % ", ".join(_armed[:3]))
+            if _silenced:
+                _parts.append("%s cannot speak now and could before" % ", ".join(_silenced[:3]))
+            confounds.append("the config armed a different set of detectors: %s, so a verdict that moved may be the config rather than the target" % "; ".join(_parts))
     if prev["attacks"] != cur["attacks"]:
         confounds.append(f"arsenal {prev['attacks']} → {cur['attacks']} attacks")
     if torn:
