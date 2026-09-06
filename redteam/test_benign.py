@@ -600,6 +600,40 @@ def main():
     check("...and still shows the last turn too",
           "turn two" in _ex, repr(_ex[:160]))
 
+    # --- THE BUILD THAT JUDGED THE BASELINE ---------------------------------------------
+    #
+    # Every attribution in the engine rests on this file: a finding is weakened or
+    # unattributable because of what these rows say. `run_redteam` stamps the build into
+    # its results and this did not, so nothing recorded which oracle produced the fires the
+    # whole attribution layer reads.
+    #
+    # Two costs, both measured on a baseline written the same day. `detector_coverage`'s
+    # provenance audit filed its fifty probes under `written before results carried one`,
+    # which is a claim about age and was false. And `report_engine` could tell a reader the
+    # baseline's DATE and warn that the oracle may have moved since -- when the build is
+    # the exact answer to that question.
+    #
+    # READ OFF THE SOURCE THAT WRITES IT, not off a stored artifact: the committed
+    # baselines predate this and a check over them would assert the absence.
+    import ast as _a7, io as _io7
+    _bsrc = _io7.open(os.path.join(HERE, "benign.py"), encoding="utf-8").read()
+    _meta_keys = set()
+    for _n7 in _a7.walk(_a7.parse(_bsrc)):
+        if not isinstance(_n7, _a7.Dict):
+            continue
+        _ks = [k.value for k in _n7.keys
+               if isinstance(k, _a7.Constant) and isinstance(k.value, str)]
+        if "target" in _ks and "when" in _ks:
+            _meta_keys |= set(_ks)
+    check("the baseline writes a meta a reader can place",
+          {"target", "when", "trials"} <= _meta_keys, str(sorted(_meta_keys)))
+    check("...and stamps the build that judged it",
+          "engine" in _meta_keys, str(sorted(_meta_keys)))
+
+    # AND IT IS THE SAME SOURCE THE SWEEP USES, not a second way of asking.
+    check("...from `engine_version`, the one the sweep stamps with",
+          "engine_version()" in _bsrc, "benign has its own idea of a build")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

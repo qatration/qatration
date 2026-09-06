@@ -43,7 +43,7 @@ except Exception:
     pass
 
 import yaml
-from target import payload
+from target import payload, engine_version
 from oracle import DETECTORS, inert_for, visible_text
 
 # ---------------------------------------------------------------------------------------
@@ -1086,7 +1086,16 @@ def main():
     # them, with the traceback scrolling past above a tally that read like success.
     path = workspace.artifact(f"benign_{args.target}.json", root=OUT_DIR)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"meta": {"target": args.target, "when": datetime.now().isoformat(" ", "seconds"),
+        # THE BUILD THAT JUDGED IT, the way `run_redteam` stamps its own results. Every
+        # attribution in the engine rests on this file, and nothing in it said which oracle
+        # produced the fires it records. Two costs, both measured on a baseline written
+        # today: `detector_coverage`'s provenance audit filed its 50 probes under `written
+        # before results carried one`, which is a statement about age and was false; and
+        # `report_engine` could tell a reader the baseline's DATE and warn that the oracle
+        # may have moved since, when the build is the exact answer to that.
+        json.dump({"meta": {"target": args.target,
+                            "when": datetime.now().isoformat(" ", "seconds"),
+                            "engine": engine_version(),
                             "trials": args.trials, **s}, "rows": rows}, f, indent=2)
     print(f"\nwrote {path}")
 
