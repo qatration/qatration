@@ -1124,7 +1124,12 @@ def read_artifact(path):
             data = json.load(fh)
     except (OSError, ValueError) as e:
         return None, f"{type(e).__name__}: {e}"
-    why = _unusable_results(data)
+    # THE NAME IS PART OF THE IDENTIFICATION, and it has to be: a benign baseline with no
+    # `rows` at all cannot be recognised BY its rows, and that is precisely the file the
+    # roll-up dies on. This engine names its artifact families on purpose -- `workspace
+    # .artifact` decides the prefix -- so the name answers what the content cannot.
+    _name = os.path.basename(str(path))
+    why = _unusable_results(data, _name) or _unusable_benign(data, _name)
     return (None, why) if why else (data, None)
 
 
@@ -1140,7 +1145,49 @@ _RESULTS_REQUIRE = {
 }
 
 
-def _unusable_results(data):
+# The same measurement, for the benign family. `meta.probes` is the denominator of every
+# rate this project publishes and `rows` is the evidence under it; the roll-up subscripts
+# both, so a file missing either arrives as a KeyError reported as a bug in this tool.
+_BENIGN_REQUIRE = {
+    "meta.target": "every rate is filed under it",
+    "meta.probes": "it is the denominator of the false-alarm rate",
+    "rows": "the evidence the rate is counted from",
+}
+
+
+def _unusable_benign(data, name=""):
+    """-> why a parsed benign baseline still cannot be used, or None.
+
+    Measured the same way as the results rule beside it: drop a key from a real baseline
+    and run the consumers. `benign --summary` dies on a missing `meta.probes` and on a
+    missing `rows`, both as a KeyError under the message telling the reader it is a bug in
+    qatration. The 35 baselines stored here carry all three, which is why nothing noticed.
+
+    Identified by `rows` + a target, which is what a benign artifact IS; a results file has
+    `results` and reaches the rule above instead.
+    """
+    if not isinstance(data, dict) or "results" in data:
+        return None
+    # BY NAME ONLY, and that is the lesson of the results rule pointed the other way. A
+    # `rows` list is not enough to say "this is a benign baseline": `rejudge` hands this
+    # reader a re-scoring input with rows and no `meta.probes`, which is fine for what it is,
+    # and content-based identification refused it. The name is what this engine decides on
+    # purpose -- `workspace.artifact` picks the prefix -- so the name is what identifies.
+    if not name.startswith("benign_"):
+        return None
+    if not isinstance(data.get("rows"), list):
+        return ("a benign baseline with no rows: %s" % _BENIGN_REQUIRE["rows"])
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        return "a benign baseline with no meta: %s" % _BENIGN_REQUIRE["meta.target"]
+    for k in ("target", "probes"):
+        if k not in meta:
+            return ("a benign baseline with no meta.%s: %s"
+                    % (k, _BENIGN_REQUIRE["meta.%s" % k]))
+    return None
+
+
+def _unusable_results(data, name=""):
     """-> why a parsed results artifact still cannot be used, or None.
 
     THE OTHER HALF OF THE RULE ABOVE. `read_artifact` was written because five tools each
@@ -1157,8 +1204,12 @@ def _unusable_results(data):
     RESULTS FILES ONLY. Benign baselines, lock maps and recon profiles come through this
     same reader with their own shapes, and a rule that guessed at those would refuse them.
     """
-    if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+    if not isinstance(data, dict):
         return None
+    if not (name.startswith("results_") or isinstance(data.get("results"), list)):
+        return None
+    if not isinstance(data.get("results"), list):
+        return "a results file with no results list to read"
     if not (data.get("meta") or {}).get("target"):
         return ("a results file with no meta.target: %s"
                 % _RESULTS_REQUIRE["meta.target"])

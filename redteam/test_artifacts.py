@@ -133,6 +133,7 @@ def main():
     # one of them, which is exactly why nothing noticed -- an artifact from a newer build, a
     # file repaired by hand after an interrupted write, or one from a fork does not.
     import copy as _cp
+    import glob as _g_a
 
     def _minus(where, key):
         d = _cp.deepcopy(GOOD)
@@ -154,6 +155,58 @@ def main():
           "`compare`" in (_minus("result", "fired")[1] or ""),
           str(_minus("result", "fired")[1]))
 
+    # THE SAME MEASUREMENT FOR THE BENIGN FAMILY, which comes through the same reader.
+    # `benign --summary` dies on a missing `meta.probes` -- the denominator of every rate this
+    # project publishes -- and on a missing `rows`, both as a KeyError under the message
+    # telling the reader it is a bug in this tool.
+    def _minus_benign(fn):
+        d = _cp.deepcopy(BENIGN)
+        fn(d)
+        _fp = os.path.join(tempfile.mkdtemp(), "benign_x.json")
+        io.open(_fp, "w", encoding="utf-8").write(json.dumps(d))
+        return read_artifact(_fp)
+
+    for _lbl, _fn in (("meta.probes", lambda d: d["meta"].pop("probes", None)),
+                      ("meta.target", lambda d: d["meta"].pop("target", None)),
+                      ("rows", lambda d: d.pop("rows", None)),
+                      ("meta", lambda d: d.pop("meta", None))):
+        _d2, _why2 = _minus_benign(_fn)
+        check("a benign baseline with no %s is not handed to the roll-up" % _lbl,
+              _d2 is None and _why2 is not None, str(_why2))
+    check("...and the reason says what the number was for",
+          "denominator" in (_minus_benign(lambda d: d["meta"].pop("probes", None))[1] or ""),
+          str(_minus_benign(lambda d: d["meta"].pop("probes", None))[1]))
+
+    # IDENTIFIED BY NAME, and that is the results rule's lesson pointed the other way. A `rows`
+    # list is not enough to say "this is a benign baseline": `rejudge` hands this same reader a
+    # re-scoring input with rows and no `meta.probes`, which is fine for what it is, and
+    # content-based identification refused it -- caught by `test_benign` on the first run. This
+    # engine names its artifact families on purpose, so the name is what identifies.
+    _other = os.path.join(tempfile.mkdtemp(), "tmp-rejudge-input.json")
+    io.open(_other, "w", encoding="utf-8").write(json.dumps({"rows": [{"id": "p1"}]}))
+    check("a rows file that is not a baseline is not judged by the baseline rule",
+          read_artifact(_other)[1] is None, str(read_artifact(_other)[1]))
+    # AND THE NAME ALONE IS ENOUGH, which is what catches the file with no rows at all: a
+    # baseline cannot be recognised BY its rows when its rows are the missing thing.
+    _norows = os.path.join(tempfile.mkdtemp(), "benign_x.json")
+    io.open(_norows, "w", encoding="utf-8").write(
+        json.dumps({"meta": {"target": "x", "probes": 1}}))
+    check("a baseline with no rows at all is still recognised and refused",
+          read_artifact(_norows)[1] is not None, str(read_artifact(_norows)[1]))
+
+    # AND THE RESULTS SIDE IS IDENTIFIED BY NAME TOO, for the mirror reason: a results file
+    # whose `results` list is the missing thing cannot be recognised by having one.
+    _nores = os.path.join(tempfile.mkdtemp(), "results_x.json")
+    io.open(_nores, "w", encoding="utf-8").write(json.dumps({"meta": {"target": "x"}}))
+    check("a results file with no results list is recognised and refused",
+          read_artifact(_nores)[1] is not None, str(read_artifact(_nores)[1]))
+
+    _brefused = {os.path.basename(_p): read_artifact(_p)[1]
+                 for _p in _g_a.glob(os.path.join(ROOT, "out", "benign_*.json"))
+                 if read_artifact(_p)[1]}
+    check("no baseline this repository ships is refused by the shape rule",
+          _brefused == {}, str(_brefused))
+
     # NOT THE FILE THAT IS FINE, and not the other artifact families: benign baselines, lock
     # maps and recon profiles come through this same reader with their own shapes, and a
     # rule that guessed at those would refuse them.
@@ -172,7 +225,6 @@ def main():
           str(read_artifact(_mfp)[1]))
 
     # AND EVERY SHIPPED ARTIFACT STILL READS, or the rule is one this repository fails.
-    import glob as _g_a
     _refused = {os.path.basename(_p): read_artifact(_p)[1]
                for _p in _g_a.glob(os.path.join(ROOT, "out", "results_*.json"))
                if read_artifact(_p)[1]}
