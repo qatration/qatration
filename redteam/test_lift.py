@@ -82,6 +82,45 @@ def main():
     # Textbook 2x2 (Fisher's tea tasting, 3 of 4 correct): p = 0.4857 two-tailed.
     check("it agrees with a published table rather than only with itself",
           abs(fisher_exact(3, 1, 1, 3) - 0.4857) < 0.0005, fisher_exact(3, 1, 1, 3))
+    # --- AND THE OTHER DESIGN, WHERE THE SAME ATTACK IS SENT TWICE ---------------------
+    #
+    # An A/B pair is not two independent groups: the same attack id goes to the naive arm
+    # and to its defended twin, so every attack is one unit observed twice. `mcnemar_exact`
+    # is the test for that, and the values below are a sign test on the discordant pairs --
+    # arithmetic anybody can redo on paper, which is the point of checking them here.
+    from stats import mcnemar_exact as _mc
+
+    check("ten discordant pairs all one way is significant",
+          abs(_mc(10, 0) - 2 * 0.5 ** 10) < 1e-12, _mc(10, 0))
+    check("...and it is symmetric, so the defended arm breaking more is seen too",
+          abs(_mc(0, 10) - _mc(10, 0)) < 1e-12, (_mc(0, 10), _mc(10, 0)))
+    # Nine flips, one of them the other way: 2 * (C(9,0) + C(9,1)) / 2**9.
+    check("one pair going the other way is paid for, not ignored",
+          abs(_mc(8, 1) - 2 * (1 + 9) / 512.0) < 1e-12, _mc(8, 1))
+
+    # THE CEILING IS THE USEFUL PART. The p-value is a sign test on b + c flips, so with
+    # the defended arm never breaking, four discordant pairs cannot reach 0.05 however
+    # lopsided they look, and six is where a perfectly one-sided pair first crosses it.
+    # Three pairs on this fleet sit at four, and that is what `how many more attacks`
+    # means in the unit this test reads.
+    check("four one-sided pairs cannot separate, however obvious they look",
+          _mc(4, 0) > 0.05, _mc(4, 0))
+    check("...five still cannot", _mc(5, 0) > 0.05, _mc(5, 0))
+    check("...and six is where it first can", _mc(6, 0) < 0.05, _mc(6, 0))
+
+    # AGREEING EVERYWHERE IS A MEASUREMENT. `fisher_exact` refuses only an EMPTY GROUP and
+    # returns 1.0 for margins that came out equal; the same reading applies here, or two
+    # arms that answered identically on every shared attack would print NOT COMPARABLE.
+    check("two arms that never disagreed are equal, not unmeasured",
+          _mc(0, 0) == 1.0, _mc(0, 0))
+    check("...and an evenly split pair is p = 1", _mc(3, 3) == 1.0, _mc(3, 3))
+
+    # PAIRING IS NOT A WAY OF GETTING A SMALLER NUMBER. On the fleet's 4/8 against 0/8 the
+    # unpaired test says 0.077 and the paired one says 0.125: Fisher was answering an
+    # easier question than the design supports, and the honest number is the larger one.
+    check("the paired test is not uniformly kinder than the unpaired one",
+          _mc(4, 0) > fisher_exact(4, 4, 0, 8), (_mc(4, 0), fisher_exact(4, 4, 0, 8)))
+
     # AN EMPTY GROUP IS NOT AGREEMENT. Returning 1.0 here would print as "measured, identical".
     check("an empty group returns nothing rather than a p-value of 1",
           fisher_exact(0, 0, 5, 5) is None, fisher_exact(0, 0, 5, 5))

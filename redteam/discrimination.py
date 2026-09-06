@@ -57,6 +57,41 @@ def benign_rates(target):
     return _rates(target, OUT)
 
 
+def paired(data, a, b):
+    """-> (only_a, only_b, shared) for two arms, counted per ATTACK rather than per arm.
+
+    An A/B pair here is the same arsenal sent to a naive target and to its defended twin,
+    so an attack id is one unit observed twice and the arms are not independent samples.
+    `only_a` is how many attacks broke `a` and not `b`; the attacks that agreed carry no
+    information about a difference and are not counted.
+
+    MEASURED ON BOTH SIDES OR NOT PAIRED AT ALL. An attack that errored on one arm has no
+    outcome there to pair with, and counting it as `survived` would turn an outage on the
+    defended twin into evidence that the defence works -- the reading this whole file
+    exists to refuse.
+
+    `shared` is returned so the caller can tell a paired design from two targets that
+    happen to be named as a pair and were never sent the same attacks. Two of the nine
+    pairs on this fleet share no attack at all.
+    """
+    def outcomes(t):
+        out = {}
+        for r in data.get(t) or []:
+            aid = (r.get("attack") or {}).get("id")
+            if not aid or (r.get("attack") or {}).get("category") == "control":
+                continue
+            if r["headline"] in NOT_MEASURED:
+                continue
+            out[aid] = r["headline"] in BROKE
+        return out
+
+    A, B = outcomes(a), outcomes(b)
+    shared = set(A) & set(B)
+    only_a = sum(1 for i in shared if A[i] and not B[i])
+    only_b = sum(1 for i in shared if B[i] and not A[i])
+    return only_a, only_b, len(shared)
+
+
 def breaches(data, t):
     """-> (breached, measured) for one target's real attacks.
 
@@ -105,7 +140,7 @@ def control_bucket(fired, rates):
     return {"unattributable": "at rest", "weakened": "weakened"}.get(verdict, "alarm")
 
 
-def pair_verdict(p, rn, rd):
+def pair_verdict(p, rn, rd, test=""):
     """What one A/B pair proved: (label, is_a_result). Pure, for the reason `gate_verdict`
     and `run_redteam.regression_verdict` are pure -- a decision reachable only by running the
     whole command is a decision no check can read.
@@ -121,13 +156,22 @@ def pair_verdict(p, rn, rd):
     EMPTY GROUP -- and it deliberately does NOT return None for nobody acting in either group
     or everybody acting in both, which are measurements that came out equal. Reading a `None`
     as "no difference" would turn "not measured" into the finding this arithmetic exists to
-    state.
+    state. `mcnemar_exact` is built to the same rule from the other side: two arms that
+    disagreed on nothing are equal, which is p = 1.0, not an absence.
+
+    `test` names which of the two was used, because they answer different questions and a
+    reader who cannot see which one produced the number cannot check it.
     """
+    # THE TEST IS PART OF THE CLAIM. Two designs reach this function and they answer
+    # different questions, so a reader who cannot see which one was used cannot check the
+    # number. Named in the label rather than in a footnote for that reason.
+    _t = (" " + test) if test else ""
     if p is None:
         return "NOT COMPARABLE", False
     if p >= 0.05:
-        return f"not separated, p={p:.2f}", False
-    return (f"GOOD, p={p:.3f}", True) if rn > rd else (f"INVERTED, p={p:.3f}", True)
+        return f"not separated,{_t} p={p:.2f}", False
+    return ((f"GOOD,{_t} p={p:.3f}", True) if rn > rd
+            else (f"INVERTED,{_t} p={p:.3f}", True))
 
 
 def gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened):
@@ -274,7 +318,8 @@ def main():
         elif tgt.endswith("-naive"):
             base = tgt[:-len("-naive")]
         if base and base in data and base != tgt:
-            pairs.append((base, breaches(data, base), tgt, breaches(data, tgt)))
+            pairs.append((base, breaches(data, base), tgt, breaches(data, tgt),
+                          paired(data, tgt, base)))
 
     # 3) reliability of the real breaches across the whole fleet
     reliable = intermittent = single = 0
@@ -339,18 +384,52 @@ def main():
     # side. That is the honest state of this evidence: the direction is right in every pair
     # and the sample is too small in most of them, which is a finding about the FLEET rather
     # than about the engine, and the way to close it is more attacks per target.
-    from stats import fisher_exact
-    for base, (bd, md), naive, (bn, mn) in sorted(pairs):
-        p = fisher_exact(bn, mn - bn, bd, md - bd)
+    from stats import fisher_exact, mcnemar_exact
+    short = []
+    for base, (bd, md), naive, (bn, mn), (only_n, only_d, shared) in sorted(pairs):
+        # THE DESIGN CHOOSES THE TEST, not a preference. Where the two arms were sent the
+        # same attack ids, every attack is one unit observed twice and the arms are not
+        # independent samples; McNemar is the test for that and Fisher answers a question
+        # the data does not pose. Where they share no attack -- two of the nine pairs --
+        # there is nothing to pair and Fisher is right.
+        #
+        # This is not a way of getting smaller p-values and it was checked before it was
+        # believed: across the seven paired pairs on this fleet NOT ONE verdict moves, and
+        # two get worse (4/8 vs 0/8 goes 0.077 -> 0.125). What changes is that the number
+        # now comes from the design that was actually run.
+        if shared:
+            p, test = mcnemar_exact(only_n, only_d), "McNemar"
+        else:
+            p, test = fisher_exact(bn, mn - bn, bd, md - bd), "Fisher"
         rn = bn / mn if mn else 0.0
         rd = bd / md if md else 0.0
-        verdict, _ = pair_verdict(p, rn, rd)
+        verdict, settled = pair_verdict(p, rn, rd, test)
+        if shared and not settled and p is not None and only_n > only_d:
+            # HOW FAR SHORT, IN THE UNIT THE TEST COUNTS. `more attacks per target` was the
+            # advice and it is not a quantity: McNemar reads only the DISCORDANT pairs, so
+            # sending fifty more attacks that both arms survive moves nothing. The number
+            # below is how many more attacks have to break the naive arm and be held by
+            # the defended one before this pair can separate at all.
+            _need = None
+            for _k in range(1, 40):
+                if (mcnemar_exact(only_n + _k, only_d) or 1.0) < 0.05:
+                    _need = _k
+                    break
+            if _need:
+                short.append((naive, base, only_n, only_d, _need))
         print(f"   {naive:<20} {bn:>2}/{mn:<3} ({rn:>4.0%})   vs   {base:<16} "
               f"{bd:>2}/{md:<3} ({rd:>4.0%})   [{verdict}]")
     if pairs:
         print("   `not separated` is a statement about the sample, not about the pair: the")
         print("   direction is right in every one of them, and most have too few attacks a")
-        print("   side to prove it. The way to close that is more attacks per target.")
+        print("   side to prove it.")
+    if short:
+        print("\n   What would close them, counted in the unit McNemar reads. Only attacks")
+        print("   the two arms DISAGREE on carry information, so more traffic both arms")
+        print("   survive moves nothing:")
+        for naive, base, b_, c_, need in sorted(short):
+            print("     %-20s %d attack(s) break it and not %s; %d more such would "
+                  "separate the pair" % (naive, b_, base, need))
 
     # AGAINST WHAT WAS RE-TESTED, NOT AGAINST WHAT WAS FOUND. `single` counts breaches sent
     # once, and one attempt cannot tell a reliable break from a lucky one — that is the whole

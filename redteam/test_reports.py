@@ -2073,6 +2073,65 @@ def main():
     check("...and none of them is also listed as never sent",
           not [c for c in _ctrl_ids if c in _nline], _nline)
 
+    # --- THE DESIGN CHOOSES THE TEST ----------------------------------------------------
+    #
+    # An A/B pair is the same arsenal sent to a naive target and to its defended twin, so
+    # an attack id is one unit observed twice and the arms are not independent samples.
+    # This compared them with `fisher_exact`, which is the two-groups model and throws the
+    # pairing away. Two of the nine pairs on the fleet share no attack at all, and for
+    # those there is nothing to pair and Fisher is right -- so the rule is the design, not
+    # a preference for one test.
+    from discrimination import paired as _paired
+
+    def _rows_for(ids):
+        return [{"attack": {"id": i, "category": "jailbreak"},
+                 "headline": h, "rate": "1/1", "fired": ["canary_in_output"],
+                 "locks": {}, "trials": []} for i, h in ids.items()]
+
+    _data = {
+        "weak": _rows_for({"a": "EXPLOITED", "b": "EXPLOITED", "c": "DEFENDED"}),
+        "firm": _rows_for({"a": "DEFENDED", "b": "EXPLOITED", "c": "DEFENDED"}),
+    }
+    _b, _c, _sh = _paired(_data, "weak", "firm")
+    check("a pair is counted per attack, not per arm", (_b, _c, _sh) == (1, 0, 3),
+          str((_b, _c, _sh)))
+
+    # AN ATTACK MEASURED ON ONE ARM ONLY IS NOT A PAIR. Counting an errored row on the
+    # defended twin as `survived` would turn an outage there into evidence that the
+    # defence works, which is the reading this whole file exists to refuse.
+    _data2 = {"weak": _rows_for({"a": "EXPLOITED", "b": "EXPLOITED"}),
+              "firm": _rows_for({"a": "ERROR", "b": "DEFENDED"})}
+    _b2, _c2, _sh2 = _paired(_data2, "weak", "firm")
+    check("...and an attack that errored on one arm is not paired at all",
+          (_b2, _c2, _sh2) == (1, 0, 1), str((_b2, _c2, _sh2)))
+
+    # AND THE CALL SITE. `discrimination` is what decides which test to run, and a helper
+    # tested on its own says nothing about which one the command reaches for.
+    def _two(shared):
+        _w = _tf5.mkdtemp()
+        try:
+            _ids = {"a": "EXPLOITED", "b": "EXPLOITED", "c": "DEFENDED"}
+            _other = _ids if shared else {"x": "DEFENDED", "y": "DEFENDED",
+                                          "z": "DEFENDED"}
+            for _n, _i in (("bot-naive", _ids), ("bot", _other)):
+                with _io5.open(os.path.join(_w, "results_%s.json" % _n), "w",
+                               encoding="utf-8") as _f:
+                    _js5.dump({"meta": {"target": _n, "attacks_n": len(_i)},
+                               "results": _rows_for(_i)}, _f)
+            _p = _sp5.run([sys.executable, os.path.join(HERE, "cli.py"), "discrimination"],
+                          capture_output=True, text=True, timeout=600,
+                          env=dict(os.environ, QATRATION_OUT=_w, PYTHONIOENCODING="utf-8"))
+            return (_p.stdout or "") + (_p.stderr or "")
+        finally:
+            _sh5.rmtree(_w, ignore_errors=True)
+
+    _out_p = _two(True)
+    check("a pair sent the same attacks is tested as a pair", "McNemar" in _out_p,
+          _out_p[-300:])
+    _out_u = _two(False)
+    check("...and a pair with no attack in common is not", "Fisher" in _out_u
+          and "McNemar" not in _out_u, _out_u[-300:])
+
     # --- THE CREDIBILITY GATE, REACHABLE AT LAST ----------------------------------------
     # `discrimination` decides whether this engine can be said not to cry wolf, and exits 1
     # when it cannot. That decision lived inside its print block, so no check could see it --
