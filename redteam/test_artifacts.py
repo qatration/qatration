@@ -168,6 +168,49 @@ def main():
     check("no module opens a stored artifact without going through workspace.read_artifact",
           not strays, f"raw json.load(open(...)) at: {strays}")
 
+    # --- WHAT THIS REPOSITORY SHIPS AT ITS ROOT -----------------------------------------
+    #
+    # `qatration init` writes its config into the CURRENT DIRECTORY, which is right: a
+    # config is a thing you edit, not an artifact, and burying it in `out/` would hide it.
+    # Run from inside a checkout it therefore lands in the repository, and `git add -A`
+    # swept `mybot.yaml` into a commit and a push -- carrying a generated canary that would
+    # then be shared by everyone who copied it, which is the one thing a canary must not be.
+    #
+    # Every other command writes through `workspace.artifact` into `out/`, so this door is
+    # narrow and the root is small and deliberate. Declared rather than pattern-matched: a
+    # new top-level file is a decision, and it should cost one line here to record it.
+    # DIRECTORIES ARE NOT LISTED -- the practice fleet adds them and they are somebody's
+    # work, not a stray; a stray is a FILE dropped where a command was run.
+    _ROOT_FILES = {
+        ".gitattributes": "line endings, so a CRLF checkout does not change a hash",
+        ".gitignore": "what a working checkout is allowed to leave lying around",
+        "AUTHORISED-USE.md": "the authorisation gate this tool refuses to run without",
+        "CHANGELOG.md": "what changed per release",
+        "CONTRIBUTING.md": "how to run the suites",
+        "LICENSE": "Apache-2.0",
+        "NOTICE": "attribution required by that licence",
+        "README.md": "the front page, whose every number a suite recounts",
+        "SECURITY.md": "where to report a vulnerability in this tool",
+        "pyproject.toml": "the package",
+        "requirements.txt": "what a checkout needs to run the suites",
+        "wrangler.jsonc": "how the site is published",
+    }
+    import subprocess as _sp_r
+    _tracked = _sp_r.run(["git", "-C", ROOT, "ls-files"], capture_output=True,
+                         text=True).stdout.split()
+    check("the repository lists tracked files, so this check can see the root",
+          len(_tracked) > 50, "git ls-files returned %d path(s)" % len(_tracked))
+    _at_root = sorted(f for f in _tracked if "/" not in f)
+    check("no undeclared file sits at the top of the repository",
+          sorted(set(_at_root) - set(_ROOT_FILES)) == [],
+          "undeclared: %s" % ", ".join(sorted(set(_at_root) - set(_ROOT_FILES))))
+    # AND THE DECLARATION IS NOT A LIST OF THINGS THAT LEFT, which is how a list like this
+    # stops meaning anything.
+    check("...and every declared file is still there",
+          sorted(set(_ROOT_FILES) - set(_at_root)) == [],
+          "declared but absent: %s" % ", ".join(sorted(set(_ROOT_FILES) - set(_at_root))))
+    check("...and each one says why it is there", all(_ROOT_FILES.values()), True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

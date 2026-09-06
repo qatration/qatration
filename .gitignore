@@ -115,3 +115,17 @@ out/run_2026-08-21T0110-665c21.json
 
 # Cloudflare wrangler's local state, created by a deploy from a workstation.
 .wrangler/
+
+# A TARGET CONFIG WRITTEN AT THE ROOT IS SOMEBODY'S WORKING FILE, NOT CONTENT.
+#
+# `qatration init` writes its config into the CURRENT DIRECTORY, which is right -- a config
+# is a thing you edit, not an artifact, and burying it in `out/` would hide it. Run from
+# inside a checkout it therefore lands here, and `git add -A` swept `mybot.yaml` into a
+# commit and a push: a generated canary, then shared by everyone who copied the file, which
+# is the one thing a canary must not be.
+#
+# Every config this repository DOES track lives in `redteam/`, so this pattern is anchored
+# to the root and takes nothing with it. `test_artifacts` declares the root file set as
+# well, because an ignore rule is not a gate: `git add -f` walks straight past it.
+/*.yaml
+/*.yml
