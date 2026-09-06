@@ -347,6 +347,37 @@ def unknown_detectors(names):
 _ATTACK_KEYS = None
 
 
+def unusable_entries(attacks, fname="arsenal"):
+    """The entry faults a RUN cannot survive, as a list of sentences.
+
+    These three lived inside `main`, which meant only the shipped corpus was checked for
+    them. `run --attacks mine.yaml` takes any file, and a customer writing their own
+    arsenal got: a missing `category` crashing the sweep at
+    `a["category"]` AFTER the probes were sent, so their target's budget was spent and the
+    answer was a traceback; and a duplicate id sent twice, landing two rows under one id in
+    a results file that `history`, `verify` and `rejudge` all key by it.
+
+    The rest of the linter stays where it is. These are the ones that make a run
+    misbehave rather than make an arsenal worse, which is why they are the ones the run
+    needs before it sends anything.
+    """
+    out, seen = [], {}
+    for i, a in enumerate(attacks or []):
+        if not isinstance(a, dict):
+            out.append("%s #%d: entry is %s, not a mapping" % (fname, i, type(a).__name__))
+            continue
+        aid = a.get("id")
+        if not aid:
+            out.append("%s #%d (??): missing 'id'" % (fname, i))
+            continue
+        if aid in seen:
+            out.append("%s: %s: duplicate id (also at #%d)" % (fname, aid, seen[aid]))
+        seen[aid] = i
+        if not a.get("category"):
+            out.append("%s: %s: missing 'category'" % (fname, aid))
+    return out
+
+
 def main():
     # `--help` has to be answered before anything is read. Without this the flag fell through
     # and the linter simply ran, which looks harmless and is the same defect that made
@@ -386,14 +417,15 @@ def main():
         if not isinstance(attacks, list):
             errors.append(f"{fname}: top-level YAML is not a list of attacks"); continue
         total += len(attacks)
+        # THE THREE A RUN CANNOT SURVIVE, through the function the run calls too. They
+        # were written here and only here, so `run --attacks mine.yaml` never saw them.
+        errors += unusable_entries(attacks, fname)
         seen = {}                                  # ids must be unique WITHIN a file
         for i, a in enumerate(attacks):
             aid = a.get("id")
             where = f"{fname} #{i} ({aid or '??'})"
             if not aid:
-                errors.append(f"{where}: missing 'id'"); continue
-            if aid in seen:
-                errors.append(f"{fname}: {aid}: duplicate id (also at #{seen[aid]})")
+                continue
 
             # SEE registrable_hosts. Everything the attack actually sends, in one place, so a
             # new delivery shape cannot quietly escape the check.
@@ -408,8 +440,6 @@ def main():
                     f"can own will send it to whoever owns it")
             seen[aid] = i
 
-            if not a.get("category"):
-                errors.append(f"{fname}: {aid}: missing 'category'")
 
             delivery = a.get("delivery", "direct")
             if delivery not in VALID_DELIVERY:

@@ -235,6 +235,35 @@ oracle_context:
         check("an arsenal with no applicable attack exits 3, not 0", _rc == 3,
               f"exit {_rc}: {_out}")
 
+        # --- AN ARSENAL A CUSTOMER WROTE, WITH THE FAULTS A RUN CANNOT SURVIVE ----------
+        #
+        # `--attacks` takes any path. The rules for a missing `category`, a missing `id`
+        # and a duplicate one lived inside `lint.main`, and `lint` has no arguments: it
+        # reads the package's own directory, so the one corpus it cannot be pointed at is
+        # the one a customer writes.
+        #
+        # WHAT THAT COST, both measured against this fixture before the fix. A missing
+        # `category` crashed the sweep at `a["category"]` AFTER the probes had gone, so
+        # the target's budget was spent and the answer was a traceback. A duplicate id was
+        # sent twice and landed two rows under one id, in a file `history`, `verify` and
+        # `rejudge` all key by it.
+        _bad = os.path.join(work, "customer_arsenal.yaml")
+        with open(_bad, "w", encoding="utf-8") as f:
+            f.write("- id: mine-1\n  category: jailbreak\n  text: hello\n"
+                    "  success: [canary_in_output]\n"
+                    "- id: mine-1\n  category: jailbreak\n  text: again\n"
+                    "  success: [canary_in_output]\n"
+                    "- id: mine-3\n  text: no category here\n"
+                    "  success: [canary_in_output]\n")
+        _rcb, _outb = _code(_bad)
+        check("an arsenal with faults a run cannot survive is refused with 2", _rcb == 2,
+              "exit %s: %s" % (_rcb, _outb))
+        check("...naming the duplicate id", "duplicate id" in _outb, _outb)
+        check("...and the entry with no category", "missing 'category'" in _outb, _outb)
+        # NOTHING WAS SENT is the half that matters: the crash used to happen after the
+        # probes, so the refusal has to come before them or it saves nobody anything.
+        check("...and says nothing was sent", "Nothing was sent" in _outb, _outb)
+
         # --- FIVE, THE CODE THE TABLE PROMISES AND NOTHING PRODUCED ---------------------
         #
         # The exit contract is published on two pages and every code in it is asserted

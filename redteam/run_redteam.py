@@ -645,8 +645,27 @@ def main():
     # AND EVERY DETECTOR THEY NAME HAS TO EXIST. Checked on the arsenal that was LOADED
     # rather than on the one that ships, because `--attacks` takes a path and the rule was
     # only ever applied to files that already pass it.
-    from lint_arsenal import refuse_unknown_detectors
+    from lint_arsenal import refuse_unknown_detectors, unusable_entries
     refuse_unknown_detectors(all_attacks, "run", args.attacks)
+
+    # AND THE THREE FAULTS A RUN CANNOT SURVIVE, for the same reason and from the same
+    # place. `--attacks` takes any path, and these rules lived inside `lint.main`, so a
+    # customer's own arsenal met them only if they thought to lint a corpus the linter
+    # cannot be pointed at. What that cost: an entry with no `category` crashed this
+    # module at `a["category"]` AFTER the probes had gone, so the target's budget was
+    # spent and the answer was a traceback; and a duplicate id was sent twice, landing two
+    # rows under one id in a file that `history`, `verify` and `rejudge` all key by it.
+    #
+    # BEFORE ANYTHING IS SENT, which is the whole point of moving it here.
+    _unusable = unusable_entries(all_attacks, os.path.basename(args.attacks))
+    if _unusable:
+        print("run: %d entr%s in %s cannot be used. Nothing was sent."
+              % (len(_unusable), "y" if len(_unusable) == 1 else "ies", args.attacks),
+              file=sys.stderr)
+        for _u in _unusable[:8]:
+            print("    " + _u, file=sys.stderr)
+        # 2: the invocation was refused. Not 1, which is a finding about the target.
+        sys.exit(2)
     # AND THE TARGET'S OWN REFUSAL VOCABULARY. A misspelled class name under
     # `refusal_patterns` is not refused and not applied, so the operator's phrasings never
     # join the classifier and their bot reads as one that never refuses; an uncompilable
