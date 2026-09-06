@@ -683,6 +683,16 @@ class HttpConfiguredTarget(Target):
                              error="TargetError: the endpoint answered 200 and reported an "
                                    "error at response.error=%r (%s)" % (self.error_path, _said),
                              seconds=round(time.time() - t0, 1))
+            # ON THE TARGET, NOT ON THE PROBE, and only when a caller asked. `onboard`
+            # needs the body to say WHICH path holds the answer when the configured one
+            # holds an identifier -- see `_prose` there -- and the failure branch below
+            # already attaches it for the same reason. Attaching it to a successful
+            # probe would be a second, unaudited channel into every judgement in this
+            # repo: a detector is handed a Probe and would then be able to read a
+            # payload nothing audits. A detector is never handed the TARGET, so this
+            # side is closed by construction, and it is off unless somebody sets it.
+            if getattr(self, "_keep_last_raw", False):
+                self._last_raw = raw
             reply = dig(raw, self.reply_path)
             if reply is None:
                 # The path is wrong or the API changed shape. A run of empty replies looks

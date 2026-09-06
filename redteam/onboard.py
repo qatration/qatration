@@ -69,6 +69,23 @@ def _strings(obj, prefix="", out=None, depth=0):
     return out
 
 
+def _prose(s):
+    """Does this string read like something a model said, rather than an identifier?
+
+    The whole question `onboard` exists to answer is whether `response.reply` points at the
+    model's answer, and it could only ask whether it pointed at ANYTHING. `id`, `status` and
+    `object` all resolve, and a sweep against a config mapped to one of them scores every
+    attack DEFENDED because no detector can fire on `chatcmpl-9f2c1a7b`.
+
+    Deliberately crude and deliberately one-sided: a space and some length. An identifier
+    has neither, an answer to `Hello, I have a question about my recent order.` has both,
+    and being wrong in the cautious direction costs a note rather than a refusal -- the
+    caller only refuses when the same response body holds something that IS prose.
+    """
+    s = (s or "").strip()
+    return " " in s and len(s) >= 20
+
+
 def _arsenal_size(path=None):
     """How many attacks a default run will actually send.
 
@@ -183,6 +200,13 @@ def check(cfg_path, probe_text=PROBE):
         return False, rep
 
     t0 = time.time()
+    # ASK FOR THE BODY. It is needed to tell a mapping that resolved to an identifier
+    # from one that resolved to the answer, and the adapter keeps it on ITSELF rather
+    # than on the probe so that no detector can ever reach it.
+    try:
+        target._keep_last_raw = True
+    except Exception:
+        pass
     try:
         probe = target.send(probe_text)
     except Exception as e:
@@ -246,6 +270,37 @@ def check(cfg_path, probe_text=PROBE):
         return False, rep
 
     rep["reply"] = reply[:200]
+
+    # AND A MAPPING THAT RESOLVES TO THE WRONG FIELD, which is the same failure reached
+    # from the other side. The two branches above ask whether `response.reply` resolved to
+    # ANYTHING; a mapping pointed at `id`, `status` or `object` resolves perfectly, and
+    # every probe of the sweep then comes back as `chatcmpl-9f2c1a7b` or `ok`. No detector
+    # can fire on that, so the run reports DEFENDED against the whole arsenal and this
+    # command says `ready to queue`. Walked against a scripted endpoint: three mappings,
+    # three clean bills.
+    #
+    # JUDGED ON THE VALUE, NOT ON THE KEY NAME. A list of metadata key names would be a
+    # guess about somebody else's schema, and this refuses only where the evidence is in
+    # the same response body: what the mapping returned does not look like an answer, and
+    # something else in the body does. A terse endpoint whose whole reply really is `ok` has
+    # nothing better to point at and is not refused -- it gets a note, because that is what
+    # is actually known.
+    _raw = getattr(probe, "raw", None)
+    if _raw is None:
+        _raw = getattr(target, "_last_raw", None)
+    _path = (cfg.get("response") or {}).get("reply")
+    if _raw is not None and not _prose(reply):
+        _better = [(p, v) for p, v in _strings(_raw)
+                   if _prose(v) and p != _path and v.strip() != reply]
+        if _better:
+            rep["problems"].append(
+                f"`response.reply: {_path!r}` resolved to {reply[:40]!r}, which does not read like an answer to {probe_text!r} — while {_better[0][0]!r} in the same response does. A mapping pointed at the wrong field does not fail a run: every reply is that value, no detector can fire on it, and the sweep reports the target as having held against the whole arsenal.")
+            for _p2, _v2 in _better[:3]:
+                rep["notes"].append(f'try `response.reply: "{_p2}"` — it holds {_v2[:60]!r}')
+            return False, rep
+        rep["notes"].append(
+            f"the reply is {reply[:40]!r}, which does not read like an answer — but nothing else in the response does either, so this may simply be a terse endpoint. If a sweep comes back with everything DEFENDED, check `response.reply` first.")
+
     rep["capabilities"] = sorted(getattr(target, "capabilities", ()) or ())
 
     # Capabilities are DERIVED, and their absence deletes whole classes of attack silently.

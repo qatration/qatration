@@ -144,6 +144,81 @@ def main():
               "What is the order" in notes or "help with your recent order" in notes,
               notes[:240])
 
+        # --- AND A PATH THAT RESOLVES TO THE WRONG FIELD ----------------------------------
+        #
+        # The check above asks whether `response.reply` resolved to ANYTHING. A mapping
+        # pointed at `id` or `model` resolves perfectly, and every probe of the sweep then
+        # comes back as `cmpl-1` or `scripted`: no detector can fire on that, so the run
+        # reports the target as having held against the whole arsenal, and this command
+        # said `ready to queue`. Walked against this same scripted endpoint before the fix:
+        # three wrong mappings, three clean bills.
+        for _bad_path, _got in (("id", "cmpl-1"), ("model", "scripted")):
+            _wrongfield = write("wrongfield_%s" % _bad_path, _bad_path)
+            _ok2, _rep2 = onboard.check(_wrongfield)
+            check("a reply path that resolves to %r does not pass" % _got, not _ok2,
+                  str(_rep2.get("problems")))
+            _p2 = " ".join(_rep2["problems"])
+            check("...quoting what it actually resolved to", _got in _p2, _p2[:200])
+            check("...and saying the sweep would have reported the target as holding",
+                  "held against the whole arsenal" in _p2, _p2[:240])
+            _n2 = " ".join(_rep2["notes"])
+            check("...and naming the path that does hold the answer",
+                  "choices.0.message.content" in _n2, _n2[:200])
+
+        # AND A TERSE ENDPOINT IS NOT REFUSED, which is the other direction and the one that
+        # would make this rule unusable. The judgement is on the EVIDENCE: refuse only when
+        # the same body holds something that reads like an answer and the mapping missed it.
+        class _Terse(Bot):
+            def do_POST(self):
+                _n = int(self.headers.get("Content-Length", 0) or 0)
+                self.rfile.read(_n)
+                _o = json.dumps({"status": "ok"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(_o)))
+                self.end_headers()
+                self.wfile.write(_o)
+
+        _tsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Terse)
+        threading.Thread(target=_tsrv.serve_forever, daemon=True).start()
+        try:
+            _tp = os.path.join(work, "targets_terse.yaml")
+            with open(_tp, "w", encoding="utf-8") as _f:
+                _f.write(CFG.format(name="terse", port=_tsrv.server_address[1],
+                                    path="status", extra=""))
+            _ok3, _rep3 = onboard.check(_tp)
+            check("a terse endpoint with nothing better to point at is not refused", _ok3,
+                  str(_rep3.get("problems")))
+            check("...but is told where to look if everything comes back DEFENDED",
+                  any("terse endpoint" in n for n in _rep3["notes"]),
+                  str(_rep3["notes"]))
+        finally:
+            _tsrv.shutdown()
+
+        # AND THE BODY STAYS OFF THE PROBE. `targets_http` attaches the raw response to a
+        # FAILED probe on purpose and to nothing else: "a raw payload the oracle could read
+        # would be a second, unaudited channel into every judgement in this repo". The body
+        # onboard now reads is kept on the TARGET, which a detector is never handed, and only
+        # when a caller asks. Both halves are checked, because the safe half is the one that
+        # would be quietly lost.
+        _rsrc = io.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _isrc = io.open(os.path.join(HERE, "run_isolation.py"), encoding="utf-8").read()
+        _bsrc = io.open(os.path.join(HERE, "benign.py"), encoding="utf-8").read()
+        check("no command that judges probes asks the adapter to keep response bodies",
+              "_keep_last_raw" not in (_rsrc + _isrc + _bsrc), "a sweep asked for the body")
+        _hp = write("probeclean", "choices.0.message.content")
+        import yaml as _yaml
+        _cfg9 = _yaml.safe_load(io.open(_hp, encoding="utf-8"))
+        from targets_http import HttpConfiguredTarget as _HCT
+        _tg = _HCT(**{k: v for k, v in _cfg9.items()
+                      if k not in onboard.CONFIG_ONLY_KEYS})
+        _pb = _tg.send("Hello, I have a question about my recent order.")
+        check("...and a successful probe carries no raw body for a detector to read",
+              getattr(_pb, "raw", None) is None, repr(getattr(_pb, "raw", None))[:80])
+        check("...while the target it came from did not keep one either, unasked",
+              getattr(_tg, "_last_raw", None) is None,
+              repr(getattr(_tg, "_last_raw", None))[:80])
+
         # --- the happy path, and what it derives ------------------------------------------
         right = write("rightpath", "choices.0.message.content")
         ok, rep = onboard.check(right)
