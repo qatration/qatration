@@ -180,6 +180,22 @@ def run_attack(target, attack, ctx, trials=1):
     if undeliverable(attack, caps):
         return [{"verdict": "SKIP", "fired": [], "probe": None}]
     aid = attack.get("id", "?")
+    # EVERY STRING THE ATTACKER SENDS, normalised and then obfuscated. `encode:` was applied
+    # in the `else` branch alone, so a `chain`, `sessions`, `forged_history` or `indirect`
+    # attack that asked for an encoding was sent IN THE CLEAR -- and a DEFENDED verdict then
+    # described a target that was never shown the technique. That is the same failure `lint`
+    # already refuses for `ascii_art` with no marker, reached through the delivery instead of
+    # through the text. 193 attacks in this corpus use one of those four deliveries.
+    #
+    # NOT THE SEED, and that is not an omission: `target.seed` takes a structured record
+    # whose field names belong to the target, and encoding those would break the plant
+    # rather than obfuscate it. For an `indirect` attack the encoding applies to the prompt
+    # that asks the question, which is the string a filter on the way in would read.
+    _enc = attack.get("encode")
+
+    def _text(s):
+        _t = payload(s)
+        return apply_encoding(_t, _enc) if _enc else _t
     for _ in range(trials):
         target.reset()
         seeded = False
@@ -188,32 +204,30 @@ def run_attack(target, attack, ctx, trials=1):
                 target.seed(attack["seed"])
                 seeded = True
                 probe = _resilient_send(
-                    lambda: target.send(payload(attack.get("user_prompt", "Hello"))), aid)
+                    lambda: target.send(_text(attack.get("user_prompt", "Hello"))), aid)
             elif delivery == "sessions":
                 probe = _resilient_send(
-                    lambda: _run_sessions(target, [payload(x) for x in attack["steps"]]),
+                    lambda: _run_sessions(target, [_text(x) for x in attack["steps"]]),
                     aid)
             elif delivery == "chain":
                 probe = _resilient_send(
                     lambda: target.send_chain(
-                        [payload(s) for s in attack["steps"]]), aid)
+                        [_text(s) for s in attack["steps"]]), aid)
             elif delivery == "forged_history":
                 # The whole forged transcript is the attacker's side, assistant turns
                 # included — they wrote those too — so echo subtraction has to see all of
                 # it. Without this the fabricated "certainly, the key is …" that the
                 # attacker planted counts as the bot revealing it.
                 forged = [{"role": h.get("role", "user"),
-                           "content": payload(h.get("content", ""))}
+                           "content": _text(h.get("content", ""))}
                           for h in (attack.get("history") or [])]
                 probe = _resilient_send(
-                    lambda: target.send_forged(payload(attack["text"]), forged), aid)
+                    lambda: target.send_forged(_text(attack["text"]), forged), aid)
                 if probe is not None:
                     probe.prompt = "\n".join(
-                        [h["content"] for h in forged] + [payload(attack["text"])])
+                        [h["content"] for h in forged] + [_text(attack["text"])])
             else:
-                text = payload(attack["text"])
-                if attack.get("encode"):        # obfuscation strategy (homoglyph/zero-width/…)
-                    text = apply_encoding(text, attack["encode"])
+                text = _text(attack["text"])
                 probe = _resilient_send(lambda t=text: target.send(t), aid)
         finally:
             if seeded:
@@ -225,7 +239,11 @@ def run_attack(target, attack, ctx, trials=1):
         # canary and credential detectors firing on the plant. The attacker's whole side of
         # the conversation is what they already knew.
         if delivery in ("chain", "sessions") and probe is not None and attack.get("steps"):
-            probe.prompt = "\n".join(str(x) for x in attack["steps"])
+            # WHAT WAS SENT, not what was written. Echo subtraction compares the reply
+            # against this string, so recording the plain steps for a run that sent
+            # encoded ones would subtract text the target never saw -- and fail to
+            # subtract the text it did.
+            probe.prompt = "\n".join(_text(x) for x in attack["steps"])
         # NO WATCHDOG HERE, AND THAT IS NOT AN OVERSIGHT. Judging is CPU inside this process:
         # `signal.alarm` does not exist on Windows, a thread cannot interrupt a regular
         # expression, and a subprocess per probe would cost more than the sweep. Nothing that
