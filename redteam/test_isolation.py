@@ -586,6 +586,73 @@ def main():
     finally:
         _sh_w.rmtree(_wd, ignore_errors=True)
 
+    # --- A MAP NOBODY COULD MEASURE IS NOT A MAP OF LOCKS -----------------------------
+    #
+    # `_verdict` learned to answer UNMEASURED after a dead target came back HARDENED,
+    # and the exit code was left at 0. Pointed at an endpoint that refuses every
+    # connection, this printed `summary: UNMEASURED 1`, wrote the artifact, and told the
+    # shell it had succeeded -- which a pipeline reads as the locks holding, the
+    # strongest claim this command makes, made from nothing. `recon` and `benign` both
+    # exit 3 for the same outage.
+    #
+    # DRIVEN AGAINST A PORT WITH NOTHING ON IT: that is loopback, so it is allowed by
+    # the offline rule, and a refused connection is the condition under test rather
+    # than a dependency on anything.
+    import subprocess as _sp_u, tempfile as _tf_u, shutil as _sh_u
+    _uw = _tf_u.mkdtemp()
+    try:
+        _ucfg = _os_w.path.join(_uw, "targets_deadbot.yaml")
+        io.open(_ucfg, "w", encoding="utf-8").write(chr(10).join([
+            "name: deadbot", "adapter: http",
+            'url: "http://127.0.0.1:9/chat"',
+            "request:", '  message: "{prompt}"',
+            "response:", '  reply: "reply"',
+            "oracle_context:", '  canaries: ["ACME-CANARY-9931"]', ""]))
+        _up = _sp_u.run(
+            [sys.executable,
+             _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+             "isolation", "--target-config", _ucfg, "--trials", "1"],
+            capture_output=True, text=True, timeout=900,
+            env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                     PYTHONIOENCODING="utf-8"))
+        _uout = (_up.stdout or "") + (_up.stderr or "")
+        check("an isolation run that measured nothing exits 3, not 0", _up.returncode, 3)
+        check("...and the verdict says so too", "UNMEASURED" in _uout, True)
+        check("...and it is not read as nothing being open",
+              "not the same as nothing open" in _uout, True)
+        # THE ARTIFACT IS STILL WRITTEN. It records that a run happened and learned
+        # nothing, which `coverage` and the report both read; the exit code was the
+        # part a pipeline acts on and the part that was wrong.
+        check("...while the map is still written, because it is a real record",
+              any(f.startswith("isolation_deadbot") for f in _os_w.listdir(_uw)), True)
+
+        # AND NO TWO COLUMNS RUN TOGETHER. `status` was a fixed width of 10 and
+        # `unmeasured` is exactly 10 characters, so this table printed `unmeasured0/1`
+        # -- the two columns a reader needs most in an outage, with no space between
+        # them. The rule against exactly that is stated two lines above in `format_map`
+        # and had been applied to one of the three columns.
+        _rows = [l for l in _uout.splitlines() if "unmeasured" in l]
+        check("the status column does not run into the next one",
+              all(" 0/1" in r for r in _rows) and bool(_rows), True)
+    finally:
+        _sh_u.rmtree(_uw, ignore_errors=True)
+
+    # AND THE WIDTHS FOLLOW THE VALUES, asked of the formatter directly so a status
+    # longer than any this fleet produces cannot reintroduce it.
+    from isolation import format_map as _fm
+    _wide = _fm({
+        "objective": "o", "verdict": "PARTIAL", "coupling": [],
+        "properties": [{"name": "p", "status": "a" * 24, "hits": "1000/1000",
+                        "locks": {"content": 1}}],
+        "combined": {"status": "open", "hits": "0/1", "locks": {}},
+    })
+    check("a status longer than the column still leaves a gap after it",
+          ("a" * 24 + " ") in _wide, True)
+    check("...and so does a long hits cell", "1000/1000 " in _wide, True)
+    check("...and the header still lines up with the rows",
+          _wide.splitlines()[1].index("hits")
+          == _wide.splitlines()[2].index("1000/1000"), True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

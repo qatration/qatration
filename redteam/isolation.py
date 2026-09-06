@@ -333,14 +333,26 @@ def format_map(result):
     # width follows the longest name so a long property can't collide with the next
     # column (a truncated map is a misread map)
     w = max([len("[combined]")] + [len(p["name"]) for p in result["properties"]]) + 2
+    # AND THE SAME RULE FOR THE OTHER TWO COLUMNS, which it was not applied to. `status`
+    # was a fixed 10 and `unmeasured` is exactly 10 characters long, so a run against a
+    # target that did not answer printed `unmeasured0/1` -- the two columns a reader
+    # needs most in that situation, run together. A truncated map is a misread map, and
+    # a collided one is worse: it looks like a value.
+    _st = [p["status"] for p in result["properties"]] + [result["combined"]["status"]]
+    _hi = [str(p["hits"]) for p in result["properties"]]
+    _hi += [str(result["combined"]["hits"])]
+    sw = max([len("status")] + [len(s) for s in _st]) + 2
+    hw = max([len("hits")] + [len(h) for h in _hi]) + 2
     lines = [f"objective: {result['objective']}   verdict: {result['verdict']}"]
-    lines.append(f"  {'property':<{w}}{'status':<10}{'hits':<8}blocked by")
+    lines.append(f"  {'property':<{w}}{'status':<{sw}}{'hits':<{hw}}blocked by")
     for p in result["properties"]:
         locks = ",".join(f"{k}:{v}" for k, v in p["locks"].items() if k != "compliance")
-        lines.append(f"  {p['name']:<{w}}{p['status']:<10}{p['hits']:<8}{locks or '-'}")
+        lines.append(f"  {p['name']:<{w}}{p['status']:<{sw}}{p['hits']:<{hw}}"
+                     f"{locks or '-'}")
     c = result["combined"]
     locks = ",".join(f"{k}:{v}" for k, v in c["locks"].items() if k != "compliance")
-    lines.append(f"  {'[combined]':<{w}}{c['status']:<10}{c['hits']:<8}{locks or '-'}")
+    lines.append(f"  {'[combined]':<{w}}{c['status']:<{sw}}{c['hits']:<{hw}}"
+                 f"{locks or '-'}")
     if result["coupling"]:
         lines.append(f"  coupling: {', '.join(result['coupling'])} "
                      f"— open alone, blocked together")

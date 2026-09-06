@@ -262,6 +262,25 @@ def main():
                    when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
         print(f"\nwrote {out}")
 
+    # 3 WHEN NOTHING WAS MEASURED, WHICH THE VERDICT ALREADY KNEW. `_verdict` learned to
+    # answer UNMEASURED after a dead target came back HARDENED, and the exit code was left
+    # at 0: pointed at an endpoint that refuses every connection this printed
+    # `summary: UNMEASURED 1`, wrote the artifact, and told the shell it had succeeded. A
+    # pipeline reads that as the locks holding, which is the strongest claim this command
+    # makes, made from nothing. `recon` and `benign` both exit 3 for the same outage.
+    #
+    # The map is still WRITTEN. It is an honest record that a run happened and learned
+    # nothing, and `coverage` and the report both read it; the exit code is the part a
+    # pipeline acts on, and it was the part that was wrong.
+    if maps and all(m["verdict"] == "UNMEASURED" for m in maps):
+        _n = len(maps)
+        _which = "the objective" if _n == 1 else "none of the %d objectives" % _n
+        print("\nNOTHING MEASURED - every property errored on every trial, so %s above "
+              "says nothing about %s.\n"
+              "  Nothing measured is not the same as nothing open. Check the endpoint is "
+              "up and answering, then run this again." % (_which, target.name))
+        return 3
+
 
 if __name__ == "__main__":
     main()
