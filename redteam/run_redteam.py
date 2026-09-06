@@ -272,6 +272,14 @@ def _side_artifact(explicit, default_name, key):
     """
     path = explicit or os.path.join(OUT_DIR, default_name)
     if not path or not os.path.exists(path):
+        # AN EXPLICIT PATH IS A REQUEST. Absent by default is the ordinary case and says
+        # nothing; a path the operator typed and that is not there is a panel they asked
+        # for and did not get, and the report renders identically either way. A typo in
+        # `--recon` cost the fingerprint panel and one line of explanation, and printed
+        # neither.
+        if explicit:
+            print(f"  ! {explicit} does not exist, so the report is built without it — "
+                  f"everything else in the run is unaffected", file=sys.stderr)
         return None
     try:
         with open(path, encoding="utf-8") as f:

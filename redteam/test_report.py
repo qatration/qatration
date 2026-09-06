@@ -239,6 +239,32 @@ def main():
     check("...and a row that held is not given a caveat it does not need",
           _in_table(_held), False)
 
+    # --- A PANEL ASKED FOR AND NOT GOT ---------------------------------------------------
+    #
+    # `--recon` and `--isolation` fold a side artifact into this report. Absent by default
+    # is the ordinary case and says nothing. A path the operator TYPED that is not there is
+    # a panel they asked for and did not get, and the report renders identically either
+    # way, so a typo cost the fingerprint panel and printed nothing at all.
+    import contextlib as _cx2, io as _io2
+    from run_redteam import _side_artifact as _side
+
+    _e = _io2.StringIO()
+    with _cx2.redirect_stderr(_e):
+        _got = _side("no_such_side_artifact_xyz.json", "recon_absent.json", "profile")
+    _said = _e.getvalue()
+    # `check(label, got, want)` in this suite: the third argument is the expectation.
+    check("a side artifact that is not there is not invented", _got is None, True)
+    check("...and a path the operator typed is named when it is missing",
+          "no_such_side_artifact_xyz.json" in _said, True)
+    check("...and the run is not implied to be affected", "unaffected" in _said, True)
+
+    # NOT ON THE ORDINARY ABSENCE. Most runs have no recon beside them, and a line every
+    # time is a line nobody reads.
+    _e2 = _io2.StringIO()
+    with _cx2.redirect_stderr(_e2):
+        _side(None, "recon_absent_xyz.json", "profile")
+    check("...while nothing is said when nobody asked", _e2.getvalue() == "", True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:
