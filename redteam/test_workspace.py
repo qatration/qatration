@@ -164,6 +164,80 @@ def check_every_command_refuses():
     check("a usable config is not refused",
           _refused({"oracle_context": {"canaries": ["ACME-CANARY-9931"]}}), "")
     check("...nor is one with no oracle_context at all", _refused({"adapter": "http"}), "")
+
+    # --- AND THE OTHER HALF: A PATH THAT IS NOT THERE ------------------------------------
+    #
+    # The rule above is about what a config CONTAINS. Whether it could be READ was a second
+    # rule with the same history and it was never finished: `run` grew a `_load` closure,
+    # which is a rule no sibling can call, `generate` wrote a second copy of it, and five
+    # commands opened the path bare.
+    #
+    # WALKED. `qatration benign --target-config nope.yaml`, and the same for `verify`,
+    # `recon`, `isolation` and `matrix`, each answered a mistyped filename with a Python
+    # traceback under the sentence `This is a bug in qatration, not a finding about your
+    # target and not a problem with your config` -- wrong on the last clause, and it asks
+    # the reader to file a bug for their own typo. The exit code was 2 either way, so a
+    # pipeline was never misled and only the person was.
+    #
+    # DRIVEN AS PROCESSES over the same scanned set, because the thing under test is what
+    # a shell sees. An in-process call would exercise the function and not the command, and
+    # the function was never the part that was missing.
+    import subprocess as _sp
+    import sys as _sys
+    import tempfile as _tfp
+    import cli as _cli
+    _mod_to_cmd = {}
+    for _cmd, (_mod, _blurb) in _cli.COMMANDS.items():
+        _mod_to_cmd.setdefault(_mod + ".py", _cmd)
+    # A reader with no command is reachable only as a module, so a person cannot mistype a
+    # path into it. Named rather than dropped, so the two sets stay comparable.
+    _drivable = [(_mod_to_cmd[_n], _n) for _n in _readers if _n in _mod_to_cmd]
+    check("the readers that a person can actually type a path into are found",
+          len(_drivable) >= 7, True)
+
+    _crashed, _wrong_code = [], []
+    _env = dict(_os.environ, PYTHONDONTWRITEBYTECODE="1", QATRATION_OUT=_tfp.mkdtemp())
+    # `matrix` compares stored per-model runs and refuses before that without a mode, so it
+    # is given the one that reaches the config read. Nothing here reaches a network: every
+    # one of these must stop at the path.
+    _EXTRA = {"matrix": ["--from-disk"], "sarif": ["--results", "nope.json"]}
+    for _cmd, _n in sorted(_drivable):
+        _p = _sp.run([_sys.executable, _os.path.join(_here, "cli.py"), _cmd,
+                      "--target-config", "definitely-not-here.yaml"] + _EXTRA.get(_cmd, []),
+                     capture_output=True, text=True, timeout=180, env=_env,
+                     cwd=_os.path.dirname(_here))
+        _out = (_p.stdout or "") + (_p.stderr or "")
+        if "Traceback (most recent call last)" in _out:
+            _crashed.append(_cmd)
+        if _p.returncode != 2:
+            _wrong_code.append("%s exited %s" % (_cmd, _p.returncode))
+    check("no command answers a path that is not there with a traceback",
+          sorted(_crashed), [])
+    check("...and every one of them exits 2, the code for a refused invocation",
+          sorted(_wrong_code), [])
+
+    # AND THE READER ITSELF SAYS WHICH OF THE THREE THINGS WENT WRONG, because `no such
+    # file`, `that is a directory` and `that is not YAML` have different remedies.
+    def _read(path):
+        try:
+            _ws.load_yaml_or_refuse(path, "target config", "test")
+        except SystemExit as e:
+            return str(e)
+        return ""
+
+    check("a path that is not there is named", "no target config at" in _read("nope.yaml"),
+          True)
+    check("...and the command that stopped is named", _read("nope.yaml").startswith("test:"),
+          True)
+    check("a directory is not reported as a missing file",
+          "is a directory" in _read(_here), True)
+    # A NAME IS THE COMMONEST WRONG PATH, because `--target` is an unambiguous prefix of
+    # `--target-config` and argparse accepts it. Said only for a bare name: a hint printed
+    # on every mistyped path is one nobody reads by the third time.
+    check("a bare name is diagnosed as the flag trap it usually is",
+          "prefix of `--target-config`" in _read("opsbot"), True)
+    check("...and a real path that is simply absent is not",
+          "prefix of `--target-config`" in _read("configs/opsbot.yaml"), False)
     return fails
 
 

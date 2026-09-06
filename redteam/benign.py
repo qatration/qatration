@@ -917,7 +917,8 @@ def main():
     # below is the whole point: there are two ways to name a target and the gate has to sit
     # above both of them, not inside one.
     if args.target_config:
-        cfg = yaml.safe_load(open(args.target_config, encoding="utf-8")) or {}
+        from workspace import load_yaml_or_refuse as _load_yaml
+        cfg = _load_yaml(args.target_config, "target config", "benign") or {}
         # THE COMMAND THIS TOOL TELLS AN OPERATOR TO RUN to measure their false-positive
         # rate. With `canaries: "ACME"` it would report a wall of noise, and the operator
         # would read that as the detector being broken rather than the config.

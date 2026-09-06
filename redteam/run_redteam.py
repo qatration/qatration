@@ -448,17 +448,14 @@ def main():
     # tool documents as "the target was exploited or breached". A CI reading that would treat a
     # mistyped filename as a security finding, which is the exact confusion the exit table
     # exists to prevent.
+    # THE RULE MOVED OUT. It was written here as a closure, which is a rule no sibling
+    # can call: `generate` wrote a second copy of it, and `benign`, `verify`, `recon`,
+    # `isolation` and `matrix` answered a mistyped path with a traceback that told the
+    # reader to file a bug against this tool. One reader, in `workspace`, for all six.
+    from workspace import load_yaml_or_refuse as _load_yaml
+
     def _load(path, what):
-        try:
-            return yaml.safe_load(open(path, encoding="utf-8"))
-        except FileNotFoundError:
-            raise SystemExit("ABORT — no %s at %s. Nothing was sent." % (what, path))
-        except IsADirectoryError:
-            raise SystemExit("ABORT — %s is a directory, not a %s file. Nothing was sent."
-                             % (path, what))
-        except Exception as e:
-            raise SystemExit("ABORT — could not read the %s at %s: %s: %s. Nothing was sent."
-                             % (what, path, type(e).__name__, e))
+        return _load_yaml(path, what, "run")
 
     all_attacks = _load(args.attacks, "arsenal")
     tcfg = _load(args.target_config, "target config")

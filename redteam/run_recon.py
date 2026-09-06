@@ -51,8 +51,8 @@ def main():
                          "which run_redteam.py picks up into the report)")
     args = ap.parse_args()
 
-    with open(args.target_config, encoding="utf-8") as f:
-        tcfg = yaml.safe_load(f) or {}
+    from workspace import load_yaml_or_refuse as _load_yaml
+    tcfg = _load_yaml(args.target_config, "target config", "recon") or {}
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "recon")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the

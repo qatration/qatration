@@ -494,6 +494,54 @@ def esc(s):
     return _html.escape(plain(s))
 
 
+def load_yaml_or_refuse(path, what="target config", where=""):
+    """Read a YAML path somebody typed, or refuse it. -> the parsed document.
+
+    THE OTHER HALF OF THE RULE BELOW, which says of the parse step that there is no
+    shared loader and so the checks lived in two commands and were missing from eight.
+    That was fixed for what a config CONTAINS and not for whether it could be read at
+    all: `run` grew a `_load` closure no sibling can call, `generate` wrote a second
+    version of the same refusal, and five commands still opened the path bare.
+
+    Walked, not supposed. `qatration benign --target-config nope.yaml`, and the same
+    for `verify`, `recon`, `isolation` and `matrix`, each answered a mistyped filename
+    with a Python traceback and the sentence `This is a bug in qatration, not a
+    finding about your target and not a problem with your config`, which is wrong on
+    the last clause and asks the reader to file a bug for their own typo.
+
+    THE COMMONEST CAUSE IS A FLAG THAT LOOKS RIGHT. `--target` is an unambiguous
+    prefix of `--target-config`, so argparse accepts it and hands a target NAME to
+    something that opens a FILE. Said only when the path looks like a name, because a
+    hint printed on every mistyped path is one nobody reads by the third time.
+    """
+    import yaml
+    lead = (where + ": ") if where else ""
+    # ASKED OF THE PATH, NOT OF THE ERRNO. `run`'s closure caught `IsADirectoryError`, which
+    # POSIX raises and Windows does not: there a directory arrives as `PermissionError` and
+    # fell through to the generic branch, so the message read `Permission denied` and sent the
+    # reader after file ownership for a path that was simply a folder. What the path IS does
+    # not depend on the platform.
+    if os.path.isdir(path):
+        raise SystemExit(lead + "ABORT — %s is a directory, not a %s file. Nothing was sent."
+                         % (path, what))
+    try:
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        why = "no %s at %s." % (what, path)
+    except Exception as e:
+        why = "could not read the %s at %s: %s: %s" % (what, path, type(e).__name__, e)
+    lines = [lead + "ABORT — " + why + " Nothing was sent."]
+    if not os.path.splitext(str(path))[1] and not os.path.dirname(str(path)):
+        lines += [
+            "  That looks like a NAME rather than a path. `--target` is an unambiguous",
+            "  prefix of `--target-config`, argparse accepts the abbreviation, and this",
+            "  command is handed a name where it wanted a file. Give it the config itself:",
+            "  it reads the url and the oracle context from there.",
+        ]
+    raise SystemExit("\n".join(lines))
+
+
 def refuse_unusable_config(cfg, where):
     """Refuse a target config the engine cannot use, wherever it was loaded.
 

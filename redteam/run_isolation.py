@@ -34,8 +34,8 @@ from workspace import (OUT as WORKSPACE_OUT, safe_target_name,
 def load_target(cfg_path, model=None):
     """Reuse run_redteam's adapter registry and target config verbatim — one place
     to add a target, both entry points get it."""
-    with open(cfg_path, encoding="utf-8") as f:
-        tcfg = yaml.safe_load(f) or {}
+    from workspace import load_yaml_or_refuse as _load_yaml
+    tcfg = _load_yaml(cfg_path, "target config", "isolation") or {}
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "isolation")
     # AUTHORISATION FIRST, before a target is even built. Isolation sends real traffic — a
@@ -125,8 +125,8 @@ def main():
         args.keys = True          # composition needs the keys the search finds
 
     path = objectives_path(args.objectives)
-    with open(path, encoding="utf-8") as f:
-        objectives = yaml.safe_load(f) or []
+    from workspace import load_yaml_or_refuse as _load_yaml
+    objectives = _load_yaml(path, "objectives file", "isolation") or []
     # The same rule, on the corpus where a typo is worst: an unknown name leaves nothing to
     # evaluate, every trial misses, and an objective whose properties are all locked reads as
     # HARDENED — the strongest claim this command makes.

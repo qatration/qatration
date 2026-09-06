@@ -129,7 +129,8 @@ def main():
                          "next run gets it for free instead of rediscovering it")
     args = ap.parse_args()
 
-    tcfg = yaml.safe_load(open(args.target_config, encoding="utf-8"))
+    from workspace import load_yaml_or_refuse as _load_yaml
+    tcfg = _load_yaml(args.target_config, "target config", "adaptive")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "adaptive")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the

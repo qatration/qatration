@@ -389,8 +389,8 @@ def main():
     if args.all:
         return audit(args.trials, args.confirm_trials)
 
-    with io.open(args.target_config, encoding="utf-8") as f:
-        tcfg = yaml.safe_load(f) or {}
+    from workspace import load_yaml_or_refuse as _load_yaml
+    tcfg = _load_yaml(args.target_config, "target config", "verify") or {}
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "verify")
     if not tcfg.get("name"):

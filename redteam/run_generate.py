@@ -48,16 +48,10 @@ def main():
     # `--target-config`, so argparse accepts it and hands a target NAME to something that opens
     # a path -- and a stack trace tells the reader the tool is broken rather than that they
     # typed the wrong flag.
-    if not os.path.isfile(args.target_config):
-        raise SystemExit(
-            f"generate: --target-config expects a path to a YAML file, and "
-            f"{args.target_config!r} is not one.\n"
-            f"  If you meant the target's NAME, this command wants its config instead: it "
-            f"reads the url and the oracle context from it.\n"
-            f"  Note that `--target` is accepted as an abbreviation of `--target-config`, "
-            f"which is how a name ends up here.")
-    with open(args.target_config, encoding="utf-8") as f:
-        tcfg = yaml.safe_load(f) or {}
+    # THROUGH THE ONE READER. This refusal was written out here, and separately inside
+    # `run` as a closure, while five siblings had neither and crashed.
+    from workspace import load_yaml_or_refuse as _load_yaml
+    tcfg = _load_yaml(args.target_config, "target config", "generate") or {}
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "generate")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the

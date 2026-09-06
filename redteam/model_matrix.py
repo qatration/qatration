@@ -40,7 +40,8 @@ def main():
     if not args.models and not args.from_disk:
         ap.error("--models is required unless --from-disk is given")
 
-    cfg = yaml.safe_load(open(args.target_config, encoding="utf-8")) or {}
+    from workspace import load_yaml_or_refuse as _load_yaml
+    cfg = _load_yaml(args.target_config, "target config", "matrix") or {}
     from workspace import refuse_unusable_config as _refuse
     _refuse(cfg, "matrix")
     from workspace import config_name as _config_name
