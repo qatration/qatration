@@ -143,6 +143,39 @@ def dig(data, path):
     return cur
 
 
+def _observations(raw):
+    """Normalise whatever a deployment calls a tool observation into a list of strings.
+
+    A STRING IS ITERABLE, WHICH IS THE WHOLE DEFECT -- the same one `bad_context_shapes`
+    exists for on the config side. `observations: "trace.output"` pointing at one string
+    was iterated character by character: thirty observations of one letter each, and
+    `canary_in_context` joins them with spaces, so `ACME-CANARY-9931` became
+    `A C M E - C A N A R Y ...` and the detector could not match it.
+
+    A MAPPING LOSES THE HALF THAT MATTERS. Iterating a dict yields its KEYS, so a
+    {tool: output} shape kept the tool names and dropped every output -- which is where a
+    planted secret would be. `canary_in_context` is the detector for a boundary breach:
+    the secret entered the agent's context even though the model never displayed it. Both
+    shapes made that breach invisible and the run reported the target as clean.
+
+    `_pairs` beside this already normalises the same three shapes for tool CALLS, including
+    the dict one, and the rule simply was not written twice.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, dict):
+        # The tool name travels with its output: a reader wants to know which call carried
+        # the string, and `_pairs` keeps the same pairing for the call side.
+        return ["%s: %s" % (k, v) for k, v in raw.items()]
+    if isinstance(raw, (list, tuple)):
+        return [str(o) for o in raw]
+    # EVERYTHING ELSE IS ONE OBSERVATION, and that includes a bare string: the point is that
+    # a string is never ITERATED. An explicit branch for it above this line would be a line
+    # that cannot fail -- deleting it changes nothing, because this is what catches it -- so
+    # what protects the case is the check in `test_http_adapter`, not a second `isinstance`.
+    return [str(raw)]
+
+
 def _pairs(raw):
     """Normalise whatever a deployment calls a tool call into [(name, arguments)].
 
@@ -752,9 +785,9 @@ class HttpConfiguredTarget(Target):
                 self.resolutions["observations"] += 1
             calls = _pairs(_rawcalls) if self.calls_path else []
             resolved = _pairs(_rawres) if self.resolved_path else []
-            obs = _rawobs if self.observations_path else []
+            obs = _observations(_rawobs) if self.observations_path else []
             return Probe(prompt=prompt, output=str(reply), tool_calls=calls,
-                         observations=[str(o) for o in (obs or [])], resolved=resolved,
+                         observations=obs, resolved=resolved,
                          seconds=round(time.time() - t0, 1))
         except Exception as e:
             detail = ""
