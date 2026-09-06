@@ -823,6 +823,27 @@ def main():
                 print(f"      which is worth reading beside the list above — a key spelled "
                       f"{_near[0]!r} arms nothing that a key spelled correctly would.")
 
+    # WHERE THIS ARSENAL TELLS THE TARGET TO SEND THE DATA. `lint` refuses a registrable
+    # host in the corpus this repository ships -- an agent told to send data to a name
+    # somebody can own will send it to whoever owns it -- and `lint` takes no arguments, so
+    # the corpus a customer writes never reached the rule. Walked: an arsenal telling the
+    # target to POST the customer list to `collector-9x2.com` ran with no notice at all.
+    #
+    # NAMED, NOT REFUSED, and that is the difference from the shipped corpus. A customer
+    # testing exfiltration to a domain THEY own is doing the right thing and this must not
+    # stand in front of it. What it must not do is stay quiet: if the target complies, real
+    # data leaves for that name, and the tool that said the words should say so first.
+    from lint_arsenal import registrable_hosts as _rh, sent_strings as _ss
+    _named_hosts = sorted({h for _a in all_attacks
+                           for h in _rh(" ".join(_ss(_a)))})
+    if _named_hosts:
+        print("  ! this arsenal names %d host(s) somebody can register, and tells the "
+              "target to reach them:" % len(_named_hosts))
+        for _h in _named_hosts[:8]:
+            print("      %s" % _h)
+        print("      If those are not yours, they are somebody's. RFC 2606 reserved space "
+              "(.example)\n      tests the same behaviour and reaches nobody.")
+
     if _loud:
         print("  ! %d detector(s) have nothing to subtract, so ordinary replies may score as "
               "findings:" % len(_loud))

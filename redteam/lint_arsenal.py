@@ -55,6 +55,24 @@ _NOT_A_HOST = (".py", ".json", ".yaml", ".yml", ".html", ".md", ".txt", ".jsonl"
                ".join", ".format", ".append", ".exe", ".dll", ".so")
 
 
+def sent_strings(a):
+    """Everything an attack actually puts in front of a target, in one place.
+
+    Written out inside `main`'s loop, where only the shipped corpus reaches it, and
+    with the reason attached: so a new delivery shape cannot quietly escape the check
+    that reads it. It escaped the OTHER way instead -- a second caller, in `run`,
+    needed the same list and there was nothing to call.
+    """
+    if not isinstance(a, dict):
+        return []
+    out = [a.get("text") or ""]
+    out += [str(x) for x in (a.get("steps") or [])]
+    out += [str((h or {}).get("content", "")) for h in (a.get("history") or [])]
+    out.append(str((a.get("seed") or {}).get("text", "")))
+    out.append(str(a.get("user_prompt") or ""))
+    return [s for s in out if s]
+
+
 def registrable_hosts(text):
     """Every host in a payload that somebody could go and register."""
     out = set()
@@ -655,11 +673,9 @@ def main():
                 continue
 
             # SEE registrable_hosts. Everything the attack actually sends, in one place, so a
-            # new delivery shape cannot quietly escape the check.
-            sent = [a.get("text") or ""]
-            sent += [str(x) for x in (a.get("steps") or [])]
-            sent += [str((h or {}).get("content", "")) for h in (a.get("history") or [])]
-            sent.append(str((a.get("seed") or {}).get("text", "")))
+            # new delivery shape cannot quietly escape the check -- and through the shared
+            # assembly, because `run` needs the same list to warn a customer about their own.
+            sent = sent_strings(a)
             for host in sorted(registrable_hosts(" ".join(sent))):
                 errors.append(
                     f"{fname}: {aid}: payload names {host}, which is registrable. Use RFC 2606 "
