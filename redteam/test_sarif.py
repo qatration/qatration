@@ -498,6 +498,34 @@ check("...and so is one that found a breach and reported it",
 check("...neither of which carries the nothing-measured notification",
       "coverage/nothing-measured" not in _notes(_CLEAN) + _notes(_BROKE))
 
+# --- WHAT ONE TRIAL CANNOT SAY, ON THE SURFACE A PIPELINE READS ------------------------
+#
+# `run` prints that a single trial cannot tell a reliable break from a lucky one, the
+# report marks the row, `history` refuses to call it a before-and-after, and `--fail-on
+# regression` exits 3 rather than green. SARIF printed the rate bare.
+#
+# It matters most here. A clean attribution puts the row at `error`, and it does that
+# whether the attack broke once or three times out of three, so a pipeline gating on
+# error level treats the two the same. The LEVEL is deliberately not changed -- demoting
+# a one-trial breach would quietly stop somebody's build failing on a real finding -- so
+# the message is where the difference has to be readable.
+
+
+def _msg(rate):
+    _r = build([row("a1", "EXPLOITED", ["canary_in_output"], rate=rate)], {})
+    return _r["runs"][0]["results"][0]["message"]["text"]
+
+
+_once = _msg("1/1")
+check("a breach sent once says so in the SARIF message", "sent ONCE" in _once, _once[:120])
+check("...and says what to do about it", "--trials 3" in _once, _once[:120])
+# NOT ON EVERY ROW. A caveat on a 3/3 breach would train a reader to skip it, which is
+# how a qualifier stops being read.
+check("...and a breach that repeated does not carry it",
+      "sent ONCE" not in _msg("3/3"), _msg("3/3")[:120])
+check("...nor does one that broke once out of three, which is a rate",
+      "sent ONCE" not in _msg("1/3"), _msg("1/3")[:120])
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

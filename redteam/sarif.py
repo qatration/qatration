@@ -111,6 +111,21 @@ def _message(row, verdict, noisy):
                               a.get("id", "?"), a.get("category", "uncategorised"))]
     if row.get("rate"):
         parts.append("fired on %s trials" % row["rate"])
+        # AND WHAT ONE TRIAL CANNOT SAY. Every other surface qualifies this: `run` prints
+        # that a single trial cannot tell a reliable break from a lucky one, the report
+        # marks the row, `history` refuses to call it a before-and-after, and `--fail-on
+        # regression` exits 3 rather than green. Here the rate was printed bare, and this
+        # is the surface a pipeline gates on -- where the row lands as `error` on a clean
+        # attribution whether it broke once or three times out of three.
+        #
+        # The LEVEL is left alone deliberately. Demoting a one-trial breach would quietly
+        # stop somebody's build failing on a real finding, which is a worse trade than a
+        # sentence they can read. `QUALIFIERS_NOT_CARRIED` exempts `trials` on the grounds
+        # that the rate rides on the message: it does, and now so does what it costs.
+        _d = str(row["rate"]).split("/")[-1].strip()
+        if _d == "1":
+            parts.append("sent ONCE, so this cannot be told from a lucky break -- re-run "
+                         "with --trials 3 before acting on it")
     if row.get("fired"):
         parts.append("detectors: %s" % ", ".join(row["fired"]))
     if verdict == "unattributable":
