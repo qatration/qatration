@@ -750,6 +750,38 @@ def check_measured_when():
 
 
 
+def check_named_build():
+    """An `unknown` build is an absence wearing a value.
+
+    `engine_version` is best-effort and stamps the literal string when neither git nor
+    an installed release can answer, which is the normal case in a tarball. Every
+    comparison of two builds here is `a and b and a != b`, so that string breaks the
+    rule in both directions at once: two unknowns compare EQUAL and withdraw a caveat
+    nothing earned, and one against a real build compares UNEQUAL and raises a confound
+    naming a change nobody measured -- `history.diff` printed exactly that, as
+    `engine unknown -> a1b2c3`, three lines under a comment stating the correct rule.
+    """
+    from workspace import named_build
+    bad = []
+
+    def want(label, got, expect):
+        print("%s  %s -> %r" % ("PASS" if got == expect else "FAIL", label, got))
+        if got != expect:
+            bad.append("%s: %r != %r" % (label, got, expect))
+
+    want("a real build is a build", named_build("a1b2c3"), "a1b2c3")
+    want("the sentinel is not", named_build("unknown"), "")
+    want("...in any case", named_build("UNKNOWN"), "")
+    want("...with whitespace around it", named_build("  unknown  "), "")
+    want("a missing stamp is not a build either", named_build(None), "")
+    want("...nor an empty one", named_build(""), "")
+    # AND IT MUST NOT EAT A REAL BUILD that merely contains the word: git short revs are
+    # hex, but an installed release stamps a version string and this must not judge it.
+    want("a build that mentions it is still a build",
+         named_build("0.4.1-unknown"), "0.4.1-unknown")
+    return bad
+
+
 def check_evidence_guard():
     """A run must not silently replace a results file somebody committed.
 
@@ -873,7 +905,7 @@ def check_evidence_guard():
 
 
 if __name__ == "__main__":
-    _bad = check_evidence_guard() + check_measured_when()
+    _bad = check_evidence_guard() + check_measured_when() + check_named_build()
     if _bad:
         for _b in _bad:
             print('  !', _b)

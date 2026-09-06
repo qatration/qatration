@@ -166,6 +166,30 @@ def main():
               not any("engine" in c for c in H.diff("cf7")["confounds"]),
               str(H.diff("cf7")))
 
+        # AND AN "UNKNOWN" IS A MISSING STAMP, not a different one. `engine_version` is
+        # best-effort and stamps that literal string in a tarball with no git history,
+        # which is truthy -- so the rule two comments above had a hole the size of the
+        # sentinel, and this diff printed `engine unknown -> bbb222`: a confound naming
+        # a change nobody had measured, on a timeline whose only fault was being
+        # recorded without a repository to ask.
+        H.record({"target": "cf8", "model": "m", "trials": 3, "engine": "unknown"},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf8", "model": "m", "trials": 3, "engine": "bbb222"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...and a run that could not name its build raises nothing either",
+              not any("engine" in c for c in H.diff("cf8")["confounds"]),
+              str(H.diff("cf8")))
+
+        # AND TWO OF THEM ARE NOT AGREEMENT. This one is silent either way, so it is
+        # here to say which silence it is: nothing was compared, not nothing changed.
+        H.record({"target": "cf9", "model": "m", "trials": 3, "engine": "unknown"},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3, "engine": "unknown"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("...and two unknowns are not two matching builds",
+              not any("unknown" in c for c in H.diff("cf9")["confounds"]),
+              str(H.diff("cf9")))
+
         # THE THIRD INPUT TO A VERDICT. Target, oracle, and the config that arms the
         # oracle: adding `sysprompt_markers` between two runs takes `sysprompt_leak` from
         # silent to armed, and the findings it then produces are not the target getting

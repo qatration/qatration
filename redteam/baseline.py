@@ -95,6 +95,31 @@ def days_between(then, now):
     return (b - a).days
 
 
+def judged_by(target, out_dir=None):
+    """-> the build that produced this target's baseline, or "" if it does not say.
+
+    `measured_on` beside this answers WHEN, and the report turns that into a warning:
+    a week or more before the sweep and the oracle may have moved since. That is an
+    inference from age, and the build is the fact it stands in for. A baseline measured
+    this morning under a different oracle is exactly as unusable as a stale one and the
+    page called it fresh; a baseline from a month ago under the same oracle is not
+    stale at all and the page scolded it.
+
+    Empty for every baseline written before `benign` stamped its build, which is all
+    35 stored here, and empty for a stamp that says `unknown` -- `named_build` is where
+    that is decided. A caller holding an empty string has not learned that the builds
+    match, which is why the report falls back to the age rather than to silence.
+    """
+    from workspace import named_build
+    path = _path(target, out_dir)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return ""
+    return named_build((data.get("meta") or {}).get("engine"))
+
+
 def measured_on(target, out_dir=None):
     """-> (date string, True if the BENIGN RUN said so), or None when there is no baseline.
 

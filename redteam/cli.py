@@ -98,8 +98,9 @@ def _version():
     # it says something the release does not.
     try:
         from target import engine_version
-        ev = (engine_version() or "").strip()
-        if ev and ev.lower() != "unknown" and ev != package_version():
+        from workspace import named_build
+        ev = named_build(engine_version())
+        if ev and ev != package_version():
             line += " (engine %s)" % ev
     except Exception:
         pass

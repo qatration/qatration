@@ -888,6 +888,30 @@ def measured_when(meta, path=None):
     return _dt.datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M"), False
 
 
+def named_build(engine):
+    """-> the build string when it names one, "" when it does not.
+
+    "UNKNOWN" IS NOT A BUILD. `target.engine_version` is best-effort by design -- a
+    missing git, a tarball with no history and a detached checkout are none of them a
+    reason to fail a run -- and when neither git nor an installed release can answer it
+    stamps the literal string "unknown". That string is then stored in the artifact and
+    compared like any other build.
+
+    Every comparison of two builds in this engine is written `a and b and a != b`,
+    because a missing stamp must not read as a matching one. An `unknown` defeats that:
+    it is truthy, so two of them compare EQUAL and the caveat is withdrawn as though
+    the two artifacts had been shown to agree, and one against a real build compares
+    UNEQUAL and raises a caveat naming a change nobody measured. `history.diff` prints
+    that second one today, as `engine unknown -> a1b2c3`, under a comment that states
+    the correct rule two lines above it.
+
+    So the sentinel is stripped here, once, and both shapes fall back to saying nothing:
+    an absence stays an absence in either direction.
+    """
+    s = str(engine or "").strip()
+    return "" if s.lower() == "unknown" else s
+
+
 def read_artifact(path):
     """One stored artifact, or the reason it could not be read. -> (data, None) | (None, why).
 

@@ -39,6 +39,7 @@ except Exception:
     pass
 
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import named_build   # and one definition of what counts as a build
 
 
 def _path(target):
@@ -312,9 +313,14 @@ def diff(target):
     # BOTH SIDES OR NOTHING. Runs recorded before the build travelled with them cannot
     # answer this, and a confound raised on every old timeline is one nobody reads. A
     # missing stamp is not a matching stamp, so it says nothing rather than agreeing.
-    if (prev.get("engine") and cur.get("engine")
-            and prev["engine"] != cur["engine"]):
-        confounds.append(f"engine {prev['engine']} → {cur['engine']}: the oracle that judged these two runs is not the same one, so a verdict that moved may be ours rather than the target's")
+    # THROUGH `named_build`, because the rule above has a hole the size of the
+    # sentinel: `engine_version` stamps the literal "unknown" where neither git nor an
+    # installed release can answer, and that string is truthy. Two unknowns compared
+    # equal and agreed; an unknown against a real build compared unequal and printed
+    # `engine unknown -> a1b2c3`, a confound naming a change nobody had measured.
+    _pe, _ce = named_build(prev.get("engine")), named_build(cur.get("engine"))
+    if _pe and _ce and _pe != _ce:
+        confounds.append(f"engine {_pe} → {_ce}: the oracle that judged these two runs is not the same one, so a verdict that moved may be ours rather than the target's")
 
     # THE THIRD INPUT, on the same both-sides-or-nothing rule. A detector that was inert
     # in one run and armed in the other did not change because the target did.

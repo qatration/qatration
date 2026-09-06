@@ -1763,8 +1763,11 @@ def main():
     import tempfile as _tf5, shutil as _sh5, json as _js5, importlib as _il5
     _aw = _tf5.mkdtemp()
     try:
-        def _dated_panel(bwhen, rwhen):
-            _js5.dump({"meta": {"target": "agebot", "probes": 2, "when": bwhen},
+        def _dated_panel(bwhen, rwhen, bbuild=None, rbuild=None):
+            _bmeta = {"target": "agebot", "probes": 2, "when": bwhen}
+            if bbuild is not None:
+                _bmeta["engine"] = bbuild
+            _js5.dump({"meta": _bmeta,
                        "rows": [{"probe": {"output": "x"}, "fired": [], "refused": False}] * 2},
                       io.open(os.path.join(_aw, "benign_agebot.json"), "w",
                               encoding="utf-8", newline=""))
@@ -1774,8 +1777,11 @@ def main():
                 import workspace as _w7, report_engine as _r7
                 _il5.reload(_w7)
                 _il5.reload(_r7)
-                return _r7.build_html({"target": "agebot", "attribution": "  measured.",
-                                       "when": rwhen}, [])
+                _rmeta = {"target": "agebot", "attribution": "  measured.",
+                          "when": rwhen}
+                if rbuild is not None:
+                    _rmeta["engine"] = rbuild
+                return _r7.build_html(_rmeta, [])
             finally:
                 if _was is None:
                     os.environ.pop("QATRATION_OUT", None)
@@ -1794,12 +1800,58 @@ def main():
         check("a baseline measured the same day is dated and not scolded",
               "baseline measured 2026-09-03" in _same
               and "days before this run" not in _same, "a same-day baseline was flagged")
+        # AND NOT HEDGED EITHER. The caveat is a hedge about an oracle that had no time
+        # to move, and one printed on every honest run is one nobody reads by the third.
+        check("...and carries no caveat about an oracle that had no time to move",
+              "may have moved" not in _same, _same[:120])
         # AN MTIME IS NOT A MEASUREMENT. `workspace.measured_when` exists because git does not
         # preserve mtimes, and a date read off the filesystem must say so rather than pass as
         # something the run recorded.
         _nodate = _dated_panel(None, "2026-09-03 10:00")
         check("a baseline whose run recorded no date says where the date came from",
               "the run did not say" in _nodate, "an mtime was presented as a measurement")
+
+        # AND THE AGE WAS A PROXY FOR THE BUILD. The question behind every sentence in
+        # this panel is whether the oracle that produced these rates is the one that
+        # produced the verdicts they qualify, and the line answered it off a calendar:
+        # `the oracle has moved since` on any baseline a week old, including one judged
+        # by this exact build, and nothing at all about a baseline measured this morning
+        # under a different one -- which is the case that costs the reader something.
+        _split = _dated_panel("2026-09-03 08:00", "2026-09-03 10:00",
+                              bbuild="aaa111", rbuild="bbb222")
+        check("a baseline judged by another build says so on a page dated today",
+              "judged by build aaa111 and this run by bbb222" in _split,
+              "a same-day baseline from a different oracle passed as agreement")
+        check("...and says what that costs the rates above",
+              "a different oracle than the verdicts" in _split, _split[:80])
+
+        # AND THE OTHER DIRECTION, which is the one the calendar got wrong every time:
+        # a month-old baseline judged by this build is not stale, and the page said it
+        # was.
+        _agreed = _dated_panel("2026-08-21 17:28", "2026-09-03 10:00",
+                               bbuild="aaa111", rbuild="aaa111")
+        check("an old baseline judged by this build is dated, not scolded",
+              "13 days before this run" in _agreed
+              and "may have moved" not in _agreed, "the build was known and ignored")
+        check("...and no build sentence is printed when there is nothing to report",
+              "judged by build" not in _agreed, _agreed[:80])
+
+        # BOTH SIDES OR NOTHING. A baseline with no stamp has not been shown to agree,
+        # so the sentence falls back to the age and stays a hedge rather than naming a
+        # build it does not have. Every one of the 35 baselines stored here is this row.
+        _halfstamp = _dated_panel("2026-08-21 17:28", "2026-09-03 10:00",
+                                  bbuild=None, rbuild="bbb222")
+        check("a baseline with no build recorded names none",
+              "judged by build" not in _halfstamp, _halfstamp[:80])
+        check("...and keeps the age warning it cannot replace",
+              "may have moved" in _halfstamp, _halfstamp[:80])
+
+        # AND AN "UNKNOWN" IS ONE OF THOSE, not a build that differs from ours. Through
+        # `workspace.named_build`, so the sentinel is decided in one place.
+        _unk = _dated_panel("2026-08-21 17:28", "2026-09-03 10:00",
+                            bbuild="unknown", rbuild="bbb222")
+        check("a baseline stamped `unknown` is not a build that differs",
+              "judged by build" not in _unk and "may have moved" in _unk, _unk[:80])
     finally:
         _sh5.rmtree(_aw, ignore_errors=True)
 

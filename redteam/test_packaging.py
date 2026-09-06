@@ -1101,6 +1101,11 @@ def test_cli_help_version_and_unknown_command():
 
     p = _cli(["--version"])
     assert p.returncode == 0 and p.stdout.startswith("qatration "), p.stdout
+    # AND NEVER THE SENTINEL. `engine_version` stamps the literal "unknown" where there
+    # is no repository to ask, and printing it beside the release reads as a second fact
+    # that happens to be missing rather than as one question that could not be answered.
+    # Through `workspace.named_build`, which is where that string stops being a build.
+    assert "unknown" not in p.stdout, p.stdout
 
     p = _cli(["definitely-not-a-command"])
     assert p.returncode == 2, "an unknown command must fail, not fall through"

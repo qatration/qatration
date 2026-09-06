@@ -340,7 +340,9 @@ def build_html(meta, results, recon=None, isolation=None):
         # IMPORTED UNDER A NAME, because `baseline` is already a local variable in this
         # function -- the config's declared tool-input baseline, a different thing entirely.
         from baseline import (refusal_rate as _refusal_rate, measured_on as _measured_on,
-                              OVER_REFUSING as _OVER)
+                              OVER_REFUSING as _OVER, judged_by as _judged_by,
+                              STALE_AFTER_DAYS as _STALE)
+        from workspace import named_build as _named_build
         from workspace import OUT as _OUT
         _rr = _refusal_rate(meta.get("target"), out_dir=_OUT)
         if _rr and _rr[1]:
@@ -364,11 +366,34 @@ def build_html(meta, results, recon=None, isolation=None):
         if _on:
             _bdate, _bsaid = _on
             _age = _days_between(_bdate, meta.get("when"))
-            lines += ('<div>baseline measured %s%s%s</div>'
+            _agetail = ("" if _age is None or _age < _STALE
+                        else " — %d days before this run" % _age)
+            # AND BY WHICH BUILD, WHICH IS WHAT THE AGE WAS STANDING IN FOR. The age is
+            # a proxy for one question -- is the oracle that produced these rates the
+            # one that produced the verdicts they qualify -- and this line answered it
+            # by guessing from a calendar. It asserted `the oracle has moved since` on
+            # every baseline a week old, including the ones judged by this exact build,
+            # and said nothing at all about a baseline measured this morning under a
+            # different one, which is the case that actually costs the reader something.
+            #
+            # BOTH SIDES OR NOTHING, the same rule the timeline states: a baseline with
+            # no stamp has not been shown to agree, so the age keeps its inference and
+            # the sentence stays a hedge. All 35 baselines stored here predate the
+            # stamp, so on this fleet nothing changes -- it changes on the next one
+            # somebody measures.
+            _bbuild = _judged_by(meta.get("target"), out_dir=_OUT)
+            _rbuild = _named_build(meta.get("engine"))
+            if _bbuild and _rbuild:
+                _oracle = ("" if _bbuild == _rbuild else
+                           "%s judged by build %s and this run by %s, so these rates "
+                           "come from a different oracle than the verdicts they qualify"
+                           % ("," if _agetail else " —", esc(_bbuild), esc(_rbuild)))
+            else:
+                _oracle = ", and the oracle may have moved since" if _agetail else ""
+            lines += ('<div>baseline measured %s%s%s%s</div>'
                       % (esc(_bdate[:16]),
                          "" if _bsaid else " (from the file's timestamp; the run did not say)",
-                         "" if _age is None or _age < 7 else
-                         " — %d days before this run, and the oracle has moved since" % _age))
+                         _agetail, _oracle))
         attribution_html = (f'<div class="panel"><div class="ptitle">what this target does '
                             f'unattacked</div><div class="{cls}">{lines}</div></div>')
 

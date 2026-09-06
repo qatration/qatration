@@ -243,6 +243,38 @@ def main():
     check("...and a day under it is not", _aged(_STALE - 1) == "",
           _aged(_STALE - 1)[:140])
 
+    # AND THE AGE IS A PROXY FOR THE BUILD, which the baseline now carries. Staleness is
+    # one question asked sideways -- is the oracle that produced these rates the one that
+    # produced the verdicts they qualify -- and a calendar answers it wrong in both
+    # directions: a month-old baseline judged by this build is not stale, and one measured
+    # this morning under a different build is, and a date cannot tell them apart.
+    #
+    # THROUGH `named_build`, so a stamp that says `unknown` is read as the absence it is
+    # rather than as a build that happens to differ from ours.
+    from baseline import judged_by as _judged_by
+
+    def _stamped(engine):
+        """A workspace whose baseline was written by `engine`, and what `judged_by` says."""
+        _w = tempfile.mkdtemp()
+        _meta = {"target": "bb", "when": "2026-09-01 10:00:00"}
+        if engine is not None:
+            _meta["engine"] = engine
+        with open(os.path.join(_w, "benign_bb.json"), "w", encoding="utf-8") as _f:
+            _js7.dump({"meta": _meta,
+                       "rows": [{"id": "p1", "fired": [], "refused": False,
+                                 "probe": {"output": "hello"}}]}, _f)
+        return _judged_by("bb", _w)
+
+    check("a baseline names the build that judged it", _stamped("a1b2c3") == "a1b2c3",
+          repr(_stamped("a1b2c3")))
+    check("...and one written before the stamp names none", _stamped(None) == "",
+          repr(_stamped(None)))
+    check("...and `unknown` is one of those, not a build that differs",
+          _stamped("unknown") == "", repr(_stamped("unknown")))
+    check("a target with no baseline at all claims nothing",
+          _judged_by("nobaseline", tempfile.mkdtemp()) == "",
+          repr(_judged_by("nobaseline", tempfile.mkdtemp())))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
