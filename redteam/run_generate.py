@@ -74,9 +74,17 @@ def main():
 
     prof_path = args.recon or os.path.join(WORKSPACE_OUT, f"recon_{name}.json")
     if not os.path.exists(prof_path):
-        print(f"no recon profile at {prof_path}\n"
-              f"run: run_recon.py --target-config {args.target_config}")
-        return
+        # 3, NOT 0. The input this command works from is not there, so nothing was
+        # generated and nothing was measured, and returning None made `cli` exit 0 --
+        # which a pipeline reads as `asked and answered`. `compare_recon` reached the
+        # same conclusion for the same situation and wrote it down there.
+        #
+        # AND THE REMEDY IS A COMMAND, not a path. `run_recon.py` exists in a checkout of
+        # this repository and nowhere in an installed package, so the line telling a
+        # reader what to do next was the one thing on the page they could not run.
+        print(f"no recon profile at {prof_path} - profile the target first:"
+              f"\n    qatration recon --target-config {args.target_config}")
+        return 3
     with open(prof_path, encoding="utf-8") as f:
         profile = json.load(f)
 
@@ -93,8 +101,12 @@ def main():
         print(f"  - {s['ask'][:64]:<66}dropped, {s['why']}")
 
     if not objs:
-        print("\nnothing to write.")
-        return
+        # 0, AND THE DIFFERENCE FROM THE BRANCH ABOVE IS THE POINT. The profile was read
+        # and states no prohibitions: an answer about the target rather than a missing
+        # input, and this command did the work it was asked to do.
+        print("\nnothing to write: this profile states no prohibitions to turn into "
+              "objectives, which is an answer about the target rather than a failure.")
+        return 0
     if args.show:
         print("\n" + to_yaml(objs, name))
         return

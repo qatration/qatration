@@ -173,6 +173,41 @@ def main():
         # live in neighbouring suites and the mix-up prints a passing property as a failure.
         check("...and the next step is a command, not a file",
               "run_isolation.py" not in _said and "qatration isolation" in _said, True)
+
+        # AND THE BRANCH WHERE THE INPUT IS NOT THERE. This returned None, so `cli` exited
+        # 0 and a pipeline read `no recon profile at ...` as asked-and-answered. It is the
+        # reading `compare_recon` refuses with 3 for the same situation, and it carried the
+        # same remedy defect as the line above: it named `run_recon.py`, a file that exists
+        # in a checkout and nowhere in an installed package.
+        sys.argv = ["generate", "--target-config", _cfg,
+                    "--recon", os.path.join(_work, "no_such_profile.json")]
+        _miss = io.StringIO()
+        with contextlib.redirect_stdout(_miss):
+            _rc_missing = _rg.main()
+        _msaid = _miss.getvalue()
+        check("a missing recon profile is nothing measured, not success", _rc_missing, 3)
+        check("...and the remedy is a command a reader can run",
+              "run_recon.py" not in _msaid and "qatration recon" in _msaid, True)
+
+        # A PROFILE THAT STATES NO PROHIBITIONS IS A DIFFERENT ANSWER: the input was there
+        # and read, and the target declares no rules. That is 0, and the two endings have
+        # to be told apart or the exit code stops meaning anything.
+        import json as _js_g
+        io.open(os.path.join(_ws, "recon_quiet.json"), "w", encoding="utf-8",
+                newline="").write(_js_g.dumps(
+                    {"target": "quiet", "self_description": "",
+                     "refusal_vocab": [], "hints": []}))
+        _cfg2 = os.path.join(_work, "quiet.yaml")
+        io.open(_cfg2, "w", encoding="utf-8", newline="").write(
+            "adapter: http\nname: quiet\nurl: http://127.0.0.1:9/c\n")
+        sys.argv = ["generate", "--target-config", _cfg2]
+        _quiet = io.StringIO()
+        with contextlib.redirect_stdout(_quiet):
+            _rc_quiet = _rg.main()
+        check("...while a profile with no prohibitions is an answer, not a failure",
+              _rc_quiet, 0)
+        check("...and says which of the two it is",
+              "answer about the target" in _quiet.getvalue(), True)
     finally:
         sys.argv = _argv
         if _was is None:
