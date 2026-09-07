@@ -267,13 +267,23 @@ def list_attack_fields(root=None):
     different types, which is what makes this derivable rather than a matter of opinion. A
     field added on a Monday joins by being a list in the file that introduces it.
     """
+    # THE CACHE REMEMBERS THE ANSWER AND HAS TO REMEMBER THE QUESTION. It used to key on
+    # nothing: the first call with `root=None` stored whatever `ROOT` pointed at, and `ROOT`
+    # is a module global that both this file's own `main` and the suites reassign. Any
+    # caller reached from inside a fixture directory therefore froze the answer to that
+    # fixture's corpus for the life of the process, and the next honest call got it back.
+    #
+    # It stayed hidden while every caller was `main`, which sets `ROOT` and then asks. It
+    # surfaced the moment `unusable_entries` -- reached from a fixture run -- started
+    # asking too: `list_attack_fields()` returned {'success'} for the rest of the process,
+    # so `applies_to` was no longer a list field and the rule about it silently did nothing.
     global _LIST_FIELDS
-    if _LIST_FIELDS is not None and root is None:
-        return _LIST_FIELDS
+    here = root or ROOT
+    if _LIST_FIELDS is not None and _LIST_FIELDS[0] == here:
+        return _LIST_FIELDS[1]
     import glob as _glob
     import io as _io
     import yaml as _yaml
-    here = root or ROOT
     seen = {}
     for fn in _glob.glob(os.path.join(here, "attacks*.yaml")):
         try:
@@ -287,8 +297,7 @@ def list_attack_fields(root=None):
                 for k, v in a.items():
                     seen.setdefault(k, set()).add(type(v).__name__)
     out = {k for k, kinds in seen.items() if kinds == {"list"}}
-    if root is None:
-        _LIST_FIELDS = out
+    _LIST_FIELDS = (here, out)
     return out
 
 
@@ -703,6 +712,11 @@ def unusable_entries(attacks, fname="arsenal"):
             out.append("%s: %s: missing 'category'" % (fname, aid))
         out += bad_delivery(a, fname)
         out += misspelt_keys(a, fname)
+    # NOT `bad_entry_shapes` HERE, and the absence is the point. It is already raised by
+    # `refuse_unknown_detectors`, which both `run_redteam` and `run_isolation` call before
+    # anything is sent -- shape before spelling, with the reason written there. Adding it
+    # to this function too would be a second implementation of one rule at one door, which
+    # is the mistake `workspace.BROKE` and `runner.attacker_side` were each collapsed out of.
     return out
 
 

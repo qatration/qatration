@@ -712,9 +712,12 @@ def main():
     from honeytoken import weak_canaries as _weak_canaries
     for _c, _why in _weak_canaries(ctx):
         print("  ! canary %r %s" % (_c, _why))
+    # SCOPING IS ONE RULE IN ONE PLACE. `run_isolation` had the same expression written
+    # out again, and the hazard they share does not survive being copied: an `applies_to`
+    # without brackets is a string, and `name in "httpbot"` is a substring test.
+    from workspace import scoped_to as _scoped
     attacks = [a for a in all_attacks
-               if (not a.get("applies_to") or target.name in a["applies_to"])
-               and a["id"] not in exclude]
+               if _scoped(a, target.name) and a["id"] not in exclude]
     # TWO REASONS AN ATTACK IS NOT IN A RUN, AND ONLY ONE OF THEM IS ABOUT THE TARGET.
     # `not_applicable` is the deployment: the arsenal named an `applies_to` that excludes it,
     # a detector it needs is dead here, or the delivery channel does not exist on this bot.

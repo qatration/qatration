@@ -134,8 +134,12 @@ def main():
     refuse_unknown_detectors(objectives, "isolation", path, nested=True)
 
     target, ctx = load_target(args.target_config, args.model)
-    objectives = [o for o in objectives
-                  if not o.get("applies_to") or target.name in o["applies_to"]]
+    # SCOPING IS ONE RULE IN ONE PLACE. `run_redteam` had the same expression written out
+    # again, and the hazard they share does not survive being copied: an `applies_to`
+    # without brackets is a string, and `name in "guardbot"` is a substring test. The
+    # shape itself is refused a few lines up, by `refuse_unknown_detectors`.
+    from workspace import scoped_to as _scoped
+    objectives = [o for o in objectives if _scoped(o, target.name)]
     if args.only:
         objectives = [o for o in objectives if o.get("id") == args.only]
     if not objectives:

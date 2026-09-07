@@ -729,13 +729,19 @@ def context_keys_read(root=None):
     unknown. So the caller WARNS and never refuses -- the cost of being wrong is a note a
     reader can dismiss, and the cost of silence is a clean report over a disarmed oracle.
     """
+    # KEYED ON THE DIRECTORY IT READ, for the reason `lint_arsenal.list_attack_fields`
+    # carries: a cache that stores an answer without the question it was about hands a
+    # fixture's answer to the next honest caller, and `ROOT` is a module global that the
+    # suites reassign. Nothing has gone wrong here yet; the neighbour with the identical
+    # shape did, the moment a second caller started asking from inside a fixture.
     global _CTX_KEYS
-    if _CTX_KEYS is not None and root is None:
-        return _CTX_KEYS
+    _ctx_here = root or os.path.dirname(os.path.abspath(__file__))
+    if _CTX_KEYS is not None and _CTX_KEYS[0] == _ctx_here:
+        return _CTX_KEYS[1]
     import glob as _glob
     import io as _io
     import re as _re
-    here = root or os.path.dirname(os.path.abspath(__file__))
+    here = _ctx_here
     keys = set()
     pats = (r'ctx\.get\(\s*["\']([a-z_]+)["\']',
             r'ctx\[["\']([a-z_]+)["\']\]',
@@ -769,8 +775,7 @@ def context_keys_read(root=None):
         # fewer keys makes the caller's warning noisier, never quieter, which is the safe
         # direction for a note that can be dismissed.
         pass
-    if root is None:
-        _CTX_KEYS = keys
+    _CTX_KEYS = (_ctx_here, keys)
     return keys
 
 
@@ -952,6 +957,33 @@ NOT_MEASURED = ("SKIP", "ERROR")
 # decides a fourth verdict counts as a breach, and then two reports disagree about what a
 # finding is.
 BROKE = ("EXPLOITED", "PARTIAL")
+
+
+def scoped_to(entry, name):
+    """Whether an attack or objective applies to the target called `name`.
+
+    NO `applies_to` MEANS GENERIC, which is the convention the whole corpus is built
+    on: `attacks_generic.yaml` exists because an attack with no scope runs everywhere.
+
+    HERE BECAUSE IT WAS WRITTEN TWICE. `run_redteam` scoped the arsenal and
+    `run_isolation` scoped the objectives, character for character the same expression
+    in two files, and the hazard they share is not obvious enough to survive being
+    copied: a `applies_to` written without brackets is a STRING, a string is iterable,
+    and `name in "httpbot"` is a SUBSTRING test. An attack written for `httpbot` then
+    runs against a target called `bot`, or `http`, is judged there, and produces rows
+    that read as coverage of a bot it was never written for.
+
+    A STRING SCOPES TO NOTHING here, deliberately, rather than being read one
+    character at a time -- and both callers refuse such a file before they get this
+    far, so the refusal is what an operator actually sees. This is the backstop for a
+    caller that grows later and forgets, in the direction that cannot invent a finding.
+    """
+    scope = (entry or {}).get("applies_to")
+    if not scope:
+        return True
+    if isinstance(scope, str):
+        return False
+    return name in scope
 
 
 # WHAT QUALIFIES A NUMBER, and the reason this list exists at all.
