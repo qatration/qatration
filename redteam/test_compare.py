@@ -75,6 +75,68 @@ def main():
     check("an attack missing from one side is not counted as a difference",
           not pair_diffs(matrix), str(pair_diffs(matrix)))
 
+    # --- BOTH SIDES, DIFFERENT QUESTION ------------------------------------------------
+    #
+    # The check above handles an attack one build never saw. This is the sharper case: both
+    # builds ran it, in different versions of it, so the row LOOKS like a comparison. The
+    # fourth element of a matrix entry is a digest over what the attack sends and what
+    # scores it, and two that disagree are not evidence about the control either way.
+    #
+    # Not hypothetical: seven of the ten attacks guardedrag and guardedrag-naive share are
+    # recorded with different bodies, and six of portalagent's seventeen.
+    matrix = [M("bot", {"a1": ("DEFENDED", [], "x", "aaaa"),
+                        "a2": ("DEFENDED", [], "x", "cccc")}),
+              M("bot-naive", {"a1": ("EXPLOITED", ["x"], "x", "bbbb"),
+                              "a2": ("EXPLOITED", ["x"], "x", "cccc")})]
+    _p = pair_diffs(matrix)
+    check("an attack both builds ran in DIFFERENT versions is not a difference",
+          _p and [x["attack"] for x in _p[0]["diffs"]] == ["a2"], str(_p))
+    check("...and is named rather than dropped",
+          _p and _p[0]["mismatched"] == ["a1"], str(_p))
+    check("...and is not counted among the shared attacks either",
+          _p and _p[0]["shared"] == 1, str(_p))
+
+    # AND A MATCHING DIGEST IS NOT A MISMATCH, or the caveat lands on every honest pair.
+    matrix = [M("bot2", {"a1": ("DEFENDED", [], "x", "aaaa")}),
+              M("bot2-naive", {"a1": ("EXPLOITED", ["x"], "x", "aaaa")})]
+    _p = pair_diffs(matrix)
+    check("...while the same version on both sides still compares",
+          _p and [x["attack"] for x in _p[0]["diffs"]] == ["a1"]
+          and _p[0]["mismatched"] == [], str(_p))
+
+    # AND AN ENTRY WITH NO DIGEST SAYS NOTHING, the both-sides-or-nothing rule the history
+    # diff and the `inert` comparison already follow: a three-element entry is what every
+    # caller wrote before this field existed.
+    matrix = [M("bot3", {"a1": ("DEFENDED", [], "x")}),
+              M("bot3-naive", {"a1": ("EXPLOITED", ["x"], "x")})]
+    _p = pair_diffs(matrix)
+    check("an entry with no digest raises nothing",
+          _p and [x["attack"] for x in _p[0]["diffs"]] == ["a1"]
+          and _p[0]["mismatched"] == [], str(_p))
+    # AND NEITHER DOES ONE SIDE HAVING IT. Absence is not disagreement -- the same rule the
+    # engine and inert comparisons follow one axis over -- and this is the shape that
+    # distinguishes "both sides or nothing" from "compare whatever is there": a digest on one
+    # side and none on the other would read as a rewritten attack on every such pair.
+    matrix = [M("bot4", {"a1": ("DEFENDED", [], "x", "aaaa")}),
+              M("bot4-naive", {"a1": ("EXPLOITED", ["x"], "x")})]
+    _p = pair_diffs(matrix)
+    check("...nor does a digest on one side and none on the other",
+          _p and [x["attack"] for x in _p[0]["diffs"]] == ["a1"]
+          and _p[0]["mismatched"] == [], str(_p))
+
+    # AND THE PAGE THIS REPOSITORY SHIPS CARRIES THE NOTICE, which is what makes the rule a
+    # measurement rather than a capability. Read from the built page, not recomputed here.
+    import io as _io_c, os as _os_c
+    _page = _os_c.path.join(_os_c.path.dirname(HERE), "out", "compare_targets.html")
+    if _os_c.path.exists(_page):
+        _h = _io_c.open(_page, encoding="utf-8").read()
+        check("the shipped comparison page says which pairs were asked different questions",
+              _h.count("DIFFERENT versions") == 2,
+              "%d notices" % _h.count("DIFFERENT versions"))
+        check("...and names the attacks rather than only counting them",
+              "gr-loyalty" in _h and "pa-bola-order" in _h,
+              "the ids are not on the page")
+
     # --- a declared pair with NO differences is a result, not silence -----------------
     declared = _declared_pairs()
     check("pairs can be declared in a config, not only inferred from a suffix",

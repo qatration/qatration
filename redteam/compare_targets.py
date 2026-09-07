@@ -113,6 +113,10 @@ def arsenal_claim(rows):
 
 
 from workspace import esc as _ws_esc
+# ONE DEFINITION OF WHAT AN ATTACK IS, the same one `history.diff` compares runs with
+# and the same one `lint` reads. A field that starts changing what gets sent joins this
+# page's comparison by being added there.
+from lint_arsenal import attack_digest
 
 
 def esc(s):
@@ -168,7 +172,7 @@ def pair_diffs(matrix):
         if base not in by_name:
             continue
         guarded, naive = by_name[base], by_name[name]
-        diffs, unpaired = [], []
+        diffs, unpaired, mismatched = [], [], []
         for aid in sorted(set(guarded) | set(naive)):
             g, n = guarded.get(aid), naive.get(aid)
             if not g or not n:
@@ -180,6 +184,17 @@ def pair_diffs(matrix):
                 # history diff already grew a confound machinery for, and the same silence
                 # here would narrow the comparison without narrowing the sentence about it.
                 unpaired.append((aid, "guarded" if g else name))
+                continue
+            # BOTH SIDES, DIFFERENT QUESTION. The branch above catches an attack one build
+            # never saw; this one catches an attack both builds saw in different versions,
+            # and that is the case that LOOKS like a comparison. It is not hypothetical
+            # here: seven of the ten attacks guardedrag and guardedrag-naive share, and six
+            # of portalagent's seventeen, were recorded with different bodies -- the naive
+            # sweeps predate `partial:` on those attacks, so one side could not return
+            # PARTIAL at all and the other could. A verdict that differs for that reason is
+            # not what the control bought.
+            if len(g) > 3 and len(n) > 3 and g[3] and n[3] and g[3] != n[3]:
+                mismatched.append(aid)
                 continue
             if g[0] == n[0]:
                 continue
@@ -205,11 +220,16 @@ def pair_diffs(matrix):
         # and the code agent stopped looking safer than the tool-calling one. Silence here
         # would have left "the reasoning format changes nothing" invisible, which is the
         # same way the strongest measurement of the day went missing once already.
-        shared = sorted(set(guarded) & set(naive))
+        # SHARED MEANS COMPARABLE. An attack both builds ran in different versions is in
+        # neither this count nor the diffs, and is reported on its own line -- counting it
+        # as shared is what would make `identical on all N` a claim about attacks nobody
+        # asked the same way.
+        shared = sorted((set(guarded) & set(naive)) - set(mismatched))
         if diffs or name in declared:
             out.append({"base": base, "naive": name, "label": label, "diffs": diffs,
                         "identical": len(shared) if not diffs else 0,
-                        "shared": len(shared), "unpaired": unpaired})
+                        "shared": len(shared), "unpaired": unpaired,
+                        "mismatched": mismatched})
     return out
 
 
@@ -356,7 +376,14 @@ def main():
             # module in nine that scored a control as a finding: eight others exclude
             # `category == "control"` and this one could not see it. Appended third, so
             # every existing `g[0]` / `g[1]` reader is untouched.
-            by_id[aid] = (r["headline"], r["fired"], r["attack"].get("category"))
+            #
+            # AND SO DOES THE ATTACK, fourth, for the same reason one step further on: an
+            # id is a name, not a question. `pair_diffs` handles an attack present on one
+            # side and absent on the other, and had nothing to say about one PRESENT ON
+            # BOTH IN TWO DIFFERENT VERSIONS -- which is the worse case, because it looks
+            # like a comparison.
+            by_id[aid] = (r["headline"], r["fired"], r["attack"].get("category"),
+                          attack_digest(r["attack"]))
             if aid not in seen:
                 seen.add(aid); all_attacks_order.append(aid)
             if r["headline"] in ("EXPLOITED", "PARTIAL") and r["attack"].get("category") != "control":
@@ -516,6 +543,19 @@ def main():
                 f'in this comparison — they say nothing about the control either way: '
                 f'{esc(ids)}{esc(more)}. Re-run both builds with one arsenal before reading '
                 f'the counts below as a before-and-after.</p>')
+        # AND THE SHARPER ONE, which reads as a comparison and is not: both builds ran the
+        # attack, under different versions of it.
+        if p_.get("mismatched"):
+            mids = ", ".join(p_["mismatched"][:6])
+            mmore = "" if len(p_["mismatched"]) <= 6 else (
+                " … and %d more" % (len(p_["mismatched"]) - 6))
+            pair_html += (
+                f'<p class="dim pn"><b>{len(p_["mismatched"])} attack(s) were run against '
+                f'both builds in DIFFERENT versions</b> — the payload, the encoding, the '
+                f'delivery or the detectors that score it are not the same on the two sides, '
+                f'so a verdict that differs is not what the control bought. They are left '
+                f'out of the counts below: {esc(mids)}{esc(mmore)}. Re-run both builds with '
+                f'one arsenal to compare them.</p>')
         if not p_["diffs"]:
             # "no difference" is a result, and it is the one this pair was declared to find
             pair_html += (
