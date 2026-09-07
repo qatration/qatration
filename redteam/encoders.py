@@ -170,6 +170,14 @@ _BRAILLE = {c: chr(0x2800 + v) for c, v in zip(
 # capitals, digits and hyphens all at once.
 _BR_CAPITAL = chr(0x2820)
 _BR_NUMBER = chr(0x283C)
+# AND THE LETTER SIGN, which is what ENDS a number run. Braille's digits ARE its first ten
+# letters -- `1` and `a` are the same cell -- so `9931abc` encoded to a number sign and six
+# cells and read back as `9931123`: three letters returned as three digits, silently, in a
+# transform this file declares reversible. Dots 5-6 are the real notation for it and every
+# Braille reader knows them; without one the ambiguity is not resolvable at all. Uppercase
+# was already safe by accident, because the capital sign breaks the run, which is why a
+# minted `QAT-CANARY-<16 uppercase and digits>` survived and this stayed hidden.
+_BR_LETTER = chr(0x2830)
 _BR_DIGIT = {d: _BRAILLE[c] for d, c in zip("1234567890", "abcdefghij")}
 
 _LEET = {"a": "4", "e": "3", "i": "1", "o": "0", "s": "5", "t": "7", "b": "8", "g": "9"}
@@ -188,6 +196,7 @@ def braille(s):
     how Braille actually works and is what makes `9931` four cells rather than eight.
     """
     out, in_number = [], False
+    _ambiguous = set(_BR_DIGIT.values())        # the a-j cells, which are also 1-0
     for ch in s:
         if ch in _BR_DIGIT:
             if not in_number:
@@ -195,8 +204,13 @@ def braille(s):
                 in_number = True
             out.append(_BR_DIGIT[ch])
             continue
-        in_number = False
         low = ch.lower()
+        # CLOSE THE NUMBER RUN BEFORE A CELL THAT IS ALSO A DIGIT. Only a-j are ambiguous;
+        # everything else ends the run by being unreadable as a number, and an uppercase
+        # letter ends it with the capital sign it already carries.
+        if in_number and not ch.isupper() and _BRAILLE.get(low) in _ambiguous:
+            out.append(_BR_LETTER)
+        in_number = False
         if ch.isupper() and low in _BRAILLE:
             out.append(_BR_CAPITAL)
         out.append(_BRAILLE.get(low, ch))
@@ -279,8 +293,28 @@ ENCODERS = {
 
 
 def _morse_back(o):
+    """The inverse, PASSING THROUGH exactly what `morse` passed through.
+
+    It used to substitute `?` for any token it did not recognise, and `morse` passes an
+    unmapped character through as itself -- so `100% done` came back `100? done`, a
+    character that was sent in the clear reported as a different one that was not. Fifteen
+    printable ASCII characters are outside the table -- hash, dollar, percent, asterisk,
+    angle brackets, square brackets, backslash, caret, backtick, braces, pipe, tilde -- and
+    every one of them did this.
+
+    THE COST WAS A FALSE REFUSAL, which is the direction that hurts here. `lint` asks
+    whether an encoding carries a planted marker by decoding what it would send: a marker
+    like `KEY#77` survives morse perfectly, because `#` rides through untouched, and the
+    old inverse turned it into `KEY?77` and had `bad_encoders` refuse a working attack.
+
+    Mirroring the pass-through is also what makes `LOSSY` honest: case really is the only
+    thing morse loses now, and `test_encoders` drives a payload of every printable ASCII
+    character through to keep that true.
+    """
     inv = {v: k for k, v in _MORSE.items()}
-    return "".join(inv.get(tok, "?") for tok in o.split(" "))
+    # `tok` rather than `?`: a token the table does not know is a character `morse` left
+    # alone, and giving it back unchanged is the only answer that is not an invention.
+    return "".join(inv.get(tok, tok) for tok in o.split(" "))
 
 
 def _braille_back(o):
@@ -291,6 +325,9 @@ def _braille_back(o):
         ch = o[i]
         if ch == _BR_NUMBER:
             num, i = True, i + 1
+            continue
+        if ch == _BR_LETTER:
+            num, i = False, i + 1
             continue
         if ch == _BR_CAPITAL:
             i += 1
@@ -346,6 +383,10 @@ DECODERS = {
 # comparison in the oracle that reads a planted string lower-cases both sides
 # (`_canaries` and `_markers` both do), so a folded case changes no verdict. Named here
 # so the round-trip gate can allow exactly this much and no more.
+# CASE, AND NOTHING ELSE, is a claim `test_encoders` holds to by round-tripping a payload
+# of every printable ASCII character -- including the fifteen morse has no code for, which
+# ride through in the clear and come back as themselves. The inverse used to answer `?` for
+# those and this line was wrong about its own transform.
 LOSSY = {"morse": "case"}
 
 ONE_WAY = {
