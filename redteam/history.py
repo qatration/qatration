@@ -41,6 +41,9 @@ except Exception:
 from workspace import BROKE   # one definition of what counts as a breach
 from workspace import named_build   # and one definition of what counts as a build
 from workspace import measured_when # and one definition of when a run happened
+# and one definition of what an attack IS -- the same one `lint` reads, so a field that
+# starts changing what gets sent joins this comparison by being added there.
+from lint_arsenal import attack_digest
 
 
 def _path(target):
@@ -61,8 +64,12 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
     for r in results:
         if r["attack"].get("category") == "control":
             continue                       # a control is a false-alarm check, not a finding
+        # AND WHAT THE ATTACK WAS, twelve characters of it. Everything else in this row
+        # is a verdict; this is the question that produced it, and without it the diff
+        # below compares two answers to two different questions under one name.
         rows[r["attack"]["id"]] = {"v": r["headline"], "rate": r.get("rate", ""),
-                                   "fired": sorted(r.get("fired") or [])}
+                                   "fired": sorted(r.get("fired") or []),
+                                   "h": attack_digest(r["attack"])}
     return {"run": when or datetime.datetime.now().isoformat(" ", "seconds"),
             "target": meta.get("target"), "model": meta.get("model", ""),
             # THE BUILD THAT JUDGED IT, for the same reason `model` is here. A verdict is
@@ -346,6 +353,21 @@ def diff(target):
             confounds.append("the config armed a different set of detectors: %s, so a verdict that moved may be the config rather than the target" % "; ".join(_parts))
     if prev["attacks"] != cur["attacks"]:
         confounds.append(f"arsenal {prev['attacks']} → {cur['attacks']} attacks")
+    # AND THE ATTACKS THAT STAYED, REWRITTEN. The line above counts them; an attack
+    # edited in place changes no count and changes what was asked. BOTH SIDES OR
+    # NOTHING, the same rule `inert` follows: a snapshot written before this field
+    # existed carries no digest, and a comparison against one says nothing rather than
+    # claiming every attack changed.
+    _rewritten = sorted(
+        aid for aid, row in cur["rows"].items()
+        if (row or {}).get("h") and (prev["rows"].get(aid) or {}).get("h")
+        and row["h"] != prev["rows"][aid]["h"])
+    if _rewritten:
+        confounds.append(
+            "%d attack(s) were rewritten between these runs: %s%s — a verdict that "
+            "moved on one of them may be the question rather than the target"
+            % (len(_rewritten), ", ".join(_rewritten[:4]),
+               " …" if len(_rewritten) > 4 else ""))
     if torn:
         # A gap in the timeline is not a gap in the diff's confidence unless it is said to be.
         confounds.append(f"{len(torn)} line(s) of this target's timeline could not be read "

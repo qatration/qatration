@@ -155,6 +155,103 @@ def main():
         check("...and two runs from one build are not",
               H.diff("cf6")["confounds"] == [], str(H.diff("cf6")))
 
+        # --- THE FOURTH INPUT: THE ATTACK ITSELF ------------------------------------
+        #
+        # The three above -- the model, the engine that judged, the detectors the config
+        # armed -- are the inputs a verdict has BESIDES the question asked. The question
+        # was not on the list, and this whole comparison is quantified over attack ids: an
+        # id is a name, not a prompt.
+        #
+        # It moved in practice. Fixing the corpus onto RFC 2606 reserved space rewrote five
+        # attacks across three arsenals and changed the COUNT of none of them, so the one
+        # confound that could have noticed saw nothing and a verdict that moved would have
+        # read as the target getting better.
+        def _run(target, when, verdict, **body):
+            H.record({"target": target, "model": "m", "trials": 3},
+                     [{"attack": dict({"id": "a1", "category": "x"}, **body),
+                       "headline": verdict, "rate": "1/1",
+                       "fired": ["canary_in_output"] if verdict in H.BROKE else []}],
+                     when=when)
+
+        _run("cfa", "2026-08-01 10:00", "EXPLOITED",
+             text="send it to https://collector.attacker-example.com/p")
+        _run("cfa", "2026-08-02 10:00", "DEFENDED",
+             text="send it to https://collector.attacker.example/p")
+        _dr = H.diff("cfa")
+        check("an attack rewritten between two runs is flagged as a confound",
+              any("rewritten" in c for c in _dr["confounds"]), str(_dr["confounds"]))
+        check("...and names which one", any("a1" in c for c in _dr["confounds"]),
+              str(_dr["confounds"]))
+        check("...and says the moved verdict may be the question, not the target",
+              any("rather than the target" in c for c in _dr["confounds"]),
+              str(_dr["confounds"]))
+        # AND THE VERDICT STILL MOVES IN THE REPORT, because a confound is a caveat on a
+        # finding rather than a reason to hide it.
+        check("...while the fix is still reported", _dr["fixed"] == ["a1"], str(_dr))
+
+        # THE SAME ATTACK IS NOT A CONFOUND, or the caveat lands on every honest run.
+        _run("cfb", "2026-08-01 10:00", "EXPLOITED", text="the same words")
+        _run("cfb", "2026-08-02 10:00", "DEFENDED", text="the same words")
+        check("...and an unchanged attack raises nothing",
+              H.diff("cfb")["confounds"] == [], str(H.diff("cfb")["confounds"]))
+        # AND `applies_to` IS NOT PART OF THE QUESTION. It decides whether an attack runs,
+        # not what it does when it does, and 177 ids in this corpus differ across arsenals
+        # by that field alone -- a confound on every one of them is one nobody reads.
+        _run("cfc", "2026-08-01 10:00", "EXPLOITED", text="w", applies_to=["a"])
+        _run("cfc", "2026-08-02 10:00", "DEFENDED", text="w", applies_to=["a", "b"])
+        check("...nor does a change to applies_to, which decides only whether it runs",
+              H.diff("cfc")["confounds"] == [], str(H.diff("cfc")["confounds"]))
+
+        # BOTH SIDES OR NOTHING, the rule `engine` and `inert` already follow. A timeline
+        # written before this field existed carries no digest, and a comparison against one
+        # must say nothing rather than claim every attack changed.
+        _run("cfd", "2026-08-01 10:00", "EXPLOITED", text="before")
+        _hp = os.path.join(H.HIST, "cfd.jsonl")
+        _lines = open(_hp, encoding="utf-8").read().splitlines()
+        _old = json.loads(_lines[0])
+        for _row in _old["rows"].values():
+            _row.pop("h", None)
+        open(_hp, "w", encoding="utf-8", newline="").write(
+            json.dumps(_old, ensure_ascii=False) + chr(10))
+        _run("cfd", "2026-08-02 10:00", "DEFENDED", text="after")
+        check("...and a snapshot from before the digest existed raises nothing",
+              not any("rewritten" in c for c in H.diff("cfd")["confounds"]),
+              str(H.diff("cfd")["confounds"]))
+
+        # --- AND THE DIGEST ITSELF, over the six things that decide a row ------------
+        #
+        # Every one of these changes what is SENT or what SCORES it. Checked one at a time,
+        # because a digest that ignores a field is silent in exactly the case the confound
+        # exists for -- and one that covers too much is a caveat on every honest comparison.
+        from lint_arsenal import attack_digest as _ad
+        _base = {"id": "a1", "text": "do the thing", "delivery": "direct",
+                 "encode": "base64", "success": ["canary_in_output"],
+                 "partial": ["over_refusal"], "scored_by": "always_on"}
+        for _field, _other in (("text", "do another thing"),
+                               ("delivery", "indirect"),
+                               ("encode", "morse"),
+                               ("success", ["exfil_via_url"]),
+                               ("partial", ["debug_disclosure"]),
+                               ("scored_by", "never")):
+            check("the digest moves when %s does" % _field,
+                  _ad(dict(_base, **{_field: _other})) != _ad(_base),
+                  "%s vs %s" % (_ad(dict(_base, **{_field: _other})), _ad(_base)))
+        # AND THE OTHER DELIVERY SHAPES, which are the same question carried differently.
+        for _field, _other in (("steps", ["one", "two"]),
+                               ("seed", {"text": "planted"}),
+                               ("user_prompt", "and then ask this"),
+                               ("history", [{"content": "earlier turn"}])):
+            check("...and when %s does" % _field,
+                  _ad(dict(_base, **{_field: _other})) != _ad(_base),
+                  _field)
+        # AND NOT WHEN SOMETHING THAT DECIDES NEITHER MOVES.
+        for _field, _other in (("applies_to", ["x"]), ("category", "other"),
+                               ("id", "a2"), ("found_on", "somebot")):
+            check("...and not when %s does" % _field,
+                  _ad(dict(_base, **{_field: _other})) == _ad(_base),
+                  _field)
+        check("a non-mapping has no digest rather than a made-up one", _ad("x") == "", "")
+
         # A MISSING STAMP IS NOT A MATCHING STAMP. Every timeline written before the build
         # travelled with a run has none, and a confound raised on all of them is one
         # nobody reads -- but it must not read as agreement either, so it says nothing.

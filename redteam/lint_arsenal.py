@@ -73,6 +73,39 @@ def sent_strings(a):
     return [s for s in out if s]
 
 
+# WHAT DECIDES A ROW'S VERDICT, reduced to twelve characters. `history.diff` compares two
+# runs attack by attack and names every input it can see that moved between them -- the
+# model, the engine that judged, the detectors the config armed, the trial count, the
+# size of the arsenal. THE ATTACK ITSELF WAS NOT ON THAT LIST, and it is the thing the
+# comparison is quantified over: an id is a name, not a prompt.
+#
+# It moves in practice and it moved here. Fixing the corpus to use RFC 2606 reserved
+# space rewrote five attacks across three arsenals without changing the count of any of
+# them, so the one confound that could have noticed -- `arsenal N -> M attacks` -- saw
+# nothing. A verdict that moved for that reason reads as the target getting better.
+#
+# Both halves are here because both move a verdict: what is SENT (the strings, the
+# encoding applied to them, the delivery that carries them) and what SCORES it (the
+# detectors named success or partial, and the scored_by rule). `applies_to` and any
+# note are deliberately outside it -- they decide whether the attack runs, not what it
+# does when it does, and 177 ids differ across arsenals by `applies_to` alone.
+def attack_digest(a):
+    """-> 12 hex characters over what this attack sends and how it is judged."""
+    import hashlib, json as _json
+    if not isinstance(a, dict):
+        return ""
+    body = {
+        "sent": sent_strings(a),
+        "encode": a.get("encode"),
+        "delivery": a.get("delivery"),
+        "success": sorted(str(x) for x in (a.get("success") or [])),
+        "partial": sorted(str(x) for x in (a.get("partial") or [])),
+        "scored_by": a.get("scored_by"),
+    }
+    blob = _json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+
+
 # IN A URL, not in prose. `version 1.2.3.4 of the spec` is four numbers and a full stop,
 # and refusing an arsenal over it would be the same damage as missing the real one. The
 # address has to be reached FOR: preceded by a scheme's `//`, or followed by a path or a
