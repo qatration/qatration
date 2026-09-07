@@ -835,8 +835,12 @@ def main():
     # stand in front of it. What it must not do is stay quiet: if the target complies, real
     # data leaves for that name, and the tool that said the words should say so first.
     from lint_arsenal import registrable_hosts as _rh, sent_strings as _ss
+    from lint_arsenal import reachable_addresses as _ra
+    # ADDRESSES TOO, and for a sharper reason than names: a name has to be registered
+    # before it reaches anybody, and an address answers today.
     _named_hosts = sorted({h for _a in all_attacks
-                           for h in _rh(" ".join(_ss(_a)))})
+                           for h in (_rh(" ".join(_ss(_a)))
+                                     | _ra(" ".join(_ss(_a))))})
     if _named_hosts:
         print("  ! this arsenal names %d host(s) somebody can register, and tells the "
               "target to reach them:" % len(_named_hosts))

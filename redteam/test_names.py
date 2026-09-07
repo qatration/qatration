@@ -342,6 +342,70 @@ def main():
     check("no suite keeps checking after it has counted its checks",
           not _snapped, "; ".join(_snapped))
 
+    # --- TWO `check` SIGNATURES, AND THE WRONG ONE PASSES QUIETLY ----------------------
+    #
+    # Most suites here define `check(label, ok, detail="")` and a few define
+    # `check(label, got, want)`. Writing the second shape in a file that has the first
+    # gives `check("...", sorted(x), ["a"])`: the expected value lands in `detail`, and
+    # the ASSERTION becomes `bool(sorted(x))` -- true for any non-empty result and false
+    # for every empty one, whatever the values are.
+    #
+    # Both failure modes are live. A check that should compare `[] == []` FAILS, which is
+    # loud and gets fixed; a check that should compare `["8.8.8.8"] == ["a"]` PASSES,
+    # which is a green check asserting nothing. Both happened repeatedly while writing
+    # this suite's neighbours, in both directions, and nothing could see them.
+    #
+    # A CONTAINER IS THE TELL. Nobody writes `check(label, ["a"], ...)` meaning "the truth
+    # value of this list"; they mean "equals". The rule is narrow on purpose: only files
+    # whose own `check` names its second parameter `ok`, and only a second argument that
+    # constructs a container.
+    import ast as _ast_s
+    _CONTAINERS = (_ast_s.List, _ast_s.Dict, _ast_s.Set, _ast_s.ListComp,
+                   _ast_s.DictComp, _ast_s.SetComp)
+    _MAKERS = {"sorted", "list", "set", "dict"}
+    _wrong = []
+    for _sp in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
+        try:
+            _tree = _ast_s.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        _styles = set()
+        for _n in _ast_s.walk(_tree):
+            if isinstance(_n, _ast_s.FunctionDef) and _n.name == "check":
+                _a = [_x.arg for _x in _n.args.args]
+                if len(_a) >= 2:
+                    _styles.add(_a[1])
+        # A file with BOTH shapes is its own hazard and is not judged here: `test_workspace`
+        # defines `check` six times across six functions, and which one a call reaches
+        # depends on where it sits.
+        if _styles != {"ok"}:
+            continue
+        for _n in _ast_s.walk(_tree):
+            if not (isinstance(_n, _ast_s.Call) and isinstance(_n.func, _ast_s.Name)
+                    and _n.func.id == "check" and len(_n.args) >= 2):
+                continue
+            _second = _n.args[1]
+            if isinstance(_second, _CONTAINERS) or (
+                    isinstance(_second, _ast_s.Call)
+                    and isinstance(_second.func, _ast_s.Name)
+                    and _second.func.id in _MAKERS):
+                _wrong.append("%s:%d" % (os.path.basename(_sp), _n.lineno))
+    check("no check asserts the truth value of a container it meant to compare",
+          not _wrong, "; ".join(_wrong[:8]))
+    # AND THE SCAN CAN SEE THE FILES IT IS ABOUT, or the claim above is about nothing.
+    _ok_files = 0
+    for _sp in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
+        try:
+            _tree = _ast_s.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        for _n in _ast_s.walk(_tree):
+            if (isinstance(_n, _ast_s.FunctionDef) and _n.name == "check"
+                    and [_x.arg for _x in _n.args.args][1:2] == ["ok"]):
+                _ok_files += 1
+                break
+    check("...over the suites that use that signature", _ok_files >= 20, str(_ok_files))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

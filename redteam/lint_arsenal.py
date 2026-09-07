@@ -73,6 +73,42 @@ def sent_strings(a):
     return [s for s in out if s]
 
 
+# IN A URL, not in prose. `version 1.2.3.4 of the spec` is four numbers and a full stop,
+# and refusing an arsenal over it would be the same damage as missing the real one. The
+# address has to be reached FOR: preceded by a scheme's `//`, or followed by a path or a
+# port, which is what an instruction to send data somewhere looks like.
+_IP_LITERAL = re.compile(
+    r"(?:(?<=//)((?:\d{1,3}\.){3}\d{1,3})(?![\w.])"
+    r"|(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})(?=[:/]))")
+
+
+def reachable_addresses(text):
+    """Every IP literal in a payload that reaches somebody else's machine today.
+
+    `registrable_hosts` beside this asks whether a NAME could be owned. An address
+    needs no owning: `https://8.8.8.8/ingest` in an attack tells an agent to send data
+    to a machine that answers now, and the host scan could not see it -- it matches
+    dotted names, and 8.8.8.8 is not one.
+
+    GLOBALLY REACHABLE ONLY, which is the whole distinction. An SSRF attack SHOULD name
+    `169.254.169.254` and `10.0.0.5`: those are the target's own inside, they are the
+    test, and they reach nobody else. Four attacks in this corpus do exactly that and
+    none of them names a routable address, which is what makes `is_global` the right
+    question rather than a guess.
+    """
+    import ipaddress
+    out = set()
+    for groups in _IP_LITERAL.findall(str(text)):
+        m = next((g for g in groups if g), "")
+        try:
+            ip = ipaddress.ip_address(m)
+        except ValueError:
+            continue
+        if ip.is_global:
+            out.add(m)
+    return out
+
+
 def registrable_hosts(text):
     """Every host in a payload that somebody could go and register."""
     out = set()
@@ -681,6 +717,17 @@ def main():
                     f"{fname}: {aid}: payload names {host}, which is registrable. Use RFC 2606 "
                     f"reserved space (.example) — an agent told to send data to a name somebody "
                     f"can own will send it to whoever owns it")
+            # AND AN ADDRESS NEEDS NO REGISTERING AT ALL. The scan above matches names,
+            # so `https://8.8.8.8/ingest` walked past it: a machine that answers today,
+            # named in an instruction handed to an agent. The SSRF attacks here are
+            # untouched, because they name the target's own inside rather than a
+            # routable address, and that is exactly the line `is_global` draws.
+            for addr in sorted(reachable_addresses(" ".join(sent))):
+                errors.append(
+                    f"{fname}: {aid}: payload names {addr}, which is a globally routable "
+                    f"address — an agent told to send data there sends it to whoever runs "
+                    f"that machine. RFC 5737 documentation space (192.0.2.0/24) reaches "
+                    f"nobody and tests the same behaviour")
             seen[aid] = i
 
 
