@@ -633,9 +633,51 @@ def main():
     # conclude the exact opposite of what happened. There is no other code for it: 2 is a
     # refusal, 3 is nothing measured. So the table says so, rather than leaving a reader to
     # apply a sentence that does not describe it.
-    check("the table says what `verify` means by 1, which is not what a run means by it",
-          "verify" in text and "no longer reproduce" in text,
-          "docs/ci.md never mentions what verify exits with")
+    # DERIVED, so a third command that starts exiting 1 about something other than the target
+    # has to be named too. `run` is the row's own subject; the others each need a sentence.
+    _ones = set()
+    for _m in _mods:
+        _p1 = os.path.join(HERE, _m + ".py")
+        if not os.path.exists(_p1):
+            continue
+        _t1 = _ast_x.parse(open(_p1, encoding="utf-8").read())
+        for _n1 in _ast_x.walk(_t1):
+            _v = None
+            if isinstance(_n1, _ast_x.Call):
+                _f1 = _n1.func
+                if (((isinstance(_f1, _ast_x.Attribute) and _f1.attr == "exit")
+                     or (isinstance(_f1, _ast_x.Name)
+                         and _f1.id in ("SystemExit", "_refuse", "exit")))
+                        and _n1.args):
+                    _v = _n1.args[0]
+            elif isinstance(_n1, _ast_x.Return):
+                _v = _n1.value
+            for _b in ([_v] if not isinstance(_v, _ast_x.IfExp) else [_v.body, _v.orelse]):
+                if (isinstance(_b, _ast_x.Constant) and _b.value == 1
+                        and not isinstance(_b.value, bool)):
+                    _ones.add(_m)
+    _cmd_for = {mod: cmd for cmd, (mod, _) in _cli_x.COMMANDS.items()}
+    _others = sorted(_cmd_for[_m] for _m in _ones
+                     if _m in _cmd_for and _cmd_for[_m] != "run")
+    check("the commands that exit 1 about something other than the target can be found",
+          _others, str(sorted(_ones)))
+    # SEARCHED IN THE SECTION, NOT THE DOCUMENT. `lint` and `sarif` both appear elsewhere in
+    # `docs/ci.md` -- in a workflow step and in an upload -- so asking whether the name is
+    # anywhere in the file is a check two mutations walked straight through: renaming the
+    # bullet and adding a third command both left it green.
+    _sec = text.split("## Reading the exit code", 1)[-1].split(
+        chr(10) + "## ", 1)[0]
+    check("the exit-code section can be isolated from the rest of the page",
+          len(_sec) > 400 and "| `4` |" in _sec, str(len(_sec)))
+    # A BACKTICK AND THE NAME, so a bullet may qualify the command with the flag that does it:
+    # `benign` exits 1 only under `--dry-run`, and the sentence that explains it says so.
+    _unnamed = [c for c in _others if ("`" + c) not in _sec]
+    check("...and the table's own section names every one of them",
+          not _unnamed,
+          "docs/ci.md never says what %s means by 1" % ", ".join(_unnamed))
+    check("...and says what the exit means, not just the command's name",
+          "no longer reproduce" in _sec and "arsenal" in _sec,
+          "the sentences do not describe the events")
 
     # A `raise SystemExit("message")` exits ONE, which this table reserves for "the target was
     # exploited". Ten of them exist and all are refusals, so the dispatcher converts them —

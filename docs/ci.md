@@ -370,13 +370,23 @@ Only `1` is a finding. Treating `2` through `5` as security failures is how a te
 ignore the whole check, and treating them as passes is how a broken pipeline reports a clean
 bill for months.
 
-**`verify` means something else by `1`, and the difference is worth knowing before a build goes
-red on it.** That command re-sends only what a stored report already claims, so it never
-introduces a finding; it exits `1` when a published claim **no longer reproduces**. The finding
-is in the artifact rather than in the target — a report asserting five breaches that have since
-been fixed is a claim nobody can support, which is exactly what the command exists to catch —
-and read against the row above alone a build would conclude the opposite of what happened.
-There is no other code that fits: `2` is a refusal and `3` is nothing measured, and both would
+**`1` means a finding in whatever the command examined, and two commands do not examine the
+target.** Worth knowing before a build goes red on one of them, because the row above describes
+only the third.
+
+- **`verify`** re-sends what a stored report already claims, so it cannot introduce a finding.
+  It exits `1` when a published claim **no longer reproduces**: the finding is in the artifact,
+  not in the target — a report asserting five breaches that have since been fixed is a claim
+  nobody can support, which is exactly what the command exists to catch. Read against the row
+  above alone, a build would conclude the opposite of what happened.
+- **`lint`** exits `1` when the attack corpus has an error: an attack that cannot be delivered,
+  a detector name nothing registers, a payload naming a host somebody could own. The finding is
+  in the arsenal, and it is caught before anything is sent.
+- **`benign --dry-run`** exits `1` when a detector fires on the corpus with a bland reply — that
+  is, when a detector is reading the QUESTION and reporting it as the target's answer. The
+  finding is in this tool's own oracle, and no target was contacted at all.
+
+Neither has a better code available: `2` is a refusal, `3` is nothing measured, and either would
 tell a pipeline to ignore it.
 
 
