@@ -116,6 +116,18 @@ def main():
         ("a JWT", "site/x.js",
          "t='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "s" * 43 + "'"),
         ("an OpenSSH private key header", "x.pem", "-----BEGIN OPENSSH PRIVATE KEY-----"),
+        # THE FOUR THAT USED TO BE ABSENT. Each was dropped because a fixture in this
+        # repository collided with it, and each is back narrowed by the format instead --
+        # so the pair that matters is this entry and its twin in MUST_ALLOW below, which
+        # feeds the REAL fixture, read off disk. A sample here that fires and a fixture
+        # there that does not is the whole claim.
+        ("an OpenAI legacy secret key", "redteam/x.py", "K = 'sk-" + "a" * 48 + "'"),
+        ("an Anthropic API key", "x.env", "ANTHROPIC_API_KEY=sk-ant-api03-" + "b" * 40),
+        ("an AWS access key id", "tools/x.sh", "AWS_ACCESS_KEY_ID=AKIA" + "Q" * 16),
+        ("a PEM private key with a line of the key under it", "x.pem",
+         "-----BEGIN RSA PRIVATE KEY-----\n" + "M" * 64 + "\n"),
+        # AND THE ADMIN VARIANT, which is a different two letters in the same place.
+        ("an Anthropic admin key", "x.env", "sk-ant-admin01-" + "c" * 40),
         ("a Cyrillic character in source", "redteam/x.py", "# \u0416\u0429\u04ae\u0424"),
     ]
     for label, path, text in MUST_CATCH:
@@ -127,12 +139,44 @@ def main():
     # read, and then how it stops being run. The four credential shapes below are in this
     # repository ON PURPOSE — a tool whose subject is credential formats has credential-shaped
     # fixtures — and a pattern that fires on its own fixtures is one somebody switches off.
+    #
+    # ALL FOUR PATTERNS EXIST AGAIN, narrowed by format rather than dropped, so each line here
+    # is now load-bearing in a way it was not: it used to assert that a pattern was missing,
+    # and now it asserts where a live pattern stops. The strings are READ OFF DISK by
+    # `_fixture` below, because the stand-in written here first was `sk-rangeQA9931xyz` --
+    # seventeen characters against a rule that asks for fifty-one, when the real plant is
+    # forty-two and the margin is nine. A shortened stand-in passes a rule the real fixture
+    # would fail.
+    _fx_cache = {}
+
+    def _fixture(relpath, needle, chars):
+        """The real string from the real file, so this pair cannot drift apart.
+
+        A stand-in written here is a fixture testing itself. What has to not fire is what
+        `--tree` scans in CI, and that is the bytes on disk.
+        """
+        if relpath not in _fx_cache:
+            _fx_cache[relpath] = io.open(os.path.join(ROOT, relpath),
+                                        encoding="utf-8").read()
+        body = _fx_cache[relpath]
+        at = body.find(needle)
+        assert at >= 0, f"{relpath} no longer contains {needle!r} — the exemption's subject " \
+                        "moved, and this check would be about nothing"
+        return body[at:at + chars]
+
     MUST_ALLOW = [
-        ("the practice bot's planted secret", "redteam/x.py", "SECRET = 'sk-rangeQA9931xyz'"),
-        ("AWS's own published example key", "redteam/x.py", "AKIAIOSFODNN7EXAMPLE"),
+        ("the practice bot's planted secret", "redteam/x.py",
+         _fixture("redteam/targets_rangebot.py", "sk-range", 64)),
+        ("AWS's own published example key", "redteam/x.py",
+         _fixture("redteam/test_oracle.py", "AKIAIOSFODNN7EXAMPLE", 24)),
         ("the documented Anthropic variable", "redteam/x.yaml",
-         "# export ANTHROPIC_API_KEY=sk-ant-..."),
-        ("a PEM header fragment used as detector input", "redteam/x.py", "'-----BEGIN RSA'"),
+         _fixture("redteam/targets_anthropic.yaml", "sk-ant-", 32)),
+        ("a PEM header used as detector input", "redteam/x.py",
+         _fixture("redteam/test_oracle.py", "-----BEGIN RSA", 64)),
+        # AND THE SHAPES THE NARROWING DELIBERATELY GIVES UP, named rather than left implied.
+        ("a bare PEM header with no key under it", "x.pem",
+         "-----BEGIN RSA PRIVATE KEY-----\nMIIE"),
+        ("an sk- prefix on something too short to be a key", "x.py", "sk-" + "a" * 40),
         ("ordinary source", "redteam/x.py", "def f():\n    return 1\n"),
         ("an em dash, which is everywhere in this repository", "docs/x.md",
          "one place decides — and the rest read it"),

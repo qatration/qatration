@@ -30,9 +30,9 @@ WHAT IT CHECKS, AND WHY EACH IS HERE:
     encoding layer that a literal scan and a single-escape scan both miss.
   * a local supplement of exact strings, if one exists.
 
-FOUR CREDENTIAL PATTERNS ARE DELIBERATELY ABSENT, and finding that out is why this list was run
-against the real history before it was trusted. The first draft included them and refused this
-repository's own fixtures:
+FOUR CREDENTIAL PATTERNS WERE DELIBERATELY ABSENT, and finding that out is why this list was
+run against the real history before it was trusted. The first draft included them and refused
+this repository's own fixtures:
 
     sk-                    `targets_rangebot.py` plants `sk-rangeQA9931…` as the practice bot's
                            secret, which its own attacks exist to extract
@@ -40,11 +40,20 @@ repository's own fixtures:
                            (AKIAIOSFODNN7EXAMPLE) to a detector, three times
     sk-ant-                `targets_anthropic.yaml` documents the variable as
                            `export ANTHROPIC_API_KEY=sk-ant-…`
-    BEGIN … PRIVATE KEY    `test_oracle.py` uses four characters of a PEM header as input
+    BEGIN … PRIVATE KEY    `test_oracle.py` feeds a PEM header to a detector
 
 In a tool whose subject IS credential formats, the fixtures are credential-shaped by design, and
-a pattern that fires on its own fixture is one somebody switches off. Everything below matches
-nothing in this repository today, which is the only reason it will mean something tomorrow.
+a pattern that fires on its own fixture is one somebody switches off.
+
+ALL FOUR ARE BACK, NARROWED RATHER THAN DROPPED, which is the answer this file had already
+found twice and not applied here. `ASIA` was rescued by refusing to match a key that spells
+EXAMPLE in the middle of itself, and the JWT pattern by requiring a signature the real thing
+always has. The same move covers these: a real OpenAI key is 48 characters after `sk-` and the
+rangebot's plant is 39; a real Anthropic key is `sk-ant-api03-` and forty more, and the
+documented variable is an ellipsis; a real PEM has a 64-character base64 line under the header
+and the fixture has four. Each was run against every blob in this repository's history --
+3,094 of them across 329 commits -- and matches none, which is the only reason they will mean
+something tomorrow. Dropping a pattern costs a real check; narrowing one costs nothing.
 """
 import argparse
 import ast
@@ -70,10 +79,31 @@ CREDENTIALS = [
     # NARROWED, NOT DROPPED. It fires on a stored finding: `ca-credential-files` asks a bot
     # to dump its credential files and one obliged with `ASIAIOSFODNN7EXAMPLE`, which is
     # AWS's own published placeholder and which the artifact keeps because it IS the finding.
-    # The answer taken for `AKIA` above was to drop the pattern; that costs a real check, and
-    # a real temporary access key ID does not spell EXAMPLE in the middle of itself.
+    # The answer first taken for `AKIA` was to drop the pattern; that costs a real check, and
+    # a real temporary access key ID does not spell EXAMPLE in the middle of itself. `AKIA`
+    # now carries the identical exclusion, three entries down, for the identical reason.
     ("AWS session token", r"ASIA(?![0-9A-Z]*EXAMPLE)[0-9A-Z]{16}", "ASIA" + "Q" * 16),
+    # NARROWED, NOT DROPPED -- see the four in the docstring. A real legacy secret key is 48
+    # characters after the prefix; the plant in `targets_rangebot.py` is 39, counted, which
+    # is a nine-character margin and the reason `test_guard.py` feeds it the REAL string
+    # rather than a shortened stand-in. `sk-proj-` below covers the newer format by prefix.
+    ("OpenAI secret key", r"sk-[A-Za-z0-9]{48}", "sk-" + "a" * 48),
     ("OpenAI project key", r"sk-proj-", "sk-proj-abc123"),
+    # `sk-ant-api03-` and forty more. The documented variable in `targets_anthropic.yaml`
+    # is the prefix and an ellipsis, which is what made the unnarrowed pattern unusable.
+    ("Anthropic API key", r"sk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{40}",
+     "sk-ant-api03-" + "b" * 40),
+    # The same EXAMPLE exclusion the session-token pattern above already carries. AWS's own
+    # published example key is what `test_oracle` feeds the detector three times, and a real
+    # access key ID does not spell EXAMPLE in the middle of itself either.
+    ("AWS access key id", r"AKIA(?![0-9A-Z]*EXAMPLE)[0-9A-Z]{16}", "AKIA" + "Q" * 16),
+    # HEADER PLUS A LINE OF THE KEY, narrowed by format the way the JWT pattern below is.
+    # `test_oracle` feeds a header and four characters of body to `credential_in_output`;
+    # a real PEM wraps its body at 64 base64 characters, and 60 is asked for so a writer
+    # that wraps shorter is still caught. What this gives up is a header with no key under
+    # it, which is not a credential, and which `oracle.py` reports as a finding anyway.
+    ("private key", r"-----BEGIN (?:RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----\s*\n[A-Za-z0-9+/=]{60}",
+     "-----BEGIN RSA PRIVATE KEY-----\n" + "M" * 64),
     ("GitHub personal token", r"ghp_[0-9A-Za-z]{20}", "ghp_" + "a" * 20),
     ("GitHub OAuth token", r"gho_[0-9A-Za-z]{20}", "gho_" + "a" * 20),
     ("GitHub fine-grained token", r"github_pat_", "github_pat_11ABC"),
