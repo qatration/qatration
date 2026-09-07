@@ -16,11 +16,18 @@ except Exception:
 import yaml
 from workspace import OUT as WORKSPACE_OUT, read_artifact, NOT_MEASURED
 from workspace import dated, named_build
+# THE FIFTH COPY, and `workspace` has the comment that predicted it: this tuple was written
+# out in `history`, `discrimination` and `build_index`, a fourth was caught arriving, and
+# the grep that found those three did not reach here. Three copies of a rule agree until
+# somebody decides a fourth verdict counts as a breach. `test_names` refuses the next one.
+from workspace import BROKE
+# and one definition of what an ATTACK is -- what it sends and what scores it. The same
+# digest `history.diff`, `compare_targets.pair_diffs` and `discrimination.paired` use.
+from lint_arsenal import attack_digest
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
 PY = sys.executable
-BROKE = ("EXPLOITED", "PARTIAL")
 
 
 def tag(model):
@@ -236,6 +243,43 @@ def report(tname, per_model):
     breaches = {m: len(broke_set[m]) for m in ms}
     print("-" * (w + 2 + 16 * len(ms)))
     print(f"{'BREACHES (excl. controls)':<{w}}  " + "  ".join(f"{breaches[m]:<14}" for m in ms))
+
+    # AN ID IS A NAME, NOT A QUESTION, and this table joins arms on the id. Under
+    # `--from-disk` the arms are separate stored runs -- which this command allows on purpose,
+    # with its own help calling the dates and the builds "the whole risk" -- so an attack can
+    # be recorded in two versions under one name. A row like that is not one model answering
+    # differently from another, and the verdict below is a sentence about the models.
+    #
+    # NOTHING IN THE STORED MATRIX ARMS DISAGREES TODAY: four targets have two model arms each
+    # and all 317 shared ids match. This completes a list this function already keeps -- it
+    # warns about a different oracle build and about runs measured on different days for the
+    # same reason -- rather than fixing something measured. The three other places an id is
+    # used as a join key each had a live instance; this one does not, and saying so is the
+    # difference between a check and a claim.
+    #
+    # THE COUNTS ABOVE STAY. They are per-model totals over what that model was sent, which
+    # is a real number either way. What is narrowed is the COMPARISON, because that is the
+    # part that reads across arms -- the same split `discrimination.paired` and the
+    # comparison page's build pairs already draw, with the same digest.
+    _versions = {}
+    for aid in ids:
+        # NO EMPTY-DIGEST GUARD, and the absence is deliberate. `attack_digest` returns
+        # empty only for a non-mapping, and every row here has already been indexed by
+        # `r["attack"]["id"]`, so it cannot. A line no mutation can turn red is the thing
+        # this suite refuses everywhere else.
+        _seen = {attack_digest((per_model[m].get(aid) or {}).get("attack") or {})
+                 for m in ms if per_model[m].get(aid)}
+        if len(_seen) > 1:
+            _versions[aid] = len(_seen)
+    if _versions:
+        print("\n  ! %d attack(s) are recorded in more than one version across these runs, "
+              "so a\n    difference on them is the question changing rather than the model: "
+              "%s%s.\n    They are in the counts above and out of the comparison below; "
+              "re-run the models\n    with one arsenal to compare them."
+              % (len(_versions), ", ".join(sorted(_versions)[:6]),
+                 " …" if len(_versions) > 6 else ""))
+        for m in ms:
+            broke_set[m] = broke_set[m] - set(_versions)
 
     # verdict: compare the SETS breached, not just counts — a different failure
     # SURFACE at the same count is the subtle case a count-only view hides.

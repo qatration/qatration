@@ -406,6 +406,65 @@ def main():
                 break
     check("...over the suites that use that signature", _ok_files >= 20, str(_ok_files))
 
+    # --- A CONSTANT `workspace` OWNS, WRITTEN OUT AGAIN SOMEWHERE ELSE -----------------
+    #
+    # `workspace.BROKE` carries the comment that predicted this: the tuple `("EXPLOITED",
+    # "PARTIAL")` had been written out in `history`, `discrimination` and `build_index`,
+    # a fourth was caught arriving, and they were collapsed into one definition -- "three
+    # copies of a rule agree until the day somebody decides a fourth verdict counts as a
+    # breach, and then two reports disagree about what a finding is".
+    #
+    # THE GREP THAT FOUND THOSE THREE MISSED A FIFTH. `model_matrix.py` line 23 was its own
+    # `BROKE = ("EXPLOITED", "PARTIAL")`, identical and unimported, in the command that
+    # prints "model choice MATTERS here" off exactly that tuple. A rule enforced by a grep
+    # somebody ran once is a rule for as long as nobody adds a file.
+    #
+    # The scan is narrow on purpose: a module-level assignment of a LITERAL whose name
+    # `workspace` also binds to a module-level literal. An alias (`OUT = WORKSPACE_OUT`) is
+    # not a literal and is not a copy; a local constant nothing else owns is not touched.
+    import ast as _ast_w
+    _LITS = (_ast_w.Constant, _ast_w.Tuple, _ast_w.List, _ast_w.Set, _ast_w.Dict)
+
+    def _top_literals(path):
+        try:
+            _tree = _ast_w.parse(io.open(path, encoding="utf-8").read())
+        except (SyntaxError, OSError):
+            return {}
+        out = {}
+        for _n in _tree.body:
+            if (isinstance(_n, _ast_w.Assign) and len(_n.targets) == 1
+                    and isinstance(_n.targets[0], _ast_w.Name)
+                    and isinstance(_n.value, _LITS)):
+                out[_n.targets[0].id] = _ast_w.dump(_n.value)
+        return out
+
+    _ws = _top_literals(os.path.join(HERE, "workspace.py"))
+    # NAMED, NOT COUNTED. A floor on how MANY literals workspace holds is satisfied by any
+    # five of them, so a mutation that stops it owning the one this rule is about leaves the
+    # scan green with nothing to find -- an empty set satisfying the claim made about it.
+    # `BROKE` is the constant whose five copies motivated the rule, and it is checked by name.
+    # `OUT` is deliberately not on this list: it is `out_dir()`, a CALL, so it is not a
+    # literal and this scan cannot see it either way -- naming it here would be a check that
+    # fails for a reason unrelated to the rule.
+    _want_owned = ("BROKE", "NOT_MEASURED")
+    _unowned = [k for k in _want_owned if k not in _ws]
+    check("workspace owns the constants other modules share", not _unowned,
+          "not module-level literals in workspace.py: %s" % _unowned)
+    check("...and there are more than those to protect", len(_ws) >= 5,
+          "%d module-level literals" % len(_ws))
+    _copies = []
+    for _sp in sorted(glob.glob(os.path.join(HERE, "*.py"))
+                      + glob.glob(os.path.join(ROOT, "tools", "*.py"))):
+        _b = os.path.basename(_sp)
+        if _b.startswith("test_") or _b == "workspace.py":
+            continue
+        for _k, _v in _top_literals(_sp).items():
+            if _k in _ws:
+                _copies.append("%s:%s%s" % (_b, _k,
+                                            "" if _v == _ws[_k] else " (and DIFFERS)"))
+    check("no module writes out a constant workspace already owns", not _copies,
+          "; ".join(_copies))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

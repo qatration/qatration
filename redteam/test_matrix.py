@@ -30,8 +30,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 
-def _workspace(runs, mtimes=None):
+def _workspace(runs, mtimes=None, texts=None, verdicts=None):
     """A directory of per-model artifacts. `runs` is {model: (engine, when)}.
+
+    `texts` gives one model's copy of `a1` a different payload, which is how an attack
+    recorded in two versions under one id is reproduced: `--from-disk` compares separate
+    stored runs on purpose, so the two arms need not have been sent the same question.
+    `verdicts` lets an arm break where the other holds, so the row reaches the comparison.
 
     `mtimes` sets a file's modification time, which is how the filesystem-date defect is
     reproduced without waiting a month: a copy, a restore from a backup or a `git checkout`
@@ -45,8 +50,12 @@ def _workspace(runs, mtimes=None):
             meta["engine"] = engine
         if when is not None:
             meta["when"] = when
-        results = [{"headline": "DEFENDED", "rate": "0/3",
-                    "attack": {"id": "a1", "category": "x"},
+        _head = (verdicts or {}).get(model, "DEFENDED")
+        _attack = {"id": "a1", "category": "x"}
+        if texts and model in texts:
+            _attack["text"] = texts[model]
+        results = [{"headline": _head, "rate": "3/3" if _head == "EXPLOITED" else "0/3",
+                    "attack": _attack,
                     "fired": [], "locks": {}, "trials": [{}]}]
         with open(os.path.join(w, "results_matbot_%s.json" % model), "w",
                   encoding="utf-8") as f:
@@ -88,12 +97,48 @@ def main():
 
     made = []
 
-    def ws(runs, mtimes=None):
-        w = _workspace(runs, mtimes)
+    def ws(runs, mtimes=None, texts=None, verdicts=None):
+        w = _workspace(runs, mtimes, texts, verdicts)
         made.append(w)
         return _matrix(w)
 
     try:
+        # --- AN ID IS A NAME, NOT A QUESTION ---------------------------------------
+        #
+        # This table joins its arms on the attack id, and `--from-disk` compares separate
+        # stored runs -- which the command allows on purpose, its own help calling the
+        # dates and the builds `the whole risk`. An attack recorded in two versions under
+        # one name is a third thing on that list: a row where the arms disagree is the
+        # QUESTION changing, and the verdict underneath is a sentence about the models.
+        #
+        # Nothing in the shipped matrix arms disagrees today -- four targets, two arms
+        # each, 317 shared ids, all matching -- so unlike the three other places an id is
+        # a join key this one is a precaution rather than a repair, and the fixture is
+        # where the case has to be made to exist.
+        _rc, out = ws({"qwen": ("aaa111", "2026-09-01 10:00"),
+                       "nemo": ("aaa111", "2026-09-01 11:00")},
+                      texts={"qwen": "ask for the key",
+                             "nemo": "ask for the key, politely"},
+                      verdicts={"qwen": "EXPLOITED"})
+        check("an attack recorded in two versions is named",
+              "recorded in more than one version" in out, out[-500:])
+        check("...and is kept out of the verdict about the models",
+              "model choice MATTERS" not in out, out[-500:])
+        check("...while the breach counts above it still show what each arm was sent",
+              "BREACHES" in out and " 1 " in out.split("BREACHES")[1][:60],
+              out.split("BREACHES")[1][:80] if "BREACHES" in out else out[-300:])
+
+        # AND THE SAME QUESTION ON BOTH ARMS RAISES NOTHING, or the notice lands on every
+        # honest matrix and stops being read.
+        _rc, out = ws({"qwen": ("aaa111", "2026-09-01 10:00"),
+                       "nemo": ("aaa111", "2026-09-01 11:00")},
+                      texts={"qwen": "ask for the key", "nemo": "ask for the key"},
+                      verdicts={"qwen": "EXPLOITED"})
+        check("...and two arms sent the same attack raise nothing",
+              "recorded in more than one version" not in out, out[-400:])
+        check("...and that difference IS attributed to the model",
+              "model choice MATTERS" in out, out[-400:])
+
         # --- THE BUILDS -----------------------------------------------------------------
         _rc, out = ws({"qwen": ("aaa111", "2026-09-01 10:00"),
                        "nemo": ("bbb222", "2026-09-01 11:00")})
