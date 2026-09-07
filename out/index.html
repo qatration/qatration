@@ -27,15 +27,15 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)
 .adapt{list-style:none;padding:0;margin:0} .adapt li{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
 </style></head><body><div class="wrap">
 <h1><span class="q">QA</span>tration — Dashboard</h1>
-<div class="sub">Adversarial test of AI features · 2026-09-04 · 35 targets</div>
-<div class="sub">9 of them are somebody else's software and carry 70 of the
+<div class="sub">Adversarial test of AI features · 2026-09-07 · 35 targets</div>
+<div class="sub">9 of them are somebody else's software and carry 63 of the
 findings; the other 26 are bots written here to exercise the engine. A fleet count
 that does not separate those is counting its own homework — dvla, foreign, foreign-code, lcagent, localrag, localrag-refusal, nemo, nemo-inputonly, shipdesk.</div>
 <div class="tiles">
   <div class="tile"><div class="n">35</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">9</div><div class="l">third-party code</div></div>
-  <div class="tile"><div class="n" style="color:var(--accent)">440</div><div class="l">attacks breached</div><div class="l" style="color:var(--dim)">247 the benign baseline cannot attribute</div></div>
-  <div class="tile"><div class="n" style="color:#1e6b3a">3</div><div class="l">hardened (0 breaches)</div></div>
+  <div class="tile"><div class="n" style="color:var(--accent)">436</div><div class="l">attacks breached</div><div class="l" style="color:var(--dim)">234 the benign baseline cannot attribute</div></div>
+  <div class="tile"><div class="n" style="color:#1e6b3a">4</div><div class="l">hardened (0 breaches)</div></div>
 </div>
 <div class="links">
   <a href="defense_report.html">→ Defense report (fixes)</a>
@@ -56,12 +56,6 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
           <div class="cm">mistral-nemo · 3 trials · 100%</div>
         </a>
-        <a class="card" href="report_localrag-refusal.html">
-          <div class="ct"><span class="dot" style="background:#b3261e"></span>localrag-refusal</div>
-          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">7</b> / 7 breached</div>
-          <div class="bar"><span style="width:100%;background:#b3261e"></span></div>
-          <div class="cm">hosted · 10 trials · 100%</div>
-        </a>
         <a class="card" href="report_mcpagent-rugpull.html">
           <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent-rugpull</div>
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">6</b> / 6 breached</div>
@@ -79,6 +73,12 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">10</b> / 11 breached</div>
           <div class="bar"><span style="width:91%;background:#b3261e"></span></div>
           <div class="cm">hosted · 10 trials · 91%</div>
+        </a>
+        <a class="card" href="report_guardedrag-refusal.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-refusal</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">7</b> / 8 breached</div>
+          <div class="bar"><span style="width:88%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 10 trials · 88%</div>
         </a>
         <a class="card" href="report_shipdesk.html">
           <div class="ct"><span class="dot" style="background:#b3261e"></span>shipdesk</div>
@@ -140,8 +140,8 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="bar"><span style="width:64%;background:#b3261e"></span></div>
           <div class="cm">qwen2.5:14b · 3 trials · 64%</div>
         </a>
-        <a class="card" href="report_guardedrag-refusal.html">
-          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-refusal</div>
+        <a class="card" href="report_guardedrag-refusal-policy.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-refusal-policy</div>
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">5</b> / 8 breached</div>
           <div class="bar"><span style="width:62%;background:#b3261e"></span></div>
           <div class="cm">hosted · 10 trials · 62%</div>
@@ -175,12 +175,6 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">4</b> / 8 breached</div>
           <div class="bar"><span style="width:50%;background:#b3261e"></span></div>
           <div class="cm">hosted · 3 trials · 50%</div>
-        </a>
-        <a class="card" href="report_guardedrag-refusal-policy.html">
-          <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-refusal-policy</div>
-          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">4</b> / 8 breached</div>
-          <div class="bar"><span style="width:50%;background:#b3261e"></span></div>
-          <div class="cm">hosted · 10 trials · 50%</div>
         </a>
         <a class="card" href="report_toolagent.html">
           <div class="ct"><span class="dot" style="background:#c2410c"></span>toolagent</div>
@@ -241,6 +235,12 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="cs" style="color:#1e6b3a"><b style="color:#1e6b3a">0</b> / 8 breached</div>
           <div class="bar"><span style="width:0%;background:#1e6b3a"></span></div>
           <div class="cm">hosted · 3 trials · 0%</div>
+        </a>
+        <a class="card" href="report_localrag-refusal.html">
+          <div class="ct"><span class="dot" style="background:#1e6b3a"></span>localrag-refusal</div>
+          <div class="cs" style="color:#1e6b3a"><b style="color:#1e6b3a">0</b> / 7 breached</div>
+          <div class="bar"><span style="width:0%;background:#1e6b3a"></span></div>
+          <div class="cm">hosted · 10 trials · 0%</div>
         </a>
         <a class="card" href="report_memorybot.html">
           <div class="ct"><span class="dot" style="background:#1e6b3a"></span>memorybot</div>

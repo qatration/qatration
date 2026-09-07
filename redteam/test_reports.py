@@ -903,6 +903,88 @@ def main():
     check("...and the three stay distinguishable from each other",
           len({mm.mark({"headline": h}) for h in ("DEFENDED", "SKIP", "ERROR")}) == 3)
 
+    # --- A COMMITTED PAGE THAT SAYS WHAT THE CODE NO LONGER SAYS ------------------------
+    #
+    # `out/` holds four aggregate pages built from the stored evidence and committed with
+    # it, and nothing compared them with what the generators produce. Two had drifted:
+    # `index.html` said 440 attacks breached and 3 hardened targets where the same code over
+    # the same artifacts says 436 and 4, and `defense_report.html` said 440 occurrences,
+    # 32 vulnerable systems and a coverage paragraph the module had replaced entirely.
+    #
+    # The README's numbers are recounted from the evidence by `test_readme`, with the reason
+    # written there -- a number that is declared instead of counted goes stale and nobody
+    # hears. These pages ARE numbers, in the same repository, and they were declared.
+    #
+    # DERIVED, NOT LISTED. The commands to run are the ones whose module names a fixed
+    # `.html` file, so a new aggregate page joins this check by being written rather than by
+    # somebody remembering. The generators are deterministic -- two runs over one input
+    # produce identical bytes -- so the only line that legitimately differs is the date.
+    import cli as _cli_p, re as _re_p, shutil as _sh_p, subprocess as _sp_p
+    import tempfile as _tf_p
+
+    _pagey = {}
+    for _cmd, (_mod, _) in _cli_p.COMMANDS.items():
+        _mp = os.path.join(HERE, _mod + ".py")
+        if not os.path.exists(_mp):
+            continue
+        _names = set(_re_p.findall(r'["\']([a-z_]+\.html)["\']',
+                                   io.open(_mp, encoding="utf-8").read()))
+        if _names:
+            _pagey[_cmd] = _names
+    check("the commands that build a committed page can be derived",
+          len(_pagey) >= 3, str(sorted(_pagey)))
+
+    _live = os.path.join(os.path.dirname(HERE), "out")
+    _work = _tf_p.mkdtemp()
+    _stale, _seen = {}, {}
+    try:
+        for _f in sorted(glob.glob(os.path.join(_live, "*.json"))):
+            _sh_p.copy(_f, _work)
+        if os.path.isdir(os.path.join(_live, "history")):
+            _sh_p.copytree(os.path.join(_live, "history"),
+                           os.path.join(_work, "history"))
+        _env = dict(os.environ, QATRATION_OUT=_work,
+                    PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+        for _cmd in sorted(_pagey):
+            _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd],
+                      capture_output=True, text=True, timeout=300, env=_env)
+
+        def _body(path):
+            """The page without the lines a rebuild legitimately moves: its dates."""
+            _txt = io.open(path, encoding="utf-8", newline="").read()
+            return [l for l in _txt.replace(chr(13), "").split(chr(10))
+                    if not _re_p.search(r"20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]", l)
+                    and not _re_p.search(r"[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]", l)]
+
+        for _f in sorted(glob.glob(os.path.join(_work, "*.html"))):
+            _b = os.path.basename(_f)
+            _committed = os.path.join(_live, _b)
+            if not os.path.exists(_committed):
+                _stale[_b] = "not committed at all"
+                continue
+            _was, _now = _body(_committed), _body(_f)
+            # AND THE COMPARISON READ SOMETHING. Two empty lists are equal, so a `_body`
+            # that returns nothing -- a date filter that swallowed the page, a read that
+            # failed -- would satisfy this check about every page at once. That mutation
+            # stayed green until this line existed.
+            _seen[_b] = min(len(_was), len(_now))
+            if _was != _now:
+                _diff = [x for x in _now if x not in _was]
+                _stale[_b] = "%d line(s) differ, e.g. %s" % (
+                    sum(1 for a, b in zip(_was, _now) if a != b) + abs(len(_was) - len(_now)),
+                    (_diff[0][:70] if _diff else ""))
+        check("every committed page says what the code says about the stored evidence",
+              not _stale,
+              "; ".join("%s: %s" % (k, v) for k, v in sorted(_stale.items())))
+        check("...over pages the comparison could actually read",
+              _seen and min(_seen.values()) >= 20, str(_seen))
+        check("...over the pages that were actually rebuilt",
+              len(glob.glob(os.path.join(_work, "*.html"))) >= 3,
+              str(sorted(os.path.basename(x)
+                         for x in glob.glob(os.path.join(_work, "*.html")))))
+    finally:
+        _sh_p.rmtree(_work, ignore_errors=True)
+
     # --- discrimination: the false-alarm gate ------------------------------------------
     check("a rate parses to numerator and denominator", disc._frac("2/3") == (2, 3))
     check("a malformed rate is (0, 0), so it can never be read as a break",
