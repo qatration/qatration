@@ -88,6 +88,99 @@ def main():
     _odd = sorted({r.get("verdict") for r in _rows} - {"finding", "false_positive"})
     check("...with one of the two verdicts this file has", not _odd, str(_odd))
 
+    # --- AND EVERY ROW REACHES THE MAP, which is where two of them stopped ----------------
+    #
+    # `load_adjudication` was a dict comprehension keyed at (target, detector), so a second
+    # entry for a pair deleted the first. The count above says 142 and the map held 140. The
+    # two that vanished are not duplicates in the sense of redundant: each is a person
+    # settling a genuinely different fire that happens to share both names, which is what the
+    # file's header offered a `value` field for and what nothing ever implemented.
+    #
+    # SO THE CHECK IS ON THE FOLD, not on the absence of a collision. Writing a pair twice is
+    # allowed and the file does it; losing one of them is not.
+    import benign as _B0, io as _io0, tempfile as _tmp0
+    _adj = _B0.load_adjudication(os.path.join(HERE, "benign_adjudication.yaml"))
+    _pairs = {(r.get("target"), r.get("detector")) for r in _rows}
+    check("every pair the file names is in the map",
+          sorted(_pairs - set(_adj)) == [], str(sorted(_pairs - set(_adj))[:4]))
+    # AND THE REASONING SURVIVES. Any pair written twice carries both `why` texts, so the
+    # entry a reader sees covers both cases rather than whichever was typed second.
+    _twice = sorted({p for p in _pairs
+                     if sum(1 for r in _rows
+                            if (r.get("target"), r.get("detector")) == p) > 1})
+    check("...and the file really does write a pair twice, or this is about nothing",
+          len(_twice) >= 2, str(_twice))
+    # THE WHOLE TEXT, not its first word. The first version compared `why.split()[0]`, and
+    # both of this file's collided pairs open with the word "The" -- so it passed against
+    # last-wins, which is the bug it was written to catch. A check whose fixture cannot reach
+    # the property is not a weak check, it is a green one that asserts nothing.
+    _lost = [p for p in _twice
+             for r in _rows if (r.get("target"), r.get("detector")) == p
+             and str(r.get("why") or "").strip() not in (_adj[p].get("why") or "")]
+    check("...and both reasons survive the fold, whole", not _lost,
+          str(sorted(set(_lost))[:4]))
+
+    # BOTH DIRECTIONS ON THE FOLD ITSELF, driven through the real function on a written file,
+    # because the shipped file's two collisions happen to AGREE and the dangerous one does not.
+    import yaml as _y0
+    _fd0 = os.path.join(_tmp0.mkdtemp(), "adj.yaml")
+    def _wrote(rows):
+        _io0.open(_fd0, "w", encoding="utf-8").write(_y0.safe_dump(rows))
+        return _B0.load_adjudication(_fd0)
+
+    _agree = _wrote([{"target": "t", "detector": "d", "verdict": "finding", "why": "ALPHA"},
+                     {"target": "t", "detector": "d", "verdict": "finding", "why": "BETA"}])
+    check("two agreeing entries keep the verdict",
+          _agree[("t", "d")]["verdict"] == "finding", str(_agree))
+    check("...and keep both reasons",
+          "ALPHA" in _agree[("t", "d")]["why"] and "BETA" in _agree[("t", "d")]["why"],
+          _agree[("t", "d")]["why"])
+
+    # THE DANGEROUS ONE. Last-wins here would let a `false_positive` typed later suppress a
+    # pair somebody else recorded as a finding, with nothing said. Two people disagreeing is
+    # the definition of unsettled, and `disputed` is neither word anything downstream tests
+    # for -- so the pair falls through to `unknown` in `settled()` and is listed there.
+    _rowsx = [{"target": "t", "detector": "d", "verdict": "finding", "why": "ALPHA"},
+              {"target": "t", "detector": "d", "verdict": "false_positive", "why": "BETA"}]
+    _fight = _wrote(_rowsx)
+    check("two disagreeing entries settle nothing",
+          _fight[("t", "d")]["verdict"] == "disputed", str(_fight))
+    check("...and say both sides",
+          "ALPHA" in _fight[("t", "d")]["why"] and "BETA" in _fight[("t", "d")]["why"],
+          _fight[("t", "d")]["why"])
+    check("...and reversing the order gives the same answer",
+          _wrote(list(reversed(_rowsx)))[("t", "d")]["verdict"] == "disputed",
+          str(_wrote(list(reversed(_rowsx)))))
+    # A ROW THAT IS NOT A MAPPING used to raise AttributeError inside the comprehension, so a
+    # malformed file crashed the reader instead of being reported by the checks above.
+    check("a row that is not a mapping does not crash the reader",
+          _wrote(["not a mapping",
+                  {"target": "t", "detector": "d", "verdict": "finding", "why": "W"}])
+          == {("t", "d"): {"target": "t", "detector": "d", "verdict": "finding",
+                           "why": "W"}}, "")
+
+    # --- AND NO ROW CARRIES A KEY NOTHING READS ------------------------------------------
+    #
+    # The header used to offer a `value` field narrowing an entry to fires carrying a specific
+    # string. `load_adjudication` keys at (target, detector) and every count downstream is per
+    # (detector, target), so a `value` would have applied to every fire of the pair -- the
+    # exact over-generalisation it was described as preventing. Zero rows used it, which is the
+    # only reason it never misled anybody, and the offer is withdrawn. This is the gate that
+    # keeps it withdrawn: a key this file does not implement is a verdict that does not apply
+    # the way its author thinks it does.
+    from workspace import near_miss_keys as _nmk0
+    _KNOWN_ADJ = {"target", "detector", "verdict", "why"}
+    _stray = sorted({k for r in _rows if isinstance(r, dict)
+                     for k in r if k not in _KNOWN_ADJ})
+    check("no adjudication carries a key the reader does not read", not _stray,
+          "%s%s" % (_stray, (" — did you mean %s?" % _nmk0(dict.fromkeys(_stray),
+                                                            _KNOWN_ADJ)) if _stray else ""))
+    check("...and the four it does read are all present on every row",
+          not [i for i, r in enumerate(_rows)
+               if isinstance(r, dict) and set(r) != _KNOWN_ADJ],
+          str([i for i, r in enumerate(_rows)
+               if isinstance(r, dict) and set(r) != _KNOWN_ADJ][:4]))
+
     # AND THE TWO GAPS ARE COMPUTED, not assumed. A fire nobody settled and a verdict about a
     # fire that stopped are opposite problems; the roll-up reports both and neither is an
     # error, so what is checked here is that the function can tell them apart.

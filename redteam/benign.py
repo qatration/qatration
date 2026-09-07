@@ -546,12 +546,44 @@ def load_adjudication(path=None):
     is routinely right about one bot and wrong about another — a fleet-wide verdict on a
     detector NAME is the over-generalisation `baseline.py` already refuses when it compares the
     specific value rather than the detector that noticed it.
+
+    A SECOND VERDICT ON A PAIR USED TO DELETE THE FIRST, because this was one dict
+    comprehension and the later key won. Two pairs in the shipped file are written twice --
+    `nemo-inputonly/refusal_then_comply` and `draftbot/debug_disclosure` -- each a person
+    settling a genuinely different fire under the same two names, which is exactly what the
+    file's header offered a `value` field for and what nothing implements. The count said 142
+    verdicts and the map held 140, and the two that vanished were reasoning, not noise.
+
+    So the rows are FOLDED, not overwritten. Agreeing verdicts keep both reasons, separated,
+    so a reader sees the two cases the one line covers. DISAGREEING verdicts become `disputed`,
+    which is neither of the two words anything downstream tests for -- so the pair counts as
+    unsettled, and two people disagreeing is precisely the state where nobody has settled it.
+    Silently picking whichever was typed later is the one answer that cannot be right.
     """
     path = path or os.path.join(HERE, "benign_adjudication.yaml")
     if not os.path.exists(path):
         return {}
     rows = yaml.safe_load(open(path, encoding="utf-8")) or []
-    return {(r["target"], r["detector"]): r for r in rows if r.get("target") and r.get("detector")}
+    out = {}
+    for r in rows:
+        # A row that is not a mapping has no verdict in it, and reading one used to raise
+        # AttributeError here -- before `test_benign` could say which row is malformed.
+        if not isinstance(r, dict) or not (r.get("target") and r.get("detector")):
+            continue
+        key = (r["target"], r["detector"])
+        prev = out.get(key)
+        if prev is None:
+            out[key] = dict(r)
+            continue
+        if prev.get("verdict") != r.get("verdict"):
+            out[key] = dict(r, verdict="disputed", why=(
+                "TWO ENTRIES DISAGREE, so this pair is not settled.\n\n"
+                "%s: %s\n\n%s: %s" % (prev.get("verdict"), prev.get("why"),
+                                      r.get("verdict"), r.get("why"))))
+        else:
+            out[key] = dict(prev, why="%s\n\n%s" % (prev.get("why") or "",
+                                                    r.get("why") or ""))
+    return out
 
 
 def adjudication_gaps(rows_by_target=None, path=None):
