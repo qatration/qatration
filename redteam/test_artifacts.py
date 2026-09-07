@@ -201,9 +201,13 @@ def main():
     check("a results file with no results list is recognised and refused",
           read_artifact(_nores)[1] is not None, str(read_artifact(_nores)[1]))
 
+    # AND THERE HAVE TO BE SOME. "no shipped file is refused" is satisfied by shipping no
+    # files, and an empty `out/` is exactly the state a `--depth 1` clone of a fork can be in.
+    # Measured by deleting the artifacts in a clone and re-running: this suite passed.
+    _bships = sorted(_g_a.glob(os.path.join(ROOT, "out", "benign_*.json")))
+    check("there are baselines committed to check", len(_bships) >= 20, str(len(_bships)))
     _brefused = {os.path.basename(_p): read_artifact(_p)[1]
-                 for _p in _g_a.glob(os.path.join(ROOT, "out", "benign_*.json"))
-                 if read_artifact(_p)[1]}
+                 for _p in _bships if read_artifact(_p)[1]}
     check("no baseline this repository ships is refused by the shape rule",
           _brefused == {}, str(_brefused))
 
@@ -225,9 +229,10 @@ def main():
           str(read_artifact(_mfp)[1]))
 
     # AND EVERY SHIPPED ARTIFACT STILL READS, or the rule is one this repository fails.
+    _ships = sorted(_g_a.glob(os.path.join(ROOT, "out", "results_*.json")))
+    check("there are results committed to check", len(_ships) >= 20, str(len(_ships)))
     _refused = {os.path.basename(_p): read_artifact(_p)[1]
-               for _p in _g_a.glob(os.path.join(ROOT, "out", "results_*.json"))
-               if read_artifact(_p)[1]}
+                for _p in _ships if read_artifact(_p)[1]}
     check("no artifact this repository ships is refused by the shape rule",
           _refused == {}, str(_refused))
 

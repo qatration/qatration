@@ -107,6 +107,8 @@ def main():
           {f["family"] for f in scoped}, {"control", "assertion"})
     check("an unknown family scopes down to the control alone",
           [f["id"] for f in load_frames(families=["nonesuch"])], ["bare"])
+    check("the shipped frame library is not empty, or every claim about it is vacuous",
+          len(load_frames()) >= 5, True)
     check("every frame in the shipped library carries a hypothesis",
           all(f.get("why") and "{task}" in f["template"] for f in load_frames()), True)
 

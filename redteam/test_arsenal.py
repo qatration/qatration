@@ -400,6 +400,7 @@ def main():
     import glob as _glob
     need = sum(_requests(r) for r in gen_rows) * 3          # default --trials
     short = []
+    _budgeted = 0
     for fp in target_configs(HERE):
         cfg = _yaml.safe_load(open(fp, encoding="utf-8")) or {}
         if not cfg.get("skip_in_fleet") or cfg.get("adapter") != "http":
@@ -412,6 +413,8 @@ def main():
         if "localhost" in url or "127.0.0.1" in url:
             continue
         cap = (cfg.get("rate") or {}).get("max_requests")
+        if cap:
+            _budgeted += 1
         base = os.path.basename(fp)
         # A config that cannot cover a full sweep may say so instead — targets_vertex.yaml
         # does, because an access token's lifetime is the real ceiling there and raising a
@@ -419,6 +422,10 @@ def main():
         excused = "cannot complete a full sweep" in open(fp, encoding="utf-8").read().lower()
         if cap and cap < need and not excused:
             short.append("%s (%d of %d)" % (base, cap, need))
+    # AND THERE WERE BUDGETS TO CHECK, or "none would truncate a run" is satisfied by there
+    # being none: an empty set satisfies every universal claim made about it.
+    check("there are example configs with a budget to check", _budgeted >= 4,
+          "%d example config(s) carry a rate budget" % _budgeted)
     check("every shipped example budget covers a full sweep, or says why it cannot",
           not short, "these would truncate a default run: %s" % short)
 

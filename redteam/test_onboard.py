@@ -114,6 +114,11 @@ def main():
         _u = onboard.unread_context_keys(_c)
         if _u:
             _bad[os.path.basename(_f)] = _u
+    # AND THERE HAVE TO BE CONFIGS. A universal claim over an empty set is satisfied by the
+    # set being empty, and the `except Exception: continue` above makes an unparseable file
+    # disappear from it silently -- so the count is asserted beside the claim.
+    _seen_cfgs = sorted(_g.glob(os.path.join(HERE, "targets_*.yaml")))
+    check("there are shipped configs to check", len(_seen_cfgs) >= 20, str(len(_seen_cfgs)))
     check("no shipped config declares a context key nothing reads", not _bad, str(_bad))
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Bot)
