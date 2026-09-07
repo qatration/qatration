@@ -60,6 +60,62 @@ for name, method, url, body, want in VECTORS:
     sig = got["Authorization"].rsplit("Signature=", 1)[-1]
     check("AWS test vector: %s" % name, sig == want, "got %s, want %s" % (sig, want))
 
+# --- THE RULE THE VECTORS CANNOT REACH ------------------------------------------------
+#
+# The comment above says query parameters are sorted AFTER encoding, and every one of the
+# three vectors has keys made of letters and digits -- `Param1`, `Param2` -- which encode
+# to themselves. So all three passed with the code sorting the DECODED pairs and encoding
+# afterwards, which is the other rule, and the vector named for the rule proved nothing
+# about it.
+#
+# The two orders differ whenever encoding moves a key past its neighbour, which `%` at 0x25
+# does to most punctuation. AWS states the rule in one sentence: "You must also sort the
+# parameters in the canonical query string alphabetically by key name. The sorting occurs
+# after encoding."
+_cr, _ = signing.canonical_request(
+    "GET", "https://example.amazonaws.com/?%2Da%26.=1&%3B=2",
+    {"host": "example.amazonaws.com"}, b"")
+_q = _cr.split(chr(10))[2]
+check("the canonical query is sorted after encoding, not before",
+      _q == "%3B=2&-a%26.=1", _q)
+# AND THE TWO ORDERS REALLY DO DIFFER HERE, or the line above is about nothing: decoded,
+# `-a&.` sorts first; encoded, `%3B` does.
+check("...on a pair the two rules disagree about",
+      sorted(["-a&.", ";"]) == ["-a&.", ";"]
+      and sorted(["-a%26.", "%3B"]) == ["%3B", "-a%26."], "the fixture cannot tell them apart")
+
+# AND THE ENCODING ITSELF, against the rules AWS writes out for UriEncode: every byte
+# except A-Z a-z 0-9 - . _ ~ is encoded, a space is %20 and never +, and the hex is
+# uppercase.
+_cr2, _ = signing.canonical_request(
+    "GET", "https://example.amazonaws.com/?k=a-b.c_d~e", {"host": "h"}, b"")
+check("the unreserved characters are left alone",
+      _cr2.split(chr(10))[2] == "k=a-b.c_d~e", _cr2.split(chr(10))[2])
+_cr3, _ = signing.canonical_request(
+    "GET", "https://example.amazonaws.com/?k=a%20b", {"host": "h"}, b"")
+check("a space is %20 and never +",
+      _cr3.split(chr(10))[2] == "k=a%20b", _cr3.split(chr(10))[2])
+_cr4, _ = signing.canonical_request(
+    "GET", "https://example.amazonaws.com/?k=%1a", {"host": "h"}, b"")
+check("...and the hex digits are uppercase",
+      _cr4.split(chr(10))[2] == "k=%1A", _cr4.split(chr(10))[2])
+
+# HEADER VALUES: trimmed, and sequential spaces collapsed to one. Both are stated by AWS in
+# the same list, and both are a place to be silently wrong.
+_cr5, _ = signing.canonical_request(
+    "GET", "https://example.amazonaws.com/",
+    {"Host": "  h  ", "X-Amz-Thing": "a   b"}, b"")
+_heads = _cr5.split(chr(10))[3:5]
+check("header values are trimmed and inner runs collapse",
+      _heads == ["host:h", "x-amz-thing:a b"], str(_heads))
+# LINE 6, NOT 5: the canonical headers block ends with its own newline, so an empty line sits
+# between the last header and SignedHeaders -- which is the spec's shape and the reason the
+# first version of this check read the blank one.
+check("...and the names are lowercased and sorted",
+      _cr5.split(chr(10))[6] == "host;x-amz-thing", _cr5.split(chr(10))[6])
+check("...with the blank line the spec puts between them",
+      _cr5.split(chr(10))[5] == "", repr(_cr5.split(chr(10))[5]))
+
 head = signing.authorization("GET", "https://example.amazonaws.com/", {}, b"",
                              service="service", region="us-east-1",
                              access_key=KEY, secret_key=SECRET, when=WHEN)
