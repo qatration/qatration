@@ -919,6 +919,15 @@ def main():
     # `.html` file, so a new aggregate page joins this check by being written rather than by
     # somebody remembering. The generators are deterministic -- two runs over one input
     # produce identical bytes -- so the only line that legitimately differs is the date.
+    #
+    # WHAT THIS DOES NOT COVER: the 45 per-target `report_<name>.html` pages. All 45 differ
+    # from what `report_engine.build_html` produces today -- labels moved, `attacks fired`
+    # became `attacks measured` -- but a faithful rebuild needs more than the stored results:
+    # five of them carry an isolation lock map that `build_html` only renders when handed the
+    # maps, so a naive rebuild drops a whole section and reads as a difference that is not
+    # one. Their VERDICTS were checked by hand against the artifacts and match. Refreshing
+    # them is `rejudge --write`, which also rewrites the JSON, and that is a deliberate act
+    # rather than something a check should force.
     import cli as _cli_p, re as _re_p, shutil as _sh_p, subprocess as _sp_p
     import tempfile as _tf_p
 
