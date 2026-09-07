@@ -155,6 +155,89 @@ def main():
           _r.unfinished_note({"run_id": "missing"}, _d))
 
 
+    # --- THE RECORD HAS A DOOR ---------------------------------------------------------
+    #
+    # This module opens by naming four things a run record exists to answer -- who
+    # authorised this, what did it cost, how did it end, which build produced it -- and
+    # calls them "something somebody will actually ask". Nothing could ask. `listing` and
+    # `summarise` were reached by the suite and by `worker`, `summarise` describes itself
+    # as "one line a human reads in a terminal", and the module had no `main()` to invoke
+    # either. `cli.COMMANDS` carries the same lesson twice already, for three commands that
+    # "had no door" and three more found the same way.
+    #
+    # DRIVEN AS A SUBPROCESS, because the exit code is half the contract and a function
+    # call cannot see it.
+    import subprocess as _sp_d, tempfile as _tf_d, json as _js_d
+
+    def _runs_cmd(work, *flags):
+        _p = _sp_d.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), "runs"] + list(flags),
+            capture_output=True, text=True, timeout=120,
+            env=dict(os.environ, QATRATION_OUT=work,
+                     PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        return _p.returncode, (_p.stdout or "") + (_p.stderr or "")
+
+    _w = _tf_d.mkdtemp()
+    _rc, _out = _runs_cmd(_w)
+    check("an empty workspace is 3, not an empty table", _rc == 3, "exit %s" % _rc)
+    check("...and says a record is written when a run STARTS, so a reader knows why",
+          "starts" in _out, _out[:200])
+
+    # THE MOMENT IS THE CALLER'S TO GIVE. `start` stamps `started_at` with now() unless told
+    # otherwise, so two records made in one breath sort by nothing at all -- and the first
+    # version of this check read the ids and believed them.
+    _t9 = datetime.datetime(2026, 9, 1, 9, 0, 0)
+    runs.start(_w, "2026-09-01T0900-aaaaaa", "botA", scope="full", when=_t9)
+    _rec2 = runs.start(_w, "2026-09-01T1000-bbbbbb", "botB", scope="quick",
+                       when=_t9 + datetime.timedelta(hours=1))
+    runs.finish(_w, _rec2, "finished", spent={"requests": 12})
+    _rc, _out = _runs_cmd(_w)
+    check("a workspace with records lists them and exits 0", _rc == 0, "exit %s" % _rc)
+    check("...newest first", _out.index("botB") < _out.index("botA"), _out[:200])
+    check("...with what it cost", "requests 12" in _out, _out[:300])
+    # AN OPEN RECORD IS THE ONE WORTH SEEING, and it is said separately: `start` writes
+    # before the first probe, so a `started` row is either a sweep in flight or a run that
+    # never came back, and those two look identical -- which is the honest answer and the
+    # reason it does not sit in the table reading as ordinary.
+    check("...and an open record is named under its own heading",
+          "still open" in _out and "botA" in _out.split("still open")[1], _out[-300:])
+    check("...while a closed one is not", "botB" not in _out.split("still open")[1],
+          _out[-300:])
+
+    # AND THE FILTERS NARROW WITHOUT LYING. A filter that matches nothing is not a clean
+    # empty list: it is 3, the code this project documents as nothing measured.
+    _rc, _out = _runs_cmd(_w, "--target", "botB")
+    check("a target filter keeps only that target",
+          _rc == 0 and "botB" in _out and "botA" not in _out, _out[:200])
+    _rc, _out = _runs_cmd(_w, "--target", "nosuch")
+    check("...and a filter that matches nothing is 3, not a clean empty list",
+          _rc == 3, "exit %s" % _rc)
+    check("...and names the targets there ARE, so the next try can be right",
+          "botA" in _out and "botB" in _out, _out[:200])
+    _rc, _out = _runs_cmd(_w, "--state", "started")
+    check("a state filter keeps only that state",
+          _rc == 0 and "botA" in _out and "botB" not in _out.split("still open")[0],
+          _out[:200])
+
+    # AN UNREADABLE RECORD IS NOT AN ABSENT ONE, which `load` already decided; the command
+    # has to carry that through rather than dropping the row.
+    with open(os.path.join(_w, "run_torn.json"), "w", encoding="utf-8") as _f:
+        _f.write("{not json")
+    _rc, _out = _runs_cmd(_w)
+    check("an unreadable record is reported rather than dropped",
+          "could not be read" in _out and "torn" in _out, _out[-300:])
+
+    # AND THE COLUMN CANNOT WELD ITSELF TO THE NEXT ONE. At 20 characters the target name
+    # ran straight into `scope=` -- `guardedrag-mitigatedscope=full` -- and a row that runs
+    # two fields together invents a word, which `run_redteam` had already learned from
+    # `refusal_capability:1-`.
+    _long = runs.start(_w, "2026-09-01T1100-cccccc", "guardedrag-mitigated", scope="full",
+                       when=_t9 + datetime.timedelta(hours=2))
+    _rc, _out = _runs_cmd(_w)
+    check("a long target name does not weld to the next column",
+          "guardedrag-mitigated  " in _out and "mitigatedscope" not in _out,
+          _out[:300])
+
     # --- EVERY EXIT AFTER THE RECORD IS OPENED OWES IT AN ENDING ----------------------
     #
     # `runs.start` writes before the first probe on purpose: "the runs worth having a

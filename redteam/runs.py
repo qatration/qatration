@@ -180,5 +180,83 @@ def summarise(rec):
     spent = rec.get("spent") or {}
     cost = ", ".join(f"{k} {v}" for k, v in spent.items()) or "nothing recorded"
     auth = (rec.get("authorization") or {}).get("method") or "local"
-    return (f"{rec.get('run_id')}  {rec.get('state','?'):<9}{rec.get('target','?'):<20}"
+    # WIDE ENOUGH FOR THE NAMES THAT EXIST. At 20 the column welded itself to the next one --
+    # `guardedrag-mitigatedscope=full` -- and a row that runs two fields together invents a
+    # word, which `run_redteam` had already learned from `refusal_capability:1-`. A name can
+    # be 64 characters by rule, so the pad is a floor and not a ceiling: a longer one pushes
+    # the row out rather than being cut.
+    return (f"{rec.get('run_id')}  {rec.get('state','?'):<9}"
+            f"{str(rec.get('target','?')) + '  ':<26}"
             f"scope={_scope(rec):<6}auth={auth:<11}{cost}")
+
+def main(argv=None):
+    """Every run in this workspace: what ran, on whose authority, and how it ended.
+
+    THE RECORD HAD NO DOOR. This module's own docstring lists four things it exists to
+    answer -- who authorised this, what did it cost, how did it end, which build produced
+    it -- and names them as "something somebody will actually ask". `listing` and
+    `summarise` were written to be read by a person, `summarise` says so in one line, and
+    nothing outside the suite called either: no command, and not even a `main()` to invoke
+    the module with. `cli.COMMANDS` carries the same lesson twice already, once for three
+    commands that "had no door" and again for three more found the same way.
+
+    AN OPEN RECORD IS THE ONE WORTH SEEING. `start` writes before the first probe so a run
+    that dies leaves evidence, which means a `started` row is either a sweep in flight or a
+    run that never came back -- and this repository has one of the latter, from 2026-08-19.
+    It is printed last, under its own heading, rather than sorted into the list where it
+    reads as ordinary.
+    """
+    import argparse
+    ap = argparse.ArgumentParser(
+        prog="qatration runs",
+        description="what ran, against what, on whose authority, and what it cost")
+    ap.add_argument("--target", default=None,
+                    help="only runs against this target name")
+    ap.add_argument("--state", default=None, choices=list(STATES),
+                    help="only runs that ended this way")
+    ap.add_argument("--limit", type=int, default=25,
+                    help="how many to show, newest first (0 for all)")
+    args = ap.parse_args(argv)
+
+    from workspace import OUT
+    rows = listing(OUT)
+    if not rows:
+        # NOT ZERO ROWS PRINTED AS AN EMPTY TABLE. A workspace with no records and a
+        # workspace this command cannot find are different facts, and the second is the
+        # one an operator needs to hear.
+        print(f"no run records in {OUT}. A record is written when `qatration run` starts, "
+              f"so an empty list here means nothing has been run in this workspace.")
+        return 3
+    picked = [r for r in rows
+             if (not args.target or r.get("target") == args.target)
+             and (not args.state or r.get("state") == args.state)]
+    if not picked:
+        print(f"{len(rows)} run(s) recorded, none matching. "
+              f"targets: {', '.join(sorted({str(r.get('target')) for r in rows}))}")
+        return 3
+    shown = picked if args.limit <= 0 else picked[:args.limit]
+    for rec in shown:
+        print(summarise(rec))
+    if len(shown) < len(picked):
+        print(f"  ... and {len(picked) - len(shown)} more (--limit 0 for all)")
+
+    # THE OPEN ONES, SAID SEPARATELY. A run still listed as started is either in flight or
+    # one that never came back, and the two look identical here -- which is the honest
+    # answer, and the reason it is worth a line of its own rather than a row in a table.
+    open_ = [r for r in picked if r.get("state") == "started"]
+    if open_:
+        print(f"\n{len(open_)} run(s) still open — either in flight now, or ended without "
+              f"saying so:")
+        for rec in open_:
+            print(f"  {rec.get('run_id')}  {rec.get('target')}  started {rec.get('started_at')}")
+    _unreadable = [r for r in picked if r.get("state") == "unreadable"]
+    if _unreadable:
+        # Unreadable is not absent, and saying which is the whole discipline of this repo.
+        print(f"\n{len(_unreadable)} record(s) could not be read: "
+              f"{', '.join(str(r.get('run_id')) for r in _unreadable)}")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

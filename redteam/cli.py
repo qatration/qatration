@@ -72,6 +72,12 @@ COMMANDS = {
     "isolation": ("run_isolation",  "map which of a target's defences are separable, one at a time"),
     "lint":     ("lint_arsenal",    "check the attack corpus for the mistakes that read as findings"),
     "coverage": ("detector_coverage", "which detectors have ever caught anything"),
+    # AND THE RECORD OF WHAT RAN. `runs.py` opens with four things it exists to answer --
+    # who authorised this, what did it cost, how did it end, which build produced it -- and
+    # calls them "something somebody will actually ask". Nothing could ask: `listing` and
+    # `summarise` were called by the suite and by `worker`, and the module had no `main()`
+    # to invoke either. The seventh command found by the same walk as the six above it.
+    "runs":     ("runs",            "what ran, on whose authority, and how it ended"),
 }
 
 
