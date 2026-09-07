@@ -133,8 +133,17 @@ def main():
     # transform that encodes the instruction ALONG WITH the payload leaves the model nothing
     # readable to act on. That would test whether a model guesses a cipher unprompted, which
     # is a different question with a uniformly negative answer, reported as a defence.
+    # A SECOND IMPLEMENTATION OF `encoders._plain`, and it disagreed with the engine's. It
+    # took the LAST line, which was right only while every strategy produced a one-line
+    # body; `quoted_printable` wraps with soft line breaks now, so the last line is the tail
+    # of the payload and the round trip decoded `ow.` out of `...9931 now.` and called that
+    # a mismatch. The engine drops the FIRST line and keeps the rest, and a MIME part's
+    # preamble is its headers up to the blank line -- which is what `DECODERS["mime_b64"]`
+    # already does, and is the only shape here with more than one line of preamble.
     def payload(out):
-        return out.rsplit("\n", 1)[-1].strip()
+        if "\n\n" in out:
+            return out.split("\n\n", 1)[1].strip()
+        return out.split("\n", 1)[1].strip() if "\n" in out else out.strip()
     ROUND = [
         ("base32", lambda o: _b.b32decode(o).decode()),
         ("base85", lambda o: _b.b85decode(o).decode()),
@@ -332,6 +341,26 @@ def main():
               "%r" % (_back,))
     check("...and the fixture really is every one of them",
           len(set(_ALL)) == 95, "%d distinct characters" % len(set(_ALL)))
+
+    # AND THE COPY OF `_plain` IN THIS FILE AGREES WITH THE ENGINE'S. `payload` above is a
+    # second implementation of the same rule -- which line of the output is the instruction
+    # and which is the payload -- and it disagreed: it took the LAST line, correct only
+    # while every strategy produced a one-line body. It is here rather than imported because
+    # a MIME part's preamble is three headers and a blank line rather than one line, so this
+    # pins the copy to the original at every strategy and names the one that differs.
+    from encoders import _plain as _engine_plain
+    _split_differs = sorted(
+        _n for _n in ENCODERS
+        if _n != "ascii_art"
+        and payload(apply_encoding(CANARY_MSG, _n))
+        != _engine_plain(apply_encoding(CANARY_MSG, _n)).strip())
+    check("this suite splits instruction from payload the way the engine does",
+          _split_differs == ["mime_b64"], str(_split_differs))
+    # ...AND THE ONE THAT DIFFERS DIFFERS THE WAY THE ENGINE'S OWN DECODER DOES.
+    _mime = apply_encoding(CANARY_MSG, "mime_b64")
+    check("...and mime_b64 splits on the blank line, as its decoder does",
+          payload(_mime) == _mime.split(chr(10) + chr(10), 1)[-1].strip(),
+          repr(payload(_mime))[:70])
 
     # AND THE TWO CASES BY NAME, so a later reader sees the bug rather than the alphabet.
     check("morse gives back a character it had no code for, not a question mark",

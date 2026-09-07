@@ -272,6 +272,28 @@ def bad_entry_shapes(entries):
     return out
 
 
+def _unchanged(e, enc):
+    """True when applying `enc` to this attack's payload gives the payload back.
+
+    Compared after the plain-language line the strategies prepend, because that line is not
+    the payload: every strategy adds one, and comparing with it attached would say every
+    transform did something.
+    """
+    from encoders import apply_encoding
+    from encoders import _plain as _body
+    for s in sent_strings(e):
+        if not isinstance(s, str) or not s.strip():
+            continue
+        try:
+            out = apply_encoding(s, enc)
+        except Exception:
+            # An encoder that raises is the OTHER branch's finding, not this one's.
+            return False
+        if _body(out).strip() == s.strip():
+            return True
+    return False
+
+
 def bad_encoders(entries):
     """-> [(id, why)] for attacks whose `encode:` cannot do what its name claims.
 
@@ -313,6 +335,19 @@ def bad_encoders(entries):
                              "transform is a no-op: the sensitive word goes out written "
                              "normally and a DEFENDED verdict describes a target that was "
                              "shown it in the clear."))
+        # AND THE SAME NO-OP UNDER ANY OTHER NAME. The rule above was written for the one
+        # encoder that had been caught doing it, and `quoted_printable` was doing it in two
+        # shipped arsenals at the same time: RFC 2045 escapes only non-ASCII, `=` and
+        # trailing whitespace, so a plain English instruction came back byte for byte,
+        # under a header announcing it was encoded. Whether a transform no-ops is a property
+        # of the encoder AND the payload together, which is why it has to be asked here,
+        # about this attack's own text, rather than once about the encoder.
+        elif _unchanged(e, enc):
+            out.append((who, "encode: %s leaves this payload byte for byte unchanged, so the attack "
+                             "goes to the target in the clear under an encoded name. A "
+                             "DEFENDED verdict then describes a model that was shown the "
+                             "plain words -- credit for resisting a technique it was never "
+                             "shown." % enc))
         else:
             # AND A MARKER THE ENCODING DESTROYS. `plants:` names a string the attack puts
             # into the target and later asks it to repeat, and `marker_echoed` is the
