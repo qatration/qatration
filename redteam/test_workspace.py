@@ -462,6 +462,65 @@ def check_context_shapes():
     return fails
 
 
+def check_ctx_read_forms():
+    """Every way the engine reads a context key, in one place, read by both scans.
+
+    `workspace.context_keys_read` derives the whole set an operator may configure;
+    `oracle.quieted_by` derives the suppressor keys ONE detector reads. Same question, two
+    scopes -- and the second had a single pattern, `ctx.get(...)`, while this file had five.
+    A detector reading its suppressor as `ctx["allowed_domains"]`, or through `_configured`
+    or `_num`, was reported as having no suppressor at all, so `noisy_for` never told the
+    operator it was unarmed.
+
+    No detector does that today, and that is not the point: four of the five forms were
+    added HERE one at a time, each because a read this scan could not see became a key
+    `onboard` told an operator nothing reads, and none of those four lessons reached the
+    copy one file over.
+    """
+    fails = []
+
+    def check(label, ok, detail=""):
+        print("%s  %s" % ("PASS" if ok else "FAIL", label))
+        if not ok:
+            fails.append("%s: %s" % (label, detail))
+
+    from workspace import CTX_READ_FORMS, ctx_keys_in
+    SRC = ('ctx.get("alpha") and ctx["beta"] and '
+           '_configured("gamma", ctx) and _num(ctx, "delta", 3) and '
+           'oracle_context.get("epsilon")')
+    check("every documented form of a context read is found",
+          sorted(ctx_keys_in(SRC))
+          == ["alpha", "beta", "delta", "epsilon", "gamma"],
+          str(sorted(ctx_keys_in(SRC))))
+    check("...and there are five of them, so a form cannot go missing quietly",
+          len(CTX_READ_FORMS) == 5, str(len(CTX_READ_FORMS)))
+    check("...and a source that reads nothing yields nothing",
+          ctx_keys_in("return True") == set(), str(ctx_keys_in("return True")))
+    check("...and None is not a crash", ctx_keys_in(None) == set(), "")
+
+    # AND BOTH SCANS READ IT. A shared definition two callers do not use is a third copy.
+    import ast as _ast_c, io as _io_c, os as _os_c
+    for _mod, _fn in (("workspace.py", "context_keys_read"),
+                      ("oracle.py", "quieted_by")):
+        _src = _io_c.open(_os_c.path.join(HERE, _mod), encoding="utf-8").read()
+        _tree = _ast_c.parse(_src)
+        _body = [n for n in _ast_c.walk(_tree)
+                 if isinstance(n, _ast_c.FunctionDef) and n.name == _fn]
+        check("%s uses the shared form list" % _fn,
+              bool(_body) and any(
+                  isinstance(n, _ast_c.Name)
+                  and n.id in ("CTX_READ_FORMS", "_ctx_keys_in", "ctx_keys_in")
+                  for n in _ast_c.walk(_body[0])),
+              "%s has its own pattern" % _fn)
+    # ...AND NEITHER KEEPS A SECOND COPY OF THE REGEX.
+    for _mod in ("oracle.py",):
+        _src = _io_c.open(_os_c.path.join(HERE, _mod), encoding="utf-8").read()
+        check("%s has no second copy of the ctx.get pattern" % _mod,
+              _src.count(chr(92) + chr(92) + ".get") == 0
+              or "ctx" + chr(92) + chr(92) + ".get" not in _src, _mod)
+    return fails
+
+
 def check_unread_context_keys():
     """A key nothing reads is a detector nobody armed, and TWO commands need to say so.
 
@@ -1156,7 +1215,7 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = (check_unread_context_keys() + check_context_shapes() + check_esc()
+    _f = (check_ctx_read_forms() + check_unread_context_keys() + check_context_shapes() + check_esc()
           + check_every_command_refuses())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))

@@ -3308,8 +3308,14 @@ def quieted_by(name):
     without `allowed_domains` and `pii_in_output` merely gets noisier.
     """
     import inspect as _inspect
-    import re as _re
     from workspace import list_context_keys as _list_keys
+    # THROUGH `ctx_keys_in`, NOT A SECOND REGEX. This scan asked only for `ctx.get(...)`
+    # while `workspace.context_keys_read` asked for five forms, and the other four were
+    # each added there because a read the scan could not see became a key `onboard` told
+    # an operator nothing reads. A detector reading its suppressor as `ctx["key"]` or
+    # through `_configured`/`_num` was reported here as having no suppressor, so
+    # `noisy_for` never said it was unarmed.
+    from workspace import ctx_keys_in as _ctx_keys_in
     fn = DETECTORS.get(name)
     if fn is None or name in WIDENS:
         return []
@@ -3319,7 +3325,7 @@ def quieted_by(name):
         return []
     if "_own_pii" in src:
         src += _inspect.getsource(_own_pii)
-    reads = set(_re.findall(r'ctx\.get\(\s*["\']([a-z_]+)["\']', src))
+    reads = _ctx_keys_in(src)
     needs = set()
     for entry in NEEDS_CONFIG.get(name, []):
         needs |= set(entry) if isinstance(entry, (tuple, list)) else {entry}

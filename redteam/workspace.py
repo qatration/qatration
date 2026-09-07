@@ -743,16 +743,7 @@ def context_keys_read(root=None):
     import re as _re
     here = _ctx_here
     keys = set()
-    pats = (r'ctx\.get\(\s*["\']([a-z_]+)["\']',
-            r'ctx\[["\']([a-z_]+)["\']\]',
-            r'oracle_context\.get\(\s*["\']([a-z_]+)["\']',
-            r'_configured\(\s*["\']([a-z_]+)["\']',
-            # `_num(ctx, "key", default)` is the numeric read, and it exists because
-            # `int(ctx.get(k) or D)` threw away a configured 0. Named here for the same
-            # reason `_configured` is: this scan IS the set of keys the engine reads, so a
-            # read it cannot see becomes a key `onboard` tells an operator nothing reads.
-            # That is exactly what it said about four of them the moment they moved.
-            r'_num\(\s*ctx\s*,\s*["\']([a-z_]+)["\']')
+    pats = CTX_READ_FORMS
     for fn in _glob.glob(os.path.join(here, "*.py")):
         if os.path.basename(fn).startswith("test_"):
             continue
@@ -776,6 +767,40 @@ def context_keys_read(root=None):
         # direction for a note that can be dismissed.
         pass
     _CTX_KEYS = (_ctx_here, keys)
+    return keys
+
+
+# EVERY WAY THIS ENGINE READS A CONTEXT KEY, in one place because two scans ask it.
+#
+# `context_keys_read` above derives the whole set an operator may configure, and
+# `oracle.quieted_by` derives the suppressor keys ONE detector reads. They are the same
+# question at two scopes, and the second had a single pattern -- `ctx.get(...)` -- while
+# this one had five. A detector reading its suppressor as `ctx["allowed_domains"]`, or
+# through `_configured` or `_num`, was therefore reported as having no suppressor at
+# all, and `noisy_for` never told the operator the detector was unarmed.
+#
+# No detector does that today: measured over all 66, the narrow scan and this one
+# return the same keys. The divergence is the defect -- four of these five forms were
+# added HERE one at a time, each because a read this scan could not see became a key
+# `onboard` told an operator nothing reads, and none of those four lessons reached the
+# copy one file over.
+CTX_READ_FORMS = (
+    r'ctx\.get\(\s*["\']([a-z_]+)["\']',
+    r'ctx\[["\']([a-z_]+)["\']\]',
+    r'oracle_context\.get\(\s*["\']([a-z_]+)["\']',
+    r'_configured\(\s*["\']([a-z_]+)["\']',
+    # `_num(ctx, "key", default)` is the numeric read, and it exists because
+    # `int(ctx.get(k) or D)` threw away a configured 0.
+    r'_num\(\s*ctx\s*,\s*["\']([a-z_]+)["\']',
+)
+
+
+def ctx_keys_in(src):
+    """Every context key this source reads, in any of the forms the engine uses."""
+    import re as _re
+    keys = set()
+    for p in CTX_READ_FORMS:
+        keys |= set(_re.findall(p, src or ""))
     return keys
 
 
