@@ -212,6 +212,27 @@ def package_version():
     return found.group(1) if found else "unknown"
 
 
+def judged_now(meta):
+    """-> `meta` with the build stamped as the one that produced the verdicts in it.
+
+    `write_maps` says the rule and applies it: "The BUILD is the opposite case and is
+    stamped unconditionally: it describes the oracle that produced the verdicts in this
+    file, which is always the one running now." It is written beside `when`, which is the
+    opposite -- the probes were measured whenever they were measured, and a re-score must
+    not stamp today onto them.
+
+    THE RULE WAS STATED FOR LOCK MAPS AND APPLIED TO NOTHING ELSE. `rejudge --write`
+    rewrites three artifact families in one command: a lock map, which re-stamps; a results
+    file, which kept the old build beside verdicts the current oracle had just produced;
+    and `benign --rejudge --write` the same. Three readers act on that field --
+    `history.diff` raises `engine A -> B: the oracle that judged these two runs is not the
+    same one`, `model_matrix --from-disk` warns about different builds, and
+    `detector_coverage`'s provenance audit files artifacts by it -- so a re-scored artifact
+    told all three that an older oracle had judged it.
+    """
+    return {**(meta or {}), "engine": engine_version()}
+
+
 def engine_version():
     """Which build of this engine produced an artifact. Cheap, cached, never fatal.
 

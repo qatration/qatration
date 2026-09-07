@@ -293,6 +293,13 @@ def main():
         if args.write:
             data["meta"]["attribution"] = note
             data["meta"]["delivery"] = delivery
+            # THE BUILD IS THE ORACLE THAT PRODUCED THESE VERDICTS, and after this line
+            # that is the one running now -- the rule `write_maps` states and applies to
+            # the lock map a hundred lines down, in this same command, on the same run.
+            # `when` is untouched for the opposite reason: the probes were measured
+            # whenever they were measured.
+            from target import judged_now as _judged_now
+            data["meta"] = _judged_now(data["meta"])
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
             html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)

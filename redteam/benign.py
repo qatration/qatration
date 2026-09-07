@@ -812,6 +812,11 @@ def main():
             for cid, before, after in changed:
                 print(f"  {cid:<26}{','.join(before) or '-':<34} -> {','.join(after) or '-'}")
             if args.write:
+                # Same rule as the results family and the lock map: the build describes
+                # the oracle that produced the verdicts in this file, and after a re-score
+                # that is the one running now. `when` stays as measured.
+                from target import judged_now as _judged_now
+                d["meta"] = _judged_now(d.get("meta") or {})
                 with open(fp, "w", encoding="utf-8") as f:
                     json.dump(d, f, indent=2)
         verb = "rescored" if args.write else "would change"
@@ -1175,10 +1180,15 @@ def main():
         # before results carried one`, which is a statement about age and was false; and
         # `report_engine` could tell a reader the baseline's DATE and warn that the oracle
         # may have moved since, when the build is the exact answer to that.
-        json.dump({"meta": {"target": args.target,
-                            "when": datetime.now().isoformat(" ", "seconds"),
-                            "engine": engine_version(),
-                            "trials": args.trials, **s}, "rows": rows}, f, indent=2)
+        # THE BUILD THROUGH `judged_now`, the same call the re-score path makes. For a
+        # fresh sweep the answer is the same either way, and that is the point: one rule
+        # for which oracle produced the verdicts in a file, with no second spelling of it
+        # to drift from.
+        from target import judged_now as _judged_now
+        json.dump({"meta": _judged_now({"target": args.target,
+                                        "when": datetime.now().isoformat(" ", "seconds"),
+                                        "trials": args.trials, **s}), "rows": rows},
+                  f, indent=2)
     print(f"\nwrote {path}")
 
 

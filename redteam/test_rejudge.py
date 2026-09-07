@@ -183,6 +183,51 @@ def main():
         check("a %s run records the same attacker side the replay rebuilds" % _label,
               _sent == _prompt_of(_a, None), "%r != %r" % (_sent, _prompt_of(_a, None)))
 
+    # --- WHICH ORACLE JUDGED THIS FILE, IN EVERY FAMILY A RE-SCORE REWRITES -----------
+    #
+    # `isolation.write_maps` states the rule and applied it to one family: "The BUILD is
+    # the opposite case and is stamped unconditionally: it describes the oracle that
+    # produced the verdicts in this file, which is always the one running now." `when` is
+    # the opposite -- the probes were measured whenever they were measured, and a re-score
+    # must not stamp today onto them.
+    #
+    # `rejudge --write` rewrites THREE families in one command and applied it to one. A
+    # re-scored results file and a re-scored benign baseline kept the old build beside
+    # verdicts the current oracle had just produced, and three readers act on that field:
+    # `history.diff` raises `engine A -> B: the oracle that judged these two runs is not
+    # the same one`, `model_matrix --from-disk` warns about different builds, and
+    # `detector_coverage`'s provenance audit files artifacts by it.
+    from target import judged_now as _jn, engine_version as _ev
+    _old = {"when": "2026-01-01 00:00", "engine": "old111", "target": "t"}
+    check("a re-scored file names the oracle running now",
+          _jn(_old)["engine"] == _ev() and _ev() != "old111")
+    check("...and keeps the moment the probes were measured",
+          _jn(_old)["when"] == "2026-01-01 00:00")
+    check("...and everything else it carried", _jn(_old)["target"] == "t")
+    check("...and invents a stamp for a meta that had none",
+          _jn(None) == {"engine": _ev()})
+
+    # AND ALL THREE WRITERS GO THROUGH IT. A rule stated in one place and applied in one
+    # place is the shape this whole defect had.
+    import ast as _ast_e
+    # `benign.py` writes twice -- a fresh sweep and a re-score -- so it needs two, and a
+    # count of one there was satisfied by the fresh writer while the re-score kept the old
+    # stamp. That mutation stayed green until this number did.
+    for _mod, _want in (("rejudge.py", 1), ("benign.py", 2), ("isolation.py", 1),
+                        ("run_redteam.py", 1)):
+        _tree = _ast_e.parse(
+            io.open(os.path.join(HERE, _mod), encoding="utf-8").read())
+        _n = sum(1 for x in _ast_e.walk(_tree)
+                 if isinstance(x, _ast_e.Call) and isinstance(x.func, _ast_e.Name)
+                 and x.func.id in ("judged_now", "_judged_now"))
+        check("%s stamps the build through the shared rule" % _mod, _n >= _want,
+              "%d call(s)" % _n)
+    # ...AND NONE OF THEM STAMPS IT BY HAND, which is how the rule forked the first time.
+    for _mod in ("rejudge.py", "benign.py", "isolation.py", "run_redteam.py"):
+        _src = io.open(os.path.join(HERE, _mod), encoding="utf-8").read()
+        check("%s has no second copy of the stamp" % _mod,
+              '"engine": engine_version()' not in _src, _mod)
+
     # --- the two defects, end to end --------------------------------------------------
     # A slow probe whose only evidence is the clock. Dropping `seconds` turned this into
     # DEFENDED on a probe whose own record says 26.5s.

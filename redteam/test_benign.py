@@ -872,12 +872,25 @@ def main():
             _meta_keys |= set(_ks)
     check("the baseline writes a meta a reader can place",
           {"target", "when", "trials"} <= _meta_keys, str(sorted(_meta_keys)))
-    check("...and stamps the build that judged it",
-          "engine" in _meta_keys, str(sorted(_meta_keys)))
+    # THE BUILD IS NOT A LITERAL KEY ANY MORE, and asking the source for one was asking about
+    # the spelling rather than the fact. `target.judged_now` adds it, on the rule `write_maps`
+    # states -- the build describes the oracle that produced the verdicts in this file, which
+    # is always the one running now -- and both of this module's writers go through it: the
+    # fresh sweep and `--rejudge --write`, which used to keep the old stamp beside verdicts the
+    # current oracle had just produced.
+    _stamps = sum(1 for _n7 in _a7.walk(_a7.parse(_bsrc))
+                  if isinstance(_n7, _a7.Call) and isinstance(_n7.func, _a7.Name)
+                  and _n7.func.id in ("judged_now", "_judged_now"))
+    check("...and stamps the build that judged it, at both of its writers",
+          _stamps >= 2, "%d call(s) to judged_now" % _stamps)
+    from target import judged_now as _jn7, engine_version as _ev7
+    check("...and the stamp is the build this process reports",
+          _jn7({"target": "t"}).get("engine") == _ev7(),
+          str(_jn7({"target": "t"})))
 
     # AND IT IS THE SAME SOURCE THE SWEEP USES, not a second way of asking.
     check("...from `engine_version`, the one the sweep stamps with",
-          "engine_version()" in _bsrc, "benign has its own idea of a build")
+          "engine_version()" not in _bsrc, "benign has its own idea of a build")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

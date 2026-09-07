@@ -405,11 +405,12 @@ def write_maps(path, maps, meta=None, when=None):
     The BUILD is the opposite case and is stamped unconditionally: it describes the
     oracle that produced the verdicts in this file, which is always the one running now.
     """
-    from target import engine_version
+    from target import judged_now
     # `meta` carries a stored date through untouched -- that is what `rejudge --write` hands
     # back -- and an explicit `when` overrides it, which is what a fresh measurement does.
-    body = {"meta": {**(meta or {}),
-                     **({"when": when} if when else {}),
-                     "engine": engine_version()}, "maps": maps}
+    # The build goes through `judged_now`, which is where this paragraph's rule now lives,
+    # because two other artifact families were rewritten by the same command without it.
+    body = {"meta": judged_now({**(meta or {}),
+                                **({"when": when} if when else {})}), "maps": maps}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(body, f, indent=2, ensure_ascii=False)

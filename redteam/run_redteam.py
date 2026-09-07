@@ -1203,9 +1203,10 @@ def main():
             # reproducing and the artifact could not say whether it was made yesterday or in
             # July, and `qatration verify` had no way to tell a reader how stale "stale" is.
             "when": datetime.now().isoformat(" ", "seconds"),
-            # which build of the engine wrote this, so a replay can tell evidence that
-            # predates a fix from evidence that survived one
-            "engine": engine_version(),
+            # WHICH ORACLE PRODUCED THE VERDICTS IN THIS FILE, so a replay can tell
+            # evidence that predates a fix from evidence that survived one. Stamped by
+            # `judged_now` below rather than here, because `rejudge --write` rewrites this
+            # same file and has to answer the question the same way.
             # Travels with the findings, because an assessment that cannot say who authorised
             # it is worthless as evidence and dangerous as an artifact: in a log it is
             # indistinguishable from an attack.
@@ -1244,6 +1245,8 @@ def main():
             # reader needs it: the SARIF export turns it into a tool notification, and a
             # replay a year from now has no console to consult.
             "inert": {name: list(keys) for name, keys in sorted(_dead_here.items())}}
+    from target import judged_now as _judged_now
+    meta = _judged_now(meta)
     # a --model override writes results_<target>_<model>.json (2 underscores) so it
     # sits BESIDE the canonical single-model run and is skipped by the fleet aggregates
     # (which key on the 1-underscore name) — this is what makes a model matrix possible.
