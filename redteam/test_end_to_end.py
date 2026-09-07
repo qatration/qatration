@@ -709,7 +709,7 @@ oracle_context:
                 return _r.returncode, (_r.stdout or "") + (_r.stderr or ""), len(_hits)
 
             _rc1, _o1, _n1 = _sweep(True)
-            from run_redteam import RATE_LIMIT_GIVE_UP as _GIVE
+            from runner import RATE_LIMIT_GIVE_UP as _GIVE
             check("a sweep stops when every attack comes back rate-limited",
                   "STOPPED" in _o1, _o1[-400:])
             check("...long before the arsenal is spent", _n1 <= (_GIVE + 2) * 2,

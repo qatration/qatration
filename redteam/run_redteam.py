@@ -419,11 +419,6 @@ def is_unmeasurable(attack, dead):
     return bool(decl) and decl <= set(dead)
 
 
-# How many attacks in a row may come back rate-limited before the sweep stops. Five is
-# enough to be sure it is not one busy moment and small enough to matter: measured against
-# an endpoint answering 429 to everything, the run sent 92 requests before this existed.
-RATE_LIMIT_GIVE_UP = 5
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -1054,7 +1049,8 @@ def main():
     # shape is a metered endpoint that answers happily until the quota runs out, and every one
     # of those has succeeded. It would have kept hammering exactly the deployment this exists
     # to protect. Two mutations survived on it, which is how it was found.
-    _rl_streak, _rl_stopped = 0, ""
+    from runner import RateLimitWall as _Wall
+    _wall, _rl_stopped = _Wall(), ""
     for a in attacks:
         if _rl_stopped:
             break
@@ -1090,16 +1086,9 @@ def main():
         } for r in recs]
         results.append({"attack": a, "headline": head, "rate": rate,
                         "fired": fired_list, "locks": locks, "trials": trials_ser})
-        if all(str((r.get("probe") and r["probe"].error) or "").startswith("RateLimited")
-               for r in recs) and recs:
-            _rl_streak += 1
-        else:
-            _rl_streak = 0
-        if _rl_streak >= RATE_LIMIT_GIVE_UP:
-            _rl_stopped = (
-                "the endpoint answered every one of the last %d attacks with a rate "
-                "limit and has not answered anything else, so the rest of the arsenal "
-                "was NOT sent" % _rl_streak)
+        if _wall.saw([r.get("probe") for r in recs]):
+            _rl_stopped = _wall.reason.replace("of the last", "of the last").replace(
+                "the rest was", "the rest of the arsenal was")
             print("\n  ! STOPPED — %s.\n"
                   "    Nothing here is a result about %s. Raise the limit on their side, "
                   "or lower\n    `rate.min_interval_s` on ours, and run it again."

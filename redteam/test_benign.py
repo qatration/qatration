@@ -177,6 +177,82 @@ def main():
     check("...naming the key rather than only the detector",
           "unset: allowed_domains" in _out4 or "unset: known_pii" in _out4, _out4[-300:])
 
+    # --- A BASELINE MEASURED AGAINST A WALL IS NOT A BASELINE ---------------------------
+    #
+    # This is the command the documentation tells an operator to run FIRST, at an endpoint
+    # they have just pointed the tool at, and it sent 48 requests at one answering 429 to
+    # every single one. The rows it would have written say what the endpoint refused, not
+    # what it does when nobody is attacking it.
+    import json as _js8, tempfile as _tf8, shutil as _sh8
+    import subprocess as _sp4
+    import threading as _th_b
+    from http.server import BaseHTTPRequestHandler as _BH_b
+    from http.server import ThreadingHTTPServer as _TS_b
+    from runner import RATE_LIMIT_GIVE_UP as _GIVE_B
+    _bhits, _ball = [], {"v": True}
+
+    class _Limiting(_BH_b):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _bhits.append(1)
+            if not _ball["v"] and (len(_bhits) - 1) % 5 == 4:
+                _bb = _js8.dumps({"reply": "Shipping takes 3-5 days."}).encode()
+                self.send_response(200)
+            else:
+                _bb = _js8.dumps({"error": {"message": "rate limit"}}).encode()
+                self.send_response(429)
+                self.send_header("Retry-After", "0")
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_bb)))
+            self.end_headers()
+            self.wfile.write(_bb)
+
+        def log_message(self, *a):
+            pass
+
+    _bsrv = _TS_b(("127.0.0.1", 0), _Limiting)
+    _th_b.Thread(target=_bsrv.serve_forever, daemon=True).start()
+    _bw = _tf8.mkdtemp()
+    try:
+        _bcfg = os.path.join(_bw, "targets_rlbot.yaml")
+        with open(_bcfg, "w", encoding="utf-8") as _f:
+            _f.write("name: rlbot\nadapter: http\n")
+            _f.write('url: "http://127.0.0.1:%d/c"\n' % _bsrv.server_address[1])
+            _f.write("request:\n  message: \"{prompt}\"\n")
+            _f.write("response:\n  reply: \"reply\"\n")
+            _f.write("oracle_context:\n  canaries: [\"ACME-CANARY-9931\"]\n")
+
+        def _bench(_all):
+            _ball["v"] = _all
+            del _bhits[:]
+            _r = _sp4.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                           "--target-config", _bcfg],
+                          capture_output=True, text=True, errors="replace", timeout=900,
+                          env=dict(os.environ, QATRATION_OUT=_bw,
+                                   PYTHONDONTWRITEBYTECODE="1",
+                                   PYTHONIOENCODING="utf-8"))
+            return _r.returncode, (_r.stdout or "") + (_r.stderr or ""), len(_bhits)
+
+        _bc, _bo, _bn = _bench(True)
+        check("a baseline stops when the endpoint refuses everything with a limit",
+              "STOPPED" in _bo, _bo[-400:])
+        check("...within the declared streak rather than the whole corpus",
+              _bn <= _GIVE_B + 2, "%d probe(s) sent" % _bn)
+        check("...saying why those rows would not have been a baseline",
+              "not what it does when nobody is attacking it" in _bo, _bo[-400:])
+        check("...and it is nothing measured, not a clean baseline", _bc == 3,
+              "exit %s" % _bc)
+
+        # A LIMIT THAT LETS TRAFFIC THROUGH IS NOT A WALL.
+        _bc2, _bo2, _bn2 = _bench(False)
+        check("a baseline that keeps landing probes is not stopped",
+              "STOPPED" not in _bo2, _bo2[-400:])
+        check("...and reaches the whole corpus", _bn2 > _bn * 4,
+              "%d probe(s) against %d" % (_bn2, _bn))
+    finally:
+        _bsrv.shutdown()
+        _sh8.rmtree(_bw, ignore_errors=True)
+
     # --- AND `NOT ONE SNAPSHOT` IS COMPUTED FROM WHAT THE RUNS RECORDED ------------------
     #
     # This warning is the precedent two other surfaces cite for saying a baseline is old:

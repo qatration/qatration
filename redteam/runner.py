@@ -23,6 +23,46 @@ RETRIES = 1               # extra attempts after the first, on timeout / error
 # day; refusing to wait at all is what this is fixing. Beyond the ceiling the retry
 # is abandoned and the row says the endpoint asked for longer than a run can give.
 MAX_BACKOFF = 30
+# How many units of work in a row may come back entirely rate-limited before the
+# command stops sending. Five is enough to be sure it is not one busy moment and
+# small enough to matter: measured against an endpoint answering 429 to everything,
+# a sweep sent 92 requests and a benign run 48 before this existed.
+RATE_LIMIT_GIVE_UP = 5
+
+
+class RateLimitWall(object):
+    """Counts units of work the target refused with a rate limit, in a row.
+
+    A `unit` is whatever the caller sends and scores as one thing: an attack with its
+    trials in a sweep, one probe in a benign run. `saw` takes the probes for one unit
+    and returns True once the wall is reached; `reason` is the sentence to print.
+
+    `IN A ROW` IS THE WHOLE RULE. A single 429 in the middle of a working run does not
+    end it -- a limit that lets some traffic through is one the run can live within,
+    and stopping on it throws away a measurement the operator can have. A first draft
+    also required that nothing had ever succeeded, which is a hole rather than a
+    safeguard: the commonest real shape is a metered endpoint answering happily until
+    the quota runs out, and every one of those has succeeded.
+    """
+
+    def __init__(self, limit=RATE_LIMIT_GIVE_UP):
+        self.limit = limit
+        self.streak = 0
+        self.reason = ""
+
+    def saw(self, probes):
+        probes = [p for p in (probes or []) if p is not None]
+        if probes and all(str(getattr(p, "error", "") or "").startswith("RateLimited")
+                          for p in probes):
+            self.streak += 1
+        else:
+            self.streak = 0
+        if self.streak >= self.limit and not self.reason:
+            self.reason = (
+                "the endpoint answered every one of the last %d with a rate limit "
+                "and has not answered anything else since, so the rest was NOT sent"
+                % self.streak)
+        return bool(self.reason)
 
 
 def _invoke_with_timeout(fn, timeout):

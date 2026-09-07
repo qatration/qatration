@@ -287,6 +287,56 @@ def main():
           not (_dead.turns or []) and _judge(_atk, _dead, _ctx)[0] == "ERROR",
           f"turns={len(_dead.turns or [])} judged={_judge(_atk, _dead, _ctx)!r}")
 
+    # --- WHEN THE TARGET KEEPS ASKING US TO STOP ---------------------------------------
+    #
+    # Two commands send at somebody else's endpoint in a loop, and both walked straight
+    # through a wall of 429s: a sweep sent 92 requests over 45 attacks, and `benign` --
+    # the command the documentation tells an operator to run FIRST -- sent 48. The counter
+    # is shared rather than written twice, and the shape of the rule is what matters: `in
+    # a row`.
+    from runner import RateLimitWall as _W, RATE_LIMIT_GIVE_UP as _GIVE
+    from target import Probe as _P
+
+    def _lim():
+        return _P(prompt="x", output="", error="RateLimited: HTTPError 429")
+
+    def _ok():
+        return _P(prompt="x", output="fine")
+
+    _w = _W()
+    _tripped = [_w.saw([_lim()]) for _ in range(_GIVE)]
+    check("the wall is reached after the declared number in a row",
+          _tripped == [False] * (_GIVE - 1) + [True], str(_tripped))
+    check("...and says the rest was not sent", "was NOT sent" in _w.reason, _w.reason)
+    check("...naming how many it took", str(_GIVE) in _w.reason, _w.reason)
+
+    # ONE BUSY MOMENT IS NOT A WALL, which is the other direction and the one that would
+    # throw away a measurement the operator can have.
+    _w2 = _W()
+    for _i in range(_GIVE * 4):
+        _w2.saw([_lim() if _i % 2 else _ok()])
+    check("a limit that lets traffic through never trips it", _w2.reason == "", _w2.reason)
+
+    # AND A UNIT IS ONLY REFUSED IF EVERY PROBE IN IT WAS. A sweep's unit is an attack
+    # with its trials, and one trial landing means the attack was measured.
+    _w3 = _W()
+    for _ in range(_GIVE * 2):
+        _w3.saw([_lim(), _ok()])
+    check("an attack whose retry landed does not count towards the wall",
+          _w3.reason == "", _w3.reason)
+    # NOR DOES A UNIT WITH NOTHING IN IT, which is a skip rather than a refusal.
+    _w4 = _W()
+    for _ in range(_GIVE * 2):
+        _w4.saw([])
+    check("...and neither does a unit that sent nothing", _w4.reason == "", _w4.reason)
+    # AND AN ORDINARY ERROR IS NOT A RATE LIMIT: a socket reset says nothing about what
+    # the endpoint wants, and stopping on one would end a run over a blip.
+    _w5 = _W()
+    for _ in range(_GIVE * 2):
+        _w5.saw([_P(prompt="x", output="", error="URLError: connection reset")])
+    check("...and an ordinary error is not the target asking", _w5.reason == "",
+          _w5.reason)
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:
