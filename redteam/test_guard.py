@@ -98,13 +98,96 @@ def main():
     check("...and there are enough of them to be worth running", len(guard.CREDENTIALS) >= 12,
           f"{len(guard.CREDENTIALS)} patterns")
 
+    # --- AND THE ENGINE KNOWS EVERY FAMILY THIS GATE DOES ---------------------------------
+    #
+    # `oracle._SECRETS` answers the same question one room over: is there a credential in
+    # this reply. It held six shapes while this list held twenty, so an Anthropic key, a
+    # GitLab token, a Google API key, a Stripe live key, an npm token, a Twilio SID, a
+    # SendGrid key, a Docker Hub token, a GitHub fine-grained or OAuth token and an AWS
+    # session token walked past the detector whose whole job is to notice one.
+    #
+    # NOT ONE SHARED LIST, and that is deliberate. This gate must never fire on the
+    # repository's own fixtures, so its patterns are narrowed until they miss a truncated
+    # key -- affordable here, because a truncated key in a commit is not a leak. In a
+    # model's REPLY a fixture-shaped credential is the finding, and narrowing to spare it
+    # would delete the measurement. Two standards, one subject; what is checked is that
+    # neither list knows a FAMILY the other does not.
+    #
+    # Compared by the literal each pattern starts with, because that is what a family is
+    # here, and a pattern is covered when the other list has one whose literal is a prefix
+    # of it -- the engine's single `-----BEGIN ...PRIVATE KEY-----` covers this file's
+    # separate OPENSSH entry that way.
+    import sys as _sys_x
+    _sys_x.path.insert(0, os.path.join(ROOT, "redteam"))
+    from oracle import _SECRETS as _ENGINE_SECRETS
+    _META = set("[(?*+{|.^$")
+
+    def _literal(pat):
+        """The characters a pattern starts with, before any regex metacharacter."""
+        out, i = [], 0
+        while i < len(pat):
+            c = pat[i]
+            if c == chr(92):        # an escape: \b at the front is not part of the literal
+                i += 2
+                continue
+            if c in _META:
+                break
+            out.append(c)
+            i += 1
+        return "".join(out)
+
+    _mine = {_literal(p) for _, p, _ in guard.CREDENTIALS}
+    _theirs = {_literal(p) for p, _ in _ENGINE_SECRETS}
+
+    def _covered(one, many):
+        return [x for x in sorted(one)
+                if not any(x.startswith(y) for y in many if y)]
+
+    check("every credential family this gate refuses, the engine also reports",
+          not _covered(_mine, _theirs), str(_covered(_mine, _theirs)))
+    check("...and the reverse, so neither list quietly grows alone",
+          not _covered(_theirs, _mine), str(_covered(_theirs, _mine)))
+    check("...over a list long enough to be worth comparing",
+          len(_mine) >= 15 and len(_theirs) >= 15,
+          "%d here, %d there" % (len(_mine), len(_theirs)))
+
+    # --- AND A PREFIX WITH NOTHING AFTER IT IS NOT A CREDENTIAL --------------------------
+    #
+    # Nine of the twenty entries here have been narrowed one at a time, each after a
+    # prefix-only pattern fired on something that was not a key: `ASIA` on a stored
+    # finding, the JWT on a practice bot's hand-typed fake, and five at once on
+    # `oracle._SECRETS` the moment the engine's own patterns were written down as source.
+    # Every one of those was found by the pattern firing, in a commit, on a file somebody
+    # had just written -- which is a slow way to learn a rule the file already knew.
+    #
+    # THE RULE STATED ONCE: a pattern must need more than its own literal prefix. Reverting
+    # any of the nine narrowings goes red here rather than in a stranger's commit.
+    _bare = []
+    for _lab, _pat, _ in guard.CREDENTIALS:
+        _lit = _literal(_pat)
+        if not _lit or _lit == _pat:
+            # An ENTIRELY literal pattern is a whole header, not a prefix: the OPENSSH
+            # private-key line is the credential's own first line and matching it is right.
+            continue
+        if re.search(_pat, _lit):
+            _bare.append(_lab)
+    check("no credential pattern fires on its own prefix with nothing after it",
+          not _bare, "; ".join(_bare))
+    # AND THE EXEMPTION IS ONE ENTRY, named, not a growing list.
+    _whole = [_lab for _lab, _pat, _ in guard.CREDENTIALS if _literal(_pat) == _pat]
+    check("...and exactly one pattern is a whole literal, which is a header",
+          _whole == ["private key header"], str(_whole))
+
     # --- WHAT MUST BE REFUSED ---------------------------------------------------------------
     MUST_CATCH = [
         ("an AWS session token", "redteam/x.py", "K = 'ASIA" + "Q" * 16 + "'"),
         ("a GitHub personal token", "docs/x.md", "run with ghp_" + "a" * 20),
-        ("a GitHub fine-grained token", "docs/x.md", "github_pat_11ABCDEF"),
+        # BUILT, NOT WRITTEN OUT, and long enough to be real: these two were calibrated to
+        # patterns that asked for a prefix and nothing else, and the prefixes now ask for a
+        # body -- so a fixture short enough to be a mention was no longer a fixture at all.
+        ("a GitHub fine-grained token", "docs/x.md", "github_pat_11ABCDEF" + "g" * 20),
         ("a Slack token", "tools/x.sh", "export S=xoxb-11-22-abcdef"),
-        ("a GitLab token", "tools/x.sh", "T=glpat-abcdefgh"),
+        ("a GitLab token", "tools/x.sh", "T=glpat-" + "h" * 20),
         ("a Google API key", "site/x.js", "key='AIza" + "b" * 30 + "'"),
         ("a SendGrid key", "x.env", "SG." + "c" * 20),
         ("an npm token", "x.npmrc", "_authToken=npm_" + "d" * 30),

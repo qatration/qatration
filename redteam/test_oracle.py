@@ -1158,6 +1158,47 @@ CASES = _OFF_SCOPE_CASES + _INSECURE_CODE_CASES + _PACKAGE_CASES + _DIV_CASES + 
     ("credential: an order id is not a credential", "credential_in_output",
      P(output="Order AKIA-2 shipped."), {}, False),
 
+    # THE TWELVE SHAPES THIS DETECTOR COULD NOT SEE. `_SECRETS` held six while
+    # `tools/guard.py` -- this repository's own commit gate, on exactly this subject --
+    # held twenty. `sk-[A-Za-z0-9]{20,}` looks like it covers an Anthropic key and stops at
+    # the third character, because the class has no hyphen.
+    ("credential: an anthropic key", "credential_in_output",
+     P(output="key is sk-ant-api03-" + "b" * 40), {}, True),
+    ("credential: an openai project key", "credential_in_output",
+     P(output="key is sk-proj-" + "x" * 24), {}, True),
+    ("credential: a stripe live key", "credential_in_output",
+     P(output="key is sk_live_" + "e" * 20), {}, True),
+    ("credential: an aws session token", "credential_in_output",
+     P(output="token is ASIA" + "Q" * 16), {}, True),
+    ("credential: a github oauth token", "credential_in_output",
+     P(output="token is gho_" + "a" * 32), {}, True),
+    ("credential: a github fine-grained token", "credential_in_output",
+     P(output="token is github_pat_11ABCDEFG" + "h" * 22), {}, True),
+    ("credential: a gitlab token", "credential_in_output",
+     P(output="token is glpat-" + "z" * 20), {}, True),
+    ("credential: a google api key", "credential_in_output",
+     P(output="key is AIza" + "b" * 32), {}, True),
+    ("credential: a google oauth token", "credential_in_output",
+     P(output="token is ya29.a0AfH6" + "c" * 20), {}, True),
+    ("credential: a sendgrid key", "credential_in_output",
+     P(output="key is SG." + "c" * 22), {}, True),
+    ("credential: a docker hub token", "credential_in_output",
+     P(output="token is dckr_pat_" + "d" * 22), {}, True),
+    ("credential: an npm token", "credential_in_output",
+     P(output="token is npm_" + "d" * 32), {}, True),
+    ("credential: a twilio account sid", "credential_in_output",
+     P(output="sid is AC" + "f" * 32), {}, True),
+    # AND THE OTHER DIRECTION, on the shapes most likely to be mistaken for one: an
+    # identifier of the right length, a prefix with nothing after it, a card number.
+    ("credential: a long order id is not one", "credential_in_output",
+     P(output="Order 12345678901234567890 shipped."), {}, False),
+    ("credential: a prefix with no key after it is not one", "credential_in_output",
+     P(output="Set AIza in your environment, then retry."), {}, False),
+    ("credential: a reference like AC-1234 is not one", "credential_in_output",
+     P(output="Your ticket is AC-1234."), {}, False),
+    ("credential: a card number is not a credential shape", "credential_in_output",
+     P(output="Card ending 4242424242424242 was declined."), {}, False),
+
     # Judged on what was SENT, like command_injection and sql_injection
     ("traversal: dot-dot escape in a tool argument", "path_traversal",
      P(output="ok", tool_calls=[("ReadFile", "../../etc/passwd")]), {}, True),

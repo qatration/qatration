@@ -88,7 +88,18 @@ CREDENTIALS = [
     # is a nine-character margin and the reason `test_guard.py` feeds it the REAL string
     # rather than a shortened stand-in. `sk-proj-` below covers the newer format by prefix.
     ("OpenAI secret key", r"sk-[A-Za-z0-9]{48}", "sk-" + "a" * 48),
-    ("OpenAI project key", r"sk-proj-", "sk-proj-abc123"),
+    # PREFIX-ONLY WAS NOT ENOUGH, and the fifth narrowing here has the same shape as the
+    # first four. `oracle._SECRETS` grew to know every family this list knows -- it is the
+    # detector that reports a credential in a model's reply, and it knew six shapes to
+    # this file's twenty -- and the moment those patterns were written down as source,
+    # five entries here fired on the regexes themselves. Exempting `oracle.py` would have
+    # been the wrong repair: the engine is exactly the code a real key must never reach.
+    #
+    # So each of the five now asks for a body, which is what a credential has and a
+    # prefix in a pattern does not. What it gives up is a TRUNCATED key, the same trade
+    # the JWT entry below already took and for the same reason.
+    ("OpenAI project key", r"sk-proj-[A-Za-z0-9_-]{20,}",
+     "sk-proj-" + "a" * 24),
     # `sk-ant-api03-` and forty more. The documented variable in `targets_anthropic.yaml`
     # is the prefix and an ellipsis, which is what made the unnarrowed pattern unusable.
     ("Anthropic API key", r"sk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{40}",
@@ -106,13 +117,14 @@ CREDENTIALS = [
      "-----BEGIN RSA PRIVATE KEY-----\n" + "M" * 64),
     ("GitHub personal token", r"ghp_[0-9A-Za-z]{20}", "ghp_" + "a" * 20),
     ("GitHub OAuth token", r"gho_[0-9A-Za-z]{20}", "gho_" + "a" * 20),
-    ("GitHub fine-grained token", r"github_pat_", "github_pat_11ABC"),
-    ("GitLab token", r"glpat-", "glpat-xxxxxxxx"),
+    ("GitHub fine-grained token", r"github_pat_[0-9A-Za-z_]{20,}",
+     "github_pat_11ABC" + "d" * 20),
+    ("GitLab token", r"glpat-[0-9A-Za-z_-]{16,}", "glpat-" + "x" * 20),
     ("Slack token", r"xox[baprs]-", "xoxb-1-2-abc"),
     ("Google API key", r"AIza[0-9A-Za-z_-]{30}", "AIza" + "b" * 30),
-    ("Google OAuth token", r"ya29\.", "ya29.a0Af"),
+    ("Google OAuth token", r"ya29\.[0-9A-Za-z_-]{20,}", "ya29.a0Af" + "b" * 20),
     ("SendGrid key", r"SG\.[0-9A-Za-z_-]{20}", "SG." + "c" * 20),
-    ("Docker Hub token", r"dckr_pat_", "dckr_pat_xyz"),
+    ("Docker Hub token", r"dckr_pat_[0-9A-Za-z_-]{20,}", "dckr_pat_" + "x" * 22),
     ("npm token", r"npm_[0-9A-Za-z]{30}", "npm_" + "d" * 30),
     ("Stripe live key", r"sk_live_[0-9A-Za-z]{16}", "sk_live_" + "e" * 16),
     ("Twilio account SID", r"AC[0-9a-f]{32}", "AC" + "f" * 32),
