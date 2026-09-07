@@ -245,12 +245,19 @@ def main():
     # is the ordinary case and says nothing. A path the operator TYPED that is not there is
     # a panel they asked for and did not get, and the report renders identically either
     # way, so a typo cost the fingerprint panel and printed nothing at all.
+    # THE READER IS SHARED AND THE WARNING IS NOT. `workspace.side_artifact` is read by
+    # `run` and by `rejudge --write`, which rewrites the same page; only `run` takes a path
+    # an operator typed, so only `run` has anything to say when one is missing. The warner
+    # is passed in, and the pairing is checked below rather than assumed -- a shared reader
+    # whose caller stops passing it is exactly this defect with the message removed.
     import contextlib as _cx2, io as _io2
-    from run_redteam import _side_artifact as _side
+    from workspace import side_artifact as _side
+    from run_redteam import _missing_side as _warn_side
 
     _e = _io2.StringIO()
     with _cx2.redirect_stderr(_e):
-        _got = _side("no_such_side_artifact_xyz.json", "recon_absent.json", "profile")
+        _got = _side("no_such_side_artifact_xyz.json", "recon_absent.json", "profile",
+                     warn=_warn_side)
     _said = _e.getvalue()
     # `check(label, got, want)` in this suite: the third argument is the expectation.
     check("a side artifact that is not there is not invented", _got is None, True)
@@ -262,8 +269,57 @@ def main():
     # time is a line nobody reads.
     _e2 = _io2.StringIO()
     with _cx2.redirect_stderr(_e2):
-        _side(None, "recon_absent_xyz.json", "profile")
+        _side(None, "recon_absent_xyz.json", "profile", warn=_warn_side)
     check("...while nothing is said when nobody asked", _e2.getvalue() == "", True)
+
+    # AND THE CALLER STILL PASSES IT, asked of the AST: the warner exists to be handed to
+    # the reader, and a call that stops handing it over is silent in the one case it is for.
+    import ast as _ast_s, os as _os_s
+    _rt = _ast_s.parse(
+        _io2.open(_os_s.path.join(_os_s.path.dirname(_os_s.path.abspath(__file__)), "run_redteam.py"), encoding="utf-8").read())
+    _passes = [n for n in _ast_s.walk(_rt)
+               if isinstance(n, _ast_s.Call)
+               and isinstance(n.func, _ast_s.Name)
+               and n.func.id == "_side_artifact"
+               and any(k.arg == "warn" for k in n.keywords)]
+    check("run hands the warner to the shared reader, at both call sites",
+          len(_passes), 2)
+
+    # AND A PROVENANCE-WRAPPED LOCK MAP ARRIVES AS A LIST. Three shapes reach this reader:
+    # a bare list from before `write_maps` existed, `{"maps": [...]}`, and the provenance form
+    # `{"meta": ..., "maps": {"maps": [...]}}`. The renderer wants the list, and the unwrapping
+    # travelled with the reader so exactly one place knows the container -- a reader that stops
+    # unwrapping hands the page a dict where it expects rows, and the panel renders empty.
+    import json as _js_s, tempfile as _tf_s
+    _w = _tf_s.mkdtemp()
+    _wrapped = {"meta": {"when": "2026-01-01 00:00"},
+                "maps": {"maps": [{"id": "o1", "verdict": "EXPLOITED"}]}}
+    with _io2.open(_os_s.path.join(_w, "isolation_x.json"), "w", encoding="utf-8") as _f:
+        _js_s.dump(_wrapped, _f)
+    _un = _side(None, "isolation_x.json", "maps", root=_w)
+    check("a provenance-wrapped lock map arrives as the list the page wants",
+          isinstance((_un or {}).get("maps"), list), True)
+    check("...with the objectives still in it",
+          [o["id"] for o in (_un or {}).get("maps") or []], ["o1"])
+    with _io2.open(_os_s.path.join(_w, "isolation_y.json"), "w", encoding="utf-8") as _f:
+        _js_s.dump({"maps": [{"id": "o2"}]}, _f)
+    _plain = _side(None, "isolation_y.json", "maps", root=_w)
+    check("...and an unwrapped one is left alone",
+          [o["id"] for o in (_plain or {}).get("maps") or []], ["o2"])
+
+    # AND `rejudge --write` REBUILDS THE PAGE WITH BOTH PANELS. It used to call
+    # `build_html(meta, results)` with neither, so re-scoring a stored run deleted the
+    # fingerprint and the lock map from the page -- ten targets here ship one or both.
+    _rj = _ast_s.parse(
+        _io2.open(_os_s.path.join(_os_s.path.dirname(_os_s.path.abspath(__file__)), "rejudge.py"), encoding="utf-8").read())
+    _builds = [n for n in _ast_s.walk(_rj)
+               if isinstance(n, _ast_s.Call) and isinstance(n.func, _ast_s.Name)
+               and n.func.id == "build_html"]
+    check("rejudge rebuilds a report page in two places", len(_builds), 2)
+    check("...and both of them carry the recon panel",
+          all(any(k.arg == "recon" for k in b.keywords) for b in _builds), True)
+    check("...and both carry the isolation panel",
+          all(any(k.arg == "isolation" for k in b.keywords) for b in _builds), True)
 
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")

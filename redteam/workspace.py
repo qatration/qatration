@@ -804,6 +804,55 @@ def ctx_keys_in(src):
     return keys
 
 
+def side_artifact(explicit, default_name, key, root=None, warn=None):
+    """A recon profile or an isolation map, folded into the report if one exists.
+
+    Dated by ITSELF rather than by the run: a fingerprint from last week silently presented
+    as today's is worse than no fingerprint, so the age travels with the data. An mtime is a
+    filesystem event git does not preserve, so in a clone that printed the clone time beside
+    the HARDENED verdicts the panel qualifies.
+
+    A LOCK MAP KEEPS ITS DATE IN `meta` AND A RECON PROFILE AT THE TOP LEVEL, and a lock map
+    written before `write_maps` existed is a bare LIST with nowhere to keep one. All three
+    shapes reach here, so the shape is asked rather than assumed.
+
+    HERE BECAUSE TWO COMMANDS WRITE THE SAME PAGE. `run` built it with both panels and
+    `rejudge --write` rebuilt it with `build_html(meta, results)` -- no recon, no isolation
+    -- so re-scoring a stored run silently deleted the fingerprint panel and the lock map
+    from the page. Ten targets in this repository ship a side artifact, and every one of
+    them would have lost it to the command whose whole purpose is to keep the scores
+    current. The unwrapping of a provenance-wrapped map comes with it, for the reason it
+    was written down where it used to live: exactly one place should know the container.
+    """
+    import json as _json
+    path = explicit or os.path.join(root or OUT, default_name)
+    if not path or not os.path.exists(path):
+        # AN EXPLICIT PATH IS A REQUEST. Absent by default is the ordinary case and says
+        # nothing; a path the operator typed and that is not there is a panel they asked
+        # for and did not get, and the report renders identically either way.
+        if explicit and warn:
+            warn(explicit)
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = _json.load(f)
+    except Exception:
+        return None
+    _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
+    _when, _said = dated(_said_by, path)
+    out = {key: data, "when": _when}
+    # A LOCK MAP WRITTEN WITH PROVENANCE IS `{"meta": ..., "maps": [...]}`, and the page wants
+    # the list. The caller's key IS "maps" for that family, so the unwrapping replaces it:
+    # handing the renderer the wrapper instead of the rows makes the panel render empty, which
+    # is the same silence this reader was moved here to stop.
+    if key == "maps" and isinstance(data, dict):
+        _inner = data.get("maps")
+        if isinstance(_inner, dict):
+            _inner = _inner.get("maps")
+        out[key] = _inner if isinstance(_inner, list) else []
+    return out
+
+
 def config_model(cfg):
     """Which model a target config runs against, whatever shape the config is.
 

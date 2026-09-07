@@ -13,6 +13,7 @@ except Exception:
     pass
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
+from workspace import side_artifact as _side_artifact
 from workspace import (config_model, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -263,48 +264,17 @@ def _spend(target):
     return {"requests": rate.used, "seconds": round(rate.elapsed, 1)}
 
 
-def _side_artifact(explicit, default_name, key):
-    """Fold a recon profile / isolation map into the report if one exists.
+def _missing_side(path):
+    """What to say when a path the operator TYPED is not there.
 
-    Dated by ITSELF rather than by the run: a fingerprint from last week silently presented
-    as today's is worse than no fingerprint, so the age travels with the data.
-
-    THE ARTIFACT'S OWN DATE WHERE IT HAS ONE. This was `os.path.getmtime`, a filesystem
-    event git does not preserve, so in a clone the panel printed the clone time beside the
-    HARDENED verdicts it qualifies. Both families record a date now -- a lock map in `meta`,
-    a recon profile at the top level, because that is the shape each already had -- and the
-    ones written before that say so instead of passing a file time off as a measurement.
+    Absent by default is the ordinary case and says nothing; a path they typed and that is
+    not there is a panel they asked for and did not get, and the report renders identically
+    either way. A typo in `--recon` cost the fingerprint panel and one line of explanation,
+    and printed neither. Passed to `workspace.side_artifact` rather than lived inside it,
+    because `rejudge` reads the same artifacts with nobody having typed a path.
     """
-    path = explicit or os.path.join(OUT_DIR, default_name)
-    if not path or not os.path.exists(path):
-        # AN EXPLICIT PATH IS A REQUEST. Absent by default is the ordinary case and says
-        # nothing; a path the operator typed and that is not there is a panel they asked
-        # for and did not get, and the report renders identically either way. A typo in
-        # `--recon` cost the fingerprint panel and one line of explanation, and printed
-        # neither.
-        if explicit:
-            print(f"  ! {explicit} does not exist, so the report is built without it — "
-                  f"everything else in the run is unaffected", file=sys.stderr)
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"  ! ignoring {os.path.basename(path)}: {e}", file=sys.stderr)
-        return None
-    # DATED BY THE ARTIFACT WHERE THE ARTIFACT SAID. An mtime is a filesystem event and
-    # git does not preserve it, so in a clone this printed the clone time beside the
-    # HARDENED verdicts the panel qualifies. Lock maps record their own date since
-    # `write_maps` started writing one; the eleven stored here predate it and are marked
-    # rather than passed off as measurements.
-    # A LOCK MAP KEEPS ITS DATE IN `meta` AND A RECON PROFILE AT THE TOP LEVEL, and a lock
-    # map written before `write_maps` existed is a bare LIST with nowhere to keep one. All
-    # three reach here, so the shape is asked rather than assumed: `data.get` on the list
-    # would raise, and the report would be built without the panel it did have.
-    from workspace import dated as _dated_fn
-    _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
-    _when, _said = _dated_fn(_said_by, path)
-    return {key: data, "when": _when}
+    print(f"  ! {path} does not exist, so the report is built without it — "
+          f"everything else in the run is unaffected", file=sys.stderr)
 
 
 def breadth_slice(attacks):
@@ -1291,13 +1261,13 @@ def main():
                  note=(f"budget spent ({getattr(target.rate, 'exhausted', '')}); the remaining "
                        f"attacks were never sent") if _stopped else None)
 
-    recon = _side_artifact(args.recon, f"recon_{target.name}.json", "profile")
-    isolation = _side_artifact(args.isolation, f"isolation_{target.name}.json", "maps")
-    if isolation and isinstance(isolation.get("maps"), dict):
-        # a lock map written with provenance is {"meta": …, "maps": […]}; the page wants the
-        # list. Unwrapped here rather than in the renderer, so exactly one place knows the
-        # container and the older bare-list artifacts keep working untouched.
-        isolation = {**isolation, "maps": isolation["maps"].get("maps") or []}
+    # THROUGH `workspace.side_artifact`, because `rejudge --write` rewrites this same page
+    # and was building it without either panel. The unwrapping of a provenance-wrapped lock
+    # map travelled with the reader, so exactly one place still knows the container.
+    recon = _side_artifact(args.recon, f"recon_{target.name}.json", "profile",
+                           root=OUT_DIR, warn=_missing_side)
+    isolation = _side_artifact(args.isolation, f"isolation_{target.name}.json", "maps",
+                               root=OUT_DIR, warn=_missing_side)
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(build_html(meta, results, recon=recon, isolation=isolation))
     print(f"report → {html_path}")

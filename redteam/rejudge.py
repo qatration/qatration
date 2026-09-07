@@ -296,8 +296,18 @@ def main():
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
             html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)
+            # WITH THE PANELS THE RUN PUT THERE. This rebuilt the page from the results
+            # alone, so re-scoring a stored run silently deleted the recon fingerprint and
+            # the isolation lock map from it -- ten targets here ship one or both, and the
+            # command that removed them exists to keep the scores current. Same reader as
+            # `run`, so the two cannot render the same page from different inputs.
+            _recon = workspace.side_artifact(
+                None, f"recon_{name}.json", "profile", root=OUT_DIR)
+            _iso = workspace.side_artifact(
+                None, f"isolation_{name}.json", "maps", root=OUT_DIR)
             with open(html, "w", encoding="utf-8") as f:
-                f.write(build_html(data["meta"], data["results"]))
+                f.write(build_html(data["meta"], data["results"],
+                                   recon=_recon, isolation=_iso))
 
     # Lock maps, which had no replay at all until one of them published HARDENED over a key
     # its own record held.
@@ -341,8 +351,12 @@ def main():
                 from workspace import dated as _dated_fn
                 when, _msaid = _dated_fn(_map_meta.get(path) or {}, path)
                 html = os.path.join(OUT_DIR, f"report_{tgt}.html")
+                # AND THE RECON PANEL TOO. This branch restored the lock map and dropped
+                # the fingerprint, which is the same deletion pointed the other way.
+                _recon2 = workspace.side_artifact(
+                    None, f"recon_{tgt}.json", "profile", root=OUT_DIR)
                 with open(html, "w", encoding="utf-8") as f:
-                    f.write(build_html(rd["meta"], rd["results"],
+                    f.write(build_html(rd["meta"], rd["results"], recon=_recon2,
                                        isolation={"maps": maps, "when": when}))
                 print(f"  rebuilt {os.path.basename(html)}")
 
