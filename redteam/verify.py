@@ -20,6 +20,13 @@ WHAT IT WILL NOT DO: write. A verification is shallower than a sweep, so letting
 `results_<target>.json` would replace a measurement with a spot check. It prints, it exits with
 a code, and it leaves the evidence alone.
 
+AND `1` MEANS SOMETHING ELSE HERE THAN IT DOES ANYWHERE ELSE. The exit table reserves it for
+"this change introduced or reopened a finding", and this command cannot introduce one: it
+re-sends what a report already claims. It exits `1` when a claim NO LONGER REPRODUCES -- the
+finding is in the artifact, not in the target -- and a build reading the table's row alone would
+conclude the opposite. `docs/ci.md` says so beside the table; said here too, because the code is
+returned from this file.
+
 WHAT IT DOES NOT COVER, said here because a list of what a check protects reads as the complete
 list: the rows that were DEFENDED. A target that got WORSE since the artifact was written is a
 full sweep's question, and this command says so rather than implying it looked.

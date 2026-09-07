@@ -370,6 +370,16 @@ Only `1` is a finding. Treating `2` through `5` as security failures is how a te
 ignore the whole check, and treating them as passes is how a broken pipeline reports a clean
 bill for months.
 
+**`verify` means something else by `1`, and the difference is worth knowing before a build goes
+red on it.** That command re-sends only what a stored report already claims, so it never
+introduces a finding; it exits `1` when a published claim **no longer reproduces**. The finding
+is in the artifact rather than in the target — a report asserting five breaches that have since
+been fixed is a claim nobody can support, which is exactly what the command exists to catch —
+and read against the row above alone a build would conclude the opposite of what happened.
+There is no other code that fits: `2` is a refusal and `3` is nothing measured, and both would
+tell a pipeline to ignore it.
+
+
 A crash is deliberately not `1`. Python exits one on an unhandled exception and `1` is the
 code above it — the one case where red means what red usually means — so before this, any bug
 in the tool and every YAML typo that reached a `KeyError` instead of a refusal arrived here as

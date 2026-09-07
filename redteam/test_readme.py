@@ -553,11 +553,70 @@ def main():
     # stranger is most likely to meet: pointing at anything that is not localhost without
     # proving they control it. A CI that sees an undocumented number has to guess, and the
     # guess it will make is the one the table teaches — that non-zero means the bot broke.
+    # DERIVED FROM `cli.COMMANDS`, not from four names typed here. The first version read
+    # `run_redteam`, `authorization`, `honeytoken` and `onboard`, which is the set that
+    # happened to be interesting the day it was written -- so nineteen other commands could
+    # return anything at all and this said the contract held. `verify` returns 1 and 2 and 3
+    # through `return`, `runs` returns 3, `matrix` exits 3: none of them was read.
+    #
+    # AND EVERY SPELLING OF AN EXIT. A command leaves through `sys.exit(N)`, through
+    # `SystemExit(N)`, through a bare `return N` that `cli.main` hands to the shell, and in
+    # `run_redteam` through `_refuse(N, ...)`, which closes the open run record first. Four
+    # ways out, one of which the old pattern could see.
+    import ast as _ast_x
+    import cli as _cli_x
     codes = set()
-    for name in ("run_redteam.py", "authorization.py", "honeytoken.py", "onboard.py"):
-        src = open(os.path.join(HERE, name), encoding="utf-8").read()
-        codes |= {int(n) for n in re.findall(r"sys\.exit\((\d)\)", src)}
-        codes |= {int(n) for n in re.findall(r"SystemExit\((\d)\)", src)}
+    # THE IMPORT CLOSURE, not just the command modules. Exit 4 -- not authorised -- is raised
+    # in `authorization.py`, which no command names and every command drags in, so a set built
+    # from `cli.COMMANDS` alone reported 4 as documented-but-unreachable. What a command can
+    # exit with is what everything it imports can exit with.
+    _local = {os.path.basename(_p)[:-3] for _p in glob.glob(os.path.join(HERE, "*.py"))}
+    _mods, _queue = set(), [m for m, _ in _cli_x.COMMANDS.values()]
+    while _queue:
+        _m = _queue.pop()
+        if _m in _mods or _m not in _local or _m.startswith("test_"):
+            continue
+        _mods.add(_m)
+        _tree0 = _ast_x.parse(open(os.path.join(HERE, _m + ".py"), encoding="utf-8").read())
+        for _node in _ast_x.walk(_tree0):
+            if isinstance(_node, _ast_x.Import):
+                _queue += [_a.name.split(".")[0] for _a in _node.names]
+            elif isinstance(_node, _ast_x.ImportFrom) and _node.level == 0 and _node.module:
+                _queue.append(_node.module.split(".")[0])
+    _mods = sorted(_mods)
+    check("the modules whose exits are read are derived, not listed",
+          len(_mods) >= 25, str(len(_mods)))
+    check("...and the derivation reaches the one that raises 4",
+          "authorization" in _mods, str(_mods[:8]))
+    for _m in _mods:
+        _p = os.path.join(HERE, _m + ".py")
+        if not os.path.exists(_p):
+            continue
+        _tree = _ast_x.parse(open(_p, encoding="utf-8").read())
+        for _n in _ast_x.walk(_tree):
+            _got = None
+            if isinstance(_n, _ast_x.Call):
+                _f = _n.func
+                _is_exit = ((isinstance(_f, _ast_x.Attribute) and _f.attr == "exit")
+                            or (isinstance(_f, _ast_x.Name)
+                                and _f.id in ("SystemExit", "_refuse", "exit")))
+                if _is_exit and _n.args:
+                    _got = _n.args[0]
+            elif isinstance(_n, _ast_x.Return):
+                _got = _n.value
+            # TWO SHAPES, AND ONLY TWO. `return 1 if total_stale else 0` is an IfExp rather
+            # than a constant, which is exactly how `verify` returns its 1 -- so a version of
+            # this that asked whether the returned node WAS an integer could not see the one
+            # command this section's caveat is about. Walking every integer UNDER the node is
+            # the other mistake: it reads slice bounds and widths and reports seventeen exit
+            # codes the engine has never had.
+            _branches = ([_got] if not isinstance(_got, _ast_x.IfExp)
+                         else [_got.body, _got.orelse])
+            for _c in _branches:
+                if (isinstance(_c, _ast_x.Constant)
+                        and isinstance(_c.value, int)
+                        and not isinstance(_c.value, bool)):
+                    codes.add(_c.value)
     documented = {int(n) for n in re.findall(r"^\| `(\d)` \|", text, re.M)}
     missing_codes = sorted(codes - documented)
     check("every exit code a run can produce is in the documented contract",
@@ -566,6 +625,17 @@ def main():
     phantom_codes = sorted(documented - codes - {0})
     check("...and the table documents no code the code cannot produce",
           not phantom_codes, str(phantom_codes))
+
+    # AND THE ONE CODE TWO COMMANDS USE FOR OPPOSITE EVENTS IS SPELLED OUT. Row 1 reads
+    # "this change introduced or reopened a finding", and `verify` returns 1 when a
+    # published claim STOPS reproducing -- the artifact is stale, which is a defect in the
+    # deliverable rather than in the target, and read against that row alone a CI would
+    # conclude the exact opposite of what happened. There is no other code for it: 2 is a
+    # refusal, 3 is nothing measured. So the table says so, rather than leaving a reader to
+    # apply a sentence that does not describe it.
+    check("the table says what `verify` means by 1, which is not what a run means by it",
+          "verify" in text and "no longer reproduce" in text,
+          "docs/ci.md never mentions what verify exits with")
 
     # A `raise SystemExit("message")` exits ONE, which this table reserves for "the target was
     # exploited". Ten of them exist and all are refusals, so the dispatcher converts them —
