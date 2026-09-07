@@ -307,6 +307,15 @@ def _address_refused(ip):
     if ip.is_link_local:
         return ("link-local, and 169.254.169.254 is the cloud metadata service — the one "
                 "address a scanner must never be pointed at")
+    # DOCUMENTATION SPACE FIRST, because `ipaddress` calls it private and it is not: RFC
+    # 5737 reserves these three for examples, so nothing is there to test and the person
+    # who typed one has almost certainly left the address from a sample config in place.
+    # `a private address is inside somebody's network` was the answer they got, which is
+    # both wrong about the address and useless about the mistake.
+    import ipaddress as _ip0
+    for _net in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"):
+        if ip.version == 4 and ip in _ip0.ip_network(_net):
+            return ("documentation space (RFC 5737): %s is one of the addresses reserved for examples, so nothing is listening there. If it came from a sample config, replace it with your own endpoint" % ip)
     if ip.is_private or ip.is_reserved or ip.is_multicast:
         return "a private address is inside somebody's network, not on it"
     # Two ranges `ipaddress` does not call private and a scanner still must not reach:

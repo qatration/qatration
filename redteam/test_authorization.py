@@ -298,6 +298,29 @@ def main():
     for u in REFUSE:
         check(f"hosted: refused — {u}", az.unreachable_by_policy(u, PUBLIC) is not None)
 
+    # --- DOCUMENTATION SPACE IS NOT SOMEBODY'S INSIDE --------------------------------------
+    #
+    # `ipaddress` calls RFC 5737's three ranges private, and they are not: they are reserved
+    # for examples, so nothing is listening there. The refusal was right and its reason was
+    # wrong twice over -- wrong about the address, and useless about the mistake, which is
+    # almost always that the address from a sample config was left in place.
+    for _doc in ("203.0.113.5", "192.0.2.1", "198.51.100.7"):
+        _why = az.unreachable_by_policy("http://%s/chat" % _doc, PUBLIC)
+        check("hosted: documentation space is refused — %s" % _doc, _why is not None,
+              str(_why))
+        check("...and named as documentation space rather than as somebody's network",
+              "RFC 5737" in (_why or ""), str(_why))
+        check("...and the message says why it cannot be the endpoint",
+              "nothing is listening there" in (_why or ""), str(_why))
+        check("...and points at the mistake it usually is",
+              "sample config" in (_why or ""), str(_why))
+    # AND THE RANGES THAT REALLY ARE SOMEBODY'S INSIDE STILL SAY SO, or this is a rename
+    # rather than a distinction.
+    for _priv in ("10.0.0.5", "192.168.1.1", "172.16.0.1", "100.64.0.1"):
+        _why = az.unreachable_by_policy("http://%s/chat" % _priv, PUBLIC)
+        check("hosted: a private address still reads as one — %s" % _priv,
+              "inside somebody's network" in (_why or ""), str(_why))
+
     # --- A NAME IS AN ADDRESS SOMEBODY ELSE CHOOSES ----------------------------------------
     #
     # Every entry in REFUSE spells its address in the URL, and the gate used to check only what
