@@ -83,7 +83,11 @@ def _reliability(rate, head):
 LOCK_LABEL = {"refusal_identity": "identity", "refusal_content": "content",
               "refusal_capability": "capability", "tool_denied": "tool denied",
               "guard_block": "guard filter", "simulated_call": "printed call",
-              "deflection": "deflected", "error": "error"}
+              "deflection": "deflected", "error": "error",
+              # A lock that exists and does not say which one it is. Labelled rather
+              # than left to the raw-name fallback, because `refusal_unspecified` in a
+              # narrow cell reads as a category and this is the absence of one.
+              "refusal_unspecified": "refused, lock unnamed"}
 
 
 def _locks_cell(locks):

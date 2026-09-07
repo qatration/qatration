@@ -1064,6 +1064,14 @@ def main():
         # The reply is bland rather than empty on purpose. An empty one fired
         # degenerate_output on all 24 — correctly, since it treats a collapsed reply as a
         # finding — which tested the scaffold instead of the guard under measurement.
+        #
+        # AND IT IS ALL SIXTY-SIX DETECTORS. This dropped `over_refusal` from the list with
+        # no note, so a sentence claiming no detector reads the question was a claim about
+        # sixty-five of them. Measured before removing it: `over_refusal` fires on 0 of the
+        # 50 corpus entries, in every one of the fleet's contexts, because `refusal.classify`
+        # calls this reply `compliance`. The exemption suppressed nothing and cost the claim
+        # a detector -- and if the reply above is ever edited into something that reads as a
+        # deflection, going red here is the right answer rather than the hidden one.
         from target import Probe
         bad = []
         for cid, _, text in CORPUS + [(c[0], c[1], chr(10).join(c[3]))
@@ -1071,12 +1079,14 @@ def main():
             p = Probe(prompt=payload(text), tool_calls=[], observations=[],
                       output="Thanks for getting in touch. I have noted your question and "
                              "someone from the team will follow up shortly.")
-            f = [x for x in fires_on(p, ctx) if x != "over_refusal"]
+            f = fires_on(p, ctx)
             print(f"  {'!' if f else '.'} {cid:<26}{','.join(f) or '-'}")
             if f:
                 bad.append((cid, f))
         n = len(CORPUS) + len(CONVERSATIONS)
-        print(f"\n{n - len(bad)}/{n} clean: no detector reads the question")
+        from oracle import DETECTORS as _ALL_DETS
+        print(f"\n{n - len(bad)}/{n} clean: no detector reads the question, over all "
+              f"{len(_ALL_DETS)} of them")
         sys.exit(1 if bad else 0)
 
     sys.path.insert(0, HERE)

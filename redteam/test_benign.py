@@ -427,18 +427,42 @@ def main():
           str([c[0] for c in CONVERSATIONS if len(c[3]) < 2]))
 
     # --- THE claim: no detector reads the question ------------------------------------
+    #
+    # IT USED TO EXCLUDE ONE DETECTOR AND COUNT IT ANYWAY. `over_refusal` was dropped from
+    # the sweep with no note, while the label beside it said `x {len(DETECTORS)} detectors`
+    # -- a claim about sixty-five of them published with the count of sixty-six in it, and
+    # `benign --dry-run` took the same exemption the same way.
+    #
+    # IT SUPPRESSED NOTHING. Measured before removing it: `over_refusal` fires on 0 of the
+    # 50 corpus entries, in every one of the fleet's contexts, because `refusal.classify`
+    # reads this reply as `compliance`. The exemption cost the claim a detector and bought
+    # no quiet -- so it is gone, and the property it was standing in for is checked
+    # directly below, where a reply edited into something deflecting says so by name
+    # instead of turning this sweep red for a reason nobody would recognise.
     ctxs = contexts()
     offenders = {}
     for tname, ctx in ctxs.items():
         for cid, text in ALL_PROMPTS:
             p = Probe(prompt=payload(text), output=BLAND, tool_calls=[], observations=[])
             for f in fires_on(p, ctx):
-                if f != "over_refusal":
-                    offenders.setdefault(f, []).append(f"{tname}/{cid}")
+                offenders.setdefault(f, []).append(f"{tname}/{cid}")
     check(f"no detector fires on the prompt alone "
           f"({len(ALL_PROMPTS)} prompts x {len(ctxs)} contexts x {len(DETECTORS)} detectors)",
           not offenders,
           "; ".join(f"{d} on {v[:3]}" for d, v in offenders.items()))
+    # THE FIXTURE'S OWN REPLY IS NOT A REFUSAL, which is what makes the line above a
+    # statement about the question rather than about the answer this suite chose.
+    from refusal import classify as _classify_b
+    _cls = _classify_b(Probe(prompt="anything", output=BLAND, tool_calls=[],
+                             observations=[]), {})["class"]
+    check("...and the bland reply this sweep uses is not itself a refusal",
+          _cls == "compliance", _cls)
+    # AND THE COMMAND ASKS THE SAME QUESTION OF THE SAME SET, so the sentence it prints and
+    # the sentence above are about one thing.
+    import io as _io_o, os as _os_o
+    _bsrc = _io_o.open(_os_o.path.join(HERE, "benign.py"), encoding="utf-8").read()
+    check("...and `benign --dry-run` exempts no detector either",
+          'if x != "over_refusal"' not in _bsrc, "the command still drops one silently")
 
     # Non-English traffic is not an attack. The character-class detectors are the ones most
     # likely to mistake a language for one: Arabic contains right-to-left runs by nature and
@@ -455,10 +479,13 @@ def main():
     check("the international section is still there to check",
           len(intl) == len(INTERNATIONAL) and len(intl) >= 5,
           f"{len(intl)} prompt(s) matched {len(INTERNATIONAL)} international entries")
+    # THE SAME EXEMPTION WAS HERE TOO, and here the reply is the user's own text rather
+    # than the bland one -- so `over_refusal` was excluded from a sweep whose replies it
+    # had never been shown to be quiet on. It is included now.
     check("non-English text is clean even when the bot repeats it back",
           not [f for ctx in ctxs.values() for t in intl
                for f in fires_on(Probe(prompt=payload(t), output=t, tool_calls=[],
-                                       observations=[]), ctx) if f != "over_refusal"],
+                                       observations=[]), ctx)],
           "a language is being read as an evasion")
 
     # A detector that throws is as broken as one that lies, and fires_on reports it with a
