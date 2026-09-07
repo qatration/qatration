@@ -68,15 +68,20 @@ def contexts():
 def _prompt_of(attack, stored):
     """The attacker's whole side of the exchange, for echo subtraction.
 
-    Older result files predate storing it, so it is reconstructed from the attack exactly
-    as runner.py assembles it — including every step of a chain or session, not just the
-    last, since the attacker typed all of them.
+    Older result files predate storing it, so it is reconstructed -- through
+    `runner.attacker_side`, which is the function `run_attack` itself uses, rather than
+    through a second copy here. The copy said it reconstructed "exactly as runner.py
+    assembles it" and did not: it joined the raw `steps` with neither `payload()` nor the
+    attack's `encode:` applied, and ignored a forged transcript entirely.
+
+    That fails in the direction that manufactures a finding. Subtracting the plain words of
+    an encoded attack subtracts almost nothing, so the encoded payload coming back in the
+    reply reads as the target revealing it.
     """
     if stored:
         return stored
-    if attack.get("steps"):
-        return "\n".join(str(x) for x in attack["steps"])
-    return attack.get("text") or attack.get("user_prompt") or ""
+    from runner import attacker_side
+    return attacker_side(attack)
 
 
 def _probe(attack, d):

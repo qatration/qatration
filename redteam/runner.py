@@ -236,6 +236,48 @@ def judged_ctx(attack, ctx):
     return merged
 
 
+def attacker_side(attack):
+    """Everything the attacker put in front of the target, AS IT WAS SENT.
+
+    Echo subtraction compares a reply against this string, so it has to be what the target
+    saw rather than what the arsenal says. `run_attack` writes that rule down where it
+    assembles a multi-step prompt -- "recording the plain steps for a run that sent encoded
+    ones would subtract text the target never saw, and fail to subtract the text it did" --
+    and `rejudge._prompt_of` did the thing that comment forbids, for any stored probe with
+    no recorded prompt: it joined the raw `steps`, or returned the raw `text`, with neither
+    `payload()` nor the attack's `encode:` applied and with a forged transcript ignored
+    altogether. Its docstring said "reconstructed from the attack exactly as runner.py
+    assembles it".
+
+    THE DIRECTION IT FAILS IN IS THE BAD ONE. Subtracting the plain words of an encoded
+    attack subtracts almost nothing, so the encoded payload coming back in the reply is
+    counted as the target revealing it -- a manufactured finding on replay, out of an
+    artifact that was fine. 820 stored probes here have no recorded prompt; none of them
+    belongs to an encoded or forged attack today, which is why nothing has gone wrong yet
+    and not a reason for the reconstruction to be wrong.
+
+    So there is one implementation and both callers use it: `run_attack` below for the two
+    deliveries whose adapters cannot set it themselves, and `rejudge` for a probe that
+    never recorded one.
+    """
+    enc = attack.get("encode")
+
+    def _t(s):
+        s = payload(s)
+        return apply_encoding(s, enc) if enc else s
+
+    delivery = attack.get("delivery", "direct")
+    if delivery in ("chain", "sessions") and attack.get("steps"):
+        return "\n".join(_t(x) for x in attack["steps"])
+    if delivery == "forged_history":
+        return "\n".join(
+            [_t((h or {}).get("content", "")) for h in (attack.get("history") or [])]
+            + [_t(attack.get("text") or "")])
+    if delivery == "indirect":
+        return _t(attack.get("user_prompt", "Hello"))
+    return _t(attack.get("text") or attack.get("user_prompt") or "")
+
+
 def run_attack(target, attack, ctx, trials=1):
     records = []
     delivery = attack.get("delivery", "direct")
@@ -291,8 +333,8 @@ def run_attack(target, attack, ctx, trials=1):
                 probe = _resilient_send(
                     lambda: target.send_forged(_text(attack["text"]), forged), aid)
                 if probe is not None:
-                    probe.prompt = "\n".join(
-                        [h["content"] for h in forged] + [_text(attack["text"])])
+                    # Same one implementation as the multi-step branch below.
+                    probe.prompt = attacker_side(attack)
             else:
                 text = _text(attack["text"])
                 probe = _resilient_send(lambda t=text: target.send(t), aid)
@@ -309,8 +351,9 @@ def run_attack(target, attack, ctx, trials=1):
             # WHAT WAS SENT, not what was written. Echo subtraction compares the reply
             # against this string, so recording the plain steps for a run that sent
             # encoded ones would subtract text the target never saw -- and fail to
-            # subtract the text it did.
-            probe.prompt = "\n".join(_text(x) for x in attack["steps"])
+            # subtract the text it did. Through `attacker_side` because `rejudge` needs
+            # the same answer for a probe that recorded no prompt, and had its own.
+            probe.prompt = attacker_side(attack)
         # NO WATCHDOG HERE, AND THAT IS NOT AN OVERSIGHT. Judging is CPU inside this process:
         # `signal.alarm` does not exist on Windows, a thread cannot interrupt a regular
         # expression, and a subprocess per probe would cost more than the sweep. Nothing that
