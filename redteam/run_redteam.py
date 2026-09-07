@@ -419,6 +419,12 @@ def is_unmeasurable(attack, dead):
     return bool(decl) and decl <= set(dead)
 
 
+# How many attacks in a row may come back rate-limited before the sweep stops. Five is
+# enough to be sure it is not one busy moment and small enough to matter: measured against
+# an endpoint answering 429 to everything, the run sent 92 requests before this existed.
+RATE_LIMIT_GIVE_UP = 5
+
+
 def main():
     ap = argparse.ArgumentParser()
     from workspace import trial_count as _trial_count
@@ -1030,7 +1036,28 @@ def main():
     broke = 0
     exploited_n = 0
     results = []
+    # WHEN THE TARGET HAS ASKED US TO STOP, REPEATEDLY, AND NOTHING HAS EVER LANDED.
+    #
+    # Measured against an endpoint answering 429 to everything: this sent 92 requests over
+    # 45 attacks and 30 seconds, then exited 3 with `NOTHING MEASURED`. The exit code and
+    # the sentence were right, and the traffic had already gone. `RateLimit` beside this
+    # bounds what WE decide to send -- "the request budget is the only thing standing
+    # between assessment and traffic generator" -- and this is the target asking, which
+    # nothing was listening to.
+    #
+    # `IN A ROW` IS THE WHOLE RULE, and it is enough. A single 429 in the middle of a working
+    # sweep does not end it: a limit that lets some traffic through is one the run can live
+    # within, and stopping on it would throw away a measurement the operator can have.
+    #
+    # A FIRST DRAFT ALSO REQUIRED THAT NOTHING HAD EVER SUCCEEDED, borrowing the adapter's
+    # `_seen_success`. That condition is a hole rather than a safeguard: the commonest real
+    # shape is a metered endpoint that answers happily until the quota runs out, and every one
+    # of those has succeeded. It would have kept hammering exactly the deployment this exists
+    # to protect. Two mutations survived on it, which is how it was found.
+    _rl_streak, _rl_stopped = 0, ""
     for a in attacks:
+        if _rl_stopped:
+            break
         recs = run_attack(target, a, ctx, trials=trials)
         head, rate = headline(recs)
         fired_list = sorted({d for r in recs for d in r["fired"]})
@@ -1063,6 +1090,20 @@ def main():
         } for r in recs]
         results.append({"attack": a, "headline": head, "rate": rate,
                         "fired": fired_list, "locks": locks, "trials": trials_ser})
+        if all(str((r.get("probe") and r["probe"].error) or "").startswith("RateLimited")
+               for r in recs) and recs:
+            _rl_streak += 1
+        else:
+            _rl_streak = 0
+        if _rl_streak >= RATE_LIMIT_GIVE_UP:
+            _rl_stopped = (
+                "the endpoint answered every one of the last %d attacks with a rate "
+                "limit and has not answered anything else, so the rest of the arsenal "
+                "was NOT sent" % _rl_streak)
+            print("\n  ! STOPPED — %s.\n"
+                  "    Nothing here is a result about %s. Raise the limit on their side, "
+                  "or lower\n    `rate.min_interval_s` on ours, and run it again."
+                  % (_rl_stopped, target.name), file=sys.stderr)
 
     attacks_n = sum(1 for a in attacks if a["category"] != "control")
     # The same ruler as the header. This was `"-" * 78` while the line above it is as wide as
@@ -1085,6 +1126,10 @@ def main():
     # THE BUDGET'S OWN WORDS, read here rather than at the record two hundred lines below,
     # because this is where the number is stated and the caveat belongs beside it.
     _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
+    # A RUN THE TARGET STOPPED IS A RUN THAT DID NOT FINISH, and the closing line is where
+    # the reader looks first. `exhausted` says the same thing about OUR budget; this says it
+    # about theirs.
+    _budget_note = _budget_note or _rl_stopped
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials))
 
