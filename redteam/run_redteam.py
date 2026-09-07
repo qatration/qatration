@@ -539,6 +539,22 @@ def main():
                        engine=engine_version(), arsenal=os.path.basename(args.attacks),
                        trials=trials)
 
+    def _refuse(code, note):
+        """Close the record, then exit. THE RECORD IS OPEN FROM HERE ON.
+
+        `runs.start` writes before the first probe on purpose -- "the runs worth having a
+        record of are disproportionately the ones that did not finish" -- so every exit
+        after it owes the record an ending. Four refusals below close theirs as `aborted`
+        with the reason; five others printed `Nothing was sent` and exited, leaving a
+        record that says `started` for a run that never began and never will. One is on
+        disk in this repository: lcagent, 2026-08-19, still open.
+
+        A reader of `qatration runs` cannot tell that from a sweep the machine died in the
+        middle of, which is the difference the state field exists to draw.
+        """
+        _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target), note=note)
+        sys.exit(code)
+
     # THE HONEYTOKEN HAS TO BE THERE, and this is the only place that can insist.
     #
     # A minted token the operator never pasted is invisible: every canary detector finds
@@ -570,7 +586,7 @@ def main():
               f"  Mint your own — `qatration mint` — and put the pair in your system prompt and "
               f"your config.\n"
               f"  Nothing was sent.", file=sys.stderr)
-        sys.exit(5)
+        _refuse(5, f"{target.name} declares a canary this tool publishes ({sorted(_published)[0]}); nothing was sent and nothing was written")
 
     # BEFORE A SINGLE PROBE. The results file is written at the END of the run, so a check
     # there would refuse after somebody had paid for forty-seven minutes of model time and
@@ -588,7 +604,7 @@ def main():
         # This is the invocation being refused, which is 2's own description, and the act that
         # clears it is a flag or QATRATION_OUT rather than anything about the target.
         print(_refusal, file=sys.stderr)
-        sys.exit(2)
+        _refuse(2, "refused to replace committed evidence; nothing was sent and nothing was written")
 
     _verify = (ctx.get("honeytoken_verify") or "").strip()
     _ours = [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)]
@@ -596,7 +612,7 @@ def main():
         print(f"ABORT — {target.name} declares a honeytoken ({_ours[0]}) but no "
               f"`honeytoken_verify`, so nothing can confirm it was ever pasted in. Mint a pair "
               f"with `qatration mint` and declare both.", file=sys.stderr)
-        sys.exit(5)
+        _refuse(5, f"{target.name} declares a honeytoken with no `honeytoken_verify`; nothing was sent and nothing was written")
     if _ours and _verify:
         target.reset()
         _p = target.send(_ht.VERIFY_PROMPT)
@@ -609,7 +625,7 @@ def main():
                      if _why[0] == "NOT PLANTED" else "")
             print(f"ABORT — {_why[1]}\n{_said}"
                   f"  nothing was sent and nothing was written.", file=sys.stderr)
-            sys.exit(5)
+            _refuse(5, f"{_why[1]}; nothing was sent and nothing was written")
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
 
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
@@ -657,7 +673,7 @@ def main():
         for _u in _unusable[:8]:
             print("    " + _u, file=sys.stderr)
         # 2: the invocation was refused. Not 1, which is a finding about the target.
-        sys.exit(2)
+        _refuse(2, f"{len(_unusable)} entr%s in the arsenal cannot be used; nothing was sent and nothing was written" % ("y" if len(_unusable) == 1 else "ies"))
     # AND THE TARGET'S OWN REFUSAL VOCABULARY. A misspelled class name under
     # `refusal_patterns` is not refused and not applied, so the operator's phrasings never
     # join the classifier and their bot reads as one that never refuses; an uncompilable

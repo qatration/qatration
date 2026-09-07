@@ -279,8 +279,20 @@ def main():
     ob = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
     check("the sweep verifies the honeytoken before spending anything",
           "honeytoken as _ht" in rr and "_ht.verify_refusal(" in rr)
+    # ASKED OF THE AST, and for the CODE rather than for one spelling of it. This read
+    # `"sys.exit(5)" in rr`, and the five refusals in that file now go through `_refuse`,
+    # which closes the open run record before exiting -- so the literal moved and the
+    # property did not. What matters is that a run reaching this branch exits 5, which the
+    # exit-code table documents as the canary precondition, and names the reason.
+    import ast as _ast_h
+    _fives = [n for n in _ast_h.walk(_ast_h.parse(rr))
+              if isinstance(n, _ast_h.Call)
+              and ((isinstance(n.func, _ast_h.Attribute) and n.func.attr == "exit")
+                   or (isinstance(n.func, _ast_h.Name) and n.func.id == "_refuse"))
+              and n.args and isinstance(n.args[0], _ast_h.Constant)
+              and n.args[0].value == 5]
     check("...and refuses the run rather than reporting a clean one",
-          "sys.exit(5)" in rr and "_why[1]" in rr)
+          bool(_fives) and "_why[1]" in rr)
     # THROUGH THE SHARED DECISION, not its own `planted()` call. That call is what let
     # two causes share one sentence: an errored probe has an empty output, an empty
     # output is what an unplanted token looks like, and a stranger with a dead port was

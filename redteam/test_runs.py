@@ -155,6 +155,77 @@ def main():
           _r.unfinished_note({"run_id": "missing"}, _d))
 
 
+    # --- EVERY EXIT AFTER THE RECORD IS OPENED OWES IT AN ENDING ----------------------
+    #
+    # `runs.start` writes before the first probe on purpose: "the runs worth having a
+    # record of are disproportionately the ones that did not finish". That makes the record
+    # open from that line to the end of `main`, and every way out of the function in between
+    # is a run that has to say how it ended.
+    #
+    # FOUR REFUSALS CLOSED IT AND FIVE DID NOT. Each of the five printed `Nothing was sent`
+    # and exited -- a published canary, a refusal to overwrite committed evidence, a
+    # honeytoken with no verifier, a honeytoken that was never planted, an unusable arsenal
+    # -- leaving a record that says `started` for a run that never began. One such record is
+    # on disk in this repository: lcagent, 2026-08-19, still open, and a reader of
+    # `qatration runs` cannot tell it from a sweep the machine died in the middle of.
+    #
+    # ASKED OF THE AST, not of the text: an exit is a `sys.exit` call, and what makes it
+    # legitimate is a `finish` just above it or a `_refuse` that does the closing itself.
+    import ast as _ast_r, io as _io_r
+    _src = _io_r.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    _fn = [n for n in _ast_r.walk(_ast_r.parse(_src))
+           if isinstance(n, _ast_r.FunctionDef) and n.name == "main"]
+    check("run_redteam has a main to walk", bool(_fn), "no main")
+    if _fn:
+        _fn = _fn[0]
+
+        def _calls(name, attr=True):
+            return [n.lineno for n in _ast_r.walk(_fn)
+                    if isinstance(n, _ast_r.Call)
+                    and ((isinstance(n.func, _ast_r.Attribute) and n.func.attr == name)
+                         if attr else
+                         (isinstance(n.func, _ast_r.Name) and n.func.id == name))]
+
+        _start = _calls("start")
+        _finish = _calls("finish")
+        _refuse = _calls("_refuse", attr=False)
+        check("the record is opened once", len(_start) == 1, str(_start))
+        check("...and closed in more than one place, because a run ends more than one way",
+              len(_finish) >= 4, str(len(_finish)))
+        _open_at = _start[0] if _start else 0
+        _leaks = []
+        for _n in _ast_r.walk(_fn):
+            if not (isinstance(_n, _ast_r.Call)
+                    and isinstance(_n.func, _ast_r.Attribute)
+                    and _n.func.attr == "exit" and _n.lineno > _open_at):
+                continue
+            if any(0 <= _n.lineno - _f <= 12 for _f in _finish):
+                continue
+            if any(abs(_n.lineno - _r) <= 1 for _r in _refuse):
+                continue
+            # AFTER THE LAST CLOSE, the record is already ended: the CI gate exits live
+            # there and owe nothing.
+            if _finish and _n.lineno > max(_finish):
+                continue
+            _leaks.append(_n.lineno)
+        check("no exit between opening the record and closing it leaves it open",
+              not _leaks, "run_redteam.py lines %s" % _leaks)
+        # AND THE HELPER REALLY DOES CLOSE IT, or every call to it is a leak with a name.
+        _ref_fn = [n for n in _ast_r.walk(_fn)
+                   if isinstance(n, _ast_r.FunctionDef) and n.name == "_refuse"]
+        check("the refusal helper exists", bool(_ref_fn), "no _refuse")
+        if _ref_fn:
+            _body = _ref_fn[0]
+            check("...and it closes the record before exiting",
+                  any(isinstance(x, _ast_r.Call)
+                      and isinstance(x.func, _ast_r.Attribute)
+                      and x.func.attr == "finish" for x in _ast_r.walk(_body)), "")
+            check("...as `aborted`, which is what nothing-was-sent means",
+                  any(isinstance(x, _ast_r.Constant) and x.value == "aborted"
+                      for x in _ast_r.walk(_body)), "")
+            check("...and is used by every refusal that used to leak", len(_refuse) >= 5,
+                  "%d call(s)" % len(_refuse))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
