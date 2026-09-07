@@ -462,6 +462,58 @@ def check_context_shapes():
     return fails
 
 
+def check_one_name_rule():
+    """What a target name may be, decided in one place by everything that takes one.
+
+    `safe_target_name` exists because the rule was written in `targets_http` and four
+    callers then assigned the raw config value onto the target after construction -- its own
+    docstring says so. It was lifted out for every adapter that is not the HTTP one, and the
+    HTTP one kept its copy: the same regex, the same `.strip(".")` guard, character for
+    character. A divergence there is the hardest kind to notice, because both sides refuse
+    and the only question is ever which names each one refuses.
+    """
+    fails = []
+
+    def check(label, ok, detail=""):
+        print("%s  %s" % ("PASS" if ok else "FAIL", label))
+        if not ok:
+            fails.append("%s: %s" % (label, detail))
+
+    import ast as _ast_n, io as _io_n, os as _os_n
+    from workspace import safe_target_name as _safe
+    from targets_http import HttpConfiguredTarget as _H
+
+    # THE SAME ANSWER FROM BOTH DOORS, on the names that decide the rule.
+    for _n in ("ok-name", "fine_1.2", "a.b-c_9"):
+        _http = _H(name=_n, url="http://127.0.0.1:9/x").name
+        check("both doors accept %r" % _n,
+              _http == _safe(_n, "w") == _n, _http)
+    for _n in ("../evil", "a/b", ".", "..", "x" * 65, "", "  ", "a b", "a\\b"):
+        _a = _b = None
+        try:
+            _H(name=_n, url="http://127.0.0.1:9/x")
+        except SystemExit as _e:
+            _a = str(_e)
+        try:
+            _safe(_n, "w")
+        except SystemExit as _e:
+            _b = str(_e)
+        check("both doors refuse %r" % _n, bool(_a) and bool(_b),
+              "http=%r workspace=%r" % (_a, _b))
+
+    # AND THE ADAPTER HAS NO SECOND COPY OF THE RULE, which is what keeps the two in step.
+    _src = _io_n.open(_os_n.path.join(HERE, "targets_http.py"), encoding="utf-8").read()
+    check("targets_http keeps no copy of the name pattern",
+          "[A-Za-z0-9._-]{1,64}" not in _src, "the regex is written out again")
+    _tree = _ast_n.parse(_src)
+    _uses = any(isinstance(_x, _ast_n.Call) and isinstance(_x.func, _ast_n.Name)
+                and _x.func.id in ("safe_target_name", "_safe_name")
+                for _x in _ast_n.walk(_tree))
+    check("...and calls the shared rule instead", _uses,
+          "the name is validated some other way")
+    return fails
+
+
 def check_ctx_read_forms():
     """Every way the engine reads a context key, in one place, read by both scans.
 
@@ -1215,7 +1267,7 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = (check_ctx_read_forms() + check_unread_context_keys() + check_context_shapes() + check_esc()
+    _f = (check_one_name_rule() + check_ctx_read_forms() + check_unread_context_keys() + check_context_shapes() + check_esc()
           + check_every_command_refuses())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))

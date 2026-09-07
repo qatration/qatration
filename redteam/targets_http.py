@@ -395,21 +395,19 @@ class HttpConfiguredTarget(Target):
         if not str(url).lower().startswith(("http://", "https://")):
             raise SystemExit(f"targets_http: refusing a non-HTTP url: {url!r}")
         self.url = url
-        # THE NAME BECOMES A FILENAME: `out/results_{name}.json`, `out/report_{name}.html`, and
-        # the run record. In hosted mode the config comes from a stranger, which makes a name
-        # containing `..` or a separator a path traversal driven by a config field. Restricted
-        # to what a filename can hold rather than escaped, because a name is a label somebody
-        # chose and there is no reason for it to need escaping.
-        name = str(name or "").strip()
-        if not name:
-            raise SystemExit("targets_http: `name` is required — it labels the target in every "
-                             "result file and in the run record.")
-        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", name) or name.strip(".") == "":
-            raise SystemExit(
-                f"targets_http: name={name!r} is not usable as a filename. It is interpolated "
-                f"into out/results_<name>.json, so letters, digits, dot, dash and underscore "
-                f"only, up to 64 characters.")
-        self.name = name
+        # THE NAME BECOMES A FILENAME: `out/results_{name}.json`, `out/report_{name}.html`,
+        # and the run record. In hosted mode the config comes from a stranger, which makes a
+        # name containing `..` or a separator a path traversal driven by a config field.
+        #
+        # THROUGH `workspace.safe_target_name`, WHICH THIS RULE IS THE PARENT OF. That
+        # function exists because the rule was written HERE and four callers then assigned
+        # the raw config value onto the target after construction -- its own docstring says
+        # so -- and it was lifted out for every adapter that is not this one. This module
+        # kept its copy: the same regex, the same `.strip(".")` guard, character for
+        # character, in the one place a divergence would be hardest to notice, because both
+        # sides refuse and the question is only ever which name each refuses.
+        from workspace import safe_target_name as _safe_name
+        self.name = _safe_name(name, "targets_http")
         self.method = (method or "POST").upper()
         # THE VERB HAS TO CARRY A BODY. urllib sends no data on GET/HEAD/DELETE, so the built
         # request body — the only thing carrying the attack — is silently dropped: the endpoint
