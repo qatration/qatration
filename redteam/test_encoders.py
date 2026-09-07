@@ -92,16 +92,23 @@ def main():
     check("ascii_art leaves the surrounding instruction in place", "please" in art)
 
     # --- the arsenal agrees with the registry -----------------------------------------
-    bad, artless = [], []
+    # AND THE ARSENAL HAS TO BE THERE. Both claims below are universal over the attacks that
+    # declare an `encode:`, and an empty set satisfies a universal claim: deleting every
+    # `attacks*.yaml` in a clone left this suite green. The docstring above says fourteen
+    # attacks carry one; there are 53 now, and the floor is asserted rather than described.
+    bad, artless, _encoded = [], [], 0
     for fp in glob.glob(os.path.join(HERE, "attacks*.yaml")):
         for a in yaml.safe_load(open(fp, encoding="utf-8")) or []:
             enc = a.get("encode")
             if not enc:
                 continue
+            _encoded += 1
             if enc not in ENCODERS:
                 bad.append(f"{os.path.basename(fp)}:{a.get('id')} -> {enc}")
             if enc == "ascii_art" and "[[ART:" not in str(a.get("text") or ""):
                 artless.append(a.get("id"))
+    check("the arsenal really does carry encoded attacks to check", _encoded >= 14,
+          "%d attack(s) declare an encode:" % _encoded)
     check("every encode: in the arsenal names a real strategy", not bad, str(bad))
     check("every ascii_art attack has a marker for it to replace", not artless,
           str(artless))
