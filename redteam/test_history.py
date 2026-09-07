@@ -244,6 +244,27 @@ def main():
             check("...and when %s does" % _field,
                   _ad(dict(_base, **{_field: _other})) != _ad(_base),
                   _field)
+        # AND THE FOUR THE FIRST VERSION MISSED, found by reading what `run_attack` and
+        # `judged_ctx` take off an attack rather than by reasoning about the schema. Each
+        # is a field the engine acts on and the digest could not see.
+        _seeded = dict(_base, seed={"text": "planted", "doc": "refunds"})
+        _forged = dict(_base, history=[{"role": "user", "content": "earlier turn"}])
+        for _label, _one, _two in (
+                ("plants, which becomes planted_markers",
+                 dict(_base, plants=["ZULU-77"]), dict(_base, plants=["ZULU-78"])),
+                ("expects_refusal, which decides if a refusal is the finding",
+                 dict(_base, expects_refusal=True), dict(_base, expects_refusal=False)),
+                ("which document a seed poisons",
+                 _seeded, dict(_seeded, seed={"text": "planted", "doc": "returns"})),
+                ("which field of it",
+                 _seeded, dict(_seeded, seed={"text": "planted", "doc": "refunds",
+                                              "field": "body"})),
+                ("who spoke a forged turn",
+                 _forged, dict(_forged,
+                               history=[{"role": "assistant",
+                                         "content": "earlier turn"}]))):
+            check("the digest moves with %s" % _label, _ad(_one) != _ad(_two),
+                  "%s == %s" % (_ad(_one), _ad(_two)))
         # AND NOT WHEN SOMETHING THAT DECIDES NEITHER MOVES.
         for _field, _other in (("applies_to", ["x"]), ("category", "other"),
                                ("id", "a2"), ("found_on", "somebot")):

@@ -89,11 +89,30 @@ def sent_strings(a):
 # detectors named success or partial, and the scored_by rule). `applies_to` and any
 # note are deliberately outside it -- they decide whether the attack runs, not what it
 # does when it does, and 177 ids differ across arsenals by `applies_to` alone.
+#
+# THE FIRST VERSION MISSED FOUR, and the way to find them was to read what `run_attack`
+# and `judged_ctx` actually take off an attack rather than to reason about the schema:
+#
+#   plants           `judged_ctx` merges it into `planted_markers`, which is the whole
+#                    input to `marker_echoed`
+#   expects_refusal  the same function turns it into `ctx["expects_refusal"]`, which
+#                    decides whether a refusal is the finding or the pass
+#   seed doc/field   `target.seed(attack["seed"])` is handed the WHOLE mapping, and
+#                    `sent_strings` reads only its `text`: poisoning the refunds document
+#                    and poisoning the returns one are two attacks under one id
+#   history roles    a forged turn attributed to the assistant is a different attack from
+#                    the same words attributed to the user, and only the content was here
+#
+# Widening it splits no group in the corpus (1,060 attacks) and none in the stored
+# evidence, which is why it costs nothing -- and is exactly why it had to be measured
+# rather than assumed: a digest that ignores a field is silent in the one case the
+# comparisons that read it exist for.
 def attack_digest(a):
     """-> 12 hex characters over what this attack sends and how it is judged."""
     import hashlib, json as _json
     if not isinstance(a, dict):
         return ""
+    seed = a.get("seed") if isinstance(a.get("seed"), dict) else {}
     body = {
         "sent": sent_strings(a),
         "encode": a.get("encode"),
@@ -101,6 +120,10 @@ def attack_digest(a):
         "success": sorted(str(x) for x in (a.get("success") or [])),
         "partial": sorted(str(x) for x in (a.get("partial") or [])),
         "scored_by": a.get("scored_by"),
+        "plants": sorted(str(x) for x in (a.get("plants") or [])),
+        "expects_refusal": bool(a.get("expects_refusal")),
+        "seed_at": [seed.get("doc"), seed.get("field")],
+        "roles": [str((h or {}).get("role", "user")) for h in (a.get("history") or [])],
     }
     blob = _json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
