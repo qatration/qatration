@@ -18,6 +18,11 @@ from target import Probe, payload
 SLOW_JUDGE_S = 10.0
 SEND_TIMEOUT = 180        # seconds a single probe may take before it's abandoned
 RETRIES = 1               # extra attempts after the first, on timeout / error
+# The longest this will wait when an endpoint answers 429 and asks for a pause. A
+# target may say `Retry-After: 86400`, and honouring that would hang a sweep for a
+# day; refusing to wait at all is what this is fixing. Beyond the ceiling the retry
+# is abandoned and the row says the endpoint asked for longer than a run can give.
+MAX_BACKOFF = 30
 
 
 def _invoke_with_timeout(fn, timeout):
@@ -55,7 +60,22 @@ def _resilient_send(fn, attack_id):
     probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
     attempts = 1
     while probe.error and attempts <= RETRIES:
-        print(f"  ! {attack_id}: {probe.error} — retry {attempts}/{RETRIES}", file=sys.stderr)
+        # A 429 IS THE ONE ERROR WHERE RETRYING AT ONCE IS BOTH USELESS AND RUDE. The
+        # endpoint said stop; sending again 0.0 seconds later doubles the traffic at
+        # exactly that moment and cannot succeed. The adapter attaches the pause the
+        # endpoint asked for, and a 429 with no `Retry-After` still gets a small one,
+        # because the header being absent does not mean the limit is not there.
+        _wait = getattr(probe, "retry_after", None)
+        if _wait is None and str(probe.error or "").startswith("RateLimited"):
+            _wait = 1.0
+        if _wait is not None and _wait > MAX_BACKOFF:
+            print(f"  ! {attack_id}: {probe.error} — asked for {_wait:g}s, longer than "
+                  f"a run can wait ({MAX_BACKOFF}s); not retried", file=sys.stderr)
+            break
+        print(f"  ! {attack_id}: {probe.error} — retry {attempts}/{RETRIES}"
+              + (f" after {_wait:g}s" if _wait else ""), file=sys.stderr)
+        if _wait:
+            time.sleep(_wait)
         probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
         attempts += 1
     return probe

@@ -352,6 +352,103 @@ def main():
         finally:
             EXTRA.clear()
 
+        # --- A 429 SAYS SLOW DOWN, AND THIS RETRIED 0.0 SECONDS LATER ---------------------
+        #
+        # `_resilient_send` retries once on any error. A rate limit is the one error where
+        # an immediate retry is both guaranteed to fail and rude: it doubles the traffic at
+        # exactly the moment somebody's deployment said stop. Measured against a scripted
+        # endpoint answering 429 with `Retry-After: 2` -- the second request left 0.0
+        # seconds after the first, and the header was never read.
+        #
+        # The pause travels ON THE PROBE, because the retry loop lives in `runner` and can
+        # only see the error string; a number travels better than prose.
+        import time as _t_rl
+        from runner import _resilient_send as _rs, MAX_BACKOFF as _CEIL
+        _hits, _hdr = [], {"v": "2"}
+
+        class _Limited(Handler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+                _hits.append(_t_rl.time())
+                _b = json.dumps({"error": {"message": "rate limit"}}).encode()
+                self.send_response(429)
+                if _hdr["v"] is not None:
+                    self.send_header("Retry-After", _hdr["v"])
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            def log_message(self, *a):
+                pass
+
+        _lsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Limited)
+        threading.Thread(target=_lsrv.serve_forever, daemon=True).start()
+        try:
+            _lt = HttpConfiguredTarget(url="http://127.0.0.1:%d/c"
+                                       % _lsrv.server_address[1],
+                                       name="limited",
+                                       request={"message": "{prompt}"},
+                                       response={"reply": "reply"})
+
+            def _drive(_v):
+                _hdr["v"] = _v
+                del _hits[:]
+                _t0 = _t_rl.time()
+                _p = _rs(lambda: _lt.send("hello"), "a1")
+                return len(_hits), _t_rl.time() - _t0, _p
+
+            _n, _took, _p = _drive("2")
+            check("a 429 is named as a rate limit, not as a bare HTTP error",
+                  (_p.error or "").startswith("RateLimited"), repr(_p.error)[:110])
+            check("...and the retry waits the interval the endpoint asked for",
+                  _n == 2 and _took >= 1.9, "%d request(s) in %.2fs" % (_n, _took))
+            check("...and the message says how long it was asked to wait",
+                  "pause of 2s" in (_p.error or ""), repr(_p.error)[:110])
+
+            # A HEADER THAT IS NOT THERE DOES NOT MEAN THE LIMIT IS NOT THERE.
+            _n, _took, _p = _drive(None)
+            check("a 429 with no Retry-After still pauses before retrying",
+                  _n == 2 and _took >= 0.9, "%d request(s) in %.2fs" % (_n, _took))
+            check("...and says the endpoint named no interval",
+                  "named no interval" in (_p.error or ""), repr(_p.error)[:110])
+
+            # AND A PAUSE LONGER THAN A RUN CAN GIVE IS NOT WAITED OUT. A target answering
+            # `Retry-After: 86400` would otherwise hang the sweep for a day.
+            _n, _took, _p = _drive(str(_CEIL * 10))
+            check("a pause longer than the ceiling is not retried at all", _n == 1,
+                  "%d request(s) in %.2fs" % (_n, _took))
+            check("...and the run does not sit waiting for it", _took < 2.0,
+                  "%.2fs" % _took)
+        finally:
+            _lsrv.shutdown()
+
+        # AND THE HEADER IS READ IN BOTH SHAPES RFC 9110 ALLOWS. A delay in seconds and an
+        # HTTP date are both seen in the wild, and a header nobody can parse is the same as
+        # no header rather than a crash.
+        from targets_http import _retry_after as _ra
+        import datetime as _dt_rl, email.utils as _eu_rl
+
+        class _Hdrs(object):
+            def __init__(self, v):
+                self.v = v
+
+            def get(self, k):
+                return self.v
+
+        check("Retry-After in seconds is read", _ra(_Hdrs("7")) == 7.0,
+              repr(_ra(_Hdrs("7"))))
+        _dsec = _ra(_Hdrs(_eu_rl.format_datetime(
+            _dt_rl.datetime.now(_dt_rl.timezone.utc) + _dt_rl.timedelta(seconds=5))))
+        check("...and an HTTP date is read as an interval",
+              _dsec is not None and 3 <= _dsec <= 6, repr(_dsec))
+        check("...a header nobody can parse is the same as none",
+              _ra(_Hdrs("soon")) is None, repr(_ra(_Hdrs("soon"))))
+        check("...and so is no header at all", _ra(_Hdrs(None)) is None,
+              repr(_ra(_Hdrs(None))))
+        check("...and a negative interval is not a negative sleep",
+              _ra(_Hdrs("-5")) == 0.0, repr(_ra(_Hdrs("-5"))))
+
         # --- capabilities are DERIVED, never claimed ---------------------------------------
         # A config that claims chain on an API with nowhere to put the transcript makes every
         # multi-turn attack fail for the same uninteresting reason and read as a hard target.

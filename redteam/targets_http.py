@@ -251,6 +251,36 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
 
 _OPENER = urllib.request.build_opener(_GuardedRedirect)
 
+def _retry_after(headers):
+    """-> seconds this endpoint asked us to wait, or None if it did not say.
+
+    RFC 9110 allows either a delay in seconds or an HTTP date; both are seen in the
+    wild, and a header nobody can parse is the same as no header. Never negative and
+    never trusted to be small -- the caller decides what it is willing to wait, because
+    a target answering `Retry-After: 86400` must not hang a sweep for a day.
+    """
+    if not headers:
+        return None
+    try:
+        raw = headers.get("Retry-After")
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(str(raw).strip()))
+    except ValueError:
+        pass
+    try:
+        import email.utils as _eu
+        when = _eu.parsedate_to_datetime(str(raw))
+        import datetime as _dt
+        now = _dt.datetime.now(when.tzinfo) if when.tzinfo else _dt.datetime.now()
+        return max(0.0, (when - now).total_seconds())
+    except Exception:
+        return None
+
+
 class RateLimit:
     """A minimum gap between requests and a hard ceiling on how many there are.
 
@@ -818,6 +848,29 @@ class HttpConfiguredTarget(Target):
                 # succeeded it is not even a configuration problem — it is a credential that ran
                 # out mid-sweep. Left as a plain HTTPError, every probe after that point is an
                 # error, and a wall of errors is the shape a hardened deployment makes.
+                # AND WHEN THE ENDPOINT ASKS US TO WAIT. A 429 is the one error where an
+                # immediate retry is both guaranteed to fail and rude: it doubles the
+                # traffic at the exact moment somebody's deployment said stop. Measured
+                # against a scripted endpoint answering 429 with `Retry-After: 2` --
+                # the second request left 0.0 seconds after the first.
+                #
+                # ON THE PROBE, because the retry loop lives in `runner` and can only
+                # see the error STRING. A number travels better than prose: attached
+                # here rather than parsed back out of a message there.
+                if e.code in (429, 503):
+                    _wait = _retry_after(e.headers)
+                    _p = Probe(
+                        prompt=prompt, output="",
+                        error=("RateLimited: %s%s. The endpoint asked for a pause %s"
+                               % (type(e).__name__, detail,
+                                  "of %gs" % _wait if _wait
+                                  else "and named no interval")),
+                        seconds=round(time.time() - t0, 1))
+                    try:
+                        object.__setattr__(_p, "retry_after", _wait)
+                    except Exception:
+                        pass
+                    return _p
                 import signing
                 note = signing.expired_credential(e.code, self._seen_success)
                 if note:
