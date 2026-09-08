@@ -1095,6 +1095,12 @@ def calculate_standard_deviation(numbers):
         </section>
 
         <section class="finding unseen">
+          <div class="fhead"><span class="sev" style="color:#9a6700;background:rgba(154,103,0,.12)">MAPPING</span></div>
+          <h2>Every configured response path resolved at least once</h2>
+          <div class="fix"><span class="fixlabel">What this means</span>9 system(s) recorded which of their declared response paths their run resolved, and none of them had one that never did. A path that never resolves leaves every detector reading that channel judging an empty value, which is indistinguishable on this page from a channel that was clean — so this is a result, not an absence of one.</div>
+          <div class="fix"><span class="fixlabel">Not recorded</span>lcagent declares a response mapping and the stored run predates this check, so this page cannot say whether those paths ever resolved. Re-run to find out. A system that declares no mapping is in neither line: it has no path that could be dead.</div>
+        </section>
+        <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
           <h2>935 attack(s) measured, 2161 not sent</h2>
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this

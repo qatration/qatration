@@ -122,6 +122,84 @@ def main():
     check("esc escapes markup, so a target's own reply cannot inject into the page",
           dr.esc("<script>&") == "&lt;script&gt;&amp;")
 
+    # --- AND THE SAME QUESTION FOR A CONFIGURED RESPONSE PATH ------------------------
+    #
+    # `_unresolved_paths` names a declared path the whole sweep never resolved once, and
+    # its section rendered only when there was one. `meta.unresolved_paths` is written by
+    # the sweep: nine of the thirty-five stored here carry it and every one is empty, so
+    # the same blank space meant `every declared path resolved` and `this run predates the
+    # question`. That is the confusion the section's own prose is about, one level up: a
+    # channel that produced nothing is indistinguishable, on this page, from a clean one.
+    _dead_r, _pa_r, _pu_r = dr._unresolved_paths()
+    check("the stored fleet records which declared paths resolved",
+          len(_pa_r) >= 5, str(len(_pa_r)))
+    check("...and a run that predates the record is named, not counted as clean",
+          "lcagent" in _pu_r or not _pu_r, str(_pu_r))
+    check("...and no target is in both lists",
+          not (set(_pa_r) & set(_pu_r)), str(sorted(set(_pa_r) & set(_pu_r))))
+    # A TARGET THAT DECLARES NO MAPPING IS IN NEITHER, and twenty-five of the thirty-five
+    # here are exactly that: a built-in practice bot has no path that could be dead, and
+    # saying `cannot tell` about one would be its own small false statement.
+    from workspace import configs_by_name as _cbn_r
+    _nomap = [n for n, (_f, _c) in _cbn_r().items()
+              if isinstance(_c, dict) and not _c.get("response")]
+    check("a target with no response mapping is in neither list",
+          not (set(_nomap) & (set(_pa_r) | set(_pu_r)) - set(_pa_r)),
+          str(sorted(set(_nomap) & set(_pu_r))))
+
+    def _paths_page(meta_extra, response_declared):
+        """Render one fleet whose single artifact carries (or omits) the record."""
+        _tmp = tempfile.mkdtemp()
+        try:
+            _rows = [{"attack": {"id": "a1", "category": "exfil", "text": "a"},
+                      "headline": "EXPLOITED", "fired": ["canary_in_output"],
+                      "rate": "1/1",
+                      "trials": [{"verdict": "EXPLOITED", "probe": {"output": "x"}}]}]
+            _meta = {"target": "path-fake"}
+            _meta.update(meta_extra)
+            with open(os.path.join(_tmp, "results_path-fake.json"), "w",
+                      encoding="utf-8") as _f:
+                json.dump({"meta": _meta, "results": _rows}, _f)
+            _real = dr.OUT_DIR
+            dr.OUT_DIR = __import__("pathlib").Path(_tmp)
+            _wsp = __import__("workspace")
+            _orig_cbn = _wsp.configs_by_name
+            _wsp.configs_by_name = lambda *a, **k: dict(
+                _orig_cbn(*a, **k),
+                **({"path-fake": ("x.yaml", {"response": {"text": "$.out"}})}
+                   if response_declared else {}))
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    dr.main()
+                return open(os.path.join(_tmp, "defense_report.html"),
+                            encoding="utf-8").read()
+            finally:
+                dr.OUT_DIR = _real
+                _wsp.configs_by_name = _orig_cbn
+        finally:
+            shutil.rmtree(_tmp, ignore_errors=True)
+
+    _pg_clean = _paths_page({"unresolved_paths": []}, True)
+    check("a run that recorded a clean answer says so on the page",
+          "Every configured response path resolved" in _pg_clean, _pg_clean[-200:])
+    _pg_dead = _paths_page(
+        {"unresolved_paths": ["response.tool_calls = '$.calls'"]}, True)
+    check("...and a dead path is still reported as one",
+          "A configured response path never resolved" in _pg_dead
+          and "$.calls" in _pg_dead, _pg_dead[-200:])
+    _pg_unrec = _paths_page({}, True)
+    check("a run that predates the record is NOT RECORDED, not clean",
+          "Not recorded" in _pg_unrec and "path-fake" in _pg_unrec,
+          "the page said nothing about a run that never asked")
+    check("...and does not claim every path resolved",
+          "Every configured response path resolved" not in _pg_unrec,
+          "silence was published as a result")
+    # AND SILENCE WHERE SILENCE IS RIGHT: a target declaring no response mapping has no
+    # path that could be dead, and the section is not about it.
+    _pg_nomap = _paths_page({}, False)
+    check("a target with no response mapping gets no mapping section",
+          "MAPPING" not in _pg_nomap, "a section about nothing was rendered")
+
     # --- WHY THE OBSERVABILITY SECTION WAS SILENT -----------------------------------
     #
     # `_unobservable` answers `which calls had contents no detector could read`, and the

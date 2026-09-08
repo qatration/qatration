@@ -814,24 +814,49 @@ def _timeline():
 
 
 def _unresolved_paths():
-    """target -> the response paths its config declared and its run never once resolved.
+    """-> (target -> declared response paths its run never once resolved, asked, not asked).
 
     `caps` on a results file says what the config CLAIMED the target exposes. This says which
     of those claims the sweep could not substantiate a single time. The two disagreeing is the
     case that matters: sixteen detectors read the tool-call channel, and against a mistyped
-    path every one of them judged an empty list and reported nothing — a clean tool surface for
-    a deployment whose tool calls were never read.
+    path every one of them judged an empty list and reported nothing — a clean tool
+    surface for a deployment whose tool calls were never read.
+
+    AND A RUN THAT NEVER RECORDED IT LOOKS THE SAME. `meta.unresolved_paths` is written by
+    the sweep; nine of the thirty-five stored here carry it and every one is empty, and the
+    section rendered only when something was dead. So its silence covered `every declared
+    path resolved` and `this run predates the question` alike, which is the confusion the
+    section's own prose is about one paragraph down: a channel that produced nothing is
+    indistinguishable, on this page, from a channel that was clean.
+
+    A target whose config declares no `response:` mapping has nothing to resolve and is in
+    neither list — twenty-five of the thirty-five here are built-in practice bots. That
+    leaves one, `lcagent`, whose mapping is declared and whose stored run cannot say.
     """
-    out = {}
+    out, asked, unasked = {}, [], []
+    _declared = None
     for fp in results_files(OUT_DIR):
         try:
             m = (read_artifact(fp)[0] or {})["meta"]
         except (ValueError, KeyError, OSError):
             continue
+        tgt = m.get("target", "?")
         bad = m.get("unresolved_paths") or []
         if bad:
-            out[m.get("target", "?")] = list(bad)
-    return out
+            out[tgt] = list(bad)
+        if "unresolved_paths" in m:
+            asked.append(tgt)
+            continue
+        # NOT ASKED IS NOT THE SAME AS NOTHING TO ASK. Read from the config rather than
+        # assumed: a built-in practice bot declares no response mapping, so no path of
+        # its could be dead and saying `cannot tell` about it would be its own small lie.
+        if _declared is None:
+            from workspace import configs_by_name as _cbn
+            _declared = {n for n, (_fp, c) in _cbn().items()
+                         if isinstance(c, dict) and c.get("response")}
+        if tgt in _declared:
+            unasked.append(tgt)
+    return out, sorted(asked), sorted(unasked)
 
 
 def _unobservable():
@@ -849,9 +874,9 @@ def _unobservable():
     On this fleet: 213 unresolved tool calls across 6 systems are ones the question could
     be asked about, and the answer for every one of them is none. 216 across 8 more —
     dvla, opsbot, portalagent and four mcpagent variants — could not be asked at
-    all, and the section has never appeared on a published page in either case. A reader of the assessment could
-    not tell `we looked and found none` from `we could not look`, which is the sentence
-    three lines above this one.
+    all, and the section had never appeared on a published page in either case. A reader
+    could not tell `we looked and found none` from `we could not look`, which is the
+    sentence three lines above this one.
 
     Both numbers come back, per target, from the same pass: reading every stored artifact
     twice to count what the first pass already saw is the shape that drifts.
@@ -1284,7 +1309,7 @@ def main():
     # about calls whose CONTENTS no detector could read; this is about a channel that was
     # configured and never once produced a value, which is a mapping error rather than a
     # visibility limit — and the report is the only place the operator would find out.
-    dead_paths = _unresolved_paths()
+    dead_paths, _paths_asked, _paths_unasked = _unresolved_paths()
     newest = max(measured.values(), default="")
     stale = sorted({f"{t} ({d})" for t, d in measured.items() if d < newest})
     staleness = ("" if not stale else
@@ -1567,21 +1592,61 @@ def main():
     # it is one attack per category by design. Saying so is not a caveat bolted on; it is the
     # same rule the rest of this page follows, that an absence must never render as a result.
     dead_html = ""
-    if dead_paths:
+    # THE SECTION SPEAKS WHENEVER A RESPONSE MAPPING WAS DECLARED, not only when one is
+    # dead. It rendered `if dead_paths:`, and a run that never recorded the answer looks
+    # from here exactly like a run that recorded a clean one -- which is the confusion the
+    # paragraph below is written about, one level up.
+    if dead_paths or _paths_asked or _paths_unasked:
         _rows = "".join(
             f'<li><span class="mono">{esc(t)}</span><br><span class="muted">{esc(", ".join(p))}'
             f'</span></li>' for t, p in sorted(dead_paths.items()))
+        if dead_paths:
+            _dead_head = "A configured response path never resolved"
+            _dead_body = (
+                '<div class="fix"><span class="fixlabel">What this means</span>the config '
+                'declares these paths and the whole run produced nothing at any of them, '
+                'not once. The capability is still listed above because the config claims '
+                'it, so every detector that reads that channel ran against an empty value '
+                'and reported nothing — which is indistinguishable, on this page, from a '
+                'channel that was clean. Check the path against one real response before '
+                f'believing any result that depends on it.<ul class="trig">{_rows}</ul>'
+                '</div>')
+        elif _paths_asked:
+            _dead_head = "Every configured response path resolved at least once"
+            _dead_body = (
+                f'<div class="fix"><span class="fixlabel">What this means</span>'
+                f'{len(_paths_asked)} system(s) recorded which of their declared response '
+                f'paths their run resolved, and none of them had one that never did. A '
+                f'path that never resolves leaves every detector reading that channel '
+                f'judging an empty value, which is indistinguishable on this page from a '
+                f'channel that was clean — so this is a result, not an absence of one.</div>')
+        else:
+            # AND NOT `EVERY PATH RESOLVED` OVER ZERO RECORDED RUNS, which is the same
+            # defect facing the other way and is what the first version of this branch
+            # printed: a heading that is a result, computed from nothing.
+            _dead_head = "No run here recorded whether its response paths resolved"
+            _dead_body = (
+                '<div class="fix"><span class="fixlabel">What this means</span>nothing '
+                'on this page says whether the declared paths below ever carried a value. '
+                'A path that never resolves leaves every detector reading that channel '
+                'judging an empty value, which is indistinguishable here from a channel '
+                'that was clean.</div>')
+        _unasked_body = ""
+        if _paths_unasked:
+            _unasked_body = (
+                f'<div class="fix"><span class="fixlabel">Not recorded</span>'
+                f'{esc(", ".join(_paths_unasked))} '
+                f'{"declares" if len(_paths_unasked) == 1 else "declare"} a response '
+                f'mapping and the stored run predates this check, so this page cannot '
+                f'say whether those paths ever resolved. Re-run to find out. A system '
+                f'that declares no '
+                f'mapping is in neither line: it has no path that could be dead.</div>')
         dead_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#9a6700;background:rgba(154,103,0,.12)">MAPPING</span></div>
-          <h2>A configured response path never resolved</h2>
-          <div class="fix"><span class="fixlabel">What this means</span>the config declares
-            these paths and the whole run produced nothing at any of them, not once. The
-            capability is still listed above because the config claims it, so every detector
-            that reads that channel ran against an empty value and reported nothing — which is
-            indistinguishable, on this page, from a channel that was clean. Check the path
-            against one real response before believing any result that depends on it.
-            <ul class="trig">{_rows}</ul></div>
+          <h2>{_dead_head}</h2>
+          {_dead_body}
+          {_unasked_body}
         </section>"""
 
     held_html = ""
