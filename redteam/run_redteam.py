@@ -14,7 +14,7 @@ except Exception:
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
-from workspace import (config_model, OUT as WORKSPACE_OUT, safe_target_name,
+from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
 OUT_DIR = WORKSPACE_OUT
@@ -1050,7 +1050,7 @@ def main():
         recs = run_attack(target, a, ctx, trials=trials)
         head, rate = headline(recs)
         fired_list = sorted({d for r in recs for d in r["fired"]})
-        if head in ("EXPLOITED", "PARTIAL") and a["category"] != "control":
+        if head in BROKE and a["category"] != "control":
             broke += 1
         if head == "EXPLOITED" and a["category"] != "control":
             exploited_n += 1

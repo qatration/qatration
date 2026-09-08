@@ -573,6 +573,93 @@ def check_ctx_read_forms():
     return fails
 
 
+def check_one_breach_rule():
+    """The tuple that decides what a finding IS, in one place -- and it was in fifteen.
+
+    `workspace.BROKE` was written to end exactly this, and its own comment says so: three
+    modules had spelled the tuple out, a fourth was about to, and "three copies of a rule
+    agree until the day somebody decides a fourth verdict counts as a breach, and then two
+    reports disagree about what a finding is".
+
+    Fourteen copies were still there. Not in corners either: `run_redteam` counting the
+    breaches it prints, `defense_report` picking the finding rows and the trial to show,
+    `compare_targets` colouring the fleet table, `rejudge` rewriting `meta["broke"]`,
+    `baseline` deciding what to attribute, `runner` and `refusal`. Every number a reader of
+    this engine sees came off one of those literals.
+
+    `NOT_MEASURED` -- the same rule's twin, one section up in the same file -- really was
+    consolidated, and grew from `("ERROR",)` to `("SKIP", "ERROR")` afterwards. That is the
+    change this gate exists for: had it happened to `BROKE`, fourteen sites would have kept
+    the old answer and nothing would have said so.
+
+    AST, not a substring: the tuple appears in prose in half these files, and a comment
+    quoting the rule is not a second implementation of it.
+    """
+    import ast as _ast_b, glob as _glob_b, io as _io_b, os as _os_b
+    fails = []
+
+    def check(label, ok, detail=""):
+        print("%s  %s" % ("PASS" if ok else "FAIL", label))
+        if not ok:
+            fails.append("%s: %s" % (label, detail))
+
+    WANT = {"BROKE": {"EXPLOITED", "PARTIAL"},
+            "NOT_MEASURED": {"SKIP", "ERROR"}}
+
+    def literals(path):
+        """-> [(name of the rule, line)] for every literal spelling of one in this file."""
+        found = []
+        try:
+            tree = _ast_b.parse(_io_b.open(path, encoding="utf-8").read())
+        except SyntaxError:
+            return found
+        for n in _ast_b.walk(tree):
+            if not isinstance(n, (_ast_b.Tuple, _ast_b.List, _ast_b.Set)):
+                continue
+            vals = [e.value for e in n.elts
+                    if isinstance(e, _ast_b.Constant) and isinstance(e.value, str)]
+            if len(vals) != len(n.elts) or len(vals) < 2:
+                continue
+            for name, want in WANT.items():
+                if set(vals) == want:
+                    found.append((name, n.lineno))
+        return found
+
+    # THE SCANNER WORKS, PROVED WHERE THE RULE IS ALLOWED TO BE. A scan that finds nothing
+    # because it can no longer see anything is the failure this whole suite is about, and
+    # a gate over `no copies exist` is satisfied by a broken scanner.
+    _home = sorted(n for n, _ in literals(_os_b.path.join(HERE, "workspace.py")))
+    check("the scan finds both rules where they are DEFINED",
+          _home == ["BROKE", "NOT_MEASURED"], str(_home))
+
+    _scanned, _copies = 0, []
+    for _p in sorted(_glob_b.glob(_os_b.path.join(HERE, "*.py"))):
+        _b = _os_b.path.basename(_p)
+        if _b.startswith("test_") or _b == "workspace.py":
+            continue
+        _scanned += 1
+        for _name, _line in literals(_p):
+            _copies.append("%s:%d spells out %s" % (_b, _line, _name))
+    check("no module spells out a rule workspace already owns", not _copies,
+          "; ".join(_copies[:6]))
+    check("...over the whole package, not a corner of it", _scanned >= 30, str(_scanned))
+
+    # AND THE NAME HAS TO BE THE SHARED OBJECT. Deleting a literal in favour of a local
+    # constant of the same name would pass the scan above and be the fifteenth copy.
+    import importlib as _il_b
+    for _m in ("baseline", "compare_targets", "defense_report", "refusal", "rejudge",
+               "run_redteam", "runner", "history", "discrimination", "verify"):
+        try:
+            _mod = _il_b.import_module(_m)
+        except Exception as _e:
+            check("%s imports" % _m, False, "%s: %s" % (type(_e).__name__, _e))
+            continue
+        check("%s reads BROKE from workspace, not a namesake of its own" % _m,
+              getattr(_mod, "BROKE", None) is workspace.BROKE,
+              repr(getattr(_mod, "BROKE", None)))
+    return fails
+
+
 def check_unread_context_keys():
     """A key nothing reads is a detector nobody armed, and TWO commands need to say so.
 
@@ -1267,7 +1354,8 @@ if __name__ == "__main__":
             print('  !', _b)
         sys.exit(1)
     check_config_model()
-    _f = (check_one_name_rule() + check_ctx_read_forms() + check_unread_context_keys() + check_context_shapes() + check_esc()
+    _f = (check_one_name_rule() + check_ctx_read_forms() + check_one_breach_rule()
+          + check_unread_context_keys() + check_context_shapes() + check_esc()
           + check_every_command_refuses())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))

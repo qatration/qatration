@@ -27,6 +27,7 @@ the evidence, and a labelled weak claim is worth more than an unlabelled strong 
 import json
 import os
 from workspace import OUT as WORKSPACE_OUT
+from workspace import BROKE            # one definition of what counts as a breach
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = WORKSPACE_OUT
@@ -351,7 +352,7 @@ def qualified(target, results, canaries=(), out_dir=None):
     c_rates = canary_rates(target, canaries, out_dir)
     doubtful, rescued = [], []
     for r in results:
-        if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
+        if (r.get("headline") or "") not in BROKE:
             continue
         verdict, detail = attribution(r.get("fired"), ambient)
         if verdict not in ("unattributable", "weakened"):

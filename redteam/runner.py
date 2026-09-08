@@ -9,6 +9,7 @@ import sys, threading, time
 from oracle import judge, ORDER
 from encoders import apply_encoding
 from target import Probe, payload
+from workspace import BROKE            # one definition of what counts as a breach
 
 # When judging one reply is slow enough that an operator would think the run had
 # hung. Ten seconds, because the measured cost of the whole oracle on a hostile
@@ -383,5 +384,5 @@ def run_attack(target, attack, ctx, trials=1):
 def headline(records):
     vs = [r["verdict"] for r in records]
     head = sorted(vs, key=lambda v: ORDER[v])[0]
-    broke = sum(1 for v in vs if v in ("EXPLOITED", "PARTIAL"))
+    broke = sum(1 for v in vs if v in BROKE)
     return head, f"{broke}/{len(vs)}"

@@ -25,6 +25,8 @@ Per-target additions ride in ctx: {"refusal_patterns": {"refusal_content": [...]
 """
 import re
 
+from workspace import BROKE            # one definition of what counts as a breach
+
 # Ordered: the first class whose pattern matches wins, so put the most specific
 # (an external guard's fixed string) before the general model-voice refusals.
 CLASSES = [
@@ -466,7 +468,7 @@ def summarize(records, ctx=None):
     """
     counts = {}
     for r in records:
-        if r.get("verdict") in ("EXPLOITED", "PARTIAL"):
+        if r.get("verdict") in BROKE:
             continue
         cls = classify(r.get("probe"), ctx)["class"]
         counts[cls] = counts.get(cls, 0) + 1
