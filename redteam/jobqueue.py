@@ -25,7 +25,7 @@ The three states worth being careful about, because each is a place this repo ha
     worker, because the submitter was told a number when they submitted and the worker that
     eventually picks it up may be running a different build.
 """
-import datetime, json, os, glob, uuid
+import datetime, io, json, os, glob, time, uuid
 
 STATES = ("queued", "running", "done", "failed", "dead", "cancelled")
 LEASE_SECONDS = 3600        # a full sweep over 19 attacks x 3 trials runs well under this
@@ -82,6 +82,45 @@ def _take(root, job_id, worker, now):
     finally:
         os.close(fd)
     return True
+
+
+# HOW LONG A CLAIM MAY EXIST WITHOUT A JOB TO MATCH IT. `_take` and the state write that
+# follows it are two operations, and a worker killed between them leaves a marker for a job
+# still recorded as `queued`. Nothing reclaimed that: the lease machinery only looks at jobs
+# in `running`, and this one never got there.
+#
+# The gap between the two operations is a few file writes. A minute is six orders of
+# magnitude more, which is what makes clearing it safe rather than a guess.
+ORPHAN_SECONDS = 60
+
+
+def _marker_holder(root, job_id):
+    """-> (worker, age in seconds) for an existing claim marker, or None."""
+    path = _marker(root, job_id)
+    try:
+        raw = io.open(path, encoding="utf-8", errors="replace").read()
+        age = max(0.0, time.time() - os.path.getmtime(path))
+    except OSError:
+        return None
+    return (raw.split(" ", 1)[0] if raw else ""), age
+
+
+def _still_ours(root, job_id, worker):
+    """Does the claim marker still name this worker?
+
+    THE BRANCH THAT READS THIS CANNOT BE REACHED BY ONE PROCESS, and that is worth saying
+    rather than dressing up. It fires when a worker is descheduled between taking the
+    marker and writing the job, for longer than `ORPHAN_SECONDS`, so that another worker
+    clears the orphan and takes it in between. Getting there needs two processes and a
+    stall; a single-threaded test reads the marker it just wrote and always sees itself.
+
+    So the PREDICATE is what the suite exercises, in both directions, and an AST check asks
+    whether `claim` still consults it. What it prevents is the two-sweeps race the marker
+    exists to close, arriving through the machinery that recovers from it: the late worker
+    writing `running` with its own lease over a run already in flight.
+    """
+    held = _marker_holder(root, job_id)
+    return bool(held) and held[0] == worker
 
 
 def _drop(root, job_id):
@@ -255,6 +294,30 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
         # and nothing would ever run it again.
         _drop(root, j["job_id"])
 
+    # AND A CLAIM WITH NO JOB BEHIND IT. `_take` and the state write below are two
+    # operations, and a worker killed between them leaves a marker on a job still recorded
+    # as `queued`. The loop above cannot see it -- it reclaims leases, and this job never
+    # got one -- so every later claim picked the job, failed to take it, and returned
+    # `was claimed by another worker between listing the queue and taking it`: a sentence
+    # about a race that lasts microseconds, describing a state that lasts forever.
+    #
+    # AND IT BLOCKED EVERYTHING BEHIND IT. `claim` stops at the first runnable job, so one
+    # stuck at the head made the whole queue unclaimable, with the same misleading line.
+    #
+    # Clearing it is safe in a way clearing a lock is not, which is the objection `_take`
+    # raises against lock files: after the marker is gone both workers still have to take it
+    # again, and only one can. What the grace period buys is not exclusion, it is not
+    # deleting a claim a live worker made a moment ago.
+    for j in [x for x in listing(root) if x.get("state") == "queued"]:
+        _held = _marker_holder(root, j["job_id"])
+        if not _held or _held[1] < ORPHAN_SECONDS:
+            continue
+        j["history"] = (j.get("history") or []) + [
+            {"at": now.isoformat(" ", "seconds"), "event": "orphaned claim cleared",
+             "worker": _held[0]}]
+        _write(root, j)
+        _drop(root, j["job_id"])
+
     queued = [j for j in listing(root) if j.get("state") == "queued"]
     if not queued:
         blocked = [j for j in listing(root) if j.get("state") == "running"]
@@ -298,8 +361,18 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
     # THE ATOMIC STEP. Everything above is a read of a directory that another worker may be
     # writing to at the same moment, so the decision is provisional until this succeeds.
     if not _take(root, job["job_id"], worker, now):
-        return None, (f"busy: {job['job_id']} was claimed by another worker between listing "
-                      f"the queue and taking it")
+        _who = _marker_holder(root, job["job_id"])
+        return None, (f"busy: {job['job_id']} is claimed by "
+                      f"{(_who or ('another worker',))[0]}"
+                      + (f" and has been for {int(_who[1])}s; it will be cleared after {ORPHAN_SECONDS}s if that worker never comes back" if _who else ""))
+    # AND THE MARKER IS STILL OURS AT THE MOMENT WE WRITE. A worker descheduled past the
+    # grace period would find its claim cleared and re-taken by somebody else, and writing
+    # the state anyway would clobber a run already in flight -- the two-sweeps race the
+    # marker exists to prevent, arriving through the machinery that recovers from it.
+    if not _still_ours(root, job["job_id"], worker):
+        _mine = _marker_holder(root, job["job_id"])
+        return None, (f"busy: {job['job_id']} was taken and then reclaimed by "
+                      f"{(_mine or ('another worker',))[0]} while this worker was stopped")
     job["state"] = "running"
     job["attempts"] = int(job.get("attempts") or 0) + 1
     job["lease"] = {"worker": worker,

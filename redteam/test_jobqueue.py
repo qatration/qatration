@@ -333,6 +333,115 @@ def main():
     check("...and a step that finishes still returns what the caller expects",
           _r2.returncode == 0 and "done" in (_r2.stdout or ""), repr(_r2.stdout)[:60])
 
+    # --- A CLAIM WITH NO JOB BEHIND IT ------------------------------------------------
+    #
+    # `_take` and the state write that follows it are two operations. A worker killed
+    # between them leaves a marker on a job still recorded as `queued`, and nothing
+    # reclaimed that: the lease loop only looks at jobs in `running`, and this one never
+    # got there. Every later claim picked the job, failed to take it, and returned `was
+    # claimed by another worker between listing the queue and taking it` -- a sentence about
+    # a race lasting microseconds, describing a state that lasted forever.
+    #
+    # AND IT BLOCKED EVERYTHING BEHIND IT, because `claim` stops at the first runnable job.
+    # One stuck at the head made the whole queue unclaimable, with the same wrong sentence.
+    import time as _time_o
+    _CFG_O = os.path.join(os.path.dirname(os.path.abspath(__file__)), "targets_httpbot.yaml")
+    _w = tempfile.mkdtemp()
+    _a = q.submit(_w, "bot", _CFG_O, scope="quick")
+    assert q._take(_w, _a["job_id"], "w1", q._now())
+    _got, _why = q.claim(_w, worker="w2")
+    check("a fresh claim marker is respected", _got is None, str(_why))
+    check("...and the reason names the holder rather than a race",
+          "claimed by w1" in _why, _why)
+    check("...and says when it will be cleared, so the state is not read as permanent",
+          "will be cleared after" in _why, _why)
+    check("...and the job is still queued, not lost", 
+          q.load(_w, _a["job_id"])["state"] == "queued",
+          q.load(_w, _a["job_id"])["state"])
+
+    # PAST THE GRACE PERIOD it is an orphan, and clearing it is safe in a way clearing a
+    # lock is not: after the marker is gone both workers still have to take it again, and
+    # only one can. The grace period is not exclusion, it is not deleting a claim a live
+    # worker made a moment ago.
+    _m = q._marker(_w, _a["job_id"])
+    _old = _time_o.time() - q.ORPHAN_SECONDS - 5
+    os.utime(_m, (_old, _old))
+    _got, _why = q.claim(_w, worker="w2")
+    check("an orphaned claim is cleared and the job runs",
+          _got is not None and _got["job_id"] == _a["job_id"], str(_why))
+    check("...and the clearing is recorded rather than silent",
+          "orphaned claim cleared" in [e.get("event") for e in
+                                       q.load(_w, _a["job_id"])["history"]],
+          str(q.load(_w, _a["job_id"])["history"]))
+
+    # AND A WORKER THAT COMES BACK LATE YIELDS INSTEAD OF CLOBBERING. One descheduled past
+    # the grace period finds its claim cleared and re-taken; writing the state anyway would
+    # overwrite a run already in flight, which is the two-sweeps race the marker exists to
+    # prevent, arriving through the machinery that recovers from it.
+    _w2 = tempfile.mkdtemp()
+    _c = q.submit(_w2, "bot", _CFG_O, scope="quick")
+    assert q._take(_w2, _c["job_id"], "slow", q._now())
+    _m2 = q._marker(_w2, _c["job_id"])
+    os.utime(_m2, (_old, _old))
+    _fresh, _ = q.claim(_w2, worker="fresh")
+    check("a fresh worker takes over an orphaned claim", _fresh is not None, "")
+    check("...and the lease names the worker that is actually running it",
+          (q.load(_w2, _c["job_id"]).get("lease") or {}).get("worker") == "fresh",
+          str(q.load(_w2, _c["job_id"]).get("lease")))
+    # THE LATE ONE, arriving now: it must not write the job at all.
+    _late, _why_late = q.claim(_w2, worker="slow")
+    check("...and the late worker gets no job", _late is None, str(_late))
+    check("...and the lease it would have clobbered is untouched",
+          (q.load(_w2, _c["job_id"]).get("lease") or {}).get("worker") == "fresh",
+          str(q.load(_w2, _c["job_id"]).get("lease")))
+
+    # AND THE PREDICATE THE LATE WORKER CONSULTS, in both directions. The BRANCH cannot be
+    # reached by one process -- it fires when a worker is descheduled between taking the marker
+    # and writing the job, long enough for another to clear the orphan and take it, which needs
+    # two processes and a stall -- so what is exercised is the question it asks, plus an AST
+    # check that `claim` still asks it. Saying that is better than a fixture pretending to be
+    # a race.
+    _w3 = tempfile.mkdtemp()
+    _d = q.submit(_w3, "bot", _CFG_O, scope="quick")
+    assert q._take(_w3, _d["job_id"], "mine", q._now())
+    check("the marker names the worker that took it",
+          q._still_ours(_w3, _d["job_id"], "mine"), "")
+    check("...and not one that did not",
+          not q._still_ours(_w3, _d["job_id"], "other"), "")
+    q._drop(_w3, _d["job_id"])
+    assert q._take(_w3, _d["job_id"], "other", q._now())
+    check("...and after a clear and a re-take it names the new holder",
+          q._still_ours(_w3, _d["job_id"], "other")
+          and not q._still_ours(_w3, _d["job_id"], "mine"), "")
+    check("a missing marker is not ours either",
+          (q._drop(_w3, _d["job_id"]) or True)
+          and not q._still_ours(_w3, _d["job_id"], "other"), "")
+
+    # AND `claim` STILL ASKS IT between taking the marker and writing the state. A predicate
+    # nothing consults is the guard removed with its name left behind.
+    import ast as _ast_o
+    _qsrc = _ast_o.parse(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                           "jobqueue.py"), encoding="utf-8").read())
+    _claim = [n for n in _ast_o.walk(_qsrc)
+              if isinstance(n, _ast_o.FunctionDef) and n.name == "claim"]
+    check("claim can be walked", bool(_claim), "")
+    if _claim:
+        _asks = [n.lineno for n in _ast_o.walk(_claim[0])
+                 if isinstance(n, _ast_o.Call) and isinstance(n.func, _ast_o.Name)
+                 and n.func.id == "_still_ours"]
+        _takes = [n.lineno for n in _ast_o.walk(_claim[0])
+                  if isinstance(n, _ast_o.Call) and isinstance(n.func, _ast_o.Name)
+                  and n.func.id == "_take"]
+        check("claim asks whether the marker is still its own", bool(_asks), str(_asks))
+        check("...after taking it, not before",
+              bool(_asks) and bool(_takes) and min(_asks) > min(_takes),
+              "take at %s, ask at %s" % (_takes, _asks))
+
+    # AND THE GRACE PERIOD IS LONGER THAN THE GAP IT COVERS, by a margin that is the whole
+    # reason clearing is not a guess: the gap is a few file writes.
+    check("the grace period is not a timing guess", q.ORPHAN_SECONDS >= 30,
+          str(q.ORPHAN_SECONDS))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
