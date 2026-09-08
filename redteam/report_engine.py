@@ -442,6 +442,19 @@ def build_html(meta, results, recon=None, isolation=None):
             f'out the behaviour they look for, because they were never able to look. Each names '
             f'the config key that would arm it.</div></div></div>')
 
+    # AND WHETHER A DECLARED CHANNEL EVER CARRIED ANYTHING, which is the same question one
+    # field over and reached even fewer readers: `meta["unresolved_paths"]` was written by
+    # every sweep and read by the fleet-wide defense report alone. A mistyped
+    # `response.tool_calls` empties the channel sixteen detectors read, and this page —
+    # the one an operator opens about their own bot — said nothing at all.
+    from workspace import dead_path_note as _dead_note
+    _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
+    deadpath_html = ""
+    if _dead_txt:
+        deadpath_html = (
+            f'<div class="panel"><div class="ptitle">a configured response path never '
+            f'resolved</div><div class="warn">{esc(_dead_txt)}</div></div>')
+
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — {esc(meta.get('target',''))}</title><style>
@@ -510,6 +523,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 {attribution_html}
 {delivery_html}
 {inert_html}
+{deadpath_html}
 {_recon_panel(recon)}
 <table>
 <thead><tr><th>ID</th><th>Technique</th><th>Delivery</th><th>Verdict</th><th>Rate</th><th>Blocked by</th><th>Detectors</th></tr></thead>

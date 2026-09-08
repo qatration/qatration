@@ -288,6 +288,25 @@ def build(results, target_config=None, out_dir=None):
                                     "is a gap, not a defence." % (name, ", ".join(keys))},
                 "descriptor": {"id": "inert/%s" % name}})
 
+    # AND A DECLARED CHANNEL THAT NEVER CARRIED ANYTHING, which is an inert detector by a
+    # different route: the key is spelled right, the detector is armed, and the value it
+    # reads is empty on every probe because the path does not exist. Recorded by the sweep
+    # since it was written and exported by nothing.
+    from workspace import dead_path_note as _dead_note
+    _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
+    if _dead_txt:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": _dead_txt},
+            "descriptor": {"id": "mapping/unresolved-path"}})
+    elif "unresolved_paths" not in meta:
+        notifications.append({
+            "level": "note",
+            "message": {"text": "This result predates response-path recording, so whether a "
+                                "configured channel ever carried a value is unknown for this "
+                                "run \u2014 not known to be fine."},
+            "descriptor": {"id": "mapping/unrecorded"}})
+
     # `ambient is None` ALONE. This used to also require `meta["baseline"] is None`, on the
     # assumption that the key held the benign baseline. It does not — `run_redteam` writes
     # `ctx["baseline_tool_inputs"]` there, the clean tool-call arguments learned from a probe.

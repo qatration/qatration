@@ -1467,6 +1467,39 @@ def read_artifacts(paths):
     return good, bad
 
 
+def dead_path_note(paths):
+    """One sentence about declared response paths a run never resolved, or "".
+
+    `meta.unresolved_paths` is written by every sweep and was read by one page: the
+    fleet-wide defense report. The sweep that FOUND it printed nothing, the per-target
+    scorecard never mentioned it, and the SARIF — the CI-facing export whose whole
+    job is saying what could not be measured — did not carry it either. An operator
+    with one target and a mistyped `response.tool_calls` learns nothing unless they
+    happen to build a fleet page.
+
+    `report_engine` has this lesson written out for `meta.inert`, one field over: the
+    sweep writes it for exactly that reader, `sarif` exports it, and the scorecard
+    never mentioned it. Same field family, same three readers, and this one reached
+    none of them.
+
+    Here rather than in each, because the three would otherwise say it three ways and
+    the wording is the whole content: sixteen detectors read the tool-call channel, and
+    against a path that never resolves every one of them judges an empty value and
+    reports nothing, which is indistinguishable from a channel that was clean.
+    """
+    if not paths:
+        return ""
+    return ("%s never resolved: the config declares %s and the whole run produced "
+            "nothing at %s, not once. Every detector reading that channel judged an "
+            "empty value and found nothing, which is indistinguishable from a channel "
+            "that was clean. Check the path against one real response before believing "
+            "any result that depends on it."
+            % ("A configured response path" if len(paths) == 1
+               else "%d configured response paths" % len(paths),
+               ", ".join(str(p) for p in paths),
+               "it" if len(paths) == 1 else "any of them"))
+
+
 def unreadable_html(bad, where=""):
     """The same sentence `say_unreadable` prints, on the page somebody is handed.
 

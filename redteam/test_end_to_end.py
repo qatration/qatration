@@ -920,6 +920,23 @@ oracle_context:
         # Driven through a real run rather than asserted of `_spend`: the counter has to
         # be threaded from the probe through the attack loop to the record, and every
         # link of that is a place it can be dropped.
+        # AND THE SWEEP SAYS IT WHERE IT FINDS IT. The run that discovers a dead path
+        # printed nothing about it; asked of the source rather than of this run's output,
+        # because this fixture's paths all resolve and a check over its stdout would pass
+        # for the wrong reason.
+        import ast as _ast8
+        _rr8 = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _main8 = next((_n for _n in _ast8.walk(_ast8.parse(_rr8))
+                       if isinstance(_n, _ast8.FunctionDef)
+                       and _n.name == "main"), None)
+        _asks8 = {(_a.asname or _a.name)
+                  for _n in (_ast8.walk(_main8) if _main8 else ())
+                  if isinstance(_n, _ast8.ImportFrom)
+                  for _a in _n.names}
+        check("the sweep says out loud when a configured path never resolved",
+          "dead_path_note" in {_a.name for _n in (_ast8.walk(_main8) if _main8 else ())
+                              if isinstance(_n, _ast8.ImportFrom) for _a in _n.names},
+              "run_redteam.main never asks for the sentence")
         check("...and how many sends had to be retried, which zero also answers",
               isinstance((rec.get("spent") or {}).get("retries"), int),
               str(rec.get("spent")))

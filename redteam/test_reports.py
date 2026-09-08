@@ -2028,6 +2028,31 @@ def main():
           not _dupes, "; ".join("%s: %r" % (v, k[:60]) for k, v in list(_dupes.items())[:2]))
     check("...over a real number of literals", len(_seen4) > 100, str(len(_seen4)))
 
+    # --- AND THE PAGE AN OPERATOR OPENS ABOUT THEIR OWN BOT ---------------------------
+    #
+    # `report_engine` states this lesson for `meta["inert"]` in its own comment: the sweep
+    # writes it for exactly this reader, `sarif` exports it, and the scorecard never
+    # mentioned it. `unresolved_paths` is the same field family and reached fewer readers
+    # still — the fleet-wide defense report alone, which an operator with one target
+    # has no reason to build.
+    from report_engine import build_html as _bh8
+    _m8 = {"target": "pathbot", "attacks_n": 1, "broke": 0, "trials": 1,
+           "when": "2026-09-04 10:00",
+           "unresolved_paths": ["response.tool_calls = '$.calls'"]}
+    _r8 = [{"attack": {"id": "a1", "category": "exfil", "text": "a"},
+            "headline": "DEFENDED", "fired": [], "rate": "0/1",
+            "trials": [{"verdict": "DEFENDED", "probe": {"output": "no"}}]}]
+    _pg8 = _bh8(_m8, _r8)
+    check("the scorecard says a configured response path never resolved",
+          "never resolved" in _pg8 and "$.calls" in _pg8,
+          "the page says nothing about the dead path")
+    check("...and says what that costs, rather than only naming it",
+          "indistinguishable from a channel that was clean" in _pg8,
+          "the page names the path and not the consequence")
+    _pg8b = _bh8(dict(_m8, unresolved_paths=[]), _r8)
+    check("...and a run where every declared path resolved gets no such panel",
+          "never resolved" not in _pg8b, "the panel appears whatever the run found")
+
     # --- AN UNREADABLE ARTIFACT REACHED THE CONSOLE AND NOT THE PAGE -------------------
     #
     # `read_artifact` exists for this and its docstring names the stake: skipping

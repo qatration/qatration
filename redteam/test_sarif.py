@@ -170,6 +170,30 @@ old = build([row("a1", "DEFENDED", [])], {})
 check("a result predating the inert field says it is UNKNOWN, not none",
       any(n["descriptor"]["id"] == "inert/unrecorded" for n in notifications(old)))
 
+# --- a declared channel that never carried anything -------------------------------------
+#
+# An inert detector by a different route: the key is spelled right, the detector is armed,
+# and the value it reads is empty on every probe because the path does not exist. `sarif`
+# exports `meta.inert` and nothing exported this, though the sweep has recorded it since
+# it was written — it reached one page, the fleet-wide defense report, which an
+# operator with a single target has no reason to build.
+_dp = build([row("a1", "DEFENDED", [])], {}, inert={},
+            unresolved_paths=["response.tool_calls = '$.calls'"])
+_dpids = [n["descriptor"]["id"] for n in notifications(_dp)]
+check("a configured path that never resolved is a notification",
+      "mapping/unresolved-path" in _dpids, str(_dpids))
+check("...and names the path, so it can be checked against one real response",
+      any("$.calls" in n["message"]["text"] for n in notifications(_dp)
+          if n["descriptor"]["id"] == "mapping/unresolved-path"), str(_dpids))
+_dpnone = build([row("a1", "DEFENDED", [])], {}, inert={}, unresolved_paths=[])
+check("a run that recorded none says nothing about paths",
+      not [i for i in [n["descriptor"]["id"] for n in notifications(_dpnone)]
+           if i.startswith("mapping/")])
+# The same three states as `inert`, and the third is the one that reads as fine.
+_dpold = build([row("a1", "DEFENDED", [])], {}, inert={})
+check("a result predating the field says it is UNKNOWN, not fine",
+      "mapping/unrecorded" in [n["descriptor"]["id"] for n in notifications(_dpold)])
+
 # --- fingerprints must survive a rerun ---------------------------------------------------
 a = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0})
 b = build([row("a1", "EXPLOITED", ["canary_in_output"], rate="3/3")], {"canary_in_output": 0.02})

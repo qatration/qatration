@@ -1377,6 +1377,13 @@ def main():
     # AND SAID HERE TOO, because the run record is a file somebody opens later and this is
     # the moment they are looking at the run. Silence when there were none: a line saying
     # `0 retries` on every clean sweep is a line nobody reads by the third one.
+    # AND WHETHER A DECLARED PATH EVER CARRIED ANYTHING. Recorded in `meta` a few lines
+    # down and read, until now, only by the fleet-wide defense report -- so the run that
+    # discovered it said nothing, and an operator with one target never saw it.
+    from workspace import dead_path_note as _dead_note
+    _dead = _dead_note(_unresolved(target))
+    if _dead:
+        print("\n  ! " + _dead)
     if _retried:
         print(f"\n  ! {_retried} of {_sends + _retried} send(s) had to be retried. A run that limped"
           f"\n    is not a clean run: a retried send may have reached a different state of the"
