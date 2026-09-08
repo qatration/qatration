@@ -219,6 +219,68 @@ def main():
     check("...and a date in the future is not an age",
           "future" in age_note({"when": "2026-09-09 12:00:00"}, now))
 
+    # AND "SAYING NOTHING" WAS THE ANSWER ON 44 OF THE 45 SHIPPED ARTIFACTS. `meta["when"]`
+    # arrived on 2026-08-28 and only one stored results file has it, so the command whose
+    # verdict word is `stale` printed `cannot be said` on every other one -- while
+    # `workspace.measured_when` answers it from the file and marks that it did. mtime only
+    # ever moves forward (a clone, a `cp`, a `rejudge --write`), so the age it gives is a
+    # FLOOR: at least this old, possibly older. A bound in the safe direction beats a
+    # sentence saying nothing is knowable.
+    import tempfile as _tf_a, os as _os_a, time as _time_a
+    from datetime import datetime as _dt_a
+    _fd_a, _fp_a = _tf_a.mkstemp(suffix=".json")
+    _os_a.close(_fd_a)
+    try:
+        _made_a = _dt_a(2026, 8, 25, 9, 30, 0)
+        _os_a.utime(_fp_a, (_made_a.timestamp(), _made_a.timestamp()))
+        _fl = age_note({}, now, path=_fp_a)
+        check("an artifact the run never dated is dated by its file rather than left unknown",
+              "cannot be said" not in _fl and "7 days ago" in _fl, _fl)
+        check("...and the file date is not passed off as a measurement",
+              "the run recorded no date" in _fl and "measured 2026" not in _fl, _fl)
+        check("...and it is stated as a floor, because mtime only moves forward",
+              "AT LEAST" in _fl, _fl)
+        # THE RUN'S OWN DATE STILL WINS. A file touched today under an artifact measured
+        # three weeks ago must not read as three weeks fresher.
+        _sd = age_note({"when": "2026-08-29 12:00:00"}, now, path=_fp_a)
+        check("...and a run that DID record a date is not overruled by its file",
+              "3 days ago" in _sd and "AT LEAST" not in _sd, _sd)
+    finally:
+        _os_a.unlink(_fp_a)
+    check("with no date and no file there is still nothing to say",
+          "cannot be said" in age_note({}, now, path=None), age_note({}, now))
+
+    # CALENDAR DAYS, THE WAY EVERY OTHER SURFACE COUNTS THEM. This counted elapsed 24-hour
+    # periods, so an artifact written at 23:00 and checked at 01:00 was `0 days` here and
+    # `1 day` on the page -- and a stamp two hours ahead of the reader's clock (a sweep on a
+    # UTC box, verified west of it) came out `dated in the future`, withholding the age over
+    # a skew a date comparison does not even see. `baseline.days_between` is that comparison
+    # and it was already imported by the renderer for the same question.
+    check("a night crossing is a day, not nineteen hours",
+          "1 day ago" in age_note({"when": "2026-08-31 23:00:00"},
+                                  _dt_a(2026, 9, 1, 1, 0, 0)),
+          age_note({"when": "2026-08-31 23:00:00"}, _dt_a(2026, 9, 1, 1, 0, 0)))
+    check("...and a clock two hours ahead is today, not the future",
+          "0 days ago" in age_note({"when": "2026-09-01 14:00:00"}, now),
+          age_note({"when": "2026-09-01 14:00:00"}, now))
+    check("...while a whole day ahead still is the future",
+          "future" in age_note({"when": "2026-09-02 01:00:00"}, now),
+          age_note({"when": "2026-09-02 01:00:00"}, now))
+
+    # AND THE CALLER HAS TO HAND IT THE FILE, which is where this kind of fix dies: the
+    # function grows the argument, the one place that calls it keeps the old call, and the
+    # gates above pass on a path no shipped run supplies. `verify_target` has `path` in hand
+    # -- it opened the artifact with it two lines earlier.
+    import ast as _ast_a
+    _vsrc = io.open(os.path.join(HERE, "verify.py"), encoding="utf-8").read()
+    _calls = [n for n in _ast_a.walk(_ast_a.parse(_vsrc))
+              if isinstance(n, _ast_a.Call) and isinstance(n.func, _ast_a.Name)
+              and n.func.id == "age_note"]
+    check("verify.py calls age_note exactly once", len(_calls) == 1, str(len(_calls)))
+    check("...and hands it the artifact it is dating",
+          bool(_calls) and any(k.arg == "path" for k in _calls[0].keywords),
+          str([k.arg for k in _calls[0].keywords]) if _calls else "no call")
+
     # --- a state nobody handled must not read as a pass -----------------------------------
     #
     # `main` handled four notes by name and fell through everything else to "every claimed

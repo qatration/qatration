@@ -151,27 +151,54 @@ def verdict(before_hits, before_trials, now_hits, now_trials,
                      % (before_hits, before_trials, now_trials, again_trials))
 
 
-def age_note(meta, now=None):
+def age_note(meta, now=None, path=None):
     """-> a sentence about how old the measurement being checked is.
 
     "Stale" is a claim about time and this command could not say how much. Sweeps stamp `when`
     from 2026-08-28; every artifact written before that says nothing, and saying nothing is the
     answer that must be printed rather than a zero or a guess. Two questions in this repository
     have already died on a missing date.
+
+    AND SAYING NOTHING WAS ITSELF THE GAP, on 44 of the 45 shipped artifacts. This is the one
+    command whose verdict word is `stale`, and on all but one stored run it printed that how
+    stale a stale row is cannot be said -- while `workspace.measured_when`, written for this
+    exact question and read by the SARIF export, the fleet page and the report panel, answers
+    it from the file and marks that it did.
+
+    THE FILE'S MTIME IS NOT WHEN THE RUN HAPPENED, which is why that helper flags it and why
+    it was right not to be reached for blindly. But it only ever moves the wrong way ONCE: a
+    clone, a `cp` or a `rejudge --write` pushes it forward and nothing pushes it back, so
+    mtime >= the write >= the run and the age it yields is a FLOOR. The measurement is at
+    least that old and may be older, which is a bound in the safe direction -- it can
+    understate staleness and cannot invent freshness -- and a floor said out loud beats a
+    sentence saying nothing is knowable.
+
+    Through `workspace.measured_when` and `baseline.days_between` rather than a second date
+    reader kept here. The one this replaced counted elapsed 24-hour periods where every other
+    surface counts calendar days, so an artifact written at 23:00 and checked at 01:00 read as
+    `0 days` here and `1 day` on the page; and one stamped two hours ahead by a clock that
+    disagreed -- a sweep run on a UTC box, verified on a machine west of it -- came out
+    `dated in the future`, which withholds the age entirely over a skew a date comparison
+    does not even see.
     """
     from datetime import datetime
-    when = (meta or {}).get("when")
+    import baseline
+    import workspace
+    when, said = workspace.measured_when(meta or {}, path)
     if not when:
-        return ("this artifact carries no date, so how stale a stale row is cannot be said — "
-                "sweeps stamp one from 2026-08-28")
-    try:
-        made = datetime.fromisoformat(str(when))
-    except ValueError:
-        return "this artifact's date is unreadable (%r)" % when
-    days = ((now or datetime.now()) - made).days
+        return ("this artifact carries no date and there is no file to date it by, so how "
+                "stale a stale row is cannot be said — sweeps stamp one from 2026-08-28")
+    days = baseline.days_between(when, (now or datetime.now()).isoformat(" ", "seconds"))
+    if days is None:
+        return "this artifact's date is unreadable (%r)" % ((meta or {}).get("when"),)
     if days < 0:
         return "this artifact is dated in the future (%s), so its age says nothing" % when
-    return "measured %s, %d day%s ago" % (when, days, "" if days == 1 else "s")
+    ago = "%d day%s ago" % (days, "" if days == 1 else "s")
+    if said:
+        return "measured %s, %s" % (when, ago)
+    return ("the run recorded no date, so this is the file's: last written %s, %s. A copy, a "
+            "clone or a `rejudge --write` moves that forward and never back, so the "
+            "measurement is AT LEAST that old and may be older" % (when, ago))
 
 
 def check_row(hits, trials, send, first_trials, confirm_trials):
@@ -280,7 +307,7 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     if not quiet:
         print("verify -> target='%s'  %d claimed breach(es) in %s  trials=%d (+%d to confirm)"
               % (target.name, len(rows), os.path.basename(path), trials, confirm_trials))
-        print("  %s" % age_note(stored.get("meta")))
+        print("  %s" % age_note(stored.get("meta"), path=path))
     if not rows:
         out["note"] = "nothing claimed"
         return out
