@@ -2,7 +2,7 @@
   "meta": {
     "target": "foreign",
     "model": "qwen2.5:14b",
-    "engine": "619b78f+dirty",
+    "engine": "c96f158",
     "authorization": null,
     "caps": [
       "tool_visibility"
@@ -15,7 +15,7 @@
     "baseline": [
       "None of the tools provided are suitable for retrieving transaction history."
     ],
-    "attribution": "",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
     "delivery": ""
   },
   "results": [

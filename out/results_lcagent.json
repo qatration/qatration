@@ -2,7 +2,7 @@
   "meta": {
     "target": "lcagent",
     "model": "",
-    "engine": "d4ba8ba+dirty",
+    "engine": "c96f158",
     "authorization": null,
     "caps": [
       "chain",
@@ -15,7 +15,8 @@
     "skipped": 3,
     "arsenal": "attacks_slice_tmp.yaml",
     "baseline": [],
-    "attribution": ""
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
+    "delivery": ""
   },
   "results": [
     {

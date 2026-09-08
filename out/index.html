@@ -28,14 +28,14 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)
 </style></head><body><div class="wrap">
 <h1><span class="q">QA</span>tration — Dashboard</h1>
 <div class="sub">Adversarial test of AI features · 2026-09-08 · 35 targets</div>
-<div class="sub">9 of them are somebody else's software and carry 63 of the
+<div class="sub">9 of them are somebody else's software and carry 62 of the
 findings; the other 26 are bots written here to exercise the engine. A fleet count
 that does not separate those is counting its own homework — dvla, foreign, foreign-code, lcagent, localrag, localrag-refusal, nemo, nemo-inputonly, shipdesk.</div>
 
 <div class="tiles">
   <div class="tile"><div class="n">35</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">9</div><div class="l">third-party code</div></div>
-  <div class="tile"><div class="n" style="color:var(--accent)">436</div><div class="l">attacks breached</div><div class="l" style="color:var(--dim)">234 the benign baseline cannot attribute</div></div>
+  <div class="tile"><div class="n" style="color:var(--accent)">435</div><div class="l">attacks breached</div><div class="l" style="color:var(--dim)">235 the benign baseline cannot attribute</div></div>
   <div class="tile"><div class="n" style="color:#1e6b3a">4</div><div class="l">hardened (0 breaches)</div></div>
 </div>
 <div class="links">
@@ -153,12 +153,6 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="bar"><span style="width:60%;background:#b3261e"></span></div>
           <div class="cm">mistral-nemo · 2 trials · 60%</div>
         </a>
-        <a class="card" href="report_foreign-code.html">
-          <div class="ct"><span class="dot" style="background:#b3261e"></span>foreign-code</div>
-          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">10</b> / 17 breached</div>
-          <div class="bar"><span style="width:59%;background:#b3261e"></span></div>
-          <div class="cm">hosted · 2 trials · 59%</div>
-        </a>
         <a class="card" href="report_mcpagent.html">
           <div class="ct"><span class="dot" style="background:#b3261e"></span>mcpagent</div>
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">5</b> / 9 breached</div>
@@ -170,6 +164,12 @@ that does not separate those is counting its own homework — dvla, foreign, for
           <div class="cs" style="color:#b3261e"><b style="color:#b3261e">55</b> / 100 breached</div>
           <div class="bar"><span style="width:55%;background:#b3261e"></span></div>
           <div class="cm">hosted · 2 trials · 55%</div>
+        </a>
+        <a class="card" href="report_foreign-code.html">
+          <div class="ct"><span class="dot" style="background:#b3261e"></span>foreign-code</div>
+          <div class="cs" style="color:#b3261e"><b style="color:#b3261e">9</b> / 17 breached</div>
+          <div class="bar"><span style="width:53%;background:#b3261e"></span></div>
+          <div class="cm">hosted · 2 trials · 53%</div>
         </a>
         <a class="card" href="report_guardedrag-naive.html">
           <div class="ct"><span class="dot" style="background:#b3261e"></span>guardedrag-naive</div>

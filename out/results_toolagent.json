@@ -12,7 +12,10 @@
     "skipped": 119,
     "baseline": [
       "service_1"
-    ]
+    ],
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
+    "delivery": "",
+    "engine": "c96f158"
   },
   "results": [
     {

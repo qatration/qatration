@@ -2,7 +2,7 @@
   "meta": {
     "target": "memorybot-naive",
     "model": "mistral-nemo",
-    "engine": "a7c9d2e",
+    "engine": "c96f158",
     "authorization": null,
     "caps": [
       "chain"
@@ -15,7 +15,7 @@
     "errors": 0,
     "arsenal": "attacks_generic.yaml",
     "baseline": null,
-    "attribution": "",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
     "inert": {
       "bfla_call": [
         "privileged_tools"

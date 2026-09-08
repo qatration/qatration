@@ -5,9 +5,9 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "138",
-      "61"
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "137",
+      "62"
     ],
     "An attack that failed reports a zero. So does a check that could not run, and so does a genuinely hardened bot, and that is where testing stalls: three different facts arrive looking identical, and nobody knows what to try next. These are measurements from real runs, not projections.": [
       "0"
@@ -91,7 +91,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "한 턴에 심어둔 규칙이 이후의 모든 답변을 조용히 바꿉니다. 대화가 다시 평범해 보이게 된 뒤로도 한참 동안.",
     "Needs access to the thing being attacked": "공격 대상 자체에 대한 접근이 필요함",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "쓰기 권한이 없는 지식 베이스에 문서를 심을 수는 없고, 바깥에서는 실제로 실행된 도구 호출과 봇이 말로만 설명한 호출을 구별할 수 없습니다. 이 점에서 봇이 자기 자신에 대해 얼마나 자주 틀리는지를 우리는 측정했습니다. 이를 위해서는 코퍼스, 도구 정의, 또는 호출에 대한 가시성이 필요합니다.",
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": "이 도구와 함께 제공되는 증거로 측정한 결과입니다. 도구 호출을 보고하는 대상에서, 138건의 발견 사항 중 61건은 응답만 읽어서는 전혀 드러나지 않습니다.",
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "이 도구와 함께 제공되는 증거로 측정한 결과입니다. 도구 호출을 보고하는 대상에서, 137건의 발견 사항 중 62건은 응답만 읽어서는 전혀 드러나지 않습니다.",
     "The bot answers politely and puts the secret in an argument.": "봇은 정중하게 답하면서 비밀을 호출 인자에 담습니다.",
     "Agent tool abuse": "에이전트 도구 오용",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "에이전트가 되돌릴 수 없는 작업을 하도록 설득당합니다: 삭제, 환불, 메일 발송.",

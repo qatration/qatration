@@ -5,9 +5,9 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "138",
-      "61"
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "137",
+      "62"
     ],
     "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "9",
@@ -81,7 +81,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "Bir turda yerleştirilen bir kural, sonraki her yanıtı sessizce değiştirir, konuşma yeniden normal göründükten çok sonra bile.",
     "Needs access to the thing being attacked": "Saldırılan şeye erişim gerektirir",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz. Botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunun için külliyat değil, saldırı kümesi, araç tanımları ya da çağrıların görünürlüğü gerekir.",
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": "Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 138 bulgunun 61'i, yalnızca yanıt okunduğunda hiç görünmüyor.",
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 137 bulgunun 62'i, yalnızca yanıt okunduğunda hiç görünmüyor.",
     "The bot answers politely and puts the secret in an argument.": "Bot kibarca yanıt verir ve sırrı bir çağrı argümanının içine koyar.",
     "Agent tool abuse": "Ajan araçlarının kötüye kullanımı",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "Ajanınız geri alınamaz bir eyleme ikna edilir: silme, para iadesi, e-posta gönderme.",

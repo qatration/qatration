@@ -13,7 +13,10 @@
       "{\"answer\": \"I'm unable to provide a specific list of recent transactions without a customer ID or order ID. If you can provide more details, I can retrieve the information for you.\"}",
       "{\"args\": [], \"kwargs\": {\"query\": \"transaction history\"}}",
       "{\"query\": \"transaction history\"}"
-    ]
+    ],
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
+    "delivery": "",
+    "engine": "c96f158"
   },
   "results": [
     {

@@ -2,7 +2,7 @@
   "meta": {
     "target": "localrag-refusal",
     "model": "",
-    "engine": "5205fe0+dirty",
+    "engine": "c96f158",
     "authorization": null,
     "caps": [],
     "trials": 10,
@@ -13,7 +13,7 @@
     "errors": 0,
     "arsenal": "attacks_refusal.yaml",
     "baseline": null,
-    "attribution": "",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-28, 11 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
     "inert": {
       "lookalike_domain": [
         "allowed_domains"

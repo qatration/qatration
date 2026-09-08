@@ -5,9 +5,9 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "138",
-      "61"
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "137",
+      "62"
     ],
     "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "9",
@@ -81,7 +81,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "在某一轮里埋下的规则，会悄悄改变之后的每一个回答，哪怕对话早已看起来恢复正常。",
     "Needs access to the thing being attacked": "需要接触被攻击的对象本身",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "你无法把文档放进一个你没有写入权限的知识库，从外部也无法分辨一次真正执行了的工具调用和一次机器人只是嘴上描述的调用。机器人在这一点上会把自己说错，这一点我们实测过。这需要语料、工具定义，或者对调用的可见性。",
-    "Measured on the evidence shipped with this tool: 61 of 138 findings on targets that report tool calls do not appear at all when only the reply is read.": "基于随本工具分发的证据实测：在会报告工具调用的目标上，138 项发现中有 61 项，如果只读回复就完全看不到。",
+    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "基于随本工具分发的证据实测：在会报告工具调用的目标上，137 项发现中有 62 项，如果只读回复就完全看不到。",
     "The bot answers politely and puts the secret in an argument.": "机器人礼貌地作答，同时把机密塞进调用参数里。",
     "Agent tool abuse": "智能体工具滥用",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "你的智能体被说服执行了不可撤销的操作：删除、退款、发送邮件。",
