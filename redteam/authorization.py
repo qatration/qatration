@@ -52,12 +52,56 @@ def issue(target_url, secret, issued=None):
     return f"qat-{mac.hexdigest()[:32]}", day
 
 
+# The port a scheme means when a URL does not say one. RFC 6454 elides it from an origin,
+# which is why `https://host:443/x` and `https://host/x` are the same origin and not two.
+DEFAULT_PORT = {"http": 80, "https": 443}
+
+
 def origin_of(url):
+    """The origin two URLs share, normalised so that one host has one answer.
+
+    IT WAS THE NETLOC VERBATIM, and a netloc is not a normal form. `https://API.Example.com`
+    and `https://api.example.com` are the same host -- DNS has been case-insensitive since
+    RFC 1035 -- and `https://host:443` is the same origin as `https://host`, because a
+    scheme's default port is not part of one. Verbatim, each pair came out as two.
+
+    THE QUEUE RUNS ON THIS. `jobqueue.contended_resource` asks what two jobs would collide
+    over, and two jobs whose configs spell one endpoint differently were allowed to sweep it
+    at the same time -- which its own docstring calls out as rude to the operator and as
+    corrupting the measurement, since their latency and rate limits get attributed to the
+    attacks.
+
+    AND THE TOKEN IS BOUND TO IT. `issue` and the check both go through here, so both sides
+    normalise together and a proof written for one spelling verifies against the other. It
+    admits no host it did not already admit: what changes is that one host stops being two.
+
+    THE USERINFO IS LEFT ALONE. RFC 3986 makes scheme and host case-insensitive and says
+    nothing of the kind about a username, so lowercasing the whole netloc would rewrite a
+    credential. Rare in a target config and wrong to touch.
+    """
     from urllib.parse import urlparse
     u = urlparse(url)
     if not u.scheme or not u.netloc:
         raise ValueError(f"not a URL: {url!r}")
-    return f"{u.scheme}://{u.netloc}"
+    # `urlparse` LOWERCASES BOTH OF THESE ALREADY -- `.scheme` and `.hostname`, but not
+    # `.netloc`, which it hands back verbatim. That difference IS the defect: reading the
+    # netloc took the case with it. Calling `.lower()` here as well would be a line no
+    # mutation can turn red, so it is not called and the reason is written down instead.
+    scheme = u.scheme
+    try:
+        port = u.port
+    except ValueError:
+        # A netloc whose port is not a number is not something to guess at: keep it as
+        # written so two of them still compare equal to each other and to nothing else.
+        return f"{scheme}://{u.netloc}"
+    host = u.hostname or ""
+    # COMPARED AS A NUMBER. `":80" in netloc` is true of `:8000` and `:8099`, which is the
+    # substring trap this file warns about elsewhere and which caught the first probe
+    # written to measure this very defect.
+    if port is not None and port != DEFAULT_PORT.get(scheme):
+        host = f"{host}:{port}"
+    userinfo = u.netloc.rsplit("@", 1)[0] + "@" if "@" in u.netloc else ""
+    return f"{scheme}://{userinfo}{host}"
 
 
 def _fresh(day):

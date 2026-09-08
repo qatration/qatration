@@ -591,6 +591,75 @@ def main():
         _s1.shutdown()
         _s2.shutdown()
 
+    # --- ONE HOST IS ONE ORIGIN ---------------------------------------------------------
+    #
+    # `origin_of` returned the netloc verbatim, and a netloc is not a normal form.
+    # `https://API.Example.com` and `https://api.example.com` are the same host -- DNS has
+    # been case-insensitive since RFC 1035 -- and `https://host:443` is the same origin as
+    # `https://host`, because a scheme's default port is not part of one. Each pair came
+    # out as two.
+    #
+    # THE QUEUE RUNS ON THIS. `jobqueue.contended_resource` asks what two jobs collide over,
+    # so two configs spelling one endpoint differently were allowed to sweep it at once --
+    # which that module calls rude to the operator and corrupting to the measurement, since
+    # their latency and rate limits get attributed to the attacks.
+    from authorization import origin_of as _oo
+    for _a, _b, _why in ((("https://API.Example.com/x", "https://api.example.com/y"),
+                          None, "the host is case-insensitive"),
+                         (("https://api.example.com:443/x", "https://api.example.com/x"),
+                          None, "443 is what https means"),
+                         (("http://api.example.com:80/x", "http://api.example.com/x"),
+                          None, "80 is what http means"),
+                         (("HTTPS://Api.Example.COM:443/a", "https://api.example.com/b"),
+                          None, "and the scheme is case-insensitive too")):
+        check("one endpoint, one answer: %s" % _why, _oo(_a[0]) == _oo(_a[1]),
+              "%s != %s" % (_oo(_a[0]), _oo(_a[1])))
+
+    # AND NOTHING ELSE COLLAPSES WITH IT. A normalisation that admits a host it should not
+    # is the same defect pointed at authorisation, where the origin is what a token binds to.
+    for _a, _b, _why in ((("https://a.example.com/x", "https://b.example.com/x"),
+                          None, "a different host"),
+                         (("https://api.example.com:8443/x", "https://api.example.com/x"),
+                          None, "a non-default port"),
+                         (("http://api.example.com/x", "https://api.example.com/x"),
+                          None, "a different scheme"),
+                         (("https://api.example.com:80/x", "https://api.example.com/x"),
+                          None, "80 under https is not the default")):
+        check("still two: %s" % _why, _oo(_a[0]) != _oo(_a[1]),
+              "%s == %s" % (_oo(_a[0]), _oo(_a[1])))
+
+    # THE USERINFO IS LEFT ALONE. RFC 3986 makes scheme and host case-insensitive and says
+    # nothing of the kind about a username, so lowercasing the whole netloc would rewrite a
+    # credential.
+    check("a username keeps its case",
+          _oo("https://User:Pw@API.Example.com:443/x") == "https://User:Pw@api.example.com",
+          _oo("https://User:Pw@API.Example.com:443/x"))
+    # AND A PORT THAT IS NOT A NUMBER IS NOT GUESSED AT: kept as written, so two of them
+    # still compare equal to each other and to nothing else.
+    check("an unparseable port is kept rather than invented",
+          _oo("https://host:notaport/x") == _oo("https://host:notaport/y"),
+          _oo("https://host:notaport/x"))
+
+    # AND THE TOKEN BINDS TO THE NORMALISED ORIGIN, both sides through the same function, so
+    # a proof written for one spelling verifies against the other.
+    from authorization import issue as _issue
+    _t1, _d1 = _issue("https://API.Example.com:443/a", "s3cret")
+    _t2, _d2 = _issue("https://api.example.com/b", "s3cret")
+    check("a proof for one spelling is a proof for the other", _t1 == _t2,
+          "%s vs %s" % (_t1, _t2))
+    _t3, _ = _issue("https://other.example.com/a", "s3cret")
+    check("...and not for a different host", _t1 != _t3, "%s == %s" % (_t1, _t3))
+
+    # AND THE QUEUE ASKS THIS FUNCTION, rather than keeping its own idea of an endpoint.
+    import ast as _ast_o, io as _io_o, os as _os_o
+    _jq = _ast_o.parse(_io_o.open(
+        _os_o.path.join(_os_o.path.dirname(_os_o.path.abspath(__file__)), "jobqueue.py"),
+        encoding="utf-8").read())
+    check("the queue names its contended resource through origin_of",
+          any(isinstance(_n, _ast_o.Call) and isinstance(_n.func, _ast_o.Name)
+              and _n.func.id == "origin_of" for _n in _ast_o.walk(_jq)),
+          "jobqueue has its own idea of an endpoint")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
