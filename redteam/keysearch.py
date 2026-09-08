@@ -194,13 +194,27 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
         if stop_on_hit and r["hits"] == r["trials"]:
             break
 
+    # ONE QUESTION, ASKED ONCE. Whether there is anything to subtract decided the VERDICT
+    # below and nothing else, so an errored control -- one that ran and came back with
+    # nothing on every trial -- still scored `hits: 0`, every frame that landed still
+    # `beat` it, and `keys` was published beside `UNMEASURED`. `format_search` then printed
+    # a starred row and a `key:` line naming the frame that opened the property, under a
+    # verdict whose whole meaning is that this run cannot tell the frame from the bare ask.
+    #
+    # A KEY IS A SUBTRACTION and the subtrahend has to exist. Downstream reads it as one:
+    # `run_isolation --compose` builds its ladder from `keys[0]["template"]`, and the
+    # report panel lists them. Reproduced against a target whose control errors and whose
+    # framed probes land: verdict UNMEASURED, one key published.
+    usable_control = (control is not None
+                     and control.get("errors", 0) < control.get("trials", 1))
+
     for r in results:
-        r["beats_control"] = (r["hits"] > control["hits"]) if control else None
+        r["beats_control"] = (r["hits"] > control["hits"]) if usable_control else None
 
     results.sort(key=lambda r: (-r["hits"], r["frame"]))
     keys = [r for r in results if r["hits"] > 0 and r["beats_control"]]
 
-    if control is None or control.get("errors", 0) >= control.get("trials", 1):
+    if not usable_control:
         # Nothing to subtract, so nothing is a key and nothing is locked either: whatever
         # landed might be the frame or might be the bare ask, and this run cannot tell.
         #
@@ -224,7 +238,15 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
 def format_search(name, out):
     lines = [f"property: {name}   verdict: {out['verdict']}"]
     c = out["control"]
-    if c:
+    if c and c.get("errors", 0) >= c.get("trials", 1):
+        # A CONTROL THAT ERRORED ON EVERY TRIAL IS NOT A CONTROL THAT SCORED ZERO, and
+        # `0/3` in this column reads as the second: the bare ask was tried and never
+        # worked, which is the strongest thing a key search can say about it. The rate is
+        # still shown, with what it is.
+        lines.append(f"  {'[bare control]':<22}{c['rate']:<8}"
+                     f"every trial errored — nothing to subtract, so no rate below is "
+                     f"evidence that a frame opened anything")
+    elif c:
         lines.append(f"  {'[bare control]':<22}{c['rate']:<8}"
                      f"{_locks_str(c['locks']) or '-'}")
     else:

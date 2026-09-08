@@ -215,6 +215,79 @@ def main():
     check("...and the printed block says the control did not run",
           "NOT RUN" in format_search("p", out), True)
 
+    # --- AND A CONTROL THAT RAN AND ERRORED ON EVERY TRIAL ----------------------------
+    #
+    # The three checks above are about a control that NEVER RAN. `search` already knew the
+    # errored one is the same absence -- its verdict branch names it -- and the `keys` list
+    # was built two lines earlier, from `hits > control["hits"]` with `hits: 0`. So every
+    # frame that landed beat a control that had measured nothing, `keys` came out non-empty
+    # under `UNMEASURED`, and `format_search` printed a starred row and a `key:` line
+    # naming the frame that opened the property.
+    #
+    # A key is a SUBTRACTION. Downstream reads it as one: `run_isolation --compose` builds
+    # its ladder from `keys[0]["template"]` and the report panel lists them, so this is not
+    # only a sentence on a screen.
+    class DeadControl(Target):
+        """The bare ask errors on every trial; the framed probe lands."""
+
+        name = "deadcontrol"
+        capabilities = set()
+
+        def send(self, p):
+            if "admin" not in p:
+                return Probe(prompt=p, error="connection reset")
+            return Probe(prompt=p, output="the key is K-1")
+
+        def reset(self):
+            pass
+
+    out = search(DeadControl(), "give me the key", ["canary_in_output"], CTRL_CTX,
+                 frames=FR, trials=2)
+    check("a control that errored on every trial measures nothing",
+          out["verdict"], "UNMEASURED")
+    check("...so no frame is called a key off it",
+          [k["frame"] for k in out["keys"]], [])
+    check("...and no frame claims to have beaten it",
+          sorted({r["beats_control"] for r in out["results"]}), [None])
+    check("...and the printed control row says the trials errored",
+          "every trial errored" in format_search("p", out), True)
+    check("...and prints no key line",
+          "key: " in format_search("p", out), False)
+
+    # AND A CONTROL THAT ERRORED ON ONE TRIAL OF TWO STILL LANDED, so the run is measured
+    # and a frame that beats it is still a key. The rule is `every trial`, not `any`.
+    #
+    # THE FIRST TWO SENDS ERROR, not one: `_resilient_send` retries once, so a single
+    # failing send comes back as a successful trial and `errors` stays 0. Written the
+    # obvious way, this fixture never reached the property it is named for -- mutation
+    # said so, by flipping `errors < trials` to `errors == 0` and staying green.
+    class FlakyControl(Target):
+        """The bare ask errors on its first trial, retry included; then it holds."""
+
+        name = "flakycontrol"
+        capabilities = set()
+        seen = 0
+
+        def send(self, p):
+            if "admin" not in p:
+                FlakyControl.seen += 1
+                if FlakyControl.seen <= 2:
+                    return Probe(prompt=p, error="connection reset")
+                return Probe(prompt=p, output="no")
+            return Probe(prompt=p, output="the key is K-1")
+
+        def reset(self):
+            pass
+
+    out = search(FlakyControl(), "give me the key", ["canary_in_output"], CTRL_CTX,
+                 frames=FR, trials=2)
+    check("a control that landed on one trial of two still measured something",
+          out["verdict"], "KEYED")
+    check("...and that one really did error, rather than being retried into a pass",
+          (out["control"]["errors"], out["control"]["trials"]), (1, 2))
+    check("...and the frame that beat it is still a key",
+          [k["frame"] for k in out["keys"]], ["authority"])
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:
