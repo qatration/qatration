@@ -835,18 +835,33 @@ def _unresolved_paths():
 
 
 def _unobservable():
-    """target -> calls whose contents no detector could see.
+    """-> (target -> calls whose contents no detector could see, asked, could-not-ask).
 
     Reported beside the findings because the difference between "we checked and it was
     clean" and "we could not see" is the difference between a measurement and a promise, and a
     report that blurs the two is worth less than one that admits the gap.
+
+    AND THE SECTION ITSELF BLURRED THEM, by rendering only when it had rows. `blind_spots`
+    returns nothing at all for a target whose config declares no `tool_names`, and says so
+    in its own source: "nothing declared: cannot tell a tool from a builtin". So silence
+    here has two causes and the page showed one face for both.
+
+    On this fleet: 213 unresolved tool calls across 6 systems are ones the question could
+    be asked about, and the answer for every one of them is none. 216 across 8 more —
+    dvla, opsbot, portalagent and four mcpagent variants — could not be asked at
+    all, and the section has never appeared on a published page in either case. A reader of the assessment could
+    not tell `we looked and found none` from `we could not look`, which is the sentence
+    three lines above this one.
+
+    Both numbers come back, per target, from the same pass: reading every stored artifact
+    twice to count what the first pass already saw is the shape that drifts.
     """
     try:
         from oracle import blind_spots
         from target import Probe
     except Exception:
-        return {}
-    out = {}
+        return {}, {}, {}
+    out, asked, unasked = {}, {}, {}
     for fp in results_files(OUT_DIR):
         # The last bare read in this file, and the one that survived the first pass: a
         # truncated artifact raised here and took the whole report down after `load_all` had
@@ -867,9 +882,20 @@ def _unobservable():
                 pr = Probe(prompt="", output=pd.get("output") or "",
                            tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
                            resolved=[tuple(x) for x in (pd.get("resolved") or [])])
+                # WHICH PROBES THE QUESTION REACHES, counted where it is decided rather
+                # than re-derived from the config afterwards. A probe with no tool call
+                # is not in either number: nothing about it could be unobservable. One
+                # whose boundary reported what it received is not either, and that is a
+                # result rather than a gap.
+                if pr.tool_calls and not pr.resolved:
+                    _code = {str(x).lower()
+                             for x in (cfg.get("code_tools") or ["python_interpreter"])}
+                    _named = {str(x).lower() for x in (cfg.get("tool_names") or [])} - _code
+                    (asked if _named else unasked)[tgt] = \
+                        (asked if _named else unasked).get(tgt, 0) + 1
                 for b in blind_spots(pr, cfg):
                     out.setdefault(tgt, {}).setdefault(b, set()).add(r["attack"]["id"])
-    return out
+    return out, asked, unasked
 
 
 def _contexts():
@@ -1253,7 +1279,7 @@ def main():
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
     ages, regressed, came_back = _timeline()
-    unseen = _unobservable()
+    unseen, _seen_n, _blind_n = _unobservable()
     # A DECLARED CHANNEL THAT NEVER CARRIED ANYTHING. Kept separate from `unseen`, which is
     # about calls whose CONTENTS no detector could read; this is about a channel that was
     # configured and never once produced a value, which is a mapping error rather than a
@@ -1630,24 +1656,55 @@ def main():
     # What the run could NOT see, said beside what it did. A report that only lists
     # findings promises coverage it never had: on a code agent a customer record left
     # through send_email(body=customer_record) and every detector read a variable name.
+    # THE SECTION SPEAKS WHENEVER A TOOL CALL WAS SEEN, not only when it has rows. It
+    # rendered `if unseen:`, and `blind_spots` returns nothing for a target whose config
+    # declares no `tool_names` -- so a page with no rows meant either `we looked at every
+    # call and none was unobservable` or `we could not look at any of them`, and on this
+    # fleet it has always meant both at once, about different systems. The three-line
+    # difference between a measurement and a promise is the thing this section is for.
     unseen_html = ""
-    if unseen:
+    if unseen or _seen_n or _blind_n:
         rows = ""
         for tgt in sorted(unseen):
             for b, aids in sorted(unseen[tgt].items()):
                 rows += (f'<tr><td class="mono">{esc(tgt)}</td><td>{esc(b)}</td>'
                          f'<td class="mono dim">{esc(", ".join(sorted(aids)[:4]))}</td></tr>')
+        _table = (f'<table class="pair"><thead><tr><th>system</th><th>call</th>'
+                  f'<th>seen on</th></tr></thead><tbody>{rows}</tbody></table>'
+                  if rows else
+                  f'<p class="dim">No call among the {sum(_seen_n.values())} checked on '
+                  f'{len(_seen_n)} system(s) had contents a detector could not read.</p>'
+                  if _seen_n else
+                  f'<p class="dim">No call was checked for this at all.</p>')
+        # AND THE ONES THE QUESTION COULD NOT REACH, named with the act that closes it.
+        # A config that lists no tools leaves no way to tell a tool call from a language
+        # builtin, so the answer for those systems is not `none`, it is `not asked`.
+        _blind_html = ""
+        if _blind_n:
+            _blind_html = (
+                f'<div class="fix"><span class="fixlabel">Not asked</span>'
+                f'{sum(_blind_n.values())} tool call(s) on {len(_blind_n)} system(s) '
+                f'could not be checked for this: '
+                f'{esc(", ".join(sorted(_blind_n)))} declare no <code>tool_names</code> '
+                f'in their <code>oracle_context</code>, and without that list a tool call '
+                f'cannot be told from a language builtin. Those rows are absent from this '
+                f'section because the question was never put, not because the answer was no.</div>')
+        # AND THE REMEDY ONLY WHERE THERE IS SOMETHING TO REMEDY. It read `the rows below
+        # are gaps, not clean results` above an empty table the moment the section learned
+        # to render without rows.
+        _needed = (
+            '<div class="fix"><span class="fixlabel">What is needed</span>a log of what '
+            'each tool RECEIVED, not only what the model wrote. Standard '
+            'agent-observability tool-call logging already records it. Until then the rows '
+            'below are gaps, not clean results: the argument was a variable, so its value '
+            'never appears in the text and no pattern can reach it.</div>') if rows else ""
         unseen_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">NOT MEASURED</span></div>
           <h2>Calls this assessment could not see inside</h2>
-          <div class="fix"><span class="fixlabel">What is needed</span>a log of what each
-            tool RECEIVED, not only what the model wrote. Standard agent-observability
-            tool-call logging already records it. Until then the rows below are gaps, not
-            clean results: the argument was a variable, so its value never appears in the
-            text and no pattern can reach it.</div>
-          <table class="pair"><thead><tr><th>system</th><th>call</th><th>seen on</th></tr>
-          </thead><tbody>{rows}</tbody></table>
+          {_needed}
+          {_table}
+          {_blind_html}
         </section>"""
 
     # Whose software these were found in, said in the header rather than inferred from the

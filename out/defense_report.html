@@ -1106,6 +1106,13 @@ def calculate_standard_deviation(numbers):
         </section>
 
 
+        <section class="finding unseen">
+          <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">NOT MEASURED</span></div>
+          <h2>Calls this assessment could not see inside</h2>
+          
+          <p class="dim">No call among the 213 checked on 6 system(s) had contents a detector could not read.</p>
+          <div class="fix"><span class="fixlabel">Not asked</span>216 tool call(s) on 8 system(s) could not be checked for this: dvla, mcpagent, mcpagent-naive, mcpagent-rugpull, mcpagent-shadow, opsbot, portalagent, portalagent-naive declare no <code>tool_names</code> in their <code>oracle_context</code>, and without that list a tool call cannot be told from a language builtin. Those rows are absent from this section because the question was never put, not because the answer was no.</div>
+        </section>
 <p class="pattern">Root cause across every finding: the model was trusted to enforce a security boundary.
 Models are helpful, not secure. Put the boundary in the tool, the query, and the auth layer — and treat
 everything the model reads (prompts, retrieved documents, tool output) as untrusted input.</p>
