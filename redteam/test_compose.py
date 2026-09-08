@@ -169,6 +169,30 @@ def main():
     check("unframed part contributes the bare ask",
           "stored record" not in cands[0][1] and f'Body: "{HIT}"' in cands[0][1], True)
 
+    # 4b. AND THE RUNG THAT REACHES THE TARGET IS THE RUNG SOMEBODY WROTE. A YAML block
+    #     scalar appends a newline to a task and to a frame template alike, and on
+    #     portalagent at temperature 0 that one character was 0/3 against 3/3. `keysearch`
+    #     has had this check since the day it was measured; this module strips in its own
+    #     words and nothing looked, so the normalisation could be deleted here and every
+    #     assertion in this file stayed green.
+    _nl = [{"name": "a", "task": "do the thing\n",
+            "frame_template": "{task}\n\ncontext.\n"},
+           {"name": "b", "task": "  and this.  ", "frame_template": None}]
+    _cands = dict(build_candidates(_nl))
+    # `split_turns` is a LIST of messages rather than one string, and each of them
+    # reaches the target on its own, so each of them has to be clean.
+    _texts = [s for v in _cands.values()
+              for s in (v if isinstance(v, list) else [v])]
+    check("no rung carries an edge nobody wrote",
+          all(s == s.strip() for s in _texts), True)
+    check("...over every rung, including the multi-message one",
+          len(_texts) >= 4, True)
+    check("...and the frame is rendered around the normalised ask",
+          "do the thing\n\ncontext." in _cands["stacked"], True)
+    check("...and an unframed part contributes its ask with the edges gone",
+          "and this." in _cands["stacked"] and "  and this.  " not in _cands["stacked"],
+          True)
+
     # 5. partial success is FLAKY, never EXPLOITED — one lucky trial is not a break
     class Flaky(Scripted):
         def __init__(self):

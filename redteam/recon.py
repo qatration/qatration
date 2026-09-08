@@ -33,6 +33,7 @@ import re
 from oracle import DETECTORS, real_calls
 from refusal import classify
 from runner import _resilient_send
+from target import payload
 
 MEMO_TOKEN = "QX7-2209"       # unguessable: a stateless bot cannot produce it on recall
 
@@ -327,9 +328,15 @@ def sent_so_far():
 
 
 def _send(target, text, reset=True):
+    # NORMALISED HERE, because this is the one door every recon probe goes through and
+    # two of them are the operator's: `--tool-prompt`, and `baseline_prompt` out of the
+    # target config. `target.payload` says why -- a YAML block scalar appends a newline,
+    # and one trailing character moved a portalagent probe from 0 of 3 to 3 of 3. Recon
+    # decides which objectives exist for a target, so a probe that is not the probe its
+    # author wrote shapes everything downstream of it.
     if reset:
         target.reset()
-    probe = _resilient_send(lambda: target.send(text), "recon")
+    probe = _resilient_send(lambda t=payload(text): target.send(t), "recon")
     _SENT["probes"] += 1
     if probe is None or probe.error or not (probe.output or "").strip():
         # Silence counts with the errors: a probe that came back empty told this profile

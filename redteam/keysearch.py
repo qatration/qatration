@@ -21,6 +21,7 @@ import yaml
 from oracle import DETECTORS
 from refusal import classify
 from runner import _resilient_send
+from target import payload
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -109,7 +110,11 @@ def try_frame(target, frame, task, success, ctx, trials=3, frame_vars=None):
     # newline and 3/3 without it (GetProfile(1) vs GetProfile(2)). Every frame in the
     # library was quietly carrying one, so every framed probe was being scored on a payload
     # nobody intended to send. Normalise the edges, always.
-    text = text.strip()
+    # THROUGH `target.payload`, which is where that rule lives and whose docstring ends
+    # "a rule that has to be remembered at five call sites will be missing from the
+    # sixth". This was the second spelling of it and `compose` was the third, each with a
+    # comment pointing at the other; the site with neither is the one that goes wrong.
+    text = payload(text)
     hits, errors, locks = 0, 0, []
     for _ in range(trials):
         target.reset()

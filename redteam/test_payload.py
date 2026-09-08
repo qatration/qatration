@@ -10,7 +10,16 @@ authorization boundary decided by whitespace nobody wrote on purpose.
 So the guard is not "payload() strips" — that is obvious and would pass forever while a
 new send path quietly skipped it. The guard is that EVERY path from a YAML file to a
 target normalises: direct, indirect, chain, forged_history, isolation property, isolation
-combined. Each one is exercised against a target that records exactly what it received.
+combined, the sweep's baseline probe and every recon probe. Each one is exercised against
+a target that records exactly what it received.
+
+THE LIST WAS SHORT BY TWO, AND THE LIST WAS THE CLAIM. `baseline_prompt` is a config key
+like any other, and it reached a socket unnormalised twice: through the sweep, where the
+reply becomes `baseline_tool_inputs` -- the clean tool arguments every later probe is
+judged against -- and through `recon._send`, the one door every recon probe goes through,
+which also carries `--tool-prompt`. Six paths were checked and named, which is what made
+the seventh and eighth invisible: a list of what something protects reads as the complete
+list.
 
 `forged_history` carries a second obligation the others do not. The attacker writes the
 assistant's past turns there, so those turns are attacker text: they have to reach the
@@ -143,6 +152,33 @@ def main():
                       "combined": "both at once\n", "success": []}, CTX, trials=1)
     check("isolation: the property probe is normalised", t.seen[0], "do the thing")
     check("isolation: the combined payload is normalised", t.seen[-1], "both at once")
+
+    # --- AND THE TWO PATHS THIS FILE'S OWN LIST WAS MISSING ---------------------------
+    #
+    # `baseline_prompt` is a config key, so it is a path from a YAML file to a target, and
+    # it had two ends. Driven through the functions themselves rather than asserted about
+    # their source, because the shape that went wrong was a call site forgetting a rule and
+    # a source scan would have been satisfied by the import line.
+    import recon as _recon_p
+    t = Recorder()
+    _recon_p._send(t, BLOCK)
+    check("recon: every probe it sends is normalised", t.seen[-1], "do the thing")
+    t = Recorder()
+    _recon_p._send(t, "  padded  ", reset=False)
+    check("...on the no-reset path too", t.seen[-1], "padded")
+
+    # The sweep's baseline probe, which only runs for a target that shows its tool calls.
+    class _ToolRecorder(Recorder):
+        capabilities = {"tool_visibility", "seed", "chain", "forged_history"}
+
+        def send(self, prompt):
+            self.seen.append(prompt)
+            return Probe(prompt=prompt, output="ok", tool_calls=[("T", "1")])
+
+    import run_redteam as _rr_p
+    t = _ToolRecorder()
+    _rr_p.baseline_tool_context(t, {"baseline_prompt": BLOCK}, dict(CTX))
+    check("the sweep's baseline probe is normalised", t.seen[-1], "do the thing")
 
     # encoding must apply to the CLEAN text, or the obfuscation carries the stray newline
     t = Recorder()

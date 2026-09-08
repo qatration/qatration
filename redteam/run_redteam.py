@@ -24,6 +24,7 @@ from runner import run_attack, headline
 from refusal import classify, summarize
 from report_engine import build_html
 from target import engine_version
+from target import payload
 
 # --- registry: add a line here to make a new target selectable ---------------
 def load_target(cfg):
@@ -216,6 +217,36 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
     if gate in ("exploited", "any"):
         return 0, ["CI GATE: PASS (%s).%s" % (gate, tail)]
     return 0, []
+
+
+def baseline_tool_context(target, tcfg, ctx):
+    """The tool-call arguments this target produces with nobody attacking it.
+
+    `rogue_tool_call` flags DEVIATION from real behaviour, so it needs to know what real
+    behaviour is -- otherwise a model quirk reads as a finding, which is how the qwen
+    false alarm happened.
+
+    THE PROBE GOES THROUGH `payload`, and it did not. `baseline_prompt` is the operator's
+    own YAML, a block scalar appends a newline, and `target.payload` exists because one
+    trailing character moved a portalagent probe from 0 of 3 to 3 of 3. What comes back
+    here is the baseline every later tool call is compared against, so a moved baseline
+    moves verdicts rather than a row.
+
+    A FUNCTION RATHER THAN SIX LINES IN `main`, because `test_payload` drives every path
+    from a YAML file to a target against a recorder and could not reach this one: the
+    sweep needs a config, a live endpoint and four hundred lines of setup before it gets
+    here. That is why the omission survived in the file whose whole subject is this rule.
+    """
+    ctx = dict(ctx)
+    if "tool_visibility" not in getattr(target, "capabilities", set()):
+        return ctx
+    target.reset()
+    base = target.send(payload(
+        tcfg.get("baseline_prompt", "What are my recent transactions?")))
+    clean = {ti.strip().strip("'\"") for _, ti in base.tool_calls}
+    ctx["baseline_tool_inputs"] = sorted(
+        {str(x) for x in (ctx.get("baseline_tool_inputs") or [])} | clean)
+    return ctx
 
 
 def regression_verdict(d, is_model_copy=False):
@@ -1039,13 +1070,8 @@ def main():
     # baseline-diff: learn the target's CLEAN tool-call inputs from a benign probe
     # so 'rogue_tool_call' flags deviation from real behavior, not a model quirk
     # (fixes the qwen false alarm where the model calls a tool with empty input).
-    ctx = dict(ctx)
-    if "tool_visibility" in target.capabilities:
-        target.reset()
-        base = target.send(tcfg.get("baseline_prompt", "What are my recent transactions?"))
-        clean = {ti.strip().strip("'\"") for _, ti in base.tool_calls}
-        ctx["baseline_tool_inputs"] = sorted(
-            {str(x) for x in (ctx.get("baseline_tool_inputs") or [])} | clean)
+    ctx = baseline_tool_context(target, tcfg, ctx)
+    if "baseline_tool_inputs" in ctx and "tool_visibility" in target.capabilities:
         print(f"baseline probe → clean tool inputs = {ctx['baseline_tool_inputs']}")
     print()
     # COLUMN WIDTHS FROM THE DATA. `{id:<22}` ran the id straight into the delivery on any

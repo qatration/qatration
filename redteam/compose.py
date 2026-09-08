@@ -28,6 +28,7 @@ shrug. Candidate payloads are returned either way so a tester can carry on from 
 from oracle import DETECTORS
 from refusal import classify
 from runner import _resilient_send
+from target import payload
 from isolation import achieved_combined
 
 
@@ -57,16 +58,20 @@ def _achieved(probe, objective, ctx):
 from isolation import tally as _tally
 
 
-def _run(target, payload, objective, ctx, trials):
-    """One strategy, N trials. `payload` is a string (one message) or a list of strings
-    (consecutive turns with persistent memory) — the split strategy needs the latter."""
+def _run(target, rung, objective, ctx, trials):
+    """One strategy, N trials. `rung` is a string (one message) or a list of strings
+    (consecutive turns with persistent memory) — the split strategy needs the latter.
+
+    NOT NAMED `payload`, which is what it was called: this module imports `target.payload`
+    now, and a parameter of that name shadows the rule for the whole function. Nothing here
+    called it, which is exactly how that kind of trap waits."""
     hits, errors, locks = 0, 0, []
-    turns = isinstance(payload, list)
+    turns = isinstance(rung, list)
     for _ in range(trials):
         target.reset()
         probe = _resilient_send(
-            (lambda p=payload: target.send_chain(p)) if turns
-            else (lambda p=payload: target.send(p)), "compose")
+            (lambda p=rung: target.send_chain(p)) if turns
+            else (lambda p=rung: target.send(p)), "compose")
         # AN ERRORED TRIAL IS NOT A MISS. `_achieved` returns False for it, correctly,
         # and counting that as the target holding is how a dead endpoint produced
         # COUPLED — "every property was reachable on its own; the combination is the
@@ -88,13 +93,15 @@ def build_candidates(parts):
     that actually needed a key keep one.
     """
     def framed(p):
-        # .strip() for the same reason keysearch does it: a template's trailing newline
-        # measurably changes the reply, so it must never ride along unintended
+        # Through `target.payload` for the same reason keysearch does: a template's
+        # trailing newline measurably changes the reply, so it must never ride along
+        # unintended -- and this was the third hand-rolled copy of a one-line rule whose
+        # own docstring says it exists so nobody has to remember it at the next site.
         tpl = p.get("frame_template")
-        return (tpl.replace("{task}", p["task"].strip()).strip() if tpl
-                else p["task"].strip())
+        return (payload(tpl.replace("{task}", payload(p["task"]))) if tpl
+                else payload(p["task"]))
 
-    tasks = [p["task"].strip() for p in parts]
+    tasks = [payload(p["task"]) for p in parts]
     stacked = "\n\n".join(framed(p) for p in parts)
 
     # merged: the first framed part wraps the ENTIRE objective; the rest ride along as plain
@@ -102,13 +109,14 @@ def build_candidates(parts):
     lead = next((p for p in parts if p.get("frame_template")), None)
     if lead:
         body = "\n\n".join(tasks)
-        merged = lead["frame_template"].replace("{task}", body).strip()
+        merged = payload(lead["frame_template"].replace("{task}", body))
     else:
         merged = "\n\n".join(tasks)
 
     # lead_only: exactly one framed property, the rest bare — the least unusual language
     # that still asserts everything the objective needs
-    lead_only = "\n\n".join(framed(p) if p is lead else p["task"].strip() for p in parts)
+    lead_only = "\n\n".join(framed(p) if p is lead else payload(p["task"])
+                             for p in parts)
 
     out, seen = [], set()
     for name, text in (("stacked", stacked), ("merged", merged), ("lead_only", lead_only)):
@@ -139,12 +147,12 @@ def split_turns(parts):
         tpl = p.get("frame_template")
         if not tpl:
             continue
-        ctx_only = tpl.replace("{task}", "").strip()
+        ctx_only = payload(tpl.replace("{task}", ""))
         if ctx_only and ctx_only not in setup:
             setup.append(ctx_only)
     if not setup:
         return None                     # nothing framed: splitting would change nothing
-    ask = "\n\n".join(p["task"].strip() for p in parts)
+    ask = "\n\n".join(payload(p["task"]) for p in parts)
     return ["\n\n".join(setup), ask]
 
 
@@ -160,16 +168,16 @@ def compose(target, objective, parts, ctx, trials=3):
     """
     caps = getattr(target, "capabilities", set()) or set()
     attempts, skipped = [], []
-    for strategy, payload in build_candidates(parts):
-        if isinstance(payload, list) and "chain" not in caps:
+    for strategy, rung in build_candidates(parts):
+        if isinstance(rung, list) and "chain" not in caps:
             # say so rather than silently dropping a rung: "we never tried it" and "it
             # did not work" are different findings, and only one of them is a defence
             skipped.append(strategy)
             continue
-        hits, errors, locks = _run(target, payload, objective, ctx, trials)
+        hits, errors, locks = _run(target, rung, objective, ctx, trials)
         attempts.append({"strategy": strategy, "rate": f"{hits}/{trials}",
                          "hits": hits, "trials": trials, "errors": errors,
-                         "locks": locks, "prompt": payload})
+                         "locks": locks, "prompt": rung})
         if hits == trials:
             break
 
