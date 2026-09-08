@@ -258,40 +258,50 @@ def no_results_note(out_dir=None):
             "    qatration run --target-config <your-config>.yaml" % (out_dir or OUT))
 
 
-def config_keys_read(root=None):
-    """Every TOP-LEVEL target-config key some part of this engine reads.
+# THE SPELLINGS A CONFIG READ TAKES IN THIS PACKAGE, and the reason there are two sets.
+# `c.get("...")` is how `provenance` is read, and it also sweeps in `note`, `state`,
+# `spent` and `verdict` from readers of RUN RECORDS that happen to use the same variable
+# name. For membership that is harmless — an extra known key only ever makes the rule
+# quieter. For a SUGGESTION it is poison: `notes:` on a config then reads as a misspelling
+# of `note`, a key no config has ever had, and the run is refused.
+#
+# So the tight set is a PREFIX of the wide one rather than a second list. `test_workspace`
+# asserts that suspects are a subset of known, because a suspect that is not known refuses
+# a correct config for looking like a misspelling of itself; written this way the
+# assertion is checking a property of the code instead of a coincidence between two
+# hand-kept tuples.
+SUSPECT_PATTERNS = (
+    r'cfg\.get\(\s*["\']([a-z_]+)["\']',
+    r'cfg\[["\']([a-z_]+)["\']\]',
+    r'tcfg\.get\(\s*["\']([a-z_]+)["\']',
+)
+READ_PATTERNS = SUSPECT_PATTERNS + (r'c\.get\(\s*["\']([a-z_]+)["\']',)
 
-    THE http ADAPTER REFUSES WHAT IT CANNOT READ and the twelve built-in ones never look.
-    `HttpConfiguredTarget.__init__` names its parameters and ends in `**unknown`, which it
-    raises on, with the defect written beside it: a config saying `respones:` built a target
-    with no response mapping, every reply read as empty, every attack scored DEFENDED, and the
-    run looked like a hardened deployment. The practice bots are constructed from a table that
-    reads named keys off the config -- `guard=cfg.get("guard", True)` -- so a config saying
-    `gaurd: false` is not refused and not applied. The bot silently stays guarded, and the
-    fleet's published numbers are about a different deployment from the one the file describes.
 
-    TWO SOURCES, because neither alone is the answer: the literal reads (`cfg.get("guard")`)
-    and every adapter constructor's parameter names, which is how the table's keys are spelled
-    at the other end. Seventy-three keys, and the forty-three shipped configs use none outside
-    them.
+def _scan_config_keys(here, pats):
+    """Every top-level config key this package reads, by two routes.
 
-    A hand-typed list would be the copy that goes stale -- the same reason `context_keys_read`
-    beside it scans instead of listing.
+    THE SCAN, NOT THE ANSWER. `config_keys_read` and `config_key_suspects` ask different
+    questions — is this key known, and what could a typo have been aiming at — and
+    the difference between their answers is a pattern and a subtraction. The thirty lines
+    that produce them were written out twice, identically: the glob, the `test_`
+    exclusion, the read, the adapter import and the constructor walk. A fifth read spelling
+    added to one of them is a key that is a SUSPECT and not KNOWN, and `near_miss_keys`
+    then refuses a correct config for looking like a misspelling of itself.
+
+    That invariant is asserted in `test_workspace`; this is the other half of keeping it
+    true, which is not having two scans that can disagree.
+
+    Two routes because neither alone is the answer: the literal reads (`cfg.get("guard")`)
+    and every adapter constructor's parameter names, which is how the same key is spelled
+    at the other end.
     """
-    global _CFG_KEYS
-    if _CFG_KEYS is not None and root is None:
-        return _CFG_KEYS
     import glob as _glob
     import importlib as _il
     import inspect as _inspect
     import io as _io
     import re as _re
-    here = root or os.path.dirname(os.path.abspath(__file__))
     keys = set()
-    pats = (r'cfg\.get\(\s*["\']([a-z_]+)["\']',
-            r'cfg\[["\']([a-z_]+)["\']\]',
-            r'tcfg\.get\(\s*["\']([a-z_]+)["\']',
-            r'c\.get\(\s*["\']([a-z_]+)["\']')
     for fn in _glob.glob(os.path.join(here, "*.py")):
         if os.path.basename(fn).startswith("test_"):
             continue
@@ -306,8 +316,8 @@ def config_keys_read(root=None):
             mod = _il.import_module(os.path.basename(fn)[:-3])
         except Exception:
             # An adapter that will not import is `test_packaging`'s business. Skipping it
-            # here returns fewer keys, which makes the caller's complaint louder rather than
-            # quieter -- the safe direction for a check that can be wrong.
+            # here returns fewer keys, which makes the caller's complaint louder rather
+            # than quieter -- the safe direction for a check that can be wrong.
             continue
         for nm in dir(mod):
             obj = getattr(mod, nm)
@@ -316,6 +326,35 @@ def config_keys_read(root=None):
                     keys |= set(_inspect.signature(obj.__init__).parameters) - {"self"}
                 except (TypeError, ValueError):
                     pass
+    return keys
+
+
+def config_keys_read(root=None):
+    """Every TOP-LEVEL target-config key some part of this engine reads.
+
+    THE http ADAPTER REFUSES WHAT IT CANNOT READ and the twelve built-in ones never look.
+    `HttpConfiguredTarget.__init__` names its parameters and ends in `**unknown`, which it
+    raises on, with the defect written beside it: a config saying `respones:` built a target
+    with no response mapping, every reply read as empty, every attack scored DEFENDED, and the
+    run looked like a hardened deployment. The practice bots are constructed from a table that
+    reads named keys off the config -- `guard=cfg.get("guard", True)` -- so a config saying
+    `gaurd: false` is not refused and not applied. The bot silently stays guarded, and the
+    fleet's published numbers are about a different deployment from the one the file describes.
+
+    TWO SOURCES, because neither alone is the answer: the literal reads (`cfg.get("guard")`)
+    and every adapter constructor's parameter names, which is how the table's keys are spelled
+    at the other end. This said `seventy-three keys` and the scan returns sixty-three; a count
+    in prose is a number nothing recounts, so what is claimed here now is the property
+    `test_workspace` actually checks: no key any shipped config uses falls outside the set.
+
+    A hand-typed list would be the copy that goes stale -- the same reason `context_keys_read`
+    beside it scans instead of listing.
+    """
+    global _CFG_KEYS
+    if _CFG_KEYS is not None and root is None:
+        return _CFG_KEYS
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = _scan_config_keys(here, READ_PATTERNS)
     if root is None:
         _CFG_KEYS = keys
     return keys
@@ -573,37 +612,8 @@ def config_key_suspects(root=None):
     global _CFG_SUSPECTS
     if _CFG_SUSPECTS is not None and root is None:
         return _CFG_SUSPECTS
-    import glob as _glob
-    import importlib as _il
-    import inspect as _inspect
-    import io as _io
-    import re as _re
     here = root or os.path.dirname(os.path.abspath(__file__))
-    keys = set()
-    pats = (r'cfg\.get\(\s*["\']([a-z_]+)["\']',
-            r'cfg\[["\']([a-z_]+)["\']\]',
-            r'tcfg\.get\(\s*["\']([a-z_]+)["\']')
-    for fn in _glob.glob(os.path.join(here, "*.py")):
-        if os.path.basename(fn).startswith("test_"):
-            continue
-        try:
-            src = _io.open(fn, encoding="utf-8").read()
-        except OSError:
-            continue
-        for p in pats:
-            keys |= set(_re.findall(p, src))
-    for fn in sorted(_glob.glob(os.path.join(here, "targets_*.py"))):
-        try:
-            mod = _il.import_module(os.path.basename(fn)[:-3])
-        except Exception:
-            continue
-        for nm in dir(mod):
-            obj = getattr(mod, nm)
-            if _inspect.isclass(obj):
-                try:
-                    keys |= set(_inspect.signature(obj.__init__).parameters) - {"self"}
-                except (TypeError, ValueError):
-                    pass
+    keys = _scan_config_keys(here, SUSPECT_PATTERNS)
     # PYTHON PLUMBING IS NOT A CONFIG KEY. `*args` and `**kwargs` are in every constructor
     # signature and in no config, and leaving them here made `tags:` read as a misspelling of
     # `args` -- a suggestion pointing at something that cannot be written in a YAML file.

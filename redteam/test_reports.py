@@ -1837,15 +1837,13 @@ def main():
     # and a NEW duplicate outside that set still fails.
     import ast as _ast5, glob as _g4
     _SEPARATE_BY_DESIGN = "targets_"
-    _bodies = {}
-    for _f5 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):
-        _base = os.path.basename(_f5)
-        if _base.startswith("test_") or _base.startswith(_SEPARATE_BY_DESIGN):
-            continue
+
+    def _collect(_src5, _base, _into):
+        """Group this module's function bodies, docstring stripped, by what they DO."""
         try:
-            _tr5 = _ast5.parse(open(_f5, encoding="utf-8").read(), filename=_f5)
+            _tr5 = _ast5.parse(_src5)
         except SyntaxError:
-            continue
+            return _into
         for _n5 in _ast5.walk(_tr5):
             if not isinstance(_n5, (_ast5.FunctionDef, _ast5.AsyncFunctionDef)):
                 continue
@@ -1857,11 +1855,77 @@ def main():
             if len(_st) < 2:
                 continue          # a one-liner is shared idiom, not a shared rule
             _key = "|".join(_ast5.dump(_s, annotate_fields=False) for _s in _st)
-            _bodies.setdefault(_key, []).append("%s:%s" % (_base, _n5.name))
-    _twice = {k: v for k, v in _bodies.items()
-              if len({x.split(":")[0] for x in v}) > 1}
-    check("no engine function is implemented twice in two modules", not _twice,
+            _into.setdefault(_key, []).append("%s:%s" % (_base, _n5.name))
+        return _into
+
+    _bodies = {}
+    for _f5 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):
+        _base = os.path.basename(_f5)
+        if _base.startswith("test_") or _base.startswith(_SEPARATE_BY_DESIGN):
+            continue
+        try:
+            _collect(open(_f5, encoding="utf-8").read(), _base, _bodies)
+        except OSError:
+            continue
+    # ONCE ANYWHERE, not once per module. This required the twin to be in a DIFFERENT
+    # file, so a rule written twice inside one was invisible — and `oracle` had exactly
+    # that: `d_pii_in_output` and `d_pii_in_tool_call` each carried their own copy of the
+    # `fresh` test that decides whether a contact detail is a finding or the attacker's
+    # own text coming back. Two copies of a rule are two chances for one to learn
+    # something the other does not, which is the whole reason this check exists, and the
+    # set it quantified over could not contain the case.
+    #
+    # The suites keep their per-scope `check` and `want` closures and are already skipped
+    # above; across the engine modules the widened set has one member and it is the one
+    # this found.
+    def _duplicated(_b):
+        """The bodies that appear more than once, wherever they appear."""
+        return {k: v for k, v in _b.items() if len(v) > 1}
+
+    _twice = _duplicated(_bodies)
+    check("no engine function is implemented twice", not _twice,
           "; ".join(", ".join(v) for v in list(_twice.values())[:2]))
+    # AND IT CAN SEE ONE, planted rather than surveyed. Widening the set from `in two
+    # modules` to `twice anywhere` is a change whose whole value is a case the old set
+    # could not contain, and a tree with no duplicate satisfies both spellings equally.
+    _NL5 = chr(10)
+    _planted5 = _NL5.join([
+        "def a():",
+        "    x = 1",
+        "    return x + 1",
+        "",
+        "def b():",
+        "    x = 1",
+        "    return x + 1",
+    ])
+    check("the scan sees one rule written twice in a single file",
+          bool(_duplicated(_collect(_planted5, "planted.py", {}))),
+          "the planted twin was not seen")
+    # AND A ONE-LINER IS NOT ONE, which is the exemption that keeps this usable: two
+    # accessors returning the same attribute are shared idiom, not a shared rule.
+    _short5 = _NL5.join([
+        "def a():",
+        "    return 1",
+        "",
+        "def b():",
+        "    return 1",
+    ])
+    check("...and two one-line functions are not a duplicated rule",
+          not _duplicated(_collect(_short5, "planted.py", {})),
+          "a one-liner was read as a shared rule")
+    # AND TWO FUNCTIONS THAT DIFFER ARE LEFT ALONE.
+    _diff5 = _NL5.join([
+        "def a():",
+        "    x = 1",
+        "    return x + 1",
+        "",
+        "def b():",
+        "    x = 1",
+        "    return x + 2",
+    ])
+    check("...and two that do different things are not",
+          not _duplicated(_collect(_diff5, "planted.py", {})),
+          "two different bodies were grouped together")
     check("...over a real number of functions", len(_bodies) > 100, str(len(_bodies)))
 
     # --- ONE SENTENCE, ONE PLACE --------------------------------------------------------
