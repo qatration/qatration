@@ -53,6 +53,31 @@ def _path(target, out_dir=None):
     return os.path.join(out_dir or OUT_DIR, f"benign_{target}.json")
 
 
+def _load(target, out_dir=None):
+    """-> (the stored benign baseline, why it could not be read).
+
+    ONE READER, BECAUSE THERE WERE FIVE. `rates`, `built`, `measured_on`, `refusal_rate`
+    and `clean_rate` each opened this file themselves, four of them repeating the same
+    `rows with a probe, or None` line after it. Five spellings of `read this target's
+    baseline` in the module every attribution claim rests on.
+
+    AND ALL FIVE SAID `except Exception: return None`, which is the conflation this
+    repository has fixed in `jobqueue`, in `runs`, in the report builders and in
+    `read_artifact` itself: UNREADABLE IS NOT ABSENT. A torn `benign_<target>.json` came
+    back as `nobody has ever measured this target`, and `note` printed exactly that —
+    a false statement about a file that is sitting right there.
+
+    So the two are separated: no file at all is `(None, "")`, and a file this cannot read
+    is `(None, why)`. Through `workspace.read_artifact`, which is the one reader that
+    already knows how to say why, and which validates a benign baseline by its name.
+    """
+    from workspace import read_artifact as _read
+    p = _path(target, out_dir)
+    if not os.path.exists(p):
+        return None, ""
+    data, why = _read(p)
+    return (None, why) if why else (data, "")
+
 def rates(target, out_dir=None):
     """detector -> share of benign probes it fired on. None if never measured.
 
@@ -62,10 +87,8 @@ def rates(target, out_dir=None):
     conflation while the code committed it. `None` means nobody looked; `{}` means somebody
     looked and nothing fired.
     """
-    try:
-        with open(_path(target, out_dir), encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    data, _why = _load(target, out_dir)
+    if data is None:
         return None
     rows = data.get("rows") or []
     scored = [r for r in rows if r.get("probe")]
@@ -112,11 +135,8 @@ def judged_by(target, out_dir=None):
     match, which is why the report falls back to the age rather than to silence.
     """
     from workspace import named_build
-    path = _path(target, out_dir)
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    data, _why = _load(target, out_dir)
+    if data is None:
         return ""
     return named_build((data.get("meta") or {}).get("engine"))
 
@@ -141,10 +161,8 @@ def measured_on(target, out_dir=None):
     """
     from workspace import measured_when
     path = _path(target, out_dir)
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    data, _why = _load(target, out_dir)
+    if data is None:
         return None
     if not [r for r in (data.get("rows") or []) if r.get("probe")]:
         return None
@@ -186,10 +204,8 @@ def refusal_rate(target, out_dir=None):
     None when nobody looked, for the reason `rates` states: a target measured and found to
     refuse nothing is the best possible answer and must not read as an absent measurement.
     """
-    try:
-        with open(_path(target, out_dir), encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    data, _why = _load(target, out_dir)
+    if data is None:
         return None
     rows = data.get("rows") or []
     sent = [r for r in rows if r.get("probe")]
@@ -213,10 +229,8 @@ def benign_seen(target, out_dir=None):
     Counted from the rows for the same reason `rates` does: a row carrying a probe is a row
     the target answered, and that is the traffic the number is about.
     """
-    try:
-        with open(_path(target, out_dir), encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
+    data, _why = _load(target, out_dir)
+    if data is None:
         return None
     rows = data.get("rows") or []
     sent = [r for r in rows if r.get("probe")]
@@ -404,7 +418,17 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
     """
     ambient = rates(target, out_dir)
     if ambient is None:
-        # THE COMMAND HAS TO BE THE ONE THE READER CAN RUN. `--target` resolves against the
+        # WHICH KIND OF NOTHING. `rates` answers None for two different worlds and the
+        # sentence below is only true of one of them: a torn `benign_<target>.json` is a
+        # measurement that exists and cannot be read, and telling the reader nobody has
+        # ever looked sends them to run a command that will overwrite it.
+        _b_data, _b_why = _load(target, out_dir)
+        if _b_why:
+            return (f"  ! the benign run for '{target}' could not be read ({_b_why}) " 
+                    f"\u2014 every verdict below is unattributed, and the file it rests "
+                    f"on is there.\n"
+                    f"      Nothing has been re-measured: read or replace "
+                    f"{_path(target, out_dir)} before trusting a verdict above.")
         # configs shipped with the package, so it works for this repository's own fleet and
         # fails with "no config named 'mybot'" for anybody who arrived via --target-config —
         # which is everybody who ever sees this line, since a shipped target already has a

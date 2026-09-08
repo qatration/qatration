@@ -205,29 +205,22 @@ def attack_keys_read(root=None):
     package are: a list of twenty-one keys beside a corpus of six hundred attacks is the copy
     that goes stale.
     """
-    import re as _re
     # THE PACKAGE, NOT `ROOT`. `ROOT` is where the corpus is, and `test_lint` redirects it to
     # a temporary directory holding two YAML files — so a scan rooted there finds no Python at
     # all, returns nothing, and calls every key in every attack unknown. The suite caught that
     # on the first run: `text` reported as a key nothing reads.
     here = root or os.path.dirname(os.path.abspath(__file__))
-    keys = set()
+    # THROUGH `workspace.scan_source_keys`, which is the same eight lines `engine_keys`
+    # below and the two config scans in `workspace` each had a copy of. The patterns are
+    # what differs between them; the scan is not.
+    from workspace import scan_source_keys as _scan
     pats = (r'\ba\.get\(\s*["\']([a-z_]+)["\']',
             r'\ba\[["\']([a-z_]+)["\']\]',
             r'attack\.get\(\s*["\']([a-z_]+)["\']',
             r'attack\[["\']([a-z_]+)["\']\]',
             r'atk\.get\(\s*["\']([a-z_]+)["\']',
             r'_at\.get\(\s*["\']([a-z_]+)["\']')
-    for fname in sorted(glob.glob(os.path.join(here, "*.py"))):
-        if os.path.basename(fname).startswith("test_"):
-            continue
-        try:
-            src = open(fname, encoding="utf-8").read()
-        except OSError:
-            continue
-        for p in pats:
-            keys |= set(_re.findall(p, src))
-    return keys | set(WRITTEN_NOT_READ)
+    return _scan(here, pats) | set(WRITTEN_NOT_READ)
 
 
 def control_ids(root=None):
@@ -627,20 +620,11 @@ def engine_keys(root=None):
     typo (`probes:` in an objective is a real key elsewhere, so it passes), and never
     refuses a key some part of this engine actually reads.
     """
-    import re as _re
     here = root or os.path.dirname(os.path.abspath(__file__))
-    keys = set()
+    from workspace import scan_source_keys as _scan
     pats = (r'\b[A-Za-z_][A-Za-z_0-9]*\.get\(\s*["\']([a-z_][a-z_0-9]*)["\']',
             r'\b[A-Za-z_][A-Za-z_0-9]*\[\s*["\']([a-z_][a-z_0-9]*)["\']\s*\]')
-    for fname in sorted(glob.glob(os.path.join(here, "*.py"))):
-        if os.path.basename(fname).startswith("test_"):
-            continue
-        try:
-            src = open(fname, encoding="utf-8").read()
-        except OSError:
-            continue
-        for p in pats:
-            keys |= set(_re.findall(p, src))
+    keys = _scan(here, pats)
     # Reached with a variable key, so no literal scan can find it. Named here rather
     # than in a comment, because a key this rule cannot see is a file it would refuse.
     return keys | {"task_self"} | set(WRITTEN_NOT_READ)

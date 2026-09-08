@@ -37,10 +37,20 @@ from baseline import (NOISY, SEPARATED, attribution, canary_rates, note, quiet_c
                       rates)
 
 
-def _benign(tmp, target, rows):
-    """Write a benign_<target>.json the way benign.py does."""
+def _benign(tmp, target, rows, meta=None):
+    """Write a benign_<target>.json the way benign.py does.
+
+    IT DID NOT. This wrote `{"rows": [...]}` with no `meta` at all, which no real
+    baseline has: `benign` stamps target, probes, when and the build. It stopped
+    mattering the day `baseline` started reading these through `workspace.read_artifact`,
+    which refuses a benign artifact with no meta — because `benign --summary` dies on
+    one, which is why that rule exists. A fixture that is not what it says it is buys
+    coverage of a file the engine never writes.
+    """
+    _meta = {"target": target, "probes": len(rows)}
+    _meta.update(meta or {})
     with open(os.path.join(tmp, f"benign_{target}.json"), "w", encoding="utf-8") as f:
-        json.dump({"rows": rows}, f)
+        json.dump({"meta": _meta, "rows": rows}, f)
 
 
 def _row(fired=(), output="", probe=True):
@@ -214,7 +224,10 @@ def main():
         _w = tempfile.mkdtemp()
         _when = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
         with open(os.path.join(_w, "benign_aged.json"), "w", encoding="utf-8") as _f:
-            _js7.dump({"meta": {"target": "aged", "when": _when + " 10:00:00"},
+            # `probes` too: a benign artifact without it is one `benign --summary`
+            # cannot use, and `read_artifact` refuses it for that reason.
+            _js7.dump({"meta": {"target": "aged", "probes": 1,
+                                "when": _when + " 10:00:00"},
                        "rows": [{"id": "p1", "fired": [], "refused": False,
                                  "probe": {"output": "hello"}}]}, _f)
         return note("aged", [], (), _w)
@@ -256,7 +269,7 @@ def main():
     def _stamped(engine):
         """A workspace whose baseline was written by `engine`, and what `judged_by` says."""
         _w = tempfile.mkdtemp()
-        _meta = {"target": "bb", "when": "2026-09-01 10:00:00"}
+        _meta = {"target": "bb", "probes": 1, "when": "2026-09-01 10:00:00"}
         if engine is not None:
             _meta["engine"] = engine
         with open(os.path.join(_w, "benign_bb.json"), "w", encoding="utf-8") as _f:

@@ -1926,6 +1926,72 @@ def main():
     check("...and two that do different things are not",
           not _duplicated(_collect(_diff5, "planted.py", {})),
           "two different bodies were grouped together")
+    # --- AND A RULE WRITTEN TWICE WITH ONE LINE DIFFERENT -----------------------------
+    #
+    # The scan above compares WHOLE function bodies, so a copy that differs anywhere is
+    # invisible to it. Both instances it just found were of that shape: `workspace` had
+    # one thirty-line package scan written out twice with a different regex tuple, and
+    # `baseline` opened the same benign artifact in five places. Neither was two identical
+    # functions.
+    #
+    # So the same question at the level of LINES: four or more consecutive statements,
+    # comments stripped and whitespace squeezed, appearing twice in one module. The
+    # character floor is what keeps `try:` / `continue` scaffolding out of it.
+    def _repeats(_src, _n=4, _floor=110):
+        """-> [(first line, second line, the run)] repeated inside this module."""
+        _norm = []
+        for _i, _l in enumerate(_src.splitlines()):
+            _s = re.sub(r"\s+", " ", _l.split("#", 1)[0].strip())
+            _norm.append((_s, _i + 1) if _s else None)
+        _runs = {}
+        for _i in range(len(_norm) - _n + 1):
+            _w = _norm[_i:_i + _n]
+            if any(_x is None for _x in _w):
+                continue
+            _k = "\n".join(_x[0] for _x in _w)
+            if len(_k) < _floor:
+                continue
+            _runs.setdefault(_k, []).append(_w[0][1])
+        return [(v, k) for k, v in _runs.items() if len(v) > 1]
+
+    _repeated = []
+    for _f6 in sorted(_g4.glob(os.path.join(HERE, "*.py"))):
+        _b6 = os.path.basename(_f6)
+        if _b6.startswith("test_") or _b6.startswith(_SEPARATE_BY_DESIGN):
+            continue
+        for _lines, _run in _repeats(open(_f6, encoding="utf-8").read()):
+            _repeated.append("%s lines %s" % (_b6, _lines))
+    check("no engine module writes the same four statements twice", not _repeated,
+          "; ".join(_repeated[:4]))
+    # PROVED ON A SOURCE WRITTEN TO REPEAT ITSELF, and on three that do not: a run under
+    # the character floor, a run of only three lines, and one where the second copy
+    # differs by a line.
+    _NL6 = chr(10)
+    _twin6 = _NL6.join([
+        "def a():",
+        "    handle = open(the_path_to_read, encoding=\"utf-8\")",
+        "    parsed = json.load(handle)",
+        "    rows = parsed.get(\"rows\") or []",
+        "    return [r for r in rows if r.get(\"probe\")]",
+        "",
+        "def b():",
+        "    handle = open(the_path_to_read, encoding=\"utf-8\")",
+        "    parsed = json.load(handle)",
+        "    rows = parsed.get(\"rows\") or []",
+        "    return [r for r in rows if r.get(\"probe\")]",
+    ])
+    check("the line scan sees a run repeated in one module",
+          bool(_repeats(_twin6)), "the planted repeat was not seen")
+    _short6 = _NL6.join(["a = 1", "b = 2", "c = 3", "d = 4",
+                        "", "a = 1", "b = 2", "c = 3", "d = 4"])
+    check("...and a short run is under the floor, not a shared rule",
+          not _repeats(_short6), str(_repeats(_short6))[:120])
+    _diff6 = _twin6.replace(
+        '    return [r for r in rows if r.get("probe")]',
+        '    return rows', 1)
+    check("...and a copy that differs by a line is not this scan's business",
+          not _repeats(_diff6), str(_repeats(_diff6))[:120])
+
     check("...over a real number of functions", len(_bodies) > 100, str(len(_bodies)))
 
     # --- ONE SENTENCE, ONE PLACE --------------------------------------------------------

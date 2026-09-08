@@ -278,6 +278,38 @@ SUSPECT_PATTERNS = (
 READ_PATTERNS = SUSPECT_PATTERNS + (r'c\.get\(\s*["\']([a-z_]+)["\']',)
 
 
+def scan_source_keys(here, patterns):
+    """Every string these patterns capture across this package's own modules.
+
+    THREE VOCABULARIES, ONE SCAN. `config_keys_read` and `config_key_suspects` here, and
+    `attack_keys_read` and `engine_keys` in `lint_arsenal`, each answer `what does this
+    engine read off a mapping` for a different corpus — a target config, an attack, an
+    objective — and each had its own copy of these eight lines. The patterns differ
+    because the corpora do; the glob, the suite exclusion, the read and the union do not.
+
+    Every one of those four decides whether a file is REFUSED for a key nothing reads, so
+    a copy that learns something the others do not is a run refused, or a typo passed, in
+    one corpus and not the next.
+
+    The suites are excluded because a key a SUITE reads is not a key the engine follows,
+    and a fixture naming one would make a real typo look known.
+    """
+    import glob as _glob
+    import io as _io
+    import re as _re
+    keys = set()
+    for fn in sorted(_glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        try:
+            src = _io.open(fn, encoding="utf-8").read()
+        except OSError:
+            continue
+        for p in patterns:
+            keys |= set(_re.findall(p, src))
+    return keys
+
+
 def _scan_config_keys(here, pats):
     """Every top-level config key this package reads, by two routes.
 
@@ -299,18 +331,7 @@ def _scan_config_keys(here, pats):
     import glob as _glob
     import importlib as _il
     import inspect as _inspect
-    import io as _io
-    import re as _re
-    keys = set()
-    for fn in _glob.glob(os.path.join(here, "*.py")):
-        if os.path.basename(fn).startswith("test_"):
-            continue
-        try:
-            src = _io.open(fn, encoding="utf-8").read()
-        except OSError:
-            continue
-        for p in pats:
-            keys |= set(_re.findall(p, src))
+    keys = scan_source_keys(here, pats)
     for fn in sorted(_glob.glob(os.path.join(here, "targets_*.py"))):
         try:
             mod = _il.import_module(os.path.basename(fn)[:-3])
@@ -995,19 +1016,16 @@ def fleet_names(directory=None):
     Used to tell a fleet member from an artifact of something that no longer exists. `out/`
     keeps whatever ever ran — a one-off target, a deliberately-unreachable end-to-end fixture —
     and counted, those inflate every published fleet size. This page said 32 systems for 30.
+
+    THE MAP'S KEYS. This kept its own loop, identical to `configs_by_name`'s down to the
+    import block, and differed in one thing: it swallowed a config that would not parse.
+    That is the wrong direction for this question. A config nobody can read drops its
+    target out of the fleet, `fleet_filter` then treats that target's artifacts as
+    belonging to something that no longer exists, and the pages quietly under-report —
+    where the four other readers of the same configs raise. One answer now, and it is the
+    loud one.
     """
-    import os as _os
-    import yaml as _yaml
-    from target import target_configs
-    directory = directory or _os.path.dirname(_os.path.abspath(__file__))
-    names = set()
-    for fp in target_configs(directory):
-        try:
-            c = _yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        except Exception:
-            continue
-        names.add(config_name(fp, c))
-    return names
+    return set(configs_by_name(directory))
 
 
 def fleet_filter(metas, known=None):

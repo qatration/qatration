@@ -171,11 +171,21 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
     # subtrahend there is no difference, and the honest answer is to say so rather than to
     # treat an absent control as a control that scored zero. Same mistake as a blank cell read
     # as clean, one module over.
-    ctrl_frames = [f for f in frames if f.get("family") == "control"]
-    for fr in ctrl_frames:
+    # ONE SKIP RULE FOR BOTH LOOPS. `skipped` is what the report shows as NOT MEASURED,
+    # and the control pass and the frame pass each had their own copy of the three lines
+    # that fill it. Two spellings of `this frame could not be built` are two chances for
+    # one pass to record a skip the other silently drops.
+    def _task_or_skip(fr):
+        """-> the frame's task text, or None with the reason recorded."""
         text, reason = frame_task(fr, tasks)
         if text is None:
             skipped.append({"frame": fr["id"], "reason": reason})
+        return text
+
+    ctrl_frames = [f for f in frames if f.get("family") == "control"]
+    for fr in ctrl_frames:
+        text = _task_or_skip(fr)
+        if text is None:
             continue
         control = try_frame(target, fr, text, success, ctx, trials,
                             frame_vars=tasks.get("frame_vars"))
@@ -184,9 +194,8 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
     for fr in frames:
         if fr.get("family") == "control":
             continue
-        text, reason = frame_task(fr, tasks)
+        text = _task_or_skip(fr)
         if text is None:
-            skipped.append({"frame": fr["id"], "reason": reason})
             continue
         r = try_frame(target, fr, text, success, ctx, trials,
                       frame_vars=tasks.get("frame_vars"))

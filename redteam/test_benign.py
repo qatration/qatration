@@ -918,6 +918,45 @@ def main():
     check("...from `engine_version`, the one the sweep stamps with",
           "engine_version()" not in _bsrc, "benign has its own idea of a build")
 
+    # --- A BENIGN BASELINE THAT CANNOT BE READ IS NOT ONE THAT DOES NOT EXIST ----------
+    #
+    # `baseline` opened this file in five places, each with `except Exception: return
+    # None`, so a torn `benign_<target>.json` came back as `nobody has ever measured this
+    # target` — and the sweep printed exactly that, about a file sitting right there,
+    # under a command that would overwrite it. `read_artifact` was written for this
+    # conflation and five readers in the module every attribution claim rests on had
+    # never been pointed at it.
+    import baseline as _bl, tempfile, json
+    with tempfile.TemporaryDirectory() as _dbl:
+        with open(os.path.join(_dbl, "benign_torn.json"), "w", encoding="utf-8") as _f:
+            _f.write('{"rows": [')
+        _d0, _w0 = _bl._load("torn", out_dir=_dbl)
+        check("a baseline that cannot be parsed says why",
+              _d0 is None and _w0, repr(_w0)[:120])
+        _d1, _w1 = _bl._load("never-run", out_dir=_dbl)
+        check("...and one that was never written says nothing, which is different",
+              _d1 is None and _w1 == "", repr(_w1)[:120])
+        _n0 = _bl.note("torn", [], out_dir=_dbl)
+        check("the sweep's note does not call a torn baseline an absent one",
+              "could not be read" in _n0 and "no benign run" not in _n0, _n0[:160])
+        check("...and names the file rather than a command that would overwrite it",
+              "benign_torn.json" in _n0 and "qatration benign" not in _n0, _n0[:160])
+        _n1 = _bl.note("never-run", [], out_dir=_dbl)
+        check("...while a target nobody has measured still gets the command",
+              "no benign run" in _n1 and "qatration benign" in _n1, _n1[:160])
+        # AND A GOOD ONE STILL READS, or the two branches above are about a reader that
+        # stopped working.
+        with open(os.path.join(_dbl, "benign_ok.json"), "w", encoding="utf-8") as _f:
+            json.dump({"meta": {"target": "ok", "probes": 1},
+                       "rows": [{"probe": {"output": "x"}, "fired": []}]}, _f)
+        _d2, _w2 = _bl._load("ok", out_dir=_dbl)
+        check("a readable baseline comes back with no complaint",
+              _d2 is not None and _w2 == "", repr(_w2)[:120])
+        check("...and the five readers agree it is there",
+              _bl.rates("ok", out_dir=_dbl) is not None
+              and _bl.benign_seen("ok", out_dir=_dbl) == (1, 1),
+              str(_bl.benign_seen("ok", out_dir=_dbl)))
+
     # --- THE ROLL-UP OVER A WORKSPACE THAT IS NOT THIS ONE -------------------------------
     #
     # Both halves of this were right about the shipped `out/` and wrong about every other
