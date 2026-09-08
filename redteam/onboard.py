@@ -143,6 +143,34 @@ def check(cfg_path, probe_text=PROBE):
     # is a check over the shipped configs, in `test_http_adapter`, where it can run without a
     # target at all.
     rep["unread_keys"] = unread_context_keys(cfg)
+    # AND THE MIRROR, which nothing asked before the run. `unread_context_keys` says a key
+    # nothing reads is a detector nobody armed; the other direction is a DETECTOR nothing
+    # arms, and on the config `qatration init` writes that is twenty-one of sixty-six.
+    #
+    # The engine already answers it -- `meta.inert` on every results file, a notification
+    # per detector in the SARIF, a bucket in `coverage` -- and every one of those arrives
+    # after the sweep has been paid for. This command is the pre-flight, and it is the one
+    # place the answer is still actionable: a key added here arms a detector before the
+    # run rather than explaining a silence after it.
+    #
+    # A NOTE, NEVER A PROBLEM. A bot with no tools has no `privileged_tools` and never
+    # will; the config `init` writes leaves `privileged_roles` and `allowed_domains` empty
+    # ON PURPOSE, with the reason written beside them. What is not acceptable is the
+    # silence going unmentioned, because a detector that cannot fire and one that fired
+    # nothing read the same on every page this tool produces.
+    from oracle import DETECTORS as _DETS_o, inert_for as _inert_o
+    # SPLIT BY WHOSE KEY IT IS. Two of the twenty-one on a fresh config —
+    # `planted_markers` and `expects_refusal` — are merged in by `judged_ctx` from the
+    # ATTACK, for that attack's judgement only. Telling an operator to add those to their
+    # config would be advice they cannot act on, in a note whose whole value is that it can
+    # be acted on.
+    from runner import ATTACK_CONTEXT_KEYS as _ATTACK_KEYS
+    _all_inert = _inert_o((cfg or {}).get("oracle_context") or {}, _DETS_o)
+    _theirs = {_d: [_k for _k in _w if _k not in _ATTACK_KEYS]
+               for _d, _w in _all_inert.items()}
+    rep["inert"] = {_d: _w for _d, _w in _theirs.items() if _w}
+    rep["inert_by_attack"] = sorted(_d for _d, _w in _theirs.items() if not _w)
+    rep["detectors"] = len(_DETS_o)
     # THE SAME QUESTION ONE LEVEL DOWN. `refusal_patterns` is a key the engine reads, so the
     # check above passes it; what it CONTAINS is a second vocabulary with its own spellings,
     # and a class name nothing names disarms the whole list under it in silence.
@@ -402,6 +430,31 @@ def render(ok, rep):
               % (len(rep["unread_keys"]), ", ".join(rep["unread_keys"])))
         print("            a misspelled key arms no detector and the run reports a clean "
               "bill for a check that never ran")
+
+    # WHAT THIS CONFIG CANNOT ANSWER, before the run rather than after it. Grouped by the
+    # key that would arm them, because the act that closes this is adding a key and one
+    # key usually arms several: a list of detector names is a list nobody can act on.
+    _inert = rep.get("inert") or {}
+    if _inert:
+        _by_key = {}
+        for _det, _why in sorted(_inert.items()):
+            for _k in _why:
+                _by_key.setdefault(_k, []).append(_det)
+        print("\n  note      %d of %d detector(s) cannot fire on this config, so their "
+              "silence in the\n            run will not be evidence of anything:"
+              % (len(_inert), rep.get("detectors") or 0))
+        for _k, _dets in sorted(_by_key.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print("            %-34s would arm %d: %s"
+                  % (_k, len(_dets), ", ".join(_dets[:4])
+                     + (" +%d" % (len(_dets) - 4) if len(_dets) > 4 else "")))
+        print("            A bot with no such surface will never have the key, and that "
+              "is a fine\n            answer -- but it is a different answer from `we looked and it was clean`.")
+    if rep.get("inert_by_attack"):
+        # NOT THE OPERATOR'S TO ADD, so said apart from the list above rather than mixed
+        # into it. These arm when an attack that declares them is sent.
+        print("\n  note      %d more wait on the attack rather than the config: %s"
+              % (len(rep["inert_by_attack"]),
+                 ", ".join(rep["inert_by_attack"])))
 
     for p in rep.get("problems") or []:
         print(f"\n  PROBLEM   {p}")

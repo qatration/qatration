@@ -430,6 +430,70 @@ def main():
               "def _requests_for" not in (_rrsrc or ""),
               "run_redteam.main defines its own request arithmetic")
 
+        # --- WHAT THIS CONFIG CANNOT ANSWER, BEFORE THE RUN PAYS FOR IT ----------------
+        #
+        # `unread_context_keys` asks which keys nothing reads, and says why: a key nothing
+        # reads is a detector nobody armed. Nothing asked the mirror — which DETECTOR
+        # nothing arms — and on the config `qatration init` writes that is nineteen of
+        # sixty-six. The engine answers it in `meta.inert`, in the SARIF notifications and
+        # in `coverage`, and every one of those arrives after the sweep has been paid for.
+        # This command is the pre-flight and the one place the answer is still actionable.
+        from oracle import DETECTORS as _DETS_t
+        _bare = write("bare", "choices.0.message.content")
+        _okb, _repb = onboard.check(_bare)
+        check("the pre-flight says which detectors this config cannot arm",
+              len(_repb.get("inert") or {}) >= 10,
+              str(len(_repb.get("inert") or {})))
+        check("...and how many detectors that is out of",
+              _repb.get("detectors") == len(_DETS_t), str(_repb.get("detectors")))
+        # AND THE KEY, not just the name: the act that closes this is adding a key, and a
+        # list of detector names is a list nobody can act on.
+        _whys = sorted({_k for _w in (_repb.get("inert") or {}).values() for _k in _w})
+        check("...and names the key each one is waiting for",
+              "forbidden_tokens" in _whys and "tool_names" in _whys, str(_whys[:8]))
+
+        # A KEY THE ATTACK SUPPLIES IS NOT ADVICE. `judged_ctx` merges `planted_markers`
+        # and `expects_refusal` from the ATTACK, for that attack's judgement only, so
+        # telling an operator to put them in their config is advice they cannot act on,
+        # in a note whose whole value is that it can be acted on.
+        from runner import ATTACK_CONTEXT_KEYS as _AK
+        check("...and never asks for a key the attack supplies",
+              not (set(_whys) & set(_AK)), str(sorted(set(_whys) & set(_AK))))
+        check("...but still says those detectors are silent, under their own heading",
+              "refusal_expected_but_absent" in (_repb.get("inert_by_attack") or []),
+              str(_repb.get("inert_by_attack")))
+        # DERIVED FROM `judged_ctx`, not agreed with it: the constant and the merge are
+        # two spellings of one rule, and the suite reads the function to settle which keys
+        # it actually writes.
+        import ast as _ast_k
+        _rsrc_k = io.open(os.path.join(HERE, "runner.py"), encoding="utf-8").read()
+        _jc = next((_n for _n in _ast_k.walk(_ast_k.parse(_rsrc_k))
+                    if isinstance(_n, _ast_k.FunctionDef)
+                    and _n.name == "judged_ctx"), None)
+        _written_k = {_t2.slice.value for _n in (_ast_k.walk(_jc) if _jc else ())
+                      if isinstance(_n, _ast_k.Assign)
+                      for _t2 in _n.targets
+                      if isinstance(_t2, _ast_k.Subscript)
+                      and isinstance(_t2.slice, _ast_k.Constant)
+                      and isinstance(_t2.slice.value, str)}
+        check("the keys an attack supplies are the ones `judged_ctx` merges",
+              _written_k == set(_AK),
+              "judged_ctx writes %s; the constant is %s"
+              % (sorted(_written_k), sorted(_AK)))
+
+        # AND A CONFIG THAT ARMS ONE STOPS BEING TOLD ABOUT IT, which is the half that
+        # makes the list mean something: a note printing the same nineteen names whatever
+        # the file says is a note nobody reads twice.
+        _armed = write("armed", "choices.0.message.content",
+                       extra='oracle_context:\n  forbidden_tokens: ["NEVER-SAY-THIS"]\n')
+        _oka, _repa = onboard.check(_armed)
+        check("a key the operator adds takes its detector off the list",
+              "forced_output" not in (_repa.get("inert") or {}),
+              str(sorted(_repa.get("inert") or {})[:6]))
+        check("...and the rest are still reported",
+              len(_repa.get("inert") or {}) >= 10,
+              str(len(_repa.get("inert") or {})))
+
         # --- an unreachable endpoint --------------------------------------------------------
         dead = os.path.join(work, "targets_dead.yaml")
         with open(dead, "w", encoding="utf-8") as f:

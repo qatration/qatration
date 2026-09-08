@@ -256,6 +256,14 @@ def undeliverable(attack, caps):
     return need if need and need not in (caps or set()) else None
 
 
+# CONTEXT KEYS AN ATTACK SUPPLIES, not the operator. `judged_ctx` below merges these two
+# into a target's context for one attack's judgement only, so a detector that is inert for
+# want of either is not a gap in anybody's config: it arms when an attack declaring it is
+# sent. Named here so a command telling an operator what to add cannot tell them to add a
+# key that is not theirs.
+ATTACK_CONTEXT_KEYS = ("planted_markers", "expects_refusal")
+
+
 def judged_ctx(attack, ctx):
     """The context this attack is judged against, plus anything the ATTACK itself planted.
 
