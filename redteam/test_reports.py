@@ -849,6 +849,58 @@ def main():
     check("...and neither unpaired attack is credited to the control",
           not [d for d in pr["diffs"] if d["attack"].endswith("-only")], str(pr["diffs"]))
 
+    # --- and the GRID under that comparison, which is read across ----------------------
+    #
+    # `pair_diffs` refuses to compare an attack two builds ran in different versions. The
+    # full matrix rendered forty lines below it put exactly those cells side by side with
+    # nothing to say so: 62 of the page's 600 rows carry more than one version, giving 231
+    # column pairs that are not comparable, and in 112 of them the two cells disagree about
+    # whether the target broke. An id is a name, not a question -- and a grid whose only
+    # purpose is reading ACROSS is the worst place to leave that unsaid.
+    from compare_targets import row_version_tags
+    _same = [({"target": "a"}, {"x": ("DEFENDED", [], None, "h1")}),
+             ({"target": "b"}, {"x": ("EXPLOITED", ["d"], None, "h1")})]
+    _mixed = [({"target": "a"}, {"x": ("DEFENDED", [], None, "h1")}),
+              ({"target": "b"}, {"x": ("EXPLOITED", ["d"], None, "h2")}),
+              ({"target": "c"}, {}),
+              ({"target": "d"}, {"x": ("DEFENDED", [], None, "h1")})]
+    _l, _n = row_version_tags(_same, "x")
+    check("a row whose cells were sent the same text is marked nowhere",
+          _l == ["", ""] and _n == "", "%s %r" % (_l, _n))
+    _l, _n = row_version_tags(_mixed, "x")
+    check("a row sent two versions letters every cell that has one",
+          _l == ["a", "b", "", "a"], str(_l))
+    check("...and the same text gets the same letter in both columns",
+          _l[0] == _l[3] and _l[0] != _l[1], str(_l))
+    check("...and a column the attack never reached is lettered nothing",
+          _l[2] == "", str(_l))
+    check("...and the id cell says how many versions there are",
+          "2 versions" in _n, _n)
+    # A ROW NOBODY RECORDED A VERSION FOR MUST NOT BE LETTERED, because a letter is a claim
+    # that two cells ARE the same question and an absent digest says nothing either way.
+    _old = [({"target": "a"}, {"x": ("DEFENDED", [])}),
+            ({"target": "b"}, {"x": ("EXPLOITED", ["d"])})]
+    _l, _n = row_version_tags(_old, "x")
+    check("a row with no version recorded is not lettered on a guess",
+          _l == ["", ""] and _n == "", "%s %r" % (_l, _n))
+
+    # AND THE PAGE HAS TO ASK. The loop that renders the grid lives inside `main`, which
+    # needs a workspace and forty artifacts to reach, so the rule was lifted out to be
+    # callable -- and a rule lifted out of a renderer that the renderer then stops calling
+    # is the whole fix undone with every check above still green.
+    import ast as _ast_m, io as _io_m, os as _os_m
+    _csrc = _io_m.open(_os_m.path.join(HERE, "compare_targets.py"), encoding="utf-8").read()
+    _main = [f for f in _ast_m.walk(_ast_m.parse(_csrc))
+             if isinstance(f, _ast_m.FunctionDef) and f.name == "main"]
+    _calls = [c for f in _main for c in _ast_m.walk(f)
+              if isinstance(c, _ast_m.Call) and isinstance(c.func, _ast_m.Name)
+              and c.func.id == "row_version_tags"]
+    check("the page asks which cells are comparable before rendering the grid",
+          len(_calls) == 1, str(len(_calls)))
+    check("...and the legend explains the letters it prints",
+          "only cells sharing a letter were sent the same text" in _csrc,
+          "the legend does not say what a letter means")
+
     # --- compare_recon: a third state must survive being rendered ---------------------
     row = cr._row({"statefulness": {"remembers": True, "reset_clears": False},
                    "tool_channel": "real", "tools_seen": ["A", "B"],

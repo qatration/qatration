@@ -7,7 +7,7 @@ import json, glob, os, sys, html, datetime, yaml
 import baseline
 import runs as _runs
 from pathlib import Path
-from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for,
+from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
                        # aliased: `measured` is already a local here, and it holds the
                        # timestamp of the run rather than a count of it
@@ -149,6 +149,49 @@ def _declared_pairs():
     return pairs
 
 
+def row_version_tags(matrix, aid):
+    """-> (a letter per column, a note for the id cell) for one row of the full matrix.
+
+    AN ID IS A NAME, NOT A QUESTION -- and the full matrix is the surface where that costs
+    most, because reading it ACROSS is the only thing it is for. `pair_diffs` below learned
+    the lesson and refuses to compare an attack two builds ran in different versions; the
+    grid put those cells side by side with nothing to say so.
+
+    Measured on the page this writes: 62 of its 600 rows carry more than one version of
+    their attack, giving 231 column pairs that are not comparable, and in 112 of those the
+    two cells disagree about whether the target broke. A reader's eye goes to exactly that
+    difference and concludes the second deployment defended what the first did not, when
+    the two were sent different text. The digest that answers this has travelled in slot 3
+    of every row since `pair_diffs` needed it; nothing here read it.
+
+    A LETTER, NOT AN EXCLUSION. Dropping the cells would delete a target's real verdict
+    from the only page that lists them all; the honest thing in a grid is to say which
+    cells are answers to the same question. Cells sharing a letter are comparable, and a
+    row whose cells were all sent the same text is lettered nowhere and looks exactly as it
+    did -- 538 of the 600.
+
+    HERE RATHER THAN IN THE LOOP THAT RENDERS IT, because the loop lives inside `main` and
+    needs a workspace, forty artifacts and an HTML string to reach. A rule no check can
+    call without building the page is a rule that gets checked by reading it.
+    """
+    seen, per_column = [], []
+    for _, by_id in matrix:
+        hit = by_id.get(aid)
+        h = hit[3] if hit is not None and len(hit) > 3 else None
+        if h and h not in seen:
+            seen.append(h)
+        per_column.append(h)
+    if len(seen) < 2:
+        # One version, or none recorded. Nothing to warn about, and a letter on every cell
+        # of every row would make the marker mean nothing on the rows that need it.
+        return [""] * len(per_column), ""
+    letters = [chr(ord("a") + seen.index(h)) if h else "" for h in per_column]
+    note = ('<span class="vers" title="the payload, the encoding, the declared'
+            ' detectors or the turns it sends differ between these runs">'
+            ' %d versions</span>' % len(seen))
+    return letters, note
+
+
 def pair_diffs(matrix):
     """For every declared or `-naive` pair, the attacks where the two disagree.
 
@@ -205,8 +248,8 @@ def pair_diffs(matrix):
             # "2 attack(s) stopped by the control". Every other module scores that pair at 1.
             if len(g) > 2 and (g[2] == "control" or (len(n) > 2 and n[2] == "control")):
                 continue
-            gb = g[0] in ("EXPLOITED", "PARTIAL")
-            nb = n[0] in ("EXPLOITED", "PARTIAL")
+            gb = g[0] in BROKE
+            nb = n[0] in BROKE
             if gb == nb:
                 continue
             diffs.append({"attack": aid, "guarded": g[0], "naive": n[0],
@@ -386,7 +429,7 @@ def main():
                           attack_digest(r["attack"]))
             if aid not in seen:
                 seen.add(aid); all_attacks_order.append(aid)
-            if r["headline"] in ("EXPLOITED", "PARTIAL") and r["attack"].get("category") != "control":
+            if r["headline"] in BROKE and r["attack"].get("category") != "control":
                 for det in r["fired"]:
                     s = SEVERITY.get(det)
                     if s and SEV_RANK[s] < SEV_RANK[worst]:
@@ -506,9 +549,11 @@ def main():
     # compact full matrix (scrollable), for the detail-minded
     mcols = "".join(f"<th>{esc(m['target'])}</th>" for m, _ in matrix)
     mrows = ""
+    # Which cells of a row are answers to the same question: `row_version_tags`.
     for aid in all_attacks_order:
         cells = ""
-        for _, by_id in matrix:
+        letters, note = row_version_tags(matrix, aid)
+        for (_, by_id), letter in zip(matrix, letters):
             hit = by_id.get(aid)
             if hit is None:
                 cells += '<td class="na">·</td>'
@@ -516,8 +561,13 @@ def main():
                 head = hit[0]
                 col = {"EXPLOITED": "var(--accent)", "PARTIAL": "#c2410c"}.get(head, "var(--ok)")
                 mark = {"EXPLOITED": "●", "PARTIAL": "◐", "DEFENDED": "○", "SKIP": "·", "ERROR": "!"}.get(head, "·")
-                cells += f'<td style="color:{col}" title="{head}">{mark}</td>'
-        mrows += f'<tr><td class="mono aid">{esc(aid)}</td>{cells}</tr>'
+                tag, ttl = "", head
+                if letter:
+                    tag = f'<sup class="vtag">{letter}</sup>'
+                    ttl = (f'{head} — version {letter} of this attack; only cells sharing '
+                           f'a letter were sent the same text')
+                cells += f'<td style="color:{col}" title="{esc(ttl)}">{mark}{tag}</td>'
+        mrows += f'<tr><td class="mono aid">{esc(aid)}{note}</td>{cells}</tr>'
 
     pairs = pair_diffs(matrix)
     pair_html = ""
@@ -526,8 +576,8 @@ def main():
         drifted = len(p_["diffs"]) - helped
         rws = "".join(
             f'<tr><td class="mono aid">{esc(d["attack"])}</td>'
-            f'<td style="color:{"var(--accent)" if d["naive"] in ("EXPLOITED", "PARTIAL") else "var(--dim)"}">{esc(d["naive"])}</td>'
-            f'<td style="color:{"var(--accent)" if d["guarded"] in ("EXPLOITED", "PARTIAL") else "var(--dim)"}">{esc(d["guarded"])}</td>'
+            f'<td style="color:{"var(--accent)" if d["naive"] in BROKE else "var(--dim)"}">{esc(d["naive"])}</td>'
+            f'<td style="color:{"var(--accent)" if d["guarded"] in BROKE else "var(--dim)"}">{esc(d["guarded"])}</td>'
             f'<td class="dim">{esc(d["fired"])}</td>'
             f'<td>{"the control held" if d["guard_helped"] else "drift, not the control"}</td></tr>'
             for d in p_["diffs"])
@@ -663,6 +713,8 @@ table.pair th{{font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;co
 table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-size:13px}}
 .na{{color:var(--line)}}
 .legend{{font-size:12.5px;color:var(--dim);margin-top:10px;font-family:ui-monospace,Consolas,monospace}}
+.vtag{{color:#c2410c;font-weight:700;font-size:9px}}
+.vers{{color:#c2410c;font-size:10px;font-weight:600}}
 </style></head><body><div class="wrap">
 <div class="head">
   <h1><span class="q">QA</span>tration — Fleet Overview</h1>
@@ -685,7 +737,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 <div class="matrix-wrap"><table class="matrix">
   <thead><tr><th>Attack</th>{mcols}</tr></thead><tbody>{mrows}</tbody>
 </table></div>
-<div class="legend">● exploited · ◐ partial · ○ defended · · not applicable</div>
+<div class="legend">● exploited · ◐ partial · ○ defended · · not applicable · <sup class="vtag">a</sup>/<sup class="vtag">b</sup> different versions of the same attack id — only cells sharing a letter were sent the same text</div>
 </div></body></html>"""
     out = OUT_DIR / "compare_targets.html"
     # The directory may not exist on a first run, and it is the caller's own workspace rather

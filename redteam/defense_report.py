@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from workspace import measured_when
-from workspace import (OUT as WORKSPACE_OUT, results_files, target_of,
+from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, target_of,
                        fleet_names, fleet_filter,
                        read_artifact, read_artifacts, say_unreadable, measured,
                        NOT_MEASURED)
@@ -777,8 +777,8 @@ def load_all(known=None):
         # in `workspace` now, shared with the fleet page.
         dates[tgt] = measured_when((d.get("meta") or {}), fp)[0][:10]
         for r in d["results"]:
-            if r["headline"] in ("EXPLOITED", "PARTIAL") and r["attack"].get("category") != "control":
-                best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in ("EXPLOITED", "PARTIAL") else 1)[0]
+            if r["headline"] in BROKE and r["attack"].get("category") != "control":
+                best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in BROKE else 1)[0]
                 findings.append((tgt, r["attack"], r["headline"], r["fired"],
                                  best.get("probe") or {}, r.get("rate", "")))
     return findings, targets, dates, _unreadable
@@ -987,7 +987,7 @@ def controls_fired():
             aid = str(r.get("attack", {}).get("id", ""))
             if not aid.startswith("ctrl-"):
                 continue
-            if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
+            if (r.get("headline") or "") not in BROKE:
                 continue
             probe = ((r.get("trials") or [{}])[0].get("probe") or {})
             out.append((stem, aid, r.get("rate") or "", r.get("fired") or [],
@@ -1044,7 +1044,7 @@ def attribution_index():
         except Exception:
             continue
         for r in rows:
-            if (r.get("headline") or "") not in ("EXPLOITED", "PARTIAL"):
+            if (r.get("headline") or "") not in BROKE:
                 continue
             verdict, detail = _bl.attribution(r.get("fired"), ambient)
             if verdict not in ("unattributable", "weakened"):
