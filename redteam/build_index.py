@@ -44,7 +44,7 @@ QUALIFIERS_NOT_CARRIED = {
 
 
 
-def load(known=None):
+def load(known=None, unreadable=None):
     """One row per canonical run, with its breach count RECOUNTED from the rows.
 
     `meta["broke"]` is written at sweep time and never re-derived, so it is a declared count
@@ -76,7 +76,11 @@ def load(known=None):
     # together, so one sweep produced a defense report and a fleet page carrying the finding,
     # beside a landing page saying nothing had been run.
     from workspace import fleet_filter
-    rows, unreadable, metas = [], [], []
+    # THE CALLER MAY ASK FOR THE FAILURES, the same way `configs_by_name` and
+    # `coverage.contexts` hand back their collisions: the page needs to name the files it
+    # could not read, and they are discovered here.
+    rows, metas = [], []
+    unreadable = unreadable if unreadable is not None else []
     for fp in results_files(OUT):
         d, why = read_artifact(fp)
         # An artifact that will not parse is not an empty artifact. Substituting `{}` here and
@@ -177,7 +181,10 @@ def main():
     # The fleet's own configs, passed IN rather than read inside `load()`. The first version
     # looked them up itself and every suite driving this builder over a temp fixture — where
     # the target names are invented — lost all of its rows to the orphan filter.
-    rows = load(known=set(provenance()))
+    _unreadable = []
+    rows = load(known=set(provenance()), unreadable=_unreadable)
+    from workspace import unreadable_html as _unread_html
+    unread_bar = _unread_html(_unreadable, "this index")
     if not rows:
         # THE DIRECTORY THIS RUN IS ACTUALLY USING, and the command that fills it. `out/` is
         # what a checkout has; a stranger who installed the package has `qatration-out/`, or
@@ -303,6 +310,7 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
 <div class="sub">{n_third} of them are somebody else's software and carry {n_third_find} of the
 findings; the other {n_practice} are bots written here to exercise the engine. A fleet count
 that does not separate those is counting its own homework{third_said}.</div>
+{unread_bar}
 <div class="tiles">
   <div class="tile"><div class="n">{n_targets}</div><div class="l">targets tested</div></div>
   <div class="tile"><div class="n">{n_third}</div><div class="l">third-party code</div></div>

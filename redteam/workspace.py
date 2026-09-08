@@ -1467,6 +1467,38 @@ def read_artifacts(paths):
     return good, bad
 
 
+def unreadable_html(bad, where=""):
+    """The same sentence `say_unreadable` prints, on the page somebody is handed.
+
+    `read_artifact` was written for this and states the rule in its own docstring:
+    skipping silently `removes a target from a report that then reads as complete —
+    the defect this whole project is named after, delivered to a customer in a
+    remediation page`. The fix stopped at a line on stderr. `index`, `compare` and
+    `fixes` each printed which file they could not read and then published a page that
+    did not mention it: a torn `results_<target>.json` beside two good ones gave `2
+    systems, 2 vulnerable` and a `Security Assessment` with no sign that a third had
+    been dropped. A console line is not the deliverable, and whoever opens the HTML is
+    usually not whoever ran the command.
+
+    Styled inline rather than through a class, because three pages with three
+    stylesheets would otherwise need three rules that can drift apart — which is the
+    same reason the sentence lives here and not in each of them.
+    """
+    if not bad:
+        return ""
+    import os as _os
+    rows = "".join(
+        '<li><code>%s</code> — %s</li>' % (esc(_os.path.basename(str(_p))), esc(_w))
+        for _p, _w in bad)
+    return ('<div style="margin:14px 0;padding:10px 12px;border-left:4px solid #9a6700;'
+            'background:rgba(154,103,0,.10);border-radius:4px">'
+            '<b>%d stored artifact(s) in this workspace could not be read.</b> '
+            'They are NOT counted%s, and nothing on this page describes whatever they '
+            'held — so every count here is over what was left.'
+            '<ul style="margin:6px 0 0 18px;padding:0">%s</ul></div>'
+            % (len(bad), (" in " + esc(where)) if where else "", rows))
+
+
 def say_unreadable(bad, where="", stream=None):
     """One sentence per unreadable artifact, in the one wording every caller should use.
 

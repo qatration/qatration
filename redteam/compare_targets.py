@@ -397,6 +397,11 @@ def main():
     for _name, _why in _unreadable:
         print(f"  ! {_name} could not be read ({_why}). It is not counted on this page, and "
               f"nothing here describes whatever it held.", file=sys.stderr)
+    # AND ON THE PAGE, for the reason the loop above exists at all: a file nobody could
+    # read still influenced this page by its absence, and the console is not where the
+    # reader of an HTML file is standing.
+    from workspace import unreadable_html as _unread_html
+    unread_bar = _unread_html(_unreadable, "this fleet overview")
     if not _all_metas:
         print("no results in %s — run a sweep first, then this page has something to "
               "compare:\n    qatration run --target-config <your-config>.yaml" % OUT_DIR)
@@ -723,6 +728,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 <p class="lead">{lead}</p>
 
 {staleness}
+{unread_bar}
 {undatedbar}
 {arsenalbar}
 {trialbar}

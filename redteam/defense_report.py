@@ -1281,6 +1281,12 @@ def main():
     # SAID, not counted. "3 files skipped" tells nobody which run to re-do, and a
     # remediation page silently short of a target reads as a clean bill for it.
     say_unreadable(unreadable, "this report")
+    # AND ON THE PAGE. The line above goes to stderr, and whoever opens this HTML is
+    # usually not whoever ran the command. A `Security Assessment` counting two systems
+    # beside a third whose file could not be read is the shape `read_artifact` was
+    # written to stop, published rather than printed.
+    from workspace import unreadable_html as _unread_html
+    unread_bar = _unread_html(unreadable, "this report")
 
     # NOTHING MEASURED IS NOT A CLEAN BILL, and this command was the one place left in the
     # package that answered otherwise. Run against an empty workspace it wrote
@@ -1982,6 +1988,7 @@ dozens of problems.{prov_line}</p>
 one exploitable finding. {coverage_line}</p>
 
 {staleness}
+{unread_bar}
 <div class="exec"><b>Executive summary.</b> This assessment found {n_roots} distinct
 weakness{'' if n_roots == 1 else 'es'}, seen {n_breaches} time{'' if n_breaches == 1 else 's'} in total.{_split}
 {n_mapped} of them reduce{'s' if n_mapped == 1 else ''} to {len(ordered)} root-cause fix{'' if len(ordered) == 1 else 'es'} below, prioritized by severity{

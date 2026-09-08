@@ -2028,6 +2028,71 @@ def main():
           not _dupes, "; ".join("%s: %r" % (v, k[:60]) for k, v in list(_dupes.items())[:2]))
     check("...over a real number of literals", len(_seen4) > 100, str(len(_seen4)))
 
+    # --- AN UNREADABLE ARTIFACT REACHED THE CONSOLE AND NOT THE PAGE -------------------
+    #
+    # `read_artifact` exists for this and its docstring names the stake: skipping
+    # silently `removes a target from a report that then reads as complete — the
+    # defect this whole project is named after, delivered to a customer in a remediation
+    # page`. The fix stopped at a line on stderr. Driven with one torn artifact beside two
+    # good ones, `index`, `compare` and `fixes` each printed which file they could not
+    # read and then published a page that did not contain its name: `2 systems, 2
+    # vulnerable`, and a Security Assessment with no sign a third had been dropped.
+    #
+    # Whoever opens the HTML is usually not whoever ran the command.
+    import tempfile as _tf9, json as _js9, subprocess as _sp9
+
+    def _one_result(target):
+        return {"meta": {"target": target, "attacks_n": 1, "broke": 1, "errors": 0,
+                         "trials": 1, "when": "2026-09-04 10:00"},
+                "results": [{"attack": {"id": "a1", "category": "exfil", "text": "a"},
+                             "headline": "EXPLOITED", "fired": ["canary_in_output"],
+                             "rate": "1/1",
+                             "trials": [{"verdict": "EXPLOITED",
+                                         "probe": {"output": "leaked"}}]}]}
+
+    def _pages(torn):
+        """-> {page: html} for a workspace with two good artifacts and maybe a torn one."""
+        _w9 = _tf9.mkdtemp()
+        for _t9 in ("pagebot-a", "pagebot-b"):
+            with open(os.path.join(_w9, "results_%s.json" % _t9), "w",
+                      encoding="utf-8") as _f9:
+                _js9.dump(_one_result(_t9), _f9)
+        if torn:
+            with open(os.path.join(_w9, "results_tornbot.json"), "w",
+                      encoding="utf-8") as _f9:
+                _f9.write('{"meta": {"target": "tornbot"}, "results": [')
+        _env9 = dict(os.environ, QATRATION_OUT=_w9, PYTHONIOENCODING="utf-8")
+        _out9 = {}
+        for _cmd9, _page9 in (("index", "index.html"),
+                              ("compare", "compare_targets.html"),
+                              ("fixes", "defense_report.html")):
+            _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd9],
+                     capture_output=True, text=True, timeout=300, env=_env9, cwd=_w9)
+            _p9 = os.path.join(_w9, _page9)
+            _out9[_page9] = (io.open(_p9, encoding="utf-8").read()
+                             if os.path.exists(_p9) else "")
+        return _out9
+
+    _torn_pages = _pages(True)
+    _missing9 = sorted(_n for _n, _h in _torn_pages.items()
+                       if "results_tornbot.json" not in _h)
+    check("every published page names the artifact it could not read",
+          not _missing9, "silent: %s" % _missing9)
+    _nosay9 = sorted(_n for _n, _h in _torn_pages.items()
+                     if "could not be read" not in _h)
+    check("...and says that is what happened to it", not _nosay9,
+          "silent: %s" % _nosay9)
+    check("...on all three of them, so this was asked of more than one",
+          len(_torn_pages) == 3 and all(_torn_pages.values()),
+          str(sorted(_n for _n, _h in _torn_pages.items() if not _h)))
+    # AND NOT OTHERWISE. A banner on every page whatever the workspace holds is a banner
+    # nobody reads by the second one.
+    _clean_pages = _pages(False)
+    _noisy9 = sorted(_n for _n, _h in _clean_pages.items()
+                     if "could not be read" in _h)
+    check("a workspace where everything parsed gets no such banner", not _noisy9,
+          "cried wolf: %s" % _noisy9)
+
     # --- "COULD NOT BE READ" AND "DID NOT RECORD IT" ARE DIFFERENT FACTS ----------------
     #
     # `coverage()` gives up for two reasons: an artifact that cannot be READ, and one that
