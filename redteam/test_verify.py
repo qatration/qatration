@@ -43,6 +43,21 @@ from verify import (claimed, verdict, check_row, age_note, measured, tally,
 from target import Probe
 
 
+import contextlib as _cl_v
+import tempfile as _tfm_v
+import shutil as _shm_v
+
+
+@_cl_v.contextmanager
+def _tempdir_v():
+    """A workspace that is not this repository's, removed afterwards."""
+    _d = _tfm_v.mkdtemp()
+    try:
+        yield _d
+    finally:
+        _shm_v.rmtree(_d, ignore_errors=True)
+
+
 def main():
     fails, checks = [], 0
 
@@ -300,7 +315,12 @@ def main():
     code, _ = note_verdict("nothing claimed")
     check("an artifact with no claims in it is not an error", code == 0)
     code, _ = note_verdict("no stored results")
-    check("...but no artifact at all is", code == 2)
+    # 3, NOT 2. The invocation was fine and the config was fine; this command read the
+    # workspace and found nothing in it, which is what the table gives 3 for -- `rejudge
+    # with no stored artifact to re-score` is the same sentence. 2 is `the config or the
+    # invocation was refused`, and neither was.
+    check("...but no artifact at all is the question going unanswered", code == 3,
+          str(code))
 
     # --- and the wrong build answering is not a stale claim -------------------------------
     #
@@ -315,11 +335,18 @@ def main():
     # branch that acts on it — which is where the other two wiring bugs of the day were.
     fake = {"adapter": "httpbot", "name": "wiring-fake", "provenance": "practice",
             "url": "http://127.0.0.1:9/chat", "oracle_context": {}}
-    # THE ARTIFACT PATH DOES NOT EXIST ON PURPOSE. With the build check in place the run stops
-    # before it is ever read, so a missing file is unreachable; delete the check and the note
-    # becomes "no stored results" instead, which fails the assertion below BY NAME rather than
-    # by a traceback from parsing a source file as JSON.
-    r = verify_target(fake, "no-such-file.json", 1, 0,
+    # THE ARTIFACT IS REAL AND EMPTY OF CLAIMS. This used to pass a path that does not
+    # exist, on the grounds that the build check stops the run before the file is read —
+    # true at the time, and it made the fixture depend on the ORDER of two guards rather
+    # than on the one under test. `verify_target` now asks whether there is anything to
+    # verify before anything else, so a missing file answers first and this would have
+    # been green for the wrong reason.
+    import tempfile as _tf_v, json as _json_v
+    _bw = _tf_v.mkdtemp()
+    _bp = os.path.join(_bw, "results_wiring-fake.json")
+    with io.open(_bp, "w", encoding="utf-8", newline="") as _bf:
+        _bf.write(_json_v.dumps({"meta": {"target": "wiring-fake"}, "results": []}))
+    r = verify_target(fake, _bp, 1, 0,
                       quiet=True, build_check=lambda _c: "GUARD='on' (config says 'weak')")
     check("a mismatched build stops the check before a single probe",
           r["note"].startswith("wrong build") and r["sent"] == 0, str(r))
@@ -360,6 +387,65 @@ def main():
              if isinstance(n, ast.Call)
              and (getattr(n.func, "id", None) or getattr(n.func, "attr", None)) in ("open", "write")]
     check("...and the check can see a write when there is one", len(found) == 2, str(found))
+
+    # --- A NOTE THAT STOPS MID-WORD READS AS A BUG IN THE TOOL -----------------------
+    #
+    # `NOT VERIFIED - not loaded: targets_dvla needs the DVLA practice app, which is not
+    # vendored in thi` is what a fixed slice produces. The same lesson as `format_map`'s
+    # column widths one module over: a truncated map is a misread map.
+    from verify import _clipped as _clip_v
+    _long_v = ("targets_dvla needs the DVLA practice app, which is not vendored in this "
+               "repository")
+    check("a note too long for its column is cut at a word",
+          not _clip_v(_long_v, 70).endswith("thi\u2026")
+          and _clip_v(_long_v, 70).endswith("\u2026"), _clip_v(_long_v, 70))
+    check("...and is not longer than it was asked to be",
+          len(_clip_v(_long_v, 70)) <= 71, str(len(_clip_v(_long_v, 70))))
+    check("...while a note that fits is left alone",
+          _clip_v("short enough", 70) == "short enough", _clip_v("short enough", 70))
+    check("...and a note with newlines in it becomes one line",
+          _clip_v("two" + chr(10) + "lines", 70) == "two lines",
+          repr(_clip_v("two" + chr(10) + "lines", 70)))
+
+    # --- WHOSE TARGET IS THIS COMMAND ABOUT ------------------------------------------
+    #
+    # `--target-config` defaulted to `targets_dvla.yaml`, a practice config inside this
+    # package. So `qatration verify`, typed with no arguments, verified somebody else's
+    # demo bot and answered `NOT VERIFIED - not loaded: targets_dvla needs the DVLA
+    # practice app, which is not vendored` — about a target the reader never named, in
+    # a workspace that may hold none of their own. Every other command that sends traffic
+    # asks for the config, and `benign` refuses in as many words.
+    import subprocess as _sp_v
+    with _tempdir_v() as _wv:
+        _env_v = dict(os.environ, QATRATION_OUT=_wv, PYTHONIOENCODING="utf-8")
+        _bare = _sp_v.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), "verify"],
+            capture_output=True, text=True, timeout=180, cwd=_wv, env=_env_v)
+        _said_v = _bare.stdout + _bare.stderr
+        check("verify with no target named refuses instead of choosing one",
+              "--target-config is required" in _said_v, _said_v[-200:])
+        check("...and names the form that needs no config at all",
+              "--all" in _said_v, _said_v[-200:])
+        # A BARE FLAG NAME IS NOT A DOOR. The reader who never named a config does not
+        # know whether `--all` means every target in the package or every target they
+        # have run, so the refusal has to say which.
+        check("...and says what that form covers, not just its spelling",
+              "every target" in _said_v and "workspace" in _said_v, _said_v[-200:])
+        check("...and does not name a practice bot the reader never asked about",
+              "dvla" not in _said_v.lower(), _said_v[-200:])
+        check("...with the code for an invocation that was refused",
+              _bare.returncode == 2, "exit %d" % _bare.returncode)
+        # AND `--all` OVER AN EMPTY WORKSPACE IS NOT A CLEAN BILL. It printed `0 of 0
+        # targets reachable` and then `every claim on every reachable target still
+        # reproduces`, and returned 0.
+        _all = _sp_v.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), "verify", "--all"],
+            capture_output=True, text=True, timeout=180, cwd=_wv, env=_env_v)
+        _all_said = _all.stdout + _all.stderr
+        check("verify --all over an empty workspace measures nothing and says so",
+              _all.returncode == 3, "exit %d: %s" % (_all.returncode, _all_said[-160:]))
+        check("...and does not report that every claim still reproduces",
+              "still reproduces" not in _all_said, _all_said[-200:])
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:

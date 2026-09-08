@@ -245,11 +245,30 @@ def note_verdict(note):
                    "This checks published FINDINGS; whether the target got worse is a sweep's "
                    "question.")
     if note == "no stored results":
-        return 2, "no stored results - there is no claim to verify. Run a sweep first."
+        # 3, NOT 2. The invocation was fine and the config was fine; this command read
+        # the workspace and found nothing in it, which is what the table gives 3 for --
+        # "rejudge with no stored artifact to re-score" is the same sentence. 2 is
+        # "the config or the invocation was refused", and neither was.
+        return 3, "no stored results - there is no claim to verify. Run a sweep first."
     if note.startswith("unreachable"):
         return 3, ("NOTHING MEASURED - every claimed row errored or came back empty. "
                    "The artifact is untouched and unverified.")
     return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
+
+
+def _clipped(text, width):
+    """A note cut at a word, with a mark, rather than in the middle of one.
+
+    `which is not vendored in thi` is what a fixed slice produces, and a sentence that
+    stops mid-word reads as a bug in the tool rather than as a message about the target.
+    The same lesson as `format_map`'s column widths one module over: a truncated map is a
+    misread map.
+    """
+    text = " ".join(str(text or "").split())
+    if len(text) <= width:
+        return text
+    cut = text[:width].rsplit(" ", 1)[0] or text[:width]
+    return cut.rstrip(" ,.;:") + "\u2026"
 
 
 def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
@@ -266,19 +285,21 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
 
     out = {"target": tcfg.get("name") or "?", "claims": 0, "holds": 0, "unclear": 0,
            "stale": 0, "stale_ids": [], "note": "", "sent": 0}
+    # IS THERE A CLAIM TO VERIFY, before anything is built. This sat below the loader, so
+    # a workspace with no artifact for this target still constructed one — and where
+    # the adapter could not be imported the answer came back as `not loaded`, which is a
+    # true sentence about the wrong question. Building a target is not inert either: the
+    # HTTP adapter expands `${VAR}` in its headers in the constructor and the practice
+    # adapters start processes there, which `run_redteam` already moved its own gate above
+    # for exactly this reason.
+    if not os.path.exists(path):
+        out["note"] = "no stored results"
+        return out
     try:
         _auth_gate(tcfg, "verify")
-        target = load_target(tcfg)
     except SystemExit as e:
-        out["note"] = "not loaded: %s" % str(e).splitlines()[0][:70]
+        out["note"] = "not loaded: %s" % _clipped(str(e).splitlines()[0], 70)
         return out
-    except Exception as e:
-        out["note"] = "not loaded: %s: %s" % (type(e).__name__, str(e)[:50])
-        return out
-    if tcfg.get("name"):
-        target.name = safe_target_name(tcfg["name"], "target config")
-    out["target"] = target.name
-    ctx = tcfg.get("oracle_context", {})
 
     # THE WRONG BUILD ANSWERING IS NOT A STALE CLAIM, and the fleet audit was about to publish
     # five of them. Six configs point at one guardedrag port and differ only by an environment
@@ -294,12 +315,30 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         from run_redteam import _build_mismatch as build_check
     wrong = build_check(tcfg)
     if wrong:
-        out["note"] = "wrong build: %s" % wrong[:70]
+        out["note"] = "wrong build: %s" % _clipped(wrong, 70)
         return out
 
-    if not os.path.exists(path):
-        out["note"] = "no stored results"
+    # AND ONLY NOW IS A TARGET BUILT. This sat above the build check, so a run refused for
+    # answering from the wrong build had already constructed the thing it refused to talk
+    # to — and building is not inert: the HTTP adapter expands `${VAR}` in its headers in
+    # the constructor, and the practice adapters start processes there. The same ordering
+    # was wrong twice in `run_redteam` and once in `benign`, each time for the same reason:
+    # a gate placed after the thing it guards is a record of a decision rather than a
+    # control. Authorisation stays first, because that is the one that must precede
+    # everything.
+    try:
+        target = load_target(tcfg)
+    except SystemExit as e:
+        out["note"] = "not loaded: %s" % _clipped(str(e).splitlines()[0], 70)
         return out
+    except Exception as e:
+        out["note"] = "not loaded: %s: %s" % (type(e).__name__, _clipped(str(e), 50))
+        return out
+    if tcfg.get("name"):
+        target.name = safe_target_name(tcfg["name"], "target config")
+    out["target"] = target.name
+    ctx = tcfg.get("oracle_context", {})
+
     with io.open(path, encoding="utf-8") as f:
         stored = json.load(f)
     rows = claimed(stored.get("results") or [])
@@ -375,6 +414,17 @@ def audit(trials, confirm_trials):
             jobs.append((cfgs[nm], fp))
     print("verify --all -> %d artifact(s) with a config, trials=%d (+%d to confirm)\n"
           % (len(jobs), trials, confirm_trials), flush=True)
+    if not jobs:
+        # NOTHING TO VERIFY IS NOT EVERY CLAIM HOLDING. Over an empty workspace this
+        # printed `0 of 0 targets reachable, 0 claims re-sent` and then `every claim on
+        # every reachable target still reproduces`, and returned 0 — a clean bill
+        # over nothing, which is the sentence this whole repository is named after. Every
+        # other read-only command answers 3 in that state.
+        from workspace import no_results_note as _no_results
+        print(_no_results(OUT_DIR))
+        print("Nothing was re-sent, so nothing here says whether a stored claim still "
+              "holds.")
+        return 3
 
     rows, total_stale = [], []
     for tcfg, fp in jobs:
@@ -407,7 +457,13 @@ def audit(trials, confirm_trials):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target-config", default=os.path.join(HERE, "targets_dvla.yaml"))
+    # NO DEFAULT TARGET. This defaulted to `targets_dvla.yaml`, a practice config inside
+    # this package, so `qatration verify` typed with no arguments verified somebody else's
+    # demo bot — and answered `NOT VERIFIED - not loaded: targets_dvla needs the DVLA
+    # practice app, which is not vendored`, about a target the reader never named, in a
+    # workspace that may hold none of their own. Every other command that sends traffic
+    # asks for the config; `benign` refuses in as many words. This one chose for them.
+    ap.add_argument("--target-config", default=None)
     ap.add_argument("--all", action="store_true",
                     help="every target that has a stored artifact, in one table. A target that "
                          "cannot be reached is reported as unreachable, never as stale")
@@ -422,6 +478,12 @@ def main():
 
     if args.all:
         return audit(args.trials, args.confirm_trials)
+    if not args.target_config:
+        # NAMED, AND WITH THE OTHER DOOR NAMED TOO. `--all` is the form that needs no
+        # config at all: it verifies what is in the workspace, which is the only subject
+        # this command can pick on its own.
+        ap.error("--target-config is required, or --all to verify every target that has a "
+                 "stored artifact in this workspace")
 
     from workspace import load_yaml_or_refuse as _load_yaml
     tcfg = _load_yaml(args.target_config, "target config", "verify") or {}
