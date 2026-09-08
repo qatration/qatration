@@ -464,9 +464,25 @@ def main():
     # because implementing it meant writing the environment from inside a module. If either
     # comes back there are two answers to one question, and the next fix lands on one of them.
     _src = io.open(os.path.join(HERE, "rejudge.py"), encoding="utf-8").read()
+    # THE RULE IS `NO SECOND MECHANISM`, and it was written as `the file contains the
+    # string def contexts():`. That is a spelling, not the rule: when the map lifted to
+    # `workspace.oracle_contexts` and this module bound the name by importing it, the
+    # check failed on a change that made the thing it guards MORE true. Asked of the
+    # binding instead -- however `contexts` gets its value here, it must not be a
+    # function of this module's own that takes a config source.
+    _ast_r = __import__("ast")
+    _own_r = [_n for _n in _ast_r.walk(_ast_r.parse(_src))
+              if isinstance(_n, _ast_r.FunctionDef) and _n.name == "contexts"]
+    _args_r = sorted(_a.arg for _f in _own_r for _a in _f.args.args)
     check("rejudge resolves configs through the shared enumeration only",
-          "def contexts():" in _src and "contexts(extra" not in _src,
-          "rejudge grew its own config resolution again")
+          set(_args_r) <= {"collisions"} and "contexts(extra" not in _src,
+          "rejudge grew its own config resolution again: %s" % _args_r)
+    check("...and `contexts` is bound here at all, however it gets its value",
+          bool(_own_r) or any(
+              isinstance(_n, _ast_r.ImportFrom)
+              and any((_a.asname or _a.name) == "contexts" for _a in _n.names)
+              for _n in _ast_r.walk(_ast_r.parse(_src))),
+          "nothing in rejudge answers what config a target name means")
     check("...and does not write the environment to get there",
           'os.environ["QATRATION_CONFIGS"]' not in _src,
           "a module editing the environment moves the ground under whatever runs next")

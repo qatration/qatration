@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import workspace
 from workspace import (OUT as WORKSPACE_OUT, read_artifact,
-                       refuse_to_overwrite_evidence, config_name)
+                       refuse_to_overwrite_evidence)
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
 try:
@@ -301,13 +301,25 @@ def fill(text, ctx):
 
 
 def _ctx_for(name):
-    for fp in sorted(os.listdir(HERE)):
-        if not (fp.startswith("targets_") and fp.endswith(".yaml")):
-            continue
-        cfg = yaml.safe_load(open(os.path.join(HERE, fp), encoding="utf-8")) or {}
-        if config_name(fp, cfg) == name:
-            return cfg, cfg.get("oracle_context", {})
-    raise SystemExit(f"no config named {name!r}")
+    """-> (config, oracle_context) for a target named on the command line.
+
+    THROUGH THE ONE MAP, which this listed the package directory instead of asking. A
+    config outside the package was invisible here and visible to `rejudge`, `coverage` and
+    the defense report, so `benign --target acmebot` answered `no config named 'acmebot'`
+    about a config the rest of the tool was reading. `--target-config` was added as the way
+    round it; a second door is not a fix when the first one lies.
+
+    It also read the throwaway configs the end-to-end suites write here, for the same
+    reason: the exclusion lives in the enumeration it was not using.
+    """
+    from workspace import configs_by_name as _by_name
+    hit = _by_name(HERE).get(name)
+    if not hit:
+        raise SystemExit(
+            "no config named %r. This package's configs and every path in "
+            "QATRATION_CONFIGS were read; `qatration init` prints the line "
+            "that sets it." % name)
+    return hit[1], hit[1].get("oracle_context") or {}
 
 
 def fires_on(probe, ctx):

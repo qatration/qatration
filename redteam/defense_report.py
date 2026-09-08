@@ -7,7 +7,6 @@ Reads every out/results_<target>.json (skips per-model copies like
 results_opsbot_qwen.json).
 """
 import json, glob, os, sys, html, datetime
-from target import target_configs
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -874,14 +873,16 @@ def _unobservable():
 
 
 def _contexts():
-    import yaml as _y
-    here = os.path.dirname(os.path.abspath(__file__))
-    out = {}
-    for fp in target_configs(here):
-        c = _y.safe_load(open(fp, encoding="utf-8")) or {}
-        out.setdefault(c.get("name") or os.path.basename(fp)[8:-5],
-                       c.get("oracle_context", {}))
-    return out
+    """target -> oracle_context, named by the one rule rather than by a slice.
+
+    `basename(fp)[8:-5]` assumes the filename is `targets_X.yaml`. A config named through
+    `QATRATION_CONFIGS` is used as spelled, so `/somewhere/acme.yaml` was called
+    `acme.yaml` by every other module here and `''` by this one -- and `_unobservable`
+    below, the section whose whole point is that `we could not see` is not `we checked and
+    it was clean`, then scored that target's probes with no context to look for.
+    """
+    from workspace import oracle_contexts as _oc
+    return _oc(os.path.dirname(os.path.abspath(__file__)))
 
 
 CTXS = _contexts()

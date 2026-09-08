@@ -42,13 +42,15 @@ BLAND = ("Thanks for getting in touch. I have noted your question and someone fr
 
 
 def contexts():
-    """Every oracle_context in the fleet, so the claim is not proved on one lucky config."""
-    out = {}
-    for fp in target_configs(HERE):
-        cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        name = cfg.get("name") or os.path.basename(fp)[len("targets_"):-len(".yaml")]
-        out[name] = cfg.get("oracle_context", {})
-    return out
+    """Every oracle_context in the fleet, so the claim is not proved on one config.
+
+    The sixth copy of a map that is one function. This one derived the fallback name
+    itself, in a suite whose whole subject is the module where that mattered: `benign`
+    could not see a config outside this package at all, and this loop names one
+    differently from the code it is checking.
+    """
+    from workspace import oracle_contexts as _oc
+    return _oc(HERE)
 
 
 def main():
@@ -891,6 +893,50 @@ def main():
     # AND IT IS THE SAME SOURCE THE SWEEP USES, not a second way of asking.
     check("...from `engine_version`, the one the sweep stamps with",
           "engine_version()" not in _bsrc, "benign has its own idea of a build")
+
+    # --- A CONFIG THAT DOES NOT LIVE IN THIS PACKAGE ------------------------------------
+    #
+    # `_ctx_for` listed this directory and matched filenames itself, so `--target NAME`
+    # here could only ever mean a config this repository ships. `rejudge`, `coverage` and
+    # the defense report all read `QATRATION_CONFIGS`; this one answered `no config named
+    # 'acmebot'` about a file the rest of the tool was reading, from the command whose
+    # whole output is the false-positive rate every attribution claim is measured against.
+    #
+    # DRIVEN IN A SUBPROCESS, because the defect is in what a DIFFERENT process's
+    # environment makes visible, and a suite that sets the variable in its own process
+    # would be testing the import it already did. `--target-config` was the answer given
+    # to this at the time; a second door is not a fix when the first one denies the file
+    # exists.
+    import subprocess as _sp9, tempfile as _tf9, os as _os9
+    _d9 = _tf9.mkdtemp()
+    try:
+        _cfg9 = _os9.path.join(_d9, "targets_acmebot.yaml")
+        with open(_cfg9, "w", encoding="utf-8") as _f9:
+            _f9.write("name: acmebot\noracle_context:\n  canaries: [ACME-CANARY-77213]\n")
+        _env9 = dict(_os9.environ, QATRATION_CONFIGS=_cfg9,
+                     PYTHONDONTWRITEBYTECODE="1")
+        _r9 = _sp9.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import benign; print(benign._ctx_for('acmebot')[1])" % HERE],
+            cwd=HERE, env=_env9, capture_output=True, text=True, timeout=90)
+        check("`--target NAME` finds a config outside this package",
+              "ACME-CANARY-77213" in (_r9.stdout + _r9.stderr),
+              (_r9.stdout + _r9.stderr).strip()[:160])
+        # AND THE CONTROL, so this is not passing because the name resolves some other
+        # way: with the variable unset the same call must still refuse.
+        _env9.pop("QATRATION_CONFIGS")
+        _r9b = _sp9.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import benign; print(benign._ctx_for('acmebot')[1])" % HERE],
+            cwd=HERE, env=_env9, capture_output=True, text=True, timeout=90)
+        check("...and without it there is no such target, as there is not",
+              _r9b.returncode != 0 and "acmebot" in (_r9b.stdout + _r9b.stderr),
+              (_r9b.stdout + _r9b.stderr).strip()[:160])
+        check("...and the refusal names the variable that would have found it",
+              "QATRATION_CONFIGS" in (_r9b.stdout + _r9b.stderr),
+              (_r9b.stdout + _r9b.stderr).strip()[:160])
+    finally:
+        __import__("shutil").rmtree(_d9, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

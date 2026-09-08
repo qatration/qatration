@@ -921,6 +921,64 @@ def config_name(path, cfg=None):
     return (cfg.get("name") or stem) if isinstance(cfg, dict) else stem
 
 
+def configs_by_name(directory=None, collisions=None):
+    """name -> (path, parsed config) for every real target config. First one wins.
+
+    FOUR ANSWERS TO ONE QUESTION and they disagreed in three directions, which is the
+    arrangement `config_name` above was written to end and did not finish ending: it made
+    the NAME one rule and left the ENUMERATION and the COLLISION to each caller.
+
+    `benign._ctx_for` listed this directory itself, so it could not see a config outside
+    the package -- and `QATRATION_CONFIGS` exists because looking only here meant that for
+    anybody who is not this repository, rejudge re-scored nothing. `rejudge`, `coverage` and
+    the defense report were all fixed; the fourth was missed because it used `os.listdir`
+    and a `startswith` rather than a glob, and the scan that guards this looked for globs.
+    An operator with a config in their own directory got `no config named 'acmebot'` from
+    `benign --target`, from the one command whose whole job is the false-positive rate that
+    every attribution claim on that target is measured against.
+
+    `defense_report` derived the fallback name a second time as `basename(fp)[8:-5]`, which
+    assumes the filename it was given. A spelled-out path is used as spelled out -- so
+    `QATRATION_CONFIGS=/somewhere/acme.yaml` is called `acme.yaml` by every other module
+    here and `''` by that one, and the section of the report that exists to separate `we
+    looked and it was clean` from `we could not see` scored it with no context at all.
+
+    COLLISIONS ARE RETURNED, NOT DECIDED QUIETLY. Two configs may legitimately describe one
+    bot scoped to different questions. What is not legitimate is a `setdefault` choosing
+    between them in silence: the loser's stored probes are then scored against the winner's
+    canaries. `coverage` said so and `rejudge` did not, and `rejudge --write` is the command
+    that rewrites the stored verdicts and the published pages.
+
+    A parse failure is left to raise exactly as it did in all four: what an unreadable
+    config should do is a different question from who gets to enumerate.
+    """
+    import os as _os
+    import yaml as _yaml
+    from target import target_configs
+    directory = directory or _os.path.dirname(_os.path.abspath(__file__))
+    out = {}
+    for fp in target_configs(directory):
+        cfg = _yaml.safe_load(open(fp, encoding="utf-8")) or {}
+        name = config_name(fp, cfg)
+        if name in out:
+            if collisions is not None:
+                collisions.append((name, _os.path.basename(fp)))
+            continue
+        out[name] = (fp, cfg)
+    return out
+
+
+def oracle_contexts(directory=None, collisions=None):
+    """name -> `oracle_context`, through the one map above.
+
+    `or {}` rather than a default, because `oracle_context:` with nothing under it parses
+    to None and the detectors are handed a mapping. Three callers wrote the default form,
+    and one config written that way would have reached `blind_spots` as None.
+    """
+    return {n: (c.get("oracle_context") or {})
+            for n, (_fp, c) in configs_by_name(directory, collisions).items()}
+
+
 def fleet_names(directory=None):
     """The target names the configs in `directory` define.
 

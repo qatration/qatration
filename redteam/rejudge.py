@@ -31,8 +31,7 @@ try:
 except Exception:
     pass
 
-import yaml
-from target import Probe, target_configs
+from target import Probe
 from oracle import judge
 from refusal import classify, summarize
 from runner import headline
@@ -43,26 +42,25 @@ from baseline import note as _baseline_note
 from baseline import two_factor_note as _two_factor_note
 
 
-def contexts():
-    """target name -> oracle_context, read from the configs rather than the results.
-
-    The results file does not store ctx (canaries, forbidden tokens, markers), and it is
-    the ctx that decides what counts as a leak — so re-scoring has to go back to the config
-    the run was pointed at.
-
-    Configs outside this repository arrive through `target_configs`, which reads
-    `QATRATION_CONFIGS`. This function briefly had its own `extra` parameter and a flag beside
-    it; then the same defect appeared in `coverage`, the fix moved to the shared enumeration,
-    and two answers to one question is the arrangement that drifts. `--target-config` still
-    exists here and sets that variable.
-    """
-    out = {}
-    for fp in target_configs(HERE):
-        cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        from workspace import config_name as _config_name
-        name = _config_name(fp, cfg)
-        out.setdefault(name, cfg.get("oracle_context", {}))
-    return out
+# target name -> oracle_context, read from the configs rather than the results. The results
+# file does not store ctx (canaries, forbidden tokens, markers), and it is the ctx that
+# decides what counts as a leak, so re-scoring has to go back to the config the run was
+# pointed at.
+#
+# Configs outside this repository arrive through `target_configs`, which reads
+# `QATRATION_CONFIGS`. This briefly had its own `extra` parameter and a flag beside it; then
+# the same defect appeared in `coverage`, the fix moved to the shared enumeration, and two
+# answers to one question is the arrangement that drifts. `--target-config` still exists
+# here and sets that variable.
+#
+# THEN THE MAP ITSELF MOVED, for the same reason one more time: this one used `setdefault`
+# and said nothing, so when two configs name one target the loser's stored rows were
+# re-scored against the winner's canaries -- and this is the command that WRITES that back.
+# `coverage` collected the collisions and printed them; the two were the same question and
+# only one of them answered it. What was left here was a two-line wrapper identical to the
+# one in `coverage`, which is a second implementation with a shorter body: the import binds
+# the name instead.
+from workspace import oracle_contexts as contexts
 
 
 def _prompt_of(attack, stored):
@@ -222,7 +220,17 @@ def main():
     # ground". Correct -- a module that edits the environment changes the ground under whatever
     # runs next in the same process. The variable is the mechanism; `qatration init` prints the
     # line that sets it, and the message below names it.
-    ctxs = contexts()
+    _collisions = []
+    ctxs = contexts(collisions=_collisions)
+    # SAID BEFORE ANYTHING IS REWRITTEN, rather than found afterwards in a diff. `coverage`
+    # printed this and this did not, and of the two commands it is this one that overwrites
+    # the stored verdict and the page built from it.
+    if _collisions:
+        print("TWO CONFIGS, ONE TARGET NAME - the first was used, the others were not:")
+        for _cn, _cf in _collisions:
+            print(f"    {_cn:<24}{_cf}")
+        print("    (their stored rows are re-scored against the first "
+              "config's oracle_context)")
     # HOW MANY ARTIFACTS WERE READ, which is a different number from how many CHANGED and the
     # difference is the whole exit code. `files_touched` counts files this command rewrote, so
     # "would change 0 attack row(s) across 0 file(s)" was printed both when every stored score

@@ -1117,6 +1117,203 @@ def main():
     finally:
         __import__("shutil").rmtree(_d8, ignore_errors=True)
 
+    # --- AND THE ENUMERATION THAT WAS NOT A GLOB ----------------------------------------
+    #
+    # The scan above asks for a glob of the config pattern. `benign._ctx_for` listed the
+    # directory and tested each filename with `startswith`, so it was the fourth answer to
+    # `what config does this name mean` and the only one invisible to the gate that exists
+    # to keep there being one. It could not see a config outside this package, while
+    # `rejudge`, `coverage` and the defense report all could: an operator running `benign
+    # --target acmebot` was told no such config exists, by the one command whose output
+    # every attribution claim on that target is measured against.
+    #
+    # A GATE READS A SET. This one read `lines containing a glob and the pattern`, and the
+    # question it was asked is which code decides what a config file IS. So the set is
+    # widened by the shape that got past it -- a filename tested against the prefix -- and
+    # not by `lists a directory`, which every suite here legitimately does.
+    _pre9 = "targets" + "_"
+    _yml9 = "." + "yaml"
+
+    def _filters(line):
+        """Is this line deciding whether a filename is a target config? Code only."""
+        b = line.split("#", 1)[0]
+        return _pre9 in b and "startswith" in b and _yml9 in b
+
+    _filt = []
+    for _p9 in _files7:
+        if os.path.basename(_p9) in ("target.py", "workspace.py"):
+            continue                     # the enumeration and the naming rule
+        for _i9, _line in enumerate(open(_p9, encoding="utf-8").read().splitlines(), 1):
+            if _filters(_line):
+                _filt.append("%s:%d" % (os.path.basename(_p9), _i9))
+    check("nothing else decides what filename is a target config", not _filt,
+          "; ".join(_filt[:6]))
+    check("the filename scan finds a planted test",
+          _filters('    if fn.startswith(%r) and fn.endswith(%r):' % (_pre9, _yml9)),
+          "the planted line was not seen")
+    check("...and ignores one that is only mentioned in a comment",
+          not _filters('    # files that startswith(%r) and end %r' % (_pre9, _yml9)),
+          "a comment was read as code")
+    check("...and an adapter module is not a config",
+          not _filters('    if fn.startswith(%r) and fn.endswith(".py"):' % _pre9),
+          "a targets_*.py module matched")
+
+    # --- AND ONE PLACE THAT DERIVES THE NAME --------------------------------------------
+    #
+    # `config_name` says the fallback rule was written out four times and names three of
+    # them. It was six. `defense_report` wrote it as `basename(fp)[8:-5]`, which assumes
+    # the filename it is handed -- and a path in `QATRATION_CONFIGS` is used as spelled,
+    # so `/somewhere/acme.yaml` was `acme.yaml` to every other module here and `''` to
+    # that one. The section it feeds is the one that separates `we looked and it was
+    # clean` from `we could not see`, and for that target it could see nothing.
+    #
+    # THE SIGNATURE IS THE FALLBACK, not the word: `_by[str(_c["name"])]` below asks
+    # whether a config DECLARES a name, which is a different question and stays.
+    _nm9 = "na" + "me"
+    _bn9 = "base" + "name"
+
+    def _names_it(line):
+        """Is this line deriving a target name from a filename, with a fallback?"""
+        b = line.split("#", 1)[0]
+        return (_bn9 in b and " or " in b
+                and ('"%s"' % _nm9 in b or "'%s'" % _nm9 in b))
+
+    _named = []
+    for _p10 in _files7:
+        if os.path.basename(_p10) == "workspace.py":
+            continue                     # the rule itself
+        for _i10, _line in enumerate(open(_p10, encoding="utf-8").read().splitlines(), 1):
+            if _names_it(_line):
+                _named.append("%s:%d" % (os.path.basename(_p10), _i10))
+    check("only `workspace.config_name` says what a config is called", not _named,
+          "; ".join(_named[:6]))
+    check("the naming scan finds a planted derivation",
+          _names_it('    n = cfg.get("%s") or os.path.%s(fp)[8:-5]' % (_nm9, _bn9)),
+          "the planted line was not seen")
+    check("...and a lookup with no fallback is not one",
+          not _names_it('    _by[str(_c["%s"])].append(os.path.%s(_p))' % (_nm9, _bn9)),
+          "a declared-name lookup matched")
+
+    # --- THE MAP ITSELF ANSWERS ---------------------------------------------------------
+    #
+    # Built on a directory written to hold every case, because the shipped tree has no
+    # colliding names and no scratch config most of the time -- so every claim here would
+    # be satisfied by a tree that happens to be clean, which is the way the arsenal
+    # exclusion passed while it was deleted.
+    from workspace import configs_by_name as _cbn, oracle_contexts as _ocs
+    import tempfile as _tf9
+    _d9 = _tf9.mkdtemp()
+    try:
+        for _fn9, _body in (
+                ("targets_alpha.yaml", "name: alpha\noracle_context:\n  canaries: [A]\n"),
+                ("targets_alpha2.yaml", "name: alpha\noracle_context:\n  canaries: [LOSER]\n"),
+                ("targets_beta.yaml", "oracle_context:\n  canaries: [B]\n"),
+                ("targets_e2e_999_tmp.yaml", "name: scratch\n")):
+            with open(os.path.join(_d9, _fn9), "w", encoding="utf-8") as _f9:
+                _f9.write(_body)
+        _col9 = []
+        _map9 = _cbn(_d9, _col9)
+        check("the map names a config that declares one and one that does not",
+              sorted(_map9) == ["alpha", "beta"], str(sorted(_map9)))
+        check("...and the scratch config is not a target", "scratch" not in _map9,
+              str(sorted(_map9)))
+        check("a second config claiming one name is REPORTED, not just dropped",
+              _col9 == [("alpha", "targets_alpha2.yaml")], str(_col9))
+        check("...and the first one is the one that is used",
+              _ocs(_d9)["alpha"] == {"canaries": ["A"]},
+              str(_ocs(_d9).get("alpha")))
+        # `oracle_context:` with nothing under it parses to None, and three of the six
+        # callers wrote `.get(..., {})`, which hands a detector None rather than a mapping.
+        with open(os.path.join(_d9, "targets_gamma.yaml"), "w", encoding="utf-8") as _f9:
+            _f9.write("name: gamma\noracle_context:\n")
+        check("an empty oracle_context is a mapping, not None",
+              _ocs(_d9)["gamma"] == {}, repr(_ocs(_d9).get("gamma")))
+    finally:
+        __import__("shutil").rmtree(_d9, ignore_errors=True)
+
+    # --- AND THE FOUR CALLERS STILL ASK IT ----------------------------------------------
+    #
+    # The rule has fixtures and passes them; what broke last time was a caller that
+    # stopped asking. Each of these functions answers `what config does this name mean`
+    # for one command, and each of them used to answer it alone.
+    _callers = [
+        ("benign.py", "_ctx_for"),
+        ("rejudge.py", "contexts"),
+        ("detector_coverage.py", "contexts"),
+        ("defense_report.py", "_contexts"),
+        ("test_benign.py", "contexts"),
+    ]
+    # NAMES, NOT PROSE. Written first as `is the string in the function`, it read the
+    # docstring: emptying `rejudge.contexts` to `return {}` left the paragraph explaining
+    # where the map went, and the check passed on a caller that had stopped asking. Every
+    # scan above this one takes the trouble to strip comments; this one had to be told.
+    _ast9 = __import__("ast")
+    _wanted9 = {"configs_by_name", "oracle_contexts"}
+
+    def _asks(node):
+        """Every identifier this function body actually uses. Strings are not names."""
+        out = set()
+        for _x in _ast9.walk(node):
+            if isinstance(_x, _ast9.alias):
+                out.add((_x.asname or _x.name).split(".")[0])
+                out.add(_x.name)
+            elif isinstance(_x, _ast9.Name):
+                out.add(_x.id)
+            elif isinstance(_x, _ast9.Attribute):
+                out.add(_x.attr)
+        return out
+
+    # OR THE NAME IS THE IMPORT. `rejudge` and `coverage` were left holding one identical
+    # two-line wrapper each once the map lifted, which `test_reports` correctly called a
+    # function implemented twice; they bind `contexts` from `workspace` now. A caller that
+    # imports the map under the name is asking it as directly as one that calls it -- and
+    # a caller that imports something ELSE under the name is not, which is the half a
+    # widened check loses first.
+    def _answers(src, fn):
+        """Does this module answer `what config does this name mean` through the map?"""
+        _tr = _ast9.parse(src)
+        for _n in _ast9.walk(_tr):
+            if isinstance(_n, _ast9.FunctionDef) and _n.name == fn:
+                return bool(_asks(_n) & _wanted9)
+        return any(
+            isinstance(_n, _ast9.ImportFrom)
+            and any((_a.asname or _a.name) == fn and _a.name in _wanted9
+                    for _a in _n.names)
+            for _n in _ast9.walk(_tr))
+
+    _stray9 = []
+    for _mod9, _fn9 in _callers:
+        _src9 = open(os.path.join(HERE, _mod9), encoding="utf-8").read()
+        if not _answers(_src9, _fn9):
+            _stray9.append("%s.%s" % (_mod9, _fn9))
+    check("every command that resolves a target name asks the one map", not _stray9,
+          "; ".join(_stray9))
+    check("...and there are enough of them for that to mean something",
+          len(_callers) >= 5, str(len(_callers)))
+    # FOUR PLANTED MODULES, because every one of these shapes has already been written
+    # here by somebody. The docstring one is not hypothetical: the first version of this
+    # check searched the function's source text and passed on `rejudge.contexts` emptied
+    # to `return {}`, because the paragraph saying where the map went was still in it.
+    _NL9 = chr(10)
+    _plants9 = [
+        ("a function that calls the map", True,
+         _NL9.join(["def contexts():",
+                    "    from workspace import oracle_contexts as _o",
+                    "    return _o(HERE)"])),
+        ("a function that only mentions it in prose", False,
+         _NL9.join(["def contexts():",
+                    "    '''The map moved to workspace.oracle_contexts.'''",
+                    "    return {}"])),
+        ("the name imported from the map", True,
+         "from workspace import oracle_contexts as contexts"),
+        ("the name imported from somewhere else", False,
+         "from json import loads as contexts"),
+    ]
+    _wrong9 = [n for n, _want, _src in _plants9
+               if _answers(_src, "contexts") is not _want]
+    check("the caller scan tells asking from talking about it", not _wrong9,
+          "; ".join(_wrong9))
+
     # --- EVERY DOOR THAT WRITES EVIDENCE, NOT THE TWO THAT HAD THE GUARD ----------------
     #
     # `refuse_to_overwrite_evidence` was written after a `--attacks` run replaced a full

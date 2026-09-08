@@ -17,7 +17,7 @@ import sys, os, glob, json, argparse, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact, config_name,
+from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact,
                        no_results_note, plain, named_build)
 from isolation import read_maps
 ROOT = os.path.dirname(HERE)
@@ -27,35 +27,29 @@ try:
 except Exception:
     pass
 
-import yaml
-from target import Probe, target_configs
+from target import Probe
 from runner import judged_ctx   # one definition of "what did this attack declare"
 from oracle import DETECTORS, inert_for, reads_tool_calls
 from target import engine_version
 from rejudge import _prompt_of
 
 
-def contexts(collisions=None):
-    """target name -> oracle_context, first config wins, and it SAYS when one did.
-
-    Two configs may legitimately describe the same bot scoped to different questions —
-    `targets_nemo.yaml` carries the staff key and the RAG poison for a sweep, and a key
-    search wants one canary at a time or a hit on the poison credits the wrong frame. The
-    name is shared because the target is. What is not legitimate is `setdefault` quietly
-    choosing between them: the replay then scores one config's stored probes against the
-    other's canary list, which can only ever ADD hits to a number whose whole value is that
-    it is allowed to go down. Pass a list to collect the collisions and print them.
-    """
-    out = {}
-    for fp in target_configs(HERE):
-        cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        name = config_name(fp, cfg)
-        if name in out:
-            if collisions is not None:
-                collisions.append((name, os.path.basename(fp)))
-            continue
-        out[name] = cfg.get("oracle_context", {})
-    return out
+# target name -> oracle_context, first config wins, and it SAYS when one did.
+#
+# Two configs may legitimately describe the same bot scoped to different questions:
+# `targets_nemo.yaml` carries the staff key and the RAG poison for a sweep, and a key
+# search wants one canary at a time or a hit on the poison credits the wrong frame. The
+# name is shared because the target is. What is not legitimate is `setdefault` quietly
+# choosing between them: the replay then scores one config's stored probes against the
+# other's canary list, which can only ever ADD hits to a number whose whole value is that
+# it is allowed to go down. Pass a list to collect the collisions and print them.
+#
+# THE NAME, NOT A WRAPPER AROUND IT. This loop lifted to `workspace.oracle_contexts`,
+# which left this and `rejudge.contexts` holding one identical two-line body -- and the
+# duplicate-function gate in `test_reports` named the pair on the first run. A wrapper
+# that only supplies the default directory is the second implementation it was written
+# to catch, so the import binds the name the four call sites below already use.
+from workspace import oracle_contexts as contexts
 
 
 def provenance(engines, engine_now):
@@ -336,7 +330,7 @@ def main():
     args = ap.parse_args()
 
     unresolved, collisions, engines = [], [], []
-    contexts(collisions)
+    contexts(collisions=collisions)
     sent = set()
     _unreadable_seen = []
     _scanned = set()
