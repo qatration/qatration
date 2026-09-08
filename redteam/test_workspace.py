@@ -202,7 +202,7 @@ def check_every_command_refuses():
 
     # AND EVERY CONFIG THIS REPOSITORY SHIPS PASSES, or the rule is one nobody could adopt.
     _refused = {}
-    for _fp in sorted(_g_c.glob(_os_c.path.join(_here_ws, "targets_*.yaml"))):
+    for _fp in _shipped_configs():
         try:
             _said = _cfg_refused(
                 _y_c.safe_load(_io_c.open(_fp, encoding="utf-8")) or {})
@@ -223,7 +223,7 @@ def check_every_command_refuses():
     check("...with `note` out of it, which is the entry that invented a refusal",
           "note" in _wide and "note" not in _tight, True)
     check("...and every key a shipped config uses still counts as known",
-          sorted({_k for _fp in _g_c.glob(_os_c.path.join(_here_ws, "targets_*.yaml"))
+          sorted({_k for _fp in _shipped_configs()
                   for _k in (_y_c.safe_load(_io_c.open(_fp, encoding="utf-8")) or {})}
                  - _wide), [])
 
@@ -452,7 +452,7 @@ def check_context_shapes():
     import glob as _g, io as _io, os as _os, yaml as _y
     _here = _os.path.dirname(_os.path.abspath(_ws.__file__))
     _n = 0
-    for _fp in sorted(_g.glob(_os.path.join(_here, "targets_*.yaml"))):
+    for _fp in _shipped_configs():
         _c = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or {}
         if not isinstance(_c, dict):
             continue
@@ -759,6 +759,24 @@ def check_config_model():
     print("  ok  config_model reads a model out of either shape")
 
 
+def _shipped_configs():
+    """The configs this repository ships, through the one enumeration of what a config is.
+
+    NOT A GLOB. `target_configs` exists because eleven enumerations disagreed, and only it
+    excluded the throwaway configs the end-to-end suites write into this directory -- so a
+    claim about `the shipped configs` changed depending on whether a suite was running, or
+    on whether an earlier one had been killed before its `finally`. That is not theoretical:
+    two leftovers naming one target failed a duplicate-name check here, about files nobody
+    ships.
+
+    Filtered back to this directory because the claim is about what this repository ships;
+    `target_configs` also honours `QATRATION_CONFIGS`, which is somebody else's config and
+    not evidence about ours.
+    """
+    from target import target_configs as _tc
+    return sorted(p for p in _tc(HERE)
+                  if os.path.dirname(os.path.abspath(p)) == HERE)
+
 def main():
     fails, checks = [], 0
 
@@ -975,7 +993,7 @@ def main():
     # nothing. Every sibling already had a distinct name.
     import yaml as _y6, glob as _g6, collections as _c6
     _by = _c6.defaultdict(list)
-    for _p6 in sorted(_g6.glob(os.path.join(HERE, "targets_*.yaml"))):
+    for _p6 in _shipped_configs():
         try:
             _c = _y6.safe_load(open(_p6, encoding="utf-8").read()) or {}
         except (OSError, _y6.YAMLError):
@@ -991,6 +1009,55 @@ def main():
           str(len(_by)))
     _dupes = sorted((n, f) for n, f in _by.items() if len(f) > 1)
     check("...and no two of them claim the same one", not _dupes, str(_dupes))
+
+    # --- AND ONE ENUMERATION OF WHAT A CONFIG IS ---------------------------------------
+    #
+    # `target_configs` says in its own docstring why it exists: "ONE enumeration because
+    # there were eleven, and only one of them excluded the temporary configs the end-to-end
+    # suites write beside the real ones. The others' answers changed depending on whether a
+    # suite was running." Eleven became one, and then thirteen more were written -- two in
+    # shipped code and eleven across these suites, every one of them a bare
+    # `glob("targets_*.yaml")`.
+    #
+    # It is not cosmetic. `honeytoken` derived the SHORTEST canary on the fleet that way --
+    # the floor a minted token has to clear -- and `workspace` derived which context keys
+    # are lists, cached for the life of the process and used to refuse a config. Both moved
+    # if a scratch file was in the directory. The check five lines above is where it showed:
+    # two leftovers from a killed run, both naming `e2e-bot`, failed a claim about the
+    # configs this repository ships.
+    #
+    # OVER EVERY FILE, SUITES INCLUDED, because eleven of the thirteen were in suites and a
+    # scan that skipped them would have found two.
+    # THE PATTERN IS ASSEMBLED, not written out, so this scan does not find itself. A check
+    # that flags its own source is a check somebody exempts, and the exemption is the hole.
+    _pat7 = "targets_" + "*.yaml"
+
+    def _enumerates(line):
+        """Is this line of source a second enumeration? Code only, never a comment."""
+        bare = line.split("#", 1)[0]
+        return "glob" in bare and _pat7 in bare
+
+    _files7 = sorted(_g6.glob(os.path.join(HERE, "*.py")))
+    _globbers = []
+    for _p7 in _files7:
+        if os.path.basename(_p7) == "target.py":
+            continue                     # the enumeration itself
+        for _i7, _line in enumerate(open(_p7, encoding="utf-8").read().splitlines(), 1):
+            if _enumerates(_line):
+                _globbers.append("%s:%d" % (os.path.basename(_p7), _i7))
+    check("only `target.py` enumerates the target configs", not _globbers,
+          "; ".join(_globbers[:6]))
+    check("...over every module here, suites included", len(_files7) >= 90, str(len(_files7)))
+    # AND THE SCAN CAN SEE ONE, proved on a planted line rather than assumed: a check that
+    # finds nothing because its pattern stopped matching reads exactly like a clean tree.
+    check("the scan finds a planted enumeration",
+          _enumerates("    for f in glob.glob(os.path.join(HERE, %r)):" % _pat7),
+          "the planted line was not seen")
+    check("...and ignores one that is only mentioned in a comment",
+          not _enumerates("    # every glob of %s" % _pat7),
+          "a comment was read as code")
+    check("...and an ordinary line is not one",
+          not _enumerates("    x = 1"), "an ordinary line matched")
 
     # --- EVERY DOOR THAT WRITES EVIDENCE, NOT THE TWO THAT HAD THE GUARD ----------------
     #

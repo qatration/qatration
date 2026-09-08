@@ -56,6 +56,24 @@ response:
 {extra}"""
 
 
+def _shipped_configs():
+    """The configs this repository ships, through the one enumeration of what a config is.
+
+    NOT A GLOB. `target_configs` exists because eleven enumerations disagreed, and only it
+    excluded the throwaway configs the end-to-end suites write into this directory -- so a
+    claim about `the shipped configs` changed depending on whether a suite was running, or
+    on whether an earlier one had been killed before its `finally`. That is not theoretical:
+    two leftovers naming one target failed a duplicate-name check here, about files nobody
+    ships.
+
+    Filtered back to this directory because the claim is about what this repository ships;
+    `target_configs` also honours `QATRATION_CONFIGS`, which is somebody else's config and
+    not evidence about ours.
+    """
+    from target import target_configs as _tc
+    return sorted(p for p in _tc(HERE)
+                  if os.path.dirname(os.path.abspath(p)) == HERE)
+
 def main():
     fails, checks = [], 0
 
@@ -106,7 +124,7 @@ def main():
     # the sweep would report a clean bill for it.
     import glob as _g, yaml as _y
     _bad = {}
-    for _f in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+    for _f in _shipped_configs():
         try:
             _c = _y.safe_load(io.open(_f, encoding="utf-8").read()) or {}
         except Exception:
@@ -117,7 +135,7 @@ def main():
     # AND THERE HAVE TO BE CONFIGS. A universal claim over an empty set is satisfied by the
     # set being empty, and the `except Exception: continue` above makes an unparseable file
     # disappear from it silently -- so the count is asserted beside the claim.
-    _seen_cfgs = sorted(_g.glob(os.path.join(HERE, "targets_*.yaml")))
+    _seen_cfgs = _shipped_configs()
     check("there are shipped configs to check", len(_seen_cfgs) >= 20, str(len(_seen_cfgs)))
     check("no shipped config declares a context key nothing reads", not _bad, str(_bad))
 

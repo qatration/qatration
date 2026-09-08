@@ -360,7 +360,12 @@ def list_context_keys(root=None):
         for m in pat.finditer(_io.open(fn, encoding="utf-8").read()):
             keys.add(m.group(1) or m.group(2))
     seen = {}
-    for fn in _glob.glob(os.path.join(here, "targets_*.yaml")):
+    # THROUGH `target_configs` for the same reason: this derives WHICH context keys are
+    # lists, `bad_context_shapes` refuses a config on the answer, and the answer is cached
+    # in `_LIST_KEYS` for the life of the process. A scratch config in this directory could
+    # add a key, or change the kind inferred for one, for every later check in the run.
+    from target import target_configs as _cfgs
+    for fn in _cfgs(here):
         try:
             cfg = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or {}
         except Exception:

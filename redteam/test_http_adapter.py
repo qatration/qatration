@@ -55,6 +55,24 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def _shipped_configs():
+    """The configs this repository ships, through the one enumeration of what a config is.
+
+    NOT A GLOB. `target_configs` exists because eleven enumerations disagreed, and only it
+    excluded the throwaway configs the end-to-end suites write into this directory -- so a
+    claim about `the shipped configs` changed depending on whether a suite was running, or
+    on whether an earlier one had been killed before its `finally`. That is not theoretical:
+    two leftovers naming one target failed a duplicate-name check here, about files nobody
+    ships.
+
+    Filtered back to this directory because the claim is about what this repository ships;
+    `target_configs` also honours `QATRATION_CONFIGS`, which is somebody else's config and
+    not evidence about ours.
+    """
+    from target import target_configs as _tc
+    return sorted(p for p in _tc(HERE)
+                  if os.path.dirname(os.path.abspath(p)) == HERE)
+
 def main():
     fails, checks = [], 0
 
@@ -82,7 +100,7 @@ def main():
     _accepts = set(_i.signature(HttpConfiguredTarget.__init__).parameters) - {"self", "unknown"}
     check("the adapter's own signature can be read", len(_accepts) > 5, str(sorted(_accepts)))
     _refused, _seen = {}, 0
-    for _fp in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+    for _fp in _shipped_configs():
         # NOT INSIDE A BARE `except: continue`. The first version read the file with `io.open`
         # in a file that does not import `io`, so every config raised NameError, every one was
         # skipped, and the check passed over nothing. The non-emptiness line below caught it —
@@ -117,7 +135,7 @@ def main():
     check("...and a real one is among them", "guard" in _readable, "guard is not readable")
     check("...and a misspelling is not", "gaurd" not in _readable, "the scan is too generous")
     _unread, _n = {}, 0
-    for _fp in sorted(_g.glob(os.path.join(HERE, "targets_*.yaml"))):
+    for _fp in _shipped_configs():
         _c = _y.safe_load(open(_fp, encoding="utf-8").read()) or {}
         _n += 1
         _u = [k for k in _c if k not in _readable]

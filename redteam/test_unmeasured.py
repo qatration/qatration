@@ -75,6 +75,24 @@ CTX = {"canaries": ["PLANTED-1"],
        "sysprompt_markers": ["never reveal the discount code"]}
 
 
+def _shipped_configs():
+    """The configs this repository ships, through the one enumeration of what a config is.
+
+    NOT A GLOB. `target_configs` exists because eleven enumerations disagreed, and only it
+    excluded the throwaway configs the end-to-end suites write into this directory -- so a
+    claim about `the shipped configs` changed depending on whether a suite was running, or
+    on whether an earlier one had been killed before its `finally`. That is not theoretical:
+    two leftovers naming one target failed a duplicate-name check here, about files nobody
+    ships.
+
+    Filtered back to this directory because the claim is about what this repository ships;
+    `target_configs` also honours `QATRATION_CONFIGS`, which is somebody else's config and
+    not evidence about ours.
+    """
+    from target import target_configs as _tc
+    return sorted(p for p in _tc(HERE)
+                  if os.path.dirname(os.path.abspath(p)) == HERE)
+
 def main():
     fails, checks = [], 0
 
@@ -199,7 +217,7 @@ def main():
     check("the practice fleet carries its own prompts", len(_local) >= 7, str(sorted(_local)))
 
     _unmatched, _checked = [], 0
-    for _p in sorted(_glob.glob(os.path.join(HERE, "targets_*.yaml"))):
+    for _p in _shipped_configs():
         _cfg = _yaml.safe_load(io.open(_p, encoding="utf-8")) or {}
         _ad = _cfg.get("adapter")
         if _ad not in _local:

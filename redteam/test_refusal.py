@@ -152,6 +152,25 @@ CASES += [
      {}, "tool_denied"),
 ]
 
+def _shipped_configs():
+    """The configs this repository ships, through the one enumeration of what a config is.
+
+    NOT A GLOB. `target_configs` exists because eleven enumerations disagreed, and only it
+    excluded the throwaway configs the end-to-end suites write into this directory -- so a
+    claim about `the shipped configs` changed depending on whether a suite was running, or
+    on whether an earlier one had been killed before its `finally`. That is not theoretical:
+    two leftovers naming one target failed a duplicate-name check, about files nobody ships.
+
+    Filtered back to this directory because the claim is about what this repository ships;
+    `target_configs` also honours `QATRATION_CONFIGS`, which is somebody else's config and
+    not evidence about ours.
+    """
+    import os as _os_s
+    from target import target_configs as _tc
+    _here = _os_s.path.dirname(_os_s.path.abspath(__file__))
+    return sorted(p for p in _tc(_here)
+                  if _os_s.path.dirname(_os_s.path.abspath(p)) == _here)
+
 def main():
     fails, checks = [], 0
 
@@ -387,7 +406,7 @@ def main():
     import glob as _g, io as _io, os as _os, yaml as _y
     _here = _os.path.dirname(_os.path.abspath(__file__))
     _checked = 0
-    for _fp in sorted(_g.glob(_os.path.join(_here, "targets_*.yaml"))):
+    for _fp in _shipped_configs():
         _c = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or {}
         _oc = (_c.get("oracle_context") or {}) if isinstance(_c, dict) else {}
         if "refusal_patterns" not in _oc:

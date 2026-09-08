@@ -181,13 +181,18 @@ def _shipped_floor(root=None):
     day somebody ships a shorter one legitimately it would start failing a build for a value
     the project itself uses.
     """
-    import glob as _glob
     import io as _io
     import os as _os
     import yaml as _yaml
+    from target import target_configs as _cfgs
     here = root or _os.path.dirname(_os.path.abspath(__file__))
     lens = []
-    for fn in _glob.glob(_os.path.join(here, "targets_*.yaml")):
+    # THROUGH `target_configs`, which is the one enumeration of what a config IS. Globbing
+    # here picked up the throwaway configs the end-to-end suites write into this directory,
+    # so the shortest canary on the fleet -- the floor a minted token has to clear -- moved
+    # depending on whether a suite happened to be running. That enumeration's own docstring
+    # names this: `only one of them excluded the temporary configs`.
+    for fn in _cfgs(here):
         try:
             cfg = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or {}
         except Exception:
