@@ -1533,6 +1533,73 @@ def main():
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
 
+    # AND A THIRD PLACE SAYS THE SAME SIZE, which is where the block above stopped looking.
+    # The comment on it opens "THE SAME FACT, PUBLISHED TWICE, GATED ONCE" and fixed the
+    # second copy; it was published three times. `docs/findings.md` opens the section on
+    # short runs with "a full sweep is N attacks against a live endpoint" -- the sentence a
+    # reader weighs `--scope quick` against -- and still said 376 while the two gated copies
+    # said 379, stale by the same growth that caught `docs/ci.md`.
+    #
+    # Recounted from `attacks_generic.yaml` like the table above it, so the three cannot
+    # drift apart again in any direction.
+    _find = io.open(os.path.join(ROOT, "docs", "findings.md"), encoding="utf-8").read()
+    _fm = re.search(r"a full sweep is ([\d,]+) attacks", _find)
+    check("docs/findings.md says how big a full sweep is", bool(_fm),
+          "the sentence is not there to be checked")
+    if _fm:
+        check("...and it is the arsenal the engine would send",
+              int(_fm.group(1).replace(",", "")) == len(_arsenal),
+              "the page says %s; the arsenal holds %d" % (_fm.group(1), len(_arsenal)))
+
+    # WHAT THIS DOES NOT COVER, said because a list of what is checked reads as the whole
+    # list. `docs/onboarding.md` publishes a NARROWER fact twice more -- "249 attacks in 46
+    # categories actually run" against a plain chat endpoint, "313 in 56" with a transcript
+    # -- and neither is recounted here. Reproducing the engine's own withholding
+    # (`is_unmeasurable` over `inert_for`, then `undeliverable` over the target's
+    # capabilities) gives 264 in 47 and 319 in 56 for the nearest reading of those two
+    # configurations, close enough to suggest the page has drifted the same way and not
+    # equal, so the method behind the published pair could not be confirmed and the numbers
+    # were left alone rather than replaced with a guess. What IS asserted is the one thing
+    # true under every reading: a subset cannot be larger than the set.
+    _onb = io.open(os.path.join(ROOT, "docs", "onboarding.md"), encoding="utf-8").read()
+    _subsets = [int(x) for x in re.findall(r"\*\*(\d+) attacks in \d+ categories\*\* "
+                                           r"actually run", _onb)]
+    _subsets += [int(x) for x in re.findall(r"gets \*\*(\d+) in \d+\*\*", _onb)]
+    check("the page still says how much of the arsenal reaches a plain endpoint",
+          len(_subsets) == 2, str(_subsets))
+    for _s in _subsets:
+        check("...and a subset of the arsenal is not larger than the arsenal (%d)" % _s,
+              _s <= len(_arsenal), "%d of %d" % (_s, len(_arsenal)))
+
+    # AND THE TWO NUMBERS EITHER SIDE OF ONE THAT WAS ALREADY CHECKED.
+    # `docs/attribution.md` opens its scope note with "Six of the 143 attacks in
+    # `attacks.yaml` are generic; the other 137 name our own practice fleet". The MIDDLE
+    # one is covered: the claims table above matches `of the (\d+) attacks` wherever it
+    # appears and recounts it. The two around it were not, and they are the two that
+    # move on their own -- `build_generic` promotes an attack by DROPPING its
+    # `applies_to`, which shifts the split without changing the total, so the one number
+    # being watched is the one that would not have noticed. All three are right today;
+    # this is the gate, not a correction.
+    _attrdoc = io.open(os.path.join(ROOT, "docs", "attribution.md"),
+                        encoding="utf-8").read()
+    _lib = _yaml.safe_load(io.open(os.path.join(HERE, "attacks.yaml"),
+                                   encoding="utf-8").read()) or []
+    _gen = [a for a in _lib if isinstance(a, dict) and not a.get("applies_to")]
+    _am2 = re.search(r"(\w+) of the (\d+) attacks in `attacks\.yaml` are generic; "
+                     r"the other (\d+)", _attrdoc)
+    check("docs/attribution.md splits the library into generic and scoped", bool(_am2),
+          "the sentence is not there to be checked")
+    if _am2:
+        check("...and the library is the size it says",
+              int(_am2.group(2)) == len(_lib),
+              "the page says %s; attacks.yaml holds %d" % (_am2.group(2), len(_lib)))
+        check("...and the generic half is the one with no applies_to",
+              _am2.group(1).lower() == spell(len(_gen)),
+              "the page says %r; %d have none" % (_am2.group(1), len(_gen)))
+        check("...and the two halves add up to the whole",
+              int(_am2.group(3)) == len(_lib) - len(_gen),
+              "the page says %s; %d are scoped" % (_am2.group(3), len(_lib) - len(_gen)))
+
     # --- THE SAFETY DOCUMENT'S OWN NUMBERS ----------------------------------------------
     #
     # `AUTHORISED-USE.md` is the page a reader is sent to before pointing this at anything,
