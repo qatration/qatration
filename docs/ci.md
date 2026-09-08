@@ -359,7 +359,7 @@ not exist in yours.
 
 | Code | What the build should conclude |
 |---|---|
-| `0` | this change introduced no finding the trials agree on. Rows that moved without agreeing are named under the verdict, not hidden by it |
+| `0` | this change introduced no finding the trials agree on. Rows that moved without agreeing are named under the verdict, not hidden by it. On `--fail-on exploited` and `--fail-on any` the question is absolute rather than comparative, so `0` means nothing broke among the attacks that were SCORED - the line says how many that was, and names the ones that errored or were never sent |
 | `1` | this change introduced or reopened a finding — the one case where red means what red usually means |
 | `2` | the config or the invocation was refused, including a committed results file this run would replace — or the command crashed, which is a bug in the tool and is reported here rather than as `1`. Nothing was sent, and this is a build problem rather than a security one |
 | `3` | the question could not be answered: no baseline yet, the comparison was confounded, or the command read the workspace and found nothing in it — `rejudge` with no stored results to re-score, `coverage` with no probes to replay, `history` before a second sweep. **Not a pass** |

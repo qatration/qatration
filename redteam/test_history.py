@@ -420,8 +420,12 @@ def main():
         # answers 3 -- "cannot answer" -- on any confounded diff, and 3 is documented as NOT
         # A PASS. Without this the same diff returned 1 and failed somebody's build.
         import run_redteam as _rr
+        # `== 3`, NOT `3`. This file's `check` is `(label, ok, detail)`, so passing the
+        # exit code as `ok` asserted only that it was non-zero -- and the label names the
+        # one distinction that leaves untested: 1 is `fail the build` and would pass here,
+        # which is exactly the outcome the sentence says must not happen.
         check("...and the CI gate cannot answer rather than failing the build",
-              _rr.regression_verdict(_d1)[0], 3)
+              _rr.regression_verdict(_d1)[0] == 3, str(_rr.regression_verdict(_d1)))
 
         # THE DEFAULT IS UNTOUCHED. `--trials` defaults to 3, so the common path must not
         # gain a caveat -- a confound on every run is a confound nobody reads.
@@ -432,7 +436,10 @@ def main():
         _d3 = H.diff("cf5")
         check("three trials a side carries no such caveat",
               not any("one attempt" in c for c in _d3["confounds"]), str(_d3["confounds"]))
-        check("...and that diff still fails the build", _rr.regression_verdict(_d3)[0], 1)
+        # Same shape, same file: `1` is truthy, so this passed on a 3 as well -- a gate
+        # saying `cannot answer` where a build should have gone red.
+        check("...and that diff still fails the build",
+              _rr.regression_verdict(_d3)[0] == 1, str(_rr.regression_verdict(_d3)))
 
         # A COUNT THAT IS NOT A NUMBER SAYS NOTHING. An artifact written before `trials` was
         # recorded carries None, and inventing a caveat from a missing field would put one on
@@ -725,6 +732,69 @@ def main():
                                                    {"a": (X, "3/3"), "b": (X, "1/3")}]))
         check("a failing build still names what moved without being counted",
               code == 1 and any("not on every attempt" in s for s in said), str(said))
+
+        # --- AND THE OTHER TWO GATES, WHICH SAID NOTHING ABOUT THEIR OWN COVERAGE ------
+        #
+        # `--fail-on exploited` and `--fail-on any` printed `CI GATE: PASS (any).` and
+        # nothing else. That line is printed AFTER `closing_line`, so it is the last thing
+        # a CI log keeps -- and `closing_line` exists precisely because the reader's last
+        # line had contradicted three correct statements above it.
+        #
+        # The whole-run case is caught: `nothing_measured` exits 3 when every trial came
+        # back empty. The middle was not. Forty errors out of forty-five, or a budget that
+        # stopped the sweep, reached this gate as `0 breached` and printed a pass.
+        from run_redteam import absolute_verdict as _av
+        _c, _s = _av("any", 0, 0, 45, 0)
+        check("a run that measured everything and found nothing passes, unchanged",
+              _c == 0 and _s == ["CI GATE: PASS (any)."], "%s %s" % (_c, _s))
+        _c, _s = _av("any", 0, 0, 45, 40)
+        check("a pass over five of forty-five says so",
+              _c == 0 and "Scored 5 attack(s)" in _s[0] and "40 errored" in _s[0],
+              str(_s))
+        check("...and calls the rest a gap rather than a result",
+              "not a result" in _s[0], str(_s))
+        # AND ON A RED BUILD TOO: a count of findings over a fifth of the arsenal is not
+        # the number it looks like, and the team reading it is about to act on it.
+        _c, _s = _av("any", 2, 3, 45, 40)
+        check("a failing build names its coverage as well",
+              _c == 1 and "3 attack(s) breached" in _s[0]
+              and "Scored 5 attack(s)" in _s[0],
+              str(_s))
+        # ATTACKS NOBODY SENT ARE THE OTHER HALF, and they leave no errored row behind, so
+        # a check that only counted errors would miss the case `--scope` and the delivery
+        # withholding produce on every run.
+        _c, _s = _av("any", 0, 0, 30, 0, skipped=15)
+        check("attacks that were never sent are named too",
+              "15 were never sent" in _s[0] and "Scored 30 attack(s)" in _s[0],
+              str(_s))
+        _c, _s = _av("any", 0, 0, 45, 3, stopped="max_requests spent")
+        check("...and a budget that stopped the run is named in its own words",
+              "max_requests spent" in _s[0], str(_s))
+        # `exploited` IS THE NARROWER GATE and must stay narrower: a PARTIAL row breaches
+        # but is not fully exploited, and this gate is what a team picks when it wants only
+        # the unambiguous ones.
+        _c, _s = _av("exploited", 0, 4, 45, 0)
+        check("--fail-on exploited passes on breaches that are not full exploits",
+              _c == 0 and _s[0].startswith("CI GATE: PASS (exploited)"), "%s %s" % (_c, _s))
+        _c, _s = _av("none", 0, 9, 45, 0)
+        check("--fail-on none says nothing and fails nothing", (_c, _s) == (0, []),
+              "%s %s" % (_c, _s))
+
+        # AND THE SWEEP HAS TO ASK IT. The rule was inlined in `main` where no check could
+        # reach it, which is how it went five months without one; lifting it out is only a
+        # fix while `main` still calls it.
+        import ast as _ast_g
+        _rsrc = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _mn = [f for f in _ast_g.walk(_ast_g.parse(_rsrc))
+               if isinstance(f, _ast_g.FunctionDef) and f.name == "main"]
+        _cl = [c for f in _mn for c in _ast_g.walk(f)
+               if isinstance(c, _ast_g.Call) and isinstance(c.func, _ast_g.Name)
+               and c.func.id == "absolute_verdict"]
+        check("the sweep asks absolute_verdict rather than deciding inline",
+              len(_cl) == 1, str(len(_cl)))
+        check("...and hands it what it could not see: the errors and the unsent",
+              bool(_cl) and {k.arg for k in _cl[0].keywords} >= {"skipped", "stopped"},
+              str([k.arg for k in _cl[0].keywords]) if _cl else "no call")
     finally:
         H.OUT, H.HIST = real_out3, real_hist3
         for d in rt_dirs:

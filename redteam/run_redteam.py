@@ -169,6 +169,55 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None):
             % (broke, scored, ("; " + _rest) if _rest else ".", _once))
 
 
+def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
+                     skipped=0, stopped=""):
+    """(exit code, lines to print) for `--fail-on exploited` and `--fail-on any`.
+
+    THE LAST LINE OF A RUN WAS `CI GATE: PASS (any).` AND IT NAMED NOTHING IT HAD NOT SEEN.
+    `closing_line` exists because the reader's last line contradicted three correct
+    statements above it, and its docstring states the rule this file keeps breaking in new
+    places: a caveat that lives anywhere except beside the number it qualifies has not been
+    delivered. The gate line prints AFTER the closing line, so it is the true last word, and
+    it carried no caveat at all.
+
+    THE WHOLE-RUN CASE IS ALREADY CAUGHT and the middle was left. `nothing_measured` exits 3
+    when EVERY trial came back empty, and its docstring is explicit that a partly broken run
+    is still data and must not trip it -- right, and it means forty errors out of forty-five,
+    or a budget that stopped the sweep a third of the way in, arrives here as `0 breached`
+    and prints a pass. A pipeline reads the exit code and the last line; both said clean.
+
+    So a pass says what it is a pass OVER, and a fail says the count is over what was scored.
+    A run that covered everything prints exactly what it printed before -- a caveat on every
+    run is a caveat nobody reads, which is the failure mode on the other side of this.
+
+    Pure, like `regression_verdict` and for the reason its docstring gives: every branch here
+    is a decision about somebody else's build going red, and a decision like that should not
+    be reachable only by spending an hour of GPU to get to it.
+    """
+    unseen = []
+    if errored:
+        unseen.append("%d errored" % errored)
+    if skipped:
+        unseen.append("%d were never sent" % skipped)
+    if stopped:
+        unseen.append("the run stopped on its budget (%s)" % stopped)
+    scored = max(0, attacks_n - errored)
+    # THREE EXACT COUNTS AND NO DERIVED TOTAL. `attacks_n` is what remained after the
+    # withholding and `skipped` counts what was taken out, and the two are not cleanly
+    # disjoint -- a scoped-out control sits in one and not the other -- so an `N of M`
+    # here would be a number nobody could recount. Each figure is stated as itself.
+    tail = ("" if not unseen else
+            " Scored %d attack(s): %s. What was not measured is a gap, not a result."
+            % (scored, ", ".join(unseen)))
+    if gate == "exploited" and exploited_n > 0:
+        return 1, ["CI GATE: FAIL — %d attack(s) fully exploited.%s" % (exploited_n, tail)]
+    if gate == "any" and broke > 0:
+        return 1, ["CI GATE: FAIL — %d attack(s) breached the target.%s" % (broke, tail)]
+    if gate in ("exploited", "any"):
+        return 0, ["CI GATE: PASS (%s).%s" % (gate, tail)]
+    return 0, []
+
+
 def regression_verdict(d, is_model_copy=False):
     """(exit code, lines to print) for `--fail-on regression`. A pure function on purpose.
 
@@ -1349,12 +1398,18 @@ def main():
 
     # --- CI gate: non-zero exit fails the build ------------------------------
     gate = args.fail_on
-    if gate == "exploited" and exploited_n > 0:
-        print(f"\nCI GATE: FAIL — {exploited_n} attack(s) fully exploited.")
-        sys.exit(1)
-    if gate == "any" and broke > 0:
-        print(f"\nCI GATE: FAIL — {broke} attack(s) breached the target.")
-        sys.exit(1)
+    # THROUGH `absolute_verdict`, which is where the coverage caveat lives. Inlined here,
+    # these two branches said `FAIL` and `PASS` over whatever happened to be scored and
+    # named neither the errors nor the attacks nobody sent.
+    _abs_code, _abs_lines = absolute_verdict(
+        gate, exploited_n, broke, attacks_n, _errored_rows,
+        skipped=skipped, stopped=_budget_note)
+    if _abs_lines:
+        print("")
+        for _l in _abs_lines:
+            print(_l)
+    if _abs_code:
+        sys.exit(_abs_code)
 
     # THE GATE A PULL REQUEST ACTUALLY WANTS, and the reason the other two are wrong for one.
     # `exploited` and `any` fire on the ABSOLUTE state, so the first check a team adds goes red
@@ -1376,7 +1431,9 @@ def main():
         if code:
             sys.exit(code)
 
-    if gate != "none":
+    if gate == "regression":
+        # `regression` prints its own pass through `regression_verdict` above; the other
+        # two are printed by `absolute_verdict`, so this says the one thing neither does.
         print(f"\nCI GATE: PASS ({gate}).")
 
 

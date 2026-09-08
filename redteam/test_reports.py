@@ -2628,8 +2628,15 @@ def main():
     # check about layout. What this demands is that somebody decided.
     from workspace import QUALIFIERS as _QUAL
 
+    # AND THE CONSOLE, which the paragraph above names as one of the three surfaces built
+    # from one run and which this list did not contain. `run_redteam` answers for all
+    # twelve already, so adding it costs nothing today -- and it is worth being explicit
+    # that it would NOT have caught the gate line that prompted this: the question here is
+    # whether a MODULE reads a qualifier or explains why not, and a module can read one
+    # everywhere except the line a CI keeps. That line is gated in `test_history` instead,
+    # against `absolute_verdict`. This closes the list, not the case.
     _SURFACES = ["report_engine.py", "sarif.py", "defense_report.py",
-                 "compare_targets.py", "build_index.py"]
+                 "compare_targets.py", "build_index.py", "run_redteam.py"]
     check("there is a list of qualifiers to quantify over", bool(_QUAL), "workspace.QUALIFIERS")
 
     def _declared_in(src):
@@ -2648,6 +2655,40 @@ def main():
             if key and len(reason) > 8:
                 out[key] = reason
         return out, src[:head] + src[(end if end > 0 else head):]
+
+    # A TYPED LIST CANNOT SAY WHETHER IT IS COMPLETE, and this one could not: dropping a
+    # name from it removes the surface AND the check about it, in one edit, with every
+    # assertion below still green. That is the shape this repository keeps finding -- a
+    # gate quantified over a set, and the question worth asking is what the set omits.
+    #
+    # The derivable half: any module that OPTS IN by declaring `QUALIFIERS_NOT_CARRIED` has
+    # said it is one of these surfaces, and cannot then be dropped from the list. That does
+    # not cover a module carrying every qualifier and declaring no exemption -- the console
+    # is exactly that -- so the remainder is named rather than implied: those five names are
+    # typed, and nothing here would notice one going missing.
+    # AN ASSIGNMENT, NOT A MENTION. `lint_arsenal` names `QUALIFIERS_NOT_CARRIED` in a
+    # comment as the analogy for its own exemption table, and a substring test read that
+    # as a surface declaring one -- a check whose first run failed on a module that had
+    # done nothing wrong. Parsed, so only a module that really declares it counts.
+    import ast as _ast_q
+    def _declares_exemptions(path):
+        try:
+            _tr = _ast_q.parse(io.open(path, encoding="utf-8").read())
+        except SyntaxError:
+            return False
+        return any(isinstance(_n, _ast_q.Assign)
+                   and any(isinstance(_tg, _ast_q.Name)
+                           and _tg.id == "QUALIFIERS_NOT_CARRIED" for _tg in _n.targets)
+                   for _n in _ast_q.walk(_tr))
+    _optin = sorted(os.path.basename(_p)
+                    for _p in glob.glob(os.path.join(HERE, "*.py"))
+                    if not os.path.basename(_p).startswith("test_")
+                    and _declares_exemptions(_p))
+    check("every module that declares exemptions is a surface this quantifies over",
+          not [m for m in _optin if m not in _SURFACES],
+          "declared but not listed: %s" % [m for m in _optin if m not in _SURFACES])
+    check("...and there are enough of them for that to mean something", len(_optin) >= 4,
+          str(_optin))
 
     for _mod in _SURFACES:
         _src = io.open(os.path.join(HERE, _mod), encoding="utf-8").read()
