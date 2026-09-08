@@ -163,6 +163,57 @@ def load(root, run_id):
         return {"run_id": run_id, "state": "unreadable", "note": f"{type(e).__name__}: {e}"}
 
 
+def open_verdict(rec, now=None):
+    """-> a sentence about a run still recorded as `started`.
+
+    "EITHER IN FLIGHT NOW, OR ENDED WITHOUT SAYING SO" was printed beside a record that
+    settles it. `start` writes `budgets` before the first probe, so the operator's own
+    ceiling on how long the run may take is in the same dictionary this command is already
+    reading -- and a run open for longer than that did not end cleanly. The one such record
+    in this repository is lcagent, `max_seconds: 3600`, open since 2026-08-19: four hundred
+    and eighty times its own limit, reported as possibly still running.
+
+    THE RUN'S OWN BUDGET, NOT A THRESHOLD CHOSEN HERE. A full sweep can legitimately take
+    ninety minutes -- `docs/ci.md` prices one at up to 98 against a slow endpoint -- so any
+    constant written into this file would be a guess about somebody else's deployment. Where
+    a record carries no `max_seconds` the two really are indistinguishable, and the sentence
+    says that instead.
+
+    Pure, because it is the only line in this command that draws a conclusion.
+    """
+    import datetime as _dt
+    started = str((rec or {}).get("started_at") or "")
+    try:
+        began = _dt.datetime.fromisoformat(started)
+    except ValueError:
+        return ("the record does not say when it started, so how long it has been open"
+                " cannot be said")
+    open_s = ((now or _dt.datetime.now()) - began).total_seconds()
+    if open_s < 0:
+        return "the record starts in the future (%s), so its age says nothing" % started
+    how_long = _duration(open_s)
+    budget = ((rec or {}).get("budgets") or {}).get("max_seconds")
+    if not isinstance(budget, (int, float)) or isinstance(budget, bool) or budget <= 0:
+        return ("open %s; this record sets no time budget, so a sweep in flight and one that "
+                "never came back look the same here" % how_long)
+    if open_s <= budget:
+        return ("open %s, inside the %s this run was given, so it may still be running"
+                % (how_long, _duration(budget)))
+    return ("open %s, past the %s this run was given: it did not end cleanly, whatever it "
+            "reached is in its results file, and nothing closed the record"
+            % (how_long, _duration(budget)))
+
+
+def _duration(seconds):
+    """A span in the largest unit that does not need a decimal point."""
+    seconds = int(seconds)
+    for size, name in ((86400, "day"), (3600, "hour"), (60, "minute")):
+        if seconds >= size:
+            n = seconds // size
+            return "%d %s%s" % (n, name, "" if n == 1 else "s")
+    return "%d second%s" % (seconds, "" if seconds == 1 else "s")
+
+
 def listing(root):
     """Every run in this workspace, newest first, with what it cost and how it ended."""
     import glob
@@ -241,14 +292,17 @@ def main(argv=None):
         print(f"  ... and {len(picked) - len(shown)} more (--limit 0 for all)")
 
     # THE OPEN ONES, SAID SEPARATELY. A run still listed as started is either in flight or
-    # one that never came back, and the two look identical here -- which is the honest
-    # answer, and the reason it is worth a line of its own rather than a row in a table.
+    # one that never came back -- and which of the two it is, this command can usually
+    # answer, because `start` wrote the operator's own time budget into the same record.
+    # It used to print `either` beside a run four hundred and eighty times past its own
+    # one-hour ceiling. `open_verdict` reads the field; where there is no budget to read,
+    # it still says the two are indistinguishable, which is then the true answer.
     open_ = [r for r in picked if r.get("state") == "started"]
     if open_:
-        print(f"\n{len(open_)} run(s) still open — either in flight now, or ended without "
-              f"saying so:")
+        print(f"\n{len(open_)} run(s) still open:")
         for rec in open_:
             print(f"  {rec.get('run_id')}  {rec.get('target')}  started {rec.get('started_at')}")
+            print(f"    {open_verdict(rec)}")
     _unreadable = [r for r in picked if r.get("state") == "unreadable"]
     if _unreadable:
         # Unreadable is not absent, and saying which is the whole discipline of this repo.

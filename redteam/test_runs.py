@@ -204,6 +204,66 @@ def main():
     check("...while a closed one is not", "botB" not in _out.split("still open")[1],
           _out[-300:])
 
+    # --- AND WHICH OF THE TWO IT IS, WHICH THE RECORD USUALLY SETTLES ------------------
+    #
+    # The line above used to end at `either in flight now, or ended without saying so`,
+    # printed beside a record carrying the operator's own `max_seconds`. `start` writes
+    # that before the first probe, so a run open for longer than its own ceiling did not
+    # end cleanly -- and the one open record in this repository is lcagent at 3600 seconds,
+    # open since 2026-08-19, four hundred and eighty times past it.
+    #
+    # The budget is the run's own. A full sweep can legitimately take ninety minutes, so a
+    # constant chosen here would be a guess about somebody else's endpoint.
+    from runs import open_verdict as _ov
+    from datetime import datetime as _dt_r, timedelta as _td_r
+    _now = _dt_r(2026, 9, 8, 12, 0, 0)
+
+    def _rec(started, **kw):
+        r = {"started_at": started.isoformat(" ", "seconds")}
+        r.update(kw)
+        return r
+
+    _dead = _rec(_now - _td_r(days=20), budgets={"max_seconds": 3600})
+    check("a run open far past its own budget is not called `maybe`",
+          "did not end cleanly" in _ov(_dead, _now) and "20 days" in _ov(_dead, _now),
+          _ov(_dead, _now))
+    _live = _rec(_now - _td_r(minutes=20), budgets={"max_seconds": 3600})
+    check("...and one inside its budget may still be running",
+          "may still be running" in _ov(_live, _now), _ov(_live, _now))
+    # THE BOUNDARY, because `past` and `inside` are decided by one comparison and an
+    # off-by-one there would call a sweep dead on the second it was still allowed.
+    _edge = _rec(_now - _td_r(seconds=3600), budgets={"max_seconds": 3600})
+    check("...and a run at exactly its budget is still allowed to be running",
+          "may still be running" in _ov(_edge, _now), _ov(_edge, _now))
+    # NO BUDGET IS THE CASE WHERE THE OLD SENTENCE WAS RIGHT, and it still says it.
+    _nob = _rec(_now - _td_r(days=20))
+    check("a record with no time budget says the two look the same",
+          "look the same" in _ov(_nob, _now) and "20 days" in _ov(_nob, _now),
+          _ov(_nob, _now))
+    check("...and a budget that is not a number is no budget",
+          "look the same" in _ov(_rec(_now - _td_r(days=2),
+                                      budgets={"max_seconds": True}), _now),
+          _ov(_rec(_now - _td_r(days=2), budgets={"max_seconds": True}), _now))
+    # A RECORD THAT CANNOT SAY WHEN IT STARTED SAYS THAT, rather than counting from zero.
+    check("an unreadable start time is named, not guessed",
+          "cannot be said" in _ov({"started_at": "whenever"}, _now),
+          _ov({"started_at": "whenever"}, _now))
+    check("...and a start in the future is not an age",
+          "future" in _ov(_rec(_now + _td_r(days=1)), _now),
+          _ov(_rec(_now + _td_r(days=1)), _now))
+
+    # AND THE COMMAND ASKS IT, rather than deciding in the print statement where nothing
+    # could reach it.
+    import ast as _ast_o
+    _rsrc = open(os.path.join(HERE, "runs.py"), encoding="utf-8").read()
+    _mn = [f for f in _ast_o.walk(_ast_o.parse(_rsrc))
+           if isinstance(f, _ast_o.FunctionDef) and f.name == "main"]
+    _cl = [c for f in _mn for c in _ast_o.walk(f)
+           if isinstance(c, _ast_o.Call) and isinstance(c.func, _ast_o.Name)
+           and c.func.id == "open_verdict"]
+    check("the listing asks open_verdict rather than deciding inline",
+          len(_cl) == 1, str(len(_cl)))
+
     # AND THE FILTERS NARROW WITHOUT LYING. A filter that matches nothing is not a clean
     # empty list: it is 3, the code this project documents as nothing measured.
     _rc, _out = _runs_cmd(_w, "--target", "botB")
