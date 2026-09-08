@@ -2265,7 +2265,8 @@ def main():
     # meaningless, and a helper that returned none would make it silent.
     import glob as _g2, yaml as _y2
     _cats = {}
-    for _f2 in _g2.glob(os.path.join(HERE, "attacks*.yaml")):
+    from workspace import arsenal_files as _arsenal_files
+    for _f2 in _arsenal_files(HERE):
         _doc = _y2.safe_load(open(_f2, encoding="utf-8")) or []
         for _a2 in (_doc if isinstance(_doc, list) else _doc.get("attacks") or []):
             if isinstance(_a2, dict) and _a2.get("id"):

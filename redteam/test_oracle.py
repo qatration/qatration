@@ -1901,7 +1901,8 @@ def test_no_orphan_detectors():
     from oracle import ALWAYS_EXPLOITED, ALWAYS_PARTIAL
     here = os.path.dirname(os.path.abspath(__file__))
     declared = set(ALWAYS_EXPLOITED) | set(ALWAYS_PARTIAL)
-    for fp in glob.glob(os.path.join(here, "attacks*.yaml")):
+    from workspace import arsenal_files as _arsenal_files
+    for fp in _arsenal_files(here):
         for a in yaml.safe_load(open(fp, encoding="utf-8")) or []:
             declared |= set(a.get("success") or []) | set(a.get("partial") or [])
     for fp in glob.glob(os.path.join(here, "isolation_*.yaml")):

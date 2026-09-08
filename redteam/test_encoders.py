@@ -97,7 +97,8 @@ def main():
     # `attacks*.yaml` in a clone left this suite green. The docstring above says fourteen
     # attacks carry one; there are 53 now, and the floor is asserted rather than described.
     bad, artless, _encoded = [], [], 0
-    for fp in glob.glob(os.path.join(HERE, "attacks*.yaml")):
+    from workspace import arsenal_files as _arsenal_files
+    for fp in _arsenal_files(HERE):
         for a in yaml.safe_load(open(fp, encoding="utf-8")) or []:
             enc = a.get("encode")
             if not enc:

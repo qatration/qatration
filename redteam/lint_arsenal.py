@@ -22,6 +22,7 @@ from oracle import DETECTORS
 from encoders import ENCODERS
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+from workspace import arsenal_files as _arsenal_files
 
 
 def known_targets():
@@ -243,7 +244,7 @@ def control_ids(root=None):
     """
     import glob as _glob
     out = set()
-    for fname in sorted(_glob.glob(os.path.join(root or ROOT, "attacks*.yaml"))):
+    for fname in _arsenal_files(root or ROOT):
         try:
             doc = yaml.safe_load(open(fname, encoding="utf-8")) or []
         except Exception:
@@ -285,7 +286,7 @@ def list_attack_fields(root=None):
     import io as _io
     import yaml as _yaml
     seen = {}
-    for fn in _glob.glob(os.path.join(here, "attacks*.yaml")):
+    for fn in _arsenal_files(here):
         try:
             rows = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or []
         except Exception:
@@ -781,7 +782,9 @@ def main():
     # no-fire trap, it just hid in a file the linter never opened.
     global _ATTACK_KEYS
     _ATTACK_KEYS = attack_keys_read()
-    files = sorted(glob.glob(os.path.join(ROOT, "attacks*.yaml")))
+    # THROUGH THE SHARED ENUMERATION. This globbed, so one leftover scratch file made
+    # `qatration lint` report an error in a file nobody ships and exit 1.
+    files = _arsenal_files(ROOT)
     errors, warns = [], []
     total = 0
 

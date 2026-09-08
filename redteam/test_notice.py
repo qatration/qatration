@@ -167,7 +167,8 @@ def main():
     # Attack ids NOTICE names must exist, or the reader is sent looking for nothing.
     import yaml
     ids = set()
-    for f in glob.glob(os.path.join(HERE, "attacks*.yaml")):
+    from workspace import arsenal_files as _arsenal_files
+    for f in _arsenal_files(HERE):
         try:
             for a in (yaml.safe_load(io.open(f, encoding="utf-8")) or []):
                 if isinstance(a, dict) and a.get("id"):

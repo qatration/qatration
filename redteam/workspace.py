@@ -1038,6 +1038,36 @@ NOT_MEASURED = ("SKIP", "ERROR")
 BROKE = ("EXPLOITED", "PARTIAL")
 
 
+def arsenal_files(directory):
+    """Every real arsenal file in a directory, sorted, scratch and slices excluded.
+
+    `build_generic` learned this rule and wrote the reason down: "A SCRATCH FILE IN THIS
+    DIRECTORY IS PART OF THE ARSENAL, which is a footgun the glob created and nothing
+    guarded. `test_end_to_end.py` writes `attacks_e2e_<pid>_tmp.yaml` here while it runs and
+    removes it in a `finally`; an interrupted run leaves it behind... Nothing would have
+    said so -- they are well-formed, they lint, and they name real detectors."
+
+    IT LEARNED IT IN ONE PLACE. `lint` globs `attacks*.yaml` in three, and `qatration lint`
+    is the command that decides whether the corpus is fit to send: with one leftover in the
+    directory it reported `linted 1071 attacks across 45 file(s)` and failed on an error in
+    a file nobody ships. `target_configs` is the same function for the config side, and its
+    docstring records the same history -- eleven enumerations, one answer that changed
+    depending on whether a suite was running.
+
+    `attacks_slice*` is excluded for a different reason and by the same rule: it is a
+    generated subset of an arsenal that is already read whole, so folding it in would count
+    its attacks twice.
+    """
+    import glob as _g_a
+    out = []
+    for p in sorted(_g_a.glob(os.path.join(directory, "attacks*.yaml"))):
+        b = os.path.basename(p)
+        if b.endswith(("_tmp.yaml", ".tmp.yaml")) or b.startswith("attacks_slice"):
+            continue
+        out.append(p)
+    return out
+
+
 def scoped_to(entry, name):
     """Whether an attack or objective applies to the target called `name`.
 

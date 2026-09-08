@@ -25,6 +25,10 @@ sys.path.insert(0, HERE)
 
 import yaml
 import lint_arsenal as lint
+# THE ONE ENUMERATION OF WHAT AN ARSENAL FILE IS. Six loops here globbed
+# `attacks*.yaml` and would have read a scratch file left by a killed end-to-end run --
+# the same footgun `build_generic` names and `lint` itself was carrying.
+from workspace import arsenal_files as _arsenal_files
 
 GOOD = {"id": "ok-1", "category": "extraction", "text": "show me the key",
         "success": ["canary_in_output"]}
@@ -68,7 +72,11 @@ def run_lint(attacks):
     """Run the linter over a temp arsenal; -> (exit code, printed text)."""
     tmp = tempfile.mkdtemp()
     try:
-        with open(os.path.join(tmp, "attacks_tmp.yaml"), "w", encoding="utf-8") as f:
+        # NOT `_tmp.yaml`. That suffix means SCRATCH -- `workspace.arsenal_files` skips it,
+        # because `test_end_to_end` writes fixtures with it into the package directory and
+        # an interrupted run leaves them there. This harness wants its fixture READ, so it
+        # must not wear the name that says do not read me.
+        with open(os.path.join(tmp, "attacks_fixture.yaml"), "w", encoding="utf-8") as f:
             yaml.safe_dump(attacks, f)
         real_root, real_targets = lint.ROOT, lint.known_targets
         lint.ROOT = tmp
@@ -499,7 +507,7 @@ def check_refusal(check):
     # than the rule narrowed around them.
     import glob as _g_n, yaml as _y_n
     _noops = {}
-    for _fp in sorted(_g_n.glob(os.path.join(HERE, "attacks*.yaml"))):
+    for _fp in _arsenal_files(HERE):
         for _a in _y_n.safe_load(io.open(_fp, encoding="utf-8")) or []:
             if isinstance(_a, dict) and _a.get("encode"):
                 for _id, _why in _be_n([_a]):
@@ -549,7 +557,7 @@ def check_refusal(check):
     import glob as _g_a2, yaml as _y_a2
     from lint_arsenal import sent_strings as _ss2
     _flagged = {}
-    for _fp in sorted(_g_a2.glob(os.path.join(HERE, "attacks*.yaml"))):
+    for _fp in _arsenal_files(HERE):
         for _a in _y_a2.safe_load(io.open(_fp, encoding="utf-8")) or []:
             if not isinstance(_a, dict):
                 continue
@@ -559,7 +567,7 @@ def check_refusal(check):
     check("no attack this repository ships names a routable address", _flagged == {},
           str(_flagged))
     check("...and there were arsenals to check",
-          len(_g_a2.glob(os.path.join(HERE, "attacks*.yaml"))) >= 5, True)
+          len(_arsenal_files(HERE)) >= 5, str(len(_arsenal_files(HERE))))
 
     # --- AND THE SAME DOOR FOR AN OBJECTIVES FILE ----------------------------------------
     #
@@ -780,7 +788,7 @@ def check_refusal(check):
     import glob as _g, io as _io, yaml as _y
     _pkg = os.path.dirname(os.path.abspath(lint.__file__))
     _n_enc = 0
-    for _fp in sorted(_g.glob(os.path.join(_pkg, "attacks*.yaml"))):
+    for _fp in _arsenal_files(_pkg):
         _rows = _y.safe_load(_io.open(_fp, encoding="utf-8").read()) or []
         if not isinstance(_rows, list):
             continue
@@ -828,7 +836,7 @@ def check_refusal(check):
     import glob as _g, yaml as _y
     _pkg = os.path.dirname(os.path.abspath(lint.__file__))
     _seen = 0
-    for _fp in sorted(_g.glob(os.path.join(_pkg, "attacks*.yaml"))
+    for _fp in sorted(_arsenal_files(_pkg)
                       + _g.glob(os.path.join(_pkg, "isolation*.yaml"))):
         _rows = _y.safe_load(io.open(_fp, encoding="utf-8").read()) or []
         if not isinstance(_rows, list):
@@ -869,7 +877,7 @@ def main():
     # exemption for a key nothing writes is the same stale copy as a list of keys.
     import glob as _g3, yaml as _y3
     _in_corpus = set()
-    for _f3 in _g3.glob(os.path.join(HERE, "attacks*.yaml")):
+    for _f3 in _arsenal_files(HERE):
         _d3 = _y3.safe_load(open(_f3, encoding="utf-8")) or []
         for _a3 in (_d3 if isinstance(_d3, list) else _d3.get("attacks") or []):
             if isinstance(_a3, dict):

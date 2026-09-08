@@ -1059,6 +1059,64 @@ def main():
     check("...and an ordinary line is not one",
           not _enumerates("    x = 1"), "an ordinary line matched")
 
+    # --- AND THE SAME QUESTION FOR THE ARSENAL ------------------------------------------
+    #
+    # `build_generic` learned that a scratch file in this directory becomes part of the
+    # arsenal, and wrote down why: `test_end_to_end` writes `attacks_e2e_<pid>_tmp.yaml`
+    # here and removes it in a `finally`, so an interrupted run leaves it. It excluded the
+    # suffix. `lint` -- the command that decides whether the corpus is fit to send -- globbed
+    # in three places and did not, so a leftover was linted as a shipped arsenal file and
+    # `qatration lint` failed on an error in a file nobody ships. Reproduced by planting one.
+    #
+    # There were three in this working tree at the time, from runs killed earlier: `lint`
+    # reported `1070 attacks across 44 file(s)` where the corpus is 1,060 across 41.
+    _pat8 = "attacks" + "*.yaml"
+
+    def _enumerates_arsenal(line):
+        bare = line.split("#", 1)[0]
+        return "glob" in bare and _pat8 in bare
+
+    _agl = []
+    for _p8 in _files7:
+        if os.path.basename(_p8) == "workspace.py":
+            continue                     # the enumeration itself
+        for _i8, _line in enumerate(open(_p8, encoding="utf-8").read().splitlines(), 1):
+            if _enumerates_arsenal(_line):
+                _agl.append("%s:%d" % (os.path.basename(_p8), _i8))
+    check("only `workspace.py` enumerates the arsenal files", not _agl,
+          "; ".join(_agl[:6]))
+    check("the arsenal scan finds a planted enumeration",
+          _enumerates_arsenal("    for f in glob.glob(os.path.join(HERE, %r)):" % _pat8),
+          "the planted line was not seen")
+    check("...and a comment naming the pattern is not one",
+          not _enumerates_arsenal("    # every glob of %s" % _pat8),
+          "a comment was read as code")
+
+    # AND THE ENUMERATION ITSELF ANSWERS, rather than being trusted: a scratch name is
+    # dropped, a real one is kept, and the count is not zero -- an empty answer would
+    # satisfy every claim above it.
+    from workspace import arsenal_files as _af
+    _kept = [os.path.basename(p) for p in _af(HERE)]
+    check("the arsenal enumeration finds the shipped files", len(_kept) >= 30,
+          str(len(_kept)))
+    check("...and keeps the main one", "attacks.yaml" in _kept, str(_kept[:4]))
+    # PLANTED, NOT SURVEYED. Asking whether the shipped tree contains a scratch file is
+    # satisfied by the tree being clean, which it is most of the time -- so the exclusion
+    # could be deleted and this would still pass. It is asked of a directory built to hold
+    # one.
+    import tempfile as _tf8
+    _d8 = _tf8.mkdtemp()
+    try:
+        for _n8 in ("attacks.yaml", "attacks_focus.yaml", "attacks_e2e_999_tmp.yaml",
+                    "attacks_slice_7.yaml"):
+            with open(os.path.join(_d8, _n8), "w", encoding="utf-8") as _f8:
+                _f8.write("[]")
+        _got8 = [os.path.basename(p) for p in _af(_d8)]
+        check("...and drops a scratch file, whatever process left it",
+              _got8 == ["attacks.yaml", "attacks_focus.yaml"], str(_got8))
+    finally:
+        __import__("shutil").rmtree(_d8, ignore_errors=True)
+
     # --- EVERY DOOR THAT WRITES EVIDENCE, NOT THE TWO THAT HAD THE GUARD ----------------
     #
     # `refuse_to_overwrite_evidence` was written after a `--attacks` run replaced a full

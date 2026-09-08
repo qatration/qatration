@@ -86,17 +86,13 @@ def library():
     """
     out, generic = {}, {}
     main = os.path.join(HERE, "attacks.yaml")
-    files = [main] + sorted(set(glob.glob(os.path.join(HERE, "attacks*.yaml"))) - {main})
+    # THE ENUMERATION IS SHARED. The exclusion below was this module's alone, and the
+    # linter that gates the same corpus never got it.
+    from workspace import arsenal_files as _arsenal_files
+    files = [main] + sorted(set(_arsenal_files(HERE)) - {main})
     for fp in files:
         base = os.path.basename(fp)
-        # A SCRATCH FILE IN THIS DIRECTORY IS PART OF THE ARSENAL, which is a footgun the glob
-        # created and nothing guarded. `test_end_to_end.py` writes `attacks_e2e_<pid>_tmp.yaml` here
-        # while it runs and removes it in a `finally`; an interrupted run leaves it behind, and
-        # the next regeneration would fold three toy attacks aimed at a scripted bot into what
-        # an arbitrary target receives. Nothing would have said so — they are well-formed, they lint,
-        # and they name real detectors.
-        if base.endswith(("_tmp.yaml", ".tmp.yaml")) or base.startswith("attacks_slice"):
-            continue
+
         if base == OUT_NAME:
             for a in (yaml.safe_load(open(fp, encoding="utf-8")) or []):
                 generic[a["id"]] = a
