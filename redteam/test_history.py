@@ -297,6 +297,16 @@ def main():
             check("...and when %s does" % _field,
                   _ad(dict(_base, **{_field: _other})) != _ad(_base),
                   _field)
+        # AND THE WORDS OF A FORGED TURN, not merely its presence. The loop above adds a
+        # `history` where there was none, which moves the digest through `roles` alone —
+        # so a digest blind to what the forged turn SAYS passed it. Found by mutation:
+        # deleting the line in `sent_strings` that reads forged content left every check
+        # here green. Two transcripts with the same speakers and different words are two
+        # different attacks.
+        _h1 = dict(_base, history=[{"role": "user", "content": "earlier turn"}])
+        _h2 = dict(_base, history=[{"role": "user", "content": "a different turn"}])
+        check("...and when the WORDS of a forged turn do, not just its speaker",
+              _ad(_h1) != _ad(_h2), "%s == %s" % (_ad(_h1), _ad(_h2)))
         # AND THE FOUR THE FIRST VERSION MISSED, found by reading what `run_attack` and
         # `judged_ctx` take off an attack rather than by reasoning about the schema. Each
         # is a field the engine acts on and the digest could not see.
@@ -318,6 +328,65 @@ def main():
                                          "content": "earlier turn"}]))):
             check("the digest moves with %s" % _label, _ad(_one) != _ad(_two),
                   "%s == %s" % (_ad(_one), _ad(_two)))
+
+        # AND THE NEXT FIELD, WHICHEVER IT IS. Everything above is a field somebody
+        # thought of; the four in the block before it were found by reading what
+        # `run_attack` and `judged_ctx` take off an attack, BY HAND, after the digest had
+        # already shipped without them. `compare_targets` states the promise — `a field
+        # that starts changing what gets sent joins this page's comparison by being added
+        # there` — and nothing was keeping it.
+        #
+        # Asked of the engine instead: every key the send path and the judging path read
+        # off an attack must be named where the digest is built. `id` is the declared
+        # exception and the reason is in that comment: an id is a name, not a prompt.
+        import ast as _ast_d, re as _re_d, io as _io_d
+
+        def _keys_off_attack(_mod, _fn):
+            """Which fields of an attack this function reads. Names, not prose."""
+            _src = _io_d.open(os.path.join(HERE, _mod), encoding="utf-8").read()
+            _f = next((_n for _n in _ast_d.walk(_ast_d.parse(_src))
+                       if isinstance(_n, _ast_d.FunctionDef) and _n.name == _fn), None)
+            return _keys_in(_ast_d.get_source_segment(_src, _f) or "") if _f else set()
+
+        def _keys_in(_seg):
+            _out = set()
+            for _a, _b in _re_d.findall(
+                    r'(?:attack|atk|a)(?:\.get\(\s*["\']([a-z_]+)["\']'
+                    r'|\[["\']([a-z_]+)["\']\])', _seg):
+                _out.add(_a or _b)
+            return _out
+
+        _SENDERS = (("runner.py", "run_attack"), ("runner.py", "attacker_side"),
+                    ("runner.py", "turns"), ("runner.py", "undeliverable"),
+                    ("runner.py", "judged_ctx"), ("oracle.py", "judge"))
+        _read = set()
+        _found = 0
+        for _mod_d, _fn_d in _SENDERS:
+            _k = _keys_off_attack(_mod_d, _fn_d)
+            _found += 1 if _k else 0
+            _read |= _k
+        _digest_src = ""
+        _lsrc = _io_d.open(os.path.join(HERE, "lint_arsenal.py"),
+                           encoding="utf-8").read()
+        for _n_d in _ast_d.walk(_ast_d.parse(_lsrc)):
+            if (isinstance(_n_d, _ast_d.FunctionDef)
+                    and _n_d.name in ("attack_digest", "sent_strings")):
+                _digest_src += _ast_d.get_source_segment(_lsrc, _n_d) or ""
+        _NOT_A_PAYLOAD = {"id"}      # an id is a name, not a prompt
+        _missing = sorted(_k for _k in _read - _NOT_A_PAYLOAD
+                          if '"%s"' % _k not in _digest_src)
+        check("every field the engine reads off an attack is in the digest",
+              not _missing, "the digest cannot see: %s" % _missing)
+        check("...over the functions that send and score one",
+              _found == len(_SENDERS) and len(_read) >= 8,
+              "%d function(s), %d key(s)" % (_found, len(_read)))
+        # AND THE SCAN CAN SEE A NEW ONE, planted rather than assumed: a scan whose regex
+        # stopped matching reports a digest that covers everything.
+        check("the scan sees a field the digest does not name",
+          _keys_in('x = attack.get("brand_new_lever")') == {"brand_new_lever"},
+              str(_keys_in('x = attack.get("brand_new_lever")')))
+        check("...and an ordinary line names none",
+              _keys_in('x = 1') == set(), str(_keys_in('x = 1')))
         # AND NOT WHEN SOMETHING THAT DECIDES NEITHER MOVES.
         for _field, _other in (("applies_to", ["x"]), ("category", "other"),
                                ("id", "a2"), ("found_on", "somebot")):
