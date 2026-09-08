@@ -1502,9 +1502,13 @@ def main():
                                        encoding="utf-8").read())
     _arsenal = _arsenal if isinstance(_arsenal, list) else (_arsenal or {}).get("attacks") or []
 
-    def _turns(a):
-        steps = a.get("steps")
-        return len(steps) if isinstance(steps, list) else 1
+    # THROUGH THE ENGINE'S OWN RULE. This was three lines here, and `onboard` had a third
+    # spelling of the same question that answered `attacks x trials` -- so the table and its
+    # gate agreed with each other and disagreed with the check an operator reads before
+    # spending the money, by 327 requests. `runner.turns` is where a delivery's cost lives
+    # now, and `test_onboard` pins it to a fixture so one shared answer cannot be quietly
+    # wrong for both callers at once.
+    from runner import turns as _turns
 
     def _minutes(requests, seconds_each):
         return int(requests * seconds_each / 60.0 + 0.5)

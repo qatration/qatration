@@ -192,6 +192,31 @@ DELIVERY_CAPABILITY = {
 }
 
 
+def turns(attack):
+    """How many REQUESTS one trial of this attack costs. A three-step chain costs three.
+
+    `docs/ci.md` prices a sweep with this rule and `test_readme` recounts that table with
+    it, so those two have always agreed. `onboard` needed the same number to tell an
+    operator whether their budget can hold a run, and multiplied ATTACKS by trials: on the
+    shipped arsenal that is 1,137 requests where the run sends 1,464, because 69 of the 379
+    attacks are chains and one of them is six steps long.
+
+    The direction is the one that matters. That note exists to say `it will STOP part way`,
+    and understating the requirement keeps it quiet exactly when it should speak: a budget
+    of 1,200 passed the check and stops the sweep at four fifths.
+
+    Here rather than in either caller, because it is a fact about how a delivery is sent
+    and this module is what sends it.
+    """
+    steps = attack.get("steps") if isinstance(attack, dict) else None
+    return len(steps) if isinstance(steps, list) and steps else 1
+
+
+def requests_for(attacks, trials):
+    """Requests one sweep of these attacks costs, before any retry."""
+    return sum(turns(a) for a in attacks) * int(trials)
+
+
 def undeliverable(attack, caps):
     """-> the capability this attack's delivery needs and the target lacks, else None."""
     need = DELIVERY_CAPABILITY.get(attack.get("delivery", "direct"))

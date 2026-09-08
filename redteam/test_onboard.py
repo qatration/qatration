@@ -266,7 +266,7 @@ def main():
         check("...and the unsent attacks are named a gap rather than rows that held",
               "gap rather than rows that held" in notes, notes[:260])
 
-        # AND THE MINUTES IN IT ARE THE ARSENAL'S, NOT A LITERAL'S. `_arsenal_size()` exists
+        # AND THE MINUTES IN IT ARE THE ARSENAL'S, NOT A LITERAL'S. `_arsenal()` exists
         # because a hard-coded 19 had been true of a nineteen-attack arsenal and nothing
         # re-read it; the request estimate above got that fix and the TIME estimate three
         # lines away kept the 19, so the sentence named the real count while the arithmetic
@@ -286,9 +286,61 @@ def main():
         if _est:
             _expr = _est.group(1)
             check("...and it multiplies by the arsenal, not by a literal",
-                  "need_att" in _expr and not _re.search(r"\*\s*\d\d\s*\*", _expr), _expr.strip())
+                  "need_req" in _expr and not _re.search(r"\*\s*\d\d\s*\*", _expr), _expr.strip())
             check("...and the sentence beside it names the same count",
                   "{need_att} attacks x 3" in _src, "the note does not name need_att")
+
+        # --- AND A CHAIN COSTS ONE REQUEST PER STEP -------------------------------------
+        #
+        # A budget is spent on REQUESTS and this counted ATTACKS: 379 x 3 = 1,137 where the
+        # run sends 1,464, because 69 of the arsenal are chains. `docs/ci.md` prices the same
+        # sweep at 1,464 and `test_readme` recounts that table, so the doc and its gate have
+        # always agreed; the check an operator reads BEFORE spending the money had its own
+        # arithmetic. It understated, which in a warning whose whole sentence is `it will
+        # STOP part way` is silence exactly where it should speak.
+        #
+        # Driven at the boundary rather than asserted about the source, because the old
+        # number is a budget that must now warn and the new one is a budget that must not.
+        from runner import requests_for as _rf
+        _atk = onboard._arsenal()
+        _need, _old_sum = _rf(_atk, 3), len(_atk) * 3
+        check("a chain makes a sweep cost more requests than it has attacks",
+              _need > _old_sum, "%d requests for %d attacks" % (_need, _old_sum))
+        _budget = write("oldsum", "choices.0.message.content",
+                        extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n" % _old_sum)
+        _ok2, _rep2 = onboard.check(_budget)
+        _n2 = " ".join(_rep2["notes"])
+        check("a budget the size of attacks x trials is too small, and is told so",
+              "STOP part way" in _n2, _n2[:200])
+        check("...and the sentence says a chain is counted by its steps",
+              "counting a chain by its steps" in _n2, _n2[:220])
+        check("...and it names the request count, not the attack count",
+              str(_need) in _n2, _n2[:220])
+        _budget = write("enough", "choices.0.message.content",
+                        extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n" % _need)
+        _ok3, _rep3 = onboard.check(_budget)
+        check("...while a budget that covers every step is not warned about",
+              "STOP part way" not in " ".join(_rep3["notes"]),
+              " ".join(_rep3["notes"])[:200])
+
+        # AND ONE ARITHMETIC, NOT TWO. `docs/ci.md`'s cost table is recounted in
+        # `test_readme` with the same rule; if that gate keeps its own copy of it the two
+        # can drift apart again in the direction nobody watches.
+        _rsrc = io.open(os.path.join(HERE, "test_readme.py"), encoding="utf-8").read()
+        check("the cost table is recounted with the engine's own turn rule",
+              "from runner import turns" in _rsrc,
+              "test_readme keeps its own copy of the turn rule")
+        # A three-step chain is three and a plain attack is one, pinned to a fixture so the
+        # shared function cannot answer both callers the same wrong way.
+        from runner import turns as _turns_f
+        check("a three-step chain costs three requests",
+              _turns_f({"delivery": "chain", "steps": ["a", "b", "c"]}) == 3,
+              str(_turns_f({"delivery": "chain", "steps": ["a", "b", "c"]})))
+        check("...a plain attack costs one",
+              _turns_f({"text": "hi"}) == 1, str(_turns_f({"text": "hi"})))
+        check("...and an empty or malformed steps list is one, not zero",
+              _turns_f({"steps": []}) == 1 and _turns_f({"steps": "abc"}) == 1,
+              "%s %s" % (_turns_f({"steps": []}), _turns_f({"steps": "abc"})))
 
         # --- an unreachable endpoint --------------------------------------------------------
         dead = os.path.join(work, "targets_dead.yaml")

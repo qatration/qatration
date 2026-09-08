@@ -117,8 +117,11 @@ def execute(job, root, python=None):
     # sorts every row on a zero and quietly does nothing. A scope designed around a measurement
     # it never took.
     #
-    # It is also the cheaper half of the honesty: 48 ordinary questions against 19 attacks x 3
-    # trials. A failure here does NOT fail the job — the sweep is still worth running, the
+    # It is also the cheaper half of the honesty: one pass of the benign corpus against the
+    # whole arsenal at three trials. Said that way because the two counts this used to name
+    # -- 48 questions, 19 attacks -- were a literal of the same vintage as the one
+    # `onboard._arsenal` replaced, and the arsenal has since grown twenty-fold.
+    # A failure here does NOT fail the job — the sweep is still worth running, the
     # report says which findings could not be attributed, and the operator gets a narrower
     # answer rather than none.
     base = _run([os.path.join(HERE, "benign.py"), "--target-config", job["config"]],

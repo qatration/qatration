@@ -86,20 +86,26 @@ def _prose(s):
     return " " in s and len(s) >= 20
 
 
-def _arsenal_size(path=None):
-    """How many attacks a default run will actually send.
+def _arsenal(path=None):
+    """The attacks a default run will actually send.
 
     Read rather than remembered: the number this replaced was a literal that had been true of a
     nineteen-attack arsenal, and nothing re-read it when the arsenal grew. A budget warning
     computed from a stale count is worse than none, because the operator sizes the budget
     against it and the sweep stops part way with no explanation.
+
+    THE ATTACKS RATHER THAN THEIR COUNT, because the count is not what a budget is spent on.
+    A chain sends one request per step, so 379 attacks cost 488 requests a trial, and this
+    returned the 379 -- the same class of wrong as the literal it replaced, one step along:
+    a number that was true of a simpler arsenal and stopped being true when chains arrived.
+    `runner.requests_for` is the arithmetic `docs/ci.md` is priced with.
     """
     import yaml as _yaml
     p = path or os.path.join(HERE, "attacks_generic.yaml")
     try:
-        return len(_yaml.safe_load(open(p, encoding="utf-8")) or [])
+        return list(_yaml.safe_load(open(p, encoding="utf-8")) or [])
     except (OSError, ValueError):
-        return 0
+        return []
 
 
 def unread_context_keys(cfg):
@@ -331,17 +337,27 @@ def check(cfg_path, probe_text=PROBE):
         # attacks in it. The intake queues the portable arsenal, which has 362, so the advice
         # said a run needs 57 requests while the run needed nearly twenty times that — and the
         # operator sized a budget against it and had the sweep stop a fraction of the way in.
-        need_att = _arsenal_size()
-        need_req = need_att * 3
+        #
+        # AND THE ARITHMETIC ABOVE IT SAID `attacks x trials`, WHICH IS NOT WHAT A BUDGET
+        # BUYS. A chain sends one request per step and 69 of the 379 are chains, so the run
+        # costs 1,464 requests and this said 1,137. `docs/ci.md` prices the same sweep at
+        # 1,464 and its gate recounts it; only the check an operator reads before spending
+        # money had its own arithmetic, and it understated -- which in a warning whose whole
+        # sentence is `it will STOP part way` means silence exactly where it should speak.
+        from runner import requests_for as _requests_for
+        _atk = _arsenal()
+        need_att = len(_atk)
+        need_req = _requests_for(_atk, 3)
         if rate.max_requests and rate.max_requests < need_req:
             rep["notes"].append(
-                f"a default run sends about {need_req} requests ({need_att} attacks x 3 trials) and "
+                f"a default run sends about {need_req} requests ({need_att} attacks x 3 trials, "
+                f"counting a chain by its steps) and "
                 f"the budget allows {rate.max_requests}. It will STOP part way, and the "
                 f"attacks it never sent are a gap rather than rows that held.")
         if rep["seconds"] and rate.max_seconds:
             # An estimate, said as one. The arsenal size x 3 trials is the default shape.
             #
-            # AND IT WAS 19 UNTIL NOW, which is the literal `_arsenal_size()` exists to replace.
+            # AND IT WAS 19 UNTIL NOW, which is the literal `_arsenal()` exists to replace.
             # Its docstring says so twelve lines up: "the number this replaced was a literal
             # that had been true of a nineteen-attack arsenal, and nothing re-read it when the
             # arsenal grew". The request estimate above got the fix; this one, in the same
@@ -351,11 +367,11 @@ def check(cfg_path, probe_text=PROBE):
             # quiet exactly when it should speak. At a 3s reply it reported 3 minutes against
             # a real 57, so an 1800s budget looked comfortable and would stop a third of the
             # way in.
-            need = rep["seconds"] * need_att * 3
+            need = rep["seconds"] * need_req
             if need > rate.max_seconds:
                 rep["notes"].append(
                     f"that reply took {rep['seconds']}s, so a default run ({need_att} attacks x 3 "
-                    f"trials) needs roughly {need / 60:.0f} min against a budget of "
+                    f"trials, {need_req} requests) needs roughly {need / 60:.0f} min against a budget of "
                     f"{rate.max_seconds / 60:.0f} min. It will STOP part way, and the attacks "
                     f"it never sent are a gap rather than rows that held.")
     return True, rep
