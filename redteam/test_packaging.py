@@ -816,6 +816,91 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
     assert len(_ran) >= 5, (
         "only %d command(s) were driven over real evidence, so this property was asserted "
         "about almost nothing: %s" % (len(_ran), _ran))
+    # (7) AND THE SAME CODE THROUGH THE MODULE'S OWN DOOR. Everything above drives
+    #     `cli.py`, which ends in `sys.exit(main() or 0)`. Five modules ended in
+    #     `main()`, so the code they computed existed for one of the two ways to run
+    #     them: `history` and `compare` answered 3 through the entry point and 0 as a
+    #     file, `isolation`, `matrix` and `generate` the same with a 2. `build_index`
+    #     states the rule beside its own guard — the return value is the answer —
+    #     and it was the only one of six that had been told.
+    #
+    #     This is the shape that keeps finding things here: the rule had fixtures and
+    #     passed them, and one of its two callers had stopped asking.
+    def _own_returns(fn):
+        """Returns of THIS function. `run_redteam`'s main holds a nested helper whose
+        `return 1` is a request count, not an exit code."""
+        out = []
+
+        def walk(node):
+            for ch in ast.iter_child_nodes(node):
+                if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                                   ast.ClassDef)):
+                    continue
+                if isinstance(ch, ast.Return):
+                    out.append(ch)
+                walk(ch)
+
+        walk(fn)
+        return out
+
+    def _drops_its_code(src):
+        """Does this module compute an exit code in main() and lose it on `python x.py`?"""
+        _tr = ast.parse(src)
+        _mn = next((n for n in _tr.body
+                    if isinstance(n, ast.FunctionDef) and n.name == "main"), None)
+        if _mn is None:
+            return False
+        if not any(isinstance(r.value, ast.Constant) and isinstance(r.value.value, int)
+                   for r in _own_returns(_mn)):
+            return False
+        _g = [n for n in _tr.body
+              if isinstance(n, ast.If) and "__main__" in ast.dump(n.test)]
+        _b = ast.get_source_segment(src, _g[0]) if _g else ""
+        return "sys.exit" not in (_b or "")
+
+    _dropped = sorted(_mod for _name, (_mod, _b) in cli.COMMANDS.items()
+                      if _drops_its_code(io.open(os.path.join(HERE, _mod + ".py"),
+                                                 encoding="utf-8").read()))
+    assert not _dropped, (
+        "%s compute an exit code in main() and end in `main()`, so `python <file>.py` "
+        "answers 0 whatever they decided: %s" % (len(_dropped), _dropped))
+    # AND THE SCAN CAN SEE ONE, on sources written to be wrong rather than on the tree
+    # happening to be clean — which is how it looked for the whole time it was not.
+    _plant_bad = ("def main():\n    return 3\n\n\n"
+                  'if __name__ == "__main__":\n    main()\n')
+    _plant_ok = ("def main():\n    return 3\n\n\n"
+                 'if __name__ == "__main__":\n    sys.exit(main() or 0)\n')
+    _plant_nested = ("def main():\n    def helper():\n        return 1\n"
+                     "    helper()\n\n\n"
+                     'if __name__ == "__main__":\n    main()\n')
+    assert _drops_its_code(_plant_bad), "the scan cannot see a dropped code"
+    assert not _drops_its_code(_plant_ok), "the scan flags a guard that propagates"
+    assert not _drops_its_code(_plant_nested), (
+        "the scan reads a nested helper's return as an exit code")
+
+    #     AND DRIVEN, because the scan reads a spelling and the question is behaviour.
+    #     Every command that answered 3 through the entry point over the ghost workspace
+    #     must answer 3 as a file, run the same way.
+    _ghost2 = tempfile.mkdtemp()
+    _door = []
+    try:
+        for name in sorted(_answered):
+            _mod = cli.COMMANDS[name][0]
+            _pm = subprocess.run([sys.executable, os.path.join(HERE, _mod + ".py")],
+                                 capture_output=True, text=True, timeout=180,
+                                 cwd=_ghost2,
+                                 env=dict(os.environ, QATRATION_OUT=_ghost2,
+                                          PYTHONIOENCODING="utf-8"))
+            assert _pm.returncode == rc_for[name], (
+                "`python %s.py` exited %s where `qatration %s` exited %s over the same "
+                "empty workspace" % (_mod, _pm.returncode, name, rc_for[name]))
+            _door.append(_mod)
+    finally:
+        shutil.rmtree(_ghost2, ignore_errors=True)
+    assert len(_door) >= 6, (
+        "only %d module(s) were driven through their own door, so this was asserted "
+        "about almost nothing: %s" % (len(_door), _door))
+
     print("  ok  %d commands answer an empty workspace without publishing one"
           % len(cli.COMMANDS))
 

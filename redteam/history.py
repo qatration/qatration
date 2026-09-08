@@ -568,4 +568,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The return value is the answer; `main()` alone drops it. Stated where `build_index`
+    # states it, because five modules here computed a code and threw it away for anybody
+    # who ran the file rather than the `qatration` entry point.
+    sys.exit(main() or 0)
