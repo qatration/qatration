@@ -261,8 +261,12 @@ def main():
           str(sorted((set(_DEC) | set(_ONE)) - set(ENCODERS))))
     check("...and no strategy is called both", sorted(set(_DEC) & set(_ONE)) == [],
           str(sorted(set(_DEC) & set(_ONE))))
-    check("...and every one-way declaration gives a reason", all(_ONE.values()), True)
-    check("...and every declared loss names what is lost", all(_LOSSY.values()), True)
+    check("...and every one-way declaration gives a reason", all(_ONE.values()),
+          "no reason given for: %s"
+          % ", ".join(sorted(k for k, v in _ONE.items() if not v)))
+    check("...and every declared loss names what is lost", all(_LOSSY.values()),
+          "nothing named for: %s"
+          % ", ".join(sorted(k for k, v in _LOSSY.items() if not v)))
     check("...and a loss is only declared for something that HAS an inverse",
           sorted(set(_LOSSY) - set(_DEC)) == [], str(sorted(set(_LOSSY) - set(_DEC))))
     # AND THE TWO LISTS AGREE. This one is written from what the codecs do; a strategy

@@ -316,6 +316,99 @@ def main():
     check("...and there were assertions to scan", _n_checks > 500 and len(_suites) > 20,
           f"{_n_checks} check() calls in {len(_suites)} suites")
 
+    # --- AND ONE WRITTEN IN THE OTHER SUITE'S DIALECT -----------------------------------
+    #
+    # These suites carry two `check` signatures. Most are `check(label, ok, detail)`, where
+    # the second argument is the assertion; a few are `check(label, got, want)`, where the
+    # comparison happens inside. Write the second form in a file that defines the first and
+    # nothing complains: the expected value lands in `detail`, the VALUE lands in `ok`, and
+    # the assertion silently weakens to `is it truthy`.
+    #
+    # Found in this repository, twice, in the two lines that gate what the CI exit code is:
+    # `check("...cannot answer rather than failing the build", regression_verdict(d)[0], 3)`
+    # passes on 1, 2, 3 and 4 alike -- and 1 is `fail the build`, the exact outcome the
+    # label says must not happen.
+    #
+    # The tautology scan above cannot see this: the expression is a call, its value is not
+    # fixed, and it does fail when the code returns zero. It asserts less than its label
+    # says rather than nothing at all, which is why it needs its own question: in a file
+    # whose `check` takes a `detail`, a bare NUMBER in that slot is the other dialect.
+    def _detail_form(fn):
+        """Does THIS function define `check` with a `detail` slot rather than a `want` one?
+
+        PER FUNCTION, NOT PER FILE. `test_workspace` defines both signatures -- `main` takes a
+        `detail`, `check_every_command_refuses` takes a `want` -- so asking the question of the
+        file flagged thirty-four calls that were written in the dialect of the `check` actually
+        in scope. A scan that cries wolf is a scan somebody switches off.
+        """
+        for n in fn.body:
+            if isinstance(n, ast.FunctionDef) and n.name == "check":
+                names = [a.arg for a in n.args.args]
+                return len(names) >= 3 and names[2] in ("detail", "why", "note")
+        return False
+
+    def _wrong_dialect(tree):
+        """-> line numbers of `check(label, value, <number>)` in a detail-form scope."""
+        out = []
+        for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+            if not _detail_form(fn):
+                continue
+            out += _constants_in_detail(fn)
+        return sorted(out)
+
+    def _constants_in_detail(fn):
+        out = []
+        for n in ast.walk(fn):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                    and n.func.id == "check" and len(n.args) == 3):
+                continue
+            third = n.args[2]
+            # A BARE `True` OR `False` COUNTS TOO, and excluding it was a guess:
+            # `detail` is what gets printed beside a failure, and a lone `False`
+            # there tells a reader nothing. It is the `want` of the other dialect
+            # and weakens the assertion exactly as a number does -- written by hand
+            # here three times in one block, the hour this scan was written.
+            if (isinstance(third, ast.Constant)
+                    and isinstance(third.value, (int, float, bool))):
+                out.append(n.lineno)
+        return out
+
+    # THE SCAN IS PROVED ON A PLANTED ONE, in this process, like the name scan above it:
+    # a detector for a shape nobody currently writes is a detector nobody has seen work.
+    # WRAPPED IN A FUNCTION, because that is the shape every suite here has: `main` defines
+    # its own `check` and the calls live beside it. A module-level fixture would prove the
+    # scan on a shape the scan is not looking at.
+    _NL = chr(10)
+    _plant = ast.parse(_NL.join([
+        "def main():",
+        "    def check(label, ok, detail=''):",
+        "        pass",
+        "    check('x', f(), 3)",
+        "    check('y', g() == 3, 'd')",
+        "    check('z', h(), False)",
+    ]) + _NL)
+    check("the dialect scan finds a planted one, number or bool alike",
+          _wrong_dialect(_plant) == [4, 6], str(_wrong_dialect(_plant)))
+    _plant2 = ast.parse(_NL.join([
+        "def main():",
+        "    def check(label, got, want):",
+        "        pass",
+        "    check('x', f(), 3)",
+    ]) + _NL)
+    check("...and leaves the scopes that really take a `want` alone",
+          _wrong_dialect(_plant2) == [], str(_wrong_dialect(_plant2)))
+
+    _dialect = []
+    for _sp in _suites:
+        try:
+            _tree = ast.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        _dialect += ["%s:%d" % (os.path.basename(_sp), ln)
+                     for ln in _wrong_dialect(_tree)]
+    check("no assertion passes its expected value where the detail goes, which would "
+          "weaken it to `is it truthy`", not _dialect, "; ".join(_dialect[:6]))
+
     # --- THE NUMBER A SUITE PRINTS IS THE NUMBER IT RAN ---------------------------------
     #
     # `test_isolation` counts its checks as they run, with the reason written above the

@@ -358,7 +358,9 @@ def main():
     check("...and every declared file is still there",
           sorted(set(_ROOT_FILES) - set(_at_root)) == [],
           "declared but absent: %s" % ", ".join(sorted(set(_ROOT_FILES) - set(_at_root))))
-    check("...and each one says why it is there", all(_ROOT_FILES.values()), True)
+    check("...and each one says why it is there", all(_ROOT_FILES.values()),
+          "no reason given for: %s"
+          % ", ".join(sorted(k for k, v in _ROOT_FILES.items() if not v)))
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
