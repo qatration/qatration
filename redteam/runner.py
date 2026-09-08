@@ -119,6 +119,10 @@ def _resilient_send(fn, attack_id):
             time.sleep(_wait)
         probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
         attempts += 1
+    # AND SAID WHERE A READER CAN SEE IT. The stderr line above is gone with the
+    # terminal; this rides on the answer into the artifact and the run record.
+    if probe is not None:
+        probe.retries = attempts - 1
     return probe
 
 
@@ -232,6 +236,18 @@ def turns(attack):
 def requests_for(attacks, trials):
     """Requests one sweep of these attacks costs, before any retry."""
     return sum(turns(a) for a in attacks) * int(trials)
+
+
+def retries_in(records):
+    """-> (sends that produced an answer, how many of them needed a second attempt).
+
+    A function rather than two lines inside the sweep's loop, because the only fixture
+    that can reach a line inside that loop is a live run against a target that fails —
+    and a healthy one makes the count zero, which is the value the arithmetic returns
+    when it has been deleted. Mutation said so: emptying the sum left every check green.
+    """
+    probes = [r.get("probe") for r in records if (r or {}).get("probe") is not None]
+    return len(probes), sum(int(getattr(p, "retries", 0) or 0) for p in probes)
 
 
 def undeliverable(attack, caps):

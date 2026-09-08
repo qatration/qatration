@@ -109,7 +109,8 @@ def _probe(attack, d):
                  observations=d.get("observations") or [],
                  resolved=[tuple(t) for t in (d.get("resolved") or [])],
                  error=d.get("error"), seconds=float(d.get("seconds") or 0),
-                 turns=d.get("turns") or [])
+                 turns=d.get("turns") or [],
+                 retries=int(d.get("retries") or 0))
 
 
 def rescore(path, ctx):

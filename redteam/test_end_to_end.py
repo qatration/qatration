@@ -777,6 +777,22 @@ oracle_context:
         # the confound could not fire.
         check("the artifact records the model it ran against",
               res["meta"].get("model"), "scripted")
+        # AND EVERY FIELD OF THE PROBE IT STORED. `test_rejudge` holds this rule and asks
+        # it of the RECONSTRUCTION and of the sweep's source; this asks it of a file a
+        # real sweep wrote, which is the only version that cannot be satisfied by a
+        # fixture somebody kept in step by hand. A field the writer stops storing comes
+        # back from the replay as its default, and a default reads as a measurement.
+        import dataclasses as _dc_e
+        from target import Probe as _P_e
+        _stored_probe = next(
+            (_tr["probe"] for _r in res["results"] for _tr in _r.get("trials", [])
+             if _tr.get("probe")), None)
+        check("the sweep stored a probe to check at all", _stored_probe is not None,
+              "no trial in this run carries one")
+        _missing_e = ({_f.name for _f in _dc_e.fields(_P_e)}
+                      - set(_stored_probe or {}))
+        check("...and it carries every field the replay reads back",
+              not _missing_e, str(sorted(_missing_e)))
         # AND WHAT ITS OWN EVIDENCE SILENCED. `inert_for` asks whether a detector could speak
         # on this TARGET, from the keys its config supplies. Twenty-one detectors read the
         # tool side and nothing else, so a run whose probes carry no tool call silenced those
@@ -898,6 +914,14 @@ oracle_context:
         check("...closed rather than left open", rec.get("state") == "finished",
               str(rec.get("state")))
         check("...with what it cost", (rec.get("spent") or {}).get("requests", 0) > 0,
+              str(rec.get("spent")))
+        # AND HOW WELL THE SENDS WENT. `_resilient_send` retries once and said so only on
+        # stderr, so a sweep that limped and one that did not left identical records.
+        # Driven through a real run rather than asserted of `_spend`: the counter has to
+        # be threaded from the probe through the attack loop to the record, and every
+        # link of that is a place it can be dropped.
+        check("...and how many sends had to be retried, which zero also answers",
+              isinstance((rec.get("spent") or {}).get("retries"), int),
               str(rec.get("spent")))
         check("...and the scope it was run at", rec.get("scope") == "quick", str(rec.get("scope")))
         check("...and the budgets it was promised",

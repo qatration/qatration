@@ -229,7 +229,15 @@ def listing(root):
 def summarise(rec):
     """One line a human reads in a terminal."""
     spent = rec.get("spent") or {}
-    cost = ", ".join(f"{k} {v}" for k, v in spent.items()) or "nothing recorded"
+    # RETRIES ARE NOT A COST, they are a fact about how the sends went, and only one
+    # adapter counts cost at all. Folded into the same join they read as another budget
+    # number, and `nothing recorded` would stop being true of a run whose cost really was
+    # not counted. `retries 0` is a measurement — every send landed first time —
+    # and its ABSENCE means the run predates the counting, which is a third thing again.
+    _cost = {k: v for k, v in spent.items() if k != "retries"}
+    cost = ", ".join(f"{k} {v}" for k, v in _cost.items()) or "nothing recorded"
+    if "retries" in spent:
+        cost += ", %s retried send(s)" % spent["retries"]
     auth = (rec.get("authorization") or {}).get("method") or "local"
     # WIDE ENOUGH FOR THE NAMES THAT EXIST. At 20 the column welded itself to the next one --
     # `guardedrag-mitigatedscope=full` -- and a row that runs two fields together invents a

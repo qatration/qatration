@@ -370,6 +370,102 @@ def main():
         finally:
             EXTRA.clear()
 
+        # --- A RUN THAT LIMPED LEFT NO TRACE A READER COULD FIND ----------------------
+        #
+        # `_resilient_send`'s own docstring: "Retries are logged to stderr (never
+        # silently swallowed) — a run that limped is not a clean run and the report
+        # reader deserves to know." The reader of an artifact does not have stderr. A
+        # sweep where every send landed first time and one where half of them needed a
+        # second attempt produced identical files and identical pages.
+        #
+        # The count rides on the probe, so it reaches the sweep, the run record, and
+        # every other caller of the retry loop without any of them asking.
+        from runner import _resilient_send as _rs_r
+        from target import Probe as _P_r
+        _st = {"n": 0}
+
+        def _flaky():
+            _st["n"] += 1
+            if _st["n"] == 1:
+                return _P_r(prompt="x", error="boom")
+            return _P_r(prompt="x", output="ok")
+
+        _pr = _rs_r(_flaky, "retry-fixture")
+        check("a send that needed a second attempt says so on the answer",
+              _pr.retries == 1 and _pr.output == "ok" and not _pr.error,
+              "retries=%s error=%r" % (_pr.retries, _pr.error))
+        check("...and one that landed first time says zero, not nothing",
+              _rs_r(lambda: _P_r(prompt="x", output="ok"), "clean").retries == 0,
+              str(_rs_r(lambda: _P_r(prompt="x", output="ok"), "clean").retries))
+        # AND A SEND THAT NEVER LANDED STILL COUNTS THE ATTEMPT IT MADE, because the
+        # question is what the run cost, not whether it succeeded.
+        _pf = _rs_r(lambda: _P_r(prompt="x", error="boom"), "dead")
+        check("...and a send that failed twice counts the retry it made",
+              _pf.retries == 1 and _pf.error, "retries=%s" % _pf.retries)
+
+        # THE RUN RECORD IS WHERE IT LANDS. `_spend` reports cost only for the adapter
+        # that counts one; retries are counted by `runner` and are known for every
+        # target, so they are reported either way — and `None` for a run that never
+        # sent anything leaves the key out rather than writing a zero, which would say
+        # the sends were clean.
+        from run_redteam import _spend as _spend_r
+
+        class _NoRate(object):
+            rate = None
+
+        check("a target with no budget still reports its retries",
+              _spend_r(_NoRate(), 4) == {"retries": 4}, str(_spend_r(_NoRate(), 4)))
+        check("...and a run that sent nothing claims nothing about them",
+              _spend_r(_NoRate()) == {}, str(_spend_r(_NoRate())))
+        # AND THE ARITHMETIC BETWEEN THEM, on fixtures rather than on a live sweep. This
+        # was two lines inside the attack loop, and the only thing that could reach them
+        # was a real run against a target that fails — a healthy one gives zero,
+        # which is exactly what the sum returns once it has been deleted. Mutation found
+        # that: emptying it left every check green.
+        from runner import retries_in as _ri
+        _recs = [
+            {"probe": _P_r(prompt="a", output="x", retries=2)},
+            {"probe": _P_r(prompt="b", output="y")},
+            {"probe": None},
+        ]
+        check("the sweep counts the retries its sends made", _ri(_recs) == (2, 2),
+              str(_ri(_recs)))
+        check("...and a skipped attack is neither a send nor a retry",
+              _ri([{"probe": None}]) == (0, 0), str(_ri([{"probe": None}])))
+        check("...and no records at all is zero of each, not an error",
+              _ri([]) == (0, 0), str(_ri([])))
+        # AND THE SWEEP ASKS IT. The count reaching the record is what this is for, and a
+        # function nobody calls answers its fixtures perfectly.
+        import ast as _ast_r, io as _io_r
+        _rrs = _io_r.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _rrm = next((n for n in _ast_r.walk(_ast_r.parse(_rrs))
+                     if isinstance(n, _ast_r.FunctionDef) and n.name == "main"), None)
+        _rrms = _ast_r.get_source_segment(_rrs, _rrm) if _rrm else ""
+        # AS A BINDING, NOT AS A SUBSTRING. Written as `is the name in the source`, it
+        # passed on a `main` that shadowed the import with `lambda recs: (0, 0)` -- the
+        # name was there and the function was not being used.
+        _imports = [_n for _n in (_ast_r.walk(_rrm) if _rrm else ())
+                    if isinstance(_n, _ast_r.ImportFrom)
+                    and _n.module == "runner"
+                    and any(_a.name == "retries_in" for _a in _n.names)]
+        check("...and the sweep is what calls it", bool(_imports),
+              "run_redteam.main does not import retries_in from runner")
+        _calls = [_n for _n in (_ast_r.walk(_rrm) if _rrm else ())
+                  if isinstance(_n, _ast_r.Call) and isinstance(_n.func, _ast_r.Name)
+                  and _n.func.id in {(_a.asname or _a.name)
+                                     for _i in _imports for _a in _i.names}]
+        check("...and calls what it imported", bool(_calls),
+              "the import is there and nothing uses it")
+        from runs import summarise as _sum_r
+        _line = _sum_r({"run_id": "r", "state": "finished", "target": "t",
+                        "spent": {"retries": 2}})
+        check("...and the run listing says it in words a reader can act on",
+              "2 retried send(s)" in _line, _line[-60:])
+        _line0 = _sum_r({"run_id": "r", "state": "finished", "target": "t",
+                         "spent": {}})
+        check("...while a record that predates the counting claims nothing",
+              "retried send(s)" not in _line0, _line0[-60:])
+
         # --- A 429 SAYS SLOW DOWN, AND THIS RETRIED 0.0 SECONDS LATER ---------------------
         #
         # `_resilient_send` retries once on any error. A rate limit is the one error where

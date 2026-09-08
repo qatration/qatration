@@ -91,6 +91,18 @@ class Probe:
     # already have. When it is absent the oracle says so rather than reporting clean; see
     # `oracle.blind_spots`.
     resolved: List[Tuple[str, str]] = field(default_factory=list)
+    # HOW MANY EXTRA ATTEMPTS THIS ANSWER TOOK. `runner._resilient_send` retries a send
+    # that timed out or errored, and its docstring says why the number matters: `a run
+    # that limped is not a clean run and the report reader deserves to know`. It was
+    # written to stderr, which is not a channel the reader of an artifact has. A run
+    # where every send succeeded first time and one where half of them needed a second
+    # attempt produced identical files.
+    #
+    # On the probe rather than in a counter somewhere, for the reason the error is: the
+    # fact belongs to the answer it is about, and every caller of the retry loop —
+    # `compose`, `isolation`, `keysearch`, `recon` and the sweep — gets it without
+    # asking.
+    retries: int = 0
 
     def __post_init__(self):
         """The annotations above are a promise; this is what keeps it.

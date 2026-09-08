@@ -56,7 +56,8 @@ def main():
     # --- every field a detector reads survives the round trip -------------------------
     stored = {"prompt": "p", "output": "o", "tool_calls": [["T", "a"]],
               "observations": ["obs"], "error": None, "seconds": 26.5,
-              "resolved": [["T", "resolved-arg"]], "turns": [{"output": "t1"}]}
+              "resolved": [["T", "resolved-arg"]], "turns": [{"output": "t1"}],
+              "retries": 2}
     p = _probe({"id": "x"}, stored)
     check("seconds survives — the timing detectors read it and saw 0",
           p.seconds == 26.5, f"got {p.seconds}")
@@ -69,6 +70,16 @@ def main():
           p.resolved == [("T", "resolved-arg")], str(p.resolved))
     check("a missing probe stays missing rather than becoming an empty one",
           _probe({"id": "x"}, None) is None)
+    check("retries survives — which trial limped is a fact about the run, not the "
+          "oracle", p.retries == 2, str(p.retries))
+    # AND AN ARTIFACT WRITTEN BEFORE THE COUNTING COMES BACK AS ZERO, which is the same
+    # convention `seconds` uses and the reason the RUN RECORD is where `not recorded` is
+    # said: there the key is absent and the absence means it.
+    check("...and an older artifact that never carried it replays as zero",
+          _probe({"id": "x"}, {k: v for k, v in stored.items()
+                               if k != "retries"}).retries == 0,
+          str(_probe({"id": "x"}, {k: v for k, v in stored.items()
+                                   if k != "retries"}).retries))
 
     # --- the gate, rather than a fourth fix of the same bug ----------------------------
     # `seconds`, then `prompt`, then `resolved`: three fields dropped by a reconstruction
@@ -78,6 +89,31 @@ def main():
     import dataclasses
     from target import Probe
     fields = {f.name for f in dataclasses.fields(Probe)}
+
+    # AND THE OTHER END OF THE TRIP, which this gate did not reach. Everything below asks
+    # whether the RECONSTRUCTION carries a field; nothing asked whether the sweep ever
+    # WROTE it. All three of the drops that provoked this check were reader-side, so the
+    # blind half went unnoticed — and a field the writer stops storing comes back from
+    # `_probe` as its default in exactly the same way, with every check here still green.
+    #
+    # Found by mutation while adding `retries`: deleting the line that stores it left this
+    # suite passing.
+    import ast as _ast_w
+    _rr_src = io.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    _probe_dicts = [
+        _n for _n in _ast_w.walk(_ast_w.parse(_rr_src))
+        if isinstance(_n, _ast_w.Dict)
+        and {_k.value for _k in _n.keys
+             if isinstance(_k, _ast_w.Constant) and isinstance(_k.value, str)}
+        >= {"output", "tool_calls", "observations"}]
+    check("the sweep has a probe to store at all", len(_probe_dicts) == 1,
+          "%d dict(s) look like a serialised probe" % len(_probe_dicts))
+    _written = set()
+    for _d in _probe_dicts:
+        _written |= {_k.value for _k in _d.keys
+                     if isinstance(_k, _ast_w.Constant) and isinstance(_k.value, str)}
+    check("...and stores every field the replay is checked for reading",
+          not (fields - _written), str(sorted(fields - _written)))
     check("every Probe field is exercised by the round-trip fixture above",
           fields <= set(stored), f"not covered: {sorted(fields - set(stored))}")
     full = _probe({"id": "x"}, stored)

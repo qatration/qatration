@@ -331,17 +331,24 @@ def _build_mismatch(tcfg):
     return "; ".join(bad)
 
 
-def _spend(target):
+def _spend(target, retries=None):
     """What this run cost, when the adapter counted. Empty is honest for one that did not.
 
     Only the configured HTTP adapter keeps a budget, because it is the only one pointed at
     somebody else's endpoint. An in-process practice target costs GPU and nobody's goodwill,
     so it reports nothing rather than a zero that would read as "free".
+
+    RETRIES ARE KNOWN FOR EVERY TARGET, because `runner` counts them and not the adapter,
+    so they are reported whether or not there is a budget to report. `None` means this run
+    never got as far as sending anything and is left out rather than written as a zero,
+    which would say the sends were clean.
     """
     rate = getattr(target, "rate", None)
-    if rate is None:
-        return {}
-    return {"requests": rate.used, "seconds": round(rate.elapsed, 1)}
+    out = {} if rate is None else {"requests": rate.used,
+                                   "seconds": round(rate.elapsed, 1)}
+    if retries is not None:
+        out["retries"] = retries
+    return out
 
 
 def _missing_side(path):
@@ -1100,6 +1107,9 @@ def main():
     broke = 0
     exploited_n = 0
     results = []
+    # SENDS AND SECOND ATTEMPTS, initialised here so every `finish` below can report
+    # them, including the ones that abort before a single attack is sent.
+    _sends, _retried = 0, 0
     # WHEN THE TARGET HAS ASKED US TO STOP, REPEATEDLY, AND NOTHING HAS EVER LANDED.
     #
     # Measured against an endpoint answering 429 to everything: this sent 92 requests over
@@ -1151,8 +1161,21 @@ def main():
                 "observations": r["probe"].observations,
                 "error": r["probe"].error, "seconds": r["probe"].seconds,
                 "turns": getattr(r["probe"], "turns", []),
+                # WHICH TRIAL LIMPED, not only how many of them did. `test_rejudge`
+                # holds the rule this was found by: every field on a Probe has to
+                # survive the round trip, because one the file does not carry comes
+                # back as its default and a default reads as a measurement.
+                "retries": getattr(r["probe"], "retries", 0),
             },
         } for r in recs]
+        # WHAT THE SENDS COST IN SECOND ATTEMPTS. `_resilient_send` retries once and said
+        # so on stderr; a reader of the run record had no way to tell a sweep that limped
+        # from one that did not. Counted here, where every probe this run produced is
+        # already in hand.
+        from runner import retries_in as _retries_in
+        _s_n, _r_n = _retries_in(recs)
+        _sends += _s_n
+        _retried += _r_n
         results.append({"attack": a, "headline": head, "rate": rate,
                         "fired": fired_list, "locks": locks, "trials": trials_ser})
         if _wall.saw([r.get("probe") for r in recs]):
@@ -1240,7 +1263,7 @@ def main():
     # against the entire arsenal. `Probe.silent` is the one place that decides what came back.
     all_errored = nothing_measured(results)
     if all_errored:
-        _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
+        _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target, _retried),
                      note="every trial errored or came back empty; nothing was measured "
                           "and nothing was written")
         print(f"\nNOTHING MEASURED — every trial errored or came back empty "
@@ -1350,7 +1373,14 @@ def main():
     # Closed with what it actually cost, and with the ending named: a run stopped by its
     # budget is not a run that finished, and the attacks it never sent are a gap rather than a
     # set of findings that came back clean.
-    _spent = _spend(target)
+    _spent = _spend(target, _retried)
+    # AND SAID HERE TOO, because the run record is a file somebody opens later and this is
+    # the moment they are looking at the run. Silence when there were none: a line saying
+    # `0 retries` on every clean sweep is a line nobody reads by the third one.
+    if _retried:
+        print(f"\n  ! {_retried} of {_sends + _retried} send(s) had to be retried. A run that limped"
+          f"\n    is not a clean run: a retried send may have reached a different state of the"
+          f"\n    target than the one before it, and the rows below do not say which.")
     _stopped = bool(getattr(getattr(target, "rate", None), "exhausted", ""))
     _runs.finish(OUT_DIR, _rec, "stopped" if _stopped else "finished", spent=_spent,
                  note=(f"budget spent ({getattr(target.rate, 'exhausted', '')}); the remaining "
