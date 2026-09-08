@@ -447,6 +447,18 @@ def build_html(meta, results, recon=None, isolation=None):
     # every sweep and read by the fleet-wide defense report alone. A mistyped
     # `response.tool_calls` empties the channel sixteen detectors read, and this page —
     # the one an operator opens about their own bot — said nothing at all.
+    # WHO ASKED FOR THIS. `AUTHORISED-USE.md` promises the answer travels `beside the
+    # findings` and says why: an assessment that cannot say who asked for it is
+    # indistinguishable, in a log, from an attack. It reached the JSON and no page. This
+    # is a page somebody is handed and it is where the sentence has to be readable.
+    from workspace import authorization_line as _auth_line
+    _auth_txt = _auth_line(meta)
+    auth_html = (f'<div class="panel"><div class="ptitle">who authorised this run'
+                 # `note2`, not `note`: the legend under the table is the page's only
+                 # `<p class="note">` and `test_report` splits on that attribute to
+                 # tell the badge in a row from the badge named in the legend. A
+                 # second `note` above the table cut the split in the wrong place.
+                 f'</div><div class="note2">{esc(_auth_txt)}</div></div>')
     from workspace import dead_path_note as _dead_note
     _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
     deadpath_html = ""
@@ -524,6 +536,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 {delivery_html}
 {inert_html}
 {deadpath_html}
+{auth_html}
 {_recon_panel(recon)}
 <table>
 <thead><tr><th>ID</th><th>Technique</th><th>Delivery</th><th>Verdict</th><th>Rate</th><th>Blocked by</th><th>Detectors</th></tr></thead>

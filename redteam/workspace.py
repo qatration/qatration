@@ -1467,6 +1467,43 @@ def read_artifacts(paths):
     return good, bad
 
 
+def authorization_line(meta):
+    """Who authorised this run, in one sentence a reader of a page can act on.
+
+    `AUTHORISED-USE.md` promises it: "Every run records who authorised it, by which
+    method and when, beside the findings. An assessment that cannot say who asked for it
+    is worthless as evidence and dangerous as an artifact: in a log, it is
+    indistinguishable from an attack." `authorization.record` repeats the sentence where
+    it builds the field, and `run_redteam` repeats it again where it writes it.
+
+    The ARTIFACT keeps that promise. The assessment did not: `meta["authorization"]` was
+    read by `runs` and `history` and by nothing anybody is handed — not the per-target
+    scorecard, not the SARIF a pipeline uploads, not one of the fleet pages. The half of
+    the sentence that says why is about a reader, and no reader could see it.
+
+    THREE STATES, and the middle one is the common case. A record says who and how. `None`
+    says the target was local, so no proof was required — which is an answer, and a
+    different one from `we did not check`. The key being absent says the run predates the
+    field, and that is the third.
+    """
+    if "authorization" not in (meta or {}):
+        return ("This run predates the authorisation record, so who asked for it cannot "
+                "be answered from this artifact.")
+    auth = (meta or {}).get("authorization")
+    if not auth:
+        return ("No proof of authorisation was required: the target is local to the "
+                "machine that ran this. Nothing here says anybody outside it agreed to "
+                "be tested.")
+    _bits = [b for b in ("method %s" % auth.get("method") if auth.get("method") else "",
+                         "origin %s" % auth.get("origin") if auth.get("origin") else "",
+                         "issued %s" % auth.get("issued") if auth.get("issued") else "",
+                         "checked %s" % auth.get("checked_at")
+                         if auth.get("checked_at") else "") if b]
+    return ("Authorised to test this target: %s. The proof was %s."
+            % ("; ".join(_bits) or "no detail recorded",
+               auth.get("evidence") or "not described"))
+
+
 def dead_path_note(paths):
     """One sentence about declared response paths a run never resolved, or "".
 

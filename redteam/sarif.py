@@ -292,6 +292,14 @@ def build(results, target_config=None, out_dir=None):
     # different route: the key is spelled right, the detector is armed, and the value it
     # reads is empty on every probe because the path does not exist. Recorded by the sweep
     # since it was written and exported by nothing.
+    # AND WHO ASKED FOR IT. A SARIF log lands in somebody's code-scanning tab and outlives
+    # the terminal that produced it; `AUTHORISED-USE.md` promises this answer travels
+    # beside the findings, and the export carried every other caveat and not this one.
+    from workspace import authorization_line as _auth_line
+    notifications.append({
+        "level": "note",
+        "message": {"text": _auth_line(meta)},
+        "descriptor": {"id": "authorization/record"}})
     from workspace import dead_path_note as _dead_note
     _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
     if _dead_txt:

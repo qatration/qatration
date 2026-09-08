@@ -170,6 +170,26 @@ old = build([row("a1", "DEFENDED", [])], {})
 check("a result predating the inert field says it is UNKNOWN, not none",
       any(n["descriptor"]["id"] == "inert/unrecorded" for n in notifications(old)))
 
+# --- who asked for this -----------------------------------------------------------------
+#
+# A SARIF log lands in a code-scanning tab and outlives the terminal that produced it.
+# `AUTHORISED-USE.md` promises the answer travels beside the findings; the export carried
+# every other caveat and not this one.
+_a1 = build([row("a1", "DEFENDED", [])], {}, inert={},
+            authorization={"target": "t", "origin": "https://acme.example",
+                           "method": "header", "issued": "2026-09-01",
+                           "checked_at": "2026-09-06 10:00:00",
+                           "evidence": "observed by this run"})
+_a1txt = " ".join(n["message"]["text"] for n in notifications(_a1)
+                  if n["descriptor"]["id"] == "authorization/record")
+check("the export says who authorised the run",
+      "acme.example" in _a1txt and "header" in _a1txt, _a1txt[:120])
+_a2 = build([row("a1", "DEFENDED", [])], {}, inert={}, authorization=None)
+_a2txt = " ".join(n["message"]["text"] for n in notifications(_a2)
+                  if n["descriptor"]["id"] == "authorization/record")
+check("...and a local target says no proof was required",
+      "local to the machine" in _a2txt, _a2txt[:120])
+
 # --- a declared channel that never carried anything -------------------------------------
 #
 # An inert detector by a different route: the key is spelled right, the detector is armed,

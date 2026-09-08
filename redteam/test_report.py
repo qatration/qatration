@@ -230,8 +230,14 @@ def main():
                        [dict(RESULTS[0], headline="DEFENDED", rate="0/1")])
 
     def _in_table(html):
-        """The badge, not the legend. The legend explains the badge and always names it."""
-        return "one trial" in html.split('class="note"')[0]
+        """The badge, not the legend. The legend explains the badge and always names it.
+
+        SPLIT ON THE LEGEND, not on its class. This cut at the first `class="note"`
+        anywhere on the page, which assumed the legend is the only thing wearing it --
+        so a panel added above the table moved the cut and left this looking at a
+        fragment with no rows in it. The legend is one `<p class="note">Rate =`.
+        """
+        return "one trial" in html.split('<p class="note">Rate =')[0]
 
     check("a breach found on one trial is marked in the table", _in_table(_once), True)
     check("...and a breach that repeated is not marked as one trial",

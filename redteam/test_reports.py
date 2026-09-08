@@ -2028,6 +2028,40 @@ def main():
           not _dupes, "; ".join("%s: %r" % (v, k[:60]) for k, v in list(_dupes.items())[:2]))
     check("...over a real number of literals", len(_seen4) > 100, str(len(_seen4)))
 
+    # --- WHO ASKED FOR THIS ------------------------------------------------------------
+    #
+    # `AUTHORISED-USE.md`: "Every run records who authorised it, by which method and
+    # when, beside the findings. An assessment that cannot say who asked for it is
+    # worthless as evidence and dangerous as an artifact: in a log, it is
+    # indistinguishable from an attack." `authorization.record` repeats it and
+    # `run_redteam` repeats it again where it writes the field.
+    #
+    # The ARTIFACT kept that promise and the assessment did not: `meta["authorization"]`
+    # was read by `runs` and `history` and by nothing anybody is handed. The half of the
+    # sentence that says why is about a reader.
+    from report_engine import build_html as _bh7
+    _base7 = {"target": "authbot", "attacks_n": 1, "broke": 0, "trials": 1,
+              "when": "2026-09-04 10:00"}
+    _rows7 = [{"attack": {"id": "a1", "category": "exfil", "text": "a"},
+               "headline": "DEFENDED", "fired": [], "rate": "0/1",
+               "trials": [{"verdict": "DEFENDED", "probe": {"output": "no"}}]}]
+    _auth7 = {"target": "authbot", "origin": "https://acme.example",
+              "method": "header", "issued": "2026-09-01",
+              "checked_at": "2026-09-06 10:00:00",
+              "evidence": "observed by this run"}
+    _pg7 = _bh7(dict(_base7, authorization=_auth7), _rows7)
+    check("the scorecard says who authorised the run",
+          "acme.example" in _pg7 and "header" in _pg7, "the page names nobody")
+    check("...and whether the proof was seen or taken on trust",
+          "observed by this run" in _pg7, "the page does not say how it was proved")
+    _pg7b = _bh7(dict(_base7, authorization=None), _rows7)
+    check("...and a local target says no proof was required, not nothing",
+          "local to the machine" in _pg7b, "a local run says nothing at all")
+    _pg7c = _bh7(dict(_base7), _rows7)
+    check("...and a run predating the field says so rather than reading as local",
+          "predates the authorisation record" in _pg7c,
+          "an unrecorded run reads like a local one")
+
     # --- AND THE PAGE AN OPERATOR OPENS ABOUT THEIR OWN BOT ---------------------------
     #
     # `report_engine` states this lesson for `meta["inert"]` in its own comment: the sweep
