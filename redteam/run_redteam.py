@@ -1020,12 +1020,13 @@ def main():
     # got 29% of a sweep and a results file that needed the SARIF export's coverage notice to
     # avoid reading as complete. A ceiling that silently truncates a run is the same defect as
     # a detector that silently cannot fire.
-    def _requests_for(a):
-        if a.get("delivery") in ("chain", "sessions"):
-            return max(1, len(a.get("steps") or []))
-        return 1
-
-    _need = sum(_requests_for(a) for a in attacks) * trials
+    # THROUGH `runner.requests_for`, which is the same arithmetic `docs/ci.md` is priced
+    # with and `onboard` warns with. This was a third copy, and it was the only one that
+    # asked the DELIVERY rather than merely whether `steps` was present -- so the shared
+    # rule was the wrong one and the two agreed only because no shipped attack carries
+    # steps under another delivery. The rule moved to the send path; the copy goes.
+    from runner import requests_for as _requests_for_run
+    _need = _requests_for_run(attacks, trials)
     _rate = getattr(target, "rate", None)
     _cap = getattr(_rate, "max_requests", None) if _rate else None
     if _cap and _need > _cap:
@@ -1035,7 +1036,7 @@ def main():
         print(f"    About {pct:.0f}% of the arsenal would be sent and the rest would never "
               f"leave — reported as a gap, but still not measured.")
         print(f"    Raise the budget, lower --trials, or use --scope quick "
-              f"(which needs {sum(_requests_for(a) for a in breadth_slice(attacks)[0]) * trials} "
+              f"(which needs {_requests_for_run(breadth_slice(attacks)[0], trials)} "
               f"requests at {trials} trial(s)).")
 
     # AND THE OTHER HALF OF THE BUDGET, which this function never mentioned. `max_requests` got

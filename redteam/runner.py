@@ -192,6 +192,14 @@ DELIVERY_CAPABILITY = {
 }
 
 
+# THE DELIVERIES THAT SEND `steps` AS SEPARATE REQUESTS, named beside the dispatch that
+# does it. `run_attack` below sends `attack["steps"]` in exactly two branches; every other
+# delivery is one request, `forged_history` included -- it carries a whole transcript and
+# sends it once. `turns` read `steps` alone, so an attack that carries them under any other
+# delivery was priced at one request per step and costs one in total.
+MULTI_STEP = ("chain", "sessions")
+
+
 def turns(attack):
     """How many REQUESTS one trial of this attack costs. A three-step chain costs three.
 
@@ -206,9 +214,18 @@ def turns(attack):
     of 1,200 passed the check and stops the sweep at four fifths.
 
     Here rather than in either caller, because it is a fact about how a delivery is sent
-    and this module is what sends it.
+    and this module is what sends it — and `run_redteam` had a third spelling anyway,
+    the one that decides whether to REFUSE a run whose budget cannot hold it. That one
+    asked the delivery and this one asked only whether `steps` was present, so the two
+    agreed on the shipped arsenal by luck: every attack carrying steps happens to be a
+    chain or a sessions attack. An attack with steps under any other delivery would have
+    been priced here at one request per step and cost one.
     """
-    steps = attack.get("steps") if isinstance(attack, dict) else None
+    if not isinstance(attack, dict):
+        return 1
+    if attack.get("delivery") not in MULTI_STEP:
+        return 1
+    steps = attack.get("steps")
     return len(steps) if isinstance(steps, list) and steps else 1
 
 

@@ -357,8 +357,78 @@ def main():
         check("...a plain attack costs one",
               _turns_f({"text": "hi"}) == 1, str(_turns_f({"text": "hi"})))
         check("...and an empty or malformed steps list is one, not zero",
-              _turns_f({"steps": []}) == 1 and _turns_f({"steps": "abc"}) == 1,
-              "%s %s" % (_turns_f({"steps": []}), _turns_f({"steps": "abc"})))
+              _turns_f({"delivery": "chain", "steps": []}) == 1
+              and _turns_f({"delivery": "chain", "steps": "abc"}) == 1,
+              "%s %s" % (_turns_f({"delivery": "chain", "steps": []}),
+                         _turns_f({"delivery": "chain", "steps": "abc"})))
+        # AND THE DELIVERY DECIDES, not the presence of the key. `run_redteam` had a third
+        # spelling of this arithmetic -- the one that REFUSES a run whose budget cannot
+        # hold it -- and it was the only one that asked the delivery. The two agreed on
+        # the shipped arsenal by luck: every attack carrying steps is a chain or a
+        # sessions attack. `forged_history` carries a whole transcript and sends it once.
+        check("an attack carrying steps under a one-request delivery costs one",
+              _turns_f({"delivery": "forged_history", "steps": ["a", "b", "c"],
+                        "text": "x"}) == 1,
+              str(_turns_f({"delivery": "forged_history", "steps": ["a", "b", "c"]})))
+        check("...and one with no delivery at all costs one",
+              _turns_f({"steps": ["a", "b", "c"]}) == 1,
+              str(_turns_f({"steps": ["a", "b", "c"]})))
+        check("...while a sessions attack still costs a request per step",
+              _turns_f({"delivery": "sessions", "steps": ["a", "b"]}) == 2,
+              str(_turns_f({"delivery": "sessions", "steps": ["a", "b"]})))
+
+        # AND THE LIST IS DERIVED FROM THE SEND PATH, not written twice. `run_attack`
+        # dispatches on `delivery` and reads `attack["steps"]` in exactly the branches
+        # that send them as separate requests; anything else is one request whatever it
+        # carries. Asked of the dispatch, so a delivery added tomorrow cannot be priced
+        # by a constant somebody forgot to extend.
+        import ast as _ast_t
+        _rsrc2 = io.open(os.path.join(HERE, "runner.py"), encoding="utf-8").read()
+        _tree_t = _ast_t.parse(_rsrc2)
+        _ra = next((n for n in _tree_t.body
+                    if isinstance(n, _ast_t.FunctionDef) and n.name == "run_attack"), None)
+        check("the send dispatch is where it was", _ra is not None,
+              "runner has no run_attack to read")
+        _sends_steps = set()
+        _branches = set()
+        for _n in _ast_t.walk(_ra) if _ra else ():
+            if not isinstance(_n, _ast_t.If):
+                continue
+            _c = _n.test
+            if not (isinstance(_c, _ast_t.Compare)
+                    and isinstance(_c.left, _ast_t.Name) and _c.left.id == "delivery"
+                    and len(_c.ops) == 1 and isinstance(_c.ops[0], _ast_t.Eq)
+                    and isinstance(_c.comparators[0], _ast_t.Constant)):
+                continue
+            _name = _c.comparators[0].value
+            _branches.add(_name)
+            _body = chr(10).join(_ast_t.get_source_segment(_rsrc2, _s) or ""
+                                 for _s in _n.body)
+            if 'attack["steps"]' in _body or "attack['steps']" in _body:
+                _sends_steps.add(_name)
+        from runner import MULTI_STEP as _MS
+        check("the deliveries priced per step are exactly the ones that send steps",
+              _sends_steps == set(_MS),
+              "dispatch sends steps for %s; MULTI_STEP is %s"
+              % (sorted(_sends_steps), sorted(_MS)))
+        check("...over a dispatch with more branches than those",
+              len(_branches) > len(_MS),
+              "only %s branch(es) were read" % len(_branches))
+
+        # AND THE COMMAND THAT REFUSES A RUN ASKS THE SAME FUNCTION. The copy it kept was
+        # a private `_requests_for` inside `main`, so the shared rule could be wrong for
+        # every other caller and this one would never notice.
+        _rr = io.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _rrmain = next((n for n in _ast_t.walk(_ast_t.parse(_rr))
+                        if isinstance(n, _ast_t.FunctionDef)
+                        and n.name == "main"), None)
+        _rrsrc = _ast_t.get_source_segment(_rr, _rrmain) if _rrmain else ""
+        check("the run command prices its budget with the engine's own rule",
+              "requests_for" in (_rrsrc or ""),
+              "run_redteam.main computes the request count itself")
+        check("...and keeps no second one beside it",
+              "def _requests_for" not in (_rrsrc or ""),
+              "run_redteam.main defines its own request arithmetic")
 
         # --- an unreachable endpoint --------------------------------------------------------
         dead = os.path.join(work, "targets_dead.yaml")
