@@ -1669,6 +1669,82 @@ def main():
               int(_am2.group(3)) == len(_lib) - len(_gen),
               "the page says %s; %d are scoped" % (_am2.group(3), len(_lib) - len(_gen)))
 
+    # --- EVERY LINK IN THE DESIGN RECORD GOES SOMEWHERE ---------------------------------
+    #
+    # `docs/ci.md` sent a reader to `#persisting-the-timeline` and the section is called
+    # `Where the timeline lives`. A heading was renamed and the link was not, which is the
+    # ordinary way this happens and exactly why it needs a check rather than a proofread:
+    # nothing in this repository asked whether a link resolved, so the only reader who
+    # would find out is the one who clicked it.
+    #
+    # BOTH HALVES. A path that does not exist is the obvious one; an anchor that does not
+    # is the one that drifts, because renaming a heading leaves every link to it valid-
+    # looking. Slugs are derived the way GitHub derives them -- lowercase, punctuation
+    # dropped, spaces to hyphens -- which is the rule the rendered page uses.
+    def _slugs(path):
+        out = set()
+        for _line in io.open(path, encoding="utf-8"):
+            _m = re.match(r"^#{1,6}\s+(.*?)\s*$", _line)
+            if not _m:
+                continue
+            _s = _m.group(1).lower()
+            _s = re.sub(r"[`*_\[\]()]", "", _s)
+            _s = re.sub(r"[^a-z0-9\s-]", "", _s)
+            out.add(re.sub(r"\s+", "-", _s).strip("-"))
+        return out
+
+    def _link_faults(path, slug_cache):
+        """-> what this page links to and cannot reach."""
+        out = []
+        _txt = io.open(path, encoding="utf-8").read()
+        _base = os.path.dirname(path)
+        for _m in re.finditer(r"\[([^\]]*)\]\(([^)]+)\)", _txt):
+            _tgt = _m.group(2).strip()
+            if _tgt.startswith(("http://", "https://", "mailto:", "#!")):
+                continue
+            _p, _, _frag = _tgt.partition("#")
+            _target = path if not _p else os.path.normpath(os.path.join(_base, _p))
+            if not os.path.exists(_target):
+                out.append("%s -> %s (no such file)"
+                           % (os.path.basename(path), _tgt))
+                continue
+            if not _frag:
+                continue
+            if _target not in slug_cache:
+                slug_cache[_target] = _slugs(_target)
+            if _frag not in slug_cache[_target]:
+                out.append("%s -> %s (no such section)"
+                           % (os.path.basename(path), _tgt))
+        return out
+
+    _pages = [p for p in _corpus_paths() if p.endswith(".md")]
+    _cache, _faults, _links = {}, [], 0
+    for _pg in _pages:
+        _faults += _link_faults(_pg, _cache)
+        _links += len(re.findall(
+            r"\[([^\]]*)\]\((?!http|mailto)([^)]+)\)",
+            io.open(_pg, encoding="utf-8").read()))
+    check("every link in the design record reaches what it names", not _faults,
+          "; ".join(_faults[:5]))
+    check("...over enough links for that to mean something", _links >= 25,
+          str(_links))
+    # AND THE CHECK CAN FAIL, proved on a page written to be wrong rather than assumed:
+    # a link checker that has stopped resolving anything reports a clean document.
+    import tempfile as _tf_l
+    _dl = _tf_l.mkdtemp()
+    try:
+        with open(os.path.join(_dl, "p.md"), "w", encoding="utf-8") as _f:
+            _f.write("# Real Heading\n\n[ok](#real-heading)\n[bad](#no-such)\n"
+                     "[gone](nowhere.md)\n")
+        _planted = _link_faults(os.path.join(_dl, "p.md"), {})
+        check("the link scan finds a broken anchor and a missing file",
+              len(_planted) == 2, str(_planted))
+        check("...and leaves the one that resolves alone",
+              not [f for f in _planted if "ok" in f or "real-heading" in f],
+              str(_planted))
+    finally:
+        __import__("shutil").rmtree(_dl, ignore_errors=True)
+
     # --- THE SAFETY DOCUMENT'S OWN NUMBERS ----------------------------------------------
     #
     # `AUTHORISED-USE.md` is the page a reader is sent to before pointing this at anything,

@@ -22,7 +22,7 @@ qatration run --target-config mybot.yaml --fail-on regression
 
 `regression` fails **only on what this run introduced or reopened** since the previous one. It
 compares against `out/history/<target>.jsonl`, which is why the history has to survive between
-runs — see [persisting the timeline](#persisting-the-timeline).
+runs — see [where the timeline lives](#where-the-timeline-lives).
 
 **A move the trials do not agree on is not a change.** A bot is sampled, not queried, so the
 same attack against the same deployment can break once in three attempts and then not at all,
