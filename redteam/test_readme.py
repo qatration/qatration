@@ -1575,6 +1575,71 @@ def main():
         check("...and a subset of the arsenal is not larger than the arsenal (%d)" % _s,
               _s <= len(_arsenal), "%d of %d" % (_s, len(_arsenal)))
 
+    # AND THE CLAIMS TABLE'S PATTERNS, POINTED AT THE SOURCE'S OWN PROSE.
+    #
+    # `docs/` and the README are read by `pages()`; the design record is also written in
+    # module docstrings, and one of them carried a claim the table has a pattern for.
+    # `generate.py` opened with "The arsenal is 138 hand-written payloads and 132 of them
+    # are pinned to this repo's practice bots" -- the same sentence shape the table matches
+    # in the README, five short of `attacks.yaml`'s 143 and 137, and invisible because the
+    # gate quantified over files rather than over prose.
+    #
+    # DOCSTRINGS ONLY, not comments. Half this repository's comments quote a number that
+    # WAS true -- `this said 376`, `it was 19 until now` -- and demanding those match today
+    # would delete the record of why a fix exists. A docstring is what the module claims is
+    # true now.
+    def _docstrings(tree):
+        """Every docstring in one module: its own, and each function's and class's."""
+        out = []
+        _md = ast.get_docstring(tree)
+        if _md:
+            out.append(_md)
+        for _n in ast.walk(tree):
+            if isinstance(_n, (ast.FunctionDef, ast.ClassDef)):
+                _dd = ast.get_docstring(_n)
+                if _dd:
+                    out.append(_dd)
+        return out
+
+    def _doc_mismatches(tree, where):
+        out = []
+        for _d in _docstrings(tree):
+            for _label, _pat, _want in claims(f):
+                for _m in re.finditer(_pat, _d):
+                    if _m.group(1) != _want:
+                        out.append("%s: %s says %s, recount says %s"
+                                   % (where, _label, _m.group(1), _want))
+        return out
+
+    # A SCAN THAT WALKED NOTHING REPORTS CLEAN, which is this repository's own defect class
+    # and the first version of this gate had it: emptying the file list, or reading no
+    # docstrings, left `no module docstring disagrees` passing. Mutation said so -- three of
+    # four ways to break the scan stayed green. So the scan is proved on a planted claim
+    # first, in this process, and the reach it achieved is asserted afterwards.
+    _spoiled = ast.parse('"""The arsenal is 1 hand-written payloads."""' + chr(10))
+    check("the docstring scan finds a planted disagreement",
+          len(_doc_mismatches(_spoiled, "planted")) == 1,
+          str(_doc_mismatches(_spoiled, "planted")))
+    _clean = ast.parse('"""The arsenal is %s hand-written payloads."""'
+                       % f["attacks"] + chr(10))
+    check("...and passes the same sentence with the right number",
+          _doc_mismatches(_clean, "planted") == [], str(_doc_mismatches(_clean, "planted")))
+
+    _doc_claims, _docs_seen, _mods_seen = [], 0, 0
+    for _sp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+        try:
+            _tree = ast.parse(io.open(_sp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        _mods_seen += 1
+        _docs_seen += len(_docstrings(_tree))
+        _doc_claims += _doc_mismatches(_tree, os.path.basename(_sp))
+    check("no module docstring states a count the code disagrees with",
+          not _doc_claims, "; ".join(_doc_claims[:4]))
+    check("...over the package rather than a corner of it",
+          _mods_seen >= 80 and _docs_seen >= 400,
+          "%d modules, %d docstrings" % (_mods_seen, _docs_seen))
+
     # AND THE TWO NUMBERS EITHER SIDE OF ONE THAT WAS ALREADY CHECKED.
     # `docs/attribution.md` opens its scope note with "Six of the 143 attacks in
     # `attacks.yaml` are generic; the other 137 name our own practice fleet". The MIDDLE
