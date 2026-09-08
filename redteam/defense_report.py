@@ -785,23 +785,33 @@ def load_all(known=None):
 
 
 def _timeline():
-    """target -> (first_seen per attack, set of attacks that came BACK after a fix).
+    """target -> (open-since per attack, attacks that came BACK after a fix, when they did).
 
     "Critical" is an opinion. "Critical, open since the 3rd, and we already closed it once"
     is a fact about how a team responds to them, and it is the sentence somebody acts on.
     The data existed in out/history and stopped at the console.
+
+    AND THE SECOND HALF OF THAT SENTENCE WAS READ OFF A TWO-RUN DIFF, which is the wrong
+    instrument for it. `diff` compares the last two runs and calls a flip a regression only
+    when both sides broke on every trial -- both right for what it does -- so a finding that
+    closed and came back three runs ago, or came back on two trials of three, is invisible
+    to it. `history.reopened` asks the whole timeline instead, and the third dictionary is
+    what it answers: the first sighting and the run that last measured the thing clean.
+    Kept apart from `back` rather than folded into it, because RETURNED AFTER A FIX is a
+    claim about a reliable flip and this is a claim about a date.
     """
     try:
-        from history import first_seen, diff, load
+        from history import first_seen, diff, reopened
     except Exception:
-        return {}, {}
-    ages, back = {}, {}
+        return {}, {}, {}
+    ages, back, again = {}, {}, {}
     for fp in glob.glob(str(OUT_DIR / "history" / "*.jsonl")):
         t = os.path.basename(fp)[:-len(".jsonl")]
         ages[t] = first_seen(t)
+        again[t] = reopened(t)
         d = diff(t)
         back[t] = set(d.get("regressed") or []) if "reason" not in d else set()
-    return ages, back
+    return ages, back, again
 
 
 def _unresolved_paths():
@@ -1241,7 +1251,7 @@ def main():
         return 3
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
-    ages, regressed = _timeline()
+    ages, regressed, came_back = _timeline()
     unseen = _unobservable()
     # A DECLARED CHANNEL THAT NEVER CARRIED ANYTHING. Kept separate from `unseen`, which is
     # about calls whose CONTENTS no detector could read; this is about a channel that was
@@ -1736,7 +1746,20 @@ def main():
                             f'</span>')
             first = (ages.get(t) or {}).get(aid)
             if first:
-                bits.append(f'<span class="age">open since {esc(first[:10])}</span>')
+                # THE DATE IS THE CURRENT SPELL, and where that is not the first sighting
+                # the page says so rather than quietly dropping nine days of history: an
+                # age that resets on a fix is right, and an age with no mention of the fix
+                # reads as a finding nobody has ever closed.
+                _rb = (came_back.get(t) or {}).get(aid)
+                if _rb:
+                    _seen, _clean = _rb
+                    _ttl = esc('first seen %s, measured clean %s, broken again since %s'
+                               % (_seen[:10], _clean[:10], first[:10]))
+                    bits.append('<span class="age" title="%s">open since %s'
+                                ' \u00b7 closed once, on %s</span>'
+                                % (_ttl, esc(first[:10]), esc(_clean[:10])))
+                else:
+                    bits.append(f'<span class="age">open since {esc(first[:10])}</span>')
             return "".join(bits)
 
         trig = "".join(f'<li><span class="mono">{esc(t)}</span> · {esc(a["id"])}'

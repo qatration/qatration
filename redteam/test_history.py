@@ -101,13 +101,66 @@ def main():
                  when="2026-08-06 10:00")
 
         # --- how long has it been open ------------------------------------------------
+        #
+        # a1's whole life so far: broke on the 1st and the 2nd, MEASURED CLEAN on the 3rd,
+        # broke again on the 4th, was not sent at all on the 5th, broke on the 6th. The age
+        # is the current spell -- the 4th -- and it used to be the first sighting, the 1st,
+        # which publishes a finding as one that has never been closed when this engine's own
+        # timeline says it was. One row on the shipped fleet had that shape and
+        # `defense_report.html` carried it: `open since 2026-08-17` for a finding measured
+        # 0 of 3 on 2026-08-22.
         ages = H.first_seen("t")
-        check("an open finding is dated from when it FIRST broke, not from the last run",
-              ages.get("a1") == "2026-08-01 10:00", str(ages))
+        check("an open finding is dated from the spell it is in, not from a spell that ended",
+              ages.get("a1") == "2026-08-04 10:00", str(ages))
         check("a finding first seen today is dated today",
               ages.get("a4") == "2026-08-04 10:00", str(ages))
         check("a fixed finding carries no age, because it is not open",
               "a2" not in ages, str(ages))
+        # AND A RUN THAT NEVER SENT IT DOES NOT END A SPELL, which is the same rule the four
+        # states above turn on: absence is not a fix. a4 was missing entirely from the 5th
+        # and its age still runs from the 4th.
+        check("...and a run that never sent the attack does not restart its age",
+              ages.get("a4") == "2026-08-04 10:00", str(ages))
+
+        # THE FIRST SIGHTING IS NOT THROWN AWAY, it is answered separately -- a page that
+        # shows the spell and never mentions the fix has dropped the more interesting half.
+        again = H.reopened("t")
+        check("a finding that closed and came back says when it was first seen",
+              (again.get("a1") or ("", ""))[0] == "2026-08-01 10:00", str(again))
+        check("...and when a run last measured it clean",
+              (again.get("a1") or ("", ""))[1] == "2026-08-03 10:00", str(again))
+        check("...while a finding in its first spell is not called a return",
+              "a4" not in again, str(again))
+
+        # A VERDICT THAT MEASURED NOTHING IS NOT A CLEAN ONE. `diff` learned this through
+        # SKIP -- `"SKIP" in BROKE` is False, the same value that means measured clean -- and
+        # the age walks the same rows, so it has to draw the line in the same place. It does,
+        # by calling `state` rather than asking `row["v"] in BROKE` in its own words.
+        H.record(meta, R(a1="SKIP", a2="DEFENDED", a4="EXPLOITED"), when="2026-08-07 10:00")
+        H.record(meta, R(a1="EXPLOITED", a2="DEFENDED", a4="EXPLOITED"),
+                 when="2026-08-08 10:00")
+        ages = H.first_seen("t")
+        check("a SKIPPED run does not close a finding and does not restart its age",
+              ages.get("a1") == "2026-08-04 10:00", str(ages))
+
+        # AND THE PAGE HAS TO ASK FOR IT. `defense_report` promises in its own words to say
+        # "and we already closed it once" and read a two-run diff to do it, which cannot see
+        # a return three runs back or one that came back on two trials of three -- both true
+        # of the row on the shipped fleet. The function is only a fix if the renderer calls
+        # it, so this walks the call rather than the name: an import line alone satisfies a
+        # substring search.
+        import ast as _ast_h
+        _dsrc = open(os.path.join(HERE, "defense_report.py"), encoding="utf-8").read()
+        _dtree = _ast_h.parse(_dsrc)
+        _tl = [n for n in _ast_h.walk(_dtree) if isinstance(n, _ast_h.FunctionDef)
+               and n.name == "_timeline"]
+        _calls = [c for f in _tl for c in _ast_h.walk(f)
+                  if isinstance(c, _ast_h.Call) and isinstance(c.func, _ast_h.Name)
+                  and c.func.id == "reopened"]
+        check("the report asks the timeline whether a finding came back, not a two-run diff",
+              len(_calls) == 1, str(len(_calls)))
+        check("...and the page prints the date it was closed on",
+              "closed once, on" in _dsrc, "the phrase is not in defense_report.py")
 
         # Two runs made with different instruments are not a before/after. Caught on the
         # first real use: httpbot went from three trials to two and seven attacks moved to

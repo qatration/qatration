@@ -195,6 +195,30 @@ def broke_every_trial(row):
     return hits >= trials
 
 
+def state(run, aid):
+    """-> True broken, False MEASURED clean, None nothing measured — for one attack in one run.
+
+    Module level rather than a closure in `diff`, because `first_seen` asks the same
+    question about the same rows and asked it in its own words: `row["v"] in BROKE`, which
+    collapses `None` and `False` into the one answer this file exists to keep apart.
+    """
+    row = run["rows"].get(aid)
+    if row is None:
+        return None                        # not attempted: says nothing either way
+    if row.get("v") in NOT_MEASURED:
+        # ATTEMPTED OR NOT, MEASURED NOTHING — either way. SKIP was missing, and it is
+        # the worse of the two: `"SKIP" in BROKE` is False, which is the value that means
+        # MEASURED CLEAN, so an attack that broke last week and was not delivered this
+        # week came back as FIXED. That is the one direction the `diff` docstring calls
+        # out as the reason that function exists, reached through a verdict the branch
+        # simply did not name.
+        #
+        # A target losing `history:` from its config is enough to do it: every forged
+        # transcript attack turns to SKIP, and the diff closes each one it had open.
+        return None
+    return row["v"] in BROKE
+
+
 def diff(target):
     """Latest run against the one before it.
 
@@ -234,22 +258,6 @@ def diff(target):
         return {"runs": len(runs), "reason": "need two runs to compare"}
     prev, cur = runs[-2], runs[-1]
 
-    def state(run, aid):
-        row = run["rows"].get(aid)
-        if row is None:
-            return None                    # not attempted: says nothing either way
-        if row.get("v") in NOT_MEASURED:
-            # ATTEMPTED OR NOT, MEASURED NOTHING — either way. SKIP was missing, and it is
-            # the worse of the two: `"SKIP" in BROKE` is False, which is the value that means
-            # MEASURED CLEAN, so an attack that broke last week and was not delivered this
-            # week came back as FIXED. That is the one direction the docstring above calls
-            # out as the reason this whole function exists, reached through a verdict the
-            # branch simply did not name.
-            #
-            # A target losing `history:` from its config is enough to do it: every forged
-            # transcript attack turns to SKIP, and the diff closes each one it had open.
-            return None
-        return row["v"] in BROKE
 
     ids = sorted(set(cur["rows"]) | set(prev["rows"]))
     new, fixed, regressed, still, untested, assumed = [], [], [], [], [], []
@@ -383,22 +391,77 @@ def diff(target):
             "confounds": confounds}
 
 
+def _streaks(target):
+    """-> (runs, open since, first ever seen, last measured clean) in one walk of a timeline.
+
+    One walk because `first_seen` and `reopened` are two questions about the same three
+    dictionaries, and answering them in two places is how they come to disagree.
+
+    A run that MEASURED IT CLEAN ends a streak. A run that never sent it, or sent it and
+    measured nothing, does not -- `state` draws that line, and it is the same one `diff`
+    draws four states above: absence is not a fix.
+    """
+    runs = load(target)
+    since, first_ever, last_clean = {}, {}, {}
+    for r in runs:
+        for aid in r["rows"]:
+            s = state(r, aid)
+            if s is False:
+                since.pop(aid, None)
+                last_clean[aid] = r["run"]
+            elif s is True:
+                since.setdefault(aid, r["run"])
+                first_ever.setdefault(aid, r["run"])
+    return runs, since, first_ever, last_clean
+
+
 def first_seen(target):
-    """attack id -> the run that first showed it broken, for anything still broken.
+    """attack id -> the run its CURRENT spell of being broken started, for anything broken now.
 
     An open finding's AGE is the number people react to. "Critical" is an opinion;
     "critical and open since the 3rd" is a fact about how the team responds to them.
+
+    AND IT WAS THE FIRST SIGHTING RATHER THAN THE SPELL, so a finding that closed and came
+    back was published as one that never closed. `cca-planted-standing-rule` on httpbot
+    broke on 2026-08-17, came back DEFENDED on the four runs after it -- 0 of 3 on the last
+    of them, measured, not skipped -- and broke again on 2026-08-27.
+    `out/defense_report.html` shipped it as `open since 2026-08-17`, nine days of which a
+    run of this engine had measured it closed.
+
+    ONE ROW IN 438 ON THIS FLEET, and the number is not the point: the direction is. An age
+    can only be overstated by this, never understated, and the sentence it feeds is the one
+    a team is meant to answer to. A page that says a finding has been open for three weeks
+    when the engine's own timeline says it was closed for nine days of them is the same
+    fabrication this repository refuses everywhere else, arriving as a date.
+
+    The first sighting is not thrown away -- `reopened` returns it, with the run that last
+    measured the finding clean, so a page can say the age AND say it came back.
     """
-    runs = load(target)
-    seen, out = {}, {}
-    for r in runs:
-        for aid, row in r["rows"].items():
-            if row["v"] in BROKE and aid not in seen:
-                seen[aid] = r["run"]
-    if runs:
-        for aid, row in runs[-1]["rows"].items():
-            if row["v"] in BROKE:
-                out[aid] = seen.get(aid, runs[-1]["run"])
+    runs, since, _first, _clean = _streaks(target)
+    if not runs:
+        return {}
+    return {aid: run for aid, run in since.items() if state(runs[-1], aid) is True}
+
+
+def reopened(target):
+    """attack id -> (first ever seen broken, the run that last measured it clean).
+
+    Only findings broken in the latest run whose current spell is not their first. `diff`
+    answers a narrower question -- it compares the last two runs, and only calls a flip a
+    regression when both sides broke on every trial -- so a finding that closed and came
+    back three runs ago, or came back on two trials of three, is invisible to it. That is
+    the shape the one on this fleet has: `defense_report` promises in its own words to say
+    "and we already closed it once", and read a two-run diff to do it.
+    """
+    runs, since, first_ever, last_clean = _streaks(target)
+    out = {}
+    if not runs:
+        return out
+    for aid, run in since.items():
+        if state(runs[-1], aid) is not True:
+            continue
+        if first_ever.get(aid) != run:
+            out[aid] = (first_ever.get(aid, run), last_clean.get(aid, ""))
     return out
 
 
@@ -501,7 +564,7 @@ def main():
         ages = first_seen(t)
         if ages:
             oldest = min(ages.values())
-            print(f"  oldest open finding first seen {oldest}")
+            print(f"  the longest-open finding has been open since {oldest}")
 
 
 if __name__ == "__main__":
