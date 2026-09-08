@@ -599,7 +599,8 @@ def load_adjudication(path=None):
 
 
 def adjudication_gaps(rows_by_target=None, path=None):
-    """-> (fired pairs nobody settled, settled pairs that no longer fire).
+    """-> (fired pairs nobody settled, settled pairs that no longer fire, settled pairs
+    whose target has no benign run in this workspace).
 
     THE JUDGEMENT FILE HAD NO GATE AT ALL. A hundred and forty-two rows, each a person's
     verdict on whether one detector firing on one target's ordinary traffic is a real finding
@@ -613,8 +614,18 @@ def adjudication_gaps(rows_by_target=None, path=None):
     since -- and the risk there is the sharper one: a stale `false_positive` goes on
     suppressing a pair that may start firing again for an entirely different reason.
 
+    THE THIRD IS NOT THE SECOND, and folding it in was a finding this tool manufactured.
+    `set(adjudged) - fired` cannot tell `this pair stopped firing` from `nothing was ever
+    run for that target`, and on any workspace that is not this repository's the second is
+    almost all of it. Measured: with one benign artifact in the directory it reported 136
+    stale verdicts, naming targets that have never been measured there, and told the reader
+    to re-read every one; with none at all it reported 140. On the full fleet here all 22
+    are real, which is why it went unseen -- the code was right about this tree and wrong
+    about everybody else's.
+
     Neither is an error. This reports; a person settles. That is the same division the file
-    itself is built on.
+    itself is built on. The third is not even that: it is the file being ahead of the
+    evidence in this directory, which is the ordinary state of a fresh workspace.
     """
     adjudged = load_adjudication(path)
     fired = set()
@@ -635,7 +646,13 @@ def adjudication_gaps(rows_by_target=None, path=None):
         for r in rows:
             for det in (r.get("fired") or []):
                 fired.add((tgt, det))
-    return sorted(fired - set(adjudged)), sorted(set(adjudged) - fired)
+    # A TARGET WITH A BENIGN RUN HERE, whatever that run found. An empty `rows` is still a
+    # measurement: the corpus went through and nothing fired.
+    measured = set(rows_by_target)
+    settled_quiet = set(adjudged) - fired
+    return (sorted(fired - set(adjudged)),
+            sorted(p for p in settled_quiet if p[0] in measured),
+            sorted(p for p in settled_quiet if p[0] not in measured))
 
 
 def roll_up():
@@ -845,6 +862,18 @@ def main():
 
     if args.summary:
         s = roll_up()
+        # NOT A PASS, and this was the one read-only command that thought so. Over an
+        # empty workspace every other page here returns 3 — `history`, `compare`,
+        # `fixes`, `index`, `profiles`, `coverage`, `runs`, `rejudge` — and this
+        # one printed the whole report with zeros in it and exited 0: `0 benign probes
+        # across 0 targets`, then `silent on this corpus: 66 detectors. Not a clean bill`,
+        # which is the sentence a real measurement of 66 silent detectors would produce.
+        # A pipeline reads the number, and the number said the false-positive check ran.
+        if not s["targets"]:
+            print(f"no benign_*.json in {OUT_DIR} — nothing has been measured, so "
+                  f"nothing below\nwould be about your deployment:\n"
+                  f"    qatration benign --target-config <your-config>.yaml")
+            return 3
         # From what the corpus REACHED, not from the false-positive list. Those differ by
         # exactly the detectors the FP filter removes, and calling one of those silent is a
         # false statement about the only evidence this section exists to summarise.
@@ -977,7 +1006,7 @@ def main():
         # deciding whether one detector firing on one target's ordinary traffic is a real
         # finding or a false alarm -- and nothing said how much of it still matches the
         # evidence. Both directions are worth saying and they say opposite things.
-        _unsettled, _stale = adjudication_gaps()
+        _unsettled, _stale, _unmeasured = adjudication_gaps()
         if _unsettled:
             print(f"\n{len(_unsettled)} (target, detector) pair(s) fire here and nobody has "
                   f"settled them:")
@@ -993,6 +1022,18 @@ def main():
                   + (" +%d" % (len(_stale) - 8) if len(_stale) > 8 else ""))
             print("    A verdict outlives the fire it was written about; re-read before "
                   "trusting one.")
+        if _unmeasured:
+            # AND THE ONES THAT ARE NEITHER. These were counted as stale, which reads as
+            # `the target stopped doing this` and is a statement about a target nothing
+            # here has measured. It is the file being ahead of the evidence in this
+            # directory, and the act that closes it is a run rather than a re-reading.
+            print(f"\n{len(_unmeasured)} adjudication(s) are about {len({p[0] for p in _unmeasured})} target(s) "
+                  f"with no benign run here, so neither current nor stale:")
+            print("    " + ", ".join(sorted({p[0] for p in _unmeasured})[:8])
+                  + (" +%d" % (len({p[0] for p in _unmeasured}) - 8)
+                     if len({p[0] for p in _unmeasured}) > 8 else ""))
+            print("    Nothing above says anything about them. `qatration benign --target-config"
+                  " <yours>.yaml` is what would.")
         return
 
     # A CONFIGURED TARGET COULD NOT GET A BASELINE AT ALL, which quietly hollowed out the
@@ -1205,4 +1246,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The return value is the answer; `main()` alone drops it, which is what `build_index`
+    # says beside its own guard. This module gained a code the moment the roll-up learned
+    # to refuse an empty workspace, and a code that only `cli.py` can see is half a code.
+    sys.exit(main() or 0)

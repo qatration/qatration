@@ -183,23 +183,47 @@ def main():
           str([i for i, r in enumerate(_rows)
                if isinstance(r, dict) and set(r) != _KNOWN_ADJ][:4]))
 
-    # AND THE TWO GAPS ARE COMPUTED, not assumed. A fire nobody settled and a verdict about a
-    # fire that stopped are opposite problems; the roll-up reports both and neither is an
-    # error, so what is checked here is that the function can tell them apart.
+    # AND THE THREE GAPS ARE COMPUTED, not assumed. A fire nobody settled, a verdict about
+    # a fire that stopped, and a verdict about a target nothing here has measured are
+    # three different problems closed by three different acts; the roll-up reports all
+    # three and none is an error, so what is checked here is that the function can tell
+    # them apart.
+    #
+    # THE SECOND AND THIRD WERE ONE, and the comment that used to sit here said so in
+    # as many words: `the fixture's only fire is t1/canary_in_output, so every real
+    # adjudication in the file is about a pair that did not fire here, which is what
+    # "stale" means`. It is not. Those pairs name targets the fixture never measured, and
+    # on any workspace that is not this repository's that is nearly all of them: with one
+    # benign artifact in the directory the roll-up reported 136 stale verdicts and told
+    # the reader to re-read every one. A finding manufactured out of an absence, in the
+    # command whose subject is findings manufactured by the instrument.
     import benign as _B4
-    _un, _st = _B4.adjudication_gaps(
+    _un, _st, _um = _B4.adjudication_gaps(
         rows_by_target={"t1": [{"fired": ["canary_in_output"]}, {"fired": []}]},
         path=os.path.join(HERE, "benign_adjudication.yaml"))
     check("a fire with no verdict is reported as unsettled",
           ("t1", "canary_in_output") in _un, str(_un[:3]))
-    # `or True` IS A CHECK THAT CANNOT FAIL, and the first version of this line had one. The
-    # fixture's only fire is `t1/canary_in_output`, so every real adjudication in the file is
-    # about a pair that did not fire here — which is what "stale" means and what to assert.
-    check("...and a verdict with no fire is reported as stale",
-          len(_st) >= 20 and ("t1", "canary_in_output") not in _st, str(len(_st)))
-    _un2, _st2 = _B4.adjudication_gaps(rows_by_target={}, path=os.path.join(HERE, "nope.yaml"))
+    check("...and a target this workspace never measured is neither stale nor current",
+          len(_um) >= 20 and not [p for p in _um if p[0] == "t1"], str(len(_um)))
+    check("...and nothing about an unmeasured target is called stale",
+          _st == [], str(_st[:4]))
+    # AND THE OTHER DIRECTION, on a fixture where the target WAS measured and the pair it
+    # was adjudicated for did not fire: that one is stale, and this is what the word is
+    # for. Taken from the judgement file rather than invented, so the pair is a real one.
+    _real = _B4.load_adjudication(os.path.join(HERE, "benign_adjudication.yaml"))
+    _tgt0, _det0 = sorted(_real)[0]
+    _un3, _st3, _um3 = _B4.adjudication_gaps(
+        rows_by_target={_tgt0: [{"fired": []}]},
+        path=os.path.join(HERE, "benign_adjudication.yaml"))
+    check("a settled pair that stopped firing on a target that DID run is stale",
+          (_tgt0, _det0) in _st3, str(_st3[:3]))
+    check("...and is not also counted among the unmeasured",
+          (_tgt0, _det0) not in _um3, str(_um3[:3]))
+    _un2, _st2, _um2 = _B4.adjudication_gaps(rows_by_target={},
+                                             path=os.path.join(HERE, "nope.yaml"))
     check("with no judgement file, nothing is settled rather than everything",
-          _un2 == [] and _st2 == [], "%s %s" % (_un2[:2], _st2[:2]))
+          _un2 == [] and _st2 == [] and _um2 == [],
+          "%s %s %s" % (_un2[:2], _st2[:2], _um2[:2]))
 
     # --- the rate, and what a config could have quieted --------------------------------
     #
@@ -893,6 +917,74 @@ def main():
     # AND IT IS THE SAME SOURCE THE SWEEP USES, not a second way of asking.
     check("...from `engine_version`, the one the sweep stamps with",
           "engine_version()" not in _bsrc, "benign has its own idea of a build")
+
+    # --- THE ROLL-UP OVER A WORKSPACE THAT IS NOT THIS ONE -------------------------------
+    #
+    # Both halves of this were right about the shipped `out/` and wrong about every other
+    # directory, which is why neither was seen. Driven rather than called, because what
+    # broke is what the command DOES when pointed somewhere else, and this process is
+    # already pointed here.
+    import shutil as _sh6, subprocess, tempfile
+    _out6 = os.path.join(os.path.dirname(HERE), "out")
+    with tempfile.TemporaryDirectory() as _d6:
+        _r6 = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                              "benign", "--summary"],
+                             capture_output=True, text=True, timeout=180,
+                             env=dict(os.environ, QATRATION_OUT=_d6,
+                                      PYTHONIOENCODING="utf-8"))
+        _s6 = _r6.stdout + _r6.stderr
+        # AN EMPTY WORKSPACE IS NOT A CLEAN BILL. This printed the whole report with zeros
+        # in it and returned 0, alone among the read-only commands here.
+        check("an empty workspace is not a false-positive measurement",
+              _r6.returncode == 3, "exit %s: %s" % (_r6.returncode, _s6[-200:]))
+        check("...and it does not report 66 detectors as measured-and-silent",
+              "silent on this corpus" not in _s6, _s6[-300:])
+        check("...and it names the command that would fill the directory",
+              "qatration benign --target-config" in _s6, _s6[-300:])
+        # AND THROUGH THE OTHER DOOR. `cli.py` does `sys.exit(main() or 0)`; this module's
+        # own guard called `main()` and threw the answer away, so the code existed for one
+        # of the two ways to run it. `build_index` states the rule beside its guard: the
+        # return value IS the answer.
+        _r6b = subprocess.run([sys.executable, os.path.join(HERE, "benign.py"),
+                               "--summary"],
+                              capture_output=True, text=True, timeout=180,
+                              env=dict(os.environ, QATRATION_OUT=_d6,
+                                       PYTHONIOENCODING="utf-8"))
+        check("...and the module run directly reports the same code",
+              _r6b.returncode == 3,
+              "exit %s: %s" % (_r6b.returncode,
+                               (_r6b.stdout + _r6b.stderr)[-200:]))
+    # AND WITH ONE TARGET'S EVIDENCE IN IT, which is the state every operator starts in.
+    # `set(adjudged) - fired` called every verdict about every other target stale and told
+    # the reader to re-read all of them: 136 of them, about targets the directory has never
+    # measured. A finding manufactured out of an absence.
+    _src6 = sorted(glob.glob(os.path.join(_out6, "benign_*.json")))
+    if not _src6:
+        print("SKIP  the roll-up over a partial workspace: this checkout ships no "
+              "benign_*.json, so it was NOT exercised")
+    else:
+        with tempfile.TemporaryDirectory() as _d7:
+            _sh6.copy(_src6[0], _d7)
+            _r7 = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                  "benign", "--summary"],
+                                 capture_output=True, text=True, timeout=300,
+                                 env=dict(os.environ, QATRATION_OUT=_d7,
+                                          PYTHONIOENCODING="utf-8"))
+            _s7 = _r7.stdout + _r7.stderr
+            check("a verdict about a target this workspace never ran is not called stale",
+                  "with no benign run here, so neither current nor stale" in _s7,
+                  _s7[-400:])
+            # THE COUNTS, not the heading: the sentence prints with both numbers wrong.
+            _m7 = re.search(r"(\d+) adjudication\(s\) are about pairs that no longer fire",
+                            _s7)
+            _m8 = re.search(r"(\d+) adjudication\(s\) are about (\d+) target\(s\) with no",
+                            _s7)
+            check("...and the stale count is now about the one target that ran",
+                  bool(_m7) and int(_m7.group(1)) < 10,
+                  _m7.group(0) if _m7 else "no stale line at all")
+            check("...and the rest are counted as unmeasured, in numbers",
+                  bool(_m8) and int(_m8.group(1)) > 50,
+                  _m8.group(0) if _m8 else "no unmeasured line at all")
 
     # --- A CONFIG THAT DOES NOT LIVE IN THIS PACKAGE ------------------------------------
     #
