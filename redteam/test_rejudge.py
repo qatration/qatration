@@ -547,6 +547,56 @@ def main():
             check("...carrying the background this run measured, not a quoted one",
                   "27/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
 
+    # --- A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES -------------------------------
+    #
+    # `examined` counted results files. `qatration isolation --target x` leaves a lock map
+    # and no sweep, and in that directory this command re-scored every map, rewrote them
+    # with `--write`, printed `no results, run a sweep first`, and returned 3 -- which
+    # `docs/ci.md` defines as `nothing was measured`. A pipeline reading the number is told
+    # the opposite of what happened.
+    #
+    # THE FIXTURE IS THE CASE `rescore_map` EXISTS FOR: a stored HARDENED over an objective
+    # whose own record is wide open. Its docstring calls that the most expensive kind of
+    # wrong this tool can be, because the reader stops looking -- so the correction for it
+    # being reported as an absence is the same defect twice in one command.
+    _stale = [{
+        "objective": "demo",
+        "properties": [{"name": "p1", "status": "open", "hits": "3/3"}],
+        "combined": {"status": "open", "hits": "3/3"},
+        "coupling": [], "verdict": "HARDENED", "keyed": [],
+    }]
+    with tempfile.TemporaryDirectory() as _dm:
+        io.open(os.path.join(_dm, "isolation_demobot.json"), "w",
+                encoding="utf-8", newline="\n").write(json.dumps(
+                    {"maps": _stale,
+                     "meta": {"when": "2026-01-01T00:00:00Z", "engine": "older"}},
+                    indent=1))
+        _envm = dict(os.environ, QATRATION_OUT=_dm, PYTHONIOENCODING="utf-8")
+        _rm = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                              "rejudge", "--write"],
+                             capture_output=True, text=True, env=_envm, timeout=180)
+        _saidm = _rm.stdout + _rm.stderr
+        check("a lock map with no sweep beside it is still re-scored",
+              "HARDENED" in _saidm and "EXPLOITED" in _saidm, _saidm[-300:])
+        check("...and the correction reaches the file",
+              json.load(io.open(os.path.join(_dm, "isolation_demobot.json"),
+                                encoding="utf-8"))["maps"][0]["verdict"] == "EXPLOITED",
+              _saidm[-300:])
+        check("...and the exit code is not `nothing was measured`",
+              _rm.returncode == 0, "exit %s: %s" % (_rm.returncode, _saidm[-300:]))
+        check("...and it says which half of the command found nothing to do",
+              "NO SWEEP RESULT WAS RE-SCORED" in _saidm, _saidm[-300:])
+    # AND THE CONTROL, so 0 is not simply what this command always returns: with nothing
+    # on disk at all, nothing was measured and the number says so.
+    with tempfile.TemporaryDirectory() as _de:
+        _rme = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                              capture_output=True, text=True, timeout=180,
+                              env=dict(os.environ, QATRATION_OUT=_de,
+                                       PYTHONIOENCODING="utf-8"))
+        check("an empty directory is still `nothing was measured`",
+              _rme.returncode == 3,
+              "exit %s: %s" % (_rme.returncode, (_rme.stdout + _rme.stderr)[-300:]))
+
     # --- AND THE CONTEXT THE RUN JUDGED AGAINST, which is not the target config alone -----
     #
     # `runner` scores every trial with `judged_ctx(attack, ctx)`: the target's context MERGED

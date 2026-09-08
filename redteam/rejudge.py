@@ -327,11 +327,17 @@ def main():
     # Lock maps, which had no replay at all until one of them published HARDENED over a key
     # its own record held.
     maps_changed, maps_touched = 0, 0
+    # READ IS NOT CHANGED, and the exit code is the difference. This loop counted only
+    # the files it REWROTE, and `examined` below counts only results files, so a
+    # directory holding lock maps and no sweep exited 3 — `nothing was
+    # measured` — after re-scoring every map in it. See the note at the bottom.
+    maps_examined = 0
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "isolation_*.json"))):
         stem = os.path.basename(path)[len("isolation_"):-len(".json")]
         if args.target and target_of(stem, ctxs) != args.target:
             continue
         maps, changed = rescore_map(path)
+        maps_examined += 1
         if not changed:
             continue
         maps_touched += 1
@@ -389,14 +395,32 @@ def main():
         print(f"{verb} {maps_changed} lock-map objective(s) across {maps_touched} map file(s).")
     if (total_changed or files_touched or maps_touched) and not args.write:
         print("nothing was written — re-run with --write to apply")
-    if not examined:
-        # NOT A PASS. Nothing was re-scored because there was nothing to re-score, which is
-        # the question going unanswered rather than answered well. `docs/ci.md` gives that
-        # code 3; returning 0 told a pipeline the stored scores had been checked.
+    # NOT A PASS. Nothing was re-scored because there was nothing to re-score, which is
+    # the question going unanswered rather than answered well. `docs/ci.md` gives that
+    # code 3; returning 0 told a pipeline the stored scores had been checked.
+    #
+    # AND A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES. `examined` counted results
+    # files only, so a directory with lock maps and no sweep — which is what
+    # `qatration isolation --target x` alone leaves — got `no results, run a
+    # sweep first` and exit 3 AFTER this command had corrected those maps and written them
+    # back. The case that proved it is the one `rescore_map` was written for: a stored
+    # HARDENED replaced with EXPLOITED, the file rewritten, and the number a pipeline reads
+    # saying nothing happened. That docstring calls the verdict the most expensive kind of
+    # wrong this tool can be, and the correction for it was published as an absence.
+    if not examined and not maps_examined:
         print(no_results_note(OUT_DIR) if not skipped else
               "no artifact could be re-scored: every results file found is for a target with "
               "no config, and re-scoring reads the canaries from the config.")
         return 3
+    # AND SAY WHICH HALF DID NOT HAPPEN, rather than letting one 0 stand for both. A lock
+    # map carries no attack rows and no attribution caveat, so a directory with maps alone
+    # has had its objectives re-scored and its sweep verdicts not looked at.
+    if not examined:
+        print("\nNO SWEEP RESULT WAS RE-SCORED, and %d lock map(s) were. Re-scoring an "
+              "attack row reads the canaries from the config; a lock map needs none."
+              % maps_examined)
+        if not skipped:
+            print(no_results_note(OUT_DIR))
     return 0
 
 
