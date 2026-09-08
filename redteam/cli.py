@@ -139,46 +139,19 @@ def main(argv=None):
     saved = sys.argv
     sys.argv = ["qatration " + name] + argv[1:]
     try:
-        return module.main()
-    except SystemExit as e:
-        # `raise SystemExit("a message")` exits ONE, and one is the code this tool documents as
-        # "the target was exploited or breached". Ten places raise it — an unset environment
-        # variable, a url that is not a url, an adapter that cannot be imported — and every one
-        # of them is a refusal where nothing was sent. Left alone, a CI reads a typo in a config
-        # as a security finding, which is the same confusion the exit table exists to prevent,
-        # arriving through the one door the table did not describe.
+        # ONE TRANSLATION, IN `workspace`. Two accidents used to be handled here and here
+        # only: `raise SystemExit("a message")` exits ONE, and Python exits ONE on an
+        # unhandled exception, and one is the code this tool documents as a finding. Both
+        # were caught for `qatration run` and for nothing else — `python
+        # run_redteam.py` with a mistyped config key exited 1 and always did, which is the
+        # door `worker`, `run_all` and `model_matrix` drive the engine through.
         #
-        # Found by installing the package into a clean venv and running it as a stranger would,
-        # not by reading: from inside the repository the default config works, so this path is
-        # invisible exactly where the code is written.
-        if isinstance(e.code, int) or e.code is None:
-            raise
-        print(str(e.code), file=sys.stderr)
-        return 2
-    except Exception:
-        # AND SO DOES A CRASH, through the same door for the same reason. Python exits ONE on
-        # an unhandled exception, and one is the code this tool documents as "the target was
-        # exploited or breached" — so any bug in any command, and every YAML typo that reaches
-        # a `KeyError` instead of a refusal, arrives in a CI log as a security finding.
-        #
-        # That is not hypothetical and it is not rare: an unknown `encode:` raised KeyError out
-        # of the runner and exited 1, an uncompilable `refusal_patterns` regex raised
-        # `re.error` mid-sweep, and an arsenal that was a mapping rather than a list raised
-        # AttributeError. Each was found and refused separately; this is the door all three
-        # came through.
-        #
-        # NOTHING IS SWALLOWED. The traceback goes to stderr exactly as before, because a bug
-        # report needs it and hiding it would trade one bad outcome for another. Only the exit
-        # code changes, and it changes to the one the table already reserves for "a build
-        # problem rather than a security one".
-        import traceback
-        traceback.print_exc()
-        print("\nqatration: the command above crashed. This is a bug in qatration, not a\n"
-              "finding about your target and not a problem with your config — exit 2 rather\n"
-              "than 1 so a pipeline does not read it as a breach. The traceback above is the\n"
-              "whole of what happened; please send it with the command you ran.",
-              file=sys.stderr)
-        return 2
+        # The reason it went unseen is worth keeping: found by installing the package into
+        # a clean venv and running it as a stranger would, not by reading. From inside the
+        # repository the default config works, so the path is invisible exactly where the
+        # code is written. That argument applies to the file door word for word.
+        from workspace import run_command as _run_command
+        return _run_command(module.main)
     finally:
         sys.argv = saved
 

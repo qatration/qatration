@@ -340,4 +340,7 @@ that does not separate those is counting its own homework{third_said}.</div>
 
 if __name__ == "__main__":
     # The return value is the answer; `main()` alone drops it.
-    sys.exit(main() or 0)
+    # THROUGH THE ENGINE'S OWN TRANSLATION, so this file answers a refusal and a crash
+    # with the code the table reserves rather than with 1, which is a finding.
+    from workspace import run_command as _run_command
+    sys.exit(_run_command(main))

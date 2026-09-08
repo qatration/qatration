@@ -930,4 +930,7 @@ if __name__ == "__main__":
     # inside `main` printed its reason and exited 0 — a gate that says REFUSED and lets the
     # build through. The deeper failures reached `sys.exit(1)` directly and worked, which is
     # what kept this invisible: one function, two ways of failing, only one of them wired up.
-    sys.exit(main())
+    # THROUGH THE ENGINE'S OWN TRANSLATION, so this file answers a refusal and a crash
+    # with the code the table reserves rather than with 1, which is a finding.
+    from workspace import run_command as _run_command
+    sys.exit(_run_command(main))

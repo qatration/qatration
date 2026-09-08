@@ -901,6 +901,64 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
         "only %d module(s) were driven through their own door, so this was asserted "
         "about almost nothing: %s" % (len(_door), _door))
 
+    # (8) AND A REFUSAL IS A REFUSAL THROUGH BOTH DOORS. `raise SystemExit("a message")`
+    #     exits ONE, and one is the code this tool documents as a finding. `cli.py` has
+    #     translated that to 2 since somebody installed the package and ran it as a
+    #     stranger — for ONE of the two doors. `python run_redteam.py` with a mistyped
+    #     config key exited 1 and always did, and the engine drives itself that way:
+    #     `worker` runs the file and reads the code, `run_all` and `model_matrix` too.
+    #
+    #     Driven rather than scanned: a config with one unknown key, through the entry
+    #     point and through the file, and the two have to agree.
+    _bad_cfg = os.path.join(tempfile.mkdtemp(), "targets_badkey.yaml")
+    with open(_bad_cfg, "w", encoding="utf-8") as _f8:
+        _f8.write("adapter: http\nname: badkey\n"
+                  "url: \"http://localhost:8999/chat\"\ngaurd: false\n"
+                  "request: {message: \"{prompt}\"}\nresponse: {reply: \"reply\"}\n")
+    _codes8 = {}
+    for _label8, _argv8 in (("cli", [os.path.join(HERE, "cli.py"), "run"]),
+                            ("file", [os.path.join(HERE, "run_redteam.py")])):
+        _w8 = tempfile.mkdtemp()
+        _p8 = subprocess.run(
+            [sys.executable] + _argv8 + ["--target-config", _bad_cfg,
+                                        "--scope", "quick", "--trials", "1"],
+            capture_output=True, text=True, timeout=180, cwd=_w8,
+            env=dict(os.environ, QATRATION_OUT=_w8, PYTHONIOENCODING="utf-8"))
+        _codes8[_label8] = _p8.returncode
+        shutil.rmtree(_w8, ignore_errors=True)
+    assert _codes8["cli"] == 2, (
+        "`qatration run` with an unknown config key exited %s; 2 is `the config or the "
+        "invocation was refused`" % _codes8["cli"])
+    assert _codes8["file"] == _codes8["cli"], (
+        "`python run_redteam.py` exited %s where `qatration run` exited %s for the same "
+        "refused config; 1 is the code the table reserves for a finding"
+        % (_codes8["file"], _codes8["cli"]))
+
+    # (9) AND THE QUEUE KNOWS EVERY CODE THE TABLE DESCRIBES. `worker.EXITS` mapped three
+    #     of six, and its `else` says of the rest that they are `not a code this engine
+    #     produces deliberately, so it died before it could say why` — a false
+    #     statement about a refused config, repeated three times before the queue gives up.
+    import worker as _wk8, jobqueue as _jq8
+    _ci_md8 = io.open(os.path.join(os.path.dirname(HERE), "docs", "ci.md"),
+                      encoding="utf-8").read()
+    _table8 = set(re.findall(r"^\| `(\d)` \|", _ci_md8, re.M))
+    assert len(_table8) >= 6, (
+        "docs/ci.md describes %d exit code(s); the table is what this is checked against"
+        % len(_table8))
+    _unmapped8 = sorted(int(c) for c in _table8 if int(c) not in _wk8.EXITS)
+    assert not _unmapped8, (
+        "the queue has no meaning for exit %s, which docs/ci.md describes: an unmapped "
+        "code is reported as one the engine does not produce" % _unmapped8)
+    assert all(_s in _jq8.STATES for _s, _ in _wk8.EXITS.values()), (
+        "worker.EXITS names a job state jobqueue does not have: %s"
+        % sorted({_s for _s, _ in _wk8.EXITS.values()} - set(_jq8.STATES)))
+    # A REFUSAL WILL NOT SUCCEED ON A RETRY, and a run that found something WORKED.
+    assert _wk8.EXITS[1][0] == "done", (
+        "a sweep whose CI gate went red is a sweep that ran; the queue calls it %s"
+        % _wk8.EXITS[1][0])
+    assert _wk8.EXITS[2][0] == "dead" and _wk8.EXITS[5][0] == "dead", (
+        "a refusal is retried: %s, %s" % (_wk8.EXITS[2][0], _wk8.EXITS[5][0]))
+
     print("  ok  %d commands answer an empty workspace without publishing one"
           % len(cli.COMMANDS))
 

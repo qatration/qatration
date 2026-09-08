@@ -2052,4 +2052,7 @@ if __name__ == "__main__":
     # THE RETURN VALUE IS THE ANSWER. `main()` alone drops it, so the module invoked directly
     # exits 0 whatever it concluded -- a second door onto the same wrong answer the CLI has
     # just been taught to carry.
-    sys.exit(main() or 0)
+    # THROUGH THE ENGINE'S OWN TRANSLATION, so this file answers a refusal and a crash
+    # with the code the table reserves rather than with 1, which is a finding.
+    from workspace import run_command as _run_command
+    sys.exit(_run_command(main))

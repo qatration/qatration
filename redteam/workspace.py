@@ -1467,6 +1467,49 @@ def read_artifacts(paths):
     return good, bad
 
 
+def run_command(main):
+    """Run a command's `main` and turn the two accidents into the code the table reserves.
+
+    `raise SystemExit("a message")` exits ONE, and one is the code this tool documents as
+    a finding. Forty-five places raise it — an unset environment variable, a url that
+    is not a url, an adapter that cannot be imported — and every one of them is a
+    refusal where nothing was sent. Python exits ONE on an unhandled exception too, so any
+    bug in any command arrives in a CI log as a breach.
+
+    `cli.py` has handled both since somebody installed the package and ran it as a
+    stranger. It handled them for ONE of the two doors. `python run_redteam.py` with a
+    mistyped config key exits 1 and always did, and the engine drives itself that way:
+    `worker` runs `run_redteam.py` as a file and maps the code through its own table, so a
+    config typo in a queued job comes back as `the sweep exited 1, which is not a code this
+    engine produces deliberately, so it died before it could say why` — and is retried
+    three times before the queue gives up on it. `run_all` and `model_matrix` read the same
+    code the same way.
+
+    So the translation belongs to the engine rather than to one of its front doors.
+
+    NOTHING IS SWALLOWED: the message and the traceback go to stderr exactly as they did.
+    Only the number changes, and it changes to the one the table already reserves for `a
+    build problem rather than a security one`.
+    """
+    import sys as _sys
+    try:
+        return main() or 0
+    except SystemExit as e:
+        if isinstance(e.code, int) or e.code is None:
+            return e.code or 0
+        print(str(e.code), file=_sys.stderr)
+        return 2
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        print("\nqatration: the command above crashed. This is a bug in qatration, not a\n"
+              "finding about your target and not a problem with your config \u2014 exit 2 rather\n"
+              "than 1 so a pipeline does not read it as a breach. The traceback above is the\n"
+              "whole of what happened; please send it with the command you ran.",
+              file=_sys.stderr)
+        return 2
+
+
 def authorization_line(meta):
     """Who authorised this run, in one sentence a reader of a page can act on.
 

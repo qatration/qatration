@@ -1249,4 +1249,7 @@ if __name__ == "__main__":
     # The return value is the answer; `main()` alone drops it, which is what `build_index`
     # says beside its own guard. This module gained a code the moment the roll-up learned
     # to refuse an empty workspace, and a code that only `cli.py` can see is half a code.
-    sys.exit(main() or 0)
+    # THROUGH THE ENGINE'S OWN TRANSLATION, so this file answers a refusal and a crash
+    # with the code the table reserves rather than with 1, which is a finding.
+    from workspace import run_command as _run_command
+    sys.exit(_run_command(main))

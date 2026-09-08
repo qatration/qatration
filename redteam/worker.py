@@ -42,10 +42,22 @@ NO_CLI_DOOR = "spawned by the queue rather than typed by a person"
 # What the sweep's exit codes mean, kept here because the worker is the only thing that turns
 # them into a job state anybody reads. run_redteam exits 3 when nothing was measured and 4 when
 # the target was not authorised; both are failures, and they are failures of different people.
+# THE CODES THE ENGINE PRODUCES ON PURPOSE, all of them. This mapped three of the six in
+# `docs/ci.md` and the `else` below then said of the rest that they are `not a code this
+# engine produces deliberately, so it died before it could say why` — which is a false
+# statement about a config typo, and a queue that repeats it three times before giving up.
+#
+# `1` is the only one that is a finding, and a job that produced findings is a job that
+# WORKED: the queue's business is whether the run happened, not whether the target held.
+# `2` and `5` are refusals where nothing was sent, and neither will succeed on a retry,
+# so both go straight to `dead` rather than round the loop.
 EXITS = {
     0: ("done", None),
-    3: ("failed", "every trial errored — nothing was measured, so nothing was written"),
+    1: ("done", "the run finished and its CI gate went red: this target has findings"),
+    2: ("dead", "the config or the invocation was refused and nothing was sent \u2014 a retry cannot change that"),
+    3: ("failed", "every trial errored \u2014 nothing was measured, so nothing was written"),
     4: ("failed", "not authorised: the target did not prove ownership, so nothing was sent"),
+    5: ("dead", "a precondition failed \u2014 usually the canary was never planted, so nothing could have been detected"),
 }
 
 

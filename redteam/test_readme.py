@@ -680,17 +680,29 @@ def main():
           "the sentences do not describe the events")
 
     # A `raise SystemExit("message")` exits ONE, which this table reserves for "the target was
-    # exploited". Ten of them exist and all are refusals, so the dispatcher converts them —
+    # exploited". Forty-five of them exist and all are refusals, so the engine converts them —
     # but the conversion is the kind of thing that gets refactored away by someone who does not
     # know why it is there, and the symptom would be a CI treating a typo as a breach.
-    cli_src = open(os.path.join(HERE, "cli.py"), encoding="utf-8").read()
+    #
+    # ASKED OF THE BEHAVIOUR, AND OF BOTH DOORS. This was `is `isinstance(e.code, int)` in
+    # cli.py`, which is a spelling rather than the rule: it went red when the conversion
+    # moved to `workspace.run_command` so that `python run_redteam.py` could use it too,
+    # and it had been green all the time that file door was answering 1.
+    _refusals = {}
+    for _label, _argv in (("cli", [os.path.join(HERE, "cli.py"), "run"]),
+                          ("file", [os.path.join(HERE, "run_redteam.py")])):
+        _p = subprocess.run(
+            [sys.executable] + _argv
+            + ["--target-config", os.path.join(HERE, "no_such_config_at_all.yaml")],
+            capture_output=True, text=True, timeout=120)
+        _refusals[_label] = _p.returncode
     check("a refusal carrying a message is not reported with the code for a breach",
-          "isinstance(e.code, int)" in cli_src and "return 2" in cli_src)
-    p = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
-                        "--target-config", os.path.join(HERE, "no_such_config_at_all.yaml")],
-                       capture_output=True, text=True, timeout=120)
-    check("...and an unreadable config really does exit 2, not 1",
-          p.returncode == 2, "exited %d" % p.returncode)
+          _refusals["cli"] == 2, "qatration run exited %d" % _refusals["cli"])
+    check("...and the file door answers it the same way, which is how the engine "
+          "drives itself",
+          _refusals["file"] == _refusals["cli"],
+          "python run_redteam.py exited %d, qatration run %d"
+          % (_refusals["file"], _refusals["cli"]))
 
     # --- the third-party share is counted, not written down --------------------------------
     #
