@@ -591,6 +591,38 @@ def main():
         _s1.shutdown()
         _s2.shutdown()
 
+    # --- ONE TABLE, AND NO DEAD ONE BESIDE IT -------------------------------------------
+    #
+    # `_BLOCKED_NETS` listed `127.`, `10.`, `192.168.`, `169.254.`, `0.` and the sixteen `172.`
+    # ranges as string prefixes, under a comment explaining that 169.254.169.254 is the cloud
+    # metadata service -- so it read as the policy. Nothing read it. The policy is
+    # `_address_refused`, which asks `ipaddress` for the properties, and the two never had to
+    # agree because only one of them ran.
+    #
+    # A dead table beside a live one is a second thing to keep true and it looks enforced. It is
+    # gone; this is the check that keeps it gone, and the one that says the live table is wider
+    # than the dead one ever was.
+    import authorization as _auth_t
+    check("no second table of blocked networks lives beside the live one",
+          not hasattr(_auth_t, "_BLOCKED_NETS"),
+          "authorization._BLOCKED_NETS is back")
+    from authorization import unreachable_by_policy as _ubp_t
+    # CARRIER-GRADE NAT never appeared in the dead list and `is_private` covers it, which is
+    # the argument for the properties in one line.
+    check("a range the dead table never listed is still refused",
+          "private" in (_ubp_t("http://100.64.0.1/x") or ""),
+          str(_ubp_t("http://100.64.0.1/x")))
+    for _u in ("http://10.0.0.1/x", "http://172.16.0.1/x", "http://192.168.1.1/x",
+               "http://169.254.169.254/x", "http://127.0.0.1/x"):
+        check("...and every range it did list still is: %s" % _u,
+              _ubp_t(_u) is not None, str(_ubp_t(_u)))
+    check("...while the range just outside 172.16/12 is not refused for being nearby",
+          _ubp_t("http://172.32.0.1/x") is None, str(_ubp_t("http://172.32.0.1/x")))
+    # AND THE NAMES, which no property can answer and which is why that half stayed.
+    for _u in ("http://x.internal/y", "http://x.cluster.local/y", "http://x.local/y"):
+        check("an internal name is refused before it is resolved: %s" % _u,
+              "internal name" in (_ubp_t(_u) or ""), str(_ubp_t(_u)))
+
     # --- THE SHORT DOTTED FORMS, WHICH THE READER PARSED AND THREW AWAY -----------------
     #
     # `_as_address` accepts two to four parts, converts each, and used to end on

@@ -267,13 +267,20 @@ def hosted():
     return os.environ.get("QATRATION_HOSTED", "").strip().lower() in ("1", "true", "yes")
 
 
-# Ranges that are never a target endpoint and always somebody's inside. 169.254.169.254 is
-# the cloud metadata service, which on most providers hands out credentials to anything that
-# asks — a target list containing it turns this engine into the exact tool it is built to find.
-_BLOCKED_NETS = (
-    "127.", "10.", "192.168.", "169.254.", "0.",
-    *(f"172.{n}." for n in range(16, 32)),
-)
+# A TABLE OF BLOCKED NETWORKS USED TO SIT HERE, and nothing read it. `_BLOCKED_NETS` listed
+# `127.`, `10.`, `192.168.`, `169.254.`, `0.` and the sixteen `172.` ranges as string
+# prefixes, under a comment explaining that 169.254.169.254 is the cloud metadata service —
+# so it read as the policy, and the policy is `_address_refused`, which asks `ipaddress` for
+# the properties instead. A dead table beside a live one is worse than no table: it is a
+# second thing to keep true, it looks enforced, and the string-prefix form it was written in
+# is the shape this file has been bitten by before.
+#
+# The properties do the work and do it wider: `100.64.0.0/10` is carrier-grade NAT and never
+# appeared in that list, `is_private` covers it, and every IPv6 range comes free.
+#
+# Names are the one thing a property cannot answer, so this stays: a name ending in one of
+# these resolves inside a network no hosted service should reach, and it is checked before
+# resolution rather than after.
 _BLOCKED_SUFFIX = (".local", ".internal", ".localdomain", ".cluster.local")
 
 
