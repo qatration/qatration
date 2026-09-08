@@ -332,7 +332,7 @@ def main():
         dr.OUT_DIR = __import__("pathlib").Path(tmp)
         # Four values now: `load_all` hands back the artifacts it could not read, because a
         # report short of a target must say so rather than look complete.
-        findings, targets, dates, unreadable = dr.load_all()
+        findings, targets, dates, unreadable, _unmeas = dr.load_all()
         dr.OUT_DIR = real
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -685,7 +685,7 @@ def main():
     # then says about what came back is not a second decision. A report that showed less
     # because the run was narrower would be answering a question nobody asked with a number
     # nobody could check.
-    findings, _, _, _ = dr.load_all()
+    findings, _, _, _, _ = dr.load_all()
     ambient = dr.ambient_rates()
     ordered = dr.rank_for_reader(findings, ambient)
     check("ranking drops nothing", len(ordered) == len(findings),
@@ -931,7 +931,7 @@ def main():
         real = (dr.OUT_DIR, bi.OUT, disc.OUT)
         dr.OUT_DIR, bi.OUT, disc.OUT = pathlib.Path(tmp), pathlib.Path(tmp), tmp
         try:
-            findings, _, _, _ = dr.load_all()
+            findings, _, _, _, _ = dr.load_all()
             index = bi.load()
             loaded = disc.load()
         finally:
@@ -2027,6 +2027,66 @@ def main():
     check("no sentence of 55 characters or more is written in two modules",
           not _dupes, "; ".join("%s: %r" % (v, k[:60]) for k, v in list(_dupes.items())[:2]))
     check("...over a real number of literals", len(_seen4) > 100, str(len(_seen4)))
+
+    # --- A TARGET THAT RAN NOTHING IS NOT A SYSTEM THIS ASSESSMENT TESTED --------------
+    #
+    # `workspace.verdict_for` is THE predicate for this and says why it exists: two pages
+    # decided it separately and reached opposite answers about the same run, so `zero
+    # breaches out of zero attacks` was painted in the colour of the best possible result.
+    # `build_index` and `compare_targets` were both taught to ask it. The assessment —
+    # the page a client is handed — never did: it counted every artifact as a system
+    # tested, so a stored sweep that sent nothing appeared in `2 systems tested` and in
+    # `Coverage: 2 targets, 1 with at least one exploitable finding`, which reads as one
+    # tested and clean. Its only other mention of that target was the staleness bar,
+    # saying it was measured earlier.
+    import tempfile as _tfu, json as _jsu, subprocess as _spu
+    _wu = _tfu.mkdtemp()
+    try:
+        _sh6 = __import__("shutil")
+        _srcu = os.path.join(os.path.dirname(HERE), "out", "results_httpbot.json")
+        if not os.path.exists(_srcu):
+            print("SKIP  the unmeasured-target rule: this checkout ships no httpbot "
+                  "artifact, so it was NOT exercised")
+        else:
+            _sh6.copy(_srcu, _wu)
+            with open(os.path.join(_wu, "results_dvla.json"), "w",
+                      encoding="utf-8") as _fu:
+                _jsu.dump({"meta": {"target": "dvla", "attacks_n": 0, "broke": 0,
+                                    "errors": 0, "trials": 3,
+                                    "when": "2026-09-04 10:00"},
+                           "results": []}, _fu)
+            _ru = _spu.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "fixes"],
+                capture_output=True, text=True, timeout=300, cwd=_wu,
+                env=dict(os.environ, QATRATION_OUT=_wu,
+                         PYTHONIOENCODING="utf-8"))
+            _pu = io.open(os.path.join(_wu, "defense_report.html"),
+                          encoding="utf-8").read()
+            check("the assessment does not count a target that ran nothing",
+                  "1 systems tested" in _pu, _pu[_pu.find("systems tested") - 40:
+                                                _pu.find("systems tested") + 20])
+            check("...and names it rather than only subtracting it",
+                  "not measured: dvla" in _pu,
+                  "the number got smaller and nobody was told which system")
+            check("...and the coverage line agrees with the headline",
+                  "Coverage: 1 target," in _pu,
+                  _pu[_pu.find("Coverage:"):_pu.find("Coverage:") + 60])
+            check("...and the console says the same, since that is what gets pasted",
+                  "1 targets, 1 not measured" in (_ru.stdout + _ru.stderr),
+                  (_ru.stdout + _ru.stderr)[-160:])
+            # AND NOT OTHERWISE: with both artifacts real, nothing is subtracted and the
+            # phrase does not appear, or the page cries wolf on every run.
+            os.remove(os.path.join(_wu, "results_dvla.json"))
+            _spu.run([sys.executable, os.path.join(HERE, "cli.py"), "fixes"],
+                     capture_output=True, text=True, timeout=300, cwd=_wu,
+                     env=dict(os.environ, QATRATION_OUT=_wu,
+                              PYTHONIOENCODING="utf-8"))
+            _pu2 = io.open(os.path.join(_wu, "defense_report.html"),
+                           encoding="utf-8").read()
+            check("...and a fleet where every run measured something says nothing of it",
+                  "not measured:" not in _pu2, "the page cried wolf")
+    finally:
+        __import__("shutil").rmtree(_wu, ignore_errors=True)
 
     # --- WHO ASKED FOR THIS ------------------------------------------------------------
     #

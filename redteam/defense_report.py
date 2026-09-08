@@ -758,6 +758,7 @@ def load_all(known=None):
     # A truncated artifact is what an interrupted write leaves. Stopping a sweep by hand
     # produces one. Four other tools that read this directory died the same way, which is why
     # the reader now lives in `workspace` and this is one of its callers.
+    unmeasured = set()
     _parsed, _unreadable = read_artifacts(results_files(OUT_DIR))
     _metas = {fp: (d.get("meta") or {}) for fp, d in _parsed.items()}
     _keep, _drop = fleet_filter(list(_metas.values()), known)
@@ -770,6 +771,17 @@ def load_all(known=None):
         if tgt not in _keep_names:
             continue
         targets.add(tgt)
+        # AND WHETHER THE RUN MEASURED ANYTHING. `workspace.verdict_for` is THE predicate
+        # for this and says why it exists: two pages decided it separately and reached
+        # opposite answers about the same run, so `zero breaches out of zero attacks` was
+        # painted in the colour of the best possible result. `build_index` and
+        # `compare_targets` were both taught to ask it. This page never did — it
+        # counted every artifact as a system tested, so a target whose sweep sent nothing
+        # appeared in `2 systems tested` and in `1 with at least one exploitable finding`,
+        # which reads as one tested and clean.
+        from workspace import verdict_for as _verdict_for
+        if _verdict_for(d.get("meta") or {}) == "Not measured":
+            unmeasured.add(tgt)
         # THE RUN'S DATE WHERE THE RUN RECORDED ONE. `os.path.getmtime` is a filesystem
         # event: git does not preserve mtimes, so a fresh clone stamps every artifact with
         # the clone day and this report dated three weeks of evidence as today. One reader
@@ -780,7 +792,7 @@ def load_all(known=None):
                 best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in BROKE else 1)[0]
                 findings.append((tgt, r["attack"], r["headline"], r["fired"],
                                  best.get("probe") or {}, r.get("rate", "")))
-    return findings, targets, dates, _unreadable
+    return findings, targets, dates, _unreadable, unmeasured
 
 
 def _timeline():
@@ -1277,7 +1289,21 @@ def main():
     # The fleet's own configs. `load_all` decides what to do with them via `fleet_filter`,
     # which identifies the directory BY ITS CONTENTS: if nothing in it belongs to this fleet,
     # it is a fixture's directory and nothing is dropped.
-    findings, all_targets, measured, unreadable = load_all(known=fleet_names())
+    findings, all_targets, measured, unreadable, _unrun = load_all(known=fleet_names())
+    # THE SYSTEMS THIS RUN ACTUALLY ASKED SOMETHING OF. A target whose artifact records a
+    # sweep that sent nothing is not one this assessment tested, and counting it in the
+    # headline is the shape `verdict_for` exists to refuse.
+    tested = all_targets - _unrun
+    # AND NAMED, not merely subtracted. A number that quietly gets smaller tells nobody
+    # which system to re-run, and `build_index` already says this out loud about the same
+    # artifacts: shown as not measured rather than as hardened.
+    # `_unrun`, NOT `unmeasured`: `attribution_index` rebinds that name three hundred
+    # lines down to mean `no benign baseline`, and the console line at the end read the
+    # wrong one -- it printed `2 not measured` for a workspace with one. A shadowed name
+    # is a different fact wearing the same word.
+    unmeasured_sub = ("" if not _unrun else
+                      " \u00b7 %d not measured: %s"
+                      % (len(_unrun), esc(", ".join(sorted(_unrun)))))
     # SAID, not counted. "3 files skipped" tells nobody which run to re-do, and a
     # remediation page silently short of a target reads as a clean bill for it.
     say_unreadable(unreadable, "this report")
@@ -1972,7 +1998,7 @@ pre{{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-mono
 </style></head><body><div class="wrap">
 <div class="rpt-head">
   <h1><span class="q">QA</span>tration — Security Assessment</h1>
-  <div class="sub">Adversarial test of AI features · {today} · {len(all_targets)} systems tested</div>
+  <div class="sub">Adversarial test of AI features · {today} · {len(tested)} systems tested{unmeasured_sub}</div>
 </div>
 
 <div class="summary">
@@ -1980,11 +2006,11 @@ pre{{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-mono
   <div class="dist"><div class="distlabel">severity distribution</div><div class="distbar">{bar}</div></div>
 </div>
 <p class="coverage"><b>Read the tiles as root causes, not as a score.</b> These {n_roots} distinct
-problems were seen <b>{n_breaches} times</b> across {len(all_targets)} systems. A count of
+problems were seen <b>{n_breaches} times</b> across {len(tested)} systems. A count of
 occurrences answers "how often", which is not the question a fix is chosen by. One
 detector accounting for dozens of rows is one problem with a wide blast radius rather than
 dozens of problems.{prov_line}</p>
-<p class="coverage">Coverage: {len(all_targets)} target{'s' if len(all_targets)!=1 else ''}, {len(breached_targets)} with at least
+<p class="coverage">Coverage: {len(tested)} target{'s' if len(tested)!=1 else ''}, {len(breached_targets)} with at least
 one exploitable finding. {coverage_line}</p>
 
 {staleness}
@@ -2010,7 +2036,8 @@ everything the model reads (prompts, retrieved documents, tool output) as untrus
     # found and the terminal is the one somebody pastes into a ticket.
     print(f"wrote {out} — {n_roots} root cause(s) ({ {k: v for k, v in root_sev.items() if v} }) "
           f"seen {n_breaches} time(s), {len(ordered)} fixes, "
-          f"{len(all_targets)} targets")
+          f"{len(tested)} targets"
+          + (f", {len(_unrun)} not measured" if _unrun else ""))
     if unmapped:
         # `plain` for the same reason `esc` is on every page: these names come out of a
         # stored artifact, and an artifact is a record of what a target said. A detector
