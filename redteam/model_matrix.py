@@ -34,6 +34,38 @@ def tag(model):
     return re.sub(r'[^A-Za-z0-9.]+', '-', model)
 
 
+def comparable(rc, path, started, exists=None, mtime=None):
+    """-> (is this model's run comparable with the others, why not).
+
+    A FAILED RUN LEAVES THE PREVIOUS RUN'S FILE IN PLACE, and `os.path.exists` is true for
+    it — so the matrix would compare this model's fresh result against another model's
+    older one and present the difference as a property of the models. It would be measuring
+    the calendar. Both the exit code and the mtime are checked, because a run can exit 0
+    having written nothing: a scope with no applicable attacks bails before writing,
+    deliberately, so that an empty sweep cannot clobber good data.
+
+    A function rather than three `continue`s inside the loop, because a rule inside a loop
+    that shells out to a sweep can only be reached by running one — and what guarded it
+    was three substring searches for `rc != 0`, `not comparable` and
+    `os.path.getmtime(fp) < started` in this file's own source. Those are spellings. They
+    go green on a refactor that keeps the words and changes the meaning, and red on one
+    that keeps the meaning.
+
+    `exists` and `mtime` are injectable for the same reason: the fixture needs to describe
+    a file that is there and older than the run, which is a state and not a file.
+    """
+    exists = exists or os.path.exists
+    mtime = mtime or os.path.getmtime
+    if rc != 0:
+        return False, "exited %s, so its results are not comparable" % rc
+    if not exists(path):
+        return False, "wrote no results file"
+    if mtime(path) < started:
+        return False, ("wrote nothing this run \u2014 the file on disk predates it, so it is a "
+                       "DIFFERENT measurement")
+    return True, ""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target-config", required=True)
@@ -160,16 +192,13 @@ def main():
         # be measuring the calendar. Both the exit code and the mtime are checked, because a
         # run can exit 0 having written nothing: a scope with no applicable attacks bails
         # before writing, deliberately, so that an empty sweep cannot clobber good data.
-        if rc != 0:
-            print(f"  ({m} exited {rc} — its results are not comparable, skipped)")
-            stale.append(m)
-            continue
-        if not os.path.exists(fp):
-            print(f"  (no results file for {m} — skipped)")
-            continue
-        if os.path.getmtime(fp) < started:
-            print(f"  ({m} wrote nothing this run — the file on disk predates it, so it is a "
-                  f"DIFFERENT measurement and is skipped)")
+        # AND A MODEL THAT WROTE NO FILE AT ALL JOINS THEM. This case printed its own line
+        # and did not join `stale`, so it was missing from the summary whose stated job is
+        # that the exclusions are named rather than silently thinning the comparison —
+        # two of the three exclusions reached the line a reader scans.
+        _ok, _why_x = comparable(rc, fp, started)
+        if not _ok:
+            print(f"  ({m} {_why_x}, skipped)")
             stale.append(m)
             continue
         _d, _why = read_artifact(fp)

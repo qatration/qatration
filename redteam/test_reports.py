@@ -668,13 +668,51 @@ def main():
     # A failed run leaves the previous run's results in place, and os.path.exists is true for
     # it — so the matrix compared one model's fresh result against another's older one and
     # published the difference as a property of the models. It was measuring the calendar.
-    mm_src = open(os.path.join(HERE, "model_matrix.py"), encoding="utf-8").read()
+    # ASKED OF THE RULE, NOT OF ITS SPELLING. These were three substring searches in
+    # `model_matrix.py`'s own source — `rc != 0`, `not comparable` and
+    # `os.path.getmtime(fp) < started` — because the rule lived inside a loop that
+    # shells out to a sweep, and nothing else could reach it. A search for a spelling goes
+    # green on a refactor that keeps the words and changes the meaning, and red on one that
+    # keeps the meaning. It is `comparable` now, with the two filesystem questions
+    # injectable, because the fixture needs to describe a file that is there and older than
+    # the run, which is a state rather than a file.
+    from model_matrix import comparable as _cmp
+
+    def _cmp_at(rc, there, when, started=100):
+        return _cmp(rc, "x", started,
+                    exists=lambda _p: there, mtime=lambda _p: when)
+
     check("a model whose run failed is kept out of the matrix",
-          "rc != 0" in mm_src and "not comparable" in mm_src)
+          _cmp_at(1, True, 200)[0] is False
+          and "not comparable" in _cmp_at(1, True, 200)[1],
+          str(_cmp_at(1, True, 200)))
     check("...as is one whose results file predates the run that was supposed to write it",
-          "os.path.getmtime(fp) < started" in mm_src)
+          _cmp_at(0, True, 50)[0] is False
+          and "DIFFERENT measurement" in _cmp_at(0, True, 50)[1],
+          str(_cmp_at(0, True, 50)))
+    # AND ONE THAT WROTE NOTHING AT ALL, which used to print its own line and NOT join the
+    # summary: two of the three exclusions reached the line a reader scans.
+    check("...as is one that wrote no results file",
+          _cmp_at(0, False, 200)[0] is False,
+          str(_cmp_at(0, False, 200)))
+    check("...while a model that ran and wrote this run's file is compared",
+          _cmp_at(0, True, 200) == (True, ""), str(_cmp_at(0, True, 200)))
+    # AND A TIMEOUT, which arrives as `rc is None` and is not zero.
+    check("...and a model that stopped answering is not silently comparable",
+          _cmp_at(None, True, 200)[0] is False, str(_cmp_at(None, True, 200)))
+    # AND THE MATRIX ASKS IT. A function with fixtures that nothing calls answers them
+    # perfectly.
+    import ast as _ast_m
+    _mm_src = open(os.path.join(HERE, "model_matrix.py"), encoding="utf-8").read()
+    _mm_main = next((_n for _n in _ast_m.walk(_ast_m.parse(_mm_src))
+                     if isinstance(_n, _ast_m.FunctionDef)
+                     and _n.name == "main"), None)
+    _mm_seg = _ast_m.get_source_segment(_mm_src, _mm_main) if _mm_main else ""
+    check("the matrix decides an exclusion by asking that function",
+          "comparable(" in (_mm_seg or ""),
+          "model_matrix.main decides comparability itself")
     check("...and the exclusions are named rather than silently thinning the comparison",
-          "not in the matrix" in mm_src)
+          "not in the matrix" in _mm_src)
 
     # --- what a quick run reports: all of it ----------------------------------------------
     # SCOPE IS ABOUT TRAFFIC, NOT ABOUT DISCLOSURE. `--scope quick` sends one attack from each
