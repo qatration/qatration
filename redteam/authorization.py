@@ -280,10 +280,23 @@ _BLOCKED_SUFFIX = (".local", ".internal", ".localdomain", ".cluster.local")
 def _as_address(host):
     """The address this host IS, for every spelling a resolver accepts. None if it is a name.
 
-    `ipaddress` is strict on purpose and refuses two forms the operating system still resolves:
-    leading-zero octal (`0177.0.0.1`) and a bare integer (`2130706433`). A policy that parses
-    with the strict reader and a socket that connects with the lenient one disagree exactly
-    where it matters, so both are normalised here before the parser sees them.
+    `ipaddress` is strict on purpose and refuses forms the operating system still resolves:
+    leading-zero octal (`0177.0.0.1`), a bare integer (`2130706433`), and the SHORT dotted
+    forms `127.1` and `127.0.1`. A policy that parses with the strict reader and a socket
+    that connects with the lenient one disagree exactly where it matters, so all of them are
+    normalised here before the parser sees them.
+
+    THE SHORT FORMS WERE PARSED AND THEN THROWN AWAY. The reader below accepts two to four
+    parts, converts each, and ended on `len(nums) == 4` -- so `127.1` came back as `None`,
+    which tells the caller `this is a hostname`. `socket.inet_aton` reads it as 127.0.0.1,
+    and so does every resolver: `a.b` means a.0.0.b and `a.b.c` means a.b.0.c, with the last
+    part carrying the bytes the missing ones would have held.
+
+    The outcome was safe on both platforms and for different reasons, which is why nothing
+    caught it: on Linux the name resolution that follows returns 127.0.0.1 and the same
+    table refuses it there, and on Windows `getaddrinfo` fails and the gate refuses with
+    `does not resolve here, so where it points is unknown` -- a refusal, with a sentence
+    that is wrong about an address whose destination is not in doubt.
     """
     import ipaddress
 
@@ -331,10 +344,19 @@ def _as_address(host):
                     for p in parts]
         except ValueError:
             return None
-        if all(0 <= n <= 255 for n in nums) and len(nums) == 4:
+        # `inet_aton` RULES, WHICH ARE NOT `all(n <= 255)`. In a short form the final part
+        # carries every byte the missing ones would have: `1.16777215` is 1.255.255.255 and
+        # `1.2.65535` is 1.2.255.255. Only the leading parts are single bytes.
+        head, last = nums[:-1], nums[-1]
+        span = 8 * (4 - len(nums))                # bits the last part has to cover
+        if (all(0 <= n <= 255 for n in head)
+                and 0 <= last < (1 << (8 + span))):
+            value = last
+            for i, n in enumerate(reversed(head)):
+                value |= n << (8 + span + 8 * i)
             try:
-                return ipaddress.ip_address(".".join(str(n) for n in nums))
-            except ValueError:
+                return ipaddress.ip_address(value)
+            except (ValueError, OverflowError):
                 return None
     return None
 

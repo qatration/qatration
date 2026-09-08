@@ -591,6 +591,68 @@ def main():
         _s1.shutdown()
         _s2.shutdown()
 
+    # --- THE SHORT DOTTED FORMS, WHICH THE READER PARSED AND THREW AWAY -----------------
+    #
+    # `_as_address` accepts two to four parts, converts each, and used to end on
+    # `len(nums) == 4` -- so `127.1` came back as None, which tells the caller `this is a
+    # hostname`. `socket.inet_aton` reads it as 127.0.0.1 and so does every resolver:
+    # `a.b` means a.0.0.b and `a.b.c` means a.b.0.c, with the last part carrying the bytes
+    # the missing ones would have held.
+    #
+    # The outcome was safe on both platforms for different reasons, which is why nothing
+    # caught it: on Linux the name resolution that follows returns 127.0.0.1 and the same
+    # table refuses it there; on Windows `getaddrinfo` fails and the gate refuses with
+    # `does not resolve here, so where it points is unknown` -- a refusal carrying a
+    # sentence that is wrong about an address whose destination is not in doubt.
+    from authorization import _as_address as _aa
+    for _s, _want in (("127.1", "127.0.0.1"), ("127.0.1", "127.0.0.1"),
+                      ("10.1", "10.0.0.1"), ("1.16777215", "1.255.255.255"),
+                      ("1.2.65535", "1.2.255.255"), ("0x7f.1", "127.0.0.1")):
+        check("a short dotted form is the address a resolver reads: %s" % _s,
+              str(_aa(_s)) == _want, str(_aa(_s)))
+    # AND THE RANGES ARE inet_aton's, not `all(n <= 255)`: only the leading parts are single
+    # bytes, and one part too large is not an address at all.
+    for _s in ("256.1", "1.16777216", "1.2.65536", "1.2.3.4.5"):
+        check("...and one that overflows its span is not an address: %s" % _s,
+              _aa(_s) is None, str(_aa(_s)))
+
+    # PINNED TO THE RESOLVER RATHER THAN TO A LIST SOMEBODY REMEMBERED. The hex form was
+    # missed by the first version of this function and found by generating spellings; the
+    # short forms were missed by the second and are the same lesson. `socket.inet_aton` IS
+    # the lenient reader the socket will use, so it is the thing to agree with.
+    import socket as _sock_a, random as _rnd_a
+    _rnd_a.seed(11)
+    _spellings = ["127.1", "127.0.1", "1.2.3.4", "0177.0.0.1", "0x7f.0.0.1",
+                  "2130706433", "8.8.8.8", "0.0.0.0", "255.255.255.255"]
+    for _ in range(120):
+        _spellings.append("%d.%d" % (_rnd_a.randint(0, 255), _rnd_a.randint(0, 16777215)))
+        _spellings.append("%d.%d.%d" % (_rnd_a.randint(0, 255), _rnd_a.randint(0, 255),
+                                        _rnd_a.randint(0, 65535)))
+        _spellings.append("%d.%d.%d.%d" % tuple(_rnd_a.randint(0, 255) for _ in range(4)))
+    _off = []
+    for _s in _spellings:
+        try:
+            _want = _sock_a.inet_ntoa(_sock_a.inet_aton(_s))
+        except OSError:
+            _want = None
+        _got = _aa(_s)
+        _got = str(_got) if _got is not None else None
+        if _got != _want:
+            _off.append("%s: inet_aton=%s ours=%s" % (_s, _want, _got))
+    check("every IPv4 spelling reads the same as the socket would read it",
+          not _off, "; ".join(_off[:4]))
+    check("...over enough spellings to be worth saying", len(_spellings) >= 300,
+          str(len(_spellings)))
+
+    # AND THE GATE REFUSES THEM, which is the point of parsing them at all.
+    from authorization import unreachable_by_policy as _ubp
+    for _u, _word in (("http://127.1/x", "loopback"), ("http://127.0.1/x", "loopback"),
+                      ("http://10.1/x", "private"), ("http://0x7f.1/x", "loopback")):
+        check("the gate refuses %s as %s" % (_u, _word),
+              _word in (_ubp(_u) or ""), str(_ubp(_u)))
+    check("...and still allows an ordinary public address",
+          _ubp("http://8.8.8.8/x") is None, str(_ubp("http://8.8.8.8/x")))
+
     # --- ONE HOST IS ONE ORIGIN ---------------------------------------------------------
     #
     # `origin_of` returned the netloc verbatim, and a netloc is not a normal form.
