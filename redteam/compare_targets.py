@@ -11,7 +11,10 @@ from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
                        # aliased: `measured` is already a local here, and it holds the
                        # timestamp of the run rather than a count of it
-                       measured as measured_counts, measured_when)
+                       measured as measured_counts, measured_when,
+                       # ONE SPELLING OF `and N more`, and four places it was simply
+                       # missing; see `named_or_more`'s docstring for both halves
+                       named_or_more)
 
 OUT_DIR = Path(WORKSPACE_OUT)
 
@@ -612,8 +615,9 @@ def main():
         # An attack only one build was run against is not evidence about the control, and
         # dropping it silently narrows a comparison without narrowing the sentence about it.
         if p_.get("unpaired"):
-            ids = ", ".join(f"{a} ({side})" for a, side in p_["unpaired"][:6])
-            more = "" if len(p_["unpaired"]) <= 6 else f" … and {len(p_['unpaired']) - 6} more"
+            ids = named_or_more(["%s (%s)" % (a, side)
+                                 for a, side in p_["unpaired"]], 6)
+            more = ""
             pair_html += (
                 f'<p class="dim pn"><b>Read over {p_.get("shared", 0)} shared attack(s).</b> '
                 f'{len(p_["unpaired"])} attack(s) were run against one build only and are not '
@@ -623,9 +627,8 @@ def main():
         # AND THE SHARPER ONE, which reads as a comparison and is not: both builds ran the
         # attack, under different versions of it.
         if p_.get("mismatched"):
-            mids = ", ".join(p_["mismatched"][:6])
-            mmore = "" if len(p_["mismatched"]) <= 6 else (
-                " … and %d more" % (len(p_["mismatched"]) - 6))
+            mids = named_or_more(p_["mismatched"], 6)
+            mmore = ""
             pair_html += (
                 f'<p class="dim pn"><b>{len(p_["mismatched"])} attack(s) were run against '
                 f'both builds in DIFFERENT versions</b> — the payload, the encoding, the '
@@ -672,9 +675,9 @@ def main():
     # `history.diff` names the same difference when it refuses a before/after.
     arsenalbar = ("" if not _odd_arsenal else
                   '<div class="stalebar">Not every row was swept with the same attacks: '
-                  + esc(", ".join("%s (%s)" % (r["target"], r["arsenal"])
-                                  for r in sorted(_odd_arsenal, key=lambda x: x["target"])[:6]))
-                  + (" and %d more" % (len(_odd_arsenal) - 6) if len(_odd_arsenal) > 6 else "")
+                  + esc(named_or_more(["%s (%s)" % (r["target"], r["arsenal"])
+                                       for r in sorted(_odd_arsenal,
+                                                       key=lambda x: x["target"])], 6))
                   + '. A breach count from one arsenal is not comparable with a breach count '
                     'from another, which is why the timeline refuses that comparison for a '
                     'single target across two runs.</div>')
@@ -685,16 +688,17 @@ def main():
     _odd_trials, _trial_kinds = odd_on(rows, "trials")
     trialbar = ("" if len(_trial_kinds) <= 1 else
                 '<div class="stalebar">These rows did not all get the same number of '
-                'attempts: ' + esc(", ".join("%s trial(s) for %s" % (k, ", ".join(
-                    sorted(r["target"] for r in rows if r.get("trials") == k)[:3]))
+                'attempts: ' + esc(", ".join("%s trial(s) for %s" % (k, named_or_more(
+                    sorted(r["target"] for r in rows if r.get("trials") == k), 3))
                     for k in _trial_kinds))
                 + '. More attempts give a flaky attack more chances to land, so a breach '
                   'count from ten trials is not comparable with one from a single try -- the '
                   'timeline refuses that comparison for one target across two runs.</div>')
     _unfin = [r for r in rows if r.get("unfinished")]
     unfinbar = ("" if not _unfin else
-                '<div class="stalebar">' + esc("; ".join(
-                    "%s: %s" % (r["target"], r["unfinished"]) for r in _unfin[:4]))
+                '<div class="stalebar">' + esc(named_or_more(
+                    ["%s: %s" % (r["target"], r["unfinished"]) for r in _unfin],
+                    4, sep="; "))
                 + '. Rows from a run that did not finish are not smaller sweeps, they are '
                   'sweeps that stopped.</div>')
     today = datetime.date.today().isoformat()

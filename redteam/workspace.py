@@ -1651,6 +1651,31 @@ def unreadable_html(bad, where=""):
             % (len(bad), (" in " + esc(where)) if where else "", rows))
 
 
+def named_or_more(names, cap=6, sep=", "):
+    """The first `cap` of a list, and how many were left out. One spelling, thirteen sites.
+
+    A LIST A PAGE PRINTS WITHOUT SAYING HOW LONG IT WAS is a list the reader takes for the
+    whole set, which is this project's own class one level down from the artifacts. Live on
+    the published comparison page: the banner naming which rows got a different number of
+    attempts truncated each bucket at three, and the fleet has buckets of twenty-one, nine
+    and four — so twelve targets were named out of thirty-five, and a reader had no way
+    to know which of the rest carried numbers the banner says are not comparable.
+
+    The convention already existed in nine places and in five spellings (` +%d`, ` … and %d
+    more`, ` and %d more`, `, and %d more below`, and a bare ` …` that says a remainder
+    exists without saying how big) and was missing from four. One function, so the sentence
+    cannot drift and cannot be forgotten.
+
+    An empty list is the empty string rather than a lonely ellipsis: the caller decides
+    whether an empty list is worth a sentence, and every one of them already does.
+    """
+    names = [str(n) for n in names]
+    shown = sep.join(names[:cap])
+    if len(names) <= cap:
+        return shown
+    return "%s … and %d more" % (shown, len(names) - cap)
+
+
 def say_unreadable(bad, where="", stream=None):
     """One sentence per unreadable artifact, in the one wording every caller should use.
 

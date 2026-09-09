@@ -50,6 +50,8 @@ from rejudge import _prompt_of
 # that only supplies the default directory is the second implementation it was written
 # to catch, so the import binds the name the four call sites below already use.
 from workspace import oracle_contexts as contexts
+# ONE SPELLING of `and N more`: see `workspace.named_or_more`.
+from workspace import named_or_more
 
 
 def provenance(engines, engine_now):
@@ -415,8 +417,8 @@ def main():
         # a target said. Printed raw, the name carrying ESC[2K and a carriage return
         # erases this warning as it is written and repaints the line.
         print(f"  ! {len(_no_config)} target(s) have stored probes and no config here: "
-              f"{', '.join(plain(_n, oneline=True) for _n in _no_config[:4])}"
-              f"{' +%d' % (len(_no_config) - 4) if len(_no_config) > 4 else ''}. Their probes "
+              f"{named_or_more([plain(_n, oneline=True) for _n in _no_config], 4)}"
+              f". Their probes "
               f"were replayed with no canary to look for and no tool list to compare against, "
               f"so anything needing one could not speak for them. Export QATRATION_CONFIGS to "
               f"the config file(s) and the numbers below can go up.", file=sys.stderr)
@@ -451,8 +453,9 @@ def main():
         # zero, because on a fresh workspace this is the first heading a reader meets.
         print("  none yet — no stored probe has made any detector fire here")
     for k in sorted(demo, key=lambda x: -hits[x]):
-        tg = ", ".join(plain(_n, oneline=True) for _n in sorted(where[k])[:3])
-        more = f" +{len(where[k]) - 3}" if len(where[k]) > 3 else ""
+        tg = named_or_more([plain(_n, oneline=True)
+                            for _n in sorted(where[k])], 3)
+        more = ""
         tag = "  [clean traffic only]" if k in benign_only else ""
         print(f"  {k:<24}{hits[k]:>5}   {tg}{more}{tag}")
     if benign_only:

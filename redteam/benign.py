@@ -45,6 +45,8 @@ except Exception:
 import yaml
 from target import payload, engine_version
 from workspace import measured_when, FILE_DATED
+# ONE SPELLING of `and N more`: see `workspace.named_or_more`.
+from workspace import named_or_more
 from oracle import DETECTORS, inert_for, visible_text
 
 # ---------------------------------------------------------------------------------------
@@ -1010,16 +1012,14 @@ def main():
         if _unsettled:
             print(f"\n{len(_unsettled)} (target, detector) pair(s) fire here and nobody has "
                   f"settled them:")
-            print("    " + ", ".join("%s/%s" % p for p in _unsettled[:8])
-                  + (" +%d" % (len(_unsettled) - 8) if len(_unsettled) > 8 else ""))
+            print("    " + named_or_more(["%s/%s" % p for p in _unsettled], 8))
             print("    Until somebody does, each is a candidate false alarm counted as one.")
         if _stale:
             # THE SHARPER OF THE TWO. A `false_positive` verdict for a pair that has stopped
             # firing goes on suppressing it, and the next time it fires it may be firing for
             # an entirely different reason than the one somebody dismissed.
             print(f"\n{len(_stale)} adjudication(s) are about pairs that no longer fire:")
-            print("    " + ", ".join("%s/%s" % p for p in _stale[:8])
-                  + (" +%d" % (len(_stale) - 8) if len(_stale) > 8 else ""))
+            print("    " + named_or_more(["%s/%s" % p for p in _stale], 8))
             print("    A verdict outlives the fire it was written about; re-read before "
                   "trusting one.")
         if _unmeasured:
@@ -1029,9 +1029,7 @@ def main():
             # directory, and the act that closes it is a run rather than a re-reading.
             print(f"\n{len(_unmeasured)} adjudication(s) are about {len({p[0] for p in _unmeasured})} target(s) "
                   f"with no benign run here, so neither current nor stale:")
-            print("    " + ", ".join(sorted({p[0] for p in _unmeasured})[:8])
-                  + (" +%d" % (len({p[0] for p in _unmeasured}) - 8)
-                     if len({p[0] for p in _unmeasured}) > 8 else ""))
+            print("    " + named_or_more(sorted({p[0] for p in _unmeasured}), 8))
             print("    Nothing above says anything about them. `qatration benign --target-config"
                   " <yours>.yaml` is what would.")
         return

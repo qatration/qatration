@@ -44,6 +44,8 @@ from workspace import measured_when # and one definition of when a run happened
 # and one definition of what an attack IS -- the same one `lint` reads, so a field that
 # starts changing what gets sent joins this comparison by being added there.
 from lint_arsenal import attack_digest
+# ONE SPELLING of `and N more`: see `workspace.named_or_more`.
+from workspace import named_or_more
 
 
 def _path(target):
@@ -364,9 +366,11 @@ def diff(target):
             _silenced = sorted(_now - _was)
             _parts = []
             if _armed:
-                _parts.append("%s can speak now and could not before" % ", ".join(_armed[:3]))
+                _parts.append("%s can speak now and could not before"
+                              % named_or_more(_armed, 3))
             if _silenced:
-                _parts.append("%s cannot speak now and could before" % ", ".join(_silenced[:3]))
+                _parts.append("%s cannot speak now and could before"
+                              % named_or_more(_silenced, 3))
             confounds.append("the config armed a different set of detectors: %s, so a verdict that moved may be the config rather than the target" % "; ".join(_parts))
     if prev["attacks"] != cur["attacks"]:
         confounds.append(f"arsenal {prev['attacks']} → {cur['attacks']} attacks")
@@ -381,10 +385,9 @@ def diff(target):
         and row["h"] != prev["rows"][aid]["h"])
     if _rewritten:
         confounds.append(
-            "%d attack(s) were rewritten between these runs: %s%s — a verdict that "
+            "%d attack(s) were rewritten between these runs: %s — a verdict that "
             "moved on one of them may be the question rather than the target"
-            % (len(_rewritten), ", ".join(_rewritten[:4]),
-               " …" if len(_rewritten) > 4 else ""))
+            % (len(_rewritten), named_or_more(_rewritten, 4)))
     if torn:
         # A gap in the timeline is not a gap in the diff's confidence unless it is said to be.
         confounds.append(f"{len(torn)} line(s) of this target's timeline could not be read "
@@ -392,7 +395,7 @@ def diff(target):
                          f"comparison is incomplete")
     if assumed:
         confounds.append(f"{len(assumed)} row(s) the previous run never sent: "
-                         f"{', '.join(assumed[:4])}{' …' if len(assumed) > 4 else ''} — "
+                         f"{named_or_more(assumed, 4)} — "
                          f"broken now, and nothing measured them clean in between")
     # `torn` AS A NUMBER, not only inside an English sentence in `confounds`. A caller that
     # wants to say `this target's stored timeline is damaged` on a page cannot get that out
@@ -575,7 +578,7 @@ def main():
                            ("fixed", "fixed"), ("still open", "open"),
                            ("NOT RUN", "not_run"), ("unsteady", "unstable")):
             if d[key]:
-                shown = ", ".join(d[key][:6]) + (f" +{len(d[key]) - 6}" if len(d[key]) > 6 else "")
+                shown = named_or_more(d[key], 6)
                 print(f"  {label:<11}{len(d[key]):>3}  {shown}")
         if d.get("confounds"):
             print(f"  ! NOT A CLEAN BEFORE/AFTER — {'; '.join(d['confounds'])}")

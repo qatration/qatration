@@ -14,6 +14,7 @@ from workspace import measured_when
 from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, target_of,
                        fleet_names, fleet_filter,
                        read_artifact, read_artifacts, say_unreadable, measured,
+                       named_or_more,
                        NOT_MEASURED)
 from oracle import current_name
 
@@ -1166,8 +1167,9 @@ def common_thread(ordered, unmapped=()):
                 "prompt rules like “never reveal” or “only fetch the docs site.” That "
                 "judgment is manipulable. Each fix below moves the control out of the prompt "
                 "and into code the attacker can't talk their way past.")
-    named = ", ".join(entry(k)["title"][0].lower() + entry(k)["title"][1:] for k in keys[:3])
-    more = "" if len(keys) <= 3 else ", and %d more below" % (len(keys) - 3)
+    named = named_or_more([entry(k)["title"][0].lower() + entry(k)["title"][1:]
+                          for k in keys], 3)
+    more = "" if len(keys) <= 3 else " below"
     lead = ("What was found" if not prompt_side else
             "What was found, and not all of it is a prompt problem")
     return ("%s: %s%s. Each fix below moves a control out of somewhere the attacker can talk "
@@ -1578,8 +1580,8 @@ def main():
         _mute = {t: v[5] for t, v in ran.items() if isinstance(v[5], int) and v[5]}
         _mutetext = ("" if not _mute else
                      " Detectors that could not speak here at all, for want of a config key: "
-                     + ", ".join("%s on %s" % (n, t) for t, n in sorted(_mute.items())[:4])
-                     + (" and %d more" % (len(_mute) - 4) if len(_mute) > 4 else "")
+                     + named_or_more(["%s on %s" % (n, t)
+                                     for t, n in sorted(_mute.items())], 4)
                      + ". Their silence is a gap in the instrument, not a defence by the "
                        "target, and nothing below rules out what they look for.")
         _held = sum(v[4] for v in ran.values() if isinstance(v[4], int))
@@ -1614,8 +1616,9 @@ def main():
         for det in sorted(by_det, key=lambda d: -len(by_det[d])):
             items = by_det[det]
             systems = ", ".join(sorted({t for t, *_ in items}))
-            examples = ", ".join(f"{a} {r}" for _, a, _, r in
-                                 sorted(items, key=lambda it: -_rate_frac(it[3]))[:3])
+            examples = named_or_more(
+                [f"{a} {r}" for _, a, _, r in
+                 sorted(items, key=lambda it: -_rate_frac(it[3]))], 3)
             rows += (f'<tr><td class="mono">{esc(det)}</td>'
                      f'<td class="mono dim">{esc(systems)}</td>'
                      f'<td>{len(items)}</td>'
@@ -1780,7 +1783,7 @@ def main():
         for tgt in sorted(unseen):
             for b, aids in sorted(unseen[tgt].items()):
                 rows += (f'<tr><td class="mono">{esc(tgt)}</td><td>{esc(b)}</td>'
-                         f'<td class="mono dim">{esc(", ".join(sorted(aids)[:4]))}</td></tr>')
+                         f'<td class="mono dim">{esc(named_or_more(sorted(aids), 4))}</td></tr>')
         _table = (f'<table class="pair"><thead><tr><th>system</th><th>call</th>'
                   f'<th>seen on</th></tr></thead><tbody>{rows}</tbody></table>'
                   if rows else
@@ -1910,7 +1913,8 @@ def main():
             a = attrib.get((t, aid))
             if a:
                 verdict, detail = a
-                why = ", ".join(f"{d} on {r:.0%} of benign traffic" for d, r in detail[:2])
+                why = named_or_more([f"{d} on {r:.0%} of benign traffic"
+                                     for d, r in detail], 2)
                 bits.append(f'<span class="unattr" title="{esc(why)}">'
                             f'{"UNATTRIBUTED" if verdict == "unattributable" else "WEAKENED"}'
                             f'</span>')
@@ -2059,8 +2063,9 @@ everything the model reads (prompts, retrieved documents, tool output) as untrus
         # name carrying ESC[2K erases this warning line as it is printed.
         print(f"  ! {len(unmapped)} finding(s) have no remediation text and are listed without "
               f"one — {len({d for *_ , fired in unmapped for d in fired})} detector(s): "
-              + plain(", ".join(sorted({d for *_, fired in unmapped for d in fired})[:8]),
-                      oneline=True))
+              + plain(named_or_more(
+                  sorted({d for *_, fired in unmapped for d in fired}), 8),
+                  oneline=True))
 
 
 if __name__ == "__main__":

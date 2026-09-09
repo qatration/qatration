@@ -22,6 +22,8 @@ from workspace import BROKE   # one definition of what counts as a breach
 # digest `history.diff` compares two runs with and the comparison page pairs builds with,
 # so a field that starts changing what gets sent joins this pairing by being added there.
 from lint_arsenal import attack_digest
+# ONE SPELLING of `and N more`: see `workspace.named_or_more`.
+from workspace import named_or_more
 
 
 def _frac(rate):
@@ -458,9 +460,8 @@ def main():
         # and reads p=0.125 over the eleven that were the same question.
         if mism:
             print("     %d of the %d attack(s) both arms ran were different versions of "
-                  "the same id and are not in the test: %s%s"
-                  % (len(mism), len(mism) + shared, ", ".join(mism[:5]),
-                     " …" if len(mism) > 5 else ""))
+                  "the same id and are not in the test: %s"
+                  % (len(mism), len(mism) + shared, named_or_more(mism, 5)))
     if pairs:
         print("   `not separated` is a statement about the sample, not about the pair: the")
         print("   direction is right in every one of them, and most have too few attacks a")
@@ -509,17 +510,15 @@ def main():
         # whose entire subject is whether this engine's claims can be believed.
         _sent = sorted(_corpus & _ran)
         if _sent:
-            print("   the verdict below is about the %d that have: %s%s"
-                  % (len(_sent), ", ".join(_sent[:6]),
-                     " +%d" % (len(_sent) - 6) if len(_sent) > 6 else ""))
+            print("   the verdict below is about the %d that have: %s"
+                  % (len(_sent), named_or_more(_sent, 6)))
         else:
             # Not a pass over a small subset: a pass over nothing. `_never` being the
             # whole corpus is the one case where the sentence above has no subject.
             print("   NOT ONE of them has ever been sent, so nothing below rests on a "
                   "control at all.")
-        print("   never sent: %s%s"
-              % (", ".join(_never[:6]),
-                 " +%d" % (len(_never) - 6) if len(_never) > 6 else ""))
+        print("   never sent: %s"
+              % (named_or_more(_never, 6),))
 
     print()
     _code, _lines = gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened)

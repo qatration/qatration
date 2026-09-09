@@ -366,6 +366,65 @@ def check_every_command_refuses():
     check("a model name becomes a tag that is legal in a filename",
           sorted(_unsafe), [])
 
+    # --- A LIST PRINTED WITHOUT ITS REMAINDER IS READ AS THE WHOLE SET ---------------
+    #
+    # Live on the published comparison page: the banner naming which rows got a different
+    # number of attempts truncated each bucket at three, and the fleet has buckets of
+    # twenty-one, nine and four — twelve targets named out of thirty-five, with nothing
+    # saying which of the rest carried numbers that banner calls not comparable. Three
+    # more lists were truncated the same way, and nine others already said `and N more`
+    # in five different spellings.
+    from workspace import named_or_more as _nom
+    check("a list that fits is printed whole, with nothing added",
+          _nom(["a", "b"], 6), "a, b")
+    check("...and an empty one is empty, not a lonely ellipsis",
+          _nom([], 6), "")
+    check("a list longer than the cap says how many were left out",
+          _nom(["a", "b", "c", "d"], 2), "a, b \u2026 and 2 more")
+    check("...counting the remainder, not the whole list",
+          _nom(list("abcdefghij"), 3).endswith("and 7 more"), True)
+    check("...and exactly at the cap nothing is claimed to be missing",
+          _nom(["a", "b", "c"], 3), "a, b, c")
+    check("...with the separator the caller asked for",
+          _nom(["a", "b", "c"], 2, sep="; "), "a; b \u2026 and 1 more")
+
+    # AND NOBODY TRUNCATES A LIST BY HAND AGAIN. The rule was written thirteen times
+    # before it was written once; a scan is what keeps the fourteenth from being another
+    # list a reader takes for the whole set. Over the modules that PRINT to a person, and
+    # by AST rather than by text: `x[:6]` inside a `join` is the shape, and a substring
+    # search for it would be a spellcheck.
+    import ast as _ast_n
+    _SURFACES = ("compare_targets.py", "defense_report.py", "build_index.py",
+                 "compare_recon.py", "discrimination.py", "history.py",
+                 "detector_coverage.py", "benign.py")
+    _hand = []
+    for _fn in _SURFACES:
+        _fp = _os.path.join(_here, _fn)
+        if not _os.path.exists(_fp):
+            continue
+        for _n in _ast_t.walk(_ast_t.parse(_io_t.open(_fp, encoding="utf-8").read())):
+            # `", ".join(<subscript with a slice>)` -- a joined list cut to a constant.
+            if not (isinstance(_n, _ast_t.Call)
+                    and isinstance(_n.func, _ast_t.Attribute)
+                    and _n.func.attr == "join" and _n.args):
+                continue
+            # THE SLICE HAS TO BE ON WHAT IS BEING JOINED, not on something inside an
+            # element. `", ".join(f"{t}({str(a)[:40]})" for t, a in calls)` clips one
+            # argument's text, which is a different act from cutting the list short, and
+            # a check that cannot tell them apart would be reporting the wrong thing.
+            _arg = _n.args[0]
+            _iters = ([_arg] if not isinstance(_arg, (_ast_t.GeneratorExp,
+                                                      _ast_t.ListComp))
+                      else [_g.iter for _g in _arg.generators])
+            for _it in _iters:
+                if (isinstance(_it, _ast_t.Subscript)
+                        and isinstance(_it.slice, _ast_t.Slice)
+                        and _it.slice.upper is not None
+                        and _it.slice.lower is None):
+                    _hand.append("%s:%d" % (_fn, _n.lineno))
+    check("no surface cuts a list to a constant on its own",
+          sorted(set(_hand)), [])
+
     # AND THE SAME QUESTION ASKED OF THE OUTPUT, because a default can also arrive as a
     # fallback further down. Every command typed bare, in an empty workspace: none of them
     # may answer about a bot that ships in this package. Nothing here reaches a network

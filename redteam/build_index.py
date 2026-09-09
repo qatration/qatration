@@ -171,6 +171,9 @@ def classify(rows):
     return held, never_attacked
 
 
+from workspace import named_or_more   # noqa: E402  one spelling of `and N more`
+
+
 def main():
     # PARSED, EVEN THOUGH THERE IS NOTHING TO PARSE. Without this the command answered
     # `--help` by doing its work -- printing the report and writing the page -- and accepted
@@ -348,7 +351,8 @@ that does not separate those is counting its own homework{third_said}.</div>
           f"{n_third} third-party ({n_third_find} of the findings)")
     if moved:
         print(f"  ! {len(moved)} target(s) whose stored breach count predates a re-score: "
-              + ", ".join(f"{m['target']} {m['broke_at_run']}->{m['broke']}" for m in moved[:6]))
+              + named_or_more([f"{m['target']} {m['broke_at_run']}->{m['broke']}"
+                               for m in moved], 6))
 
 
 if __name__ == "__main__":
