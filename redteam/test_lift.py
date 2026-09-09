@@ -246,6 +246,47 @@ def main():
         check("the note shows all three rates, so no two can be mistaken for each other",
               note.count("delivered") == 3, note)
 
+        # THE CAVEAT EXISTS ONLY IN THE RENDER, and until these lines nothing read the
+        # render. `p_vs_background` is checked above as a field of the record, and the
+        # record is not what a person reads: the number reaches one through this note, and
+        # through the HTML panel that prints the note verbatim. The sentence that stops it
+        # being taken for the attack's achievement is written nowhere but there, so an edit
+        # deleting that paragraph — number and caveat together — left every suite in this
+        # repository green. Issue #2 is the engine making exactly that reading; a later
+        # edit was free to make it again.
+        #
+        # So this is a property over three fixtures rather than one example: a page that
+        # shows the background comparison shows what it is not. It also pins the number to
+        # its label, because `p = 0.000` alone matches the verdict's own p just as well.
+        for _what, _rows in (
+                ("the confound", results(*[acting] * 20)
+                 + results(*[acting] * 20, category="control")),
+                ("a real lift", results(*[acting] * 20)
+                 + results(*[quiet] * 20, category="control")),
+                ("a run with no control rows", results(*[acting] * 20))):
+            _got = baseline.two_factor("fixture", _rows, ctx, d)
+            _note = baseline.two_factor_note("fixture", _rows, ctx, d)
+            check("the background comparison reaches the page on %s, not only the record" % _what,
+                  "vs ordinary traffic: p = %.3f" % _got["p_vs_background"] in _note,
+                  _note)
+            check("...and on %s it carries what it is not a measurement of" % _what,
+                  "not about the attack" in _note, _note)
+
+        # AND THE DIGITS, not only the shape of the line. Every fixture above is lopsided
+        # enough to print p = 0.000, and a page printing HALF the number prints the same
+        # three digits — so the three checks above passed a mutation that published a
+        # different number than the record carries. Found by mutating them, which is the
+        # only way that class is ever found. This fixture puts the two groups close enough
+        # together that the digits carry information.
+        write_benign(8, 12, 20)
+        _rows = results(*([acting] * 10 + [quiet] * 10))
+        _got = baseline.two_factor("fixture", _rows, ctx, d)
+        _note = baseline.two_factor_note("fixture", _rows, ctx, d)
+        check("a background comparison that is not lopsided is available to check against",
+              0.01 < _got["p_vs_background"] < 0.99, _got["p_vs_background"])
+        check("...and the digits on the page are the ones the record carries",
+              "vs ordinary traffic: p = %.3f" % _got["p_vs_background"] in _note, _note)
+
     # --- and the same arithmetic on the shipped evidence ----------------------------------
     #
     # localrag IS the third-party app from issue #2: the poison lives permanently in its corpus,
