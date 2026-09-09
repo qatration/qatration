@@ -37,7 +37,8 @@ from refusal import classify, summarize
 from runner import headline
 from report_engine import build_html
 import datetime
-from isolation import apply_keysearch, _verdict, read_maps, write_maps
+from isolation import (apply_keysearch, _verdict, read_maps, write_maps,
+                       map_target as _map_target)
 from baseline import note as _baseline_note
 from baseline import two_factor_note as _two_factor_note
 
@@ -335,9 +336,15 @@ def main():
     maps_examined = 0
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "isolation_*.json"))):
         stem = os.path.basename(path)[len("isolation_"):-len(".json")]
-        if args.target and target_of(stem, ctxs) != args.target:
-            continue
         maps, changed = rescore_map(path)
+        # THE MAP'S OWN RECORD OF WHICH TARGET IT IS ABOUT, which means reading it before
+        # deciding whether `--target` wants it. Resolved from the filename alone, three of
+        # the maps stored here read as two other targets, and this is the command that
+        # rewrites the published page for whatever it resolves to. One rule, in `isolation`,
+        # so `coverage` and this cannot file the same artifact under different targets.
+        tgt = _map_target(stem, _map_meta.get(path) or {}, ctxs)
+        if args.target and tgt != args.target:
+            continue
         maps_examined += 1
         if not changed:
             continue
@@ -363,7 +370,6 @@ def main():
             # AND the page, or the correction stops at the JSON. The scorecard renders the
             # lock map straight from this file, so leaving it alone is how HARDENED stayed on
             # the published page for a target whose own record held the key that opened it.
-            tgt = target_of(stem, ctxs)
             results = os.path.join(OUT_DIR, f"results_{tgt}.json") if tgt else None
             if results and os.path.exists(results):
                 with open(results, encoding="utf-8") as f:

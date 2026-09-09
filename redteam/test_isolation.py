@@ -782,6 +782,100 @@ def main():
     check("every objective shipped here declares scoring all-or-nothing", _up(_fleet), [])
     check("...and there were objectives to check", len(_fleet) > 5, True)
 
+    # --- WHICH TARGET A STORED LOCK MAP IS ABOUT ------------------------------------
+    #
+    # A lock map is a list of objectives and verdicts and nothing else. Nothing inside it
+    # names the target it measured, so the FILENAME is the entire claim, and every reader
+    # recovers the target from it with `workspace.target_of` — which reads `_` as the
+    # separator before a tag.
+    #
+    # Three of the eleven maps in `out/` were named after the config FILE
+    # (`targets_nemo_rag.yaml`) instead of the target it declares (`nemo-rag`). So
+    # `nemo_rag` read as `nemo` plus a tag, and three targets' evidence was filed under
+    # two other targets. It was published: `detector_coverage` credits a detector to the
+    # target it resolves this way, and recorded `canary_in_output` and `pii_in_output` as
+    # demonstrated on `nemo`, where neither ever fired, and `planted_instruction_obeyed`
+    # on `memorybot` — the one target in this fleet nothing breaks.
+    #
+    # A name cannot be checked against itself. The arithmetic it produces can: one target
+    # and one objective have one verdict. Both misfiled pairs are a contradiction under
+    # that rule — PARTIAL and EXPLOITED for memorybot's memory-persistence, HARDENED and
+    # EXPLOITED for nemo's nemo-data-borne — because the two files are two targets.
+    import collections as _coll_i
+    from workspace import target_of as _tof_i, oracle_contexts as _octx_i
+    from isolation import read_maps as _rm_i
+    _out_i = _os_w.path.join(
+        _os_w.path.dirname(_os_w.path.dirname(_os_w.path.abspath(__file__))), "out")
+    _names_i = set(_octx_i())
+    _seen_i = _coll_i.defaultdict(set)
+    _unresolved_i, _maps_n = [], 0
+    for _fp in sorted(_g_i.glob(_os_w.path.join(_out_i, "isolation_*.json"))):
+        _stem_i = _os_w.path.basename(_fp)[len("isolation_"):-len(".json")]
+        _tgt_i = _tof_i(_stem_i, _names_i)
+        if _tgt_i is None:
+            _unresolved_i.append(_os_w.path.basename(_fp))
+            continue
+        for _m_i in _rm_i(_fp)[0]:
+            _maps_n += 1
+            _seen_i[(_tgt_i, _m_i.get("objective"))].add(_m_i.get("verdict"))
+    check("the fleet's stored lock maps do not say two things about one objective",
+          sorted("%s/%s: %s" % (_t, _o, ", ".join(sorted(_v)))
+                 for (_t, _o), _v in _seen_i.items() if len(_v) > 1), [])
+    check("...and every one of them resolves to a target this checkout knows",
+          _unresolved_i, [])
+    # AND THE DIRECT FORM OF THE SAME QUESTION. The contradiction above needs a PAIR: two
+    # files disagreeing about one target. A single map filed under the wrong target has
+    # nothing to disagree with, and `nemo_rag_inputonly` would have been exactly that if
+    # its sibling had never been run. The objective itself says who it is about —
+    # `nemo-data-borne` declares `applies_to: [nemo-rag, nemo-rag-inputonly]`, and `nemo`
+    # is not in it — so a map for that objective cannot be a measurement of `nemo`.
+    #
+    # An objective this checkout does not ship is NOT a failure and not a pass either: it
+    # is counted and printed, because a corpus that shrank would otherwise turn this check
+    # off one objective at a time while every line stayed green.
+    _ao_i = {_o.get("id"): [str(_x) for _x in (_o.get("applies_to") or [])]
+             for _o in _fleet if _o.get("id")}
+    _misfiled_i, _unknown_obj_i = [], []
+    for _fp in sorted(_g_i.glob(_os_w.path.join(_out_i, "isolation_*.json"))):
+        _stem_i = _os_w.path.basename(_fp)[len("isolation_"):-len(".json")]
+        _tgt_i = _tof_i(_stem_i, _names_i)
+        for _m_i in _rm_i(_fp)[0]:
+            _oid_i = _m_i.get("objective")
+            if _oid_i not in _ao_i:
+                _unknown_obj_i.append("%s/%s" % (_stem_i, _oid_i))
+            elif _ao_i[_oid_i] and _tgt_i not in _ao_i[_oid_i]:
+                _misfiled_i.append("%s reads as %s, which %s does not apply to"
+                                   % (_os_w.path.basename(_fp), _tgt_i, _oid_i))
+    check("...and none is filed under a target its objective does not apply to",
+          sorted(_misfiled_i), [])
+    # NONE, TODAY, and that is the line rather than a tolerance: an objective dropped from
+    # the corpus silently removes a stored map from the check above, which is how a gate
+    # stops covering what it was written for one file at a time.
+    check("...and no stored map names an objective this checkout stopped shipping",
+          sorted(_unknown_obj_i), [])
+
+    # QUANTIFIED OVER A GLOB, so an empty `out/` would satisfy both lines above.
+    check("...and there were lock maps to check", _maps_n > 5, True)
+
+    # AND THE RULE THAT PLACES ONE, which two commands ask and must not answer
+    # differently. `coverage` files a map's evidence under the target it returns and
+    # `rejudge --write` rewrites that target's published page, so a second implementation
+    # is a fleet where one command's answer contradicts the other's about one file.
+    from isolation import map_target as _mt_i
+    _n_i = {"nemo", "nemo-rag", "memorybot", "memorybot-naive"}
+    check("a map with no stamp is placed by its filename", _mt_i("nemo", {}, _n_i), "nemo")
+    check("...and a tag after the name is a tag, not another target",
+          _mt_i("nemo_key", {}, _n_i), "nemo")
+    check("...and a stamped map is placed by what it says, not by what it is called",
+          _mt_i("nemo", {"target": "nemo-rag"}, _n_i), "nemo-rag")
+    check("...and a name matching nothing resolves to nothing, not to a prefix of it",
+          _mt_i("something-else", {}, _n_i), None)
+    # WHERE THE CALLERS ARE CHECKED, and it is not here. This asserted that `coverage` and
+    # `rejudge` IMPORT this function, which an unused import satisfies: putting `target_of`
+    # back at both call sites left it green. The two commands are driven over a stamped map
+    # in `test_coverage` and `test_rejudge` instead, because a fixture on a helper says
+    # nothing about the one line that decides whether the helper is reached.
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

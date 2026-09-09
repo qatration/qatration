@@ -368,6 +368,9 @@ def format_map(result):
     return "\n".join(lines)
 
 
+from workspace import target_of  # noqa: E402
+
+
 def read_maps(path):
     """-> (maps, meta). Reads a lock-map artifact in either shape.
 
@@ -385,6 +388,32 @@ def read_maps(path):
     if isinstance(data, dict):
         return list(data.get("maps") or []), dict(data.get("meta") or {})
     return list(data or []), {}
+
+
+def map_target(stem, meta, names):
+    """Which target a stored lock map measured: its own record first, its name after.
+
+    A map written by `isolation` stamps `target` into its meta. A map written before that
+    field existed does not, and the eleven stored here are all of that kind — for those
+    the FILENAME is the only claim there is, and `target_of` reads it as `<target>` or
+    `<target>_<tag>`.
+
+    Three were named after the config FILE (`targets_nemo_rag.yaml`) rather than the target
+    it declares (`nemo-rag`), so `nemo_rag` read as `nemo` plus a tag and three targets'
+    evidence was filed under two others. It reached the published coverage record:
+    `canary_in_output` and `pii_in_output` were listed as demonstrated on `nemo`, a target
+    neither ever fired on, and `planted_instruction_obeyed` on `memorybot`, the one target
+    in that fleet nothing breaks.
+
+    Where the two disagree the FILE wins, because a stamp is a record of the run and a
+    filename is a convention about it — and a stamped file whose name was changed is the
+    case that actually happens. Neither one resolving returns None, so the caller can say
+    it could not tell rather than scan against an empty context and call the result clean.
+    """
+    stamped = str((meta or {}).get("target") or "").strip()
+    if stamped:
+        return stamped
+    return target_of(stem, names)
 
 
 def write_maps(path, maps, meta=None, when=None):

@@ -688,6 +688,58 @@ def main():
     finally:
         os.unlink(_art)
 
+    # --- A STAMPED MAP WHOSE FILENAME SAYS ANOTHER TARGET ---------------------------
+    #
+    # A lock map records the target it measured. Three of the ones stored in this
+    # repository predate that field, so their filename is the only claim there is, and
+    # three of those were named after the config FILE (`targets_nemo_rag.yaml`) rather
+    # than the target it declares (`nemo-rag`). Resolved from the name, `nemo_rag` reads
+    # as `nemo` plus a tag: two detectors were published as demonstrated on a target
+    # neither had ever fired on, and `planted_instruction_obeyed` on the one target in
+    # that fleet nothing breaks.
+    #
+    # `isolation.map_target` is the rule now. THIS drives the command, because the rule
+    # having a fixture says nothing about the caller reaching it: the mutation that put
+    # `target_of` back at this call site left every check on the rule itself green.
+    import subprocess as _sp_mt, tempfile as _tf_mt, shutil as _sh_mt, json as _js_mt
+    _w_mt = _tf_mt.mkdtemp()
+    try:
+        _ws_mt = os.path.join(_w_mt, "ws")
+        os.makedirs(_ws_mt)
+        _cfgs_mt = []
+        for _n_mt, _can_mt in (("bot", "OTHER-CANARY-0001"), ("bot-x", "ZZ-CANARY-9999")):
+            _cp_mt = os.path.join(_w_mt, "targets_%s.yaml" % _n_mt.replace("-", "_"))
+            io.open(_cp_mt, "w", encoding="utf-8").write(
+                "adapter: ragbot\nname: %s\noracle_context:\n  canaries:\n    - \"%s\"\n"
+                % (_n_mt, _can_mt))
+            _cfgs_mt.append(_cp_mt)
+        # Named for `bot`, stamped `bot-x`, and carrying `bot-x`'s canary in its sample.
+        # Read by the stamp the detector fires; read by the name it is scanned against
+        # the other target's context and nothing fires at all, so the wrong answer is an
+        # ABSENCE rather than a swap — which is the shape that reads as a clean target.
+        io.open(os.path.join(_ws_mt, "isolation_bot.json"), "w",
+                encoding="utf-8").write(_js_mt.dumps(
+            {"meta": {"target": "bot-x"},
+             "maps": [{"objective": "o1", "verdict": "EXPLOITED",
+                       "properties": [{"name": "p1", "status": "open",
+                                       "sample": {"output": "here it is ZZ-CANARY-9999"}}]}]}))
+        _env_mt = dict(os.environ, QATRATION_OUT=_ws_mt,
+                       QATRATION_CONFIGS=os.pathsep.join(_cfgs_mt),
+                       PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+        def _maps_seen(target):
+            _r_mt = _sp_mt.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge",
+                                "--target", target], capture_output=True, text=True,
+                               timeout=300, env=_env_mt, cwd=os.path.dirname(HERE))
+            return (_r_mt.stdout or "") + (_r_mt.stderr or "")
+        _x_mt = _maps_seen("bot-x")
+        check("rejudge re-scores a lock map under the target the map names",
+              "and 1 lock map(s) were" in _x_mt, _x_mt[-300:])
+        _b_mt = _maps_seen("bot")
+        check("...and not under the target its filename spells",
+              "lock map(s) were" not in _b_mt, _b_mt[-300:])
+    finally:
+        _sh_mt.rmtree(_w_mt, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

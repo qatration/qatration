@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact,
                        no_results_note, plain, named_build)
-from isolation import read_maps
+from isolation import read_maps, map_target as _map_target
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
 try:
@@ -232,8 +232,6 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
 
     for fp in glob.glob(os.path.join(OUT, "isolation_*.json")):
         stem = os.path.basename(fp)[len("isolation_"):-len(".json")]
-        ctx = ctx_for(stem, os.path.basename(fp))
-        tgt = target_of(stem, ctxs) or stem
         # Lock maps were outside the provenance audit entirely: `note_engine` was called in
         # the results loop only, and the artifacts were a bare JSON list that could not carry
         # a stamp anyway. Three detectors — forced_output, unknown_tool_call and
@@ -249,6 +247,21 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         except Exception as _e:
             unreadable.append((os.path.basename(fp), f"{type(_e).__name__}: {_e}"))
             continue
+        # THE FILE FIRST, ITS NAME SECOND, and the file has to be open before it can be
+        # asked — which is why this resolution moved below the read. Resolving from the
+        # name alone credited two detectors to a target they never fired on; the rule is
+        # `isolation.map_target` now, so `rejudge` cannot answer it differently.
+        tgt = _map_target(stem, iso_meta, ctxs)
+        # A STAMP NAMING A TARGET THIS CHECKOUT DOES NOT HAVE is the same event as a name
+        # that resolves to nothing, and `ctxs.get(tgt, {})` would have made it the quieter
+        # one: scanned against an empty context, every canary detector inert, and the
+        # artifact absent from the list of the ones that could not be placed.
+        if tgt not in ctxs:
+            if unresolved is not None:
+                unresolved.append((os.path.basename(fp), tgt or stem))
+            tgt, ctx = tgt or stem, {}
+        else:
+            ctx = ctxs[tgt]
         before = n
         for m in iso_maps:
             for p in list(m.get("properties") or []) + [m.get("combined") or {}]:

@@ -830,6 +830,72 @@ def main():
         _sh9.rmtree(_w12, ignore_errors=True)
         _sh9.rmtree(_w12o, ignore_errors=True)
 
+    # --- A STAMPED MAP WHOSE FILENAME SAYS ANOTHER TARGET ---------------------------
+    #
+    # A lock map records the target it measured. Three of the ones stored in this
+    # repository predate that field, so their filename is the only claim there is, and
+    # three of those were named after the config FILE (`targets_nemo_rag.yaml`) rather
+    # than the target it declares (`nemo-rag`). Resolved from the name, `nemo_rag` reads
+    # as `nemo` plus a tag: two detectors were published as demonstrated on a target
+    # neither had ever fired on, and `planted_instruction_obeyed` on the one target in
+    # that fleet nothing breaks.
+    #
+    # `isolation.map_target` is the rule now. THIS drives the command, because the rule
+    # having a fixture says nothing about the caller reaching it: the mutation that put
+    # `target_of` back at this call site left every check on the rule itself green.
+    import subprocess as _sp_mt, tempfile as _tf_mt, shutil as _sh_mt, json as _js_mt, io
+    _w_mt = _tf_mt.mkdtemp()
+    try:
+        _ws_mt = os.path.join(_w_mt, "ws")
+        os.makedirs(_ws_mt)
+        _cfgs_mt = []
+        for _n_mt, _can_mt in (("bot", "OTHER-CANARY-0001"), ("bot-x", "ZZ-CANARY-9999")):
+            _cp_mt = os.path.join(_w_mt, "targets_%s.yaml" % _n_mt.replace("-", "_"))
+            io.open(_cp_mt, "w", encoding="utf-8").write(
+                "adapter: ragbot\nname: %s\noracle_context:\n  canaries:\n    - \"%s\"\n"
+                % (_n_mt, _can_mt))
+            _cfgs_mt.append(_cp_mt)
+        # Named for `bot`, stamped `bot-x`, and carrying `bot-x`'s canary in its sample.
+        # Read by the stamp the detector fires; read by the name it is scanned against
+        # the other target's context and nothing fires at all, so the wrong answer is an
+        # ABSENCE rather than a swap — which is the shape that reads as a clean target.
+        io.open(os.path.join(_ws_mt, "isolation_bot.json"), "w",
+                encoding="utf-8").write(_js_mt.dumps(
+            {"meta": {"target": "bot-x"},
+             "maps": [{"objective": "o1", "verdict": "EXPLOITED",
+                       "properties": [{"name": "p1", "status": "open",
+                                       "sample": {"output": "here it is ZZ-CANARY-9999"}}]}]}))
+        _env_mt = dict(os.environ, QATRATION_OUT=_ws_mt,
+                       QATRATION_CONFIGS=os.pathsep.join(_cfgs_mt),
+                       PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+        _cov_mt = os.path.join(_w_mt, "cov.json")
+        _p_mt = _sp_mt.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage",
+                            "--json", _cov_mt], capture_output=True, text=True,
+                           timeout=300, env=_env_mt, cwd=os.path.dirname(HERE))
+        _got_mt = ((_js_mt.load(io.open(_cov_mt, encoding="utf-8")).get("targets")
+                    or {}).get("canary_in_output") if os.path.exists(_cov_mt) else None)
+        check("the evidence in a lock map is filed under the target the map names",
+              _got_mt == ["bot-x"], "%r (%s)" % (_got_mt, (_p_mt.stdout or "")[-200:]))
+        # AND A STAMP NAMING A TARGET THIS CHECKOUT DOES NOT HAVE is the same event as
+        # a filename that resolves to nothing: scanned against an empty context, every
+        # canary detector inert, and it has to be SAID rather than counted as clean.
+        io.open(os.path.join(_ws_mt, "isolation_bot.json"), "w",
+                encoding="utf-8").write(_js_mt.dumps(
+            {"meta": {"target": "bot-zzz"},
+             "maps": [{"objective": "o1", "verdict": "EXPLOITED",
+                       "properties": [{"name": "p1", "status": "open",
+                                       "sample": {"output": "here it is ZZ-CANARY-9999"}}]}]}))
+        _sp_mt.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage",
+                    "--json", _cov_mt], capture_output=True, text=True,
+                   timeout=300, env=_env_mt, cwd=os.path.dirname(HERE))
+        _d2_mt = _js_mt.load(io.open(_cov_mt, encoding="utf-8"))
+        check("...and a map naming a target no config declares is named, not scanned "
+              "quietly against nothing",
+              _d2_mt.get("artifacts_target_unresolved") == ["isolation_bot.json"],
+              _d2_mt.get("artifacts_target_unresolved"))
+    finally:
+        _sh_mt.rmtree(_w_mt, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
