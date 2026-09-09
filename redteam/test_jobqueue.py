@@ -442,6 +442,64 @@ def main():
     check("the grace period is not a timing guess", q.ORPHAN_SECONDS >= 30,
           str(q.ORPHAN_SECONDS))
 
+    # --- A JOB RECORD NOBODY CAN READ IS NOT A JOB THAT IS NOT RUNNING --------------
+    #
+    # `load` says exactly that in its own comment and returns `state: unreadable` rather
+    # than None. Every question in `claim` then asked `state == "running"` and got False
+    # for it, so a torn record — what a worker killed mid-write leaves, which is the
+    # failure this module is written around — took its endpoint out of `busy`, and the
+    # next claim handed out a second job against the same deployment. That is the one
+    # thing the per-resource lock exists to prevent, arriving through the door marked
+    # `unreadable is not absent`.
+    #
+    # Reproduced before it was fixed: a torn record for a job running against
+    # `http://bot.example`, one queued job for the same endpoint, and `claim` handed the
+    # queued one out.
+    _tr = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_tr, "job_torn.json"), "w", encoding="utf-8") as _ft:
+            _ft.write('{"job_id": "torn", "state": "running", '
+                      '"resource": "http://bot.example", "target": "b", ')
+        with open(os.path.join(_tr, "job_queued.json"), "w",
+                  encoding="utf-8") as _fq:
+            json.dump({"job_id": "queued", "state": "queued",
+                       "resource": "http://bot.example", "target": "b",
+                       "config": "cfg.yaml", "scope": "quick",
+                       "submitted_at": "2026-09-09 00:00:00"}, _fq)
+        check("a torn job record is seen as unreadable, not as absent",
+              [j.get("state") for j in q.listing(_tr) if j.get("job_id") == "torn"]
+              == ["unreadable"], str(q.listing(_tr)))
+        _job2, _why2 = q.claim(_tr, "w-torn")
+        check("...and no job is handed out while one record cannot be read",
+              _job2 is None, str((_job2 or {}).get("job_id")))
+        check("...with a reason naming the record, so a person can repair it",
+              "torn" in _why2 and _why2.startswith("busy:"), _why2)
+        # UNDER `busy:` DELIBERATELY. `worker --drain` stops on `empty` or `busy`, so a new
+        # prefix would spin that loop forever over a queue it can never claim from.
+        import worker as _wk
+        check("...and the drain loop recognises the prefix it stops on",
+              _why2.split(":")[0] in ("busy", "empty"), _why2)
+        # AND THE CLOSING DOOR HAD THE SAME BLINDNESS. `release` reads the stored record
+        # to check the lease is still this worker's -- `care at the opening door and trust
+        # at the closing one is not a lock`, in its own words. A torn record has no
+        # `lease` key, so `theirs` was empty and every refusal below it was skipped: the
+        # close went through looking like an ordinary clean ending. Writing it is still
+        # right, it replaces a damaged file with a readable one, but the record has to say
+        # the lease could not be checked.
+        with open(os.path.join(_tr, "job_close.json"), "w", encoding="utf-8") as _fc:
+            _fc.write('{"job_id": "close", "state": "running", ')
+        _closed, _cwhy = q.release(
+            _tr, {"job_id": "close", "state": "running", "target": "b",
+                  "lease": {"worker": "w-close", "since": "2026-09-09 00:00:00"}},
+            "done")
+        check("a close over a record nobody could read still lands",
+              _cwhy is None and _closed.get("state") == "done", "%r %r" % (_cwhy, _closed))
+        check("...but says the lease could not be checked, rather than reading clean",
+              "not be checked against the lease" in (_closed.get("note") or ""),
+              str(_closed.get("note")))
+    finally:
+        shutil.rmtree(_tr, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

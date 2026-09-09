@@ -268,6 +268,24 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
     now = now or _now()
     jobs = listing(root)
 
+    # A JOB RECORD NOBODY CAN READ IS NOT A JOB THAT IS NOT RUNNING. `load` says exactly
+    # that in its own comment and returns `state: unreadable` rather than None; every
+    # question below then asked `state == "running"` and got False for it. So a torn
+    # record — what a worker killed mid-write leaves, which is the failure this module is
+    # written around — took its endpoint out of `busy`, and the next claim handed out a
+    # second job against the same deployment. That is the one thing the per-resource lock
+    # exists to prevent, arriving through the door marked `unreadable is not absent`.
+    #
+    # It cannot block only its own resource, because its resource is in the file that
+    # cannot be read. So it stops the queue and names itself, which a person can act on:
+    # the record is repaired or removed. Under the `busy:` prefix deliberately — that is
+    # what `--drain` stops on, and a new prefix would spin the drain loop forever.
+    _torn = [j for j in jobs if j.get("state") == "unreadable"]
+    if _torn:
+        return None, ("busy: %d job record(s) could not be read (%s), so no endpoint can be "
+                      "shown to be free. Repair or remove them and run this again."
+                      % (len(_torn), ", ".join(str(j.get("job_id")) for j in _torn[:3])))
+
     # A live lease blocks everything. An expired one is reclaimed, and the attempt is recorded
     # rather than forgotten, so a job that keeps killing its worker becomes visible.
     live = []
@@ -409,6 +427,15 @@ def release(root, job, state="done", run_id=None, note=None, when=None):
         theirs = (current or {}).get("lease") or {}
         if current is None:
             return job, "the job is gone: it was closed or removed while this run was going"
+        if current.get("state") == "unreadable":
+            # THE LEASE CHECK BELOW CANNOT RUN, and it silently passed: a torn record
+            # has no `lease` key, so `theirs` was empty and every refusal below was
+            # skipped. This close is still worth writing — it replaces a damaged file
+            # with a readable one — but it is a close nobody could verify, and the
+            # record has to say so rather than look like an ordinary clean ending.
+            note = ((note + " | ") if note else "") + (
+                "the previous job record could not be read (%s), so this close could "
+                "not be checked against the lease" % current.get("note"))
         if theirs.get("worker") and theirs.get("worker") != mine:
             return current, (f"refusing to close: the lease is held by {theirs['worker']!r}, "
                              f"not by {mine!r} — this run lost the job and another is on it")
