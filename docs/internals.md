@@ -278,7 +278,7 @@ without edits.
 Everything is local (Ollama, no API keys, no cost):
 
 ```bash
-qatration run --trials 3
+qatration run --target-config redteam/targets_guardbot.yaml --trials 3
 ```
 
 The intended order on a target nobody has touched yet is recon, then the lock map, then

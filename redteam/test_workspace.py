@@ -298,6 +298,75 @@ def check_every_command_refuses():
     check("...and every one of them exits 2, the code for a refused invocation",
           sorted(_wrong_code), [])
 
+    # --- AND NO COMMAND PICKS WHOSE BOT THIS IS ABOUT --------------------------------
+    #
+    # `run` defaulted `--target-config` to `targets_dvla.yaml`, a practice config that
+    # ships inside this package. Six sibling commands require the flag and two more refuse
+    # without it, so the rule existed eight times and had one hole — in the command that
+    # sends the arsenal. Inside a checkout with the practice fleet cloned, a bare
+    # `qatration run` does not fail: it attacks that bot, writes `results_dvla.json` and
+    # files a run record, on no instruction from anybody.
+    #
+    # Read from the AST rather than from the source text, because the string this is
+    # looking for is a filename and a filename is exactly what a rewording changes.
+    import ast as _ast_t
+    import io as _io_t
+    _picked = []
+    for _cmd, _n in sorted(_mod_to_cmd.items(), key=lambda kv: kv[1]):
+        _sp_path = _os.path.join(_here, _cmd)
+        if not _os.path.exists(_sp_path):
+            continue
+        for _call in _ast_t.walk(_ast_t.parse(_io_t.open(_sp_path, encoding="utf-8").read())):
+            if not (isinstance(_call, _ast_t.Call)
+                    and isinstance(_call.func, _ast_t.Attribute)
+                    and _call.func.attr == "add_argument"):
+                continue
+            _flags = [a.value for a in _call.args
+                      if isinstance(a, _ast_t.Constant) and isinstance(a.value, str)]
+            if "--target-config" not in _flags:
+                continue
+            _kw = {k.arg: k.value for k in _call.keywords}
+            _req = _kw.get("required")
+            if isinstance(_req, _ast_t.Constant) and _req.value is True:
+                continue
+            _dflt = _kw.get("default")
+            if _dflt is None or (isinstance(_dflt, _ast_t.Constant)
+                                 and _dflt.value is None):
+                continue
+            _picked.append(_mod_to_cmd[_cmd])
+    check("no command defaults --target-config to a config of its own choosing",
+          sorted(set(_picked)), [])
+
+    # AND THE SAME QUESTION ASKED OF THE OUTPUT, because a default can also arrive as a
+    # fallback further down. Every command typed bare, in an empty workspace: none of them
+    # may answer about a bot that ships in this package. Nothing here reaches a network
+    # -- each either refuses, reads the workspace, or writes a config.
+    _about, _bare_crash, _bare_code = [], [], []
+    _bare_env = dict(_os.environ, PYTHONDONTWRITEBYTECODE="1",
+                     PYTHONIOENCODING="utf-8", QATRATION_OUT=_tfp.mkdtemp())
+    _bare_cwd = _tfp.mkdtemp()
+    for _cmd in sorted(_cli.COMMANDS):
+        _p = _sp.run([_sys.executable, _os.path.join(_here, "cli.py"), _cmd],
+                     capture_output=True, text=True, timeout=300, env=_bare_env,
+                     cwd=_bare_cwd)
+        _raw = (_p.stdout or "") + (_p.stderr or "")
+        _said = _raw.lower()
+        if "dvla" in _said or "guardedrag" in _said:
+            _about.append(_cmd)
+        # AND IT HAS TO STOP. A refusal that prints and carries on is the same defect
+        # wearing the message that was written to prevent it, so the code and the
+        # absence of a traceback are read from the same bare run.
+        if "Traceback (most recent call last)" in _raw:
+            _bare_crash.append(_cmd)
+        if _p.returncode not in (0, 1, 2, 3, 4, 5):
+            _bare_code.append("%s exited %s" % (_cmd, _p.returncode))
+    check("...and no command typed bare answers about a practice bot in this package",
+          sorted(_about), [])
+    check("...and none of them answers a missing argument with a traceback",
+          sorted(_bare_crash), [])
+    check("...with an exit code the contract documents",
+          sorted(_bare_code), [])
+
     # AND THE READER ITSELF SAYS WHICH OF THE THREE THINGS WENT WRONG, because `no such
     # file`, `that is a directory` and `that is not YAML` have different remedies.
     def _read(path):

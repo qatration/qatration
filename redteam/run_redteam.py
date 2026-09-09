@@ -85,12 +85,16 @@ def load_target(cfg):
 def load_target_or_explain(cfg, config_path, was_default):
     """Build the target, and turn the one import failure a stranger will hit into a sentence.
 
-    The default `--target-config` is `targets_dvla.yaml`, whose adapter imports langchain and
-    two modules that live in `dvla/` — a third-party clone this repository deliberately does not
-    ship. So a bare `qatration run` after `pip install qatration` ended in a raw
+    `targets_dvla.yaml`'s adapter imports langchain and two modules that live in `dvla/` —
+    a third-party clone this repository deliberately does not ship. It used to be this
+    command's DEFAULT, so a bare `qatration run` after `pip install qatration` ended in a raw
     ModuleNotFoundError, and no extra fixes it, because the missing pieces are not ours to
     distribute. Inside a checkout with the practice fleet set up it works, which is why it went
     unnoticed: the failure is invisible from exactly where the code is written.
+
+    The flag is required now, so `was_default` means the reader typed that path themselves.
+    The sentence stays because the practice config still ships and is still the one a reader
+    copying from the README is most likely to name.
     """
     try:
         return load_target(cfg)
@@ -483,7 +487,14 @@ def main():
     ap.add_argument("--trials", type=_trial_count, default=None,
                     help="runs per attack (default 3, or the target config's 'trials'); "
                          "multi-trial separates a reliable breach (3/3) from a flaky one (1/3)")
-    ap.add_argument("--target-config", default=os.path.join(ROOT, "targets_dvla.yaml"))
+    # NO DEFAULT TARGET, and this was the command where it mattered most. `onboard`,
+    # `generate`, `recon`, `isolation`, `matrix` and `adaptive` all require this flag, and
+    # `verify` and `benign` refuse without it — `run` was the one exception, and `run` is
+    # the one that sends the arsenal. A bare `qatration run` inside a checkout with the
+    # practice fleet cloned does not fail: it attacks targets_dvla, writes
+    # `results_dvla.json`, and files a run record against an endpoint nobody named. One
+    # rule, and it had six implementations and one hole.
+    ap.add_argument("--target-config", default=None)
     # THE PORTABLE ARSENAL IS THE DEFAULT, because the default is what somebody who did
     # not choose gets. `attacks.yaml` is the practice-fleet library and 132 of its 138
     # payloads carry `applies_to` naming a bot in this repository, so against anybody
@@ -532,6 +543,14 @@ def main():
         return _load_yaml(path, what, "run")
 
     all_attacks = _load(args.attacks, "arsenal")
+    if not args.target_config:
+        # BEFORE THE ARSENAL IS EVEN JUDGED. There is no honest guess to make here: the
+        # tool cannot know whose bot the reader means, and picking one means sending
+        # somebody live traffic on no instruction.
+        ap.error("--target-config is required: name the config for the deployment you are testing.\n"
+                 "  qatration init          writes one, with a canary of your own\n"
+                 "  qatration onboard --target-config mybot.yaml   checks it answers\n"
+                 "  qatration run --target-config mybot.yaml       then this")
     tcfg = _load(args.target_config, "target config")
     if args.model:
         # AN OVERRIDE THAT DOES NOTHING MUST SAY SO. For an `adapter: http` target the model is

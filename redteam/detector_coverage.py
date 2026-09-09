@@ -299,6 +299,15 @@ def buckets(declared, broke=(), scanned=None):
     # `scanned` is the set of targets a probe was actually read for, not the set that has a
     # config. Passing nothing keeps the old two-way split, so callers that cannot say what was
     # read do not silently gain a bucket they have no evidence for.
+    #
+    # `None` AND `set()` ARE DIFFERENT ANSWERS and `or ()` made them the same one. `None`
+    # is a caller that cannot say what it read. `set()` is a caller that read nothing, and
+    # it is the state a fresh install is in: `qatration coverage` in an empty workspace
+    # printed `no target in the fleet exhibits this behaviour` under all sixty-six
+    # detectors — sixty-six assertions about somebody's fleet, sourced from zero probes,
+    # by the module that exists to stop exactly that sentence. The falsy test also read a
+    # caller that scanned one target it could not name as having scanned none.
+    known = scanned is not None
     scanned = set(scanned or ())
 
     # AND A SCANNED TARGET WITH NO CONFIG AT ALL, which `set()` read as a target where every
@@ -317,7 +326,7 @@ def buckets(declared, broke=(), scanned=None):
     blind = set(inert_for({}, DETECTORS))
     unevidenced = sorted(
         k for k in declared
-        if k not in inert and k not in broke and scanned
+        if k not in inert and k not in broke and known
         and not any(k not in per_target.get(t, blind) for t in scanned))
     untried = sorted(k for k in declared
                      if k not in inert and k not in broke and k not in unevidenced)
@@ -386,6 +395,10 @@ def main():
         print(f"(the arsenal count could not be computed: {type(_e).__name__}: {_e})")
     print()
     print("DEMONSTRATED — caught something on a live target")
+    if not demo:
+        # A HEADING WITH NOTHING UNDER IT is read as a section, not as a zero. Say the
+        # zero, because on a fresh workspace this is the first heading a reader meets.
+        print("  none yet — no stored probe has made any detector fire here")
     for k in sorted(demo, key=lambda x: -hits[x]):
         tg = ", ".join(plain(_n, oneline=True) for _n in sorted(where[k])[:3])
         more = f" +{len(where[k]) - 3}" if len(where[k]) > 3 else ""

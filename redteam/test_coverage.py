@@ -352,6 +352,17 @@ def main():
         check("...while a caller that reports no scan keeps the old two-way answer",
               untried5 == ["memorised_completion"] and not unev5,
               f"unevidenced={unev5} untried={untried5}")
+        # AND A CALLER THAT READ NOTHING IS NOT A CALLER THAT CANNOT SAY. `scanned or ()`
+        # collapsed `None` and `set()` into the same answer, so the state a fresh install
+        # is in — nothing run, nothing stored — took the branch reserved for callers with
+        # no scan information, and `qatration coverage` printed `no target in the fleet
+        # exhibits this behaviour` under all sixty-six detectors. Sixty-six assertions
+        # about somebody's bots, sourced from zero probes, by the module written to stop
+        # that sentence.
+        unconf6, unev6, untried6 = dc.buckets(["memorised_completion"], {}, scanned=set())
+        check("...and a caller that read nothing claims nothing about the fleet",
+              unev6 == ["memorised_completion"] and not untried6 and not unconf6,
+              f"unconfigured={unconf6} unevidenced={unev6} untried={untried6}")
 
         # a detector that THREW is neither: a defect is not an absence.
         dc.contexts = lambda: {"a": {"canaries": ["X"]}}
@@ -707,6 +718,30 @@ def main():
               "no build recorded" in _o9, _o9[:400])
     finally:
         _sh9.rmtree(_w9, ignore_errors=True)
+
+    # AND THE VERY FIRST WORKSPACE ANYONE HAS IS EMPTY. `qatration coverage` before any run
+    # is the command a reader types to see what the tool checks, and it answered with the
+    # fleet sentence — `no target in the fleet exhibits this behaviour` — under every one
+    # of the sixty-six detectors. Nothing had been read, so every one of those was an
+    # assertion about somebody's bots sourced from no evidence at all.
+    _w10 = _tf9.mkdtemp()
+    try:
+        _p10 = _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=_w10,
+                                 PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"),
+                        cwd=os.path.dirname(HERE))
+        _o10 = (_p10.stdout or "") + (_p10.stderr or "")
+        check("coverage over an empty workspace claims nothing about the fleet",
+              "no target in the fleet" not in _o10, _o10[:500])
+        check("...and says instead that nothing below is evidence either way",
+              "nothing below is evidence either way" in _o10, _o10[:500])
+        check("...and does not leave DEMONSTRATED standing as an empty heading",
+              "none yet" in _o10, _o10[:500])
+        check("...with the code for a run that measured nothing",
+              _p10.returncode == 3, "exit %d" % _p10.returncode)
+    finally:
+        _sh9.rmtree(_w10, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
