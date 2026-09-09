@@ -333,6 +333,48 @@ def buckets(declared, broke=(), scanned=None):
     return unconfigured, unevidenced, untried
 
 
+def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
+               untried, unevidenced, unconfigured, broke, unresolved, unreadable):
+    """The same four answers the console gives, in the form a pipeline can act on.
+
+    THE FILE COLLAPSED WHAT THE PAGE SPLITS. This command's whole argument, printed in its
+    own closing paragraph, is that `never fired` has four causes and each is closed by a
+    different act — and `--json`, the form a CI step actually reads, wrote one key,
+    `declared_only`, holding all four. The console is not the deliverable here; the file is.
+
+    Worse than a collapse in one place. `declared` is every detector with no hit, so a
+    detector that RAISED on real data landed in `declared_only` too, described by that
+    key's own console heading as `implemented and unit-tested, never yet seen to fire`. A
+    defect filed as an absence, machine-readable, by the module that names the difference.
+
+    Written even when nothing was measured, because a step that produces no file at all
+    cannot be told from a step that never ran. `probes: 0` and `measured: false` can.
+    """
+    if not where_to:
+        return
+    path = where_to if os.path.isabs(where_to) else os.path.join(ROOT, where_to)
+    _dir = os.path.dirname(path)
+    if _dir:
+        os.makedirs(_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"probes": n,
+                   "measured": bool(n),
+                   "demonstrated": {k: hits[k] for k in demo},
+                   "demonstrated_on_benign_traffic_only": list(benign_only),
+                   # The union of the three absences, and no longer of the defect.
+                   "declared_only": [k for k in declared if k not in broke],
+                   "no_target_exhibits_this": list(untried),
+                   "no_usable_evidence_either_way": list(unevidenced),
+                   "cannot_fire_as_configured": list(unconfigured),
+                   "raised_on_real_data": {k: c for k, c in broke.items()},
+                   "artifacts_unreadable": [{"artifact": _a, "why": _w}
+                                            for _a, _w in unreadable],
+                   "artifacts_target_unresolved": [_fp for _fp, _stem in unresolved],
+                   "targets": {k: sorted(v) for k, v in where.items()}},
+                  f, indent=2)
+    print(f"\nwrote {path}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default=None)
@@ -506,17 +548,12 @@ def main():
         # as the worst possible result while exiting 0, which is the combination a pipeline
         # cannot act on. `docs/ci.md` gives an unanswerable question code 3.
         print("\n" + no_results_note(OUT))
+        _emit_json(args.json, n, hits, demo, benign_only, declared, where,
+                   untried, unevidenced, unconfigured, broke, unresolved, _unreadable_seen)
         return 3
 
-    if args.json:
-        path = args.json if os.path.isabs(args.json) else os.path.join(ROOT, args.json)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"probes": n, "demonstrated": {k: hits[k] for k in demo},
-                       "declared_only": declared,
-                       "targets": {k: sorted(v) for k, v in where.items()}},
-                      f, indent=2)
-        print(f"\nwrote {path}")
+    _emit_json(args.json, n, hits, demo, benign_only, declared, where,
+               untried, unevidenced, unconfigured, broke, unresolved, _unreadable_seen)
 
 
 if __name__ == "__main__":

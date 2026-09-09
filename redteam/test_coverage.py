@@ -39,6 +39,9 @@ from target import Probe
 CANARY = "COV-CANARY-7712"
 
 
+_os_path_join = os.path.join
+
+
 def main():
     fails, checks = [], 0
 
@@ -742,6 +745,63 @@ def main():
               _p10.returncode == 3, "exit %d" % _p10.returncode)
     finally:
         _sh9.rmtree(_w10, ignore_errors=True)
+
+    # --- AND THE FILE SAYS WHAT THE PAGE SAYS ----------------------------------------
+    #
+    # `--json` wrote one key, `declared_only`, holding all four causes of `never fired` —
+    # in the command whose own closing paragraph is that collapsing them into one line
+    # hides three of the four. The console is not the deliverable here, the file a CI step
+    # reads is. And `declared` is every detector with no hit, so a detector that RAISED on
+    # real data was in that key too, under a name meaning `never yet seen to fire`.
+    import collections as _co11
+    _w11 = _tf9.mkdtemp()
+    try:
+        _jp = _os_path_join(_w11, "cov.json")
+        dc._emit_json(_jp, 7, {"d_hit": 3}, ["d_hit"], [], ["d_boom", "d_untried"],
+                      {"d_hit": {"t"}}, ["d_untried"], [], [],
+                      _co11.Counter({"d_boom": 4}), [("res_x.json", "x")],
+                      [("res_y.json", "torn")])
+        _got = _js9.load(open(_jp, encoding="utf-8"))
+        check("a detector that raised is not filed as one that never fired",
+              _got["declared_only"] == ["d_untried"], str(_got["declared_only"]))
+        check("...it is named as a defect, with how often it raised",
+              _got["raised_on_real_data"] == {"d_boom": 4},
+              str(_got["raised_on_real_data"]))
+        check("...and the four causes of never-firing are four keys, not one",
+              all(_k in _got for _k in ("no_target_exhibits_this",
+                                        "no_usable_evidence_either_way",
+                                        "cannot_fire_as_configured",
+                                        "raised_on_real_data")), sorted(_got))
+        check("...and the artifacts nothing could be read from are named too",
+              _got["artifacts_unreadable"] == [{"artifact": "res_y.json", "why": "torn"}]
+              and _got["artifacts_target_unresolved"] == ["res_x.json"],
+              str(_got["artifacts_unreadable"]) + str(_got["artifacts_target_unresolved"]))
+    finally:
+        _sh9.rmtree(_w11, ignore_errors=True)
+
+    # AND A STEP THAT MEASURED NOTHING STILL WRITES ITS FILE. No file at all cannot be
+    # told from a step that never ran, so the empty workspace produces `measured: false`
+    # rather than an absence for somebody to interpret.
+    _w12, _w12o = _tf9.mkdtemp(), _tf9.mkdtemp()
+    try:
+        _jp2 = _os_path_join(_w12o, "cov.json")
+        _p12 = _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage",
+                         "--json", _jp2],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=_w12,
+                                 PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"),
+                        cwd=os.path.dirname(HERE))
+        check("a run that measured nothing still writes the file it was asked for",
+              os.path.exists(_jp2),
+              ((_p12.stdout or "") + (_p12.stderr or ""))[-200:])
+        if os.path.exists(_jp2):
+            _got2 = _js9.load(open(_jp2, encoding="utf-8"))
+            check("...saying it measured nothing, rather than looking like a clean scan",
+                  _got2["measured"] is False and _got2["probes"] == 0,
+                  str(_got2)[:200])
+    finally:
+        _sh9.rmtree(_w12, ignore_errors=True)
+        _sh9.rmtree(_w12o, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
