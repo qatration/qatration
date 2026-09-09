@@ -35,6 +35,7 @@ import sys
 import time
 
 PROTOCOL = "2024-11-05"
+NEWLINE = "\n"
 
 
 def _send(proc, obj):
@@ -65,47 +66,92 @@ def _await(proc, want_id, deadline):
     return None
 
 
-def list_tools(argv, timeout=180, cwd=None):
-    """-> (tools, why). `why` is "" on success, and names what happened when tools is None.
+# The four listings a server answers, and the capability each one is gated behind. A
+# server that does not declare a capability is not refusing: the channel is absent, which
+# is a different fact from a listing that failed.
+CHANNELS = (("tools", "tools/list", "tools"),
+            ("prompts", "prompts/list", "prompts"),
+            ("resources", "resources/list", "resources"),
+            ("resource_templates", "resources/templates/list", "resourceTemplates"))
+# `resources/templates/list` is gated behind the `resources` capability, not one of its
+# own, so the declared name and the channel name are not the same string.
+CAPABILITY = {"tools": "tools", "prompts": "prompts", "resources": "resources",
+              "resource_templates": "resources"}
 
-    THREE STATES, like everything else here: a list of tools, an empty list from a server
-    that offers none, and None with a reason. A server that would not start and a server
-    with no tools are not the same fact about an operator's workspace.
+
+def list_surface(argv, timeout=180, cwd=None):
+    """-> ({channel: [items] or None}, {channel: why}, capabilities, why_fatal).
+
+    TOOLS ARE ONE CHANNEL OF FOUR, and reading only them is how a measurement of `the
+    surface` came out counting a quarter of it. A prompt template and a resource are text
+    the same server writes and the same harness puts in front of the same model; the
+    protocol lists them separately and nothing about the model reads them separately.
+
+    THREE STATES PER CHANNEL, and the capability map is what separates two of them. A
+    server that never declared `prompts` has no prompt channel, which is an absence by
+    design. A server that declared it and then would not list is a channel that could not
+    be measured, and calling that `no prompts` is the failure this repository is named
+    after, one listing over.
     """
     deadline = time.time() + timeout
     try:
         proc = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
-            errors="replace", bufsize=1, cwd=cwd,
-            # `npx` and friends are batch files on Windows and are not executable
-            # images, so the shell is how they start there and nowhere else.
-            shell=(os.name == "nt"))
+            errors="replace", bufsize=1, cwd=cwd, shell=(os.name == "nt"))
     except Exception as e:
-        return None, "%s: %s" % (type(e).__name__, e)
+        return {}, {}, {}, "%s: %s" % (type(e).__name__, e)
     try:
         _send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                      "params": {"protocolVersion": PROTOCOL, "capabilities": {},
                                 "clientInfo": {"name": "qatration", "version": "0"}}})
         init = _await(proc, 1, deadline)
         if init is None:
-            return None, "no answer to initialize within %ds" % timeout
+            return {}, {}, {}, "no answer to initialize within %ds" % timeout
         if "error" in init:
-            return None, "initialize refused: %s" % json.dumps(init["error"])[:120]
-        _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        _send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-        got = _await(proc, 2, deadline)
-        if got is None:
-            return None, "no answer to tools/list within %ds" % timeout
-        if "error" in got:
-            return None, "tools/list refused: %s" % json.dumps(got["error"])[:120]
-        return list((got.get("result") or {}).get("tools") or []), ""
+            return {}, {}, {}, "initialize refused: %s" % json.dumps(init["error"])[:120]
+        caps = ((init.get("result") or {}).get("capabilities") or {})
+        _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized",
+                     "params": {}})
+        found, why = {}, {}
+        for i, (chan, method, key) in enumerate(CHANNELS, start=2):
+            if CAPABILITY[chan] not in caps:
+                found[chan] = None
+                why[chan] = "not declared in the server's capabilities"
+                continue
+            _send(proc, {"jsonrpc": "2.0", "id": i, "method": method, "params": {}})
+            got = _await(proc, i, deadline)
+            if got is None:
+                found[chan] = None
+                why[chan] = "declared, and no answer to %s" % method
+            elif "error" in got:
+                found[chan] = None
+                why[chan] = "declared, and %s refused: %s" % (
+                    method, json.dumps(got["error"])[:100])
+            else:
+                found[chan] = list((got.get("result") or {}).get(key) or [])
+        return found, why, caps, ""
     finally:
         try:
             proc.terminate()
             proc.wait(timeout=10)
         except Exception:
             pass
+
+
+def list_tools(argv, timeout=180, cwd=None):
+    """-> (tools, why). `why` is "" on success, and names what happened when tools is None.
+
+    ONE READER. This was a second copy of the spawn and the handshake, written by copying
+    the first, and the duplicate-prose gate found the four repeated lines within the hour.
+    Two spellings of a protocol handshake is two places for a protocol change to land.
+    """
+    found, why, _caps, fatal = list_surface(argv, timeout=timeout, cwd=cwd)
+    if fatal:
+        return None, fatal
+    if found.get("tools") is None:
+        return None, why.get("tools") or "the tools channel could not be read"
+    return found["tools"], ""
 
 
 def instruction_text(tools):
@@ -116,6 +162,18 @@ def instruction_text(tools):
     one tool can contribute more of it than a server with twenty-four.
     """
     return "\n".join((t.get("description") or "") for t in tools)
+
+
+def surface_text(found):
+    """The same question over every channel, because the model reads one context.
+
+    `instruction_text` answers it for a list of items and this answers it for a whole
+    server, so the two cannot drift. A channel that could NOT be read contributes nothing
+    here and is counted nowhere, which is why the caller has to carry the reasons as well
+    as the number: a server whose prompt listing failed looks, in this string alone,
+    exactly like one that never had prompts.
+    """
+    return NEWLINE.join(instruction_text(v) for v in (found or {}).values() if v)
 
 
 def compare(before, after):
@@ -151,19 +209,50 @@ def compare(before, after):
             out.append((name, "unreadable",
                         a.get("unreadable") or b.get("unreadable")))
             continue
-        bt = {x["name"]: x.get("description") or "" for x in (b.get("tools") or [])}
-        at = {x["name"]: x.get("description") or "" for x in (a.get("tools") or [])}
+        # ACROSS EVERY CHANNEL, not just tools. This compared `tools` alone, so a prompt
+        # template rewritten under a pinned version was the same event happening where
+        # nobody was looking — which is the defect this comparison exists to find,
+        # committed by the comparison. Keys are qualified by channel because a tool and a
+        # prompt may share a name and are not the same item.
+        def _flat(rec):
+            return {"%s/%s" % (_c, _x.get("name") or ""): _x.get("description") or ""
+                    for _c, _m, _k in CHANNELS
+                    for _x in (rec.get(_c) or [])}
+
+        bt, at = _flat(b), _flat(a)
         moved = sorted(n for n in set(bt) & set(at) if bt[n] != at[n])
         added, dropped = sorted(set(at) - set(bt)), sorted(set(bt) - set(at))
-        if not (moved or added or dropped):
+        # AND A CHANNEL THAT STOPPED BEING READABLE IS NOT A CHANNEL THAT EMPTIED. A
+        # server that declared `prompts` last time and refuses to list them now has its
+        # prompts missing from this reading, and without this they arrive as items that
+        # were removed — a change reported in place of a measurement that failed.
+        blind = sorted(set(a.get("channels_absent") or {})
+                       - set(b.get("channels_absent") or {}))
+        # AND ITS ITEMS ARE NOT REPORTED AS REMOVED. They are not known to be gone: the
+        # channel that held them could not be read, and reporting the two together prints
+        # a change over a measurement that failed.
+        dropped = [_n for _n in dropped if _n.split("/", 1)[0] not in blind]
+        if not (moved or added or dropped or blind):
             continue
         what = ", ".join(
             ([("%d description(s) rewritten: " % len(moved)) + ", ".join(moved[:4])]
              if moved else [])
-            + ([("%d tool(s) added: " % len(added)) + ", ".join(added[:4])] if added else [])
-            + ([("%d tool(s) gone: " % len(dropped)) + ", ".join(dropped[:4])]
-               if dropped else []))
+            + ([("%d item(s) added: " % len(added)) + ", ".join(added[:4])] if added else [])
+            + ([("%d item(s) gone: " % len(dropped)) + ", ".join(dropped[:4])]
+               if dropped else [])
+            + ([("%d channel(s) no longer readable: " % len(blind))
+                + ", ".join(blind)] if blind else []))
         same_version = (b.get("version") or "?") == (a.get("version") or "??")
+        # A CHANNEL THAT WENT BLIND IS NOT A CHANGE THAT WAS SEEN. Under an unchanged
+        # version it has the same shape as a rug pull and none of the evidence: nothing
+        # was demonstrated to have moved, the place it would have moved stopped being
+        # readable. Its own verdict, and it does not set the exit code, because a finding
+        # this tool cannot support is the mistake it is named after.
+        if blind and not (moved or added or dropped):
+            out.append((name, "blind",
+                        "v%s, %d channel(s) no longer readable: %s"
+                        % (a.get("version") or "?", len(blind), ", ".join(blind))))
+            continue
         out.append((name, "RUG PULL" if same_version else "upgraded",
                     ("v%s unchanged, and " % (a.get("version") or "?") if same_version
                      else "v%s -> v%s, " % (b.get("version"), a.get("version"))) + what))

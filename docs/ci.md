@@ -391,7 +391,11 @@ only the third.
   upgrade and exits `0`, because a version that moved explains itself — it is still printed,
   since the instructions in a model's context changed and somebody should read the diff. A
   server that stopped answering, or one that could not be read, is printed and exits `0` too:
-  that is an absence of measurement about one server and not a finding about any.
+  that is an absence of measurement about one server and not a finding about any. A CHANNEL
+  that stopped being readable is the same event one level in and gets its own verdict,
+  `blind`: under an unchanged version it has the shape of a rug pull and none of the
+  evidence, since nothing was shown to have moved and the place it would have moved could
+  not be read. Its items are not reported as removed either.
 
 Neither has a better code available: `2` is a refusal, `3` is nothing measured, and either would
 tell a pipeline to ignore it.
