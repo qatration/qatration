@@ -655,6 +655,68 @@ def main():
               str(_why_m))
         check("...so the absence is by design rather than a listing that refused",
               "refused" not in (_why_m.get("prompts") or ""), str(_why_m))
+
+        # --- AND THE COMMAND, DRIVEN --------------------------------------------------
+        #
+        # `compare` has a dozen fixtures above and every one calls the function. The
+        # command that calls it had none: the corpus is read there, the servers are
+        # replayed there, the verdicts are counted there and the exit code is decided
+        # there, and all of that was reached by nothing. Twice tonight this repository
+        # found a rule with fixtures whose one caller had stopped.
+        #
+        # Driven over the fake server from a corpus written for it, so the whole path
+        # runs with no network: read the file, start the command it names, list, compare,
+        # decide. The fake answers the same tools every time, so a corpus recorded from
+        # it and compared against it must come back with nothing moved.
+        import shutil as _sh_cw, subprocess as _sp_cw
+        _cw = _tf_m.mkdtemp()
+        try:
+            _cpath = os.path.join(_cw, "corpus.json")
+
+            def _corpus(desc):
+                _io_m.open(_cpath, "w", encoding="utf-8").write(_js_m.dumps(
+                    {"when": "2026-01-01 00:00", "servers": {"fake": {
+                        "package": "fake", "version": "1.0",
+                        "command": [sys.executable, _fake],
+                        "tools": [{"name": "t", "description": desc}]}}}))
+
+            def _run_compare():
+                _r = _sp_cw.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "mcp",
+                     "--compare", _cpath, "--timeout", "60"],
+                    capture_output=True, text=True, timeout=300,
+                    env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                             PYTHONDONTWRITEBYTECODE="1"),
+                    cwd=os.path.dirname(HERE))
+                return _r.returncode, (_r.stdout or "") + (_r.stderr or "")
+
+            _corpus("clean")
+            _rc, _out = _run_compare()
+            check("the compare command replays the server the corpus names",
+                  _rc == 0 and "nothing moved" in _out,
+                  "exit %s: %s" % (_rc, _out[-300:]))
+
+            # AND THE SAME PATH WITH THE TEXT MOVED. The fake is unchanged and the
+            # RECORDING is wrong about it, which is the same difference a rug pull is.
+            _corpus("this is not what the server says")
+            _rc, _out = _run_compare()
+            check("...and exits 1 when a description moved under an unchanged version",
+                  _rc == 1, "exit %s: %s" % (_rc, _out[-300:]))
+            check("...naming the server and what moved",
+                  "fake" in _out and "RUG PULL" in _out, _out[-300:])
+
+            # A CORPUS THAT CANNOT BE REPLAYED IS NOT A CORPUS THAT MOVED. Without a
+            # command there is nothing to start, and `nothing moved` over that would be
+            # the strongest possible answer to a question nobody asked.
+            _io_m.open(_cpath, "w", encoding="utf-8").write(_js_m.dumps(
+                {"servers": {"fake": {"package": "fake", "version": "1.0",
+                                      "tools": []}}}))
+            _rc, _out = _run_compare()
+            check("...and a corpus recording no command is refused, not called clean",
+                  _rc == 3 and "cannot be re-read" in _out,
+                  "exit %s: %s" % (_rc, _out[-300:]))
+        finally:
+            _sh_cw.rmtree(_cw, ignore_errors=True)
         # THE RULE IS ASKED OF EVERY CHANNEL, or the false-alarm floor is a floor for
         # tools and silence everywhere else.
         _all_hits = ["%s/%s/%s" % (_s, _c, _x["name"]) for _s, _c, _x in _chan_items
