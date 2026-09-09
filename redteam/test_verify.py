@@ -355,6 +355,31 @@ def main():
           verify_target(fake, "no-such-file.json", 1, 0, quiet=True,
                         build_check=lambda _c: "")["note"] == "no stored results")
 
+    # AND WITH NOTHING INJECTED, which is the way it runs. `build_check` is a seam so the
+    # branch can be exercised without a server, and both fixtures above pass a fake
+    # through it — so the line that supplies the REAL rule was reached by nothing.
+    # Deleting it left this suite green and every command that calls `verify_target`
+    # raising TypeError on the first target it looked at.
+    #
+    # The seam is the fixture's, the default is production's, and a seam whose default is
+    # never taken is the untested half of every dependency injection.
+    import run_redteam as _rr_v
+    _seen_v = []
+    _real_v = _rr_v._build_mismatch
+    _rr_v._build_mismatch = lambda _c: (_seen_v.append(_c), "")[1]
+    try:
+        # `_bp` rather than a missing path: the "is there anything to verify" guard answers
+        # first, so a missing file returns before the build check is ever reached.
+        _n = verify_target(fake, _bp, 1, 0, quiet=True)["note"]
+    finally:
+        _rr_v._build_mismatch = _real_v
+    check("with nothing injected the build rule comes from `run_redteam`",
+          len(_seen_v) == 1, "the default was not taken: %d call(s)" % len(_seen_v))
+    check("...and it is asked about the config it was given",
+          _seen_v and _seen_v[0] is fake, str(_seen_v[:1]))
+    check("...and the run carries on past it rather than stopping there",
+          not str(_n).startswith("wrong build"), str(_n))
+
     # --- and it must not write ------------------------------------------------------------
     #
     # STRUCTURAL, and said plainly: this parses the module for a write rather than running it,
