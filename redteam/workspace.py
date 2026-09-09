@@ -898,11 +898,21 @@ def side_artifact(explicit, default_name, key, root=None, warn=None):
         if explicit and warn:
             warn(explicit)
         return None
+    # AND A FILE THAT IS THERE AND WILL NOT PARSE IS NOT A FILE THAT IS ABSENT. This
+    # returned None for both, and `report_engine` renders None as no panel at all — so a
+    # torn `recon_<target>.json` deleted the fingerprint section from the scorecard, and
+    # `_recon_panel`'s own docstring says that section is `above all the warnings that say
+    # the numbers below cannot be trusted yet`. A reset that does not reset, a tool channel
+    # that only prints: the reader loses the warnings and keeps the verdicts, on the page a
+    # customer is handed. The absent case is ordinary and stays silent; this one says so.
     try:
         with open(path, encoding="utf-8") as f:
             data = _json.load(f)
-    except Exception:
-        return None
+    except Exception as _e:
+        _why = f"{type(_e).__name__}: {_e}"
+        if warn:
+            warn(path, _why)
+        return {key: None, "when": "", "unreadable": _why, "path": path}
     _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
     _when, _said = dated(_said_by, path)
     out = {key: data, "when": _when}

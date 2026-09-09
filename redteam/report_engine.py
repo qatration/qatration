@@ -132,11 +132,32 @@ def _proof(trials):
     return "".join(parts) or "<em>no probe (skipped)</em>"
 
 
+def _unreadable_panel(kind, art):
+    """The section a torn side artifact leaves behind, instead of nothing.
+
+    A missing panel and a panel whose data would not parse render identically, and one of
+    them means `this run could not read evidence it had`. The verdicts stay on the page,
+    so the sentence qualifying them has to as well.
+    """
+    import os as _os_rp
+    if not isinstance(art, dict) or not art.get("unreadable"):
+        return ""
+    return ('<div class="panel" style="border-left:4px solid #9a6700">'
+            '<div class="ptitle">%s <span class="dim">\u2014 could not be read</span></div>'
+            '<p class="dim">%s is in this workspace and would not parse (%s). Everything'
+            ' this section would have said is missing from the page, including any warning'
+            ' that the results below cannot be trusted yet.</p></div>'
+            % (kind, esc(_os_rp.path.basename(str(art.get("path") or ""))),
+               esc(art["unreadable"])))
+
+
 def _recon_panel(recon):
     """The target's fingerprint, and above all the warnings that say the numbers below
     cannot be trusted yet (a reset() that does not reset, a tool channel that only prints)."""
     if not recon:
         return ""
+    if isinstance(recon, dict) and recon.get("unreadable"):
+        return _unreadable_panel("Target profile", recon)
     p = recon.get("profile", recon)
     # through recon.memory_phrase: three states, one place, so this cannot drift from the
     # console summary and the fleet table again
@@ -212,6 +233,8 @@ def _isolation_panel(iso):
     hard' from 'the target is fine apart from one lock nobody keyed'."""
     if not iso:
         return ""
+    if isinstance(iso, dict) and iso.get("unreadable"):
+        return _unreadable_panel("Lock map", iso)
     maps = iso.get("maps", iso)
     blocks = []
     for m in maps:

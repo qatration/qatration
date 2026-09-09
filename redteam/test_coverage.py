@@ -170,6 +170,33 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
     check("a throwing detector does not take the replay down", n2 == 1)
+
+    # AND NEITHER DOES A LOCK MAP THAT WILL NOT PARSE. The results and benign loops
+    # both ask `read_artifact`; the isolation loop called `read_maps`, which opens the
+    # file directly, so a torn one raised out of `replay` and printed `This is a bug in
+    # qatration, not a problem with your config` over a file in the operator's own
+    # workspace.
+    _iso_tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_iso_tmp, "isolation_cov-torn.json"), "w",
+                  encoding="utf-8") as _f:
+            _f.write('{"maps": ')
+        _real_o, _real_c = dc.OUT, dc.contexts
+        dc.OUT = _iso_tmp
+        dc.contexts = lambda **kw: {}
+        _seen = []
+        try:
+            _h, _w, _n, _b, _s = dc.replay(unreadable_out=_seen)
+            _raised = None
+        except Exception as _e:
+            _raised = "%s: %s" % (type(_e).__name__, _e)
+        finally:
+            dc.OUT, dc.contexts = _real_o, _real_c
+        check("a torn lock map does not take the replay down", _raised is None, _raised)
+        check("...and is named as an artifact that could not be read",
+              [_n2 for _n2, _w2 in _seen] == ["isolation_cov-torn.json"], str(_seen))
+    finally:
+        shutil.rmtree(_iso_tmp, ignore_errors=True)
     check("a throwing detector is counted, not silently filed as never-fired",
           broke2.get("_cov_boom") == 1, str(dict(broke2)))
     check("...and it is not counted as a hit either", not hits2.get("_cov_boom"))

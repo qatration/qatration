@@ -355,8 +355,8 @@ def _spend(target, retries=None):
     return out
 
 
-def _missing_side(path):
-    """What to say when a path the operator TYPED is not there.
+def _missing_side(path, why=None):
+    """What to say when a side artifact does not arrive: absent, or there and unreadable.
 
     Absent by default is the ordinary case and says nothing; a path they typed and that is
     not there is a panel they asked for and did not get, and the report renders identically
@@ -364,6 +364,14 @@ def _missing_side(path):
     and printed neither. Passed to `workspace.side_artifact` rather than lived inside it,
     because `rejudge` reads the same artifacts with nobody having typed a path.
     """
+    if why:
+        # NOT THE SAME EVENT. Absent by default is ordinary; a file that exists and will
+        # not parse is evidence this run cannot read, and the panel it feeds is the one
+        # carrying the warnings that qualify every verdict on the page.
+        print(f"  ! {path} could not be read ({why}), so the report is built without the "
+              f"panel it feeds — including any warning that section would have carried",
+              file=sys.stderr)
+        return
     print(f"  ! {path} does not exist, so the report is built without it — "
           f"everything else in the run is unaffected", file=sys.stderr)
 

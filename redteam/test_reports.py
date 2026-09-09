@@ -1157,6 +1157,22 @@ def main():
     try:
         check("collect() on an empty out/ returns nothing rather than failing",
               cr.collect() == [])
+        # AND A PROFILE IT COULD NOT READ IS NOT A PROFILE THAT IS NOT THERE. This
+        # printed `skipping ...` on stderr in this module's own wording and then
+        # published `recon_fleet.html` one target short, with nothing on the page
+        # saying so -- a fleet-hygiene table quietly missing a bot. Three sibling
+        # pages already carry `unreadable_html`; this was the fourth.
+        _torn = []
+        io.open(str(cr.OUT_DIR / "recon_bad.json"), "w",
+                encoding="utf-8").write('{"tool_channel": ')
+        cr.collect(_torn)
+        check("a torn profile is collected rather than skipped",
+              [n for n, _w in _torn] == ["recon_bad.json"], str(_torn))
+        _page = cr.render([], _torn)
+        check("...and the published page says so",
+              "could not be read" in _page and "recon_bad.json" in _page, _page[:300])
+        check("...while a page with nothing unreadable carries no such bar",
+              "could not be read" not in cr.render([]), cr.render([])[:300])
     finally:
         shutil.rmtree(cr.OUT_DIR, ignore_errors=True)
         cr.OUT_DIR = real
@@ -1483,6 +1499,36 @@ def main():
     check("build_index survives an empty out/ without inventing rows",
           isinstance(bi.load(), (list, dict)))
     check("build_index escapes markup too", bi.esc("<i>") == "&lt;i&gt;")
+
+    # AND THE ADAPTIVE FAMILY IS NAMED TOO. That loop skipped a torn artifact under a
+    # comment saying it was `reported by the results loop above` -- which walks
+    # `results_*.json` and never sees an `adaptive_*.json`. So the section lost an
+    # entry and no surface said anything, in the page that ties a run together.
+    _iw = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_iw, "results_idx-fake.json"), "w",
+                  encoding="utf-8") as _f:
+            json.dump({"meta": {"target": "idx-fake", "attacks_n": 1,
+                                "trials": 1, "broke": 0},
+                       "results": [{"attack": {"id": "a", "category": "x"},
+                                    "headline": "DEFENDED", "fired": [],
+                                    "trials": [{"probe": {"output": "no"}}]}]}, _f)
+        io.open(os.path.join(_iw, "adaptive_idx-fake.json"), "w",
+                encoding="utf-8").write('{"result": ')
+        import pathlib as _pl_i
+        _real_i = bi.OUT
+        bi.OUT = _pl_i.Path(_iw)
+        try:
+            bi.main()
+            _idx = io.open(os.path.join(_iw, "index.html"),
+                           encoding="utf-8").read()
+        finally:
+            bi.OUT = _real_i
+        check("a torn adaptive artifact is named on the index",
+              "adaptive_idx-fake.json" in _idx and "could not be read" in _idx,
+              _idx[:400])
+    finally:
+        shutil.rmtree(_iw, ignore_errors=True)
 
     # --- A TARGET THAT WAS NEVER ATTACKED IS NOT A TARGET THAT HELD -------------------------
     #

@@ -97,6 +97,31 @@ def main():
     check("renders with no recon and no isolation", "QAtration" in bare, True)
     check("no recon -> no profile panel", "TARGET PROFILE" in bare.upper(), False)
 
+    # ...AND A PROFILE THAT IS THERE AND WILL NOT PARSE IS NOT A PROFILE THAT IS ABSENT.
+    # `side_artifact` returned None for both and the panel simply vanished, which on this
+    # page is the worst place for it: `_recon_panel`'s own docstring says the section is
+    # `above all the warnings that say the numbers below cannot be trusted yet`. A torn
+    # fingerprint took the warnings off a customer's scorecard and left the verdicts.
+    _torn_recon = build_html(
+        META, RESULTS,
+        recon={"profile": None, "when": "", "unreadable": "JSONDecodeError: line 1",
+               "path": "/w/recon_bot.json"})
+    check("a recon profile that would not parse is said, not silently dropped",
+          "could not be read" in _torn_recon, True)
+    check("...naming the file, so the reader knows which one to re-run",
+          "recon_bot.json" in _torn_recon, True)
+    check("...and saying the warnings it would have carried are missing too",
+          "cannot be trusted" in _torn_recon, True)
+    _torn_iso = build_html(
+        META, RESULTS,
+        isolation={"maps": None, "when": "", "unreadable": "ValueError: bad",
+                   "path": "/w/isolation_bot.json"})
+    check("a lock map that would not parse is said too",
+          "could not be read" in _torn_iso and "isolation_bot.json" in _torn_iso, True)
+    # AND THE ORDINARY ABSENCE STAYS SILENT, so the note means something when it appears.
+    check("...while an artifact that is simply absent adds no note",
+          "could not be read" in bare, False)
+
     # 2a. WHAT IS MISSING FROM A RUN HAS TWO CAUSES AND THE SCORECARD USED TO NAME ONE.
     # A single tile read "not applicable / skipped", and its number added the attacks this
     # deployment cannot take to the attacks `--scope quick` held back. Walked from an install
@@ -270,6 +295,26 @@ def main():
     check("...and a path the operator typed is named when it is missing",
           "no_such_side_artifact_xyz.json" in _said, True)
     check("...and the run is not implied to be affected", "unaffected" in _said, True)
+
+    # AND THE READER ITSELF HAS TO TELL THE TWO APART. The panel checks above hand
+    # `build_html` a dictionary by hand, so they say nothing about the function that
+    # BUILDS it: putting `return None` back on the parse failure left every one of them
+    # green. Same shape as the `buckets(scanned=...)` lesson -- testing the helper is not
+    # testing the wiring -- pointed the other way, at the producer.
+    import tempfile as _tf2, os as _os2
+    _d2 = _tf2.mkdtemp()
+    _torn2 = _os2.path.join(_d2, "recon_torn.json")
+    _io2.open(_torn2, "w", encoding="utf-8").write('{"tool_channel": ')
+    _e2 = _io2.StringIO()
+    with _cx2.redirect_stderr(_e2):
+        _got2 = _side(_torn2, "recon_torn.json", "profile", warn=_warn_side)
+    check("a side artifact that will not parse is not reported as absent",
+          isinstance(_got2, dict) and bool(_got2.get("unreadable")), True)
+    check("...carrying the path, so the page can name the file",
+          (_got2 or {}).get("path") == _torn2, True)
+    check("...and the console says it could not be read, not that it is missing",
+          "could not be read" in _e2.getvalue() and "does not exist" not in _e2.getvalue(),
+          True)
 
     # NOT ON THE ORDINARY ABSENCE. Most runs have no recon beside them, and a line every
     # time is a line nobody reads.

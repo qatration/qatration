@@ -237,7 +237,16 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         # a stamp anyway. Three detectors — forced_output, unknown_tool_call and
         # refusal_then_comply — are demonstrated ONLY by one of these, so their whole evidence
         # sat outside the check written to say which evidence predates the build.
-        iso_maps, iso_meta = read_maps(fp)
+        # AND A LOCK MAP THAT WILL NOT PARSE IS NOT A BUG IN THIS TOOL. `read_maps` opens
+        # the file directly, so a torn one raised out of `replay`, through `run_command`,
+        # and printed `This is a bug in qatration, not a problem with your config` over an
+        # artifact sitting in the operator's own workspace. The two loops above already
+        # ask `read_artifact` and name what they could not read; this one did neither.
+        try:
+            iso_maps, iso_meta = read_maps(fp)
+        except Exception as _e:
+            unreadable.append((os.path.basename(fp), f"{type(_e).__name__}: {_e}"))
+            continue
         before = n
         for m in iso_maps:
             for p in list(m.get("properties") or []) + [m.get("combined") or {}]:

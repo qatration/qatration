@@ -232,6 +232,7 @@ def main():
     moved = [m for m in rows if m.get("broke_at_run") is not None
              and m["broke_at_run"] != m["broke"]]
     adaptive = sorted(glob.glob(str(OUT / "adaptive_*.json")))
+    _n_unread_before = len(_unreadable)
 
     cards = ""
     for m in rows:
@@ -265,7 +266,12 @@ def main():
         for fp in adaptive:
             d, why = read_artifact(fp)
             if why:
-                continue                       # reported by the results loop above
+                # NOT REPORTED BY THE RESULTS LOOP. That loop walks `results_*.json`; this
+                # one walks `adaptive_*.json`, so the comment that used to sit here was
+                # asserting a coverage that does not exist and a torn adaptive artifact
+                # left this section one entry short with nothing saying so anywhere.
+                _unreadable.append((os.path.basename(str(fp)), why))
+                continue
             r = d.get("result") or {}
             ok = r.get("success")
             col = SEV["critical"] if ok else SEV["none"]
@@ -275,6 +281,13 @@ def main():
                       f'<b>{esc(d["target"])}</b> — <span style="color:{col}">{verdict}</span>'
                       f' <span class="cm">attacker: {esc(d.get("attacker",""))}</span></li>')
         adaptive_html = (f'<h2>Adaptive attacker (LLM-in-the-loop)</h2><ul class="adapt">{items}</ul>')
+        # SAID ON BOTH SURFACES, and after this loop rather than before it: `unread_bar`
+        # was built above, so anything this loop found was collected into a list nothing
+        # read again.
+        for _an, _aw in _unreadable[_n_unread_before:]:
+            print("  ! %s could not be read (%s). It is not on the index, and nothing "
+                  "there describes whatever it held." % (_an, _aw))
+        unread_bar = _unread_html(_unreadable, "this index")
 
     today = datetime.date.today().isoformat()
     doc = f"""<!doctype html><html><head><meta charset="utf-8">

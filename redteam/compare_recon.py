@@ -91,15 +91,27 @@ def _row(profile, name, when):
     }.items()}
 
 
-def collect():
+def collect(unreadable=None):
+    """-> the rows, with what could not be read collected rather than skipped.
+
+    THIS PAGE HAD NO WAY TO SAY IT. A torn `recon_<target>.json` printed `skipping ...` on
+    stderr in this module's own wording and then `recon_fleet.html` was published with one
+    fewer target and no sign of it — a fleet-hygiene table, whose whole job is `which of
+    my bots should I look at first`, quietly short of a bot. `index`, `compare` and the
+    defense report each learned this already and carry `unreadable_html`; this was the
+    fourth page and the only one still outside it.
+
+    Through `read_artifact`, which is the one reader that tells torn from absent, rather
+    than a bare `json.load` under a bare `except`.
+    """
+    from workspace import read_artifact as _read
     rows = []
+    unreadable = unreadable if unreadable is not None else []
     for fp in sorted(glob.glob(str(OUT_DIR / "recon_*.json"))):
         name = os.path.basename(fp)[len("recon_"):-len(".json")]
-        try:
-            with open(fp, encoding="utf-8") as f:
-                profile = json.load(f)
-        except Exception as e:
-            print(f"  ! skipping {os.path.basename(fp)}: {e}", file=sys.stderr)
+        profile, _why = _read(fp)
+        if _why:
+            unreadable.append((os.path.basename(fp), _why))
             continue
         # THROUGH `measured_when`, which says which of the two answers this is. All ten
         # profiles stored here predate the writer recording one, so they still show a
@@ -112,7 +124,7 @@ def collect():
     return rows
 
 
-def render(rows):
+def render(rows, unreadable=()):
     body = ""
     for r in rows:
         label, color = CHANNEL.get(r["channel"], (r["channel"], "#6b6b70"))
@@ -127,6 +139,8 @@ def render(rows):
       <td>{warn_html or '<span class="dim">—</span>'}</td>
     </tr>"""
     n_warn = sum(1 for r in rows if r["warnings"])
+    from workspace import unreadable_html as _unread_html
+    _bar = _unread_html(list(unreadable), "this table")
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — fleet recon</title><style>
@@ -146,7 +160,7 @@ th{{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--dim
 @media(prefers-color-scheme:dark){{.w{{background:rgba(179,38,30,.16);color:#ff8a80}}}}
 .note{{color:var(--dim);font-size:13px;margin-top:14px}}
 </style></head><body><div class="wrap">
-<h1><span class="q">QA</span>tration — fleet recon</h1>
+<h1><span class="q">QA</span>tration — fleet recon</h1>{_bar}
 <p class="sub">{len(rows)} targets profiled · {n_warn} with warnings · benign probes only, no attacks</p>
 <table>
 <thead><tr><th>Target</th><th>Tool channel</th><th>Memory</th><th>Plain disclosure ask</th>
@@ -168,8 +182,18 @@ def main():
     # find out by watching it happen.
     import argparse
     argparse.ArgumentParser(prog="qatration profiles", description='every profiled target in one table, worst first').parse_args()
-    rows = collect()
+    _unreadable = []
+    rows = collect(_unreadable)
+    from workspace import say_unreadable as _say, unreadable_html as _unread_html
+    _say(_unreadable, "this table")
     if not rows:
+        # AND `THERE ARE NONE` IS NOT `I COULD NOT READ ANY`. With every profile torn this
+        # printed `no recon_*.json in <dir>` and told the reader to go and profile a
+        # target, which is false and sends them to re-run work they already have.
+        if _unreadable:
+            print("%d recon profile(s) in %s and none of them could be read, so nothing here\n"
+                  "has been measured. The files are named above." % (len(_unreadable), OUT_DIR))
+            return 3
         # NOT `run_recon.py`. That file exists in a checkout of this repository and nowhere
         # in an installed package: `pip install qatration` puts the modules inside the package
         # and gives the reader `qatration recon`. The path was already right here; the remedy
@@ -192,7 +216,7 @@ def main():
 
     out = OUT_DIR / "recon_fleet.html"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(render(rows), encoding="utf-8")
+    out.write_text(render(rows, _unreadable), encoding="utf-8")
     print(f"\nreport → {out}")
 
 
