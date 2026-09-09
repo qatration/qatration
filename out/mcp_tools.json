@@ -1,5 +1,5 @@
 {
-  "when": "2026-09-09 19:57",
+  "when": "2026-09-09 20:40",
   "protocol": "2024-11-05",
   "servers": {
     "everything": {
@@ -13,11 +13,27 @@
       "tools": [
         {
           "name": "echo",
-          "description": "Echoes back the input string"
+          "description": "Echoes back the input string",
+          "arguments": [
+            {
+              "name": "message",
+              "description": "Message to echo"
+            }
+          ]
         },
         {
           "name": "get-annotated-message",
-          "description": "Demonstrates how annotations can be used to provide metadata about content."
+          "description": "Demonstrates how annotations can be used to provide metadata about content.",
+          "arguments": [
+            {
+              "name": "includeImage",
+              "description": "Whether to include an example image"
+            },
+            {
+              "name": "messageType",
+              "description": "Type of message to demonstrate different annotation patterns"
+            }
+          ]
         },
         {
           "name": "get-env",
@@ -25,19 +41,47 @@
         },
         {
           "name": "get-resource-links",
-          "description": "Returns up to ten resource links that reference different types of resources"
+          "description": "Returns up to ten resource links that reference different types of resources",
+          "arguments": [
+            {
+              "name": "count",
+              "description": "Number of resource links to return (1-10)"
+            }
+          ]
         },
         {
           "name": "get-resource-reference",
-          "description": "Returns a resource reference that can be used by MCP clients"
+          "description": "Returns a resource reference that can be used by MCP clients",
+          "arguments": [
+            {
+              "name": "resourceId",
+              "description": "ID of the text resource to fetch"
+            }
+          ]
         },
         {
           "name": "get-structured-content",
-          "description": "Returns structured content along with an output schema for client data validation"
+          "description": "Returns structured content along with an output schema for client data validation",
+          "arguments": [
+            {
+              "name": "location",
+              "description": "Choose city"
+            }
+          ]
         },
         {
           "name": "get-sum",
-          "description": "Returns the sum of two numbers"
+          "description": "Returns the sum of two numbers",
+          "arguments": [
+            {
+              "name": "a",
+              "description": "First number"
+            },
+            {
+              "name": "b",
+              "description": "Second number"
+            }
+          ]
         },
         {
           "name": "get-tiny-image",
@@ -45,7 +89,21 @@
         },
         {
           "name": "gzip-file-as-resource",
-          "description": "Compresses a single file using gzip compression. Depending upon the selected output type, returns either the compressed data as a gzipped resource or a resource link, allowing it to be downloaded in a subsequent request during the current session."
+          "description": "Compresses a single file using gzip compression. Depending upon the selected output type, returns either the compressed data as a gzipped resource or a resource link, allowing it to be downloaded in a subsequent request during the current session.",
+          "arguments": [
+            {
+              "name": "data",
+              "description": "URL or data URI of the file content to compress"
+            },
+            {
+              "name": "name",
+              "description": "Name of the output file"
+            },
+            {
+              "name": "outputType",
+              "description": "How the resulting gzipped file should be returned. 'resourceLink' returns a link to a resource that can be read later, 'resource' returns a full resource object."
+            }
+          ]
         },
         {
           "name": "toggle-simulated-logging",
@@ -57,11 +115,31 @@
         },
         {
           "name": "trigger-long-running-operation",
-          "description": "Demonstrates a long running operation with progress updates."
+          "description": "Demonstrates a long running operation with progress updates.",
+          "arguments": [
+            {
+              "name": "duration",
+              "description": "Duration of the operation in seconds"
+            },
+            {
+              "name": "steps",
+              "description": "Number of steps in the operation"
+            }
+          ]
         },
         {
           "name": "simulate-research-query",
-          "description": "Simulates a deep research operation that gathers, analyzes, and synthesizes information. Demonstrates MCP task-based operations with progress through multiple stages. If 'ambiguous' is true and client supports elicitation, sends an elicitation request for clarification."
+          "description": "Simulates a deep research operation that gathers, analyzes, and synthesizes information. Demonstrates MCP task-based operations with progress through multiple stages. If 'ambiguous' is true and client supports elicitation, sends an elicitation request for clarification.",
+          "arguments": [
+            {
+              "name": "ambiguous",
+              "description": "Simulate an ambiguous query that requires clarification (triggers input_required status)"
+            },
+            {
+              "name": "topic",
+              "description": "The research topic to investigate"
+            }
+          ]
         }
       ],
       "prompts": [
@@ -71,15 +149,41 @@
         },
         {
           "name": "args-prompt",
-          "description": "A prompt with two arguments, one required and one optional"
+          "description": "A prompt with two arguments, one required and one optional",
+          "arguments": [
+            {
+              "name": "city",
+              "description": "Name of the city"
+            }
+          ]
         },
         {
           "name": "completable-prompt",
-          "description": "First argument choice narrows values for second argument."
+          "description": "First argument choice narrows values for second argument.",
+          "arguments": [
+            {
+              "name": "department",
+              "description": "Choose the department."
+            },
+            {
+              "name": "name",
+              "description": "Choose a team member to lead the selected department."
+            }
+          ]
         },
         {
           "name": "resource-prompt",
-          "description": "A prompt that includes an embedded resource reference"
+          "description": "A prompt that includes an embedded resource reference",
+          "arguments": [
+            {
+              "name": "resourceType",
+              "description": "Type of resource to fetch"
+            },
+            {
+              "name": "resourceId",
+              "description": "ID of the text resource to fetch"
+            }
+          ]
         }
       ],
       "resources": [
@@ -122,8 +226,8 @@
           "description": "Binary (base64) dynamic resource fabricated from the {resourceId} variable, which must be an integer."
         }
       ],
-      "chars": 1160,
-      "surface_chars": 1940
+      "chars": 1814,
+      "surface_chars": 2747
     },
     "filesystem": {
       "package": "@modelcontextprotocol/server-filesystem",
@@ -137,11 +241,31 @@
       "tools": [
         {
           "name": "read_file",
-          "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead."
+          "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.",
+          "arguments": [
+            {
+              "name": "head",
+              "description": "If provided, returns only the first N lines of the file"
+            },
+            {
+              "name": "tail",
+              "description": "If provided, returns only the last N lines of the file"
+            }
+          ]
         },
         {
           "name": "read_text_file",
-          "description": "Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories."
+          "description": "Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.",
+          "arguments": [
+            {
+              "name": "head",
+              "description": "If provided, returns only the first N lines of the file"
+            },
+            {
+              "name": "tail",
+              "description": "If provided, returns only the last N lines of the file"
+            }
+          ]
         },
         {
           "name": "read_media_file",
@@ -149,7 +273,13 @@
         },
         {
           "name": "read_multiple_files",
-          "description": "Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for individual files won't stop the entire operation. Only works within allowed directories."
+          "description": "Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for individual files won't stop the entire operation. Only works within allowed directories.",
+          "arguments": [
+            {
+              "name": "paths",
+              "description": "Array of file paths to read. Each path must be a string pointing to a valid file within allowed directories."
+            }
+          ]
         },
         {
           "name": "write_file",
@@ -157,7 +287,13 @@
         },
         {
           "name": "edit_file",
-          "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories."
+          "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.",
+          "arguments": [
+            {
+              "name": "dryRun",
+              "description": "Preview changes using git-style diff format"
+            }
+          ]
         },
         {
           "name": "create_directory",
@@ -169,7 +305,13 @@
         },
         {
           "name": "list_directory_with_sizes",
-          "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories."
+          "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories.",
+          "arguments": [
+            {
+              "name": "sortBy",
+              "description": "Sort entries by name or size"
+            }
+          ]
         },
         {
           "name": "directory_tree",
@@ -197,8 +339,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 4121,
-      "surface_chars": 4121
+      "chars": 4525,
+      "surface_chars": 4525
     },
     "memory": {
       "package": "@modelcontextprotocol/server-memory",
@@ -223,7 +365,13 @@
         },
         {
           "name": "delete_entities",
-          "description": "Delete multiple entities and their associated relations from the knowledge graph"
+          "description": "Delete multiple entities and their associated relations from the knowledge graph",
+          "arguments": [
+            {
+              "name": "entityNames",
+              "description": "An array of entity names to delete"
+            }
+          ]
         },
         {
           "name": "delete_observations",
@@ -231,7 +379,13 @@
         },
         {
           "name": "delete_relations",
-          "description": "Delete multiple relations from the knowledge graph"
+          "description": "Delete multiple relations from the knowledge graph",
+          "arguments": [
+            {
+              "name": "relations",
+              "description": "An array of relations to delete"
+            }
+          ]
         },
         {
           "name": "read_graph",
@@ -239,11 +393,23 @@
         },
         {
           "name": "search_nodes",
-          "description": "Search for nodes in the knowledge graph based on a query"
+          "description": "Search for nodes in the knowledge graph based on a query",
+          "arguments": [
+            {
+              "name": "query",
+              "description": "The search query to match against entity names, types, and observation content"
+            }
+          ]
         },
         {
           "name": "open_nodes",
-          "description": "Open specific nodes in the knowledge graph by their names"
+          "description": "Open specific nodes in the knowledge graph by their names",
+          "arguments": [
+            {
+              "name": "names",
+              "description": "An array of entity names to retrieve"
+            }
+          ]
         }
       ],
       "channels_absent": {
@@ -256,8 +422,8 @@
         }
       ],
       "resource_templates": [],
-      "chars": 568,
-      "surface_chars": 625
+      "chars": 751,
+      "surface_chars": 808
     },
     "sequential-thinking": {
       "package": "@modelcontextprotocol/server-sequential-thinking",
@@ -270,7 +436,45 @@
       "tools": [
         {
           "name": "sequentialthinking",
-          "description": "A detailed tool for dynamic and reflective problem-solving through thoughts.\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\nEach thought can build on, question, or revise previous insights as understanding deepens.\n\nWhen to use this tool:\n- Breaking down complex problems into steps\n- Planning and design with room for revision\n- Analysis that might need course correction\n- Problems where the full scope might not be clear initially\n- Problems that require a multi-step solution\n- Tasks that need to maintain context over multiple steps\n- Situations where irrelevant information needs to be filtered out\n\nKey features:\n- You can adjust total_thoughts up or down as you progress\n- You can question or revise previous thoughts\n- You can add more thoughts even after reaching what seemed like the end\n- You can express uncertainty and explore alternative approaches\n- Not every thought needs to build linearly - you can branch or backtrack\n- Generates a solution hypothesis\n- Verifies the hypothesis based on the Chain of Thought steps\n- Repeats the process until satisfied\n- Provides a correct answer\n\nParameters explained:\n- thought: Your current thinking step, which can include:\n  * Regular analytical steps\n  * Revisions of previous thoughts\n  * Questions about previous decisions\n  * Realizations about needing more analysis\n  * Changes in approach\n  * Hypothesis generation\n  * Hypothesis verification\n- nextThoughtNeeded: True if you need more thinking, even if at what seemed like the end\n- thoughtNumber: Current number in sequence (can go beyond initial total if needed)\n- totalThoughts: Current estimate of thoughts needed (can be adjusted up/down)\n- isRevision: A boolean indicating if this thought revises previous thinking\n- revisesThought: If is_revision is true, which thought number is being reconsidered\n- branchFromThought: If branching, which thought number is the branching point\n- branchId: Identifier for the current branch (if any)\n- needsMoreThoughts: If reaching end but realizing more thoughts needed\n\nYou should:\n1. Start with an initial estimate of needed thoughts, but be ready to adjust\n2. Feel free to question or revise previous thoughts\n3. Don't hesitate to add more thoughts if needed, even at the \"end\"\n4. Express uncertainty when present\n5. Mark thoughts that revise previous thinking or branch into new paths\n6. Ignore information that is irrelevant to the current step\n7. Generate a solution hypothesis when appropriate\n8. Verify the hypothesis based on the Chain of Thought steps\n9. Repeat the process until satisfied with the solution\n10. Provide a single, ideally correct answer as the final output\n11. Only set nextThoughtNeeded to false when truly done and a satisfactory answer is reached"
+          "description": "A detailed tool for dynamic and reflective problem-solving through thoughts.\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\nEach thought can build on, question, or revise previous insights as understanding deepens.\n\nWhen to use this tool:\n- Breaking down complex problems into steps\n- Planning and design with room for revision\n- Analysis that might need course correction\n- Problems where the full scope might not be clear initially\n- Problems that require a multi-step solution\n- Tasks that need to maintain context over multiple steps\n- Situations where irrelevant information needs to be filtered out\n\nKey features:\n- You can adjust total_thoughts up or down as you progress\n- You can question or revise previous thoughts\n- You can add more thoughts even after reaching what seemed like the end\n- You can express uncertainty and explore alternative approaches\n- Not every thought needs to build linearly - you can branch or backtrack\n- Generates a solution hypothesis\n- Verifies the hypothesis based on the Chain of Thought steps\n- Repeats the process until satisfied\n- Provides a correct answer\n\nParameters explained:\n- thought: Your current thinking step, which can include:\n  * Regular analytical steps\n  * Revisions of previous thoughts\n  * Questions about previous decisions\n  * Realizations about needing more analysis\n  * Changes in approach\n  * Hypothesis generation\n  * Hypothesis verification\n- nextThoughtNeeded: True if you need more thinking, even if at what seemed like the end\n- thoughtNumber: Current number in sequence (can go beyond initial total if needed)\n- totalThoughts: Current estimate of thoughts needed (can be adjusted up/down)\n- isRevision: A boolean indicating if this thought revises previous thinking\n- revisesThought: If is_revision is true, which thought number is being reconsidered\n- branchFromThought: If branching, which thought number is the branching point\n- branchId: Identifier for the current branch (if any)\n- needsMoreThoughts: If reaching end but realizing more thoughts needed\n\nYou should:\n1. Start with an initial estimate of needed thoughts, but be ready to adjust\n2. Feel free to question or revise previous thoughts\n3. Don't hesitate to add more thoughts if needed, even at the \"end\"\n4. Express uncertainty when present\n5. Mark thoughts that revise previous thinking or branch into new paths\n6. Ignore information that is irrelevant to the current step\n7. Generate a solution hypothesis when appropriate\n8. Verify the hypothesis based on the Chain of Thought steps\n9. Repeat the process until satisfied with the solution\n10. Provide a single, ideally correct answer as the final output\n11. Only set nextThoughtNeeded to false when truly done and a satisfactory answer is reached",
+          "arguments": [
+            {
+              "name": "branchFromThought",
+              "description": "Branching point thought number"
+            },
+            {
+              "name": "branchId",
+              "description": "Branch identifier"
+            },
+            {
+              "name": "isRevision",
+              "description": "Whether this revises previous thinking"
+            },
+            {
+              "name": "needsMoreThoughts",
+              "description": "If more thoughts are needed"
+            },
+            {
+              "name": "nextThoughtNeeded",
+              "description": "Whether another thought step is needed"
+            },
+            {
+              "name": "revisesThought",
+              "description": "Which thought is being reconsidered"
+            },
+            {
+              "name": "thought",
+              "description": "Your current thinking step"
+            },
+            {
+              "name": "thoughtNumber",
+              "description": "Current thought number (numeric value, e.g., 1, 2, 3)"
+            },
+            {
+              "name": "totalThoughts",
+              "description": "Estimated total thoughts needed (numeric value, e.g., 5, 10)"
+            }
+          ]
         }
       ],
       "channels_absent": {
@@ -278,8 +482,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 2781,
-      "surface_chars": 2781
+      "chars": 3114,
+      "surface_chars": 3114
     },
     "context7": {
       "package": "@upstash/context7-mcp",
@@ -292,18 +496,38 @@
       "tools": [
         {
           "name": "resolve-library-id",
-          "description": "Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\n\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\n\nEach result includes:\n- Library ID: Context7-compatible identifier (format: /org/project)\n- Name: Library or package name\n- Description: Short summary\n- Code Snippets: Number of available code examples\n- Source Reputation: Authority indicator (High, Medium, Low, or Unknown)\n- Benchmark Score: Quality indicator (100 is the highest score)\n- Versions: List of versions if available. Use one of those versions if the user provides a version in their query. The format of the version is /org/project/version.\n\nFor best results, select libraries based on name match, source reputation, snippet coverage, benchmark score, and relevance to your use case.\n\nSelection Process:\n1. Analyze the query to understand what library/package the user is looking for\n2. Return the most relevant match based on:\n- Name similarity to the query (exact matches prioritized)\n- Description relevance to the query's intent\n- Documentation coverage (prioritize libraries with higher Code Snippet counts)\n- Source reputation (consider libraries with High or Medium reputation more authoritative)\n- Benchmark Score: Quality indicator (100 is the highest score)\n\nResponse Format:\n- Return the selected library ID in a clearly marked section\n- Provide a brief explanation for why this library was chosen\n- If multiple good matches exist, acknowledge this but proceed with the most relevant one\n- If no good matches exist, clearly state this and suggest query refinements\n\nFor ambiguous queries, request clarification before proceeding with a best-guess match.\n\nIMPORTANT: Do not call this tool more than 3 times per question. If you cannot find what you need after 3 calls, use the best result you have."
+          "description": "Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\n\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\n\nEach result includes:\n- Library ID: Context7-compatible identifier (format: /org/project)\n- Name: Library or package name\n- Description: Short summary\n- Code Snippets: Number of available code examples\n- Source Reputation: Authority indicator (High, Medium, Low, or Unknown)\n- Benchmark Score: Quality indicator (100 is the highest score)\n- Versions: List of versions if available. Use one of those versions if the user provides a version in their query. The format of the version is /org/project/version.\n\nFor best results, select libraries based on name match, source reputation, snippet coverage, benchmark score, and relevance to your use case.\n\nSelection Process:\n1. Analyze the query to understand what library/package the user is looking for\n2. Return the most relevant match based on:\n- Name similarity to the query (exact matches prioritized)\n- Description relevance to the query's intent\n- Documentation coverage (prioritize libraries with higher Code Snippet counts)\n- Source reputation (consider libraries with High or Medium reputation more authoritative)\n- Benchmark Score: Quality indicator (100 is the highest score)\n\nResponse Format:\n- Return the selected library ID in a clearly marked section\n- Provide a brief explanation for why this library was chosen\n- If multiple good matches exist, acknowledge this but proceed with the most relevant one\n- If no good matches exist, clearly state this and suggest query refinements\n\nFor ambiguous queries, request clarification before proceeding with a best-guess match.\n\nIMPORTANT: Do not call this tool more than 3 times per question. If you cannot find what you need after 3 calls, use the best result you have.",
+          "arguments": [
+            {
+              "name": "libraryName",
+              "description": "Library name to search for and retrieve a Context7-compatible library ID. Use the official library name with proper punctuation — e.g., 'Next.js' instead of 'nextjs', 'Customer.io' instead of 'customerio', 'Three.js' instead of 'threejs'."
+            },
+            {
+              "name": "query",
+              "description": "What to look up in the library's documentation. This is used to rank library results by relevance to what the user is trying to accomplish. The query is sent to the Context7 API for processing. Do not include any sensitive or confidential information such as API keys, passwords, credentials, personal data, or proprietary code in your query."
+            }
+          ]
         },
         {
           "name": "query-docs",
-          "description": "Retrieves and queries up-to-date documentation and code examples from Context7 for any programming library or framework.\n\nYou must call 'Resolve Context7 Library ID' tool first to obtain the exact Context7-compatible library ID required to use this tool, UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\n\nDo not call this tool more than 3 times per question."
+          "description": "Retrieves and queries up-to-date documentation and code examples from Context7 for any programming library or framework.\n\nYou must call 'Resolve Context7 Library ID' tool first to obtain the exact Context7-compatible library ID required to use this tool, UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\n\nDo not call this tool more than 3 times per question.",
+          "arguments": [
+            {
+              "name": "libraryId",
+              "description": "Exact Context7-compatible library ID (e.g., '/mongodb/docs', '/vercel/next.js', '/supabase/supabase', '/vercel/next.js/v14.3.0-canary.87') retrieved from 'resolve-library-id' or directly from user query in the format '/org/project' or '/org/project/version'."
+            },
+            {
+              "name": "query",
+              "description": "What to look up in the library's documentation, scoped to a single concept. Be specific and include relevant details, but keep each query to one topic — if the user's question spans multiple distinct concepts, make a separate call per concept instead of combining them, unless the question is about how the concepts interact. Good: 'How to set up authentication with JWT in Express.js' or 'React useEffect cleanup function examples'. Bad (too vague): 'auth' or 'hooks'. Bad (too broad): 'routing and auth and caching in Next.js'. The query is sent to the Context7 API for processing. Do not include any sensitive or confidential information such as API keys, passwords, credentials, personal data, or proprietary code in your query."
+            }
+          ]
         }
       ],
       "prompts": [],
       "resources": [],
       "resource_templates": [],
-      "chars": 2436,
-      "surface_chars": 2436
+      "chars": 4010,
+      "surface_chars": 4010
     },
     "playwright": {
       "package": "@playwright/mcp",
@@ -321,47 +545,173 @@
         },
         {
           "name": "browser_resize",
-          "description": "Resize the browser window"
+          "description": "Resize the browser window",
+          "arguments": [
+            {
+              "name": "height",
+              "description": "Height of the browser window"
+            },
+            {
+              "name": "width",
+              "description": "Width of the browser window"
+            }
+          ]
         },
         {
           "name": "browser_console_messages",
-          "description": "Returns all console messages"
+          "description": "Returns all console messages",
+          "arguments": [
+            {
+              "name": "all",
+              "description": "Return all console messages since the beginning of the session, not just since the last navigation. Defaults to false."
+            },
+            {
+              "name": "filename",
+              "description": "Filename to save the console messages to. If not provided, messages are returned as text."
+            },
+            {
+              "name": "level",
+              "description": "Level of the console messages to return. Each level includes the messages of more severe levels. Defaults to \"info\"."
+            }
+          ]
         },
         {
           "name": "browser_handle_dialog",
-          "description": "Handle a dialog"
+          "description": "Handle a dialog",
+          "arguments": [
+            {
+              "name": "accept",
+              "description": "Whether to accept the dialog."
+            },
+            {
+              "name": "promptText",
+              "description": "The text of the prompt in case of a prompt dialog."
+            }
+          ]
         },
         {
           "name": "browser_evaluate",
-          "description": "Evaluate JavaScript expression on page or element"
+          "description": "Evaluate JavaScript expression on page or element",
+          "arguments": [
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "filename",
+              "description": "Filename to save the result to. If not provided, result is returned as text."
+            },
+            {
+              "name": "function",
+              "description": "() => { /* code */ } or (element) => { /* code */ } when element is provided"
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_file_upload",
-          "description": "Upload one or multiple files"
+          "description": "Upload one or multiple files",
+          "arguments": [
+            {
+              "name": "paths",
+              "description": "The absolute paths to the files to upload. Can be single file or multiple files. If omitted, file chooser is cancelled."
+            }
+          ]
         },
         {
           "name": "browser_drop",
-          "description": "Drop files or MIME-typed data onto an element, as if dragged from outside the page. At least one of \"paths\" or \"data\" must be provided."
+          "description": "Drop files or MIME-typed data onto an element, as if dragged from outside the page. At least one of \"paths\" or \"data\" must be provided.",
+          "arguments": [
+            {
+              "name": "data",
+              "description": "Data to drop, as a map of MIME type to string value (e.g. {\"text/plain\": \"hello\", \"text/uri-list\": \"https://example.com\"})."
+            },
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "paths",
+              "description": "Absolute paths to files to drop onto the element."
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_find",
-          "description": "Search the accessibility snapshot of the current page for text or a regular expression. Returns matching snapshot nodes with a few lines of surrounding context (like search snippets), each shown under its path from the root of the tree, which is cheaper than capturing the whole snapshot when you only need to locate an element and its ref."
+          "description": "Search the accessibility snapshot of the current page for text or a regular expression. Returns matching snapshot nodes with a few lines of surrounding context (like search snippets), each shown under its path from the root of the tree, which is cheaper than capturing the whole snapshot when you only need to locate an element and its ref.",
+          "arguments": [
+            {
+              "name": "regex",
+              "description": "Regular expression to search for in the page snapshot. Matching is case-sensitive by default; wrap the pattern in slashes to add flags, e.g. \"/error/i\" for case-insensitive. Provide either text or regex, not both."
+            },
+            {
+              "name": "text",
+              "description": "Plain text to search for in the page snapshot (case-insensitive substring match). Provide either text or regex, not both."
+            }
+          ]
         },
         {
           "name": "browser_fill_form",
-          "description": "Fill multiple form fields"
+          "description": "Fill multiple form fields",
+          "arguments": [
+            {
+              "name": "fields",
+              "description": "Fields to fill in"
+            }
+          ]
         },
         {
           "name": "browser_press_key",
-          "description": "Press a key on the keyboard"
+          "description": "Press a key on the keyboard",
+          "arguments": [
+            {
+              "name": "key",
+              "description": "Name of the key to press or a character to generate, such as `ArrowLeft` or `a`"
+            }
+          ]
         },
         {
           "name": "browser_type",
-          "description": "Type text into editable element"
+          "description": "Type text into editable element",
+          "arguments": [
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "slowly",
+              "description": "Whether to type one character at a time. Useful for triggering key handlers in the page. By default entire text is filled in at once."
+            },
+            {
+              "name": "submit",
+              "description": "Whether to submit entered text (press Enter after)"
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            },
+            {
+              "name": "text",
+              "description": "Text to type into the element"
+            }
+          ]
         },
         {
           "name": "browser_navigate",
-          "description": "Navigate to a URL"
+          "description": "Navigate to a URL",
+          "arguments": [
+            {
+              "name": "url",
+              "description": "The URL to navigate to"
+            }
+          ]
         },
         {
           "name": "browser_navigate_back",
@@ -369,47 +719,221 @@
         },
         {
           "name": "browser_network_requests",
-          "description": "Returns a numbered list of network requests since loading the page. Use browser_network_request with the number to get full details."
+          "description": "Returns a numbered list of network requests since loading the page. Use browser_network_request with the number to get full details.",
+          "arguments": [
+            {
+              "name": "filename",
+              "description": "Filename to save the network requests to. If not provided, requests are returned as text."
+            },
+            {
+              "name": "filter",
+              "description": "Only return requests whose URL matches this regexp (e.g. \"/api/.*user\")."
+            },
+            {
+              "name": "static",
+              "description": "Whether to include successful static resources like images, fonts, scripts, etc. Defaults to false."
+            }
+          ]
         },
         {
           "name": "browser_network_request",
-          "description": "Returns full details (headers and body) of a single network request, or a single part if `part` is set. Use the number from browser_network_requests."
+          "description": "Returns full details (headers and body) of a single network request, or a single part if `part` is set. Use the number from browser_network_requests.",
+          "arguments": [
+            {
+              "name": "filename",
+              "description": "Filename to save the result to. If not provided, output is returned as text."
+            },
+            {
+              "name": "index",
+              "description": "1-based index of the request, as printed by browser_network_requests."
+            },
+            {
+              "name": "part",
+              "description": "Return only this part of the request. Omit to return full details."
+            }
+          ]
         },
         {
           "name": "browser_run_code_unsafe",
-          "description": "Run a Playwright code snippet. Unsafe: executes arbitrary JavaScript in the Playwright server process and is RCE-equivalent."
+          "description": "Run a Playwright code snippet. Unsafe: executes arbitrary JavaScript in the Playwright server process and is RCE-equivalent.",
+          "arguments": [
+            {
+              "name": "code",
+              "description": "A JavaScript function containing Playwright code to execute. It will be invoked with a single argument, page, which you can use for any page interaction. For example: `async (page) => { await page.getByRole('button', { name: 'Submit' }).click(); return await page.title(); }`"
+            },
+            {
+              "name": "filename",
+              "description": "Load code from the specified file. If both code and filename are provided, code will be ignored."
+            }
+          ]
         },
         {
           "name": "browser_take_screenshot",
-          "description": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions."
+          "description": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
+          "arguments": [
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "filename",
+              "description": "File name to save the screenshot to. Defaults to `page-{timestamp}.{png|jpeg|webp}` if not specified. Prefer relative file names to stay within the output directory."
+            },
+            {
+              "name": "fullPage",
+              "description": "When true, takes a screenshot of the full scrollable page, instead of the currently visible viewport. Cannot be used with element screenshots."
+            },
+            {
+              "name": "scale",
+              "description": "Image resolution scale. \"css\" produces a screenshot sized in CSS pixels (smaller, consistent across devices). \"device\" produces a high-resolution screenshot using device pixels (larger, accounts for the device pixel ratio). Default is css."
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            },
+            {
+              "name": "type",
+              "description": "Image format for the screenshot. If unset, inferred from the filename extension, otherwise png."
+            }
+          ]
         },
         {
           "name": "browser_snapshot",
-          "description": "Capture accessibility snapshot of the current page, this is better than screenshot"
+          "description": "Capture accessibility snapshot of the current page, this is better than screenshot",
+          "arguments": [
+            {
+              "name": "boxes",
+              "description": "Include each element's bounding box as [box=x,y,width,height] in the snapshot. Coordinates are viewport-relative, in CSS pixels (Element.getBoundingClientRect)"
+            },
+            {
+              "name": "depth",
+              "description": "Limit the depth of the snapshot tree"
+            },
+            {
+              "name": "filename",
+              "description": "Save snapshot to markdown file instead of returning it in the response."
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_click",
-          "description": "Perform click on a web page"
+          "description": "Perform click on a web page",
+          "arguments": [
+            {
+              "name": "button",
+              "description": "Button to click, defaults to left"
+            },
+            {
+              "name": "doubleClick",
+              "description": "Whether to perform a double click instead of a single click"
+            },
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "modifiers",
+              "description": "Modifier keys to press"
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_drag",
-          "description": "Perform drag and drop between two elements"
+          "description": "Perform drag and drop between two elements",
+          "arguments": [
+            {
+              "name": "endElement",
+              "description": "Human-readable target element description used to obtain the permission to interact with the element"
+            },
+            {
+              "name": "endTarget",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            },
+            {
+              "name": "startElement",
+              "description": "Human-readable source element description used to obtain the permission to interact with the element"
+            },
+            {
+              "name": "startTarget",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_hover",
-          "description": "Hover over element on page"
+          "description": "Hover over element on page",
+          "arguments": [
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            }
+          ]
         },
         {
           "name": "browser_select_option",
-          "description": "Select an option in a dropdown"
+          "description": "Select an option in a dropdown",
+          "arguments": [
+            {
+              "name": "element",
+              "description": "Human-readable element description used to obtain permission to interact with the element"
+            },
+            {
+              "name": "target",
+              "description": "Exact target element reference from the page snapshot, or a unique element selector"
+            },
+            {
+              "name": "values",
+              "description": "Array of values to select in the dropdown. This can be a single value or multiple values."
+            }
+          ]
         },
         {
           "name": "browser_tabs",
-          "description": "List, create, close, or select a browser tab."
+          "description": "List, create, close, or select a browser tab.",
+          "arguments": [
+            {
+              "name": "action",
+              "description": "Operation to perform"
+            },
+            {
+              "name": "index",
+              "description": "Tab index, used for close/select. If omitted for close, current tab is closed."
+            },
+            {
+              "name": "url",
+              "description": "URL to navigate to in the new tab, used for new."
+            }
+          ]
         },
         {
           "name": "browser_wait_for",
-          "description": "Wait for text to appear or disappear or a specified time to pass"
+          "description": "Wait for text to appear or disappear or a specified time to pass",
+          "arguments": [
+            {
+              "name": "text",
+              "description": "The text to wait for"
+            },
+            {
+              "name": "textGone",
+              "description": "The text to wait for to disappear"
+            },
+            {
+              "name": "time",
+              "description": "The time to wait in seconds"
+            }
+          ]
         }
       ],
       "channels_absent": {
@@ -417,8 +941,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 1644,
-      "surface_chars": 1644
+      "chars": 7103,
+      "surface_chars": 7103
     }
   }
 }

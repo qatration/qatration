@@ -154,6 +154,32 @@ def list_tools(argv, timeout=180, cwd=None):
     return found["tools"], ""
 
 
+def parameter_text(item):
+    """Every description inside one item's argument schema, as one string.
+
+    THE SCHEMA IS NOT PLUMBING. `inputSchema.properties.<arg>.description` is written by
+    the same third party, arrives in the same context, and is read by the same model as
+    the sentence above it — and on `@playwright/mcp` it is 5,458 characters against the
+    1,644 in the tool descriptions. A count that skips it is counting a quarter of what
+    that server contributes.
+
+    Two shapes, because the protocol has two. A tool carries a JSON Schema under
+    `inputSchema`; a prompt carries a LIST under `arguments`, each with its own
+    description. Reading only the first is how this would come back right for tools and
+    silently zero for prompts.
+    """
+    out = []
+    schema = item.get("inputSchema")
+    if isinstance(schema, dict):
+        for _n, spec in sorted((schema.get("properties") or {}).items()):
+            if isinstance(spec, dict) and spec.get("description"):
+                out.append(spec["description"])
+    for arg in (item.get("arguments") or []):
+        if isinstance(arg, dict) and arg.get("description"):
+            out.append(arg["description"])
+    return NEWLINE.join(out)
+
+
 def instruction_text(tools):
     """Everything a server contributes to the model's instruction context, as one string.
 
@@ -161,7 +187,9 @@ def instruction_text(tools):
     else wrote that the model will read as instructions, and it is invisible: a server with
     one tool can contribute more of it than a server with twenty-four.
     """
-    return "\n".join((t.get("description") or "") for t in tools)
+    return NEWLINE.join(
+        NEWLINE.join(x for x in ((t.get("description") or ""), parameter_text(t)) if x)
+        for t in tools)
 
 
 def surface_text(found):
@@ -215,7 +243,10 @@ def compare(before, after):
         # committed by the comparison. Keys are qualified by channel because a tool and a
         # prompt may share a name and are not the same item.
         def _flat(rec):
-            return {"%s/%s" % (_c, _x.get("name") or ""): _x.get("description") or ""
+            # THROUGH `instruction_text`, so what is compared is exactly what was counted.
+            # Comparing `description` alone left a poisoned PARAMETER description invisible,
+            # and on one of these servers the parameter text is three times the rest.
+            return {"%s/%s" % (_c, _x.get("name") or ""): instruction_text([_x])
                     for _c, _m, _k in CHANNELS
                     for _x in (rec.get(_c) or [])}
 
