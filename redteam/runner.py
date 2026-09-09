@@ -53,7 +53,9 @@ class RateLimitWall(object):
 
     def saw(self, probes):
         probes = [p for p in (probes or []) if p is not None]
-        if probes and all(str(getattr(p, "error", "") or "").startswith("RateLimited")
+        # THROUGH THE CONSTANT `targets_http` writes, not a second spelling of it.
+        from signing import RATE_LIMITED as _RL
+        if probes and all(str(getattr(p, "error", "") or "").startswith(_RL)
                           for p in probes):
             self.streak += 1
         else:
@@ -107,7 +109,8 @@ def _resilient_send(fn, attack_id):
         # endpoint asked for, and a 429 with no `Retry-After` still gets a small one,
         # because the header being absent does not mean the limit is not there.
         _wait = getattr(probe, "retry_after", None)
-        if _wait is None and str(probe.error or "").startswith("RateLimited"):
+        from signing import RATE_LIMITED as _RL2
+        if _wait is None and str(probe.error or "").startswith(_RL2):
             _wait = 1.0
         if _wait is not None and _wait > MAX_BACKOFF:
             print(f"  ! {attack_id}: {probe.error} — asked for {_wait:g}s, longer than "

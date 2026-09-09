@@ -337,6 +337,30 @@ def main():
     check("...and an ordinary error is not the target asking", _w5.reason == "",
           _w5.reason)
 
+    # --- AND THE CLOSING LINE IS WHERE IT HAS TO ARRIVE -----------------------------
+    #
+    # `closing_line`'s own docstring states the rule: a caveat that lives anywhere except
+    # beside the number it qualifies has not been delivered. `signing.expired_credential`
+    # composes the strongest sentence in this package — a credential accepted earlier in
+    # the run and rejected later means everything after that point was not measured — and
+    # it went into each affected probe's `error` field and nowhere else. This line counted
+    # those rows under `%d more errored and were not scored`.
+    from run_redteam import closing_line as _cl_c
+    _why = "11 of them stopped at the credential, not at the target."
+    _mid = _cl_c(3, 45, 11, why_errored=_why)
+    check("a run that lost rows to a credential says so beside the count",
+          _why in _mid, _mid)
+    check("...and still reports what it did measure",
+          "3/34 attacks breached" in _mid, _mid)
+    _all = _cl_c(0, 45, 45, why_errored=_why)
+    check("...and so does a run where nothing was measured at all",
+          "NOTHING MEASURED" in _all and _why in _all, _all)
+    # NOT WHERE THERE IS NOTHING TO QUALIFY. A run with no errored rows must not carry a
+    # sentence about rows it does not have.
+    check("a clean run carries no credential caveat",
+          _why not in _cl_c(2, 45, 0, why_errored=_why),
+          _cl_c(2, 45, 0, why_errored=_why))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

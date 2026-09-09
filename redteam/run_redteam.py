@@ -119,7 +119,7 @@ def load_target_or_explain(cfg, config_path, was_default):
         raise SystemExit("\n".join(lines))
 
 
-def closing_line(broke, attacks_n, errored, stopped="", trials=None):
+def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored=""):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -154,6 +154,15 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None):
     bot that held once may break on the second ask, and "0 breached" is the reading somebody
     stops at.
 
+    AND WHY THEY ERRORED, WHERE THE ENGINE KNOWS. `signing.expired_credential` composes
+    the strongest sentence in this package — a credential accepted earlier in the run and
+    rejected later means everything after that point was not measured — and it went into
+    the `error` field of each affected probe and nowhere else. This line counted those
+    rows under `%d more errored and were not scored`: true, and silent about the one
+    thing that decides whether the rest of the run is evidence. `signing`'s own opening
+    paragraph is the argument: a run of 403s is indistinguishable, in a report, from a
+    deployment that refused every attack.
+
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
     scored = attacks_n - errored
@@ -166,12 +175,14 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None):
                     "of %d attacks. This is not 0 breaches, it is no measurement."
                     % (stopped, attacks_n))
         return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
-                "0 breaches, it is no measurement." % (errored, attacks_n))
+                "0 breaches, it is no measurement.%s"
+                % (errored, attacks_n, (" " + why_errored) if why_errored else ""))
     _once = (" Each was sent once (--trials 1), which cannot tell a reliable break from a "
              "lucky one, or a defence from a bot that would have broken on the second ask."
              if trials == 1 and scored else "")
-    return ("%d/%d attacks breached the target (controls excluded)%s%s"
-            % (broke, scored, ("; " + _rest) if _rest else ".", _once))
+    return ("%d/%d attacks breached the target (controls excluded)%s%s%s"
+            % (broke, scored, ("; " + _rest) if _rest else ".", _once,
+               (" " + why_errored) if why_errored and errored else ""))
 
 
 def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
@@ -1243,8 +1254,14 @@ def main():
     # the reader looks first. `exhausted` says the same thing about OUR budget; this says it
     # about theirs.
     _budget_note = _budget_note or _rl_stopped
+    # THE REASON, FROM THE ROWS THIS COUNT CAME FROM. Every trial's error is already in
+    # `results`; the one kind that says `the rest of this run is not evidence` was
+    # written by `signing` and read by nobody.
+    from signing import credential_note as _cred_note
+    _why_err = _cred_note([(_t.get("probe") or {}).get("error")
+                           for r in results for _t in (r.get("trials") or [])])
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
-                              trials=trials))
+                              trials=trials, why_errored=_why_err))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it

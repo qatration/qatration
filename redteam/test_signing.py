@@ -224,6 +224,34 @@ except SystemExit as e:
     check("a credential variable the config did not declare is refused",
           "does not declare" in str(e), str(e))
 
+# --- THE CAVEAT THAT WAS WRITTEN AND NEVER DELIVERED ---------------------------------
+#
+# `expired_credential` composes the strongest sentence in this file — a credential
+# accepted earlier in a run and rejected later means everything after that point was not
+# measured — and the only place it went was the `error` field of each affected probe.
+# The run's closing line counted those rows under `%d more errored and were not scored`:
+# true, and silent about the one thing that decides whether the rest is evidence at all.
+from signing import credential_note as _cn, REJECTED as _REJ
+check("a run with no credential trouble says nothing about credentials",
+      _cn(["Timeout: x", None, ""]) == "", _cn(["Timeout: x"]))
+check("...and one that had it says so, with how many rows it cost",
+      "2 of them stopped at the credential" in _cn(
+          ["%s: gone" % _REJ, "Timeout", "%s: gone" % _REJ]),
+      _cn(["%s: gone" % _REJ]))
+check("...and tells the reader not to read the rest as a defence",
+      "as a defence" in _cn(["%s: gone" % _REJ]), _cn(["%s: gone" % _REJ]))
+
+# THE PREFIX IS A CONTRACT BETWEEN TWO MODULES. `targets_http` writes it and `runner` and
+# `run_redteam` read it, and it was spelled separately in each — a reader that stops
+# recognising what the writer writes is silent in exactly the way this note prevents.
+import targets_http as _th_s, runner as _rn_s, io as _io_s
+_src = (_io_s.open(_th_s.__file__, encoding="utf-8").read()
+        + _io_s.open(_rn_s.__file__, encoding="utf-8").read())
+check("neither side spells the credential prefix for itself",
+      '"CredentialRejected' not in _src, "CredentialRejected")
+check("...nor the rate-limit one",
+      '"RateLimited' not in _src, "RateLimited")
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

@@ -856,11 +856,15 @@ class HttpConfiguredTarget(Target):
                 # see the error STRING. A number travels better than prose: attached
                 # here rather than parsed back out of a message there.
                 if e.code in (429, 503):
+                    # Local, like the `signing` import below: this module is loaded
+                    # by the worker before the package is set up.
+                    import signing as _signing
                     _wait = _retry_after(e.headers)
                     _p = Probe(
                         prompt=prompt, output="",
-                        error=("RateLimited: %s%s. The endpoint asked for a pause %s"
-                               % (type(e).__name__, detail,
+                        error=("%s: %s%s. The endpoint asked for a pause %s"
+                               % (_signing.RATE_LIMITED,
+                                  type(e).__name__, detail,
                                   "of %gs" % _wait if _wait
                                   else "and named no interval")),
                         seconds=round(time.time() - t0, 1))
@@ -873,7 +877,7 @@ class HttpConfiguredTarget(Target):
                 note = signing.expired_credential(e.code, self._seen_success)
                 if note:
                     return Probe(prompt=prompt, output="",
-                                 error="CredentialRejected: %s" % note,
+                                 error="%s: %s" % (signing.REJECTED, note),
                                  seconds=round(time.time() - t0, 1))
             return Probe(prompt=prompt, output="", error=f"{type(e).__name__}{detail}: {e}",
                          seconds=round(time.time() - t0, 1))

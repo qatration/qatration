@@ -127,6 +127,42 @@ def authorization(method, url, headers, payload, service, region,
     return out
 
 
+# THE PREFIX IS A CONTRACT BETWEEN TWO MODULES. `targets_http` writes it onto the probe
+# and a reader has to recognise it; spelling it twice is how the reader stops recognising
+# what the writer writes. `RateLimited` next to it is the same shape and already spelled
+# in two files, so it moves here with this one.
+REJECTED = "CredentialRejected"
+RATE_LIMITED = "RateLimited"
+
+
+def credential_note(errors):
+    """-> what a run has to say once, at the end, when its credential stopped working.
+
+    THE CAVEAT WAS WRITTEN AND NEVER DELIVERED. `expired_credential` composes the
+    strongest sentence in this file — `everything after this point was NOT measured` and
+    `do not read the rest of this run as a defence` — and the only place it went was the
+    `error` field of each affected probe. The closing line counted those rows under
+    `%d more errored and were not scored`, which is true and says nothing about WHY, and
+    `closing_line`'s own docstring states the rule this broke: a caveat that lives
+    anywhere except beside the number it qualifies has not been delivered.
+
+    This module's own opening paragraph is the argument: a wrong or expired credential is
+    `a 403 on every single request, and a run of 403s is a run where nothing got through
+    — which is indistinguishable, in a report, from a deployment that refused every
+    attack. The most flattering possible result.`
+
+    Counted, not merely detected: how many rows were lost is the difference between a
+    token that died on the last probe and one that died a third of the way in.
+    """
+    n = sum(1 for e in errors if str(e or "").startswith(REJECTED))
+    if not n:
+        return ""
+    return ("%d of them stopped at the credential, not at the target: it was accepted "
+            "earlier in this run and rejected later, so those attacks were never "
+            "delivered and nothing here says the target refused them. Mint a fresh one "
+            "and re-run before reading any of this as a defence." % n)
+
+
 def expired_credential(status, seen_success):
     """Is this 401/403 a credential that ran out, rather than a target that refused?
 
