@@ -248,6 +248,18 @@ def summarise(rec):
             f"{str(rec.get('target','?')) + '  ':<26}"
             f"scope={_scope(rec):<6}auth={auth:<11}{cost}")
 
+def _say_torn(torn, args):
+    """Which records could not be read, and what a filter cannot claim about them."""
+    if not torn:
+        return
+    from workspace import named_or_more
+    print("\n%d record(s) could not be read: %s"
+          % (len(torn), named_or_more([str(r.get("run_id")) for r in torn], 6)))
+    if args.target or args.state:
+        print("    A record with no readable target or state matches no filter, so "
+              "nothing above rules out that one of these is the run you asked for.")
+
+
 def main(argv=None):
     """Every run in this workspace: what ran, on whose authority, and how it ended.
 
@@ -286,12 +298,25 @@ def main(argv=None):
         print(f"no run records in {OUT}. A record is written when `qatration run` starts, "
               f"so an empty list here means nothing has been run in this workspace.")
         return 3
+    # A RECORD NOBODY COULD READ HAS NO TARGET AND NO STATE, so every filter drops it —
+    # and `--target mybot` then answers about mybot over a directory holding a record
+    # that may well have been mybot's. This command's whole subject is `what ran, against
+    # what, on whose authority`, and a filtered view that silently narrows the evidence
+    # is the same defect its own `load` refuses one function above: unreadable is not
+    # absent.
+    _torn = [r for r in rows if r.get("state") == "unreadable"]
     picked = [r for r in rows
              if (not args.target or r.get("target") == args.target)
              and (not args.state or r.get("state") == args.state)]
     if not picked:
-        print(f"{len(rows)} run(s) recorded, none matching. "
-              f"targets: {', '.join(sorted({str(r.get('target')) for r in rows}))}")
+        # NAMED, not `None`. A record with no readable target used to be printed as the
+        # literal string `None` in the list of targets this workspace holds.
+        _named = sorted({str(r.get("target")) for r in rows if r.get("target")})
+        print("%d run(s) recorded, none matching.%s"
+              % (len(rows),
+                 (" targets: " + ", ".join(_named)) if _named else
+                 " none of them names a target."))
+        _say_torn(_torn, args)
         return 3
     shown = picked if args.limit <= 0 else picked[:args.limit]
     for rec in shown:
@@ -311,11 +336,11 @@ def main(argv=None):
         for rec in open_:
             print(f"  {rec.get('run_id')}  {rec.get('target')}  started {rec.get('started_at')}")
             print(f"    {open_verdict(rec)}")
-    _unreadable = [r for r in picked if r.get("state") == "unreadable"]
-    if _unreadable:
-        # Unreadable is not absent, and saying which is the whole discipline of this repo.
-        print(f"\n{len(_unreadable)} record(s) could not be read: "
-              f"{', '.join(str(r.get('run_id')) for r in _unreadable)}")
+    # OVER EVERY RECORD, not over the ones that survived the filter. A record that could
+    # not be read has no target to match on, so it never reaches `picked`, and reporting
+    # from there meant the one view where it matters most — somebody asking about one
+    # target — was the one view that never mentioned it.
+    _say_torn(_torn, args)
     return 0
 
 

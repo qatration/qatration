@@ -369,6 +369,68 @@ def main():
             check("...and is used by every refusal that used to leak", len(_refuse) >= 5,
                   "%d call(s)" % len(_refuse))
 
+    # --- A FILTER CANNOT SAY AN UNREADABLE RECORD IS NOT ONE OF YOURS ---------------
+    #
+    # `load` returns `state: unreadable` with no target rather than None, because
+    # unreadable is not absent. `main` then filtered on `target` and `state`, which such
+    # a record can never match, and computed its `could not be read` line from what
+    # SURVIVED the filter — so the one view where it matters most, somebody asking about
+    # one target, was the one view that never mentioned it. This command's whole subject
+    # is what ran, against what, on whose authority.
+    import tempfile as _tf_r, shutil as _sh_r, contextlib as _cx_r, io as _io_r
+    import runs as _rn, workspace as _ws_r
+    _w = _tf_r.mkdtemp()
+    try:
+        json.dump({"run_id": "r1", "target": "alpha", "state": "finished",
+                   "started_at": "2026-09-09 10:00:00", "spent": {}},
+                  open(os.path.join(_w, "run_r1.json"), "w", encoding="utf-8"))
+        open(os.path.join(_w, "run_r2.json"), "w",
+             encoding="utf-8").write('{"run_id": "r2", ')
+        _real_o = _ws_r.OUT
+        _ws_r.OUT = _w
+        try:
+            _b = _io_r.StringIO()
+            with _cx_r.redirect_stdout(_b):
+                _rc = _rn.main(["--target", "alpha"])
+            _said = _b.getvalue()
+            _b2 = _io_r.StringIO()
+            with _cx_r.redirect_stdout(_b2):
+                _rn.main([])
+            _all = _b2.getvalue()
+        finally:
+            _ws_r.OUT = _real_o
+        check("a filtered view still names the records it could not read",
+              "r2" in _said, _said)
+        check("...and says a filter cannot rule them out",
+              "rules out" in _said, _said)
+        check("...while the unfiltered view names them without that caveat",
+              "r2" in _all and "rules out" not in _all, _all)
+        check("...and the run that WAS asked for is still listed",
+              "r1" in _said and _rc == 0, "%r %s" % (_rc, _said))
+        # AND `None` IS NOT A TARGET NAME. With only an unreadable record in the
+        # workspace, the `none matching` line listed the literal string `None` among the
+        # targets this workspace holds.
+        _w2 = _tf_r.mkdtemp()
+        try:
+            open(os.path.join(_w2, "run_r3.json"), "w",
+                 encoding="utf-8").write('{"run_id": "r3", ')
+            _ws_r.OUT = _w2
+            _b3 = _io_r.StringIO()
+            with _cx_r.redirect_stdout(_b3):
+                _rc3 = _rn.main(["--target", "alpha"])
+            _said3 = _b3.getvalue()
+        finally:
+            _ws_r.OUT = _real_o
+            _sh_r.rmtree(_w2, ignore_errors=True)
+        check("a workspace whose only record is unreadable names no target called None",
+              "None" not in _said3, _said3)
+        check("...and says so rather than reporting an empty list of targets",
+              "none of them names a target" in _said3 and _rc3 == 3,
+              "%r %s" % (_rc3, _said3))
+        check("...and still names the record itself", "r3" in _said3, _said3)
+    finally:
+        _sh_r.rmtree(_w, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
