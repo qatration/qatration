@@ -49,6 +49,12 @@ def _await(proc, want_id, deadline):
     Servers log to stdout. A reader that treats the first line as its answer gets a banner,
     and a reader that raises on the first unparseable line reports a working server as a
     broken one -- so lines that are not JSON, and JSON that is not this id, are skipped.
+
+    TWO CORRECT GREENS AND A SLOW SWEEP, recorded so the next one does not re-derive them.
+    Deleting either blank-line guard is an EQUIVALENT mutation: an empty string reaches
+    `json.loads`, raises ValueError and lands in the same `continue`. And deleting the id
+    match makes every listing block until its deadline rather than fail, so a guard sweep
+    over this module pays a full timeout per case instead of a run.
     """
     while time.time() < deadline:
         line = proc.stdout.readline()
