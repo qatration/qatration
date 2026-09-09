@@ -1027,6 +1027,50 @@ def main():
     check("a row that was not re-tested is excluded out loud, not silently",
           code == 0 and lines and "not re-tested" in lines[0], str(lines))
 
+    # --- ONE REASON STRING COVERED THREE DIFFERENT FACTS ----------------------------
+    #
+    # A target swept once, a target whose stored timeline is here and unreadable, and a
+    # target with no timeline at all all produced `need two runs to compare` — and
+    # `compare_targets` rendered every one of them as `first run`, which is a claim about
+    # how many times somebody's deployment has been tested, made where nothing could be
+    # read. The torn case costs most: the history is long, the file is damaged, and the
+    # fleet page says the target is new.
+    _d2 = tempfile.mkdtemp()
+    _real_h = H.HIST
+    H.HIST = _d2
+    try:
+        _no = H.diff("ghost")
+        check("a target with no timeline says there are no runs",
+              _no.get("runs") == 0 and "no runs recorded" in _no.get("reason", ""),
+              str(_no))
+        with open(os.path.join(_d2, "onerun.jsonl"), "w", encoding="utf-8") as _f2:
+            _f2.write(json.dumps({"run": "2026-09-01 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+        _o = H.diff("onerun")
+        check("...while one sweep is a first run, which is the sentence that was right",
+              _o.get("runs") == 1 and "need two runs" in _o.get("reason", ""), str(_o))
+        with open(os.path.join(_d2, "torn.jsonl"), "w", encoding="utf-8") as _f3:
+            _f3.write('{"run": ' + chr(10) + '{"rows": ' + chr(10))
+        _b = H.diff("torn")
+        check("...and a timeline nothing could be read from is neither",
+              _b.get("runs") == 0 and "could be read" in _b.get("reason", ""), str(_b))
+        check("...carrying how many lines were lost, so a page can say it",
+              _b.get("torn") == 2, str(_b.get("torn")))
+        # AND THE SAME FIELD ON THE FULL RETURN, so a caller does not have to read prose
+        # to learn the timeline is damaged.
+        with open(os.path.join(_d2, "two.jsonl"), "w", encoding="utf-8") as _f4:
+            _f4.write(json.dumps({"run": "2026-09-01 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+            _f4.write('{"run": ' + chr(10))
+            _f4.write(json.dumps({"run": "2026-09-02 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+        _t2 = H.diff("two")
+        check("a comparison that CAN be made still reports its damaged lines",
+              "reason" not in _t2 and _t2.get("torn") == 1, str(_t2)[:200])
+    finally:
+        H.HIST = _real_h
+        shutil.rmtree(_d2, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

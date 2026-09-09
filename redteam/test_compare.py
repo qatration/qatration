@@ -177,6 +177,62 @@ def main():
     # `profiles` all joined the CLI without joining that list, and three of them shipped
     # with the very defect this checked for while it stayed green. A copy is deleted, not
     # synced; what survives is the one that covers a command by virtue of it existing.
+    # --- THE MOVEMENT COLUMN DROPPED THE TARGETS IT COULD NOT COMPARE --------------
+    #
+    # `movement()` returned only the targets whose diff had no `reason`, and the cell for
+    # a target it did not return reads `first run`. So `first run` was printed for a
+    # target whose timeline could not be read, for one with no timeline at all, and —
+    # when the `history` import failed — for every target on the page at once. It keeps
+    # them now, reason and all, and the renderer decides what to say.
+    import compare_targets as _ct2, tempfile as _tf2, shutil as _sh2, json as _js2
+    import pathlib as _pl2
+    _w2 = _tf2.mkdtemp()
+    os.makedirs(os.path.join(_w2, "history"))
+    with open(os.path.join(_w2, "history", "onerun.jsonl"), "w",
+              encoding="utf-8") as _f2:
+        _f2.write(_js2.dumps({"run": "2026-09-01 10:00", "rows": {},
+                              "attacks": 0}) + chr(10))
+    with open(os.path.join(_w2, "history", "torn.jsonl"), "w",
+              encoding="utf-8") as _f3:
+        _f3.write('{"run": ' + chr(10))
+    # BOTH ROOTS. `movement` globs its own OUT_DIR and hands the target NAME to
+    # `history.diff`, which opens `history.HIST`. In a real workspace both come from
+    # `workspace.OUT` and agree; a fixture that moves only one is reading an empty
+    # directory and would pass on the wrong evidence.
+    import history as _h2
+    _real2, _realh2 = _ct2.OUT_DIR, _h2.HIST
+    _ct2.OUT_DIR = _pl2.Path(_w2)
+    _h2.HIST = os.path.join(_w2, "history")
+    try:
+        _mv, _why2 = _ct2.movement()
+    finally:
+        _ct2.OUT_DIR, _h2.HIST = _real2, _realh2
+        _sh2.rmtree(_w2, ignore_errors=True)
+    check("a target the comparison cannot make is kept, not dropped",
+          sorted(_mv) == ["onerun", "torn"], sorted(_mv))
+    check("...each carrying why, so the cell is not left to guess",
+          "need two runs" in _mv["onerun"].get("reason", "")
+          and "could be read" in _mv["torn"].get("reason", ""),
+          str(_mv)[:200])
+    check("...and the column reports separately that it could be computed at all",
+          _why2 == "", _why2)
+    # AND THE WHOLE-COLUMN FAILURE, which no workspace can produce on its own: the
+    # `except` around the import was reachable only by breaking the import. Left
+    # unexercised it is a branch that returns an empty dict, and an empty dict is what
+    # made every target on the page read `first run`.
+    import types as _ty2
+    _saved2 = sys.modules.get("history")
+    sys.modules["history"] = _ty2.ModuleType("history")      # no `diff` in it
+    try:
+        _mv3, _why3 = _ct2.movement()
+    finally:
+        if _saved2 is not None:
+            sys.modules["history"] = _saved2
+        else:
+            sys.modules.pop("history", None)
+    check("a column that could not be computed says so instead of coming back empty",
+          _mv3 == {} and "could not be read" in _why3, "%r %r" % (_mv3, _why3))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

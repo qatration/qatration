@@ -815,14 +815,27 @@ def _timeline():
         from history import first_seen, diff, reopened
     except Exception:
         return {}, {}, {}
-    ages, back, again = {}, {}, {}
+    # `back` HOLDS A SET PER TARGET AND AN EMPTY SET MEANT TWO THINGS: nothing came back,
+    # and no comparison was possible. A target left out entirely is the second, so the
+    # ones that could not be compared are simply not keys here — which is what `back.get`
+    # already distinguishes, and what filing them as `set()` destroyed.
+    ages, back, again, torn = {}, {}, {}, []
     for fp in glob.glob(str(OUT_DIR / "history" / "*.jsonl")):
         t = os.path.basename(fp)[:-len(".jsonl")]
         ages[t] = first_seen(t)
         again[t] = reopened(t)
         d = diff(t)
-        back[t] = set(d.get("regressed") or []) if "reason" not in d else set()
-    return ages, back, again
+        # A DAMAGED TIMELINE IS AN UNREADABLE ARTIFACT and this page already has the bar
+        # that names those. Without it the only sign was that `RETURNED after a fix`
+        # never appeared for that target — the worst badge on the page, structurally
+        # unreachable, and nothing saying so.
+        if d.get("torn"):
+            torn.append((os.path.join("history", os.path.basename(fp)),
+                         "%d line(s) unreadable, so this target's history is incomplete"
+                         % d["torn"]))
+        if "reason" not in d:
+            back[t] = set(d.get("regressed") or [])
+    return ages, back, again, torn
 
 
 def _unresolved_paths():
@@ -1335,7 +1348,9 @@ def main():
         return 3
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
-    ages, regressed, came_back = _timeline()
+    ages, regressed, came_back, _torn_hist = _timeline()
+    if _torn_hist:
+        unread_bar = _unread_html(list(unreadable) + _torn_hist, "this report")
     unseen, _seen_n, _blind_n = _unobservable()
     # A DECLARED CHANNEL THAT NEVER CARRIED ANYTHING. Kept separate from `unseen`, which is
     # about calls whose CONTENTS no detector could read; this is about a channel that was

@@ -255,7 +255,16 @@ def diff(target):
     torn = []
     runs = load(target, torn)
     if len(runs) < 2:
-        return {"runs": len(runs), "reason": "need two runs to compare"}
+        # WHICH OF THE THREE. One reason string covered `this target has been swept once`,
+        # `this target's timeline is here and unreadable` and `there is no timeline`, and
+        # the fleet page rendered all three as `first run` — a claim about how many times
+        # somebody's deployment has been tested, made where nothing could be read. A torn
+        # timeline is the case that costs most: the history is long, the file is corrupt,
+        # and the page says the target is new.
+        _why = ("need two runs to compare" if len(runs) == 1
+                else "no line of this target's stored timeline could be read" if torn
+                else "no runs recorded for this target")
+        return {"runs": len(runs), "reason": _why, "torn": len(torn)}
     prev, cur = runs[-2], runs[-1]
 
 
@@ -385,10 +394,14 @@ def diff(target):
         confounds.append(f"{len(assumed)} row(s) the previous run never sent: "
                          f"{', '.join(assumed[:4])}{' …' if len(assumed) > 4 else ''} — "
                          f"broken now, and nothing measured them clean in between")
+    # `torn` AS A NUMBER, not only inside an English sentence in `confounds`. A caller that
+    # wants to say `this target's stored timeline is damaged` on a page cannot get that out
+    # of prose, and the short return above carries the same field, so both shapes answer
+    # the question the same way.
     return {"runs": len(runs), "prev": prev["run"], "cur": cur["run"],
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
             "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
-            "confounds": confounds}
+            "torn": len(torn), "confounds": confounds}
 
 
 def _streaks(target):
@@ -551,7 +564,12 @@ def main():
                 print(f"  {r['run']}  {r['broke']:>3}/{r['attacks']} broken  "
                       f"{r.get('model') or ''}{mark}")
         if "reason" in d:
-            print(f"  {d['reason']} — a single run is a snapshot, not a trend")
+            _tail = (" — a single run is a snapshot, not a trend"
+                     if d.get("runs") == 1 else "")
+            print(f"  {d['reason']}{_tail}")
+            if d.get("torn"):
+                print(f"  {d['torn']} line(s) could not be read, so this is not a "
+                      f"statement about how often this target has been swept")
             continue
         for label, key in (("REGRESSED", "regressed"), ("new", "new"),
                            ("fixed", "fixed"), ("still open", "open"),

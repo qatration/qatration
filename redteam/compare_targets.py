@@ -285,17 +285,23 @@ def movement():
     finding because a fix that did not hold is the worse of the two, and merging them hides
     it.
     """
+    # -> (target -> diff or the reason there is none, why the whole column is missing).
+    #
+    # A TARGET WITH A REASON USED TO BE DROPPED, and the cell for a target this function
+    # never returned reads `first run`. So `first run` was printed for a target whose
+    # timeline could not be read, for one with no timeline at all, and — when this import
+    # failed — for every target on the page at once. The page cannot tell an absence from
+    # a measurement it never made unless this function keeps them apart.
     try:
         from history import diff
-    except Exception:
-        return {}
+    except Exception as _e:
+        return {}, ("the run history could not be read here (%s), so this column is "
+                    "empty for every target rather than unchanged" % type(_e).__name__)
     out = {}
     for fp in glob.glob(str(OUT_DIR / "history" / "*.jsonl")):
         t = os.path.basename(fp)[:-len(".jsonl")]
-        d = diff(t)
-        if "reason" not in d:
-            out[t] = d
-    return out
+        out[t] = diff(t)
+    return out, ""
 
 
 def benign_noise():
@@ -472,7 +478,7 @@ def main():
         matrix.append((meta, by_id))
 
     noise = benign_noise()
-    moved = movement()
+    moved, _moved_why = movement()
     for r in rows:
         r["benign"] = noise.get(r["target"])
         # AND WHAT IT REFUSES WHILE NOBODY IS ATTACKING. The column beside this one says how
@@ -524,8 +530,24 @@ def main():
         # Movement, and "one run" said out loud rather than left blank — a single sweep is
         # a snapshot, and an empty cell there would read as "nothing changed".
         m = r["moved"]
-        if not m:
+        if _moved_why:
+            move_html = ("<span class='dim' title='%s'>not read</span>"
+                         % esc(_moved_why))
+        elif not m:
+            move_html = ("<span class='dim' title='no run history is stored for this "
+                         "target'>—</span>")
+        elif m.get("runs") == 1:
+            # One sweep IS a first run, and that sentence was already right. What was
+            # wrong was everything else arriving under it.
             move_html = "<span class='dim' title='only one run recorded'>first run</span>"
+        elif m.get("reason"):
+            # NOT A FIRST RUN. Zero readable runs behind a history file that exists means
+            # the timeline is damaged, and `first run` is a claim about how many times
+            # somebody's deployment has been swept.
+            _why_c = m["reason"] + (" (%d line(s) could not be read)" % m["torn"]
+                                    if m.get("torn") else "")
+            move_html = ("<span class='dim' title='%s'>not comparable</span>"
+                         % esc(_why_c))
         else:
             parts = []
             if m["regressed"]:

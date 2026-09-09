@@ -3436,6 +3436,74 @@ def main():
           "do not say" in _phrase and _odd == [], "%s / %s" % (_phrase, _odd))
 
 
+    # --- A DAMAGED TIMELINE IS AN UNREADABLE ARTIFACT ------------------------------
+    #
+    # `_timeline` filed a target whose diff carried a reason as `set()` in `back`, which
+    # is the same value as `nothing regressed`. The only consumer reads
+    # `regressed.get(t, ())`, so the two were indistinguishable there too — and the
+    # visible effect is that `RETURNED after a fix`, the worst badge on the page, is
+    # structurally unreachable for that target with nothing saying why. The uncomparable
+    # ones are simply not keys now, and a torn timeline joins the bar that already names
+    # every artifact this report could not read.
+    _tw = tempfile.mkdtemp()
+    try:
+        os.makedirs(os.path.join(_tw, "history"))
+        with open(os.path.join(_tw, "history", "dr-torn.jsonl"), "w",
+                  encoding="utf-8") as _ft:
+            _ft.write(json.dumps({"run": "2026-09-01 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+            _ft.write('{"run": ' + chr(10))
+            _ft.write(json.dumps({"run": "2026-09-02 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+        with open(os.path.join(_tw, "history", "dr-one.jsonl"), "w",
+                  encoding="utf-8") as _fo:
+            _fo.write(json.dumps({"run": "2026-09-01 10:00", "rows": {},
+                                  "attacks": 0}) + chr(10))
+        import pathlib as _plt, history as _ht
+        _real_dr, _real_ht = dr.OUT_DIR, _ht.HIST
+        dr.OUT_DIR = _plt.Path(_tw)
+        _ht.HIST = os.path.join(_tw, "history")
+        try:
+            _ages, _back, _again, _torn = dr._timeline()
+        finally:
+            dr.OUT_DIR, _ht.HIST = _real_dr, _real_ht
+        check("a target whose runs cannot be compared is not filed as nothing regressed",
+              "dr-one" not in _back, str(sorted(_back)))
+        check("...while one that CAN be compared keeps its key",
+              "dr-torn" in _back, str(sorted(_back)))
+        check("...and the damaged timeline is named as an artifact that could not be read",
+              [_n for _n, _w in _torn] == [os.path.join("history", "dr-torn.jsonl")],
+              str(_torn))
+        from workspace import unreadable_html as _uh_t
+        check("...so the bar the report already carries can say it",
+              "dr-torn.jsonl" in _uh_t(_torn, "this report"), _uh_t(_torn, "x")[:200])
+        # AND ON THE PAGE. `unread_bar` is built before `_timeline` runs, so collecting
+        # the torn file into a list is only half of it — deleting the rebuild left every
+        # check above green. Driven through `main`, which is what a reader opens.
+        with open(os.path.join(_tw, "results_dr-torn.json"), "w",
+                  encoding="utf-8") as _fr:
+            json.dump({"meta": {"target": "dr-torn", "attacks_n": 1, "trials": 1},
+                       "results": [{"attack": {"id": "a", "category": "x",
+                                                "text": "t"},
+                                    "headline": "EXPLOITED", "rate": "1/1",
+                                    "fired": ["canary_in_output"],
+                                    "trials": [{"verdict": "EXPLOITED",
+                                                "probe": {"output": "x"}}]}]}, _fr)
+        dr.OUT_DIR = _plt.Path(_tw)
+        _ht.HIST = os.path.join(_tw, "history")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                dr.main()
+            _page_t = open(os.path.join(_tw, "defense_report.html"),
+                           encoding="utf-8").read()
+        finally:
+            dr.OUT_DIR, _ht.HIST = _real_dr, _real_ht
+        check("...and the published report names it, not just the function that found it",
+              "dr-torn.jsonl" in _page_t and "could not be read" in _page_t,
+              _page_t[:200])
+    finally:
+        shutil.rmtree(_tw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
