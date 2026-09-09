@@ -163,6 +163,35 @@ def out_origin():
 OUT = out_dir()
 
 
+def model_tag(model):
+    """The suffix a `--model` run adds to its artifact names, separator included.
+
+    THE RULE THAT WRITES THE NAME BELONGS BESIDE THE RULE THAT READS IT. `is_per_model_copy`
+    below decides which files are per-model copies; this decides what makes one. They were
+    in different modules and the writing half was spelled three times: twice inside
+    `run_redteam.main`, once in `model_matrix`.
+
+    The two in `run_redteam` are a guard and the thing it guards. One computes the path
+    `refuse_to_overwrite_evidence` is asked about, before a single probe is sent; the other
+    computes the path the results are written to, at the end of the run. A guard that
+    derives its subject independently of the writer is a guard that can stop protecting it
+    without anything failing — and the answer would be a sweep quietly overwriting evidence
+    it had just promised not to touch.
+
+    The third is a cross-module contract with no test behind it: `model_matrix` reconstructs
+    the filename it expects `run_redteam` to have written, and if the two spellings drifted
+    every model would be reported as having produced nothing to compare — a matrix that
+    measured nothing, blaming the models.
+    """
+    return "_" + re.sub(r"[^A-Za-z0-9.]+", "-", model) if model else ""
+
+
+def artifact_path(out_dir, kind, target_name, model=None, ext="json"):
+    """Where one run's `<kind>_<target>[_<model>].<ext>` goes. One spelling, four callers."""
+    return os.path.join(str(out_dir), "%s_%s%s.%s"
+                        % (kind, target_name, model_tag(model), ext))
+
+
 def is_per_model_copy(path):
     """Is this a `--model` copy of a run rather than the canonical one?
 

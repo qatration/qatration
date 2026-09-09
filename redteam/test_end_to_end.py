@@ -165,6 +165,57 @@ oracle_context:
         check("the sweep runs end to end against a configured target",
               run.returncode == 0, (run.stderr or run.stdout)[-300:])
 
+        # --- AND A `--model` RUN LANDS WHERE THE MATRIX WILL LOOK FOR IT --------------
+        #
+        # The filename for a `--model` sweep was spelled three times: twice inside
+        # `run_redteam.main` — once by the overwrite guard before the first probe and once
+        # by the writer at the end — and once in `model_matrix`, which reconstructs the name
+        # it expects to find. A guard that derives its own subject can stop guarding the
+        # thing it names without anything failing, and the cross-module half had no test at
+        # all: had the two spellings drifted, every model would have been reported as
+        # having produced nothing to compare, and the matrix would have blamed the models.
+        #
+        # Driven rather than read, and compared against `workspace.artifact_path`, which is
+        # now the one place the name is made.
+        from workspace import artifact_path as _apath
+        import model_matrix as _mm
+        _model = "gpt-4o-mini"
+        _mw = tempfile.mkdtemp()
+        try:
+            _mr = subprocess.run(
+                [sys.executable, os.path.join(HERE, "run_redteam.py"),
+                 "--target-config", cfg_path, "--attacks", atk_path,
+                 "--trials", "1", "--scope", "quick", "--model", _model], timeout=300,
+                capture_output=True, text=True, env=dict(env, QATRATION_OUT=_mw),
+                cwd=os.path.dirname(HERE))
+            _want = _apath(_mw, "results", "e2e-bot", _model)
+            check("a --model sweep writes the file workspace.artifact_path names",
+                  os.path.exists(_want),
+                  "exit %d; wrote %s" % (_mr.returncode, sorted(os.listdir(_mw))))
+            # AND IT IS NOT THE CANONICAL RUN'S FILE. The whole point of the tag is that a
+            # per-model sweep sits beside the run everyone else reads rather than
+            # displacing it.
+            check("...and not on top of the canonical run for that target",
+                  not os.path.exists(_apath(_mw, "results", "e2e-bot")),
+                  str(sorted(os.listdir(_mw))))
+            # AND THE MATRIX LOOKS THERE. Same target, same model name, through the path
+            # `model_matrix` builds rather than through a copy of the rule.
+            check("...which is exactly where the matrix looks for that model's run",
+                  os.path.basename(_want) == "results_e2e-bot_%s.json" % _mm.tag(_model),
+                  os.path.basename(_want) + " vs " + _mm.tag(_model))
+            # AND IT DOES NOT JOIN THE TARGET'S TIMELINE. A per-model sweep is the same
+            # target measured with a different instrument, so an entry for it would read
+            # as a change in the bot: `qatration history` would report attacks appearing
+            # and disappearing between two runs that differ only in which model answered.
+            # Nothing asked this — forcing the branch open left every check green.
+            _hist = os.path.join(_mw, "history", "e2e-bot.jsonl")
+            check("...and a per-model run writes no entry to the target's timeline",
+                  not os.path.exists(_hist),
+                  _hist if not os.path.exists(_hist) else
+                  open(_hist, encoding="utf-8").read()[:200])
+        finally:
+            shutil.rmtree(_mw, ignore_errors=True)
+
         # THE TABLE HAS TO BE READABLE, and it stopped being so without anyone noticing. The
         # id column was `{id:<22}`, written when the longest attack name fitted; the arsenal
         # grew and 74 of 362 rows in a full generic sweep printed as

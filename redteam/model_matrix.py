@@ -31,7 +31,11 @@ PY = sys.executable
 
 
 def tag(model):
-    return re.sub(r'[^A-Za-z0-9.]+', '-', model)
+    """The bare slug. The separator and the filename live in `workspace`, with the rule
+    that decides which files this produces — see `workspace.model_tag`.
+    """
+    from workspace import model_tag as _model_tag
+    return _model_tag(model)[1:]
 
 
 def comparable(rc, path, started, exists=None, mtime=None):
@@ -185,7 +189,10 @@ def main():
             print(f"  ! {m}: no output for {_deadline}s, stopped — this row is missing "
                   f"because the model stopped answering, not because it held")
             rc = None
-        fp = os.path.join(OUT, f"results_{tname}_{tag(m)}.json")
+        # ASKED, NOT RECONSTRUCTED. This is the file `run_redteam` writes for `--model m`,
+        # and the two modules now get it from the same function.
+        from workspace import artifact_path as _artifact_path
+        fp = _artifact_path(OUT, "results", tname, m)
         # A FAILED RUN LEAVES THE PREVIOUS RUN'S FILE IN PLACE, and `os.path.exists` is true
         # for it — so the matrix would compare this model's fresh result against another
         # model's older one and present the difference as a property of the models. It would

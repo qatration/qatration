@@ -337,6 +337,35 @@ def check_every_command_refuses():
     check("no command defaults --target-config to a config of its own choosing",
           sorted(set(_picked)), [])
 
+    # --- ONE SPELLING OF A PER-MODEL ARTIFACT NAME -----------------------------------
+    #
+    # `workspace.model_tag` is the rule that MAKES a per-model copy and `is_per_model_copy`
+    # is the rule that RECOGNISES one. They have to agree over the model names people
+    # actually type, including the ones with a colon or a slash in them, or a sweep would
+    # write a file the fleet aggregates then count twice.
+    from workspace import model_tag as _mtag, artifact_path as _apath
+    _mismatch = []
+    for _m in ("gpt-4o", "llama3.1:8b", "claude-opus-4.5", "org/model v2", "a b"):
+        _fp = _apath("/tmp", "results", "bot", _m)
+        if not workspace.is_per_model_copy(_fp):
+            _mismatch.append(_m)
+    check("every per-model artifact name is recognised as one",
+          sorted(_mismatch), [])
+    check("...and a run with no model is not mistaken for one",
+          workspace.is_per_model_copy(_apath("/tmp", "results", "bot")), False)
+    check("...and the tag is empty exactly when no model was named",
+          [_mtag(None), _mtag(""), _mtag("x")], ["", "", "_x"])
+    # AND THE MODEL NAME BECOMES PART OF A FILENAME. `llama3.1:8b` and `org/model v2` are
+    # things people type; a colon is not legal in a Windows filename and a slash is a
+    # directory on every platform, so the slug is the thing standing between a model name
+    # and a sweep that cannot write its own results.
+    import re as _re_m
+    _unsafe = [_m for _m in ("gpt-4o", "llama3.1:8b", "org/model v2", "a b",
+                             "q?z", "p*d", "a<b>c")
+               if not _re_m.match(r"^_[A-Za-z0-9.-]+$", _mtag(_m))]
+    check("a model name becomes a tag that is legal in a filename",
+          sorted(_unsafe), [])
+
     # AND THE SAME QUESTION ASKED OF THE OUTPUT, because a default can also arrive as a
     # fallback further down. Every command typed bare, in an empty workspace: none of them
     # may answer about a bot that ships in this package. Nothing here reaches a network
@@ -1734,6 +1763,50 @@ def check_evidence_guard():
             want("...and the file on disk is untouched",
                  io.open(os.path.join(d, "results_httpbot.json"), encoding="utf-8").read()
                  == '{"rows": [], "results": []}')
+
+    # AND THE PER-MODEL COPY IS EVIDENCE TOO. The guard is asked about a path built from
+    # the model tag, and a mutation that dropped the tag from that path stayed green:
+    # nothing asked whether a `--model` sweep is stopped from replacing committed
+    # per-model evidence. That is the artifact family `qatration matrix` reads, so
+    # overwriting one turns a comparison between models into a comparison between two runs
+    # of the same model, silently.
+    #
+    # ITS OWN REPOSITORY, committing the per-model file and NOT the canonical one. In the
+    # workspace above both are committed, so a guard that looked at the wrong one would
+    # still refuse and the check would pass for the wrong reason — a fixture that cannot
+    # tell the two apart is not testing the tag at all.
+    with tempfile.TemporaryDirectory() as d2:
+        env2 = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(d2, "none"),
+                    GIT_CONFIG_SYSTEM=os.path.join(d2, "none"), QATRATION_OUT=d2)
+
+        def git2(*a):
+            return subprocess.run(["git", "-C", d2] + list(a), capture_output=True,
+                                  text=True, env=env2)
+
+        git2("init", "-q")
+        git2("config", "user.name", "QAtration")
+        git2("config", "user.email", "qatration@gmail.com")
+        _pm = os.path.join(d2, "results_httpbot_gpt-4o.json")
+        io.open(_pm, "w", encoding="utf-8").write('{"rows": [], "results": []}')
+        git2("add", "-A")
+        _r2 = git2("commit", "-qm", "per-model evidence")
+        if _r2.returncode == 0 or "cannot spawn" not in (_r2.stdout + _r2.stderr).lower():
+            try:
+                _p2 = subprocess.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                     "--target-config", os.path.join(HERE, "targets_httpbot.yaml"),
+                     "--attacks", os.path.join(HERE, "attacks_refusal.yaml"),
+                     "--trials", "1", "--model", "gpt-4o"],
+                    capture_output=True, text=True, env=env2, timeout=60)
+                _said2, _code2 = _p2.stdout + _p2.stderr, _p2.returncode
+            except subprocess.TimeoutExpired:
+                _said2, _code2 = "it started working instead of refusing", -1
+            want("a --model sweep refuses to replace its own committed copy",
+                 _code2 == 2, "exit %s: %s" % (_code2, _said2.strip()[:200]))
+            want("...and names the per-model file rather than the canonical one",
+                 "results_httpbot_gpt-4o.json" in _said2, _said2.strip()[:200])
+            want("...and the file on disk is untouched",
+                 io.open(_pm, encoding="utf-8").read() == '{"rows": [], "results": []}')
     return bad
 
 

@@ -698,9 +698,14 @@ def main():
     # there would refuse after somebody had paid for forty-seven minutes of model time and
     # leave them with nothing. Same reason the honeytoken verification below sits here: a guard
     # that fires after the cost has been paid is an error message rather than a guard.
-    _tag = "_" + re.sub(r"[^A-Za-z0-9.]+", "-", args.model) if args.model else ""
+    # THE PATH THE RUN WILL WRITE, computed here and used at the end rather than derived a
+    # second time. `workspace.artifact_path` holds the one spelling; see `model_tag` there
+    # for why a guard that reconstructs its own subject is not a guard.
+    from workspace import artifact_path as _artifact_path
+    _json_path = _artifact_path(OUT_DIR, "results", target.name, args.model)
+    _html_path = _artifact_path(OUT_DIR, "report", target.name, args.model, "html")
     _refusal = refuse_to_overwrite_evidence(
-        os.path.join(OUT_DIR, f"results_{target.name}{_tag}.json"),
+        _json_path,
         force=getattr(args, "overwrite_evidence", False))
     if _refusal:
         # TWO, NOT FIVE. The codes exist so the reason is recoverable from the number alone,
@@ -1384,9 +1389,10 @@ def main():
     # a --model override writes results_<target>_<model>.json (2 underscores) so it
     # sits BESIDE the canonical single-model run and is skipped by the fleet aggregates
     # (which key on the 1-underscore name) — this is what makes a model matrix possible.
-    tag = "_" + re.sub(r'[^A-Za-z0-9.]+', '-', args.model) if args.model else ""
-    json_path = os.path.join(OUT_DIR, f"results_{target.name}{tag}.json")
-    html_path = os.path.join(OUT_DIR, f"report_{target.name}{tag}.html")
+    #
+    # These are the paths the overwrite guard was asked about before the run started, not a
+    # second derivation of them.
+    json_path, html_path = _json_path, _html_path
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump({"meta": meta, "results": results}, f, indent=2, default=str)
     # Closed with what it actually cost, and with the ending named: a run stopped by its
@@ -1454,7 +1460,14 @@ def main():
     # "has this regressed" were not unimplemented, they were unanswerable — the evidence
     # had been deleted. A per-model run is the same sweep measured twice and would show up
     # as a fictitious change, so it is left out.
-    if not tag:
+    #
+    # ASKED OF THE FILE, through the same rule every fleet aggregate uses to skip these.
+    # This was a truthiness test on a local `tag`, which made it the fifth place the
+    # per-model rule was written: the guard, the writer, `model_matrix`, the recogniser
+    # in `workspace`, and here. It is one question -- is this file a per-model copy --
+    # and it now has one answer.
+    from workspace import is_per_model_copy as _is_copy
+    if not _is_copy(json_path):
         from history import record, diff
         record(meta, results)
         d = diff(target.name)
@@ -1506,7 +1519,8 @@ def main():
     # 3, "nothing was measured", rather than the green that would be a lie. A team seeing that
     # once re-baselines, which is the correct response and takes a minute.
     if gate == "regression":
-        code, lines = regression_verdict(locals().get("d"), is_model_copy=bool(tag))
+        code, lines = regression_verdict(locals().get("d"),
+                                          is_model_copy=_is_copy(json_path))
         for line in lines:
             if line.startswith("CI GATE"):
                 print("")
