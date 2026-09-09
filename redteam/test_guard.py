@@ -678,6 +678,64 @@ def main():
               "_stamps(rng, refusals)" in _sh[:_sh.find("\ndef ", 1)],
               "scan_history no longer runs the stamp rules")
 
+    # --- AND `--tree` RUN, NOT READ ------------------------------------------------------
+    #
+    # Every check above this line is a grep over the source: the arm CONTAINS a call to
+    # `_stamps`. That is a fact about the text and not about the run, and a guard above
+    # the call can switch it off without moving a character of it — which is what a
+    # sweep found: replacing `if _git("rev-parse", ...)` with `if False:` leaves every
+    # line above green while CI, the part CONTRIBUTING says cannot be skipped, stops
+    # asking who wrote the history.
+    #
+    # So the arm is driven, in this process, over a throwaway repository whose only
+    # commit carries a stranger and a local offset. `--tree` is the only mode that can
+    # see it: the commit is already made, so there is nothing staged and nothing pending.
+    import shutil as _sh_g
+    with tempfile.TemporaryDirectory() as _td:
+        _tenv = git_env(_td)
+
+        def _tg(*a, **env):
+            return _sp.run(["git", "-C", _td] + list(a), capture_output=True, text=True,
+                           env=dict(_tenv, **env))
+
+        _tg("init", "-q", "-b", "main")
+        _tg("config", "user.name", "QAtration")
+        _tg("config", "user.email", "qatration@gmail.com")
+        io.open(os.path.join(_td, "a.txt"), "w").write("nothing to refuse in here")
+        # `--tree` runs the whole CI arm, and part of it reads the project's own
+        # `pyproject.toml` for the licence rule. A repository without one is refused for a
+        # reason that has nothing to do with the question here.
+        _sh_g.copy(os.path.join(ROOT, "pyproject.toml"), _td)
+        _tg("add", "-A")
+        _tg("commit", "-qm", "a stranger, from somewhere",
+            GIT_AUTHOR_NAME="A Person", GIT_AUTHOR_EMAIL="person@example.com",
+            GIT_AUTHOR_DATE="2026-08-22T10:00:00+05:45",
+            GIT_COMMITTER_DATE="2026-08-22T10:00:00+05:45")
+
+        # `guard.main()` imports `licences` by bare name, the way it runs from `tools/`.
+        import contextlib as _cl_g
+        _tools_dir = os.path.join(ROOT, "tools")
+        if _tools_dir not in sys.path:
+            sys.path.insert(0, _tools_dir)
+        _old_root, _old_argv = guard.ROOT, sys.argv
+        _err, _rc = io.StringIO(), None
+        try:
+            guard.ROOT = _td
+            sys.argv = ["guard", "--tree"]
+            with _cl_g.redirect_stderr(_err), _cl_g.redirect_stdout(io.StringIO()):
+                try:
+                    _rc = guard.main()
+                except SystemExit as _e:
+                    _rc = _e.code
+        finally:
+            guard.ROOT, sys.argv = _old_root, _old_argv
+        _tout = _err.getvalue()
+        check("--tree, RUN, refuses a history it was handed rather than reading its own "
+              "source", _rc not in (0, None), "exit %r: %s" % (_rc, _tout[-200:]))
+        check("...naming the author it did not expect",
+              "not by the project identity" in _tout, _tout[-300:])
+        check("...and the offset that is not UTC", "not UTC" in _tout, _tout[-300:])
+
     # --- AN EXEMPTION MUST NOT BE WIDER THAN ITS DATA ----------------------------------------
     #
     # MODEL_FIELDS exempted `text`, and `recon.hints()` writes tool-authored English into it —
