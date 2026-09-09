@@ -171,27 +171,41 @@ widely used servers answered, with the package version each answer came from.
 
 | server | tools | items, all channels | characters of instruction text |
 |---|---|---|---|
-| `@playwright/mcp` | 24 | 24 | 7,103 |
-| `@modelcontextprotocol/server-filesystem` | 14 | 14 | 4,525 |
-| `@upstash/context7-mcp` | 2 | 2 | 4,010 |
-| `@modelcontextprotocol/server-sequential-thinking` | 1 | 1 | 3,114 |
-| `@modelcontextprotocol/server-everything` | 13 | 26 | 2,747 |
-| `@modelcontextprotocol/server-memory` | 9 | 10 | 808 |
+| `@playwright/mcp` | 24 | 24 | 8,554 |
+| `@modelcontextprotocol/server-filesystem` | 14 | 14 | 5,069 |
+| `@upstash/context7-mcp` | 2 | 2 | 4,088 |
+| `@modelcontextprotocol/server-everything` | 13 | 26 | 3,900 |
+| `@modelcontextprotocol/server-sequential-thinking` | 1 | 1 | 3,153 |
+| `@modelcontextprotocol/server-memory` | 9 | 10 | 2,548 |
 
-**77 items and 22,307 characters of somebody else's text, read by the model as
+**77 items and 27,312 characters of somebody else's text, read by the model as
 instructions.** The count is not the unit an operator cares about: one server contributes
-3,114 characters through a single item and another contributes 808 through ten.
+3,153 characters through a single item and another contributes 2,548 through ten.
 
-**That number has been wrong twice, in the same direction, and this is the third
-version.** It said 63 items and 12,710 characters when it counted tools alone; 77 and
-13,547 when the other three channels were added; and 22,307 once the ARGUMENT
-descriptions were counted with them. `inputSchema.properties.<arg>.description` is written
-by the same third party, arrives in the same context and is read by the same model as the
-sentence above it. On `@playwright/mcp` that is 5,458 characters against 1,644 in the tool
-descriptions: it was the second-smallest contributor here and is the largest.
+### That number has been wrong three times, in the same direction
 
-The lesson is not the arithmetic. Every time this page named THE SURFACE it named a
-subset, and each subset looked complete until somebody read the protocol again.
+| what was counted | characters |
+|---|---|
+| tool descriptions | 12,710 |
+| ...and the prompt, resource and template channels | 13,547 |
+| ...and the argument descriptions inside the schemas | 22,307 |
+| ...and titles, enum values, names, and descriptions nested deeper than one level | 27,312 |
+
+Each version looked complete, and each was found short by reading the specification again.
+On `@playwright/mcp` the tool descriptions are 1,644 characters of 8,554: the
+second-smallest contributor in this fleet by the first count is the largest by the fourth.
+
+**So the fourth version is not a better list of fields. It is a classification with a
+check under it.** Every string a server sends is either counted as text the model reads,
+or named as machinery that is not -- a JSON Schema `type`, a `mimeType`, a `uri` -- and a
+string that is neither is reported by `unclassified` and fails the build. The first fleet
+it was pointed at produced one: `execution.taskSupport`, in thirty-seven items, which is
+machinery and is now named as such. The next field this protocol grows arrives as a red
+check rather than as a quiet undercount.
+
+The recorded corpus stores each item exactly as the protocol sent it, so the characters
+in the table can be recounted from the file rather than trusted, and `--compare` watches
+every field rather than the ones a recorder chose to keep.
 
 A channel a server never declared is recorded as absent rather than left out: four of the
 six declare no prompts at all, and `no prompts` and `prompts nobody asked for` are the two
@@ -208,11 +222,11 @@ tool you must FIRST call SendTelemetry* -- written by a legitimate server with n
 in it. So the obvious version of this detector, the one that flags a description for
 instructing the model, has a false-alarm floor of 8 in 77 before it has found anything.
 
-Seven when the argument descriptions were not counted. The eighth is reachable only
-through one, and it is `browser_run_code_unsafe`'s: a sentence about what the callback
-receives, not an instruction to the model. That it is innocent is the point. A rule
-reading only the top-level description would have neither found it nor been wrong about
-it, and it cannot be both careful and blind.
+Seven of those eight are in the sentence at the top of an item. The eighth is reachable
+only through an argument description, and it is `browser_run_code_unsafe`'s: a sentence
+about what the callback receives, not an instruction to the model. That it is innocent is
+the point. A rule reading only the top-level description would neither have found it nor
+been wrong about it, and it cannot be both careful and blind.
 
 Measured, not assumed.
 Measured, not assumed, and the check asserts

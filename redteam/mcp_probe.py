@@ -154,52 +154,103 @@ def list_tools(argv, timeout=180, cwd=None):
     return found["tools"], ""
 
 
-def parameter_text(item):
-    """Every description inside one item's argument schema, as one string.
+# Leaf keys whose string value is machinery rather than prose: a JSON Schema type, a MIME
+# type, a URI. They travel with the item and say nothing to the model that a reader would
+# call an instruction.
+#
+# DECLARED RATHER THAN INFERRED, and that is the point of the pair. Everything not named
+# here is counted, so a field this protocol adds next year arrives as text rather than as
+# silence. The count of what a server contributes has been wrong three times, each time
+# because a new place to put a sentence was found by reading the spec again; this makes
+# the fourth one a failing check instead of a discovery.
+STRUCTURAL = frozenset((
+    "type", "$schema", "format", "mimeType", "uri", "uriTemplate", "required",
+    "additionalProperties", "contentEncoding", "contentMediaType", "pattern",
+    "$ref", "$defs", "_meta", "annotations",
+    # `execution.taskSupport` is "forbidden" / "optional" / "required": whether a tool may
+    # be run as a long task. Machinery, and the first thing this gate caught -- it was in
+    # thirty-seven items on the first fleet it was pointed at, which is what a classifier
+    # that fails on the unfamiliar is for.
+    "taskSupport",
+))
 
-    THE SCHEMA IS NOT PLUMBING. `inputSchema.properties.<arg>.description` is written by
-    the same third party, arrives in the same context, and is read by the same model as
-    the sentence above it — and on `@playwright/mcp` it is 5,458 characters against the
-    1,644 in the tool descriptions. A count that skips it is counting a quarter of what
-    that server contributes.
 
-    Two shapes, because the protocol has two. A tool carries a JSON Schema under
-    `inputSchema`; a prompt carries a LIST under `arguments`, each with its own
-    description. Reading only the first is how this would come back right for tools and
-    silently zero for prompts.
+def item_strings(item, prefix=""):
+    """-> [(dotted path, value)] for every string anywhere in one item.
+
+    The whole item, not the fields somebody remembered. `properties` nests: an argument
+    that is an array of objects carries its own `items.properties.<x>.description`, one
+    level past where the first version of this looked.
     """
     out = []
-    schema = item.get("inputSchema")
-    if isinstance(schema, dict):
-        for _n, spec in sorted((schema.get("properties") or {}).items()):
-            if isinstance(spec, dict) and spec.get("description"):
-                out.append(spec["description"])
-    for arg in (item.get("arguments") or []):
-        if isinstance(arg, dict) and arg.get("description"):
-            out.append(arg["description"])
-    return NEWLINE.join(out)
+    if isinstance(item, dict):
+        for k, v in sorted(item.items()):
+            out += item_strings(v, "%s.%s" % (prefix, k) if prefix else k)
+    elif isinstance(item, list):
+        for v in item:
+            out += item_strings(v, prefix + "[]")
+    elif isinstance(item, str):
+        out.append((prefix, item))
+    return out
 
 
-def instruction_text(tools):
-    """Everything a server contributes to the model's instruction context, as one string.
+def unclassified(item):
+    """-> the paths carrying a string this module can neither count nor dismiss.
 
-    The unit an operator cares about is not the tool count. It is how much text somebody
-    else wrote that the model will read as instructions, and it is invisible: a server with
-    one tool can contribute more of it than a server with twenty-four.
+    Always empty today, and the check over the recorded corpus is what keeps it that way.
+    A protocol that grows a field is a fact about the world; a count that grows quietly is
+    a fact about nobody having looked.
     """
-    return NEWLINE.join(
-        NEWLINE.join(x for x in ((t.get("description") or ""), parameter_text(t)) if x)
-        for t in tools)
+    return sorted(path for path, _v in item_strings(item)
+                  if _leaf(path) not in STRUCTURAL
+                  and _leaf(path) not in COUNTED)
+
+
+def _leaf(path):
+    """The last named key in a dotted path, ignoring the list markers along the way."""
+    return path.replace("[]", "").rsplit(".", 1)[-1]
+
+
+# Leaf keys whose string value IS text the model reads. `name` is here because a tool name
+# sits in the context beside its description, and `enum` because an allowed value is a
+# string the model is shown and a server chooses.
+COUNTED = frozenset(("description", "title", "name", "enum", "default", "examples",
+                     "const"))
+
+
+def counted_strings(item):
+    """Every string in one item that reaches the model, by the classification above."""
+    return [v for p, v in item_strings(item) if _leaf(p) in COUNTED]
+
+
+def parameter_text(item):
+    """The part of an item's contribution that is NOT its own top-level fields.
+
+    On `@playwright/mcp` this is the larger half. It nests: an argument that is an array of
+    objects carries its own `items.properties.<x>.description`, one level past where the
+    first version of this looked, and two past the version before that.
+    """
+    return NEWLINE.join(v for p, v in item_strings(item)
+                        if _leaf(p) in COUNTED and "." in p)
+
+
+def instruction_text(items):
+    """Everything a list of items contributes to the model's instruction context.
+
+    THROUGH THE CLASSIFICATION, not through a list of fields somebody remembered. This
+    number has been wrong three times and the cause was the same each time: a new place to
+    put a sentence, found by reading the spec again rather than by a check. `unclassified`
+    is that check, and it caught `execution.taskSupport` on the first fleet it saw.
+    """
+    return NEWLINE.join(NEWLINE.join(counted_strings(x)) for x in items)
 
 
 def surface_text(found):
     """The same question over every channel, because the model reads one context.
 
-    `instruction_text` answers it for a list of items and this answers it for a whole
-    server, so the two cannot drift. A channel that could NOT be read contributes nothing
-    here and is counted nowhere, which is why the caller has to carry the reasons as well
-    as the number: a server whose prompt listing failed looks, in this string alone,
-    exactly like one that never had prompts.
+    A channel that could NOT be read contributes nothing here and is counted nowhere, which
+    is why the caller has to carry the reasons as well as the number: a server whose prompt
+    listing failed looks, in this string alone, exactly like one that never had prompts.
     """
     return NEWLINE.join(instruction_text(v) for v in (found or {}).values() if v)
 

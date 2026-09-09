@@ -532,7 +532,7 @@ def main():
               _pt_m({"inputSchema": {"properties": {"a": {"description": "ARG"}}}})
               == "ARG", _pt_m({"inputSchema": {"properties": {"a": {"description": "ARG"}}}}))
         check("...and so is one in the list shape a prompt uses",
-              _pt_m({"arguments": [{"name": "x", "description": "PARG"}]}) == "PARG",
+              "PARG" in _pt_m({"arguments": [{"name": "x", "description": "PARG"}]}),
               _pt_m({"arguments": [{"name": "x", "description": "PARG"}]}))
         check("...and an item with no arguments contributes none of it",
               _pt_m({"description": "top"}) == "", _pt_m({"description": "top"}))
@@ -543,10 +543,58 @@ def main():
 
         # AND THE CORPUS CARRIES THEM, or `--compare` has nothing to compare and the page
         # is quoting a number nothing can recount.
+        # ASKED OF THE PROPERTY, NOT OF A FIELD NAME. The recording stores each item as the
+        # protocol sent it, so the argument text lives under `inputSchema` for a tool and
+        # under `arguments` for a prompt, and a check naming either one is a check about
+        # the recorder rather than about what was recorded.
         _with_args = [_s for _s, _v in _srv.items()
-                      if any(_x.get("arguments") for _x in (_v.get("tools") or []))]
+                      if any(_pt_m(_x) for _x in (_v.get("tools") or []))]
         check("the recorded corpus carries the argument descriptions too",
               len(_with_args) >= 4, str(_with_args))
+        # AND IT REPRODUCES ITS OWN NUMBER. A corpus that cannot recount the figure stored
+        # beside it is a figure nobody can check, which is the state this file was in when
+        # it kept a chosen subset of each item.
+        _bad_recount = []
+        for _s, _v in _srv.items():
+            _f = {_c: _v.get(_c) for _c in
+                  ("tools", "prompts", "resources", "resource_templates")}
+            if len(_st_m(_f)) != (_v.get("surface_chars") or 0):
+                _bad_recount.append("%s: %d vs %s"
+                                    % (_s, len(_st_m(_f)), _v.get("surface_chars")))
+        check("...and every stored character count is recounted from the items beside it",
+              _bad_recount == [], str(_bad_recount))
+
+        # --- AND THE FIELD NOBODY HAS CLASSIFIED YET ---------------------------------
+        #
+        # The character count here was wrong three times and the cause was the same each
+        # time: a new place to put a sentence, found by reading the specification again.
+        # The fourth version is not a longer list of fields, it is a classification with
+        # this under it. Every string a server sends is text the model reads or machinery
+        # that is not, and a string that is neither fails the build.
+        from mcp_probe import unclassified as _un_m, STRUCTURAL as _ST_m, COUNTED as _CT_m
+        _unk = sorted({_p for _s, _v in _srv.items()
+                       for _c in ("tools", "prompts", "resources", "resource_templates")
+                       for _x in (_v.get(_c) or [])
+                       for _p in _un_m(_x)})
+        check("every string the recorded servers send is counted or named as machinery",
+              _unk == [], str(_unk[:6]))
+        # AND THE CLASSIFIER SAYS SO ABOUT A FIELD IT HAS NEVER SEEN, or the line above is
+        # a fact about six servers rather than about the rule.
+        check("...and a field nothing has classified is reported rather than dropped",
+              _un_m({"description": "d", "somethingNewInV3": "a sentence"})
+              == ["somethingNewInV3"],
+              str(_un_m({"description": "d", "somethingNewInV3": "a sentence"})))
+        # THE TWO SETS DO NOT OVERLAP. A key in both would be counted and dismissed at
+        # once, and whichever test ran first would decide.
+        check("...and no key is both text and machinery",
+              sorted(_ST_m & _CT_m) == [], str(sorted(_ST_m & _CT_m)))
+        # AND THE NESTING IS REAL. `items.properties.<x>.description` is two levels past
+        # where the first version of this looked, and it is where a schema for an array
+        # of objects puts its prose.
+        _nested = {"inputSchema": {"properties": {"rows": {"type": "array", "items": {
+            "type": "object", "properties": {"q": {"description": "DEEP"}}}}}}}
+        check("a description nested two levels inside a schema is still counted",
+              "DEEP" in _itx_m([_nested]), _itx_m([_nested]))
 
         # AND A POISONED ARGUMENT UNDER A PINNED VERSION IS A RUG PULL. Comparing the top
         # line alone left the larger half of one server's text unwatched.
