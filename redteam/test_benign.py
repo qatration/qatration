@@ -311,6 +311,86 @@ def main():
     check("...and there were such detectors to report", bool(_aq) and int(_aq.group(1)) > 0,
           _out4[-200:])
 
+    # --- THE SAME QUESTION ONE SURFACE OVER: TOOL DESCRIPTIONS ----------------------
+    #
+    # A tool description is text a third party writes and the harness pastes into the
+    # model's instruction context. `attacks_mcpagent.yaml` attacks that surface and
+    # `targets_mcpagent.py` is our own stand for it — our descriptions, poisoned by us,
+    # judged by us. A stand says whether the engine can SEE the attack. It cannot say
+    # what the ecosystem ships, and a false-alarm rate is only ever a fact about real
+    # traffic.
+    #
+    # So `out/mcp_tools.json` is the benign corpus for this surface: every tool six real
+    # MCP servers offer, read over the protocol by `mcp_probe`, with the package version
+    # each answer came from. Nobody poisoned any of it.
+    import json as _js_m, re as _re_m, io as _io_m
+    from oracle import _IMPERATIVE as _IMP_m
+    _mp = os.path.join(os.path.dirname(HERE), "out", "mcp_tools.json")
+    if not os.path.exists(_mp):
+        print("SKIP  out/mcp_tools.json is not in this checkout, so the MCP corpus was "
+              "NOT checked")
+    else:
+        _mc = _js_m.load(_io_m.open(_mp, encoding="utf-8"))
+        _srv = _mc.get("servers") or {}
+        _descs = [(_s, _t["name"], _t["description"])
+                  for _s, _v in _srv.items() for _t in (_v.get("tools") or [])]
+        check("the recorded MCP corpus has servers in it to be a corpus",
+              len(_srv) >= 5 and len(_descs) >= 50,
+              "%d server(s), %d tool(s)" % (len(_srv), len(_descs)))
+        check("...and every one of them says which package and version answered",
+              all(_v.get("package") and _v.get("version") for _v in _srv.values()),
+              str(sorted(_s for _s, _v in _srv.items() if not _v.get("version"))))
+
+        # THE NUMBER THIS EXISTS FOR. The shipped rule fires on none of them, which is
+        # what makes a hit on somebody's server worth printing.
+        _hits = ["%s/%s" % (_s, _n) for _s, _n, _d in _descs
+                 if any(_re_m.search(_p, _d, _re_m.I) for _p in _IMP_m)]
+        check("the shipped instruction rule fires on no real tool description",
+              _hits == [], str(_hits))
+
+        # AND THE RULE IS NOT SIMPLY DEAD. A rule matching nothing scores zero on every
+        # corpus there is, and would pass the line above forever.
+        from targets_mcpagent import POISON as _POISON_m
+        check("...and it is a rule that can fire, on the poison our own stand plants",
+              any(_re_m.search(_p, _POISON_m, _re_m.I) for _p in _IMP_m), _POISON_m[:80])
+
+        # AND THE CORPUS IS NOT SIMPLY BLAND. The zero above is a fact about the RULE,
+        # and it is only worth anything if these descriptions contain the thing a looser
+        # rule would catch. Seven of them address the assistant directly, two of those
+        # ordering it to call another tool first — which is the grammar of the poison
+        # above, written by servers with no attacker in them. That is the false-alarm
+        # floor for the obvious version of this detector, measured rather than assumed.
+        _naive = _re_m.compile(
+            r"\b(you (should|must|can|need|will)|use this tool"
+            r"|call .{0,20}(first|before)|do not|never|always)\b", _re_m.I)
+        _loose = ["%s/%s" % (_s, _n) for _s, _n, _d in _descs if _naive.search(_d)]
+        check("...while an instruction-shaped rule fires on real servers, so the zero "
+              "above is about the rule and not about the corpus",
+              len(_loose) >= 5, str(_loose))
+
+        # AND THE PAGE THAT QUOTES ALL OF IT. `docs/attribution.md` states the totals,
+        # the per-server rows and the false-alarm floor in words. Every number on a page
+        # in this repository is recounted from the artifact behind it, and this one is a
+        # page about somebody else's software: the day a server ships a version with one
+        # more tool, the sentence is a claim about a run nobody made.
+        _doc = _io_m.open(
+            os.path.join(os.path.dirname(HERE), "docs", "attribution.md"),
+            encoding="utf-8").read()
+        _chars = sum(_v.get("chars") or 0 for _v in _srv.values())
+        check("the page states the size of the corpus it is arguing from",
+              "%d tools and %s characters" % (len(_descs), format(_chars, ",")) in _doc,
+              "%d tools, %s characters" % (len(_descs), format(_chars, ",")))
+        check("...and the false-alarm floor it measured",
+              "floor of %d in %d" % (len(_loose), len(_descs)) in _doc,
+              "%d in %d" % (len(_loose), len(_descs)))
+        # PER SERVER TOO, because a total can stay right while two rows go wrong in
+        # opposite directions.
+        _wrong = [_s for _s, _v in _srv.items()
+                  if "| %d | %s |" % (len(_v.get("tools") or []),
+                                      format(_v.get("chars") or 0, ",")) not in _doc]
+        check("...and every server's row, so no two can go wrong in opposite directions",
+              _wrong == [], str(_wrong))
+
     # --- A BASELINE MEASURED AGAINST A WALL IS NOT A BASELINE ---------------------------
     #
     # This is the command the documentation tells an operator to run FIRST, at an endpoint

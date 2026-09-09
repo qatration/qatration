@@ -72,6 +72,10 @@ COMMANDS = {
     "isolation": ("run_isolation",  "map which of a target's defences are separable, one at a time"),
     "lint":     ("lint_arsenal",    "check the attack corpus for the mistakes that read as findings"),
     "coverage": ("detector_coverage", "which detectors have ever caught anything"),
+    # AND THE ONE THAT LOOKS AT SOMEBODY ELSE'S SERVER. A tool description is text a third
+    # party writes into the model's instruction context, and until this there was no way to
+    # read one without importing a module inside an installed package.
+    "mcp":      ("mcp_probe",       "list a real MCP server's tools, and the instruction text they carry"),
     # AND THE RECORD OF WHAT RAN. `runs.py` opens with four things it exists to answer --
     # who authorised this, what did it cost, how did it end, which build produced it -- and
     # calls them "something somebody will actually ask". Nothing could ask: `listing` and
