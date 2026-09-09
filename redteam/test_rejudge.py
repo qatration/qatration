@@ -737,6 +737,25 @@ def main():
         _b_mt = _maps_seen("bot")
         check("...and not under the target its filename spells",
               "lock map(s) were" not in _b_mt, _b_mt[-300:])
+
+        # AND A PROPERTY THAT DOES NOT SAY WHAT HAPPENED. `_verdict` read `p["status"]`,
+        # so a stored map carrying a property without one came out of this command as
+        # `This is a bug in qatration, not a problem with your config` — over a file in
+        # the operator's own workspace, and exit 2. The same wrong answer `read_maps` was
+        # given for a torn file, one field in. `_verdict` has fixtures for the rule now;
+        # this is the command, because the crash was in the command.
+        io.open(os.path.join(_ws_mt, "isolation_bot.json"), "w",
+                encoding="utf-8").write(_js_mt.dumps(
+            {"meta": {"target": "bot-x"},
+             "maps": [{"objective": "o1", "verdict": "HARDENED",
+                       "properties": [{"name": "p1"}]}]}))
+        _crash_mt = _maps_seen("bot-x")
+        check("a map with a property that never said what happened does not crash "
+              "the command",
+              "bug in qatration" not in _crash_mt, _crash_mt[-400:])
+        check("...and the objective it could not measure stops claiming HARDENED",
+              any("HARDENED" in _l and "UNMEASURED" in _l.split("->", 1)[-1]
+                  for _l in _crash_mt.splitlines()), _crash_mt[-600:])
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 

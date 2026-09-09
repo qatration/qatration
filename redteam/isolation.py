@@ -327,10 +327,19 @@ def _verdict(props, combined, coupling):
     # A property whose every trial errored measured NOTHING, so it is excluded the way a
     # skipped one is — and if that leaves nothing, the objective has no verdict rather than
     # the strongest one. A dead target used to come back HARDENED.
-    measured = [p for p in props if p["status"] not in ("skipped", "unmeasured")]
+    # AND `.get` FOR THE PROPERTIES TOO, in the same safe direction. `p["status"]` raised
+    # KeyError on a stored map whose property carries none — out of `rejudge`, through
+    # `run_command`, printing `This is a bug in qatration, not a problem with your config`
+    # over an artifact sitting in the operator's own workspace. That is the answer
+    # `read_maps` was already given for a torn file and this is the same event one field
+    # in. A property that does not say what happened demonstrated nothing, so it is
+    # excluded exactly as a skipped one is, and an objective left with nothing measured
+    # comes back UNMEASURED rather than the strongest verdict there is.
+    measured = [p for p in props
+                if p.get("status") not in ("skipped", "unmeasured", None)]
     if not measured:
         return "UNMEASURED"       # nothing ran; this says nothing about the target
-    if all(p["status"] == "locked" for p in measured):
+    if all(p.get("status") == "locked" for p in measured):
         # ...and hardened means every property that COULD be measured held, which is a
         # narrower claim when some could not be. The count travels with it.
         return "HARDENED" if len(measured) == len(props) else "PARTIAL"

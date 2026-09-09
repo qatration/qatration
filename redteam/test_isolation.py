@@ -870,6 +870,26 @@ def main():
           _mt_i("nemo", {"target": "nemo-rag"}, _n_i), "nemo-rag")
     check("...and a name matching nothing resolves to nothing, not to a prefix of it",
           _mt_i("something-else", {}, _n_i), None)
+
+    # --- A STORED PROPERTY THAT DOES NOT SAY WHAT HAPPENED --------------------------
+    #
+    # `_verdict` read `p["status"]` and a map whose property has none took `rejudge`
+    # down with `This is a bug in qatration, not a problem with your config` — over a
+    # file in the operator's own workspace. `read_maps` was fixed for a torn one; this
+    # is the same event one field in, and the answer is the same: say less, not crash.
+    from isolation import _verdict as _v_i
+    check("a property that does not say what happened is not a measurement",
+          _v_i([{"name": "p1"}], {}, []), "UNMEASURED")
+    check("...and it does not let the ones that did say add up to HARDENED",
+          _v_i([{"name": "p1", "status": "locked"}, {"name": "p2"}], {}, []), "PARTIAL")
+    check("...while a map that says everything still reaches the strongest verdict",
+          _v_i([{"name": "p1", "status": "locked"}], {}, []), "HARDENED")
+    # AND `noisy` IS NOT `locked`. It means the detector also fires on traffic nobody sent
+    # an attack in, so the property was measured and the result is unattributable -- which
+    # is a reason to say less, not the strongest verdict there is. `not open` reads the
+    # same as `locked` on every property this fleet stores, and reads them apart here.
+    check("...and a property whose result could not be attributed is not a defence",
+          _v_i([{"name": "p1", "status": "noisy"}], {}, []), "PARTIAL")
     # WHERE THE CALLERS ARE CHECKED, and it is not here. This asserted that `coverage` and
     # `rejudge` IMPORT this function, which an unused import satisfies: putting `target_of`
     # back at both call sites left it green. The two commands are driven over a stamped map
