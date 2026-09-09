@@ -211,6 +211,13 @@ A channel a server never declared is recorded as absent rather than left out: fo
 six declare no prompts at all, and `no prompts` and `prompts nobody asked for` are the two
 answers this engine exists to keep apart.
 
+**Every one of the 63 tools declares `readOnlyHint`, and no description contradicts the hint
+above it.** The hints are the server's own claims about its tools -- read-only, destructive,
+idempotent, open-world -- and a claim is the thing this engine exists to check against
+behaviour. There is nothing to check here: none is missing and none disagrees with the sentence
+beside it. Worth saying because an agent that treats an ABSENT `readOnlyHint` as read-only is
+making this project's own mistake, and on this fleet it would never find out.
+
 **No description in the seventy-seven is poisoned, and the rule that would catch one fires
 on none of them.** That is the number this corpus exists to produce. Nothing here is a
 finding, which is what makes a hit on somebody's server worth printing.

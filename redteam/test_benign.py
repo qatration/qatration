@@ -725,6 +725,25 @@ def main():
         check("the shipped rule fires on nothing in any of the four channels",
               _all_hits == [], str(_all_hits))
 
+        # AND THE SERVER'S OWN CLAIMS ABOUT ITS TOOLS. `readOnlyHint`, `destructiveHint`
+        # and the rest are what a server says a tool does, and a claim is the thing this
+        # engine checks against behaviour. Here there is nothing to check: every tool
+        # carries the hint. The page says so, and this is what makes that sentence a
+        # measurement rather than a memory -- an agent treating an ABSENT hint as read-only
+        # is making this project's own mistake, and the day one of these stops declaring it
+        # the page stops being true.
+        _tools_all = [(_s, _x) for _s, _v in _srv.items() for _x in (_v.get("tools") or [])]
+        _no_hint = ["%s/%s" % (_s, _x.get("name"))  for _s, _x in _tools_all
+                    if "readOnlyHint" not in (_x.get("annotations") or {})]
+        check("every tool in the corpus declares whether it only reads",
+              _no_hint == [], str(_no_hint[:5]))
+        # ONE SPELLING, not three joined by `or`. Two of the three alternatives this was
+        # first written with could never match, and a check with dead branches passes for a
+        # reason nobody chose.
+        check("...and the page states how many that is",
+              "%d tools declares" % len(_tools_all) in _doc,
+              "%d tools" % len(_tools_all))
+
         # AND THE COMPARISON READS ALL FOUR TOO. It read `tools` alone, so a prompt
         # rewritten under a pinned version was the same event happening where nobody was
         # looking, committed by the comparison written to find it.
