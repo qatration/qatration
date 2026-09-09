@@ -195,6 +195,27 @@ floor of 7 in 63 before it has found anything. Measured, not assumed, and the ch
 both halves: that the shipped rule fires on none of them, and that a looser rule fires on
 several, so the zero is a statement about the rule rather than about a bland corpus.
 
+### The reading a single read cannot be
+
+`targets_mcpagent.py` keeps a rug-pull variant because that is the shape one listing is blind
+to: clean while the user approves the tool, poisoned from the next turn. `qatration mcp
+--compare out/mcp_tools.json` replays the command each recorded server carries and reports what
+moved.
+
+**The version separates the three states.** Text that changed along with the package version is
+an upgrade: the instructions in a model's context changed and somebody should read the diff,
+and it is not a finding. Text that changed while the version did NOT is the release an operator
+pinned serving different instructions, and that is the whole event. A tool that appeared under a
+pinned version counts the same way: the poison does not have to arrive inside a description
+somebody already approved.
+
+A server that answered before and does not now, and one that could not be read at all, are
+reported rather than dropped. Both render as an empty diff to anything that compares only what
+is present in both readings, and an empty diff is the strongest possible answer.
+
+Exit 1 on a rug pull, 0 on an upgrade or on nothing, which is the same contract every other
+command here keeps. On the six recorded servers, re-read the same evening: nothing moved.
+
 WHAT THIS DOES NOT COVER. Six servers that start without credentials, over stdio, read once.
 A server needing an account was not started at all; an HTTP/SSE server speaks the same protocol
 over a transport this does not implement; and a rug pull -- clean on the first listing,

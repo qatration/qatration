@@ -385,6 +385,13 @@ only the third.
 - **`benign --dry-run`** exits `1` when a detector fires on the corpus with a bland reply — that
   is, when a detector is reading the QUESTION and reporting it as the target's answer. The
   finding is in this tool's own oracle, and no target was contacted at all.
+- **`mcp --compare`** exits `1` when a server served different tool descriptions under the same
+  package version. The finding is in the SUPPLY CHAIN rather than in a target: the release
+  somebody pinned is not the text their model read. Changed text under a new version is an
+  upgrade and exits `0`, because a version that moved explains itself — it is still printed,
+  since the instructions in a model's context changed and somebody should read the diff. A
+  server that stopped answering, or one that could not be read, is printed and exits `0` too:
+  that is an absence of measurement about one server and not a finding about any.
 
 Neither has a better code available: `2` is a refusal, `3` is nothing measured, and either would
 tell a pipeline to ignore it.

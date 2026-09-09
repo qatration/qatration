@@ -1,10 +1,15 @@
 {
-  "when": "2026-09-09 18:21",
+  "when": "2026-09-09 19:21",
   "protocol": "2024-11-05",
   "servers": {
     "everything": {
       "package": "@modelcontextprotocol/server-everything",
       "version": "2026.8.31",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-everything"
+      ],
       "tools": [
         {
           "name": "echo",
@@ -64,6 +69,12 @@
     "filesystem": {
       "package": "@modelcontextprotocol/server-filesystem",
       "version": "2026.8.31",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
       "tools": [
         {
           "name": "read_file",
@@ -127,6 +138,11 @@
     "memory": {
       "package": "@modelcontextprotocol/server-memory",
       "version": "2026.8.31",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
       "tools": [
         {
           "name": "create_entities",
@@ -170,6 +186,11 @@
     "sequential-thinking": {
       "package": "@modelcontextprotocol/server-sequential-thinking",
       "version": "2026.8.31",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
       "tools": [
         {
           "name": "sequentialthinking",
@@ -181,6 +202,11 @@
     "context7": {
       "package": "@upstash/context7-mcp",
       "version": "4.0.7",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp"
+      ],
       "tools": [
         {
           "name": "resolve-library-id",
@@ -196,6 +222,12 @@
     "playwright": {
       "package": "@playwright/mcp",
       "version": "0.0.80",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless"
+      ],
       "tools": [
         {
           "name": "browser_close",
