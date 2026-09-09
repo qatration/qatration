@@ -246,6 +246,40 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         sys.argv = argv
 
+    # AND AN UNANCHORED LOG IS A LOG NOBODY CAN CLICK. Without a config the findings
+    # carry no `locations`, so every one of them anchors to no file: the log uploads,
+    # the CI step goes green, and a reviewer discovers it days later by clicking a
+    # finding that goes nowhere. The person who runs this command and the person who
+    # opens the SARIF are not the same person, and the terminal is the only place the
+    # first one is still looking. That line was printed by nothing any suite read.
+    import contextlib as _cl_s
+    def _say(*a):
+        _buf = io.StringIO()
+        _av = sys.argv
+        sys.argv = list(a)
+        try:
+            with _cl_s.redirect_stdout(_buf):
+                sarif.main()
+        finally:
+            sys.argv = _av
+        return _buf.getvalue()
+
+    _unanchored = _say("sarif", "--results", src, "--out", dest)
+    check("a log whose every finding anchors to no file says so on the terminal",
+          "anchored to no file" in _unanchored, _unanchored[-300:])
+    check("...and names the two ways to fix it, since the findings are not wrong",
+          "--target-config" in _unanchored and "QATRATION_CONFIGS" in _unanchored,
+          _unanchored[-300:])
+
+    # NOT ON AN EMPTY RUN, which anchors nothing because there is nothing to anchor.
+    # `and run["results"]` is the half of that condition a mutation would drop first.
+    _empty = os.path.join(tmp, "results_empty.json")
+    with io.open(_empty, "w", encoding="utf-8") as f:
+        json.dump(results([]), f)
+    _none = _say("sarif", "--results", _empty, "--out", dest)
+    check("...and a run with no findings at all is not accused of losing its anchors",
+          "anchored to no file" not in _none, _none[-300:])
+
 # --- A RUN THAT SENT NOTHING IS NOT A CLEAN SCAN --------------------------------------------
 #
 # Everything else here reasons from rows: an attack that errored or was skipped leaves one

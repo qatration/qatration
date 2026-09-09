@@ -44,6 +44,15 @@ def esc(s):
     return _ws_esc(s)
 
 
+def _channel_of(profile):
+    """The channel the target named, or a refusal. Never something a format spec cannot take."""
+    chan = profile.get("tool_channel", "?")
+    if not isinstance(chan, str):
+        raise TypeError("tool_channel is a %s, not the name of a channel"
+                        % type(chan).__name__)
+    return chan
+
+
 def _row(profile, name, when):
     # Three states, like `disclosure` two lines down. "remembers" MISSING means the
     # fingerprint never got that far — an errored probe, or a profile written before the
@@ -76,7 +85,12 @@ def _row(profile, name, when):
     return {k: _v(v) for k, v in {
         "target": name,
         "when": when,
-        "channel": profile.get("tool_channel", "?"),
+        # ASKED OF THE VALUE, NOT ASSUMED FROM THE KEY. Both surfaces format this with a
+        # width spec, so a profile holding an object here raised `TypeError` out of an
+        # f-string and the command answered a question about somebody's workspace with
+        # `This is a bug in qatration`. Refused here, where the shape is known, so
+        # `collect` can file it with the torn ones instead.
+        "channel": _channel_of(profile),
         "tools": ", ".join(profile.get("tools_seen", [])) or "—",
         "memory": mem,
         # None is a real third state: no markers configured, so the question was not asked
@@ -118,7 +132,21 @@ def collect(unreadable=None):
         # file time -- marked as one, rather than passing as a measurement.
         from workspace import dated as _dated_fn
         _when, _said = _dated_fn(profile if isinstance(profile, dict) else {}, fp)
-        rows.append(_row(profile, name, _when))
+        # AND A PROFILE THAT PARSES BUT IS NOT A PROFILE IS UNREADABLE TOO, which is one
+        # step past the case above and reached the reader as a traceback: `tool_channel`
+        # holding an object instead of the string the target named made the console
+        # renderer raise `TypeError` out of a format spec, and the command answered a
+        # question about somebody's workspace with `This is a bug in qatration`.
+        #
+        # Routed into the same bar rather than fixed field by field, because the next
+        # wrong type will be in a different field. `read_artifact` tells torn from absent
+        # and this tells uninterpretable from either, on the same three states.
+        try:
+            rows.append(_row(profile, name, _when))
+        except Exception as _e:
+            unreadable.append((os.path.basename(fp),
+                               "%s: %s" % (type(_e).__name__, _e)))
+            continue
     # worst first: a warning invalidates measurements, so it outranks everything else
     rows.sort(key=lambda r: (-len(r["warnings"]), -r["unlabelled"], r["target"]))
     return rows

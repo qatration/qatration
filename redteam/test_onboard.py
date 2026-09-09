@@ -452,6 +452,39 @@ def main():
         check("...and names the key each one is waiting for",
               "forbidden_tokens" in _whys and "tool_names" in _whys, str(_whys[:8]))
 
+        # AND THE NOTE HAS TO REACH THE TERMINAL. `unread_context_keys` has six checks
+        # above and every one of them calls the function; the line that PRINTS what it
+        # returned had none, so deleting the print left the suite green while the
+        # operator's misspelled key went back to arming no detector in silence. Which is
+        # the sentence the note itself makes: a run then reports a clean bill for a check
+        # that never ran.
+        _typo = write("typo", "choices.0.message.content",
+                      extra='oracle_context:\n  canarys: ["ZZ-CANARY"]\n')
+        _tp = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _typo],
+            capture_output=True, text=True, timeout=120,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                     PYTHONDONTWRITEBYTECODE="1"))
+        _tout = (_tp.stdout or "") + (_tp.stderr or "")
+        check("the pre-flight prints the keys nothing in the engine reads",
+              "nothing in this engine reads" in _tout, _tout[-400:])
+        check("...naming the misspelled key itself", "canarys" in _tout, _tout[-400:])
+        check("...and what it costs: a clean bill for a check that never ran",
+              "never ran" in _tout, _tout[-400:])
+
+        # NOT ON A CONFIG THAT SPELLS IT RIGHT, or the three lines above would pass on a
+        # command that printed the note unconditionally.
+        _fine = write("spelled", "choices.0.message.content",
+                      extra='oracle_context:\n  canaries: ["ZZ-CANARY"]\n')
+        _fp = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _fine],
+            capture_output=True, text=True, timeout=120,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                     PYTHONDONTWRITEBYTECODE="1"))
+        check("...and says nothing of the kind when every key is one the engine reads",
+              "nothing in this engine reads" not in ((_fp.stdout or "") + (_fp.stderr or "")),
+              (_fp.stdout or "")[-300:])
+
         # A KEY THE ATTACK SUPPLIES IS NOT ADVICE. `judged_ctx` merges `planted_markers`
         # and `expects_refusal` from the ATTACK, for that attack's judgement only, so
         # telling an operator to put them in their config is advice they cannot act on,

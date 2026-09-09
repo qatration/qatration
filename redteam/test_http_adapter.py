@@ -218,6 +218,58 @@ def main():
         check("the constant part of the request template survives",
               SEEN[-1]["body"].get("session") == "q", str(SEEN[-1]["body"]))
 
+        # WHETHER THE PATH FOUND ANYTHING, which is a different question from whether
+        # what it found could be parsed, and the run's own report of a mistyped mapping
+        # rests on the difference. `_unresolved` names a declared path that resolved
+        # NOTHING across a whole sweep, and it is read by an operator as `your config
+        # points at the wrong field`. Counting after `_pairs` would make an unusable
+        # SHAPE indistinguishable from a wrong PATH, so a correct mapping over a value
+        # this adapter cannot normalise would be reported as the operator's typo.
+        from run_redteam import _unresolved as _unres_h
+        check("a declared path that resolved is not reported as pointing nowhere",
+              _unres_h(t) == [], str(_unres_h(t)))
+        check("...and the counters say which of them the run actually reached",
+              t.resolutions["tool_calls"] >= 1 and t.resolutions["resolved"] >= 1,
+              str(t.resolutions))
+
+        # A PATH THAT FINDS AN UNUSABLE VALUE STILL FOUND SOMETHING. `trace.resolved` is
+        # replaced with a string here: `_pairs` cannot make pairs of it and returns [],
+        # and the mapping is still right.
+        # All three channels, because the rule is one rule and it is written three times.
+        EXTRA["trace"] = {"tools": "not a list of calls",
+                          "resolved": "not a list of pairs",
+                          # EMPTY, not absent, and the sharpest case of the pair: `dig`
+                          # returns None when the path finds nothing and {} when it finds
+                          # an empty object, so a truthiness test cannot tell a mapping
+                          # that is wrong from a run where the channel stayed quiet.
+                          "obs": {}}
+        try:
+            _tu = HttpConfiguredTarget(
+                url=url, name="unusable", request={"message": "{prompt}"},
+                response={"reply": "choices.0.message.content",
+                          "tool_calls": "trace.tools",
+                          "resolved": "trace.resolved",
+                          "observations": "trace.obs"})
+            _pu = _tu.send("hello")
+            check("a path resolving to an unusable shape yields no pairs",
+                  _pu.tool_calls == [] and _pu.resolved == [],
+                  str((_pu.tool_calls, _pu.resolved)))
+            check("...and not one of the three mappings is reported as pointing nowhere",
+                  _unres_h(_tu) == [], str(_unres_h(_tu)))
+        finally:
+            EXTRA.pop("trace", None)
+
+        # AND A PATH THAT REALLY FINDS NOTHING IS STILL NAMED, or the three checks above
+        # would pass on a report that had stopped saying anything at all.
+        _tm = HttpConfiguredTarget(
+            url=url, name="missing", request={"message": "{prompt}"},
+            response={"reply": "choices.0.message.content",
+                      "observations": "trace.nothing_here"})
+        _tm.send("hello")
+        check("...while a path that found nothing all run IS named to the operator",
+              _unres_h(_tm) == ["response.observations = 'trace.nothing_here'"],
+              str(_unres_h(_tm)))
+
         # --- A 200 THAT CARRIES AN ERROR --------------------------------------------------
         #
         # A deployment reports a failed tool call or a model timeout in the body with a 200

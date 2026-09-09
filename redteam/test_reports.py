@@ -3504,6 +3504,68 @@ def main():
     finally:
         shutil.rmtree(_tw, ignore_errors=True)
 
+    # --- THE COULD-NOT-MEASURE BRANCH, DRIVEN AS A COMMAND -----------------------------
+    #
+    # Both of these print the true sentence and return 3, `docs/ci.md`'s code for a
+    # question that could not be answered. Both were reached by no check at all: deleting
+    # either branch left every suite in this repository green, which is how the branch
+    # that exists to stop a gap reading as a pass becomes a gap itself.
+    #
+    # Driven as processes, because the exit code IS the finding. A pipeline reads it, and
+    # `main()` returning 3 in-process proves nothing about what `cli.py` hands the shell.
+    _xw = tempfile.mkdtemp()
+    try:
+        _xenv = dict(os.environ, QATRATION_OUT=_xw,
+                     PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+
+        def _run_cmd(name):
+            r = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), name],
+                               capture_output=True, text=True, timeout=300, env=_xenv,
+                               cwd=os.path.dirname(HERE))
+            return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+        # `fixes` over a directory with no results at all. Zero findings across four
+        # measured targets is a result and the page should say so; zero TARGETS is the
+        # absence of the measurement, and it used to render as the same empty page.
+        _rc, _out = _run_cmd("fixes")
+        check("a fix list with no run behind it exits 3 rather than publishing nothing",
+              _rc == 3, "exit %s: %s" % (_rc, _out[-300:]))
+        check("...and says so in words, with the command that would answer it",
+              "nothing has been measured" in _out and "qatration run" in _out, _out[-300:])
+
+        # `profiles` where every profile on disk is torn. This printed `no recon_*.json in
+        # <dir>` and sent the reader to go and profile a target they had already profiled.
+        io.open(os.path.join(_xw, "recon_bad.json"), "w",
+                encoding="utf-8").write('{"tool_channel": ')
+        _rc, _out = _run_cmd("profiles")
+        check("a table whose every profile is torn exits 3, not 0", _rc == 3,
+              "exit %s: %s" % (_rc, _out[-300:]))
+        check("...and does not tell the reader there are no profiles when there are",
+              "none of them could be read" in _out
+              and "no recon_" not in _out, _out[-400:])
+
+        # A PROFILE THAT PARSES AND IS STILL NOT A PROFILE is one step past torn, and it
+        # reached the reader as a traceback: `tool_channel` holding an object instead of
+        # the string the target named made a format spec raise, and the command answered
+        # a question about somebody's workspace with `This is a bug in qatration`.
+        io.open(os.path.join(_xw, "recon_bad.json"), "w", encoding="utf-8").write(
+            json.dumps({"target": "t", "tool_channel": {}}))
+        _rc, _out = _run_cmd("profiles")
+        check("a profile that parses but is not one is unreadable, not a crash",
+              "bug in qatration" not in _out, _out[-400:])
+        check("...and it is named, with what was wrong with it",
+              "recon_bad.json" in _out and "tool_channel" in _out, _out[-400:])
+
+        # AND THE SAME COMMANDS STILL ANSWER when there IS something, or every check
+        # above would pass on a pair of commands that had simply stopped working.
+        io.open(os.path.join(_xw, "recon_bad.json"), "w", encoding="utf-8").write(
+            json.dumps({"target": "t", "tool_channel": "real"}))
+        _rc, _out = _run_cmd("profiles")
+        check("...while a profile it CAN read is not an unanswerable question", _rc == 0,
+              "exit %s: %s" % (_rc, _out[-300:]))
+    finally:
+        shutil.rmtree(_xw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -756,6 +756,36 @@ def main():
         check("...and the objective it could not measure stops claiming HARDENED",
               any("HARDENED" in _l and "UNMEASURED" in _l.split("->", 1)[-1]
                   for _l in _crash_mt.splitlines()), _crash_mt[-600:])
+
+        # TWO CONFIGS, ONE TARGET NAME, said BEFORE anything is rewritten rather than
+        # found afterwards in a diff. `configs_by_name` returns the collision rather
+        # than choosing in silence, because the loser's stored probes are then scored
+        # against the winner's canaries. `coverage` printed it and this did not, and of
+        # the two commands it is this one that overwrites the stored verdict and the
+        # page built from it. Nothing read the line, so deleting it cost nothing.
+        _dup_mt = os.path.join(_w_mt, "targets_bot_again.yaml")
+        io.open(_dup_mt, "w", encoding="utf-8").write(
+            "adapter: ragbot\nname: bot\noracle_context:\n  canaries:\n    - \"THIRD-CANARY-0003\"\n")
+        _env2_mt = dict(_env_mt,
+                        QATRATION_CONFIGS=os.pathsep.join(_cfgs_mt + [_dup_mt]))
+        _c_mt = _sp_mt.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                           capture_output=True, text=True, timeout=300, env=_env2_mt,
+                           cwd=os.path.dirname(HERE))
+        _c_out = (_c_mt.stdout or "") + (_c_mt.stderr or "")
+        check("two configs claiming one target name are named before anything is "
+              "re-scored",
+              "TWO CONFIGS, ONE TARGET NAME" in _c_out, _c_out[-400:])
+        check("...and the loser is named, not just counted",
+              "targets_bot_again.yaml" in _c_out, _c_out[-400:])
+        check("...and it says whose canaries the loser's rows were scored against",
+              "re-scored against the first" in _c_out, _c_out[-400:])
+        os.unlink(_dup_mt)
+        _q_mt = _sp_mt.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                           capture_output=True, text=True, timeout=300, env=_env_mt,
+                           cwd=os.path.dirname(HERE))
+        check("...while configs that do not collide say nothing about collisions",
+              "TWO CONFIGS" not in ((_q_mt.stdout or "") + (_q_mt.stderr or "")),
+              (_q_mt.stdout or "")[-300:])
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 

@@ -284,7 +284,7 @@ def main():
     # AND THE SUMMARY ACTUALLY PRINTS IT. Every check above recomputes the measurement and
     # none of them runs the command, so the whole section could be deleted with all of them
     # green — which is the shape of the defect they describe, one level up.
-    import subprocess as _sp4
+    import subprocess as _sp4, re as _re4
     _out4 = _sp4.run([sys.executable, os.path.join(HERE, "cli.py"), "benign", "--summary"],
                      capture_output=True, text=True, errors="replace", timeout=900,
                      env=dict(os.environ, PYTHONIOENCODING="utf-8",
@@ -295,6 +295,21 @@ def main():
           "noise suppressor their config leaves unset" in _out4, _out4[-200:])
     check("...naming the key rather than only the detector",
           "unset: allowed_domains" in _out4 or "unset: known_pii" in _out4, _out4[-300:])
+
+    # AND THE HALF THAT IS A RESULT. A detector the corpus aimed at, armed on the target
+    # that received the prompt, which stayed quiet every time, is the strongest clean
+    # answer this instrument gives, and it used to be filed under "untested" beside
+    # detectors nothing had ever sent anything at. Two lines below the gap half, which
+    # three checks read, and this half none did: deleting it left the suite green.
+    check("...and reports the detectors that were aimed at and stayed quiet",
+          "aimed at and quiet" in _out4, _out4[-400:])
+    check("...calling that a pass rather than leaving it beside the untested ones",
+          "That is a pass, not a gap" in _out4, _out4[-400:])
+    # QUANTIFIED OVER THIS FLEET, so a `passed` that went empty would take both lines
+    # above with it silently.
+    _aq = _re4.search(r"aimed at and quiet: (\d+) detectors", _out4)
+    check("...and there were such detectors to report", bool(_aq) and int(_aq.group(1)) > 0,
+          _out4[-200:])
 
     # --- A BASELINE MEASURED AGAINST A WALL IS NOT A BASELINE ---------------------------
     #
