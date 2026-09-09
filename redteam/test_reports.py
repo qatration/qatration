@@ -3504,6 +3504,71 @@ def main():
     finally:
         shutil.rmtree(_tw, ignore_errors=True)
 
+    # --- WHAT THE SET ANSWERS, AND IN WHICH UNIT ---------------------------------------
+    #
+    # Nine A/B stands, seven of them paired, and every row is a separate test of one
+    # hypothesis: does the defence separate. Five of the seven read `not separated`, so a
+    # page carrying only the rows says nothing five times over evidence that all points
+    # one way. Raised on promptfoo#10505, together with the condition that makes it
+    # honest: a pooled test speaks about the SET of configurations and not about any row,
+    # and a page may not pool and also claim each pair separately.
+    #
+    # THE UNIT IS THE PAIR. Pooling the discordant ATTACKS gives p = 1e-8 and treats
+    # twenty-five attacks against one stand as twenty-five independent facts: they share
+    # a target, a defence and an arsenal, and that one stand would decide the fleet's
+    # answer. Recounted here from the page's own rows, which is the only way to tell the
+    # two poolings apart from outside.
+    import subprocess as _sp_d, re as _re_d
+    from stats import mcnemar_exact as _mcn_d
+    _dp = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "discrimination"],
+                    capture_output=True, text=True, timeout=600,
+                    env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                             PYTHONDONTWRITEBYTECODE="1"),
+                    cwd=os.path.dirname(HERE))
+    _dout = (_dp.stdout or "") + (_dp.stderr or "")
+    _rows = [(int(_b), int(_c)) for _b, _c in
+             _re_d.findall(r"(\d+) discordant, (\d+) reversed", _dout)]
+    check("every paired stand prints the discordant counts behind its p",
+          len(_rows) >= 5, str(len(_rows)))
+    check("...and there is a stand where they disagree, so `reversed` is not always 0",
+          any(_c for _b, _c in _rows), str(_rows))
+
+    _fav = sum(1 for _b, _c in _rows if _b > _c)
+    _rev = sum(1 for _b, _c in _rows if _c > _b)
+    _want = "sign test p = %.4f" % _mcn_d(_fav, _rev)
+    check("the pooled claim is the sign test over those rows, recounted",
+          _want in _dout, "%s not in the page (%d favour, %d reverse)"
+          % (_want, _fav, _rev))
+
+    # AND NOT THE OTHER POOLING. Same rows, attacks as the unit, a number three orders
+    # smaller. If this string ever appears, the page has started treating attacks from
+    # one stand as independent of each other.
+    _attack_p = _mcn_d(sum(_b for _b, _c in _rows), sum(_c for _b, _c in _rows))
+    check("...and not the pooling that treats one stand's attacks as independent",
+          ("p = %.4f" % _attack_p) not in _dout, "%.3g" % _attack_p)
+    check("...which is a different number, or the line above proves nothing",
+          abs(_attack_p - _mcn_d(_fav, _rev)) > 0.01,
+          "%.3g vs %.3g" % (_attack_p, _mcn_d(_fav, _rev)))
+    check("...and the page says which of the two questions it answered",
+          "statement about this SET" in _dout and "not about any row" in _dout,
+          _dout[-400:])
+
+    # AND THE PROSE THAT QUOTES IT. `docs/attribution.md` states the pooled result in
+    # words, which is a number on a page like every other number on a page here: recounted
+    # from the command rather than trusted, or the day the fleet gains a stand the sentence
+    # becomes a claim about a run nobody made.
+    _att = io.open(os.path.join(os.path.dirname(HERE), "docs", "attribution.md"),
+                   encoding="utf-8").read()
+    check("the attribution page quotes the pooled result the command prints",
+          ("sign test p = %.4f" % _mcn_d(_fav, _rev)) in _att,
+          "page and command disagree; command says %.4f" % _mcn_d(_fav, _rev))
+    check("...and the count of stands behind it",
+          "%d paired stands, %d favour" % (len(_rows), _fav) in _att,
+          "%d stands, %d favour" % (len(_rows), _fav))
+    check("...and says the pooled claim is not a claim about any single pair",
+          "may not pool and also claim each pair separately" in _att,
+          "the condition is not stated on the page")
+
     # --- THE COULD-NOT-MEASURE BRANCH, DRIVEN AS A COMMAND -----------------------------
     #
     # Both of these print the true sentence and return 3, `docs/ci.md`'s code for a

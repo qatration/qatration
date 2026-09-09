@@ -540,6 +540,30 @@ The per-style split afterwards fell where `attacks_defended.yaml` already said i
 obfuscation beats a keyword filter — so that grouping was fixed as a hypothesis and forty fresh
 questions were written to test it. Those forty are the row in the table.
 
+Every p on this page is two-sided and every one of them now travels with the two counts it is
+a function of. `4 discordant, 0 reversed` **is** the evidence; `p = 0.125` is arithmetic over
+it, and a reader given only the p cannot tell a pair that is underpowered from one that is
+contradicted. Raised by a reviewer on [promptfoo#10505](https://github.com/promptfoo/promptfoo/issues/10505),
+along with the reason not to switch to a one-sided test now that the data have been seen.
+
+### One hypothesis, nine tests of it
+
+The A/B table asks one question nine times: does the defence separate. Five of the seven paired
+stands read `not separated`, so a page carrying only those rows says nothing five times over
+evidence that all points the same way. `qatration discrimination` now prints one sentence about
+the set beneath the table: **7 paired stands, 7 favour the undefended arm, none the
+defended, sign test p = 0.0156.**
+
+That sentence is about this SET of configurations and not about any row in the table, which is
+why every row still reads as its own sample says. A page may not pool and also claim each pair separately, and
+this one does not.
+
+**The unit is the pair, not the attack.** Pooling the discordant attacks themselves gives
+p = 1 × 10⁻⁸ and treats twenty-five attacks against one stand as twenty-five independent facts.
+They share a target, a defence and an arsenal, so that single stand would decide the answer for
+the fleet. Counting each pair once, in the direction it fell, is the version this design
+supports, and it is the weaker of the two numbers on purpose.
+
 `tools/paired_score.py` recounts every figure here from the artifacts and prints, beside each
 p-value, the strongest one the discordant count could have produced. That second number is the
 difference between "no effect" and "this could not have found one", and it is why the 60-pair

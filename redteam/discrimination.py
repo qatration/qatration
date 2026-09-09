@@ -419,7 +419,7 @@ def main():
     # and the sample is too small in most of them, which is a finding about the FLEET rather
     # than about the engine, and the way to close it is more attacks per target.
     from stats import fisher_exact, mcnemar_exact
-    short = []
+    short, _pairsets = [], []
     for base, (bd, md), naive, (bn, mn), (only_n, only_d, shared, mism) in sorted(pairs):
         # THE DESIGN CHOOSES THE TEST, not a preference. Where the two arms were sent the
         # same attack ids, every attack is one unit observed twice and the arms are not
@@ -433,6 +433,7 @@ def main():
         # now comes from the design that was actually run.
         if shared:
             p, test = mcnemar_exact(only_n, only_d), "McNemar"
+            _pairsets.append((naive, base, only_n, only_d))
         else:
             p, test = fisher_exact(bn, mn - bn, bd, md - bd), "Fisher"
         rn = bn / mn if mn else 0.0
@@ -451,8 +452,14 @@ def main():
                     break
             if _need:
                 short.append((naive, base, only_n, only_d, _need))
+        # THE DISCORDANT COUNTS, BESIDE THE p THEY PRODUCED. `4 discordant, 0 reversed`
+        # IS the evidence and `p = 0.125` is a function of it, so a reader given only
+        # the p cannot tell a pair that is underpowered from one that is contradicted.
+        # Raised by a reviewer on promptfoo#10505 and correct: the counts are what
+        # somebody would need to check the arithmetic or to pool it.
+        _disc = ("   %d discordant, %d reversed" % (only_n, only_d)) if shared else ""
         print(f"   {naive:<20} {bn:>2}/{mn:<3} ({rn:>4.0%})   vs   {base:<16} "
-              f"{bd:>2}/{md:<3} ({rd:>4.0%})   [{verdict}]")
+              f"{bd:>2}/{md:<3} ({rd:>4.0%})   [{verdict}]{_disc}")
         # AND WHAT THE TEST COULD NOT USE. An attack both arms ran in different versions
         # is not one unit observed twice, and leaving it out without saying so narrows the
         # comparison without narrowing the sentence about it. This is not hypothetical and
@@ -466,6 +473,34 @@ def main():
         print("   `not separated` is a statement about the sample, not about the pair: the")
         print("   direction is right in every one of them, and most have too few attacks a")
         print("   side to prove it.")
+    # AND THE QUESTION THE SET ANSWERS, which is not the question any one pair answers.
+    #
+    # Every line above is a separate test of what is really one hypothesis: does the
+    # defence separate. Reporting only those is a page that says `not separated` five
+    # times over evidence that all points one way, which understates what the design
+    # earns. Raised on promptfoo#10505, and the condition that came with it is the part
+    # that matters: a pooled test says the defence helps ACROSS these configurations,
+    # NOT that it helps on any one of them, and a page may not pool and also claim each
+    # pair separately. So this is printed as one sentence about the set, under the table
+    # whose rows stay `not separated`.
+    #
+    # THE PAIR IS THE UNIT, NOT THE ATTACK. Pooling the discordant attacks themselves
+    # gives a much smaller number and treats attacks from one target as independent of
+    # each other, which they are not: they share a target, a defence and an arsenal, and
+    # one stand with twenty-five attacks would decide the answer for the fleet. Counting
+    # each PAIR once, in the direction it fell, is the version this design supports.
+    if len(_pairsets) > 1:
+        _fav = sum(1 for _n, _b, _bn, _cn in _pairsets if _bn > _cn)
+        _rev = sum(1 for _n, _b, _bn, _cn in _pairsets if _cn > _bn)
+        _pp = mcnemar_exact(_fav, _rev)
+        print("\n   ACROSS the %d paired stand(s), counting each pair once in the "
+              "direction it fell:\n     %d favour the undefended arm, %d the defended, "
+              "sign test p = %s.\n     That is a statement about this SET of "
+              "configurations and not about any row above,\n     which is why every row "
+              "above still reads as its own sample says."
+              % (len(_pairsets), _fav, _rev,
+                 "%.4f" % _pp if _pp is not None else "not testable"))
+
     if short:
         print("\n   What would close them, counted in the unit McNemar reads. Only attacks")
         print("   the two arms DISAGREE on carry information, so more traffic both arms")
