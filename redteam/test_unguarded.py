@@ -250,6 +250,70 @@ def main():
     check("...and each one adds what it deleted to the number the verdict reads",
           _uncounted == [], str(_uncounted))
 
+    # --- WHAT A KILLED RUN LEAVES BEHIND -------------------------------------------
+    #
+    # Every arm writes a mutant over a real source file and writes the original back a few
+    # lines later. `source_restored` covers the gap through `finally`, which runs for an
+    # exception and for Ctrl-C and NOT for the process being killed -- and its docstring
+    # named a killed background job among the things it protects against.
+    #
+    # Measured, not reasoned about: killing a background run of the tool left
+    # `isolation._status`'s zero-trials guard deleted in the working tree, silently. A
+    # tool that reports which decisions nobody would miss must not be able to leave a
+    # deleted decision behind and say nothing.
+    #
+    # So the mutant is written down before it is written out. The note is exercised here
+    # rather than by killing a real sweep, because a suite cannot kill itself, and the
+    # property that matters is what `recover` does with the note it finds.
+    _kw = tempfile.mkdtemp()
+    try:
+        _kf = os.path.join(_kw, "victim.py")
+        io.open(_kf, "w", encoding="utf-8", newline="").write("ORIGINAL")
+        unguarded.write_mutant(_kf, "MUTANT", "ORIGINAL")
+        check("a mutation leaves a note behind before it lands",
+              os.path.exists(unguarded._note_path())
+              and io.open(_kf, encoding="utf-8").read() == "MUTANT",
+              io.open(_kf, encoding="utf-8").read())
+        _got = unguarded.recover()
+        check("...and the next run puts the file back",
+              io.open(_kf, encoding="utf-8").read() == "ORIGINAL",
+              io.open(_kf, encoding="utf-8").read())
+        check("...and names what it restored, rather than repairing in silence",
+              _got == _kf, str(_got))
+        check("...and tears up the note, so a clean run does not restore twice",
+              not os.path.exists(unguarded._note_path()), unguarded._note_path())
+        # A NOTE FROM LAST WEEK MUST NOT OVERWRITE THIS WEEK'S WORK. Recovery is allowed
+        # only while the file still holds exactly the mutant the note describes; anything
+        # else means somebody has been here since, and restoring would be a worse version
+        # of the defect being fixed.
+        unguarded.write_mutant(_kf, "MUTANT", "ORIGINAL")
+        io.open(_kf, "w", encoding="utf-8", newline="").write("EDITED SINCE")
+        check("a stale note does not overwrite work done since",
+              unguarded.recover() is None
+              and io.open(_kf, encoding="utf-8").read() == "EDITED SINCE",
+              io.open(_kf, encoding="utf-8").read())
+        # AND A CLEAN MUTATION LEAVES NOTHING FOR THE NEXT RUN TO FIND.
+        unguarded.write_mutant(_kf, "MUTANT", "ORIGINAL")
+        unguarded.clear_mutant(_kf, "ORIGINAL")
+        check("a mutation that was cleaned up leaves no note",
+              not os.path.exists(unguarded._note_path())
+              and io.open(_kf, encoding="utf-8").read() == "ORIGINAL",
+              unguarded._note_path())
+    finally:
+        import shutil as _sh_k
+        _sh_k.rmtree(_kw, ignore_errors=True)
+        unguarded._drop_note()
+
+    # AND EVERY ARM GOES THROUGH IT. A pair that writes the mutant with a bare `io.open`
+    # is the shape that shipped: the note is only worth having if nothing bypasses it.
+    _tool_k = io.open(_tool, encoding="utf-8").read()
+    # From the first arm onwards: the helpers above it are where the real write lives.
+    _arms_src = _tool_k[_tool_k.index("def sweep_guards("):]
+    _bypass = [_l.strip() for _l in _arms_src.split(chr(10))
+               if 'io.open(path, "w"' in _l]
+    check("no arm writes a mutant without leaving the note",
+          _bypass == [], str(_bypass[:2]))
+
     # --- A RULE IS NOT ALWAYS A STATEMENT ------------------------------------------
     #
     # `sweep_rules` neutralised each `return True` in a detector with more than one.

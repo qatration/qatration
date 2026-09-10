@@ -53,11 +53,14 @@ import argparse
 import ast
 import contextlib
 import fnmatch
+import hashlib
 import io
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RT = os.path.join(os.path.dirname(HERE), "redteam")
@@ -76,6 +79,13 @@ def source_restored(path):
 
     Found by killing a run of this file and then checking `git status` out of habit. It was
     clean, which was luck about where the signal landed rather than a property of the code.
+
+    AND `finally` DOES NOT COVER A KILL, which this docstring used to claim it did. A
+    `finally` block runs for an exception and for Ctrl-C; the process being killed —
+    a background job stopped, a runner reclaiming a machine — skips it entirely.
+    Killing a background run of this file left `isolation._status`'s zero-trials guard
+    deleted in the working tree, silently, which is the one failure this tool must not
+    be able to cause. `write_mutant` leaves a note for the next run to read.
     """
     orig = io.open(path, encoding="utf-8").read()
     try:
@@ -83,6 +93,71 @@ def source_restored(path):
     finally:
         if io.open(path, encoding="utf-8").read() != orig:
             io.open(path, "w", encoding="utf-8", newline="").write(orig)
+        _drop_note()
+
+
+def _note_path():
+    """Where the note lives: outside the tree, keyed to this checkout.
+
+    Not inside the repository, because a file that appears there mid-sweep is one more
+    thing for `guard.py`, the suites and `git status` to trip over — and this note
+    exists precisely for the runs that never get to clean up after themselves.
+    """
+    key = hashlib.sha1(os.path.abspath(HERE).encode("utf-8")).hexdigest()[:12]
+    return os.path.join(tempfile.gettempdir(), "unguarded-recovery-%s.json" % key)
+
+
+def _drop_note():
+    try:
+        os.remove(_note_path())
+    except OSError:
+        pass
+
+
+def write_mutant(path, mutant, orig):
+    """Put a mutant on disk, having first written down how to undo it.
+
+    The note records the MUTANT as well as the original, and `recover` puts a file back
+    only while it still holds exactly that mutant. A note left by a run killed last
+    week must not overwrite work somebody has done since, and a tool that restores from
+    a stale note is a worse version of the problem it is fixing.
+    """
+    try:
+        io.open(_note_path(), "w", encoding="utf-8").write(json.dumps(
+            {"path": os.path.abspath(path), "mutant": mutant, "orig": orig}))
+    except OSError:
+        pass          # a note that cannot be written is not a reason to skip the sweep
+    io.open(path, "w", encoding="utf-8", newline="").write(mutant)
+
+
+def clear_mutant(path, orig):
+    """Put the original back, then tear up the note. In that order."""
+    io.open(path, "w", encoding="utf-8", newline="").write(orig)
+    _drop_note()
+
+
+def recover():
+    """-> the file a killed run left mutated, put back, or None.
+
+    Called before anything else is touched. Returns the path so the caller can SAY so:
+    a tool that quietly repairs the tree teaches its user that the tree can be trusted
+    without looking, which is the habit that found this in the first place.
+    """
+    p = _note_path()
+    try:
+        note = json.loads(io.open(p, encoding="utf-8").read())
+    except (OSError, ValueError):
+        return None
+    restored = None
+    try:
+        now = io.open(note["path"], encoding="utf-8").read()
+    except (OSError, KeyError):
+        now = None
+    if now is not None and now == note.get("mutant"):
+        io.open(note["path"], "w", encoding="utf-8", newline="").write(note["orig"])
+        restored = note["path"]
+    _drop_note()
+    return restored
 
 GUARD = re.compile(r"^(\s+)if\s+.+:\s*$")
 BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\))\s*$")
@@ -206,10 +281,9 @@ def sweep_guards(only=()):
         with source_restored(path):
             for i in hits:
                 tested += 1
-                io.open(path, "w", encoding="utf-8", newline="").write(
-                    "\n".join(lines[:i] + lines[i + 2:]))
+                write_mutant(path, "\n".join(lines[:i] + lines[i + 2:]), orig)
                 red = any(_run(s) for s in suites)
-                io.open(path, "w", encoding="utf-8", newline="").write(orig)
+                clear_mutant(path, orig)
                 if red:
                     caught += 1
                 else:
@@ -267,9 +341,9 @@ def sweep_rules():
                     head = lines[ln][:node.col_offset] + "False"
                     lines[ln:node.end_lineno] = [
                         head + lines[node.end_lineno - 1][node.end_col_offset:]]
-            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(lines))
+            write_mutant(path, "\n".join(lines), orig)
             red = _run("test_oracle.py")
-            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            clear_mutant(path, orig)
             shown = " ".join((ast.get_source_segment(orig, node) or "").split())
             print("  %-28s line %-5d %-18s %s"
                   % (name, lineno, "kept" if red else "NO CASE OF ITS OWN",
@@ -468,9 +542,9 @@ def sweep_patterns():
                 head = lines[ln][:node.col_offset] + blank
                 lines[ln:node.end_lineno] = [
                     head + lines[node.end_lineno - 1][node.end_col_offset:]]
-            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(lines))
+            write_mutant(path, "\n".join(lines), orig)
             red = _run("test_oracle.py")
-            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            clear_mutant(path, orig)
             # WHICH RULE, not which entry: an entry can hold two, and `danger` with a
             # case beside `safe` without one is the difference between a detector that
             # is tested and one that is half tested.
@@ -523,10 +597,10 @@ def sweep_refusals():
             stmt = lines[idx]
             mutant = list(lines)
             mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
+            write_mutant(path, "\n".join(mutant), orig)
             red = _run("test_oracle.py")
             got = None if red else _replay()
-            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            clear_mutant(path, orig)
             if red:
                 continue
             if base is None or got is None:
@@ -554,6 +628,12 @@ def main(argv):
     ap.add_argument("--only", metavar="MODULE", nargs="+", default=(),
                     help="restrict the documented-guard sweep to these modules")
     args = ap.parse_args(argv)
+    # BEFORE ANYTHING IS TOUCHED, and out loud. A run of this file killed in the gap
+    # between the mutant and the original leaves a deleted decision in the tree, and
+    # the only thing worse than finding one is a tool that fixes it without saying so.
+    _back = recover()
+    if _back:
+        print("A previous run was killed mid-mutation. Restored %s." % _back)
     both = not (args.guards or args.rules or args.refusals or args.patterns)
     # WHAT WAS ACTUALLY DELETED, ACROSS EVERY ARM, which is a different number from what
     # was found. The closing verdict rests on this rather than on `bad`, because zero
