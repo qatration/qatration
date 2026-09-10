@@ -717,6 +717,109 @@ def main():
                   "exit %s: %s" % (_rc, _out[-300:]))
         finally:
             _sh_cw.rmtree(_cw, ignore_errors=True)
+
+        # --- AND THE COMMAND WITH NO --compare, WHICH IS THE PRIMARY ONE --------------
+        #
+        # It printed "N tool(s), M characters of server-authored instruction text" over
+        # `list_tools`, which reads one channel of four. A prompt and a resource template
+        # are text a third party writes into the same context window, and the model cannot
+        # tell which listing they arrived through. On the recorded corpus the line was
+        # 25,974 characters of 27,312, and on the one server there that publishes prompts
+        # and resources, 2,651 of 3,900.
+        #
+        # A server that declares TWO channels and answers both, so the shortfall is the
+        # property under test rather than a fact about today's npm.
+        import shutil as _sh_s, subprocess as _sp_s, re as _re_s
+        _ws = _tf_m.mkdtemp()
+        try:
+            _srv2 = os.path.join(_ws, "two_channel_server.py")
+            _io_m.open(_srv2, "w", encoding="utf-8").write(
+                "import json, sys" + chr(10)
+                + "for line in sys.stdin:" + chr(10)
+                + "    line = line.strip()" + chr(10)
+                + "    if not line:" + chr(10)
+                + "        continue" + chr(10)
+                + "    m = json.loads(line)" + chr(10)
+                + "    if m.get('method') == 'initialize':" + chr(10)
+                + "        r = {'protocolVersion': '2024-11-05'," + chr(10)
+                + "             'capabilities': {'tools': {}, 'prompts': {}}}" + chr(10)
+                + "    elif m.get('method') == 'tools/list':" + chr(10)
+                + "        r = {'tools': [{'name': 't', 'description': 'clean'}]}" + chr(10)
+                + "    elif m.get('method') == 'prompts/list':" + chr(10)
+                + "        r = {'prompts': [{'name': 'p', 'description':" + chr(10)
+                + "             'ZZPROMPTTEXT a prompt is instruction text too'}]}" + chr(10)
+                + "    elif 'id' in m:" + chr(10)
+                + "        print(json.dumps({'jsonrpc': '2.0', 'id': m['id']," + chr(10)
+                + "                          'error': {'code': -32601," + chr(10)
+                + "                                    'message': 'Method not found'}}))"
+                + chr(10)
+                + "        sys.stdout.flush()" + chr(10)
+                + "        continue" + chr(10)
+                + "    else:" + chr(10)
+                + "        continue" + chr(10)
+                + "    print(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result': r}))"
+                + chr(10) + "    sys.stdout.flush()" + chr(10))
+
+            def _run_mcp(server_py):
+                _r = _sp_s.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "mcp",
+                     "--timeout", "60", sys.executable, server_py],
+                    capture_output=True, text=True, timeout=300,
+                    env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                             PYTHONDONTWRITEBYTECODE="1"),
+                    cwd=os.path.dirname(HERE))
+                return _r.returncode, (_r.stdout or "") + (_r.stderr or "")
+
+            _rc_s, _out_s = _run_mcp(_srv2)
+            check("the mcp command reads every channel the server declares, not tools alone",
+                  _rc_s == 0 and "2 item(s) across 2 channel(s)" in _out_s,
+                  "exit %s: %s" % (_rc_s, _out_s[-300:]))
+            check("...so a prompt's instruction text reaches the reader",
+                  "ZZPROMPTTEXT" in _out_s, _out_s[-300:])
+            # THE NUMBER, not just the listing. The headline is what a reader quotes, and
+            # counting one channel while naming the whole surface is the defect.
+            _n_s = _re_s.search(r"(\d+) characters of server-authored", _out_s)
+            _tools_only = len(_it_m([{"name": "t", "description": "clean"}]))
+            check("...and the character count is more than the tools channel carries",
+                  bool(_n_s) and int(_n_s.group(1)) > _tools_only,
+                  "%s vs tools-only %d" % (_n_s and _n_s.group(1), _tools_only))
+            # AND A CHANNEL IT NEVER DECLARED IS NAMED WITH ITS REASON. `surface_text`
+            # counts a listing that failed exactly as it counts one that never existed;
+            # the caller carries the difference or nobody has it.
+            check("...and a channel the server never declared is reported, with the reason",
+                  "resources" in _out_s and "not declared" in _out_s, _out_s[-400:])
+
+            # A SERVER THAT LISTS NOTHING IS NOT A SERVER WITH A SMALL SURFACE. It
+            # answered, so this is not a refusal, and `0 characters` beside exit 0 reads
+            # as a measurement of a quiet server rather than as no measurement at all.
+            _none = os.path.join(_ws, "no_channel_server.py")
+            _io_m.open(_none, "w", encoding="utf-8").write(
+                "import json, sys" + chr(10)
+                + "for line in sys.stdin:" + chr(10)
+                + "    line = line.strip()" + chr(10)
+                + "    if not line:" + chr(10)
+                + "        continue" + chr(10)
+                + "    m = json.loads(line)" + chr(10)
+                + "    if m.get('method') == 'initialize':" + chr(10)
+                + "        r = {'protocolVersion': '2024-11-05', 'capabilities': {}}"
+                + chr(10)
+                + "    elif 'id' in m:" + chr(10)
+                + "        print(json.dumps({'jsonrpc': '2.0', 'id': m['id']," + chr(10)
+                + "                          'error': {'code': -32601," + chr(10)
+                + "                                    'message': 'Method not found'}}))"
+                + chr(10)
+                + "        sys.stdout.flush()" + chr(10)
+                + "        continue" + chr(10)
+                + "    else:" + chr(10)
+                + "        continue" + chr(10)
+                + "    print(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result': r}))"
+                + chr(10) + "    sys.stdout.flush()" + chr(10))
+            _rc_n, _out_n = _run_mcp(_none)
+            check("a server that lists nothing is refused as unmeasured, not reported clean",
+                  _rc_n == 3 and "nothing was measured" in _out_n,
+                  "exit %s: %s" % (_rc_n, _out_n[-300:]))
+        finally:
+            _sh_s.rmtree(_ws, ignore_errors=True)
         # THE RULE IS ASKED OF EVERY CHANNEL, or the false-alarm floor is a floor for
         # tools and silence everywhere else.
         _all_hits = ["%s/%s/%s" % (_s, _c, _x["name"]) for _s, _c, _x in _chan_items

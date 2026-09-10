@@ -433,16 +433,48 @@ def main():
         print("")
         print("nothing was started: this needs the command that runs an MCP server.")
         return 2
-    tools, why = list_tools(args.server, timeout=args.timeout)
-    if why:
-        print("could not read the tool list: %s" % why)
+    # THE WHOLE SURFACE, NOT THE TOOLS CHANNEL. `list_tools` reads one of four, and
+    # this printed `N tool(s), M characters of server-authored instruction text` —
+    # which names the thing the other three carry as well. A prompt and a resource
+    # template are text a third party writes into the same context window; the model
+    # cannot tell which listing they arrived through.
+    #
+    # Measured on the recorded corpus in `out/mcp_tools.json`: 25,974 characters of
+    # 27,312, and on the one server there that publishes prompts and resources, 2,651
+    # of 3,900. Fourteen of seventy-seven items were outside the number entirely, and
+    # the line carried no hint that anything was.
+    found, why, _caps, fatal = list_surface(args.server, timeout=args.timeout)
+    if fatal:
+        print("could not read the server: %s" % fatal)
         return 2
-    text = instruction_text(tools)
-    print("%d tool(s), %d characters of server-authored instruction text"
-          % (len(tools), len(text)))
-    for t in tools:
-        d = " ".join((t.get("description") or "").split())
-        print("  %-30s %5d  %s" % (t.get("name"), len(d), d[:80]))
+    live = {c: v for c, v in found.items() if v}
+    n_items = sum(len(v) for v in live.values())
+    print("%d item(s) across %d channel(s), %d characters of server-authored "
+          "instruction text" % (n_items, len(live), len(surface_text(found))))
+    # AND WHAT WAS NOT READ, in the same breath as what was. `surface_text` counts a
+    # channel that failed exactly as it counts a channel that never existed, and says
+    # in its own docstring that the caller has to carry the reasons. This caller is
+    # the one that did not.
+    for chan, _method, _key in CHANNELS:
+        items = found.get(chan)
+        if items:
+            print("  %-20s %3d item(s), %5d characters"
+                  % (chan, len(items), len(instruction_text(items))))
+        else:
+            print("  %-20s   not read: %s"
+                  % (chan, why.get(chan) or "no reason was recorded"))
+    for chan, _method, _key in CHANNELS:
+        for item in (found.get(chan) or []):
+            d = " ".join((item.get("description") or "").split())
+            name = item.get("name") or item.get("uriTemplate") or item.get("uri") or "?"
+            print("  %-11s %-24s %5d  %s" % (chan, name[:24], len(d), d[:64]))
+    # A SERVER THAT PUBLISHED NOTHING IS NOT A SERVER WITH A SMALL SURFACE. It answered,
+    # so this is not a refusal; nothing was listable, so there is no measurement to
+    # report either, and `0 characters` printed against a clean exit reads as one.
+    if not live:
+        print("")
+        print("nothing was measured: this server listed no tool, prompt or resource.")
+        return 3
     return 0
 
 
