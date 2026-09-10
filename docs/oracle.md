@@ -36,6 +36,16 @@ because one of them derived its bucket from a filtered set instead of from every
 happened. That is the same shape as the misfiling this file already documents one paragraph
 along, found in the module that documents it.
 
+A detector demonstrated ONLY in a `--model` copy is labelled `[per-model copy only]`, and
+the count that stands without them is printed beside the headline: **62**. A `--model` run
+writes `results_<target>_<model>.json` deliberately beside the canonical artifact, and every
+page here that counts targets, rates or verdicts leaves those out as the same attacks under
+a different model. This tool takes them, because its question is whether a detector has ever
+fired against a live target and a model copy is one. What it did not do was SAY so, and two
+of the sixty-four have fired nowhere else: `capitulation` and `model_identification`, both
+under `memorybot-naive` on a non-default model. A reader checking this headline against the
+thirty-five canonical artifacts the rest of the tooling reports had no way to reconcile it.
+
 A detector demonstrated ONLY on traffic nobody attacked is now labelled `[clean traffic
 only]`, because it is a different claim: the detector works, and no attack in the arsenal has
 yet needed it. That is a statement about the arsenal rather than a clean bill for the

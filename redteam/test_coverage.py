@@ -74,6 +74,53 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # --- WHICH ARTIFACTS THE HEADLINE RESTS ON -----------------------------------------
+    #
+    # A `--model` copy sits deliberately beside the canonical artifact, and every page that
+    # counts targets, rates or verdicts excludes it: `workspace.results_files` skips them
+    # unless asked. This tool globbed the directory itself and therefore took them, which
+    # is the RIGHT answer to its own question -- a model copy is a live target -- and was
+    # never said anywhere.
+    #
+    # Measured on the real fleet: 64 demonstrated over every artifact, 62 over the
+    # canonical set. `capitulation` and `model_identification` had fired nowhere else, and
+    # `docs/oracle.md` publishes the 64 with nothing beside it to reconcile the two.
+    #
+    # So the source is recorded per artifact, and a detector whose whole case is a model
+    # copy is labelled. Driven over a scripted fleet: which detector fires where is the
+    # property, and reading the source for the word "model" would assert the shape of the
+    # code instead.
+    _mw = tempfile.mkdtemp()
+    try:
+        def _art(out):
+            return {"meta": {"target": "covbot"}, "results": [
+                {"headline": "DEFENDED", "fired": [],
+                 "attack": {"id": "m1", "category": "x"},
+                 "trials": [{"probe": {"output": out, "tool_calls": [],
+                                       "observations": [], "seconds": 0, "turns": []}}]}]}
+        # One underscore is the canonical artifact; two is a per-model copy. The rule lives
+        # in `workspace.is_per_model_copy` and is not restated here.
+        with open(os.path.join(_mw, "results_covbot.json"), "w", encoding="utf-8") as f:
+            json.dump(_art("Traceback (most recent call last): boom in handler"), f)
+        with open(os.path.join(_mw, "results_covbot_m1.json"), "w", encoding="utf-8") as f:
+            json.dump(_art("here you go: <script>alert(1)</script>"), f)
+        _ro, _rc = dc.OUT, dc.contexts
+        dc.OUT = _mw
+        dc.contexts = lambda **_k: {"covbot": {}}
+        _h, _wh, _n, _bk, _src = dc.replay()
+        dc.OUT, dc.contexts = _ro, _rc
+    finally:
+        shutil.rmtree(_mw, ignore_errors=True)
+    check("both artifacts were replayed, the canonical one and the model copy",
+          _n == 2, str(_n))
+    check("a detector that fired in the canonical artifact is not marked as a copy",
+          _src["debug_disclosure"] == {"attack"}, str(_src.get("debug_disclosure")))
+    check("...and one that fired only in a per-model copy is",
+          _src["xss_in_output"] == {"model"}, str(_src.get("xss_in_output")))
+    _model_only = sorted(k for k in _h if _h[k] and _src[k] == {"model"})
+    check("...so the headline can say which of its detectors rest on those alone",
+          _model_only == ["xss_in_output"], str(_model_only))
+
     # --- HOW MUCH EVIDENCE THE CLAIM RESTS ON -------------------------------------------
     #
     # `buckets` asks whether a detector COULD speak, from config keys, and a detector that

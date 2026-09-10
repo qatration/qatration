@@ -18,7 +18,7 @@ import sys, os, glob, json, argparse, collections
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from workspace import (OUT as WORKSPACE_OUT, target_of, read_artifact,
-                       no_results_note, plain, named_build)
+                       no_results_note, plain, named_build, results_files)
 from isolation import read_maps, map_target as _map_target
 ROOT = os.path.dirname(HERE)
 OUT = WORKSPACE_OUT
@@ -156,7 +156,20 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                 # "this one is broken". Counted and printed instead.
                 broke[name] += 1
 
-    for fp in glob.glob(os.path.join(OUT, "results_*.json")):
+    # ONE SPELLING OF `results_*.json`, and the flag is the whole point of saying it
+    # here. `workspace.results_files` owns the naming rule and defaults to the
+    # CANONICAL set: a `--model` copy sits deliberately beside the canonical artifact,
+    # and every page that counts targets, rates or verdicts leaves it out because it is
+    # the same attacks against the same target under a different model.
+    #
+    # This tool asks a different question — has this detector ever fired against a
+    # live target — and a model copy is a live target, so it takes them. That is the
+    # same argument the benign loop below makes about deriving a bucket from a filtered
+    # set. What was missing is that it was never SAID: this file globbed the directory
+    # itself, and two of the detectors it calls demonstrated are demonstrated on
+    # nothing else. See `model_only`.
+    _canonical = set(results_files(OUT))
+    for fp in results_files(OUT, include_model_copies=True):
         d, _why = read_artifact(fp)
         if _why:
             unreadable.append((os.path.basename(fp), _why))
@@ -199,7 +212,8 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                         _row[0] += 1
                         if _pr.tool_calls:
                             _row[1] += 1
-                scan(_pr, judged_ctx(r.get("attack") or {}, ctx), tgt)
+                scan(_pr, judged_ctx(r.get("attack") or {}, ctx), tgt,
+                     source="attack" if fp in _canonical else "model")
         note_engine(d, os.path.basename(fp), n - before)
 
     # THE BENIGN CORPUS WAS NOT READ AT ALL, and it is the larger body of evidence: 1,392
@@ -358,7 +372,8 @@ def buckets(declared, broke=(), scanned=None):
 
 
 def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
-               untried, unevidenced, unconfigured, broke, unresolved, unreadable):
+               untried, unevidenced, unconfigured, broke, unresolved, unreadable,
+               model_only=()):
     """The same four answers the console gives, in the form a pipeline can act on.
 
     THE FILE COLLAPSED WHAT THE PAGE SPLITS. This command's whole argument, printed in its
@@ -385,6 +400,9 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
                    "measured": bool(n),
                    "demonstrated": {k: hits[k] for k in demo},
                    "demonstrated_on_benign_traffic_only": list(benign_only),
+                   # A CI step reading this file has to be able to tell which of the
+                   # demonstrated rest on evidence the rest of the project excludes.
+                   "demonstrated_on_model_copies_only": list(model_only),
                    # The union of the three absences, and no longer of the defect.
                    "declared_only": [k for k in declared if k not in broke],
                    "no_target_exhibits_this": list(untried),
@@ -417,6 +435,15 @@ def main():
     # an attack, and the difference is the interesting one: the detector works, and what it
     # caught was the target doing it unprompted. Said rather than folded in.
     benign_only = sorted(k for k in demo if sources[k] == {"benign"})
+    # AND DEMONSTRATED ONLY ON A PER-MODEL COPY is a third claim again. The copy is
+    # real evidence and it is evidence every other page in this project excludes, so a
+    # reader checking this headline against the thirty-five artifacts the rest of the
+    # tooling reports cannot reconcile it and has no way to find out why.
+    #
+    # Measured when this was written: 64 demonstrated over every artifact, 62 over the
+    # canonical set. `capitulation` and `model_identification` fired only under
+    # `memorybot-naive` on two non-default models.
+    model_only = sorted(k for k in demo if sources[k] == {"model"})
     declared = sorted(k for k in DETECTORS if not hits[k])
     unconfigured, unevidenced, untried = buckets(declared, broke, scanned=_scanned)
 
@@ -470,6 +497,7 @@ def main():
                             for _n in sorted(where[k])], 3)
         more = ""
         tag = "  [clean traffic only]" if k in benign_only else ""
+        tag += "  [per-model copy only]" if k in model_only else ""
         print(f"  {k:<24}{hits[k]:>5}   {tg}{more}{tag}")
     if benign_only:
         print("")
@@ -477,6 +505,13 @@ def main():
         print("  detector is demonstrated and no attack has yet needed it — which is a")
         print("  statement about the arsenal, not a clean bill for the detector:")
         print("    " + ", ".join(benign_only))
+    if model_only:
+        print("")
+        print(f"  {len(model_only)} of these fired ONLY in a `--model` copy, which every")
+        print("  other page here leaves out as the same run under a different model. The")
+        print("  detector is demonstrated; the count beside the canonical artifacts alone")
+        print(f"  would be {len(demo) - len(model_only)}:")
+        print("    " + ", ".join(model_only))
 
     print("\nDECLARED ONLY — implemented and unit-tested, never yet seen to fire")
     if untried:
@@ -574,11 +609,13 @@ def main():
         # cannot act on. `docs/ci.md` gives an unanswerable question code 3.
         print("\n" + no_results_note(OUT))
         _emit_json(args.json, n, hits, demo, benign_only, declared, where,
-                   untried, unevidenced, unconfigured, broke, unresolved, _unreadable_seen)
+                   untried, unevidenced, unconfigured, broke, unresolved,
+                   _unreadable_seen, model_only)
         return 3
 
     _emit_json(args.json, n, hits, demo, benign_only, declared, where,
-               untried, unevidenced, unconfigured, broke, unresolved, _unreadable_seen)
+               untried, unevidenced, unconfigured, broke, unresolved,
+               _unreadable_seen, model_only)
 
 
 if __name__ == "__main__":

@@ -204,6 +204,12 @@ def facts():
         # `replay()` already returned it at the top of this function.
         "probes": probes,
         "demonstrated": len(demo),
+        # AND HOW MANY OF THEM STAND WITHOUT A `--model` COPY. The page publishes the
+        # larger number, which is the right one for the question this tool asks; two of
+        # the sixty-four have fired nowhere but a copy, and the rest of the project
+        # excludes those artifacts. A headline nothing can be reconciled against is the
+        # defect this page is a list of.
+        "demonstrated_canonical": len([k for k in demo if _src[k] != {"model"}]),
         "declared_only": len(declared),
         "untried": len(untried),
         "unevidenced": len(unevidenced),
@@ -281,6 +287,9 @@ def claims(f):
         ("the headline: declared-only",
          r"It reports \*\*\d+ demonstrated, (\d+) declared-only\*\*",
          str(f["declared_only"])),
+        ("...and how many of the demonstrated stand without a per-model copy",
+         r"the count that stands without them is printed beside the headline: \*\*(\d+)\*\*",
+         str(f["demonstrated_canonical"])),
         ("the declared-only split, untried half",
          r"split \*\*(\d+) untried / \d+ unevidenced / \d+ unconfigured\*\*",
          str(f["untried"])),
