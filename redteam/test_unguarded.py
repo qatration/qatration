@@ -225,6 +225,30 @@ def main():
     check("...over modules that exist, not a refusal in disguise",
           "no such module" not in _empty, _empty[-300:])
 
+    # AND EVERY ARM COUNTS. The first version of that verdict counted deletions from the
+    # guards arm alone, so `--refusals` deleted fifty early refusals and the summary read
+    # `NOTHING WAS DELETED` — the same defect it was written to fix, pointed the other
+    # way, and it shipped for as long as it took to run the other arm once.
+    #
+    # This is the source, not a run: the refusals arm re-scores the whole stored fleet and
+    # takes minutes, which is too long to spend inside a suite. What is asserted is that
+    # each arm feeds the counter the verdict reads.
+    _tool_src = io.open(_tool, encoding="utf-8").read()
+    _main_src = _tool_src[_tool_src.index("def main("):]
+    _arms = [_a for _a in ("sweep_guards(", "sweep_rules()", "sweep_refusals()")
+             if _a in _main_src]
+    check("every arm of the sweep exists to be counted", len(_arms) == 3, str(_arms))
+    _uncounted = []
+    for _a in _arms:
+        _at = _main_src.index(_a)
+        _next = min([_p for _p in
+                     [_main_src.find(_o, _at + 1) for _o in ("if both or", "\n    #")]
+                     if _p > 0] or [len(_main_src)])
+        if "swept +=" not in _main_src[_at:_next]:
+            _uncounted.append(_a)
+    check("...and each one adds what it deleted to the number the verdict reads",
+          _uncounted == [], str(_uncounted))
+
     print("\n%d/%d passed" % (PASS, PASS + FAIL))
     if FAIL:
         return 1

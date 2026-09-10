@@ -343,9 +343,14 @@ def main(argv):
                     help="restrict the documented-guard sweep to these modules")
     args = ap.parse_args(argv)
     both = not (args.guards or args.rules or args.refusals)
-    # WHAT WAS ACTUALLY DELETED, which is a different number from what was found. The
-    # closing verdict rests on this rather than on `bad`, because zero survivors out of
-    # zero deletions is not a clean bill.
+    # WHAT WAS ACTUALLY DELETED, ACROSS EVERY ARM, which is a different number from what
+    # was found. The closing verdict rests on this rather than on `bad`, because zero
+    # survivors out of zero deletions is not a clean bill.
+    #
+    # EVERY ARM, and the first version of this counted one. `--refusals` deleted fifty and
+    # the summary read `NOTHING WAS DELETED`: the same defect as the one it was written to
+    # fix, pointed the other way, and it shipped for as long as it took to run the other
+    # arm once.
     bad = swept = 0
     if both or args.guards:
         print("=== documented guards ===")
@@ -364,6 +369,7 @@ def main(argv):
     if both or args.rules:
         print("\n=== rules inside multi-rule detectors ===")
         n, free = sweep_rules()
+        swept += n
         print("\n%d rule site(s) tested, %d with no case of their own" % (n, len(free)))
         for name, ln, src in free:
             print("  oracle.py:%d  %s  %s" % (ln, name, src[:60]))
@@ -371,6 +377,7 @@ def main(argv):
     if both or args.refusals:
         print("\n=== guards against false positives ===")
         n, moved = sweep_refusals()
+        swept += n
         print("\n%d early refusal(s) tested, %d move a verdict on the stored evidence"
               % (n, len(moved)))
         for name, ln, what in moved:
