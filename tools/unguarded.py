@@ -273,18 +273,27 @@ def _replay():
     return _json.loads(p.stdout.strip().split("\n")[-1])
 
 
-def _pattern_position(tree, src, det, list_name):
-    """-> the index in a tuple entry that the detector uses as a regex, or None.
+def _pattern_positions(tree, src, det, list_name):
+    """-> (indices in a tuple entry the detector reads as regexes, why there are none).
 
-    Derived from the loop that reads the list: `for pat, _what in _SECRET_AT_REST` binds
-    two names and only one of them reaches `re.search`. Returning None where that cannot
-    be read is deliberate — a sweep that guesses which half is the rule reports the
-    other half's prose as an uncovered rule, which is a finding about nothing.
+    Derived from the loop that reads the list: `for pat, _what in _SECRET_AT_REST`
+    binds two names and only one of them reaches a regex. Guessing which half is the
+    rule reports the other half's prose as an uncovered rule, which is a finding about
+    nothing, so an unreadable loop yields no index — and NAMES WHY, because the arm
+    that skips in silence is the thing this tool exists to refuse.
+
+    PLURAL, AND IT USED TO BE SINGULAR. `_INSECURE_CODE` binds (label, danger, safe)
+    and the last two are both rules: one makes the finding and the other takes it
+    back, so deleting either changes a verdict. Returning one index dropped five.
+
+    AND A RULE NEED NOT REACH `re.search` AS AN ARGUMENT. A pre-compiled one is read
+    as `danger.search(body)` — the same rule through a different surface, and those
+    same five were invisible for that reason as well as the first.
     """
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == det), None)
     if fn is None:
-        return None
+        return (), "there is no %s to read" % det
     for node in ast.walk(fn):
         if not isinstance(node, (ast.For, ast.comprehension)):
             continue
@@ -293,25 +302,46 @@ def _pattern_position(tree, src, det, list_name):
             continue
         target = getattr(node, "target", None)
         if not isinstance(target, (ast.Tuple, ast.List)):
-            return None
+            return (), "%s binds one name per entry" % det
         names = [e.id if isinstance(e, ast.Name) else None for e in target.elts]
-        body = fn
         used_as_pattern = set()
-        for call in ast.walk(body):
-            if not isinstance(call, ast.Call) or not call.args:
+        for call in ast.walk(fn):
+            if not isinstance(call, ast.Call):
                 continue
             f = call.func
-            is_re = (isinstance(f, ast.Attribute) and f.attr in ("search", "match",
-                                                                 "finditer", "findall")
-                     and isinstance(f.value, ast.Name) and f.value.id == "re")
-            if is_re and isinstance(call.args[0], ast.Name):
-                used_as_pattern.add(call.args[0].id)
-        for i, nm in enumerate(names):
-            if nm and nm in used_as_pattern:
-                return i
-        return None
-    return None
+            if not isinstance(f, ast.Attribute) or f.attr not in _RE_METHODS:
+                continue
+            # `re.search(pat, text)` names the rule in the first argument;
+            # `pat.search(text)` names it in the receiver. Both are the same read.
+            if isinstance(f.value, ast.Name) and f.value.id == "re":
+                if call.args and isinstance(call.args[0], ast.Name):
+                    used_as_pattern.add(call.args[0].id)
+            elif isinstance(f.value, ast.Name):
+                used_as_pattern.add(f.value.id)
+        found = tuple(i for i, nm in enumerate(names) if nm and nm in used_as_pattern)
+        return found, "" if found else "no name %s binds reaches a regex" % det
+    return (), "%s does not read %s in a loop" % (det, list_name)
 
+
+# EVERY WAY A COMPILED OR LITERAL PATTERN GETS ASKED A QUESTION.
+_RE_METHODS = ("search", "match", "fullmatch", "finditer", "findall", "sub", "split")
+
+
+def _never_matches(node):
+    """-> source that matches nothing, in the shape the rule is written in, or None.
+
+    A rule is a string literal or a `re.compile(...)` beside it, and the second shape
+    is why five rules went untested: the sweep only knew how to blank a literal, and
+    said nothing about the rest rather than admitting it could not.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return '"ZZ-MATCHES-NOTHING"'
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "compile"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "re"):
+        return 're.compile("ZZ-MATCHES-NOTHING")'
+    return None
 
 def sweep_patterns():
     """Neutralise each pattern in a detector's rule list; report the ones nothing missed.
@@ -325,6 +355,12 @@ def sweep_patterns():
     pattern or a `(pattern, specimen)` pair — the pair is what the fix for those
     forty-one looks like, and this has to read both or it stops covering the lists that
     took it.
+
+    AND IT RETURNS WHAT IT DID NOT TOUCH. The version that could read only one index per
+    entry, and only a string literal, walked past `_INSECURE_CODE` entirely: five rules
+    in a shipped detector, tested by nothing, and the summary line counted eighty-two and
+    mentioned no absence. A number that reads as coverage over a set nobody named is the
+    defect this whole tool is pointed at, arrived at from the inside.
     """
     path = os.path.join(RT, "oracle.py")
     orig = io.open(path, encoding="utf-8").read()
@@ -351,41 +387,53 @@ def sweep_patterns():
     # element zero from both reported five of `_INSECURE_CODE`'s rules as uncovered when
     # what had been neutralised was their prose. The detector unpacks the entry and
     # passes one of the names to `re.search`; that name's position is the answer.
-    sites = []
+    sites, skipped = [], []
     for name, det in sorted(used.items()):
-        pos = _pattern_position(tree, orig, det, name)
+        pos, why = _pattern_positions(tree, orig, det, name)
         for i, el in enumerate(lists[name].elts):
             if isinstance(el, (ast.Tuple, ast.List)):
-                if pos is None or pos >= len(el.elts):
-                    continue          # cannot tell which half is the rule; say nothing
-                target = el.elts[pos]
+                here = [p for p in pos if p < len(el.elts)]
+                if not here:
+                    # CANNOT TELL WHICH HALF IS THE RULE, and that is a result of its
+                    # own: guessing invents findings, and staying quiet about it is
+                    # how five rules went untested behind a number that read clean.
+                    skipped.append((name, det, why or "no index inside this entry"))
+                    continue
+                targets = [el.elts[p] for p in here]
             else:
-                target = el
-            if isinstance(target, ast.Constant) and isinstance(target.value, str):
-                sites.append((name, det, i, target))
+                targets = [el]
+            for target in targets:
+                if _never_matches(target):
+                    sites.append((name, det, i, target))
+                else:
+                    skipped.append((name, det, "the rule is not a literal or a compile"))
     assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
     free = []
     with source_restored(path):
         for name, det, i, node in sites:
+            blank = _never_matches(node)
             lines = orig.split("\n")
             ln = node.lineno - 1
             if node.lineno == node.end_lineno:
                 lines[ln] = (lines[ln][:node.col_offset]
-                             + '"ZZ-MATCHES-NOTHING"' + lines[ln][node.end_col_offset:])
+                             + blank + lines[ln][node.end_col_offset:])
             else:
-                head = lines[ln][:node.col_offset] + '"ZZ-MATCHES-NOTHING"'
+                head = lines[ln][:node.col_offset] + blank
                 lines[ln:node.end_lineno] = [
                     head + lines[node.end_lineno - 1][node.end_col_offset:]]
             io.open(path, "w", encoding="utf-8", newline="").write("\n".join(lines))
             red = _run("test_oracle.py")
             io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            # WHICH RULE, not which entry: an entry can hold two, and `danger` with a
+            # case beside `safe` without one is the difference between a detector that
+            # is tested and one that is half tested.
+            shown = " ".join((ast.get_source_segment(orig, node) or "").split())
             print("  %-20s %-26s %s  %s"
-                  % (name, det, "kept" if red else "NO CASE OF ITS OWN",
-                     node.value[:40]))
+                  % (name, det, "kept" if red else "NO CASE OF ITS OWN", shown[:44]))
             if not red:
-                free.append((name, det, node.value))
+                free.append((name, det, shown))
     assert _run("test_oracle.py") == 0, "oracle.py was not restored"
-    return len(sites), free
+    return len(sites), free, skipped
 
 
 def sweep_refusals():
@@ -493,12 +541,21 @@ def main(argv):
         bad += len(free)
     if both or args.patterns:
         print("\n=== rules that live in a pattern list ===")
-        n, free = sweep_patterns()
+        n, free, skipped = sweep_patterns()
         swept += n
         print("\n%d pattern rule(s) tested, %d with no case of their own"
               % (n, len(free)))
         for name, det, pat in free:
             print("  %-20s %-26s %s" % (name, det, pat[:60]))
+        # SAY WHAT WAS NOT LOOKED AT, the same debt the guard arm above pays. This arm
+        # ran for a week counting eighty-two and never mentioning the five it walked
+        # past, which is a number that reads as coverage of a set nobody named.
+        if skipped:
+            print("  %d more rule(s) sit where this sweep cannot tell which half is the rule.\n"
+                  "  They were not touched, and their silence here is not a result."
+                  % len(skipped))
+            for _k in sorted(set(skipped)):
+                print("    %-20s %-26s %s" % _k)
         bad += len(free)
     if both or args.refusals:
         print("\n=== guards against false positives ===")

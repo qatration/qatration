@@ -268,7 +268,7 @@ def main():
     import ast as _ast_p
 
     def _pos(src, det, name):
-        return unguarded._pattern_position(_ast_p.parse(src), src, det, name)
+        return unguarded._pattern_positions(_ast_p.parse(src), src, det, name)
 
     _first = J_SRC = (
         "import re" + chr(10)
@@ -278,7 +278,7 @@ def main():
         + "        if re.search(pat, p):" + chr(10)
         + "            return True" + chr(10))
     check("the rule is the element the detector searches with",
-          _pos(J_SRC, "d_one", "L") == 0, str(_pos(J_SRC, "d_one", "L")))
+          _pos(J_SRC, "d_one", "L")[0] == (0,), str(_pos(J_SRC, "d_one", "L")))
     _SECOND = (
         "import re" + chr(10)
         + "L = [('a', 'x')]" + chr(10)
@@ -287,7 +287,7 @@ def main():
         + "        if re.search(pat, p):" + chr(10)
         + "            return True" + chr(10))
     check("...and it is not assumed to be the first",
-          _pos(_SECOND, "d_two", "L") == 1, str(_pos(_SECOND, "d_two", "L")))
+          _pos(_SECOND, "d_two", "L")[0] == (1,), str(_pos(_SECOND, "d_two", "L")))
     # AND WHERE IT CANNOT BE READ, NOTHING IS CLAIMED. Guessing here reports the other
     # half's prose as a rule with no case, which is a finding about nothing.
     _OPAQUE = (
@@ -297,7 +297,29 @@ def main():
         + "        if a in p:" + chr(10)
         + "            return True" + chr(10))
     check("...and where neither half reaches a regex, no position is claimed",
-          _pos(_OPAQUE, "d_three", "L") is None, str(_pos(_OPAQUE, "d_three", "L")))
+          _pos(_OPAQUE, "d_three", "L")[0] == (), str(_pos(_OPAQUE, "d_three", "L")))
+    # ...AND IT SAYS WHY. An index it cannot read is a rule it will not test, and the arm
+    # has to hand that up rather than drop it: five rules in `_INSECURE_CODE` sat behind
+    # a returned None for as long as the arm had one, counted by nothing and named by
+    # nothing, under a total that read as coverage.
+    check("...and the reason travels with the refusal",
+          bool(_pos(_OPAQUE, "d_three", "L")[1]), "no reason given")
+
+    # AND AN ENTRY CAN HOLD MORE THAN ONE RULE. `_INSECURE_CODE` binds (label, danger,
+    # safe): one makes the finding, the other takes it back, and deleting either moves a
+    # verdict. A single index cannot describe that, and the version that returned one
+    # walked past the whole list. Compiled rather than literal, because that is the other
+    # half of why they were invisible -- `danger.search(body)` never passes the pattern to
+    # `re.search` as an argument, so the scan that looked for that argument saw nothing.
+    _PAIR = (
+        "import re" + chr(10)
+        + "L = [('lbl', re.compile('zzd'), re.compile('zzs'))]" + chr(10)
+        + "def d_pair(p, c):" + chr(10)
+        + "    for label, danger, safe in L:" + chr(10)
+        + "        if danger.search(p) and not safe.search(p):" + chr(10)
+        + "            return True" + chr(10))
+    check("both halves of a two-rule entry are rules",
+          _pos(_PAIR, "d_pair", "L")[0] == (1, 2), str(_pos(_PAIR, "d_pair", "L")))
 
     # AND THE ARM, DRIVEN. The three checks above read `_pattern_position` on its own,
     # and a rule with a fixture is not a caller with one: putting `pos = 0` back inside
@@ -327,6 +349,16 @@ def main():
             + "    for a, b in M:" + chr(10)
             + "        if a in p:" + chr(10)
             + "            return True" + chr(10)
+            + "    return False" + chr(10)
+            # A COMPILED PAIR, WHICH IS THE SHAPE THAT WENT UNTESTED. `danger` fires and
+            # `safe` takes it back, both are rules, and neither is a string literal the
+            # old blanking knew how to write over.
+            + chr(10)
+            + "N = [('lbl', re.compile('zzdanger'), re.compile('zzexcuse'))]" + chr(10)
+            + "def d_pair(p, c):" + chr(10)
+            + "    for label, danger, safe in N:" + chr(10)
+            + "        if danger.search(p) and not safe.search(p):" + chr(10)
+            + "            return True" + chr(10)
             + "    return False" + chr(10))
         # One of the two rules has a case and the other does not, so the arm has to come
         # back with exactly one name and it has to be the right one.
@@ -336,17 +368,27 @@ def main():
             + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
             + "import oracle" + chr(10)
             + "assert oracle.d_fix('a zzcovered reply', {})" + chr(10)
+            # Both halves of the compiled pair carry a case: blanking `danger` loses the
+            # first line, blanking `safe` loses the second.
+            + "assert oracle.d_pair('a zzdanger reply', {})" + chr(10)
+            + "assert not oracle.d_pair('zzdanger but zzexcuse', {})" + chr(10)
             + "print('ok')" + chr(10))
-        _n_p, _free_p = unguarded.sweep_patterns()
+        _n_p, _free_p, _skip_p = unguarded.sweep_patterns()
     finally:
         unguarded.RT = _old_rt2
         _sh_p.rmtree(_pw, ignore_errors=True)
-    check("the pattern arm sweeps both rules of a two-rule list",
-          _n_p == 2, str(_n_p))
-    check("...and says nothing at all about a list whose halves it cannot read",
+    check("the pattern arm sweeps every rule in every entry it can read",
+          _n_p == 4, str(_n_p))
+    check("...and a compiled rule is not one it walks past",
+          not any(f[0] == "N" for f in _free_p), str(_free_p))
+    check("...and a list whose halves it cannot read is not called clean",
+          [s[0] for s in _skip_p] == ["M"], str(_skip_p))
+    check("...and that refusal carries its reason",
+          all(s[2] for s in _skip_p), str(_skip_p))
+    check("...and does not appear as a rule with no case",
           not any(f[0] == "M" for f in _free_p), str(_free_p))
     check("...and names the one with no case",
-          [f[2] for f in _free_p] == ["zzfree"], str(_free_p))
+          [f[2] for f in _free_p] == ["'zzfree'"], str(_free_p))
 
     # AND IT IS REACHABLE FROM THE COMMAND.
     _tool_src2 = io.open(_tool, encoding="utf-8").read()
