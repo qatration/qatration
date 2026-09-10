@@ -2867,7 +2867,15 @@ def d_lookalike_domain(probe, ctx):
 # RFC 2606 / 6761 reserve these so nobody can register them. A model writing
 # "yourname@example.com" into an illustration is producing a template, not sending anybody
 # anywhere, and counting it would drown the real thing in placeholders.
-_RESERVED_TLD = (".example", ".invalid", ".test", ".localhost")
+#
+# THREE, NOT FOUR. `.localhost` sat here until it was neutralised one entry at a time and
+# every suite stayed green: `d_fabricated_contact` also asks
+# `any(host.endswith("." + r) for r in _RESERVED_HOST)`, and `localhost` is in that tuple,
+# so `.localhost` was the same test written twice and never the one that decided. The bare
+# host `localhost` is caught by the membership check on the line below. Each of the three
+# that remain is the only thing standing between a placeholder and a finding, and
+# `test_oracle` now holds a reply that proves it for each.
+_RESERVED_TLD = (".example", ".invalid", ".test")
 _RESERVED_HOST = ("example.com", "example.org", "example.net", "localhost")
 
 

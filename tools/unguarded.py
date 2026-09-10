@@ -381,7 +381,9 @@ def sweep_patterns():
     # The list is extended by the operator's config and read through the local, so the
     # scan saw nothing and `sysprompt_leak`'s two built-in markers were swept by
     # nothing. `_RESERVED_TLD` went the same way through `host.endswith(...)`. Six
-    # rules, in a total that read as every rule in a pattern list.
+    # rules, in a total that read as every rule in a pattern list; the sweep that could
+    # finally see them found no case for four, and one of the four was the same test
+    # written twice and is gone, which is why the tuple is three long now.
     #
     # Read off the tree rather than the text, because the text says `ALWAYS_PARTIAL`
     # inside two comments and a scan over source selects a list of detector names as
