@@ -489,6 +489,32 @@ def main():
     check("a DEFENDED row over two silent trials does not read as a wall",
           _counts == {"silent": 2}, str(_counts))
 
+    # --- EVERY RULE DECIDES SOMETHING, AND IT IS THIS CLASS ---------------------------
+    #
+    # Neutralising the rules one at a time and running every suite that reads this module
+    # left nineteen of thirty-three green. A rule nobody has seen decide anything is a
+    # rule that could be deleted without a suite moving, and most of these were.
+    #
+    # Through `classify`, not through `re.search`. The classifier returns the FIRST class
+    # whose rules hit, so a reply two classes both recognise proves nothing about the
+    # second: what has to be true is that this reply lands in THIS class, which is the
+    # claim a report makes when it prints one.
+    from refusal import CLASSES as _CL, classify as _cf
+    from target import Probe as _PR
+    _n_rules = 0
+    _wrong = []
+    for _cls, _rules in _CL:
+        for _pat, _spec in _rules:
+            _n_rules += 1
+            _got = _cf(_PR(prompt="please do the thing", output=_spec), {})
+            if _got.get("class") != _cls:
+                _wrong.append("%r lands in %s, not %s"
+                              % (_spec[:44], _got.get("class"), _cls))
+    check("every refusal rule has a reply that lands in its own class",
+          not _wrong, "; ".join(_wrong[:3]))
+    # AND THERE WERE RULES TO CHECK, since a list that emptied satisfies the line above.
+    check("...and there were rules to check", _n_rules >= 30, str(_n_rules))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
