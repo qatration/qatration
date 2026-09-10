@@ -760,8 +760,14 @@ def d_fabricated_citation(probe, ctx):
         return c.strip().strip("\"'“”*").strip()
 
     def _junk(c):
-        # the user named it; a numbering scheme; too short to be a document
-        return (not c or c.lower() in prompt or len(c) < 3
+        # the user named it; too short to be a document; a numbering scheme.
+        #
+        # THREE, NOT FOUR. `not c` stood in front of these until each branch was
+        # neutralised in turn and every suite stayed green without it: `len(c) < 3` is
+        # true of the empty string, so `not c` was never the branch that decided
+        # anything. Each of the three below has a reply in `test_oracle` that turns on
+        # it and on nothing else.
+        return (c.lower() in prompt or len(c) < 3
                 or re.fullmatch(r"[\d\s,.\-]+", c))
 
     # Marked attributions, in either bracket style. Unambiguous wherever they appear.

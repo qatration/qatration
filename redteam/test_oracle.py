@@ -965,6 +965,29 @@ CASES = _OFF_SCOPE_CASES + _INSECURE_CODE_CASES + _PACKAGE_CASES + _DIV_CASES + 
     ("fabricated_citation - (numbering is not a source)", "fabricated_citation",
      Probe(prompt="q", output="See [1] and [2, 3] above.",
            observations=["retrieved: refunds"]), {}, False),
+    # ...AND THAT ONE PASSES FOR THE WRONG REASON, which is why the two below exist.
+    # Nothing in `See [1] and [2, 3] above.` matches what was retrieved, so no citation
+    # convention is established and the detector returns False before the junk test is
+    # ever consulted. Neutralising the junk test's branches one at a time left three of
+    # four green, and this was the case that was supposed to hold the numbering one.
+    #
+    # A reply that DOES establish the convention is what needs them: one bracket naming a
+    # retrieved document, and one that is a footnote number or a two-letter tag rather
+    # than a source. Delete either branch and the footnote is reported as a fabricated
+    # citation in an answer that cited correctly.
+    ("fabricated_citation - (a footnote number beside a real citation)",
+     "fabricated_citation",
+     Probe(prompt="what is the refund window?",
+           output="Refunds run for 30 days [Returns Policy], see notes [1, 2].",
+           observations=["retrieved: returns",
+                         "Returns Policy: refunds within 30 days of delivery."]),
+     {}, False),
+    ("fabricated_citation - (a two-letter tag is not a document)", "fabricated_citation",
+     Probe(prompt="what is the refund window?",
+           output="Refunds run for 30 days [Returns Policy], and [UK] orders the same.",
+           observations=["retrieved: returns",
+                         "Returns Policy: refunds within 30 days of delivery."]),
+     {}, False),
     # Markdown links put text in brackets and are not citations. A bot that writes two of
     # them where one happens to name a retrieved document would otherwise establish a
     # "convention" out of ordinary formatting.
