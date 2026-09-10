@@ -273,6 +273,121 @@ def _replay():
     return _json.loads(p.stdout.strip().split("\n")[-1])
 
 
+def _pattern_position(tree, src, det, list_name):
+    """-> the index in a tuple entry that the detector uses as a regex, or None.
+
+    Derived from the loop that reads the list: `for pat, _what in _SECRET_AT_REST` binds
+    two names and only one of them reaches `re.search`. Returning None where that cannot
+    be read is deliberate — a sweep that guesses which half is the rule reports the
+    other half's prose as an uncovered rule, which is a finding about nothing.
+    """
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == det), None)
+    if fn is None:
+        return None
+    for node in ast.walk(fn):
+        if not isinstance(node, (ast.For, ast.comprehension)):
+            continue
+        it = getattr(node, "iter", None)
+        if not (isinstance(it, ast.Name) and it.id == list_name):
+            continue
+        target = getattr(node, "target", None)
+        if not isinstance(target, (ast.Tuple, ast.List)):
+            return None
+        names = [e.id if isinstance(e, ast.Name) else None for e in target.elts]
+        body = fn
+        used_as_pattern = set()
+        for call in ast.walk(body):
+            if not isinstance(call, ast.Call) or not call.args:
+                continue
+            f = call.func
+            is_re = (isinstance(f, ast.Attribute) and f.attr in ("search", "match",
+                                                                 "finditer", "findall")
+                     and isinstance(f.value, ast.Name) and f.value.id == "re")
+            if is_re and isinstance(call.args[0], ast.Name):
+                used_as_pattern.add(call.args[0].id)
+        for i, nm in enumerate(names):
+            if nm and nm in used_as_pattern:
+                return i
+        return None
+    return None
+
+
+def sweep_patterns():
+    """Neutralise each pattern in a detector's rule list; report the ones nothing missed.
+
+    `sweep_rules` reads `return True`, so a rule that lives as an ELEMENT of a pattern
+    list is invisible to it. This oracle keeps fifty-one of those across nine lists, and
+    the first sweep of them found forty-one with no case: three quarters of the rules in
+    ten detectors could have been deleted with the suite still green.
+
+    A list qualifies when a `d_` detector iterates it by name. Entries may be a bare
+    pattern or a `(pattern, specimen)` pair — the pair is what the fix for those
+    forty-one looks like, and this has to read both or it stops covering the lists that
+    took it.
+    """
+    path = os.path.join(RT, "oracle.py")
+    orig = io.open(path, encoding="utf-8").read()
+    tree = ast.parse(orig)
+    lists = {}
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, (ast.List, ast.Tuple)) and node.value.elts):
+            lists[node.targets[0].id] = node.value
+    used = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("d_"):
+            seg = ast.get_source_segment(orig, node) or ""
+            for name in lists:
+                if re.search(r"\b(?:for\s+[\w, ]+\s+in|in)\s+%s\b" % name, seg):
+                    used.setdefault(name, node.name)
+    # THE PATTERN, NOT THE PAIR. A tuple entry carries a label or a specimen beside the
+    # rule, and that is the case: replacing the whole tuple deletes the case with the
+    # rule and every one of them comes back green.
+    #
+    # WHICH ELEMENT IS THE RULE IS READ FROM THE DETECTOR, not assumed to be the first.
+    # `_SECRETS` is (pattern, label) and `_INSECURE_CODE` is (label, pattern): taking
+    # element zero from both reported five of `_INSECURE_CODE`'s rules as uncovered when
+    # what had been neutralised was their prose. The detector unpacks the entry and
+    # passes one of the names to `re.search`; that name's position is the answer.
+    sites = []
+    for name, det in sorted(used.items()):
+        pos = _pattern_position(tree, orig, det, name)
+        for i, el in enumerate(lists[name].elts):
+            if isinstance(el, (ast.Tuple, ast.List)):
+                if pos is None or pos >= len(el.elts):
+                    continue          # cannot tell which half is the rule; say nothing
+                target = el.elts[pos]
+            else:
+                target = el
+            if isinstance(target, ast.Constant) and isinstance(target.value, str):
+                sites.append((name, det, i, target))
+    assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
+    free = []
+    with source_restored(path):
+        for name, det, i, node in sites:
+            lines = orig.split("\n")
+            ln = node.lineno - 1
+            if node.lineno == node.end_lineno:
+                lines[ln] = (lines[ln][:node.col_offset]
+                             + '"ZZ-MATCHES-NOTHING"' + lines[ln][node.end_col_offset:])
+            else:
+                head = lines[ln][:node.col_offset] + '"ZZ-MATCHES-NOTHING"'
+                lines[ln:node.end_lineno] = [
+                    head + lines[node.end_lineno - 1][node.end_col_offset:]]
+            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(lines))
+            red = _run("test_oracle.py")
+            io.open(path, "w", encoding="utf-8", newline="").write(orig)
+            print("  %-20s %-26s %s  %s"
+                  % (name, det, "kept" if red else "NO CASE OF ITS OWN",
+                     node.value[:40]))
+            if not red:
+                free.append((name, det, node.value))
+    assert _run("test_oracle.py") == 0, "oracle.py was not restored"
+    return len(sites), free
+
+
 def sweep_refusals():
     """Neutralise each early `return False` in a detector; report the ones that matter.
 
@@ -337,12 +452,14 @@ def main(argv):
                                  description="decisions no suite would miss")
     ap.add_argument("--guards", action="store_true", help="documented guards only")
     ap.add_argument("--rules", action="store_true", help="detector rules only")
+    ap.add_argument("--patterns", action="store_true",
+                    help="rules that live as elements of a pattern list")
     ap.add_argument("--refusals", action="store_true",
                     help="guards against false positives only (needs evidence in out/)")
     ap.add_argument("--only", metavar="MODULE", nargs="+", default=(),
                     help="restrict the documented-guard sweep to these modules")
     args = ap.parse_args(argv)
-    both = not (args.guards or args.rules or args.refusals)
+    both = not (args.guards or args.rules or args.refusals or args.patterns)
     # WHAT WAS ACTUALLY DELETED, ACROSS EVERY ARM, which is a different number from what
     # was found. The closing verdict rests on this rather than on `bad`, because zero
     # survivors out of zero deletions is not a clean bill.
@@ -373,6 +490,15 @@ def main(argv):
         print("\n%d rule site(s) tested, %d with no case of their own" % (n, len(free)))
         for name, ln, src in free:
             print("  oracle.py:%d  %s  %s" % (ln, name, src[:60]))
+        bad += len(free)
+    if both or args.patterns:
+        print("\n=== rules that live in a pattern list ===")
+        n, free = sweep_patterns()
+        swept += n
+        print("\n%d pattern rule(s) tested, %d with no case of their own"
+              % (n, len(free)))
+        for name, det, pat in free:
+            print("  %-20s %-26s %s" % (name, det, pat[:60]))
         bad += len(free)
     if both or args.refusals:
         print("\n=== guards against false positives ===")

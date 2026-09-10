@@ -235,9 +235,10 @@ def main():
     # each arm feeds the counter the verdict reads.
     _tool_src = io.open(_tool, encoding="utf-8").read()
     _main_src = _tool_src[_tool_src.index("def main("):]
-    _arms = [_a for _a in ("sweep_guards(", "sweep_rules()", "sweep_refusals()")
+    _arms = [_a for _a in ("sweep_guards(", "sweep_rules()", "sweep_refusals()",
+                           "sweep_patterns()")
              if _a in _main_src]
-    check("every arm of the sweep exists to be counted", len(_arms) == 3, str(_arms))
+    check("every arm of the sweep exists to be counted", len(_arms) == 4, str(_arms))
     _uncounted = []
     for _a in _arms:
         _at = _main_src.index(_a)
@@ -249,7 +250,108 @@ def main():
     check("...and each one adds what it deleted to the number the verdict reads",
           _uncounted == [], str(_uncounted))
 
-    print("\n%d/%d passed" % (PASS, PASS + FAIL))
+    # --- WHICH HALF OF AN ENTRY IS THE RULE ----------------------------------------
+    #
+    # `sweep_rules` reads `return True`, so a rule that lives as an ELEMENT of a pattern
+    # list is invisible to it: the oracle keeps eighty-two of those and the first sweep
+    # of them found forty-one with no case. `sweep_patterns` is that arm.
+    #
+    # An entry is a bare pattern or a tuple, and the tuple is not always the same way
+    # round: `_SECRETS` is (pattern, label) and `_INSECURE_CODE` is (label, pattern).
+    # Taking element zero from both reported five of `_INSECURE_CODE`'s rules as
+    # uncovered when what had been neutralised was their prose — a finding about
+    # nothing, in the tool whose subject is exactly that.
+    #
+    # The position is READ FROM THE DETECTOR: it unpacks the entry and passes one of the
+    # names to `re.search`. Driven over source rather than the real oracle, so the case
+    # is a fixture and not a fact about today's file.
+    import ast as _ast_p
+
+    def _pos(src, det, name):
+        return unguarded._pattern_position(_ast_p.parse(src), src, det, name)
+
+    _first = J_SRC = (
+        "import re" + chr(10)
+        + "L = [('a', 'x')]" + chr(10)
+        + "def d_one(p, c):" + chr(10)
+        + "    for pat, label in L:" + chr(10)
+        + "        if re.search(pat, p):" + chr(10)
+        + "            return True" + chr(10))
+    check("the rule is the element the detector searches with",
+          _pos(J_SRC, "d_one", "L") == 0, str(_pos(J_SRC, "d_one", "L")))
+    _SECOND = (
+        "import re" + chr(10)
+        + "L = [('a', 'x')]" + chr(10)
+        + "def d_two(p, c):" + chr(10)
+        + "    for label, pat in L:" + chr(10)
+        + "        if re.search(pat, p):" + chr(10)
+        + "            return True" + chr(10))
+    check("...and it is not assumed to be the first",
+          _pos(_SECOND, "d_two", "L") == 1, str(_pos(_SECOND, "d_two", "L")))
+    # AND WHERE IT CANNOT BE READ, NOTHING IS CLAIMED. Guessing here reports the other
+    # half's prose as a rule with no case, which is a finding about nothing.
+    _OPAQUE = (
+        "L = [('a', 'x')]" + chr(10)
+        + "def d_three(p, c):" + chr(10)
+        + "    for a, b in L:" + chr(10)
+        + "        if a in p:" + chr(10)
+        + "            return True" + chr(10))
+    check("...and where neither half reaches a regex, no position is claimed",
+          _pos(_OPAQUE, "d_three", "L") is None, str(_pos(_OPAQUE, "d_three", "L")))
+
+    # AND THE ARM, DRIVEN. The three checks above read `_pattern_position` on its own,
+    # and a rule with a fixture is not a caller with one: putting `pos = 0` back inside
+    # `sweep_patterns` left every one of them green. So a whole little oracle, with a
+    # suite of its own, swept for real.
+    import shutil as _sh_p
+    _pw = tempfile.mkdtemp()
+    _old_rt2 = unguarded.RT
+    try:
+        unguarded.RT = _pw
+        io.open(os.path.join(_pw, "oracle.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import re" + chr(10)
+            # (label, pattern): the way round that made element zero the wrong guess.
+            + "L = [('the label', 'zzcovered'), ('other label', 'zzfree')]" + chr(10)
+            + "def d_fix(p, c):" + chr(10)
+            + "    for label, pat in L:" + chr(10)
+            + "        if re.search(pat, p):" + chr(10)
+            + "            return True" + chr(10)
+            + "    return False" + chr(10)
+            # A LIST WHOSE HALVES NEITHER REACH A REGEX. The position cannot be read, so
+            # the arm has to say nothing about it: guessing reports the other half's prose
+            # as a rule with no case, and crashing takes the whole sweep with it.
+            + chr(10)
+            + "M = [('alpha', 'beta')]" + chr(10)
+            + "def d_opaque(p, c):" + chr(10)
+            + "    for a, b in M:" + chr(10)
+            + "        if a in p:" + chr(10)
+            + "            return True" + chr(10)
+            + "    return False" + chr(10))
+        # One of the two rules has a case and the other does not, so the arm has to come
+        # back with exactly one name and it has to be the right one.
+        io.open(os.path.join(_pw, "test_oracle.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import oracle" + chr(10)
+            + "assert oracle.d_fix('a zzcovered reply', {})" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_p, _free_p = unguarded.sweep_patterns()
+    finally:
+        unguarded.RT = _old_rt2
+        _sh_p.rmtree(_pw, ignore_errors=True)
+    check("the pattern arm sweeps both rules of a two-rule list",
+          _n_p == 2, str(_n_p))
+    check("...and says nothing at all about a list whose halves it cannot read",
+          not any(f[0] == "M" for f in _free_p), str(_free_p))
+    check("...and names the one with no case",
+          [f[2] for f in _free_p] == ["zzfree"], str(_free_p))
+
+    # AND IT IS REACHABLE FROM THE COMMAND.
+    _tool_src2 = io.open(_tool, encoding="utf-8").read()
+    check("the pattern arm has a flag of its own",
+          "--patterns" in _tool_src2, "no --patterns flag")
     if FAIL:
         return 1
     print("\nOK — the instrument that names untested guards is not one of them.")
