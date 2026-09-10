@@ -176,7 +176,10 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
 
 
 def main():
-    ap = argparse.ArgumentParser(
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    ap = _cli_parser(
+        "init",
         description="Write a starting target config, with a canary of your own already in it.")
     ap.add_argument("--model", default=DEFAULT_MODEL,
                     help="the model id your endpoint expects in the request body "

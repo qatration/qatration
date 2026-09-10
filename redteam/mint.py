@@ -55,8 +55,9 @@ def instructions(secret, verify, config_path="<your.yaml>"):
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(
-        description="Mint a canary pair unique to this deployment, and print how to plant it.")
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("mint")
     ap.add_argument("--config", default="<your.yaml>",
                     help="your target config, used only to spell the verify command correctly")
     args = ap.parse_args()

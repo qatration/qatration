@@ -375,7 +375,10 @@ def main():
     # into a clean venv and running every subcommand as somebody who had just found the
     # project. A program that cannot describe itself has not been run by a stranger.
     import argparse
-    ap = argparse.ArgumentParser(
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    ap = _cli_parser(
+        "compare",
         description="One page across every target that has stored evidence: which systems "
                     "broke, on which attacks, and how the same arsenal fared on each.")
     ap.add_argument("--out", default=None,

@@ -411,9 +411,8 @@ def main():
     # THE ONE SPELLING, taken from the table the door is listed in rather than written a
     # second time here. Two copies of a command's own description is the shape the prose
     # gate looks for, and it found this one within a minute of the door being added.
-    from cli import COMMANDS as _CMDS
-    ap = argparse.ArgumentParser(prog="qatration mcp",
-                                 description=_CMDS["mcp"][1])
+    from cli import parser as _cli_parser
+    ap = _cli_parser("mcp")
     ap.add_argument("server", nargs=argparse.REMAINDER,
                     help="the command that starts the server over stdio, "
                          "e.g. npx -y @modelcontextprotocol/server-memory")

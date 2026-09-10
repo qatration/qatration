@@ -278,9 +278,9 @@ def main(argv=None):
     reads as ordinary.
     """
     import argparse
-    ap = argparse.ArgumentParser(
-        prog="qatration runs",
-        description="what ran, against what, on whose authority, and what it cost")
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("runs")
     ap.add_argument("--target", default=None,
                     help="only runs against this target name")
     ap.add_argument("--state", default=None, choices=list(STATES),

@@ -256,7 +256,9 @@ def main():
     # any mistyped flag in silence. A reader who asks what a command does should not have to
     # find out by watching it happen.
     import argparse
-    argparse.ArgumentParser(prog="qatration discrimination", description="the tool's own credibility: are the controls clean and the breaches reliable").parse_args()
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    _cli_parser("discrimination").parse_args()
     data = load()
     if not data:
         # See the note in `build_index`: the path this run is using, and a command rather

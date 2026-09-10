@@ -755,6 +755,31 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
         "lists the flags and never says what the command does: %s"
         % (len(_undescribed), len(cli.COMMANDS), _undescribed))
 
+    # (4c) AND IT IS THE SENTENCE THE DOOR LIST GIVES, not a second one. Six commands
+    #      carried their own: `onboard` said "check a target config, then queue the run"
+    #      while the list said "check a target config against its live endpoint" -- two
+    #      claims about the same command, one of which mentions spending a budget.
+    #      `discrimination`, `mint`, `sarif`, `compare` and `runs` had the same pair.
+    #
+    #      CONTAINMENT, NOT EQUALITY, because a command with more to say should say it:
+    #      `lint` names the three mistakes it looks for and `compare` names the columns.
+    #      What it may not do is start from different words, which is how six of them
+    #      drifted without anything to notice.
+    _second_copy = []
+    for _name in sorted(cli.COMMANDS):
+        _h = subprocess.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), _name, "--help"],
+            capture_output=True, text=True, timeout=180,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                     PYTHONDONTWRITEBYTECODE="1"))
+        _flat = " ".join((_h.stdout or "").split()).lower()
+        if cli.COMMANDS[_name][1].lower() not in _flat:
+            _second_copy.append(_name)
+    assert not _second_copy, (
+        "%d of %d commands describe themselves in --help in words the door list does not "
+        "use, so `qatration` and `qatration <cmd> --help` disagree about what the command "
+        "does: %s" % (len(_second_copy), len(cli.COMMANDS), _second_copy))
+
     # (5) AND THE CODE IS 3, ASKED OF THE COMMAND RATHER THAN OF ITS PROSE. Property (4)
     #     above reaches a command only if it PRINTS THE WORKSPACE PATH, and then only asks
     #     for non-zero. Both halves leaked. `history` answers "no history yet" without

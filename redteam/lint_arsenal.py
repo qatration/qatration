@@ -756,7 +756,10 @@ def main():
     # asked what it does, and the one that could not answer was found by a stranger's install
     # rather than by any suite.
     import argparse
-    argparse.ArgumentParser(
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    _cli_parser(
+        "lint",
         description="Check the attack corpus for the mistakes that read as findings: a "
                     "detector name nothing defines, a target that does not exist, an "
                     "expectation no probe can satisfy.").parse_args()

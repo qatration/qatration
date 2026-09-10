@@ -479,8 +479,9 @@ def build(results, target_config=None, out_dir=None):
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser(
-        description="Convert stored QAtration results into SARIF 2.1.0 for code scanning.")
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("sarif")
     ap.add_argument("--results", required=True,
                     help="a results_<target>.json written by `qatration run`")
     ap.add_argument("--out", default=None,

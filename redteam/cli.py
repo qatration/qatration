@@ -44,7 +44,11 @@ COMMANDS = {
     "onboard":  ("onboard",         "check a target config against its live endpoint"),
     "benign":   ("benign",          "ordinary traffic through every detector: the false-positive rate"),
     "history":  ("history",         "what changed since the last run, and whether it can be believed"),
-    "compare":  ("compare_targets", "one page across every target that has evidence"),
+    # "stored evidence", which is what `compare_targets` has always called it in its own
+    # description. Two spellings of one command is what the prose gate is for, and this
+    # pair sat one word apart for long enough that neither looked wrong.
+    "compare":  ("compare_targets",
+                 "one page across every target that has stored evidence"),
     "rejudge":  ("rejudge",         "re-score stored results with the current oracle, no model calls"),
     # THE CHEAP QUESTION NOTHING ANSWERED. `history` needs a second full sweep before it
     # can say anything and `rejudge` never touches the target, so an artifact whose

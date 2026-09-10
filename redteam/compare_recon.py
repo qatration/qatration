@@ -209,7 +209,9 @@ def main():
     # any mistyped flag in silence. A reader who asks what a command does should not have to
     # find out by watching it happen.
     import argparse
-    argparse.ArgumentParser(prog="qatration profiles", description='every profiled target in one table, worst first').parse_args()
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    _cli_parser("profiles").parse_args()
     _unreadable = []
     rows = collect(_unreadable)
     from workspace import say_unreadable as _say, unreadable_html as _unread_html

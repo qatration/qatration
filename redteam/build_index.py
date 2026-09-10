@@ -180,7 +180,9 @@ def main():
     # any mistyped flag in silence. A reader who asks what a command does should not have to
     # find out by watching it happen.
     import argparse
-    argparse.ArgumentParser(prog="qatration index", description="one page tying a run's reports together").parse_args()
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    _cli_parser("index").parse_args()
     # The fleet's own configs, passed IN rather than read inside `load()`. The first version
     # looked them up itself and every suite driving this builder over a temp fixture — where
     # the target names are invented — lost all of its rows to the orphan filter.

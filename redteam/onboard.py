@@ -465,7 +465,13 @@ def render(ok, rep):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="check a target config, then queue the run")
+    # THE ONE SPELLING, from the table this command is listed in.
+    from cli import parser as _cli_parser
+    # The whole sentence this module opens with. The door list carries its first half,
+    # and the half that was missing is the one that spends a budget.
+    ap = _cli_parser(
+        "onboard",
+        description="check a target config against its live endpoint, then queue the run")
     # BOTH SPELLINGS, because every other command in this tool takes `--target-config` and this
     # one took `--config`. The README's quickstart, two shipped example configs and cli.py's own
     # docstring all told people to type `qatration onboard --target-config …`, which argparse
