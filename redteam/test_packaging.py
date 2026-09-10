@@ -780,6 +780,41 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
         "use, so `qatration` and `qatration <cmd> --help` disagree about what the command "
         "does: %s" % (len(_second_copy), len(cli.COMMANDS), _second_copy))
 
+    # (4d) AND EVERY FLAG SAYS WHAT IT IS FOR. Seventeen printed a name and a placeholder
+    #      and nothing else -- `--target-config TARGET_CONFIG` on `run`, `verify`, `recon`,
+    #      `isolation` and `matrix`, which is the flag every one of those needs, sitting
+    #      between neighbours that all explain themselves.
+    #
+    #      Read out of `--help` rather than out of `add_argument`, because a module can
+    #      keep a perfect `help=` and stop passing it, and because the output is what a
+    #      reader has.
+    _silent_flags = []
+    for _name in sorted(cli.COMMANDS):
+        _h = subprocess.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), _name, "--help"],
+            capture_output=True, text=True, timeout=180,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                     PYTHONDONTWRITEBYTECODE="1"))
+        _parts = re.split(r"\noptions:\n", _h.stdout or "")
+        if len(_parts) < 2:
+            continue
+        _lines = _parts[1].split("\n")
+        for _i, _l in enumerate(_lines):
+            _s = _l.strip()
+            if not _s.startswith("-") or "show this help" in _s:
+                continue
+            # argparse puts the help on the same line after the flag spec, or indented on
+            # the next one when the spec is too wide for the column.
+            _same = re.sub(r"^\s*-{1,2}[^\s]+(\s+[A-Z_]+|\s+\{[^}]*\})?"
+                           r"(,\s*--[^\s]+(\s+[A-Z_]+)?)*", "", _l).strip()
+            _next = _lines[_i + 1].strip() if _i + 1 < len(_lines) else ""
+            if not _same and not (_next and not _next.startswith("-")):
+                _silent_flags.append("%s %s" % (_name, _s.split()[0]))
+    assert not _silent_flags, (
+        "%d flag(s) print a name and a placeholder and never say what the value is for, "
+        "which is the second thing a reader reads after the command's own line: %s"
+        % (len(_silent_flags), _silent_flags))
+
     # (5) AND THE CODE IS 3, ASKED OF THE COMMAND RATHER THAN OF ITS PROSE. Property (4)
     #     above reaches a command only if it PRINTS THE WORKSPACE PATH, and then only asks
     #     for non-zero. Both halves leaked. `history` answers "no history yet" without

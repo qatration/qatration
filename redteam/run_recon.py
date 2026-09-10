@@ -41,7 +41,7 @@ def main():
     # traceback and exit 1, which the exit-code contract reserves for "the target was
     # exploited or breached". `benign`, `run` and `matrix` all ask for the config and
     # exit 2; these two were the ones that did not.
-    ap.add_argument("--target-config", required=True)
+    ap.add_argument("--target-config", required=True, help="the YAML describing the target")
     ap.add_argument("--overwrite-evidence", action="store_true", help=OVERWRITE_HELP)
     ap.add_argument("--model", default=None, help="override the target's model")
     ap.add_argument("--tool-prompt", default=None,

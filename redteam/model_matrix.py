@@ -75,11 +75,14 @@ def main():
     # here printed the flags and left `--help` silent about the job.
     from cli import parser as _cli_parser
     ap = _cli_parser("matrix")
-    ap.add_argument("--target-config", required=True)
-    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks.yaml"))
+    ap.add_argument("--target-config", required=True, help="the YAML describing the target")
+    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks.yaml"),
+                    help="the arsenal every model receives — the same one for each, or"
+                         " the comparison is between two things at once")
     ap.add_argument("--models", default=None, help="comma list, e.g. mistral-nemo,qwen2.5:14b")
     from workspace import trial_count as _trial_count
-    ap.add_argument("--trials", type=_trial_count, default=3)
+    ap.add_argument("--trials", type=_trial_count, default=3,
+                    help="runs per attack per model (default 3)")
     ap.add_argument("--from-disk", action="store_true",
                     help="compare per-model runs ALREADY on disk, no GPU — and print when each "
                          "was measured and by which build, because that is the whole risk")

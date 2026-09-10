@@ -480,7 +480,9 @@ def main():
     ap.add_argument("--target-config", "--config", dest="config", required=True,
                     help="the YAML describing the target (`--config` is accepted too)")
     ap.add_argument("--submit", action="store_true", help="queue the run if the check passes")
-    ap.add_argument("--root", default=str(OUT))
+    ap.add_argument("--root", default=str(OUT),
+                    help="the workspace to queue the job in (default: this run's artifact"
+                         " directory)")
     ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="quick",
                     help="how much traffic a queued sweep may send: `quick` is one attack per "
                          "category, `full` is the whole arsenal")
@@ -491,8 +493,10 @@ def main():
     ap.add_argument("--attacks", default=os.path.join(HERE, "attacks_generic.yaml"),
                     help="arsenal to queue; defaults to the target-agnostic set")
     from workspace import trial_count as _trial_count
-    ap.add_argument("--trials", type=_trial_count, default=3)
-    ap.add_argument("--requester", default=None)
+    ap.add_argument("--trials", type=_trial_count, default=3,
+                    help="runs per attack in the queued sweep (default 3)")
+    ap.add_argument("--requester", default=None,
+                    help="who is asking, recorded on the job and on the run record")
     ap.add_argument("--mint-honeytoken", action="store_true",
                     help="print a token pair and the snippet to paste, then stop. The secret "
                          "is generated here, so no real credential goes into the target prompt")

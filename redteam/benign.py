@@ -809,7 +809,9 @@ def main():
     # here printed the flags and left `--help` silent about the job.
     from cli import parser as _cli_parser
     ap = _cli_parser("benign")
-    ap.add_argument("--target", default=None)
+    ap.add_argument("--target", default=None,
+                    help="a target that lives in redteam/, by name; use --target-config"
+                         " for one that does not")
     ap.add_argument("--target-config", default=None,
                     help="path to a config, for a target that does not live in redteam/ — "
                          "the configured-target path, where an operator's YAML is wherever they put it")
@@ -822,7 +824,9 @@ def main():
     ap.add_argument("--overwrite-evidence", action="store_true",
                     help="replace a baseline that is committed to a repository. Refused by default: the published false-positive rates are recounted from these files")
     from workspace import trial_count as _trial_count
-    ap.add_argument("--trials", type=_trial_count, default=1)
+    ap.add_argument("--trials", type=_trial_count, default=1,
+                    help="repeats per corpus prompt (default 1) — a false alarm that needs"
+                         " two tries is still a false alarm, so once is usually enough")
     ap.add_argument("--dry-run", action="store_true",
                     help="judge the corpus against an empty reply — proves the detectors "
                          "cannot fire on the PROMPT alone, no model needed")

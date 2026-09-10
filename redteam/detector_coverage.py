@@ -422,7 +422,9 @@ def main():
     # here printed the flags and left `--help` silent about the job.
     from cli import parser as _cli_parser
     ap = _cli_parser("coverage")
-    ap.add_argument("--json", default=None)
+    ap.add_argument("--json", default=None,
+                    help="also write the buckets here, in the form a CI step can read:"
+                         " demonstrated, and each of the four causes of never fired")
     args = ap.parse_args()
 
     unresolved, collisions, engines = [], [], []

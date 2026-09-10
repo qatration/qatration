@@ -466,7 +466,7 @@ def main():
     # practice app, which is not vendored`, about a target the reader never named, in a
     # workspace that may hold none of their own. Every other command that sends traffic
     # asks for the config; `benign` refuses in as many words. This one chose for them.
-    ap.add_argument("--target-config", default=None)
+    ap.add_argument("--target-config", default=None, help="the YAML describing the target")
     ap.add_argument("--all", action="store_true",
                     help="every target that has a stored artifact, in one table. A target that "
                          "cannot be reached is reported as unreachable, never as stale")

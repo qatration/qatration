@@ -516,7 +516,7 @@ def main():
     # practice fleet cloned does not fail: it attacks targets_dvla, writes
     # `results_dvla.json`, and files a run record against an endpoint nobody named. One
     # rule, and it had six implementations and one hole.
-    ap.add_argument("--target-config", default=None)
+    ap.add_argument("--target-config", default=None, help="the YAML describing the target")
     # THE PORTABLE ARSENAL IS THE DEFAULT, because the default is what somebody who did
     # not choose gets. `attacks.yaml` is the practice-fleet library and 132 of its 138
     # payloads carry `applies_to` naming a bot in this repository, so against anybody
@@ -525,7 +525,8 @@ def main():
     #
     # `run_all.py` passes --attacks explicitly for the fleet, so this changes nothing
     # there; it changes the path that had no choice made on it.
-    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks_generic.yaml"))
+    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks_generic.yaml"),
+                    help="the arsenal to send (default: the target-agnostic set)")
     ap.add_argument("--fail-on", choices=["none", "exploited", "any", "regression"],
                     default="none",
                     help="CI gate. `exploited`/`any` fail on the absolute state, which goes red "

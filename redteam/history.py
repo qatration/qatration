@@ -530,8 +530,12 @@ def main():
     # here printed the flags and left `--help` silent about the job.
     from cli import parser as _cli_parser
     ap = _cli_parser("history")
-    ap.add_argument("--target", default=None)
-    ap.add_argument("--backfill", action="store_true")
+    ap.add_argument("--target", default=None,
+                    help="one target's timeline (default: every target with a record)")
+    ap.add_argument("--backfill", action="store_true",
+                    help="seed timelines from stored results for targets that have none."
+                         " Their run times are file mtimes, not engine records, and each"
+                         " entry says so")
     args = ap.parse_args()
 
     if args.backfill:
