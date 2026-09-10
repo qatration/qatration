@@ -343,10 +343,14 @@ def main(argv):
                     help="restrict the documented-guard sweep to these modules")
     args = ap.parse_args(argv)
     both = not (args.guards or args.rules or args.refusals)
-    bad = 0
+    # WHAT WAS ACTUALLY DELETED, which is a different number from what was found. The
+    # closing verdict rests on this rather than on `bad`, because zero survivors out of
+    # zero deletions is not a clean bill.
+    bad = swept = 0
     if both or args.guards:
         print("=== documented guards ===")
         tested, survivors, undocumented = sweep_guards(args.only)
+        swept += tested
         print("\n%d documented guard(s) tested, %d survived deletion" % (tested, len(survivors)))
         if undocumented:
             # SAY WHAT WAS NOT LOOKED AT. The scope is deliberate -- a comment means
@@ -376,7 +380,19 @@ def main(argv):
     # NOT AN EXIT CODE THAT FAILS A BUILD. Some survivors are equivalent mutations -- a guard
     # whose fallback reaches the same answer, an input bound whose effect is time rather than
     # a verdict -- and this tool cannot tell those from a real gap. It reports; a person reads.
-    print("\n%d decision(s) to look at." % bad if bad else "\nNothing this sweep deleted went unnoticed.")
+    # AND A SWEEP THAT DELETED NOTHING HAS SHOWN NOTHING. Pointed at three modules with
+    # no guard of this shape, this printed `Nothing this sweep deleted went unnoticed`—
+    # a clean verdict over an empty sweep, which is the sentence this whole tool exists
+    # to refuse. `--only` naming a module that does not exist is already refused for the
+    # same reason; this is the same silence reached through a module that does exist and
+    # holds nothing to test.
+    if bad:
+        print("\n%d decision(s) to look at." % bad)
+    elif swept:
+        print("\nNothing this sweep deleted went unnoticed.")
+    else:
+        print("\nNOTHING WAS DELETED, so nothing here is a verdict. Every branch this "
+              "sweep\nlooked at was either undocumented or not of the shape it takes.")
     return 0
 
 

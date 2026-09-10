@@ -197,6 +197,34 @@ def main():
     check("...even when the same file also has one that imports",
           _r.get("plugb_*.py") == "reader" and "data_*.py" not in _r, str(_r))
 
+    # --- A SWEEP THAT DELETED NOTHING IS NOT A CLEAN BILL ---------------------------
+    #
+    # Pointed at three modules with no guard of this shape, the command printed `Nothing
+    # this sweep deleted went unnoticed` — a verdict over an empty sweep, which is
+    # the sentence this whole tool exists to refuse. It already refuses `--only` naming a
+    # module that is not there, for the same reason; this is the same silence reached
+    # through modules that do exist and hold nothing to test.
+    #
+    # Driven as a command, because the verdict is printed there and nowhere else.
+    import subprocess as _sp_u
+    _tool = os.path.join(ROOT, "tools", "unguarded.py")
+    _env_u = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+
+    def _run_tool(*a):
+        _r = _sp_u.run([sys.executable, _tool] + list(a), capture_output=True, text=True,
+                       timeout=900, env=_env_u, cwd=HERE)
+        return (_r.stdout or "") + (_r.stderr or "")
+
+    _empty = _run_tool("--guards", "--only", "mint", "run_all", "run_recon")
+    check("a sweep that deleted nothing does not report a clean bill",
+          "went unnoticed" not in _empty, _empty[-300:])
+    check("...and says so, rather than printing a zero and stopping",
+          "NOTHING WAS DELETED" in _empty, _empty[-300:])
+    # AND THE THREE MODULES ARE REALLY THERE, or this passes because `--only` refused
+    # them and the command never swept at all.
+    check("...over modules that exist, not a refusal in disguise",
+          "no such module" not in _empty, _empty[-300:])
+
     print("\n%d/%d passed" % (PASS, PASS + FAIL))
     if FAIL:
         return 1
