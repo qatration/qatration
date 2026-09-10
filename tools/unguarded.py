@@ -220,33 +220,62 @@ def sweep_guards(only=()):
 
 
 def sweep_rules():
-    """Neutralise each `return True` in a multi-rule detector; report the free ones."""
+    """Neutralise each rule in a multi-rule detector; report the ones nothing missed.
+
+    TWO SHAPES, BECAUSE A RULE IS NOT ALWAYS A STATEMENT. `return True` inside a `d_`
+    is one independent way for that detector to fire, and so is each branch of
+    `return a or b or c`. This read only the first, and `_junk` inside
+    `d_fabricated_citation` — four branches deciding whether a bracketed span counts
+    as a citation at all — was invisible to every arm of this tool.
+
+    THE TWO POINT IN OPPOSITE DIRECTIONS, and that is the right thing here. Deleting a
+    `return True` makes a detector fire less; deleting a branch of a junk test makes it
+    fire more. Both are a decision nothing in the suite would miss, which is the only
+    question this file asks.
+    """
     path = os.path.join(RT, "oracle.py")
     orig = io.open(path, encoding="utf-8").read()
     sites = []
     for node in ast.walk(ast.parse(orig)):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("d_"):
-            rets = [c for c in ast.walk(node)
-                    if isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
-                    and c.value.value is True]
-            if len(rets) > 1:
-                sites += [(node.name, r.lineno) for r in rets]
+        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("d_")):
+            continue
+        rets = [c for c in ast.walk(node)
+                if isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
+                and c.value.value is True]
+        if len(rets) > 1:
+            sites += [(node.name, r.lineno, "stmt", r) for r in rets]
+        # `ast.walk` reaches the nested helpers too, which is where the missing four
+        # were: a detector's junk test is a def inside the detector.
+        for c in ast.walk(node):
+            if (isinstance(c, ast.Return) and isinstance(c.value, ast.BoolOp)
+                    and isinstance(c.value.op, ast.Or) and len(c.value.values) > 1):
+                sites += [(node.name, v.lineno, "branch", v) for v in c.value.values]
     assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
-    lines = orig.split("\n")
     free = []
     with source_restored(path):
-        for name, lineno in sites:
-            idx = lineno - 1
-            stmt = lines[idx]
-            mutant = list(lines)
-            mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(mutant))
+        for name, lineno, kind, node in sites:
+            lines = orig.split("\n")
+            if kind == "stmt":
+                stmt = lines[lineno - 1]
+                lines[lineno - 1] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
+            else:
+                ln = node.lineno - 1
+                if node.lineno == node.end_lineno:
+                    lines[ln] = (lines[ln][:node.col_offset] + "False"
+                                 + lines[ln][node.end_col_offset:])
+                else:
+                    head = lines[ln][:node.col_offset] + "False"
+                    lines[ln:node.end_lineno] = [
+                        head + lines[node.end_lineno - 1][node.end_col_offset:]]
+            io.open(path, "w", encoding="utf-8", newline="").write("\n".join(lines))
             red = _run("test_oracle.py")
             io.open(path, "w", encoding="utf-8", newline="").write(orig)
-            print("  %-28s line %-5d %s"
-                  % (name, lineno, "kept" if red else "NO CASE OF ITS OWN"))
+            shown = " ".join((ast.get_source_segment(orig, node) or "").split())
+            print("  %-28s line %-5d %-18s %s"
+                  % (name, lineno, "kept" if red else "NO CASE OF ITS OWN",
+                     shown[:40]))
             if not red:
-                free.append((name, lineno, stmt.strip()))
+                free.append((name, lineno, shown))
     assert _run("test_oracle.py") == 0, "oracle.py was not restored"
     return len(sites), free
 

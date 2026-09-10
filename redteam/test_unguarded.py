@@ -250,6 +250,54 @@ def main():
     check("...and each one adds what it deleted to the number the verdict reads",
           _uncounted == [], str(_uncounted))
 
+    # --- A RULE IS NOT ALWAYS A STATEMENT ------------------------------------------
+    #
+    # `sweep_rules` neutralised each `return True` in a detector with more than one.
+    # `return a or b or c` holds three decisions and no `return True`, and the four
+    # branches of `_junk` inside `d_fabricated_citation` -- which decide whether a
+    # bracketed span counts as a citation at all -- were invisible to every arm of the
+    # tool. Three of them turned out to have no case.
+    #
+    # Driven, not read: the arm rewrites a file and runs a suite, and a scan of its source
+    # would assert the shape of the code rather than what it comes back with.
+    import shutil as _sh_r
+    _rw = tempfile.mkdtemp()
+    _old_rt_r = unguarded.RT
+    try:
+        unguarded.RT = _rw
+        io.open(os.path.join(_rw, "oracle.py"), "w", encoding="utf-8",
+                newline="").write(
+            "def d_two(p, c):" + chr(10)
+            + "    if 'zzalpha' in p:" + chr(10)
+            + "        return True" + chr(10)
+            + "    if 'zzbeta' in p:" + chr(10)
+            + "        return True" + chr(10)
+            + "    return False" + chr(10)
+            + chr(10)
+            # The shape that was invisible: two decisions, no `return True` anywhere.
+            + "def d_or(p, c):" + chr(10)
+            + "    return 'zzgamma' in p or 'zzdelta' in p" + chr(10))
+        # One branch of each pair has a case and the other does not.
+        io.open(os.path.join(_rw, "test_oracle.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import oracle" + chr(10)
+            + "assert oracle.d_two('a zzalpha reply', {})" + chr(10)
+            + "assert oracle.d_or('a zzgamma reply', {})" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_r, _free_r = unguarded.sweep_rules()
+    finally:
+        unguarded.RT = _old_rt_r
+        _sh_r.rmtree(_rw, ignore_errors=True)
+    check("the rule arm counts a branch of an or-return as a rule",
+          _n_r == 4, str(_n_r))
+    check("...and names the branch nothing would miss",
+          "'zzdelta' in p" in [f[2] for f in _free_r], str(_free_r))
+    check("...and still names the `return True` nothing would miss",
+          [f[0] for f in _free_r].count("d_two") == 1, str(_free_r))
+    check("...and nothing else", len(_free_r) == 2, str(_free_r))
+
     # --- WHICH HALF OF AN ENTRY IS THE RULE ----------------------------------------
     #
     # `sweep_rules` reads `return True`, so a rule that lives as an ELEMENT of a pattern
