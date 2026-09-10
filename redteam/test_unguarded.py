@@ -140,6 +140,63 @@ def main():
     check("...while a name that matches one still sweeps it",
           _u2 == 1 and len(_s2) == 1, "%d undocumented, %d survivor(s)" % (_u2, len(_s2)))
 
+    # --- THE ROUTE A SUITE MAP BUILT ON `import <name>` CANNOT SEE --------------------
+    #
+    # `workspace` globs `targets_*.py` and calls `import_module` on each name, so every
+    # suite that reaches `workspace` reaches all eleven practice adapters. Asked only
+    # about literal imports, this tool answered `NO SUITE IMPORTS IT` for every one of
+    # them and listed their guards as survivors: eleven false findings of exactly the
+    # shape it exists to report, enough to bury a real one.
+    #
+    # DERIVED, NOT LISTED. A pattern counts as a route only when one function both globs
+    # it and calls `import_module`, so a glob that merely reads files is not mistaken
+    # for one.
+    routes = unguarded._dynamic_routes()
+    check("the engine's own dynamic import route is derived from its source",
+          routes.get("targets_*.py") == "workspace", str(routes))
+    _adapters = [_m for _m in sorted(os.listdir(unguarded.RT))
+                 if _m.startswith("targets_") and _m.endswith(".py")]
+    _unreached = [_m for _m in _adapters if not unguarded._suites_touching(_m)]
+    check("...so no practice adapter is reported as reached by nothing",
+          _unreached == [], str(_unreached))
+    check("...and there were adapters to reach", len(_adapters) >= 8,
+          str(len(_adapters)))
+    # AND THE FIRST ROUTE STILL WORKS ON ITS OWN, or the widening replaced it.
+    check("...while a module imported by name is still found by its own name",
+          "test_workspace.py" in unguarded._suites_touching("workspace.py"),
+          str(unguarded._suites_touching("workspace.py")[:3]))
+
+    # A GLOB THAT ONLY READS IS NOT A ROUTE. Both halves have to be in one function, or
+    # every module that lists a directory would make every file in it reachable.
+    _d = tempfile.mkdtemp()
+    io.open(os.path.join(_d, "loader.py"), "w", encoding="utf-8", newline="").write(
+        "import glob, importlib" + chr(10)
+        + "def load():" + chr(10)
+        + "    for f in glob.glob('plug_*.py'):" + chr(10)
+        + "        importlib.import_module(f[:-3])" + chr(10))
+    # BOTH IN ONE FILE, which is the case a file-level scan cannot tell apart. `reader.py`
+    # loads `plugb_*.py` and, in a different function, merely reads `data_*.py`.
+    io.open(os.path.join(_d, "reader.py"), "w", encoding="utf-8", newline="").write(
+        "import glob, importlib" + chr(10)
+        + "def load():" + chr(10)
+        + "    for f in glob.glob('plugb_*.py'):" + chr(10)
+        + "        importlib.import_module(f[:-3])" + chr(10)
+        + chr(10)
+        + "def read():" + chr(10)
+        + "    return [open(f).read() for f in glob.glob('data_*.py')]" + chr(10))
+    _old_rt = unguarded.RT
+    try:
+        unguarded.RT = _d
+        _r = unguarded._dynamic_routes()
+    finally:
+        unguarded.RT = _old_rt
+    check("a glob whose function also imports is a route",
+          _r.get("plug_*.py") == "loader", str(_r))
+    check("...and a glob that only reads files is not",
+          "data_*.py" not in _r, str(_r))
+    check("...even when the same file also has one that imports",
+          _r.get("plugb_*.py") == "reader" and "data_*.py" not in _r, str(_r))
+
     print("\n%d/%d passed" % (PASS, PASS + FAIL))
     if FAIL:
         return 1

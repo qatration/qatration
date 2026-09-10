@@ -52,6 +52,7 @@ against the wrong check before now.
 import argparse
 import ast
 import contextlib
+import fnmatch
 import io
 import os
 import re
@@ -97,10 +98,55 @@ def _run(suite, timeout=420):
         return 99
 
 
+def _dynamic_routes():
+    """-> {glob pattern: the module that imports every file matching it}.
+
+    DERIVED FROM THE ENGINE, not listed here. `workspace` globs `targets_*.py` and calls
+    `import_module` on each name, so every suite that reaches `workspace` reaches all
+    eleven practice adapters — and a suite map built on `import <name>` reports every
+    one of them as `NO SUITE IMPORTS IT`. That is a false finding of exactly the shape
+    this tool exists to report, and eleven of them would bury a real one.
+
+    A pattern counts only when one function both globs it and calls `import_module`, so
+    a glob that merely reads files is not mistaken for a route.
+    """
+    routes = {}
+    for f in sorted(os.listdir(RT)):
+        if not f.endswith(".py") or f.startswith("test_"):
+            continue
+        src = io.open(os.path.join(RT, f), encoding="utf-8").read()
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        for fn in [n for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            body = ast.get_source_segment(src, fn) or ""
+            if "import_module(" not in body:
+                continue
+            for m in re.finditer(r'glob\(\s*[^)]*?["\']([^"\']*\*[^"\']*\.py)["\']',
+                                 body):
+                routes[m.group(1)] = f[:-3]
+    return routes
+
+
 def _suites_touching(mod):
-    """Every suite whose source imports this module -- derived, so a new suite joins itself."""
+    """Every suite that reaches this module, by import or by the engine's own glob.
+
+    Derived, so a new suite joins itself. The second route is derived too: see
+    `_dynamic_routes`. Without it this returns nothing for a practice adapter and the
+    sweep reports one for every documented guard in it.
+    """
     stem = mod[:-3]
     pat = re.compile(r"^\s*(?:import\s+%s\b|from\s+%s\s+import)" % (stem, stem), re.M)
+    stems = {stem}
+    for glob_pat, router in _dynamic_routes().items():
+        if fnmatch.fnmatch(mod, glob_pat) and router != stem:
+            stems.add(router)
+    if len(stems) > 1:
+        pat = re.compile("|".join(
+            r"^\s*(?:import\s+%s\b|from\s+%s\s+import)" % (s, s)
+            for s in sorted(stems)), re.M)
     return [t for t in sorted(os.listdir(RT))
             if t.startswith("test_") and t.endswith(".py")
             and pat.search(io.open(os.path.join(RT, t), encoding="utf-8").read())]
