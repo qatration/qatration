@@ -858,6 +858,18 @@ def main():
         # AND THERE WERE LISTINGS TO NAME, since a `CHANNELS` that emptied, or a regex that
         # stopped matching, satisfies the line above over nothing.
         check("...and there were listings to compare", len(_want_m) >= 4, str(_want_m))
+        # AND THE DOOR'S OWN ONE-LINE DESCRIPTION, which names no method and so cannot be
+        # checked the way the pages above are. It said "list a real MCP server's tools",
+        # the same one-channel claim the command printed, in the line a reader picks a
+        # command from. What it must not do is name ONE channel as if it were the surface:
+        # either it stays above the distinction, or it names all four.
+        from cli import COMMANDS as _CMD_m
+        _blurb_m = _CMD_m["mcp"][1].lower()
+        _named_ch = {_c for _c, _meth, _k in _CH_m
+                     if _c.replace("_", " ") in _blurb_m or _c in _blurb_m}
+        check("the mcp command's own description does not name one channel as the surface",
+              _named_ch in (set(), {_c for _c, _m, _k in _CH_m}),
+              "%r names %s of %d" % (_CMD_m["mcp"][1], sorted(_named_ch), len(_CH_m)))
         # THE RULE IS ASKED OF EVERY CHANNEL, or the false-alarm floor is a floor for
         # tools and silence everywhere else.
         _all_hits = ["%s/%s/%s" % (_s, _c, _x["name"]) for _s, _c, _x in _chan_items

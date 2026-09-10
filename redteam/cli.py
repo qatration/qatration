@@ -75,7 +75,10 @@ COMMANDS = {
     # AND THE ONE THAT LOOKS AT SOMEBODY ELSE'S SERVER. A tool description is text a third
     # party writes into the model's instruction context, and until this there was no way to
     # read one without importing a module inside an installed package.
-    "mcp":      ("mcp_probe",       "list a real MCP server's tools, and the instruction text they carry"),
+    # NOT "its tools". The prober asks four listings and the blurb named one of them,
+    # which is the same sentence the command itself used to print. A reader picking a
+    # door out of this list decides from one line.
+    "mcp":      ("mcp_probe",       "list what a real MCP server publishes, and the instruction text it carries"),
     # AND THE RECORD OF WHAT RAN. `runs.py` opens with four things it exists to answer --
     # who authorised this, what did it cost, how did it end, which build produced it -- and
     # calls them "something somebody will actually ask". Nothing could ask: `listing` and
