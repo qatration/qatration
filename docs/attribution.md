@@ -165,8 +165,9 @@ engine can SEE the attack. It cannot answer what the ecosystem ships, and a fals
 is only ever a fact about real traffic.
 
 So `mcp_probe.py` speaks MCP to servers somebody else wrote. JSON-RPC over stdio, in the
-standard library, `initialize` then `tools/list`, and nothing is ever called: the question is
-about the descriptions, which arrive before any tool runs. `out/mcp_tools.json` is what six
+standard library, `initialize` and then every listing the server declares (`tools/list`,
+`prompts/list`, `resources/list`, `resources/templates/list`), and nothing is ever called:
+the question is about the descriptions, which arrive before any tool runs. `out/mcp_tools.json` is what six
 widely used servers answered, with the package version each answer came from.
 
 | server | tools | items, all channels | characters of instruction text |

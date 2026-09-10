@@ -820,6 +820,44 @@ def main():
                   "exit %s: %s" % (_rc_n, _out_n[-300:]))
         finally:
             _sh_s.rmtree(_ws, ignore_errors=True)
+
+        # --- AND THE PAGES NAME THE LISTINGS THIS ACTUALLY ASKS FOR --------------------
+        #
+        # "`initialize` then `tools/list`" was written in four places -- this module's own
+        # docstring twice, `docs/attribution.md` and `docs/internals.md` -- and stayed
+        # there for the whole life of `list_surface`, which asks four listings. On
+        # attribution.md the sentence sat directly above a table headed "items, all
+        # channels", so the page contradicted itself in adjacent lines.
+        #
+        # A prose sentence cannot be recounted the way a number can, but the SET of method
+        # names in it can: every listing a page names must be one the prober asks for, and
+        # every listing it asks for must be named. A fifth channel then cannot be added
+        # without the pages moving, which is the only reason those four went stale.
+        from mcp_probe import CHANNELS as _CH_m
+        _ROOT_m = os.path.dirname(HERE)
+        _want_m = {_meth for _c, _meth, _k in _CH_m}
+        _listings = lambda s: set(_re_s.findall(r"\b([a-z]+(?:/[a-z]+)*/list)\b", s))
+        import ast as _ast_m
+        _pages_m = {
+            "mcp_probe.py docstring": _ast_m.get_docstring(
+                _ast_m.parse(_io_m.open(os.path.join(HERE, "mcp_probe.py"),
+                                        encoding="utf-8").read())) or "",
+            "docs/attribution.md": _io_m.open(
+                os.path.join(_ROOT_m, "docs", "attribution.md"), encoding="utf-8").read(),
+            "docs/internals.md": _io_m.open(
+                os.path.join(_ROOT_m, "docs", "internals.md"), encoding="utf-8").read(),
+        }
+        _wrong_m = []
+        for _where_m, _text_m in sorted(_pages_m.items()):
+            _got_m = _listings(_text_m)
+            if _got_m != _want_m:
+                _wrong_m.append("%s names %s, the prober asks %s"
+                                % (_where_m, sorted(_got_m), sorted(_want_m)))
+        check("every page describing the prober names the listings it asks for",
+              not _wrong_m, "; ".join(_wrong_m))
+        # AND THERE WERE LISTINGS TO NAME, since a `CHANNELS` that emptied, or a regex that
+        # stopped matching, satisfies the line above over nothing.
+        check("...and there were listings to compare", len(_want_m) >= 4, str(_want_m))
         # THE RULE IS ASKED OF EVERY CHANNEL, or the false-alarm floor is a floor for
         # tools and silence everywhere else.
         _all_hits = ["%s/%s/%s" % (_s, _c, _x["name"]) for _s, _c, _x in _chan_items

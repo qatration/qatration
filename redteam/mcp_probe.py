@@ -8,12 +8,14 @@ answers whether the ENGINE can see the attack. It cannot answer what the ecosyst
 ships, and that second question is the one an operator has.
 
 So this speaks MCP to a server that somebody else wrote. JSON-RPC 2.0 over stdio, newline
-delimited, `initialize` then `tools/list`, in the standard library, because a scanner that
-needs an SDK to look at a protocol has taken a dependency on the thing it is measuring.
+delimited, `initialize` and then every listing the server declares — `tools/list`,
+`prompts/list`, `resources/list` and `resources/templates/list` — in the standard
+library, because a scanner that needs an SDK to look at a protocol has taken a dependency
+on the thing it is measuring.
 
     python mcp_probe.py npx -y @modelcontextprotocol/server-filesystem .
 
-NOTHING IS CALLED. `tools/list` is a read: the server is started, asked what it offers, and
+NOTHING IS CALLED. A listing is a read: the server is started, asked what it offers, and
 stopped. Running somebody's tool is a different act with a different authorisation, and the
 question here is about the descriptions, which arrive before any tool runs.
 

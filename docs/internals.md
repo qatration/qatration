@@ -245,8 +245,10 @@ qatration/
     adaptive.py       # the attacker that writes new attacks, judged by `judge`
     run_adaptive.py   # entry point, with --promote to keep what won
     run_all.py        # the whole fleet in one command, exit code carries the result
-    mcp_probe.py      # speaks MCP to a server somebody else wrote: initialize, tools/list,
-                      #   nothing called. The descriptions ARE the surface, and they arrive
+    mcp_probe.py      # speaks MCP to a server somebody else wrote: initialize, then
+                      #   tools/list, prompts/list, resources/list and
+                      #   resources/templates/list. Nothing called: the descriptions ARE
+                      #   the surface, and they arrive
                       #   before any tool runs. out/mcp_tools.json is what six real ones say
     targets_http.py   # THE GENERIC ADAPTER: a new target is added with a YAML file
                       #   rather than a Python module. Rate limit + request budget live here
