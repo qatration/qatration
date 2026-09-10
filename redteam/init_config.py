@@ -244,7 +244,12 @@ def main():
     here = os.path.abspath(args.out)
     print("\nSo that `rejudge`, `coverage` and the reports can find this config's "
           "canaries, export it once:\n")
-    print("    export QATRATION_CONFIGS=%s" % here)
+    # QUOTED, BECAUSE THE VALUE IS A REAL PATH THIS COMMAND JUST CHOSE. Unquoted, the
+    # POSIX line is wrong on the platform it was written on: bash reads `\U` in
+    # `C:\Users\...` as an escape and hands over `C:UsersAppData...`, and any path
+    # with a space in it breaks everywhere. The PowerShell line was already quoted, so
+    # the two lines disagreed about the same value.
+    print('    export QATRATION_CONFIGS="%s"' % here)
     print("    $env:QATRATION_CONFIGS=\"%s\"      # PowerShell" % here)
     return 0
 

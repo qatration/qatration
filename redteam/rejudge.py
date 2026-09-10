@@ -397,7 +397,7 @@ def main():
               f"  Re-scoring reads the canaries and markers from the config, and results "
               f"files do not carry them.\n"
               f"  Point at it, and every other command with it:\n"
-              f"      export QATRATION_CONFIGS=/path/to/your.yaml")
+              f'      export QATRATION_CONFIGS="/path/to/your.yaml"')
     verb = "rescored" if args.write else "would change"
     print(f"\n{verb} {total_changed} attack row(s) across {files_touched} file(s)"
           f"{' (some of them only their attribution caveat)' if files_touched and not total_changed else ''}.")

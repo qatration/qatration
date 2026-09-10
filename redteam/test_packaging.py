@@ -686,6 +686,26 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
                 "qatration %s wrote %s into an empty workspace and exited 0: a page built "
                 "from no runs, published as a result" % (name, left))
 
+            # (2b) AND A SHELL ASSIGNMENT IT PRINTS SURVIVES BEING PASTED. `init` ended
+            #      with the one command that makes half the tool able to see the config it
+            #      just wrote:
+            #
+            #          export QATRATION_CONFIGS=C:\Users\you\AppData\Local\Temp\mybot.yaml
+            #
+            #      unquoted, on the platform it was written on, where bash reads `\U` as an
+            #      escape and hands over `C:UsersyouAppData...`. Any path with a space in it
+            #      breaks everywhere. The PowerShell line beside it was already quoted, so
+            #      the two lines disagreed about the same value and only one of them worked.
+            #
+            #      Property (2) asks whether the remedy names something that exists; this
+            #      asks whether it can be typed.
+            for _asg in re.finditer(r"(?:export|\$env:)\s*([A-Z_]+)\s*=\s*(\S+)", out):
+                _val = _asg.group(2)
+                assert not (("/" in _val or "\\" in _val) and _val[0] not in "\"'"), (
+                    "qatration %s prints `%s=%s` with the path unquoted: pasted into a "
+                    "shell, a backslash is an escape and a space is a new argument"
+                    % (name, _asg.group(1), _val))
+
             # (2) a file this package ships is not something a reader can run.
             for hit in re.findall(r"\b([a-z_][a-z0-9_]*)\.py\b", out):
                 assert hit not in mods, (
