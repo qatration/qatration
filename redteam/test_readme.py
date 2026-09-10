@@ -2024,6 +2024,52 @@ def main():
     # 1. NOTHING ON DISK IS HAND-WRITTEN. Without this the generator is a suggestion: an edit
     #    to a translated page survives until the next build, and in the meantime it is a
     #    sentence no check on this page has ever read.
+    # --- WHAT `translate="no"` PROTECTS, AND WHAT HAPPENS WITHOUT AN ENDONYM ---------
+    #
+    # The first guard sweep ever pointed at `tools/` found both of these: delete either
+    # and every suite that names this file stays green. `extract` is what decides which
+    # strings are offered for translation, so a hole in it is a string translated into
+    # ten languages before anybody notices.
+    #
+    # A VOID ELEMENT HAS NO INSIDE, so it never enters the skip that `translate="no"`
+    # opens on an ordinary tag. The first version of the walker therefore offered the
+    # `alt` of an `<img translate="no">` — the one attribute such a tag has, and the
+    # whole reason somebody marked it.
+    _img = '<img translate="no" alt="qatration" src="/logo.png">'
+    check("a marked void element keeps its attributes out of the translator",
+          "qatration" not in _i18n.extract(_img), str(_i18n.extract(_img)))
+    # AND AN UNMARKED ONE STILL OFFERS THEM, or the line above passes on a walker that
+    # stopped reading attributes at all.
+    _img2 = '<img alt="Find the dogs" src="/logo.png">'
+    check("...while an unmarked one still offers them",
+          "Find the dogs" in _i18n.extract(_img2), str(_i18n.extract(_img2)))
+    # AND THE MARK STILL ENDS WITH THE ELEMENT. A void tag closes itself, so a walker
+    # that skipped `in place` by pushing a skip would swallow the rest of the document.
+    _after = _img + '<p>Every number here is recounted</p>'
+    check("...and the skip ends with the void element, not with the document",
+          any("recounted" in _s for _s in _i18n.extract(_after)),
+          str(_i18n.extract(_after)))
+
+    # A LANGUAGE WITHOUT A NAME FOR ITSELF IS A BUG, not a fallback: falling back to the
+    # code printed `FR` as the whole accessible name, and the affordance quietly stopped
+    # working for exactly the reader it exists for. It has to refuse, and it has to refuse
+    # in a sentence rather than in a KeyError from two lines down.
+    try:
+        _i18n.switcher(_i18n.DEFAULT, [_i18n.DEFAULT, "zz"])
+        _sw_why = ""
+    except SystemExit as _e:
+        _sw_why = str(_e)
+    except Exception as _e:
+        _sw_why = "%s: %s" % (type(_e).__name__, _e)
+    check("a language switch refuses a language with no name for itself",
+          "ENDONYM" in _sw_why, _sw_why or "it built a switcher anyway")
+    check("...saying what is missing rather than raising from two lines down",
+          "KeyError" not in _sw_why, _sw_why)
+    # AND IT STILL BUILDS ONE FOR THE LANGUAGES THIS SITE HAS.
+    check("...and the languages this site ships still make a switcher",
+          _i18n.DEFAULT in _i18n.switcher(_i18n.DEFAULT, _langs),
+          _i18n.switcher(_i18n.DEFAULT, _langs)[:120])
+
     _drifted = [os.path.relpath(p, ROOT) for p, _changed in _i18n.build(write=False) if _changed]
     check("every published page is exactly what the source generates",
           not _drifted,
