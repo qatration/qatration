@@ -359,7 +359,22 @@ def main():
             + "    for label, danger, safe in N:" + chr(10)
             + "        if danger.search(p) and not safe.search(p):" + chr(10)
             + "            return True" + chr(10)
-            + "    return False" + chr(10))
+            + "    return False" + chr(10)
+            # A LIST MERGED INTO A LOCAL BEFORE IT IS READ, which is how the engine
+            # extends a built-in list with the operator's config. Nothing here iterates
+            # `K` by name, and `K` is still where these rules live.
+            + chr(10)
+            + "K = ['zzmerged']" + chr(10)
+            + "def d_merge(p, c):" + chr(10)
+            + "    ks = K + list(c.get('extra') or [])" + chr(10)
+            + "    return any(k in p for k in ks)" + chr(10)
+            # AND A NAME THAT APPEARS ONLY IN PROSE IS NOT A READ. Selecting on the
+            # function's text picks this up and reports a rule that no detector consults.
+            + chr(10)
+            + "GHOSTS = ['zzghost']" + chr(10)
+            + "def d_prose(p, c):" + chr(10)
+            + "    # GHOSTS is the wrong place for this, see the note above" + chr(10)
+            + "    return 'zznever' in p" + chr(10))
         # One of the two rules has a case and the other does not, so the arm has to come
         # back with exactly one name and it has to be the right one.
         io.open(os.path.join(_pw, "test_oracle.py"), "w", encoding="utf-8",
@@ -378,7 +393,20 @@ def main():
         unguarded.RT = _old_rt2
         _sh_p.rmtree(_pw, ignore_errors=True)
     check("the pattern arm sweeps every rule in every entry it can read",
-          _n_p == 4, str(_n_p))
+          _n_p == 5, str(_n_p))
+    # A LIST READ THROUGH A LOCAL IS STILL THAT DETECTOR'S RULES. `sysprompt_leak` merges
+    # its built-in markers with the operator's before reading them, and the scan that
+    # matched `for x in NAME` over the source saw no read at all.
+    # NAMED, not merely absent from the findings: `not any(f[0] == "K")` is satisfied by
+    # an arm that never looked at K, which is the whole defect wearing the check's own
+    # clothes. `zzmerged` has no case in the fixture suite, so the arm has to report it.
+    check("...including one merged into a local before it is read",
+          "K" in [f[0] for f in _free_p], str(_free_p))
+    # ...AND A NAME IN A COMMENT IS NOT A READ. Selecting on text rather than on the tree
+    # picks up prose, and `ALWAYS_PARTIAL` is named in two comments inside detectors --
+    # nineteen detector names that would have been reported as untested rules.
+    check("...and a list only named in prose is not swept as rules",
+          not any(f[0] == "GHOSTS" for f in _free_p + _skip_p), str(_free_p + _skip_p))
     check("...and a compiled rule is not one it walks past",
           not any(f[0] == "N" for f in _free_p), str(_free_p))
     check("...and a list whose halves it cannot read is not called clean",
@@ -387,8 +415,8 @@ def main():
           all(s[2] for s in _skip_p), str(_skip_p))
     check("...and does not appear as a rule with no case",
           not any(f[0] == "M" for f in _free_p), str(_free_p))
-    check("...and names the one with no case",
-          [f[2] for f in _free_p] == ["'zzfree'"], str(_free_p))
+    check("...and names the rules with no case, and only those",
+          sorted(f[2] for f in _free_p) == ["'zzfree'", "'zzmerged'"], str(_free_p))
 
     # AND IT IS REACHABLE FROM THE COMMAND.
     _tool_src2 = io.open(_tool, encoding="utf-8").read()

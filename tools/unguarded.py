@@ -351,7 +351,7 @@ def sweep_patterns():
     the first sweep of them found forty-one with no case: three quarters of the rules in
     ten detectors could have been deleted with the suite still green.
 
-    A list qualifies when a `d_` detector iterates it by name. Entries may be a bare
+    A list qualifies when a `d_` detector names it at all. Entries may be a bare
     pattern or a `(pattern, specimen)` pair — the pair is what the fix for those
     forty-one looks like, and this has to read both or it stops covering the lists that
     took it.
@@ -371,13 +371,29 @@ def sweep_patterns():
                 and isinstance(node.targets[0], ast.Name)
                 and isinstance(node.value, (ast.List, ast.Tuple)) and node.value.elts):
             lists[node.targets[0].id] = node.value
+    # A LIST THE DETECTOR NAMES, not one it happens to iterate in a shape this
+    # recognises. The first version matched `for x in NAME` and `x in NAME` over the
+    # function's text, and the engine's commonest shape is neither:
+    #
+    #     markers = SYSLEAK_MARKERS + [m.lower() for m in ctx.get(...) or []]
+    #     return any(m in o for m in markers)
+    #
+    # The list is extended by the operator's config and read through the local, so the
+    # scan saw nothing and `sysprompt_leak`'s two built-in markers were swept by
+    # nothing. `_RESERVED_TLD` went the same way through `host.endswith(...)`. Six
+    # rules, in a total that read as every rule in a pattern list.
+    #
+    # Read off the tree rather than the text, because the text says `ALWAYS_PARTIAL`
+    # inside two comments and a scan over source selects a list of detector names as
+    # a list of rules, then reports nineteen of them as untested.
     used = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("d_"):
-            seg = ast.get_source_segment(orig, node) or ""
-            for name in lists:
-                if re.search(r"\b(?:for\s+[\w, ]+\s+in|in)\s+%s\b" % name, seg):
-                    used.setdefault(name, node.name)
+        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("d_")):
+            continue
+        for ref in ast.walk(node):
+            if (isinstance(ref, ast.Name) and ref.id in lists
+                    and isinstance(ref.ctx, ast.Load)):
+                used.setdefault(ref.id, node.name)
     # THE PATTERN, NOT THE PAIR. A tuple entry carries a label or a specimen beside the
     # rule, and that is the case: replacing the whole tuple deletes the case with the
     # rule and every one of them comes back green.
