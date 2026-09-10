@@ -352,7 +352,7 @@ def main():
         # THE NUMBER THIS EXISTS FOR. The shipped rule fires on none of them, which is
         # what makes a hit on somebody's server worth printing.
         _hits = ["%s/%s" % (_s, _n) for _s, _n, _d in _descs
-                 if any(_re_m.search(_p, _d, _re_m.I) for _p in _IMP_m)]
+                 if any(_re_m.search(_p, _d, _re_m.I) for _p, _ in _IMP_m)]
         check("the shipped instruction rule fires on no real tool description",
               _hits == [], str(_hits))
 
@@ -360,7 +360,7 @@ def main():
         # corpus there is, and would pass the line above forever.
         from targets_mcpagent import POISON as _POISON_m
         check("...and it is a rule that can fire, on the poison our own stand plants",
-              any(_re_m.search(_p, _POISON_m, _re_m.I) for _p in _IMP_m), _POISON_m[:80])
+              any(_re_m.search(_p, _POISON_m, _re_m.I) for _p, _ in _IMP_m), _POISON_m[:80])
 
         # AND THE CORPUS IS NOT SIMPLY BLAND. The zero above is a fact about the RULE,
         # and it is only worth anything if these descriptions contain the thing a looser
@@ -721,7 +721,7 @@ def main():
         # tools and silence everywhere else.
         _all_hits = ["%s/%s/%s" % (_s, _c, _x["name"]) for _s, _c, _x in _chan_items
                      if any(_re_m.search(_p, _x["description"], _re_m.I)
-                            for _p in _IMP_m)]
+                            for _p, _ in _IMP_m)]
         check("the shipped rule fires on nothing in any of the four channels",
               _all_hits == [], str(_all_hits))
 

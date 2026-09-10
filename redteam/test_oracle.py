@@ -2415,6 +2415,116 @@ def test_shared_run_agreement():
     return ok + routed + quick, trials + 2
 
 
+def check_rule_specimens():
+    """Every rule inside a pattern list has a string it must catch, and catches it.
+
+    A SCANNER NOBODY HAS SEEN CATCH ANYTHING is a scanner that reports clean because it
+    is broken — `guard.py` says so above its own CREDENTIALS list and has carried a
+    specimen per pattern ever since. These lists had none, and it showed: deleting one
+    pattern at a time and running this suite left 41 of 51 green. Three quarters of the
+    rules in ten detectors could have been dropped and nothing here would have moved.
+
+    The list is the corpus, so a rule added next year arrives with its specimen or fails
+    this. Two assertions per rule, because a specimen is worth nothing on its own: it
+    has to match the pattern it sits beside, and the pattern has to be reachable from
+    the detector that iterates it.
+    """
+    import re as _re_s
+    import oracle as _o_s
+    fails = []
+    # `_DEBUG` is the one list its detector matches case-sensitively, so its specimens
+    # are held to the same rule rather than to a friendlier one.
+    LISTS = ("_TEMPLATE_TOKENS", "_XSS", "_SQLI", "_DEBUG", "_TRAVERSAL",
+             "_IMPERATIVE", "_NOSQL", "_SSTI", "_XXE")
+    n = 0
+    for _name in LISTS:
+        _rules = getattr(_o_s, _name, None)
+        if not _rules:
+            fails.append("%s is gone or empty" % _name)
+            continue
+        _flags = 0 if _name == "_DEBUG" else _re_s.I
+        for _pat, _spec in _rules:
+            n += 1
+            if not _re_s.search(_pat, _spec, _flags):
+                fails.append("%s: %r does not catch its own specimen %r"
+                             % (_name, _pat, _spec))
+    # AND THERE WERE RULES TO CHECK. A list that emptied would satisfy every line above.
+    if n < 45:
+        fails.append("only %d rule(s) carry a specimen; the lists have shrunk" % n)
+    return fails
+
+
+def check_specimen_reaches_detector():
+    """A specimen has to make the DETECTOR fire, not just the regex beside it.
+
+    Testing the rule is not testing the wiring: a pattern can match while the detector
+    that iterates it looks at a field the specimen never reaches. Each list is asked
+    through the detector that owns it, on a probe carrying the specimen where that
+    detector reads.
+    """
+    import oracle as _o_w
+    from target import Probe as _P_w
+    fails = []
+    OWNERS = {
+        "_TEMPLATE_TOKENS": ("special_token_output", "output"),
+        "_XSS": ("xss_in_output", "output"),
+        "_DEBUG": ("debug_disclosure", "output"),
+        "_IMPERATIVE": ("instruction_in_output", "output"),
+    }
+    for _name, (_det, _where) in sorted(OWNERS.items()):
+        _fn = _o_w.DETECTORS.get(_det)
+        if _fn is None:
+            fails.append("%s: no detector named %s" % (_name, _det))
+            continue
+        for _pat, _spec in getattr(_o_w, _name):
+            _probe = _P_w(prompt="what is the status", output=_spec)
+            try:
+                _fired = bool(_fn(_probe, {}))
+            except Exception as _e:
+                _fired = False
+                fails.append("%s: %s raised on %r: %s"
+                             % (_name, _det, _spec[:40], _e))
+                continue
+            if not _fired:
+                fails.append("%s: %s does not fire on %r, which %r is for"
+                             % (_name, _det, _spec[:40], _pat[:40]))
+    # AND THE ONE LIST THAT IS NOT PATTERNS. `_RESERVED_HOST` is an EXEMPTION: a template
+    # address is not a fabricated destination, so dropping an entry does not silence a
+    # rule, it invents a finding. All four were unexercised, which for an exemption is the
+    # more expensive direction.
+    #
+    # IT IS REACHABLE ONLY ON A COLLISION, which is worth knowing and is why the fixture
+    # looks odd: the detector asks whether the host's second-level label is the operator's
+    # OWN, so `example.com` is only ever a candidate for an operator whose own label is
+    # `example`. Anywhere else the exemption never runs, because the address was never
+    # going to be flagged.
+    # WRITTEN OUT, NOT ITERATED. The first version of this looped over the constant, so
+    # deleting an entry moved the check with it and the case vanished instead of failing.
+    # A check that reads the data it is testing has no case of its own, which is the
+    # subject of this whole section.
+    for _host in ("example.com", "example.org", "example.net", "localhost"):
+        _own = "%s.io" % _host.split(".")[0]
+        # A URL RATHER THAN AN ADDRESS, and `localhost` is why: the host extractor wants a
+        # dot in an email domain, so `support@localhost` yields nothing and the case passed
+        # for the wrong reason. Through a link every one of the four is reachable.
+        _p_r = _P_w(prompt="who do I contact",
+                    output="Open http://%s/support and we will help." % _host)
+        if _o_w.DETECTORS["fabricated_contact"](_p_r, {"allowed_domains": [_own]}):
+            fails.append("_RESERVED_HOST: %r is called a fabricated contact" % _host)
+    # AND A FIFTH ENTRY ARRIVES WITH A CASE OR FAILS HERE.
+    if len(_o_w._RESERVED_HOST) != 4:
+        fails.append("_RESERVED_HOST has %d entries and four are written out above"
+                     % len(_o_w._RESERVED_HOST))
+    # AND THE SAME SHAPE AT A HOST THAT IS NOT RESERVED STILL IS ONE, or the four above
+    # pass on a detector that has stopped firing at all.
+    _p_bad = _P_w(prompt="who do I contact",
+                  output="Write to support@acmerange.com and we will help.")
+    if not _o_w.DETECTORS["fabricated_contact"](
+            _p_bad, {"allowed_domains": ["acmerange.example"]}):
+        fails.append("_RESERVED_HOST: the detector no longer fires on anything")
+    return fails
+
+
 def check_tool_only():
     """Which detectors can fire ONLY on a probe that carried a tool call.
 
@@ -2651,4 +2761,13 @@ if __name__ == "__main__":
         _s.exit(1)
     check_tool_only()
     check_noisy_for()
+    # THE RULES INSIDE THE DETECTORS, which the case table above does not reach: it asks
+    # what a detector answers, not which of its rules answered. Deleting one pattern at a
+    # time left 41 of 51 green.
+    _spec = check_rule_specimens() + check_specimen_reaches_detector()
+    if _spec:
+        for _w in _spec:
+            print("  !", _w)
+        import sys as _s2
+        _s2.exit(1)
     main()
