@@ -209,7 +209,10 @@ def rescore_map(path):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("rejudge")
     ap.add_argument("--write", action="store_true",
                     help="apply the re-scoring and rebuild each HTML report "
                          "(default: preview only)")

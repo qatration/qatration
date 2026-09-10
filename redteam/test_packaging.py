@@ -726,6 +726,35 @@ def test_no_command_reports_a_clean_bill_over_an_empty_workspace():
         "only %d command(s) read the empty workspace and said so, so property (4) was "
         "asserted about almost nothing: %s" % (len(looked), looked))
 
+    # (4b) AND `--help` SAYS WHAT THE COMMAND IS FOR. Eleven of twenty-two built a bare
+    #      `ArgumentParser()`, so `qatration run --help` -- the front door of the tool --
+    #      printed its flags and never said what a run is, while `qatration` with no
+    #      arguments describes all twenty-two in one line each. The sentence existed and
+    #      was not reaching the place a reader asks for it.
+    #
+    #      Asked of the COMMAND, not of the source: a module can keep a perfect
+    #      `description=` and stop passing it, which is this file's own subject. And
+    #      quantified over `cli.COMMANDS`, so the next command joins by existing.
+    _undescribed = []
+    for _name in sorted(cli.COMMANDS):
+        _h = subprocess.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), _name, "--help"],
+            capture_output=True, text=True, timeout=180,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                     PYTHONDONTWRITEBYTECODE="1"))
+        _txt = _h.stdout or ""
+        # Everything argparse prints between the usage block and the first section
+        # heading is the description. A command with none prints nothing there.
+        _head = re.split(r"\n(?:positional arguments|options|optional arguments):", _txt)[0]
+        _body = "\n".join(_head.split("\n")[1:])
+        _desc = " ".join(_l for _l in _body.split("\n") if _l and not _l.startswith(" "))
+        if not _desc.strip():
+            _undescribed.append(_name)
+    assert not _undescribed, (
+        "%d of %d commands print no description with --help, so `qatration <cmd> --help` "
+        "lists the flags and never says what the command does: %s"
+        % (len(_undescribed), len(cli.COMMANDS), _undescribed))
+
     # (5) AND THE CODE IS 3, ASKED OF THE COMMAND RATHER THAN OF ITS PROSE. Property (4)
     #     above reaches a command only if it PRINTS THE WORKSPACE PATH, and then only asks
     #     for non-zero. Both halves leaked. `history` answers "no history yet" without

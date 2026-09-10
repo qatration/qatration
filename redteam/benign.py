@@ -805,7 +805,10 @@ def adjudicated(s):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("benign")
     ap.add_argument("--target", default=None)
     ap.add_argument("--target-config", default=None,
                     help="path to a config, for a target that does not live in redteam/ — "

@@ -456,7 +456,10 @@ def audit(trials, confirm_trials):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("verify")
     # NO DEFAULT TARGET. This defaulted to `targets_dvla.yaml`, a practice config inside
     # this package, so `qatration verify` typed with no arguments verified somebody else's
     # demo bot — and answered `NOT VERIFIED - not loaded: targets_dvla needs the DVLA

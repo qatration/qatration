@@ -84,7 +84,10 @@ def objectives_path(name):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("isolation")
     # NO DEFAULT TARGET. This pointed at a practice bot shipped inside the package,
     # so `qatration isolation` from an install aimed at the author's LangChain agent
     # rather than at the user's deployment, and the optional extra that bot needs is

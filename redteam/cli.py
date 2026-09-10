@@ -120,6 +120,23 @@ def _version():
     return line
 
 
+def parser(name, description=None, **kw):
+    """An ArgumentParser that says what the command is FOR, in the door list's words.
+
+    ELEVEN OF TWENTY-TWO BUILT A BARE `ArgumentParser()`. `qatration run --help` —
+    the front door of the whole tool — printed its flags and never said what a run
+    is, while `qatration` with no arguments describes all twenty-two in one line each.
+    The sentence existed; it was not reaching the place a reader asks for it.
+
+    Taken from `COMMANDS` rather than written a second time, which is what
+    `mcp_probe` already did and what the prose gate catches when a command writes its
+    own. A command that has more to say passes a longer `description` and keeps it.
+    """
+    import argparse
+    return argparse.ArgumentParser(prog="qatration %s" % name,
+                                   description=description or COMMANDS[name][1], **kw)
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
 

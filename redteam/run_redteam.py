@@ -501,7 +501,10 @@ def is_unmeasurable(attack, dead):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("run")
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=None,
                     help="runs per attack (default 3, or the target config's 'trials'); "

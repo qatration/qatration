@@ -526,7 +526,10 @@ def backfill():
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("history")
     ap.add_argument("--target", default=None)
     ap.add_argument("--backfill", action="store_true")
     args = ap.parse_args()

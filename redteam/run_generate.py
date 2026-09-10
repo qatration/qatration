@@ -28,7 +28,10 @@ from workspace import OUT as WORKSPACE_OUT
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("generate")
     # REQUIRED, like `onboard`'s. This defaulted to `targets_dvla.yaml`, a practice bot that
     # ships with the package -- so the command with no arguments pointed at a target the caller
     # never chose, in a tool whose neighbours send real attacks. Nothing depends on the default:

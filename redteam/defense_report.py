@@ -1293,7 +1293,10 @@ def coverage(why=None):
 
 def main():
     import argparse
-    ap = argparse.ArgumentParser()
+    # THE ONE SPELLING, from the table this command is listed in. A bare parser
+    # here printed the flags and left `--help` silent about the job.
+    from cli import parser as _cli_parser
+    ap = _cli_parser("fixes")
     # THE REPORT HAS NO SCOPE. It renders what is in the directory it was pointed at, and
     # how much traffic produced that is `run_redteam --scope`'s business. The flag used to
     # also truncate the findings, and once that went the only thing left for it to decide
