@@ -477,17 +477,55 @@ def main():
             + "assert oracle.d_two('a zzalpha reply', {})" + chr(10)
             + "assert oracle.d_or('a zzgamma reply', {})" + chr(10)
             + "print('ok')" + chr(10))
-        _n_r, _free_r = unguarded.sweep_rules()
+        # NAMED, because the arm's default is two modules now and this fixture has one.
+        _n_r, _free_r = unguarded.sweep_rules(("oracle.py",))
     finally:
         unguarded.RT = _old_rt_r
         _sh_r.rmtree(_rw, ignore_errors=True)
     check("the rule arm counts a branch of an or-return as a rule",
           _n_r == 4, str(_n_r))
     check("...and names the branch nothing would miss",
-          "'zzdelta' in p" in [f[2] for f in _free_r], str(_free_r))
+          "'zzdelta' in p" in [f[3] for f in _free_r], str(_free_r))
     check("...and still names the `return True` nothing would miss",
-          [f[0] for f in _free_r].count("d_two") == 1, str(_free_r))
+          [f[1] for f in _free_r].count("d_two") == 1, str(_free_r))
     check("...and nothing else", len(_free_r) == 2, str(_free_r))
+    check("...and every row names the module it came from",
+          all(f[0] == "oracle.py" for f in _free_r), str(_free_r))
+
+    # --- AND A RULE IN A MODULE THAT IS NOT THE ORACLE ---------------------------------
+    #
+    # `return True` is an ORACLE shape: one independent way for a detector to fire.
+    # `refusal.declined` ends on `return bool(a or b or c)` and `classify` returns a dict,
+    # so the arm pointed anywhere else found no sites and said nothing -- and one of
+    # `declined`'s three ors, the handoff rule its own comment says cost 108 misread
+    # replies, had no case.
+    #
+    # Through `bool(...)` as well as bare, because that is how the real one is written and
+    # the first version of the branch reader asked only for a bare `BoolOp`.
+    _qw = tempfile.mkdtemp()
+    _old_rt_q = unguarded.RT
+    try:
+        unguarded.RT = _qw
+        io.open(os.path.join(_qw, "verdict2.py"), "w", encoding="utf-8",
+                newline="").write(
+            "def declined(text):" + chr(10)
+            + "    return bool('zzno' in text or 'zznever' in text)" + chr(10))
+        io.open(os.path.join(_qw, "test_verdict2.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import verdict2" + chr(10)
+            + "assert verdict2.declined('a zzno reply')" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_q, _free_q = unguarded.sweep_rules(("verdict2.py",))
+    finally:
+        unguarded.RT = _old_rt_q
+        _sh_r.rmtree(_qw, ignore_errors=True)
+    check("the rule arm reads an or-chain wrapped in bool(), in a module that is not the oracle",
+          _n_q == 2, str(_n_q))
+    check("...and names the branch of it that nothing would miss",
+          [(f[0], f[3]) for f in _free_q] == [("verdict2.py", "'zznever' in text")],
+          str(_free_q))
 
     # --- WHICH HALF OF AN ENTRY IS THE RULE ----------------------------------------
     #

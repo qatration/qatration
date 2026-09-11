@@ -65,6 +65,12 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 RT = os.path.join(os.path.dirname(HERE), "redteam")
 
+# THE MODULES THAT DECIDE A VERDICT. `oracle.py` says what a finding is and `refusal.py`
+# says what a wall is, and for most of this tool's life only the first was swept: the
+# rules and refusals arms both asked for a shape that exists nowhere else, so every other
+# file came back with no sites and no sentence saying so.
+SWEPT_MODULES = ("oracle.py", "refusal.py")
+
 
 @contextlib.contextmanager
 def source_restored(path):
@@ -293,8 +299,54 @@ def sweep_guards(only=()):
     return tested, survivors, undocumented
 
 
-def sweep_rules():
-    """Neutralise each rule in a multi-rule detector; report the ones nothing missed.
+def _or_branches(node):
+    """-> the branches of `return a or b`, including through `bool(...)`.
+
+    `refusal.declined` ends on `return bool(a or b or c)` and the first version of this
+    asked only for a bare `BoolOp`, so the three rules that decide whether a reply is a
+    refusal at all were not rules to it.
+    """
+    if not isinstance(node, ast.Return):
+        return []
+    v = node.value
+    if (isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == "bool"
+            and v.args):
+        v = v.args[0]
+    if isinstance(v, ast.BoolOp) and isinstance(v.op, ast.Or) and len(v.values) > 1:
+        return list(v.values)
+    return []
+
+
+def _rule_sites(src, mod):
+    """-> [(function, lineno, kind, node)] for the rules this module fires by.
+
+    `return True` IS AN ORACLE SHAPE. It means one independent way for a DETECTOR to
+    fire, and outside `oracle.py` nothing is written that way: `refusal.declined`
+    answers with an or-chain and `classify` returns a dict. The branch arm is the half
+    that generalises, so it is asked of every module and the statement arm only of the
+    one where it means something.
+    """
+    sites = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if mod == "oracle.py":
+            if not node.name.startswith("d_"):
+                continue
+            rets = [c for c in ast.walk(node)
+                    if isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
+                    and c.value.value is True]
+            if len(rets) > 1:
+                sites += [(node.name, r.lineno, "stmt", r) for r in rets]
+        # `ast.walk` reaches the nested helpers too, which is where the missing four
+        # were: a detector's junk test is a def inside the detector.
+        for c in ast.walk(node):
+            sites += [(node.name, v.lineno, "branch", v) for v in _or_branches(c)]
+    return sites
+
+
+def sweep_rules(modules=SWEPT_MODULES):
+    """Neutralise each rule; report the ones nothing missed.
 
     TWO SHAPES, BECAUSE A RULE IS NOT ALWAYS A STATEMENT. `return True` inside a `d_`
     is one independent way for that detector to fire, and so is each branch of
@@ -306,52 +358,52 @@ def sweep_rules():
     `return True` makes a detector fire less; deleting a branch of a junk test makes it
     fire more. Both are a decision nothing in the suite would miss, which is the only
     question this file asks.
+
+    AND TWO MODULES, for the reason the refusals arm has two: `refusal.declined` decides
+    whether a reply counts as a refusal at all, on three ors, and one of the three had no
+    case — the handoff rule its own comment says cost 108 misread replies before it was
+    bounded. A tool that reads `oracle.py` and calls the answer a sweep is measuring one
+    file and naming the engine.
     """
-    path = os.path.join(RT, "oracle.py")
-    orig = io.open(path, encoding="utf-8").read()
-    sites = []
-    for node in ast.walk(ast.parse(orig)):
-        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("d_")):
+    total, free = 0, []
+    for mod in modules:
+        path = os.path.join(RT, mod)
+        orig = io.open(path, encoding="utf-8").read()
+        sites = _rule_sites(orig, mod)
+        total += len(sites)
+        suites = ["test_oracle.py"] if mod == "oracle.py" else _suites_touching(mod)
+        if not suites:
+            print("  ! nothing imports %s, so its silence here is not a result" % mod)
             continue
-        rets = [c for c in ast.walk(node)
-                if isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
-                and c.value.value is True]
-        if len(rets) > 1:
-            sites += [(node.name, r.lineno, "stmt", r) for r in rets]
-        # `ast.walk` reaches the nested helpers too, which is where the missing four
-        # were: a detector's junk test is a def inside the detector.
-        for c in ast.walk(node):
-            if (isinstance(c, ast.Return) and isinstance(c.value, ast.BoolOp)
-                    and isinstance(c.value.op, ast.Or) and len(c.value.values) > 1):
-                sites += [(node.name, v.lineno, "branch", v) for v in c.value.values]
-    assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
-    free = []
-    with source_restored(path):
-        for name, lineno, kind, node in sites:
-            lines = orig.split("\n")
-            if kind == "stmt":
-                stmt = lines[lineno - 1]
-                lines[lineno - 1] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-            else:
-                ln = node.lineno - 1
-                if node.lineno == node.end_lineno:
-                    lines[ln] = (lines[ln][:node.col_offset] + "False"
-                                 + lines[ln][node.end_col_offset:])
+        for s in suites:
+            assert _run(s) == 0, "%s is not green to begin with" % s
+        with source_restored(path):
+            for name, lineno, kind, node in sites:
+                lines = orig.split("\n")
+                if kind == "stmt":
+                    stmt = lines[lineno - 1]
+                    lines[lineno - 1] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
                 else:
-                    head = lines[ln][:node.col_offset] + "False"
-                    lines[ln:node.end_lineno] = [
-                        head + lines[node.end_lineno - 1][node.end_col_offset:]]
-            write_mutant(path, "\n".join(lines), orig)
-            red = _run("test_oracle.py")
-            clear_mutant(path, orig)
-            shown = " ".join((ast.get_source_segment(orig, node) or "").split())
-            print("  %-28s line %-5d %-18s %s"
-                  % (name, lineno, "kept" if red else "NO CASE OF ITS OWN",
-                     shown[:40]))
-            if not red:
-                free.append((name, lineno, shown))
-    assert _run("test_oracle.py") == 0, "oracle.py was not restored"
-    return len(sites), free
+                    ln = node.lineno - 1
+                    if node.lineno == node.end_lineno:
+                        lines[ln] = (lines[ln][:node.col_offset] + "False"
+                                     + lines[ln][node.end_col_offset:])
+                    else:
+                        head = lines[ln][:node.col_offset] + "False"
+                        lines[ln:node.end_lineno] = [
+                            head + lines[node.end_lineno - 1][node.end_col_offset:]]
+                write_mutant(path, "\n".join(lines), orig)
+                red = any(_run(s) for s in suites)
+                clear_mutant(path, orig)
+                shown = " ".join((ast.get_source_segment(orig, node) or "").split())
+                print("  %-14s %-20s line %-5d %-18s %s"
+                      % (mod, name, lineno, "kept" if red else "NO CASE OF ITS OWN",
+                         shown[:36]))
+                if not red:
+                    free.append((mod, name, lineno, shown))
+        for s in suites:
+            assert _run(s) == 0, "%s was not restored" % mod
+    return total, free
 
 
 _REPLAY = r"""
@@ -557,9 +609,6 @@ def sweep_patterns():
     return len(sites), free, skipped
 
 
-REFUSAL_MODULES = ("oracle.py", "refusal.py")
-
-
 def _refusal_sites(src, mod):
     """-> [(function, lineno)] for the early returns this module decides with.
 
@@ -586,7 +635,7 @@ def _refusal_sites(src, mod):
     return sites
 
 
-def sweep_refusals(modules=REFUSAL_MODULES):
+def sweep_refusals(modules=SWEPT_MODULES):
     """Neutralise each early refusal; report the ones that matter.
 
     THE MIRROR OF `sweep_rules`. Every early `return False` is a reason NOT to call something
@@ -730,8 +779,8 @@ def main(argv):
         n, free = sweep_rules()
         swept += n
         print("\n%d rule site(s) tested, %d with no case of their own" % (n, len(free)))
-        for name, ln, src in free:
-            print("  oracle.py:%d  %s  %s" % (ln, name, src[:60]))
+        for mod, name, ln, src in free:
+            print("  %s:%d  %s  %s" % (mod, ln, name, src[:60]))
         bad += len(free)
     if both or args.patterns:
         print("\n=== rules that live in a pattern list ===")
