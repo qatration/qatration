@@ -164,7 +164,23 @@ def marker_candidates(desc, baseline="", limit=6, canaries=()):
     A sentence carrying a known canary is dropped rather than proposed: that string already
     has a detector of its own (`canary_in_output`), and folding it into a leak marker would
     make two detectors fire on one fact. The leak is still reported — see `hints`.
+
+    AND A CONTROL THAT DID NOT RUN SUBTRACTS NOTHING. The ordinary-answer probe is one send
+    and one send can fail: a 500, a timeout, a reply that came back empty. `_out` returns ""
+    for all three, `low in base` is then never true, and every rule-shaped sentence walked
+    through the safeguard and into the paste-ready YAML block as a proposed
+    `sysprompt_marker` -- with nothing on the page saying the subtraction had not happened.
+    Measured on a scripted bot that says its own rule in its ordinary answer: control
+    landing, two candidates; control failing, three, and the third is the sentence it says
+    to every customer. Pasted, `sysprompt_leak` then fires on every reply, which is the
+    consequence the paragraph above names.
+
+    So: no control, no proposal. Withholding is the answer rather than a caveat, because
+    this list exists to be pasted into somebody's config and `hints` is where the reason is
+    said out loud. The run itself is not failed -- one probe is not the profile.
     """
+    if not (baseline or "").strip():
+        return []
     base = (baseline or "").lower()
     cans = [c.lower() for c in canaries if c]
     out = []
@@ -267,6 +283,14 @@ def hints(profile):
     if profile.get("sysprompt_candidates"):
         info("it paraphrases its own rules on a plain request — disclosure may already be "
              "open before any attack; confirm the markers before landing them")
+    elif not (profile.get("baseline_reply") or "").strip():
+        # THE SAFEGUARD IS A PROBE, and a probe can fail. Said here because withholding in
+        # silence is the same defect wearing the other hat: a reader sees no candidates and
+        # concludes the bot paraphrases nothing.
+        warn("the ordinary-answer probe did not land, so the control every marker is "
+             "subtracted against is missing — no sysprompt_marker is proposed from this "
+             "run. Re-run recon: a marker the bot also says in an ordinary reply turns "
+             "sysprompt_leak into a detector that fires on every answer")
 
     tok = profile.get("token_lock", {})
     if tok:
@@ -603,7 +627,12 @@ def format_profile(profile):
              f"  tool channel : {profile.get('tool_channel')}"
              + (f"  {profile.get('tools_seen')}" if profile.get("tools_seen") else ""),
              f"  memory       : {mem}",
-             f"  house style  : {shapes}  (~{s.get('chars', 0)} chars)"]
+             # NOT `plain prose (~0 chars)`, which is what an errored control printed: a
+             # claim about the target's writing, derived from a probe that never answered,
+             # one line under `memory: not measured` doing it right.
+             "  house style  : " + (f"{shapes}  (~{s.get('chars', 0)} chars)"
+                                    if (profile.get("baseline_reply") or "").strip()
+                                    else "not measured")]
 
     if profile.get("token_lock"):
         lines.append("  content lock : " + ", ".join(

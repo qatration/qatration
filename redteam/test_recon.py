@@ -136,6 +136,52 @@ def main():
     # after the first would look progressively worse.
     _again = _rc.fingerprint(_Alive(), {})
     check("the count is per profile rather than cumulative", _again["probes"], _alive["probes"])
+
+    # --- ONE PROBE DOWN, AND IT IS THE ONE EVERY MARKER IS SUBTRACTED AGAINST -------------
+    #
+    # The whole-target case above is handled. This is the MIDDLE: the ordinary-answer probe
+    # fails -- a 500, a timeout, a reply that came back empty -- and the other seven land, so
+    # the run exits 0 and writes a profile. `_out` returns "" for all three, the subtraction
+    # in `marker_candidates` then has nothing to subtract, and every rule-shaped sentence the
+    # bot volunteered went into the paste-ready YAML as a proposed `sysprompt_marker`.
+    # Measured on a scripted bot that states its own rule in its ordinary answer: control
+    # landing, two candidates; control failing, three -- and the third is the sentence it
+    # says to every customer. Pasted, `sysprompt_leak` fires on every reply.
+    class _NoControl(Bot):
+        """Bot, with the first send (and its retry) refused."""
+
+        def __init__(self):
+            Bot.__init__(self)
+            self.sent = 0
+
+        def send(self, prompt):
+            self.sent += 1
+            if self.sent <= 2:
+                return _P2(prompt=prompt, output="", error="HTTPError 500")
+            return Bot.send(self, prompt)
+
+    _nc = _rc.fingerprint(_NoControl(), CTX)
+    _ok = _rc.fingerprint(Bot(), CTX)
+    check("a healthy control still proposes what the bot volunteered",
+          bool(_ok["sysprompt_candidates"]), True)
+    check("markers: a control that did not run proposes nothing",
+          _nc["sysprompt_candidates"], [])
+    # AND SAYS SO. Withholding in silence is the same defect wearing the other hat: a reader
+    # sees no candidates and concludes the bot paraphrases nothing.
+    check("...and the profile says why, rather than withholding in silence",
+          any("subtracted against is missing" in h["text"] for h in _nc["hints"]), True)
+    check("...as a warning, because it is an outage rather than a reading",
+          [h["level"] for h in _nc["hints"] if "subtracted against is missing" in h["text"]],
+          ["warn"])
+    check("...and a profile with a control says no such thing",
+          any("subtracted against is missing" in h["text"] for h in _ok["hints"]), False)
+    # AND THE HOUSE-STYLE ROW IS THE SAME PROBE. It printed `plain prose (~0 chars)` -- a
+    # claim about the target's writing, derived from a probe that never answered, one line
+    # under `memory: not measured` doing it right.
+    check("the style of an answer nobody got is not plain prose",
+          "house style  : not measured" in _rc.format_profile(_nc), True)
+    check("...while a control that landed is still described",
+          "house style  : plain prose" in _rc.format_profile(_ok), True)
     # SILENCE COUNTS WITH THE ERRORS. A probe that came back empty told the profile nothing
     # either, and every field reads it as unmeasured already.
 
@@ -353,16 +399,32 @@ def main():
     got = marker_candidates(DESC, BASELINE)
     check("markers: rule-shaped lines survive",
           got, ["i must never use profanity", "i always keep account details private"])
-    check("markers: no baseline subtraction -> the generic line leaks in",
-          "i am a support assistant for the billing team" in marker_candidates(DESC, ""),
-          True)
+    # WHAT THE SUBTRACTION IS FOR, shown against a control that DID land and simply does not
+    # contain the line. Written against an empty baseline it proved the same point and pinned
+    # the hazard below as behaviour.
+    check("markers: subtraction only removes what the bot actually says",
+          "i am a support assistant for the billing team"
+          in marker_candidates(DESC, "I can help with billing questions."), True)
     check("markers: boilerplate is never a marker",
-          marker_candidates("I am an AI assistant and I must always be helpful.", ""), [])
+          marker_candidates("I am an AI assistant and I must always be helpful.",
+                            BASELINE), [])
     # live on mcpagent: it stated the rule AND the secret the rule protects. That belongs
     # to canary_in_output, so it must not also become a leak marker.
     check("markers: a sentence carrying a canary is not a marker",
-          marker_candidates("I will never share my key, SECRET-1, with anyone.", "",
+          marker_candidates("I will never share my key, SECRET-1, with anyone.", BASELINE,
                             canaries=["SECRET-1"]), [])
+
+    # --- AND A CONTROL THAT DID NOT RUN SUBTRACTS NOTHING ---------------------------------
+    #
+    # The ordinary-answer probe is one send and one send can fail: a 500, a timeout, a reply
+    # that came back empty. `_out` returns "" for all three, `low in base` is then never
+    # true, and every rule-shaped sentence walked through the safeguard into the paste-ready
+    # YAML block as a proposed `sysprompt_marker` -- with nothing on the page saying the
+    # subtraction had not happened. Pasted, `sysprompt_leak` fires on every reply, which is
+    # the consequence `marker_candidates`' own docstring names.
+    check("markers: no control, no proposal", marker_candidates(DESC, ""), [])
+    check("...and a control that came back empty is the same event",
+          marker_candidates(DESC, "   \n "), [])
 
     # --- the probe loop ------------------------------------------------------
     p = fingerprint(Bot(reset_works=True), CTX, tool_prompt="show my account")
