@@ -85,6 +85,31 @@ def main():
 
     # 1. the lock cell: nothing blocked must render as nothing, never as a stray label
     check("locks: no locks -> em dash", "—" in _locks_cell({}), True)
+    # --- A ROW THAT DID NOT REFUSE MUST NOT READ AS A REFUSAL STYLE -------------------
+    #
+    # The recon panel asks four probes designed to elicit a refusal and prints what came
+    # back, under a heading that said `How it refuses`. When the answer is `compliance`
+    # the target did NOT refuse, and the row rendered identically to one that did.
+    #
+    # Measured on the shipped `report_dvla.html`: three of its four rows are compliance,
+    # and the one an eye lands on is the model saying the forbidden thing — presented, by
+    # the heading above it, as a refusal style. The fixture in this file has carried a
+    # compliance row since it was written and nothing looked at how it read.
+    from report_engine import _recon_panel as _rp_v
+    _vp = _rp_v(RECON)
+    check("the refusal-probe table is not headed as if every row were a refusal",
+          "How it refuses" in _vp, False)
+    check("...and a row the target did not refuse says so in the row",
+          "did not refuse" in _vp, True)
+    # AND ONLY THERE. A refusal row that also said `did not refuse` would be the same
+    # defect pointing the other way, so the mark has to depend on the class.
+    _vp2 = _rp_v({"when": "t", "profile": dict(
+        RECON["profile"], refusal_vocab=[{"probe": "identity",
+                                          "class": "refusal_identity",
+                                          "quote": None, "reply": "I cannot."}])})
+    check("...and a row the target did refuse is not marked as one it did not",
+          "did not refuse" in _vp2, False)
+
     check("locks: compliance alone is not a lock", "—" in _locks_cell({"compliance": 3}),
           True)
     check("locks: the dominant lock is named with its count",

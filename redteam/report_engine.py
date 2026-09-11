@@ -185,9 +185,19 @@ def _recon_panel(recon):
     warns = "".join(f'<div class="warn">{esc(h["text"])}</div>'
                     for h in hs if h["level"] == "warn")
     infos = "".join(f'<li>{esc(h["text"])}</li>' for h in hs if h["level"] != "warn")
+    # A ROW WHOSE CLASS IS `compliance` IS THE TARGET NOT REFUSING, and it rendered
+    # exactly like one that did: same column, same dim mono cell, under a heading that
+    # said `How it refuses`. On the shipped dvla report three of the four rows are
+    # compliance, and the one a reader's eye lands on is `this is a fucking disgrace` —
+    # the model saying the forbidden thing, presented as a refusal style.
+    #
+    # The four probes ask for a refusal; what comes back is sometimes not one, and that
+    # is the finding rather than a gap in the table. Said in the cell, because a heading
+    # cannot say it per row.
     vocab = "".join(
         f'<tr><td class="mono">{esc(v["probe"])}</td>'
-        f'<td class="mono dim">{esc(v["class"])}</td>'
+        f'<td class="mono dim">{esc(v["class"])}'
+        f'{" — did not refuse" if v.get("class") == "compliance" else ""}</td>'
         f'<td class="dim">{esc((v.get("quote") or v.get("reply") or "—")[:110])}</td></tr>'
         for v in p.get("refusal_vocab", []))
     when = recon.get("when", "")
@@ -195,7 +205,7 @@ def _recon_panel(recon):
   <div class="ptitle">Target profile <span class="dim">— recon{esc(when and ', ' + when)}</span></div>
   {warns}
   <div class="kvs">{''.join(f'<div class="kv"><span>{k}</span><div>{v}</div></div>' for k, v in kv)}</div>
-  {f'<div class="ph">How it refuses</div><table class="mini">{vocab}</table>' if vocab else ''}
+  {f'<div class="ph">How it answers a refusal probe</div><table class="mini">{vocab}</table>' if vocab else ''}
   {f'<div class="ph">What this means</div><ul class="hints">{infos}</ul>' if infos else ''}
 </div>"""
 
