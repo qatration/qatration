@@ -19,6 +19,7 @@ try:
 except Exception:
     pass
 from target import Target, Probe
+import re as _re
 from recon import (MEMO_TOKEN, fingerprint, style_of, refusal_quote, pattern_from,
                    marker_candidates, hints, suggest_config, format_profile,
                    token_lock_state, memory_phrase)
@@ -725,6 +726,45 @@ def main():
     check("...and so does the scorecard's recon panel",
           "single sends" in _re_m._recon_panel({"when": "t", "profile": _prof_chain}),
           True)
+
+    # --- ONE ROW, TWO SURFACES, AND MARKUP THAT SUITED NEITHER ---------------------------
+    #
+    # `compare_recon._row` is rendered twice: straight into a console table, and through
+    # `esc` into `recon_fleet.html`. One of its phrases carried a `<span class="dim">`. The
+    # console printed the tags; the page escaped them and printed the tags too. Eight of
+    # them were visible on the shipped page, and the emphasis it was written for has never
+    # once rendered.
+    import ast as _ast_m, compare_recon as _cr
+    _crs = io.open(os.path.join(os.path.dirname(os.path.abspath(recon.__file__)),
+                                "compare_recon.py"), encoding="utf-8").read()
+    _rowfn = next((_n for _n in _ast_m.walk(_ast_m.parse(_crs))
+                   if isinstance(_n, _ast_m.FunctionDef) and _n.name == "_row"), None)
+    _lits = [_s.value for _s in _ast_m.walk(_rowfn) if isinstance(_s, _ast_m.Constant)
+             and isinstance(_s.value, str)] if _rowfn else []
+    check("markup: no phrase in a fleet row is written for a page that escapes it",
+          [_s for _s in _lits if "<" in _s], [])
+    check("...and the rule found the row to look at", bool(_lits), True)
+    # AND THE VALUE ITSELF, because the rule above is about this file's literals and the
+    # phrase is assembled by `recon.memory_phrase` from them.
+    _chain_row = _cr._row({"target": "t", "statefulness": {"remembers": False},
+                           "capabilities": ["chain"], "tool_channel": "real"}, "t", "when")
+    check("markup: the phrase a chain-carrying target gets is plain text",
+          "<" in _chain_row["memory"], False)
+    check("...and still says what it means",
+          "carries chains" in _chain_row["memory"], True)
+
+    # AND THE COLUMN IS AS WIDE AS WHAT GOES IN IT. `memory` was a constant 26 while the
+    # phrase above is 33, so it ran into the next column with no space:
+    # `...(carries chains)unscored`. Two values under one heading and no way to see where
+    # one ends -- the same defect this repository has fixed in the sweep's table and the
+    # benign one, both times for an id column that was a constant while its contents grew.
+    _fmt_src = _ast_m.get_source_segment(
+        _crs, next(_n for _n in _ast_m.walk(_ast_m.parse(_crs))
+                   if isinstance(_n, _ast_m.FunctionDef) and _n.name == "main"))
+    check("no console column in the fleet table is a constant width",
+          bool(_re.search(r"\{'?memory'?:<\d", _fmt_src or "")), False)
+    check("...and the widths are taken from the rows",
+          "max(len(h)" in (_fmt_src or ""), True)
 
     # Counted as they run, not declared, and taken HERE rather than partway up. A hardcoded
     # total is a coverage claim nothing keeps true — five of these suites had drifted below

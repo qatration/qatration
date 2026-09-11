@@ -59,9 +59,15 @@ def _row(profile, name, when):
     # question was asked — and reading that as `stateless` reports a security-relevant
     # property the run never measured. A stateless bot cannot carry a poisoned standing rule
     # into a later turn, which is exactly the conclusion a reader would draw from the word.
+    # PLAIN, because this row is rendered twice and neither surface wants markup. The
+    # console prints the value as it stands, so a `<span>` here is tags on a terminal AND
+    # the column width computed on characters nobody sees; the page runs every cell through
+    # `esc`, so the same tags arrive as literal text. Written for an emphasis that has never
+    # once rendered: eight of them are visible on the shipped `out/recon_fleet.html`, and
+    # the console table beside them ran the next column into the closing tag.
     mem = memory_phrase(profile, unknown="unmeasured", no="stateless",
                         clears="remembers, reset clears", sticks="RESET DOES NOT CLEAR",
-                        chain_only="single sends: no <span class=\"dim\">(carries chains)</span>")
+                        chain_only="single sends: no (carries chains)")
     warns = [h["text"] for h in profile.get("hints", [])
              if isinstance(h, dict) and h.get("level") == "warn"]
     lock = profile.get("token_lock") or {}
@@ -233,14 +239,28 @@ def main():
               f"    qatration recon --target-config <your-config>.yaml")
         # NOT A PASS, for the reason `build_index` records.
         return 3
-    w = max(len(r["target"]) for r in rows)
-    print(f"{'target':<{w}}  {'channel':<15}{'memory':<26}{'disclosure':<12}"
-          f"{'tokens':<8}{'unlabelled':<12}warnings")
-    print("-" * (w + 85))
-    for r in rows:
-        print(f"{r['target']:<{w}}  {r['channel']:<15}{r['memory']:<26}"
-              f"{r['disclosure']:<12}{r['content_lock']:<8}"
-              f"{str(r['unlabelled'] or '-'):<12}{len(r['warnings']) or '-'}")
+    # FROM THE VALUES, not from constants written when the longest one fitted. `target`
+    # was already computed and every other column was a number, so `memory` at 26 ran
+    # `single sends: no (carries chains)` -- 33 characters -- straight into the disclosure
+    # column with no space: `...(carries chains)unscored`. Two values under one heading, and
+    # the reader has no way to see where one ends. The same defect this repository has
+    # already fixed in the sweep's table and the benign one, both times for an id column
+    # that was a constant while the thing it printed grew.
+    _cells = [("target", "target"), ("channel", "channel"), ("memory", "memory"),
+              ("disclosure", "disclosure"), ("content_lock", "tokens"),
+              ("unlabelled", "unlabelled")]
+    # A SEPARATE LIST, because `rows` is the PAGE'S data and it is rendered a few lines
+    # below. A first draft normalised the cells in place -- `unlabelled` 0 to "-" -- and
+    # the console's display string went out in the HTML.
+    _shown = [{k: ("-" if k == "unlabelled" and not r[k] else str(r[k]))
+               for k, _h in _cells} for r in rows]
+    _ws = {k: max(len(h), *(len(s[k]) for s in _shown)) + 2 for k, h in _cells}
+    _heads = "".join("%-*s" % (_ws[k], h) for k, h in _cells) + "warnings"
+    print(_heads)
+    print("-" * len(_heads))
+    for r, s in zip(rows, _shown):
+        print("".join("%-*s" % (_ws[k], s[k]) for k, _h in _cells)
+              + str(len(r["warnings"]) or "-"))
     for r in rows:
         for warn in r["warnings"]:
             print(f"  ! {r['target']}: {warn}")
