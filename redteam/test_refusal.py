@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 from target import Probe
-from refusal import classify, summarize, declined
+from refusal import classify, summarize, declined, _hits as _re_hits
 
 
 def P(output="", tool_calls=None, error=None, observations=None):
@@ -589,6 +589,68 @@ def main():
           "contact our support team" in _hand and "contact our support team" in _answer
           and len(_hand) <= _alone_g < len(_answer),
           "%d <= %d < %d" % (len(_hand), _alone_g, len(_answer)))
+
+    # --- EVERY PATTERN IN EVERY LIST DECIDES SOMETHING ---------------------------------
+    #
+    # Neutralising the rules one at a time and running every suite that reads this module
+    # left EIGHTEEN of twenty-six green, across six lists. The same three-quarters the
+    # oracle's pattern lists turned out to have, in the module that names the lock rather
+    # than the one that names the finding.
+    #
+    # Through the CALLER in each case, not through `re.search`. `declined` is what
+    # `refusal_bypass` asks and `classify` is what the report prints, and a specimen that
+    # matched its own regex while a wider rule answered first would be a case for nothing.
+    from refusal import (DECLINE as _DL, DECLINE_LEAD as _DLL, DECLINE_ALONE as _DLA,
+                         DEFLECTION as _DF, TOOL_DENIED as _TD, _PRINTED_CALL as _PC,
+                         ALONE as _AL, _rules as _rl)
+    _n_pat, _wrong_pat = 0, []
+
+    def _want(label, pairs, decide):
+        """Every rule in one list, answered by its own caller."""
+        nonlocal _n_pat
+        for _pat, _spec in pairs:
+            _n_pat += 1
+            _got = decide(_spec)
+            if _got is not True:
+                _wrong_pat.append("%s %r -> %s" % (label, _spec[:40], _got))
+
+    _want("DECLINE", _DL, lambda s: _dec_g(_P_g(prompt="q", output=s), {}))
+    _want("DECLINE_LEAD", _DLL, lambda s: _dec_g(_P_g(prompt="q", output=s), {}))
+    _want("DECLINE_ALONE", _DLA, lambda s: _dec_g(_P_g(prompt="q", output=s), {}))
+    _want("TOOL_DENIED", _TD,
+          lambda s: classify(_P_g(prompt="q", output="ok", observations=[s]),
+                             {})["class"] == "tool_denied")
+    _want("DEFLECTION", _DF,
+          lambda s: classify(_P_g(prompt="q", output=s), {})["class"] == "deflection")
+    _want("_PRINTED_CALL", _PC,
+          lambda s: classify(_P_g(prompt="q", output=s), {})["class"] == "simulated_call")
+    check("every pattern in every list has a reply its own caller decides by",
+          not _wrong_pat, "; ".join(_wrong_pat[:3]))
+    # AND THERE WERE RULES TO CHECK, since six lists that emptied satisfy the line above.
+    check("...and there were rules to check", _n_pat >= 24, str(_n_pat))
+
+    # AND EACH REPLY LANDS ON ITS OWN RULE. The line above is satisfied by twenty-six
+    # replies that all trip the first pattern in their list, which would leave twenty of
+    # them testing nothing -- the exact state this pair of checks was written to end.
+    _shared = []
+    for _label, _pairs in (("DECLINE", _DL), ("DECLINE_LEAD", _DLL),
+                           ("DECLINE_ALONE", _DLA), ("DEFLECTION", _DF),
+                           ("TOOL_DENIED", _TD), ("_PRINTED_CALL", _PC)):
+        _pats = _rl(_pairs)
+        for _i, (_pat, _spec) in enumerate(_pairs):
+            _hit = [_j for _j, _q in enumerate(_pats) if _re_hits(_spec, [_q])]
+            if _hit != [_i]:
+                _shared.append("%s[%d] %r also %s" % (_label, _i, _spec[:32], _hit))
+    check("...and each reply is matched by its own rule and no other in that list",
+          not _shared, "; ".join(_shared[:3]))
+    # ...AND THE LEAD AND ALONE LISTS ARE REACHED AT ALL. Both are consulted only after
+    # `DECLINE` misses, so a specimen the wider list already catches would test the wider
+    # list and read as a pass here.
+    _shadowed = [s for _p, s in list(_DLL) + list(_DLA) if _re_hits(s, _rl(_DL))]
+    check("...and the narrower lists' replies are not already caught by the wider one",
+          not _shadowed, str(_shadowed[:2]))
+    check("...and the whole-answer list's replies are short enough to be whole answers",
+          all(len(s) <= _AL for _p, s in _DLA), str([len(s) for _p, s in _DLA]))
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
