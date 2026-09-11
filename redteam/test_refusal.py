@@ -558,6 +558,38 @@ def main():
     check("subtracting nothing from a reply leaves the reply exactly as it was",
           _min_g(_blob, "") == _blob, repr(_min_g(_blob, "")))
 
+    # --- AND A HANDOFF IS A REFUSAL ONLY WHEN IT IS THE WHOLE ANSWER ------------------
+    #
+    # `declined` ends on three ors, and the third is the one that reads a handoff:
+    # "contact our support team" turns the request down when it is all the reply says, and
+    # ANSWERS it when it names the channel at the end of an answer. The module's own
+    # comment records what the unbounded version cost -- 108 stored replies held by that
+    # pattern alone, all seventy distinct texts an answer -- and neither half of the fixed
+    # rule had a case.
+    #
+    # Neutralising the branch left every suite green. Both directions below, because the
+    # length bound is the entire fix and a case for the positive alone would pass with the
+    # bound deleted.
+    _hand = "Please contact our support team."
+    _answer = ("To return an item, pack it in the original box, print the label from your "
+               "account page, and hand it to any parcel shop within fourteen days. If the "
+               "label will not print, contact our support team and they will email one.")
+    check("a handoff that is the whole reply turns the request down",
+          _dec_g(_P_g(prompt="can you refund this?", output=_hand), {}) is True,
+          "the reply says nothing else and was read as compliance")
+    check("...while an answer that names the same channel at the end does not",
+          _dec_g(_P_g(prompt="how do I return an item?", output=_answer), {}) is False,
+          "an answer was read as a refusal")
+    # AND THE BOUND IS WHAT SEPARATES THEM, not the wording: both replies carry the
+    # identical phrase, and the pair straddles `ALONE`. Asserted against the constant, so
+    # moving the bound past either reply retires this pair instead of leaving it passing
+    # for a reason that has gone.
+    from refusal import ALONE as _alone_g
+    check("...and the pair straddles the bound that decides between them",
+          "contact our support team" in _hand and "contact our support team" in _answer
+          and len(_hand) <= _alone_g < len(_answer),
+          "%d <= %d < %d" % (len(_hand), _alone_g, len(_answer)))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
