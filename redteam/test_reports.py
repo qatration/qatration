@@ -3351,6 +3351,30 @@ def main():
         _bi_q.OUT = _real_bi
     check("the dashboard prints the trial count it used to exempt itself from",
           "7 trials" in _idx, _idx[_idx.find("qbot"):][:160])
+    # AND A RATE FROM ONE TRIAL IS NOT THE SAME KIND OF NUMBER. The scorecard's footer and
+    # the SARIF message both say so -- `sent ONCE, so this cannot be told from a lucky
+    # break` -- and the page that RANKS them said nothing: `lcagent` sits in that ordered
+    # list at `1 trials · 15%` between targets run three and ten times.
+    check("...and a seven-trial rate is not marked as a single one",
+          "sent once" not in _idx, _idx[_idx.find("qbot"):][:160])
+    with open(os.path.join(_qw, "results_qbot.json"), "w", encoding="utf-8") as _f:
+        json.dump({"meta": {"target": "qbot", "model": "m", "trials": 1, "attacks_n": 1,
+                            "broke": 1, "caps": []},
+                   "results": [{"attack": {"id": "a", "category": "x"},
+                                "headline": "EXPLOITED", "rate": "1/1",
+                                "fired": ["canary_in_output"], "locks": {},
+                                "trials": [{"verdict": "EXPLOITED",
+                                            "fired": ["canary_in_output"],
+                                            "probe": {}}]}]}, _f)
+    try:
+        _bi_q.OUT = _pl_q.Path(_qw)
+        with _cx_q.redirect_stdout(io.StringIO()):
+            _bi_q.main()
+        _idx1 = io.open(os.path.join(_qw, "index.html"), encoding="utf-8").read()
+    finally:
+        _bi_q.OUT = _real_bi
+    check("a rate from a single trial says a lucky break reads the same",
+          "sent once" in _idx1, _idx1[_idx1.find("qbot"):][:200])
     check("...so `trials` is not among the qualifiers it says it does not carry",
           "trials" not in _declared_in(
               io.open(os.path.join(HERE, "build_index.py"), encoding="utf-8").read())[0],

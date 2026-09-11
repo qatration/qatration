@@ -262,6 +262,13 @@ def main():
         pct = ("no attacks sent" if not atk else f"{100*rate:.0f}%")
         if errs:
             pct += f" \u00b7 {errs} never landed"
+        # A RATE FROM ONE TRIAL IS NOT THE SAME KIND OF NUMBER, and this page ranks it
+        # beside rates from ten. The scorecard's own footer and the SARIF message both say
+        # so in as many words -- `sent ONCE, so this cannot be told from a lucky break` --
+        # and the page that sorts them said nothing. `lcagent` sits in that list at
+        # `1 trials \u00b7 15%`.
+        if (m.get("trials") or 0) == 1 and atk:
+            pct += " \u00b7 sent once, so a lucky break reads the same"
         cards += f"""
         <a class="card" href="report_{esc(tgt)}.html">
           <div class="ct"><span class="dot" style="background:{col}"></span>{esc(tgt)}</div>
