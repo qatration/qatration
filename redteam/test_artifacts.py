@@ -26,6 +26,7 @@ share one defect.
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -362,6 +363,59 @@ def main():
           "no reason given for: %s"
           % ", ".join(sorted(k for k, v in _ROOT_FILES.items() if not v)))
 
+
+    # --- THE PAGES NOTHING BUILDS, NAMED ------------------------------------------------
+    #
+    # `test_reports` rebuilds every committed page whose command can be derived and diffs
+    # it against the code. A page no command builds is invisible to that: it cannot go
+    # stale, because nothing can make it fresh. Two of them ship here, and until this check
+    # existed neither was named anywhere.
+    #
+    # `compare.html` has its evidence in `out/compare/` and is recounted from it below.
+    # `report.html` does not: no artifact in this repository records a five-trial run of
+    # that arsenal, so nothing here can say whether its verdicts are right. What CAN be
+    # checked without the run is that the page agrees with itself, and it did not -- the
+    # headline said fifteen attacks over a table of sixteen rows whose own category totals
+    # add to sixteen.
+    #
+    # Declared as a pair rather than tolerated as a wildcard: a THIRD orphan is a page
+    # somebody added without a generator, and that is worth a red build.
+    _ORPHANS = {
+        "compare.html": "three models against one target; its runs are in out/compare/ and "
+                        "every number on it is recounted from them below",
+        "report.html": "one five-trial run of the same arsenal, and that run is not in this "
+                       "repository -- nothing here can recount its verdicts, so what is "
+                       "checked is that the page agrees with itself",
+    }
+    import cli as _cli_o
+    _buildable = set()
+    for _cmd, (_mod, _) in _cli_o.COMMANDS.items():
+        _mp = os.path.join(HERE, _mod + ".py")
+        if os.path.exists(_mp):
+            _buildable |= set(re.findall(r'["\']([a-z_]+\.html)["\']',
+                                         io.open(_mp, encoding="utf-8").read()))
+    _committed = {os.path.basename(_p)
+                  for _p in _g_a.glob(os.path.join(ROOT, "out", "*.html"))}
+    # `report_<target>.html` is the per-target scorecard: `report_engine` builds it and
+    # `test_reports` explains why those are not rebuilt here.
+    _orphan = sorted(_f for _f in _committed - _buildable
+                     if not _f.startswith("report_"))
+    check("every committed page either has a command that builds it or is named here",
+          _orphan == sorted(_ORPHANS), "%s vs %s" % (_orphan, sorted(_ORPHANS)))
+    check("...and the derivation found the commands, rather than calling everything an orphan",
+          len(_buildable) >= 3, str(sorted(_buildable)))
+
+    # AND THE ONE WITH NO RUN AGREES WITH ITSELF. Its headline count is the only claim on
+    # it that can be judged from the page alone.
+    _rp = os.path.join(ROOT, "out", "report.html")
+    if os.path.exists(_rp):
+        _rt = io.open(_rp, encoding="utf-8").read()
+        _rows = len(re.findall(r'class="row"', _rt))
+        _said = re.search(r'<div class="n">(\d+)</div><div class="l">attacks fired</div>',
+                          _rt)
+        check("the page with no run behind it counts the rows it prints",
+              bool(_said) and _rows and int(_said.group(1)) == _rows,
+              "says %s, prints %d" % (_said and _said.group(1), _rows))
 
     # --- THE PAGE WITH NO GENERATOR -----------------------------------------------------
     #
