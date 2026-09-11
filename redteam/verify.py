@@ -135,7 +135,14 @@ def verdict(before_hits, before_trials, now_hits, now_trials,
     to overturn the first and a decision split across two places drifts.
     """
     if not now_trials:
-        return "unclear", "nothing was sent"
+        # ITS OWN WORD, and it was `unclear`. Those are two different states and this command
+        # is about the difference: `unclear` means the row WAS re-sent and the answer does not
+        # decide -- an attack recorded at 1 of 3 fails to reproduce two times in three by
+        # chance, which the paragraph above calls the row that hides. This one means nothing
+        # was delivered at all, so the claim is neither confirmed nor refuted and nobody
+        # looked. Folded together they reached one counter, and a target whose every claimed
+        # row could not be sent printed `every claimed breach still reproduces`.
+        return "not sent", "nothing was sent"
     if now_hits:
         return "holds", "reproduced %d of %d" % (now_hits, now_trials)
     if not (before_trials and before_hits == before_trials):
@@ -269,7 +276,7 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     from runner import run_attack, headline, judged_ctx
 
     out = {"target": tcfg.get("name") or "?", "claims": 0, "holds": 0, "unclear": 0,
-           "stale": 0, "stale_ids": [], "note": "", "sent": 0,
+           "stale": 0, "stale_ids": [], "note": "", "sent": 0, "not_sent": 0,
            # WHY IT STOPPED AND WHAT IT DID NOT REACH. Both are empty on a run that
            # finished, and a reader of this dict must not have to infer either from a
            # count that happens to be short.
@@ -379,7 +386,10 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
                                                     str(e)[:60])
             return out
         out["sent"] += spent
-        out[v if v in ("holds", "stale") else "unclear"] += 1
+        # THREE STATES AND A DEFAULT, rather than two and everything else. `not sent` is
+        # the one that was missing: a row nobody delivered is not a row that could not be
+        # decided, and the sentence this command ends with is built from these counters.
+        out[{"holds": "holds", "stale": "stale", "not sent": "not_sent"}.get(v, "unclear")] += 1
         if v == "stale":
             out["stale_ids"].append((attack.get("id"), why))
         if not quiet:
@@ -401,7 +411,28 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         # nothing. Counted as unreachable, never as a page of stale claims.
         out["note"] = "unreachable: nothing was measured"
         out["stale"], out["holds"], out["unclear"], out["stale_ids"] = 0, 0, 0, []
+        out["not_sent"] = 0
     return out
+
+
+def target_line(r):
+    """One target's row in the fleet table: its note, or its counts.
+
+    A FUNCTION BECAUSE THE COUNTS MOVED. `not sent` was added beside `unclear` and this line
+    is the only place the fleet mode states either, so it is the line that has to agree with
+    them -- and inside the loop it was reachable only by owning forty targets and a config
+    for each. Same argument as `audit_close` below.
+
+    THE COUNT THAT WAS NOWHERE is `not sent`. A row nobody delivered was filed under
+    `unclear`, so a target whose claims could not be re-sent at all read as a target whose
+    claims could not be DECIDED, which says the opposite: that somebody looked.
+    """
+    if r.get("note"):
+        return r["note"]
+    _unsent = ", %d not sent" % r["not_sent"] if r.get("not_sent") else ""
+    return ("%d claims: %d hold, %d unclear, %d stale%s"
+            % (r.get("claims") or 0, r.get("holds") or 0, r.get("unclear") or 0,
+               r.get("stale") or 0, _unsent))
 
 
 def audit_close(rows, total_stale):
@@ -425,14 +456,23 @@ def audit_close(rows, total_stale):
     out += ["", "%d of %d targets reachable, %d claims re-sent"
             % (len(reached), len(rows), sum(r.get("claims") or 0 for r in reached))]
     partial = [r for r in reached if r.get("unchecked")]
+    unsent = sum(r.get("not_sent") or 0 for r in reached)
+    _claims = sum(r.get("claims") or 0 for r in reached)
+    _holds = sum(r.get("holds") or 0 for r in reached)
     if total_stale:
         out += ["", "%d claim(s) no longer reproduce:" % len(total_stale)]
         out += ["   %-18s %-26s %s" % (t, aid, why) for t, aid, why in total_stale]
-    elif partial:
-        out += ["", "every claim RE-SENT still reproduces, and %d were not re-sent."
-                % sum(r["unchecked"] for r in partial)]
-    else:
+    elif _holds == _claims and not partial:
         out += ["", "every claim on every reachable target still reproduces."]
+    else:
+        # NOT `every claim on every reachable target still reproduces`, which was printed
+        # whenever no row was called STALE -- including over targets where not one claim
+        # reproduced and not one could be decided, and over claims nobody re-sent.
+        out += ["", "%d of %d claim(s) on reachable targets still reproduce."
+                % (_holds, _claims)]
+        if unsent:
+            out += ["   %d could not be re-sent at all: nothing was delivered for them."
+                    % unsent]
     if partial:
         out += ["", "stopped part way (%d): %s"
                 % (len(partial), ", ".join("%s (%d not re-sent: %s)"
@@ -447,7 +487,10 @@ def audit_close(rows, total_stale):
                                           for r in missed[:8]))]
     if total_stale:
         return 1, out
-    return (3 if partial else 0), out
+    # `unclear` is not one of these: a row that WAS re-sent and whose recorded rate cannot
+    # decide is a designed outcome rather than a gap, and a fleet job that goes amber on one
+    # goes amber forever.
+    return (3 if (partial or unsent) else 0), out
 
 
 def audit(trials, confirm_trials):
@@ -490,10 +533,7 @@ def audit(trials, confirm_trials):
         r = verify_target(tcfg, fp, trials, confirm_trials, quiet=True)
         rows.append(r)
         total_stale += [(r["target"], a, w) for a, w in r["stale_ids"]]
-        print("  %-26s %s" % (r["target"],
-                              r["note"] or "%d claims: %d hold, %d unclear, %d stale"
-                              % (r["claims"], r["holds"], r["unclear"], r["stale"])),
-              flush=True)
+        print("  %-26s %s" % (r["target"], target_line(r)), flush=True)
 
     code, lines = audit_close(rows, total_stale)
     for _l in lines:
@@ -566,26 +606,38 @@ def main():
         print("\nThe artifact overstates what this target does today. Re-run the sweep to "
               "replace it, and read the difference as a change in the TARGET only after "
               "checking that nothing changed here.")
-    elif r.get("unchecked"):
-        # NOT `every claimed breach still reproduces`, which is a claim over rows nobody
-        # sent. The same rule the sweep's closing line keeps: the denominator is what was
-        # measured, and a caveat anywhere but beside the sentence it qualifies is not
-        # delivered.
-        print("every claim this run RE-SENT still reproduces, and %d were not re-sent."
-              % r["unchecked"])
-    else:
+    elif r["holds"] == r["claims"]:
         print("every claimed breach still reproduces.")
-    if r.get("unchecked"):
-        print("\n%d claim(s) were not re-sent: %s" % (r["unchecked"], r["why"]))
-        if r.get("advice"):
-            print("   %s" % r["advice"])
+    else:
+        # NOT `every claimed breach still reproduces`, which was printed whenever no row was
+        # called STALE -- over an artifact of two claims, neither of which reproduced and
+        # neither of which could be decided, and over rows nobody sent. The same rule the
+        # sweep's closing line keeps: the denominator is what was measured, and a caveat
+        # anywhere but beside the sentence it qualifies has not been delivered.
+        print("%d of %d claim(s) still reproduce." % (r["holds"], r["claims"]))
+    for _n, _why_row in ((r["unclear"], "could not be decided: the rate the artifact "
+                                        "records is too low for a failure to reproduce to "
+                                        "mean anything, so both rates are reported and no "
+                                        "verdict is drawn"),
+                         (r["not_sent"], "could not be re-sent at all: nothing was "
+                                         "delivered for them, so what they claim is "
+                                         "neither confirmed nor refuted"),
+                         (r["unchecked"], "were not re-sent: %s" % (r["why"] or
+                                                                    "the run stopped"))):
+        if _n:
+            print("   %d %s." % (_n, _why_row))
+    if r.get("unchecked") and r.get("advice"):
+        print("   %s" % r["advice"])
     print("\nNot checked: the rows this artifact records as defended. A target that got worse "
           "is a sweep's question.")
     if r["stale_ids"]:
         return 1
-    # 3, NOT 0. A verification that could not finish measured less than it was asked to, and
-    # zero is the code a schedule reads as `the published findings still hold`.
-    return 3 if r.get("unchecked") else 0
+    # 3, NOT 0. A verification that could not finish, or that could not send a claimed row at
+    # all, measured less than it was asked to -- and zero is the code a schedule reads as
+    # `the published findings still hold`. `unclear` is not one of these: it is a row that WAS
+    # re-sent and whose recorded rate cannot decide, which is a designed outcome rather than a
+    # gap, and a command that goes amber on it goes amber forever.
+    return 3 if (r.get("unchecked") or r.get("not_sent")) else 0
 
 
 if __name__ == "__main__":
