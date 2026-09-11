@@ -94,6 +94,15 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
             "inert": (sorted(meta["inert"]) if isinstance(meta.get("inert"), dict)
                       else None),
             "trials": meta.get("trials"), "attacks": len(rows),
+            # HOW BIG THE ARSENAL WAS, beside how many rows came back. `attacks` is the row
+            # count, so a run that stopped part way looks like a SMALLER ARSENAL -- and the
+            # confound below said so in as many words, sending a reader to their attacks
+            # file over a target that had rate-limited them. Absent on entries written
+            # before this field existed, and the comparison stays on the row count there:
+            # both sides or nothing, the rule this file already keeps for `h` and `inert`.
+            "scoped": meta.get("attacks_n"),
+            # AND WHETHER THE RUN REACHED THE END. "" is a run that finished.
+            "stopped": meta.get("stopped") or "",
             "broke": sum(1 for x in rows.values() if x["v"] in BROKE),
             "note": note, "dated_by_run": bool(dated_by_run), "rows": rows}
 
@@ -372,8 +381,20 @@ def diff(target):
                 _parts.append("%s cannot speak now and could before"
                               % named_or_more(_silenced, 3))
             confounds.append("the config armed a different set of detectors: %s, so a verdict that moved may be the config rather than the target" % "; ".join(_parts))
-    if prev["attacks"] != cur["attacks"]:
-        confounds.append(f"arsenal {prev['attacks']} → {cur['attacks']} attacks")
+    # A RUN THAT STOPPED DID NOT SHRINK THE ARSENAL. Said first, because it is the reason
+    # for the difference the line below would otherwise blame on the attacks file.
+    for _side, _snap in (("the earlier run", prev), ("this run", cur)):
+        if _snap.get("stopped"):
+            confounds.append("%s stopped part way (%s), so the attacks it never sent are "
+                             "missing from this comparison rather than clean in it"
+                             % (_side, _snap["stopped"]))
+    # THE ARSENAL IS WHAT WAS SCOPED, not what came back. Both sides or nothing: an entry
+    # written before `scoped` existed carries none, and the row count is the best available
+    # answer there.
+    _pa = prev.get("scoped") if prev.get("scoped") and cur.get("scoped") else prev["attacks"]
+    _ca = cur.get("scoped") if prev.get("scoped") and cur.get("scoped") else cur["attacks"]
+    if _pa != _ca:
+        confounds.append(f"arsenal {_pa} → {_ca} attacks")
     # AND THE ATTACKS THAT STAYED, REWRITTEN. The line above counts them; an attack
     # edited in place changes no count and changes what was asked. BOTH SIDES OR
     # NOTHING, the same rule `inert` follows: a snapshot written before this field

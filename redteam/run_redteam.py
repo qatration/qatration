@@ -1513,6 +1513,13 @@ def main():
             # depending entirely on whether the file was written for a target like this
             # one, and the page cannot tell the reader without the name.
             "arsenal": os.path.basename(args.attacks),
+            # AND WHETHER THIS RUN REACHED THE END OF IT. The run RECORD names the ending;
+            # this file does not, and this file is the one every later reader opens. A sweep
+            # stopped at 8 of 10 is stored with `attacks_n: 10` and eight rows, and the two
+            # missing ones are indistinguishable from an arsenal that shrank -- which is
+            # exactly what `history` told a reader: `arsenal 10 -> 8 attacks`, sending them
+            # to their own attacks file over a target that rate-limited them.
+            "stopped": _budget_note or _rl_stopped,
             "baseline": ctx.get("baseline_tool_inputs"),
             # carried into the HTML, because the reader of the scorecard is exactly the
             # person who needs to know the breach count is not attributable
@@ -1553,10 +1560,17 @@ def main():
         print(f"\n  ! {_retried} of {_sends + _retried} send(s) had to be retried. A run that limped"
           f"\n    is not a clean run: a retried send may have reached a different state of the"
           f"\n    target than the one before it, and the rows below do not say which.")
-    _stopped = bool(getattr(getattr(target, "rate", None), "exhausted", ""))
+    # AND THEIRS AS WELL AS OURS. The paragraph above this line says a run stopped by its
+    # budget is not a run that finished, and it read OUR budget only -- so a sweep the TARGET
+    # stopped, which is what `GiveUpWall` exists to do, was recorded as `finished` with no
+    # note at all. The same merge `closing_line` was split for two commits ago, still whole
+    # in the record a person opens afterwards.
+    _stopped = _budget_note or _rl_stopped
     _runs.finish(OUT_DIR, _rec, "stopped" if _stopped else "finished", spent=_spent,
-                 note=(f"budget spent ({getattr(target.rate, 'exhausted', '')}); the remaining "
-                       f"attacks were never sent") if _stopped else None)
+                 note=((f"budget spent ({_budget_note}); the remaining attacks were never "
+                        f"sent") if _budget_note else
+                       "%s; the remaining attacks were never sent" % _rl_stopped)
+                 if _stopped else None)
 
     # THROUGH `workspace.side_artifact`, because `rejudge --write` rewrites this same page
     # and was building it without either panel. The unwrapping of a provenance-wrapped lock

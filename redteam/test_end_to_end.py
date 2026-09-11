@@ -863,6 +863,28 @@ oracle_context:
                   "STOPPED" in _o3, _o3[-400:])
             check("...and not after the whole arsenal", len(_hits) <= (_GIVE + 5) * 2,
                   "%d request(s) sent" % len(_hits))
+
+            # AND THE RUN THAT STOPPED HAS TO SAY SO WHERE IT IS READ AGAIN. `_stopped` was
+            # `bool(target.rate.exhausted)` -- OUR budget only -- so a sweep the TARGET
+            # stopped was recorded as `finished` with no note, and the artifact carried no
+            # `stopped` at all. `attacks_n: 10` with eight rows then reads as an arsenal
+            # that shrank, and that is what `history` told a reader: `arsenal 10 -> 8
+            # attacks`, over an attacks file nobody had touched.
+            _rl_art = os.path.join(_lw, "results_rlbot.json")
+            _rl_meta = json.load(open(_rl_art, encoding="utf-8"))["meta"]
+            check("an artifact from a stopped run says it stopped",
+                  "rate limit" in (_rl_meta.get("stopped") or ""),
+                  repr(_rl_meta.get("stopped")))
+            check("...while still recording the arsenal it was given",
+                  _rl_meta.get("attacks_n") == 10, str(_rl_meta.get("attacks_n")))
+            _rl_rec = json.load(open(os.path.join(_lw, "run_%s.json"
+                                                  % _rl_meta["run_id"]), encoding="utf-8"))
+            check("...and the run record calls it stopped rather than finished",
+                  _rl_rec.get("state") == "stopped", str(_rl_rec.get("state")))
+            check("...with the endpoint's reason, not a budget of ours",
+                  "rate limit" in (_rl_rec.get("note") or "")
+                  and "budget spent" not in (_rl_rec.get("note") or ""),
+                  repr(_rl_rec.get("note")))
             # THE HALF THAT EXITS ZERO, and the one a pipeline reads. Three attacks were
             # scored, five were refused and two were never reached, and the run closed with
             # `0/5 attacks breached the target` -- a clean bill over five, of which three

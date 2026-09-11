@@ -208,6 +208,57 @@ def main():
         check("...and two runs from one build are not",
               H.diff("cf6")["confounds"] == [], str(H.diff("cf6")))
 
+        # --- A RUN THAT STOPPED DID NOT SHRINK THE ARSENAL --------------------------
+        #
+        # `attacks` in a snapshot is the ROW COUNT, so a sweep the target stopped part way
+        # looks exactly like a smaller arsenal -- and the confound said so in as many words.
+        # Walked: ten attacks, an endpoint that answered three probes and then rate-limited
+        # everything, and the diff reported `arsenal 10 -> 8 attacks`. The attacks file had
+        # not changed. A reader goes and looks at it.
+        #
+        # The run RECORD named the ending and the artifact did not, and the artifact is what
+        # every later reader opens. `stopped` travels with the run now, and the arsenal
+        # comparison asks what was SCOPED rather than what came back.
+        H.record({"target": "cf7", "model": "m", "trials": 3, "attacks_n": 10},
+                 R(a1="EXPLOITED", a2="EXPLOITED"), when="2026-08-01 10:00")
+        H.record({"target": "cf7", "model": "m", "trials": 3, "attacks_n": 10,
+                  "stopped": "the endpoint answered every one of the last 5 with a rate "
+                             "limit"},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        _ds = H.diff("cf7")
+        check("a run the target stopped is not reported as a smaller arsenal",
+              not any("arsenal" in c for c in _ds["confounds"]), str(_ds["confounds"]))
+        check("...it is reported as a run that stopped",
+              any("stopped part way" in c for c in _ds["confounds"]), str(_ds["confounds"]))
+        check("...naming the endpoint's reason rather than the reader's attacks file",
+              any("rate limit" in c for c in _ds["confounds"]), str(_ds["confounds"]))
+        check("...and saying what that does to the comparison",
+              any("missing from this comparison rather than clean in it" in c
+                  for c in _ds["confounds"]), str(_ds["confounds"]))
+        # AND AN ARSENAL THAT REALLY DID CHANGE IS STILL A CONFOUND.
+        H.record({"target": "cf8", "model": "m", "trials": 3, "attacks_n": 10},
+                 R(a1="EXPLOITED"), when="2026-08-01 10:00")
+        H.record({"target": "cf8", "model": "m", "trials": 3, "attacks_n": 7},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("an arsenal that really changed is still named",
+              any("arsenal 10 → 7" in c for c in H.diff("cf8")["confounds"]),
+              str(H.diff("cf8")["confounds"]))
+        # BOTH SIDES OR NOTHING. An entry written before `scoped` existed carries none, and
+        # the row count is the best answer available there -- the rule this file already
+        # keeps for the attack digest and the inert set.
+        H.record({"target": "cf9", "model": "m", "trials": 3},
+                 R(a1="EXPLOITED", a2="EXPLOITED"), when="2026-08-01 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3, "attacks_n": 2},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        check("a snapshot with no scoped count falls back to the rows it carries",
+              any("arsenal 2 → 1" in c for c in H.diff("cf9")["confounds"]),
+              str(H.diff("cf9")["confounds"]))
+        # AND A RUN THAT FINISHED SAYS NOTHING ABOUT STOPPING, or the caveat lands on every
+        # honest comparison, which is the failure mode on the other side of this.
+        check("a run that finished carries no such caveat",
+              not any("stopped part way" in c for c in H.diff("cf8")["confounds"]),
+              str(H.diff("cf8")["confounds"]))
+
         # --- THE FOURTH INPUT: THE ATTACK ITSELF ------------------------------------
         #
         # The three above -- the model, the engine that judged, the detectors the config
