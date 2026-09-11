@@ -1536,6 +1536,47 @@ def main():
 
     _quick, _ = _slice(list(_arsenal))
     _ci = io.open(os.path.join(ROOT, "docs", "ci.md"), encoding="utf-8").read()
+    # --- AND WHAT A RATE-LIMITED BUILD ACTUALLY GETS -----------------------------------
+    #
+    # This page is what a CI author reads to predict their build, and it described the engine
+    # before it learned to stop: `the run reports the resulting errors as gaps rather than
+    # findings`, which was the behaviour until `GiveUpWall` existed. What happens now is that
+    # the run stops after five refused attacks in a row and exits 3 -- a different code, on
+    # the page whose whole subject is exit codes.
+    #
+    # The streak is the engine's number, not a word somebody typed: it moved once already,
+    # and a page naming a different one sends a reader looking for traffic that never went.
+    from runner import GIVE_UP_AFTER as _GIVE_R
+    _WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+              8: "eight", 9: "nine", 10: "ten"}
+    _stop_para = re.search(r"rate limit will win.*?told you nothing\.", _ci, re.S)
+    check("the page says what a rate-limited run does now", bool(_stop_para),
+          "the passage about ten branches at once is gone")
+    if _stop_para:
+        _said = _stop_para.group(0)
+        check("...naming the streak the engine actually gives up after",
+              _WORDS.get(_GIVE_R, str(_GIVE_R)) in _said, _said[:200])
+        check("...and the code the build will see", "exit `3`" in _said, _said[:200])
+
+    # AND THE PARAGRAPH UNDER THE TABLE, WHICH PRICES THE SAME SWEEP. The fix above covered
+    # the table's four rows and stopped there: one screen down, the token-bill paragraph went
+    # on saying `At 1,407 requests` -- the figure the table used to print before the arsenal
+    # grew -- while the gated row above it said 1,464. The same fact published twice and
+    # gated once, which is the sentence this block opens with, one paragraph along.
+    _full_req = sum(_turns(_a) for _a in _arsenal) * 3
+    _prose_req = re.search(r"At ([\d,]+) requests", _ci)
+    check("the cost paragraph prices the same sweep its own table does",
+          bool(_prose_req) and int(_prose_req.group(1).replace(",", "")) == _full_req,
+          "the paragraph says %s, the arsenal costs %d"
+          % (_prose_req and _prose_req.group(1), _full_req))
+    # AND THE TOKEN FIGURE IT DERIVES FROM THAT, at the thousand-token prompt the sentence
+    # names. Rounded to one decimal, because the paragraph is a scale rather than an invoice.
+    _prose_tok = re.search(r"that is ([\d.]+)M input tokens", _ci)
+    check("...and the token volume it derives from it",
+          bool(_prose_tok)
+          and abs(float(_prose_tok.group(1)) - round(_full_req / 1000.0, 1)) < 0.05,
+          "the paragraph says %sM, %d requests at a thousand tokens is %.1fM"
+          % (_prose_tok and _prose_tok.group(1), _full_req, _full_req / 1000.0))
     for _scope, _rows in (("full", _arsenal), ("quick", _quick)):
         _n, _per = len(_rows), sum(_turns(a) for a in _rows)
         for _trials in (3, 1):

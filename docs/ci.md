@@ -232,7 +232,7 @@ million tokens, as of August 2026.
 
 **The dominant cost is your own system prompt, not the attacks.** An attack payload averages 43
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,407 requests that is 1.4M input tokens of your own instructions — about
+single request. At 1,464 requests that is 1.5M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
 
 Two consequences worth acting on:
@@ -254,8 +254,9 @@ one that has thought about it.
 ### Ten pull requests at once
 
 `cancel-in-progress` stops one branch queueing behind itself and does nothing about ten branches
-hitting one endpoint together. That endpoint's rate limit will win, and the run reports the
-resulting errors as gaps rather than findings — honest, and still a check that told you nothing.
+hitting one endpoint together. That endpoint's rate limit will win, and the run STOPS after five
+attacks come back rate-limited in a row rather than spending the arsenal on it. That is exit `3`
+with the attacks it never sent named as a gap — honest, and still a check that told you nothing.
 
 If merges are frequent, serialise rather than cancel:
 
@@ -291,8 +292,8 @@ permissions:
 
 concurrency:
   # Serialised rather than cancelled: ten branches sweeping one endpoint at once
-  # will hit its rate limit, and the errors that produces are reported as gaps —
-  # honest, and still a check that told you nothing.
+  # will hit its rate limit, and the run stops rather than spending the arsenal on
+  # it — exit 3, honest, and still a check that told you nothing.
   group: llm-security-sweep
   cancel-in-progress: false
 
