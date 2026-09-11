@@ -312,19 +312,70 @@ def main():
             + "            if fn(p, {}):" + chr(10)
             + "                hits[name] = hits.get(name, 0) + 1" + chr(10)
             + "    return hits, {}, len(PROBES), {}, {}" + chr(10))
-        _n_x, _moved_x, _excused_x = unguarded.sweep_refusals()
+        # NAMED, because the arm's default is two modules now and this fixture has one.
+        _n_x, _moved_x, _excused_x = unguarded.sweep_refusals(("oracle.py",))
     finally:
         unguarded.RT = _old_rt_x
         _sh_x.rmtree(_xw, ignore_errors=True)
     check("the refusals arm sweeps every early refusal in the fixture",
           _n_x == 3, str(_n_x))
     check("...and reports the one whose deletion moves a verdict",
-          [f[0] for f in _moved_x] == ["d_moves"], str(_moved_x))
+          [f[1] for f in _moved_x] == ["d_moves"], str(_moved_x))
     check("...and reports the one no case held and no evidence noticed, separately",
-          [f[0] for f in _excused_x] == ["d_excused"], str(_excused_x))
+          [f[1] for f in _excused_x] == ["d_excused"], str(_excused_x))
     check("...and does not report the one a case does hold",
-          not any(f[0] == "d_caught" for f in _moved_x + _excused_x),
+          not any(f[1] == "d_caught" for f in _moved_x + _excused_x),
           str(_moved_x + _excused_x))
+    # AND EVERY ROW SAYS WHICH FILE IT CAME FROM, which is the whole point of the arm
+    # taking a list: `oracle.py:2525` and `refusal.py:352` are both early refusals and a
+    # line number alone names neither.
+    check("...and every row names the module it came from",
+          all(f[0] == "oracle.py" for f in _moved_x + _excused_x),
+          str(_moved_x + _excused_x))
+
+    # --- AND A MODULE THAT IS NOT THE ORACLE --------------------------------------------
+    #
+    # `refusal.py` decides the report's `blocked by` column and half of what `judge` calls a
+    # wall, and this arm had never opened it: the site filter asked for a `return False`
+    # inside a `d_` function, which is what an ORACLE refusal looks like and what nothing
+    # else in the engine looks like. Applied to any other module it found zero sites and
+    # said nothing, which is a clean bill over a file it never read.
+    #
+    # The suites come from `_suites_touching`, the same derivation the guards arm uses, so
+    # a module joins by being imported. The evidence filter does NOT come with them: the
+    # replay scores detectors, so a survivor here is reported unfiltered and says so.
+    _yw = tempfile.mkdtemp()
+    _old_rt_y = unguarded.RT
+    try:
+        unguarded.RT = _yw
+        io.open(os.path.join(_yw, "verdicts.py"), "w", encoding="utf-8",
+                newline="").write(
+            "def call(text):" + chr(10)
+            + "    if 'zzheld' in text:" + chr(10)
+            + "        return 'refused'" + chr(10)
+            + "    if 'zzquiet' in text:" + chr(10)
+            + "        return 'refused'" + chr(10)
+            + "    return 'complied'" + chr(10))
+        # One of the two early returns has a case; the other has none.
+        io.open(os.path.join(_yw, "test_verdicts.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import verdicts" + chr(10)
+            + "assert verdicts.call('a zzheld reply') == 'refused'" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_y, _moved_y, _excused_y = unguarded.sweep_refusals(("verdicts.py",))
+    finally:
+        unguarded.RT = _old_rt_y
+        _sh_x.rmtree(_yw, ignore_errors=True)
+    check("the refusals arm reads a module that is not the oracle",
+          _n_y == 2, str(_n_y))
+    check("...and names the early return nothing would have missed",
+          [(f[0], f[1]) for f in _moved_y] == [("verdicts.py", "call")], str(_moved_y))
+    check("...and says the evidence filter did not reach it",
+          all("filter does not reach" in f[3] for f in _moved_y), str(_moved_y))
+    check("...and excuses nothing there, because nothing excused it",
+          _excused_y == [], str(_excused_y))
 
     # --- WHAT A KILLED RUN LEAVES BEHIND -------------------------------------------
     #

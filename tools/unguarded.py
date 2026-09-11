@@ -557,8 +557,37 @@ def sweep_patterns():
     return len(sites), free, skipped
 
 
-def sweep_refusals():
-    """Neutralise each early `return False` in a detector; report the ones that matter.
+REFUSAL_MODULES = ("oracle.py", "refusal.py")
+
+
+def _refusal_sites(src, mod):
+    """-> [(function, lineno)] for the early returns this module decides with.
+
+    IN `oracle.py` A REFUSAL IS A `return False` IN A DETECTOR, because that is what a
+    detector refusing to call something a finding looks like. Nowhere else is that the
+    shape: `refusal.declined` answers True to refuse and `classify` returns a dict, so
+    the same filter applied there finds nothing at all — which is exactly what this
+    arm did, silently, for as long as it existed.
+    """
+    sites = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if mod == "oracle.py" and not node.name.startswith("d_"):
+            continue
+        last = node.body[-1]
+        for c in ast.walk(node):
+            if not isinstance(c, ast.Return) or c is last:
+                continue
+            if mod == "oracle.py" and not (isinstance(c.value, ast.Constant)
+                                           and c.value.value is False):
+                continue
+            sites.append((node.name, c.lineno))
+    return sites
+
+
+def sweep_refusals(modules=REFUSAL_MODULES):
+    """Neutralise each early refusal; report the ones that matter.
 
     THE MIRROR OF `sweep_rules`. Every early `return False` is a reason NOT to call something
     a finding -- echo subtraction, an unarmed config, the caller's own id, a value the user
@@ -585,51 +614,73 @@ def sweep_refusals():
     So the count comes back in three parts. A guard the suite catches is tested; a guard
     only the evidence excuses is not, and saying so is the same debt the documented-guard
     arm pays with `their silence here is not a result`.
+
+    AND IT READ ONE FILE. `refusal.py` decides the report's `blocked by` column and half
+    of what `judge` calls a wall — `declined` feeds `refusal_bypass`, `classify` names
+    the lock in every row — and no arm of this tool had ever opened it. Swept by hand,
+    ten of its thirteen early returns were caught and three were not: `declined(None)`
+    raised instead of answering, a failed send after the model had already complied read
+    as compliance, and `_minus` quietly dropped every blank line.
+
+    The evidence filter belongs to `oracle.py` alone: the replay scores DETECTORS, so it
+    has nothing to say about a function that names a lock. For every other module a
+    survivor is reported unfiltered, and the summary says which half it is.
     """
-    path = os.path.join(RT, "oracle.py")
-    orig = io.open(path, encoding="utf-8").read()
-    sites = []
-    for node in ast.walk(ast.parse(orig)):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("d_"):
-            last = node.body[-1]
-            for c in ast.walk(node):
-                if (isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
-                        and c.value.value is False and c is not last):
-                    sites.append((node.name, c.lineno))
-    assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
-    base = _replay()
-    if base is None or not base.get("n"):
-        print("  ! no stored evidence in out/, so every survivor below is unfiltered")
-    lines = orig.split("\n")
-    moved, excused = [], []
-    with source_restored(path):
-        for name, lineno in sites:
-            idx = lineno - 1
-            stmt = lines[idx]
-            mutant = list(lines)
-            mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
-            write_mutant(path, "\n".join(mutant), orig)
-            red = _run("test_oracle.py")
-            got = None if red else _replay()
-            clear_mutant(path, orig)
-            if red:
-                continue
-            if base is None or got is None:
-                moved.append((name, lineno, "the replay could not answer"))
-                continue
-            diff = {k: (base["hits"].get(k, 0), got["hits"].get(k, 0))
-                    for k in set(base["hits"]) | set(got["hits"])
-                    if base["hits"].get(k, 0) != got["hits"].get(k, 0)}
-            if diff:
-                moved.append((name, lineno, "; ".join(
-                    "%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
-            else:
-                # DELETED WITH EVERY SUITE GREEN, and the evidence happened not to
-                # notice. That is not the same as tested, and it is the whole
-                # difference between this arm's number and its meaning.
-                excused.append((name, lineno))
-    assert _run("test_oracle.py") == 0, "oracle.py was not restored"
-    return len(sites), moved, excused
+    total, moved, excused = 0, [], []
+    for mod in modules:
+        path = os.path.join(RT, mod)
+        orig = io.open(path, encoding="utf-8").read()
+        sites = _refusal_sites(orig, mod)
+        total += len(sites)
+        # THE SUITES THAT CAN SEE IT, derived the way the guards arm derives them. On
+        # `oracle.py` that is one file and running the rest would multiply the sweep by
+        # its length for no answer; anywhere else the set is whatever imports it.
+        suites = ["test_oracle.py"] if mod == "oracle.py" else _suites_touching(mod)
+        if not suites:
+            print("  ! nothing imports %s, so its silence here is not a result" % mod)
+            continue
+        for s in suites:
+            assert _run(s) == 0, "%s is not green to begin with" % s
+        base = _replay() if mod == "oracle.py" else None
+        if mod == "oracle.py" and (base is None or not base.get("n")):
+            print("  ! no stored evidence in out/, so every survivor below is unfiltered")
+        lines = orig.split("\n")
+        with source_restored(path):
+            for name, lineno in sites:
+                idx = lineno - 1
+                stmt = lines[idx]
+                mutant = list(lines)
+                mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
+                write_mutant(path, "\n".join(mutant), orig)
+                red = any(_run(s) for s in suites)
+                got = None if (red or mod != "oracle.py") else _replay()
+                clear_mutant(path, orig)
+                if red:
+                    continue
+                if mod != "oracle.py":
+                    # NO EVIDENCE FILTER HERE, and that is a property of the replay
+                    # rather than of the module: it scores detectors and this is not
+                    # one. Reported as a survivor, which is the unfiltered answer.
+                    moved.append((mod, name, lineno,
+                                  "no case; the evidence filter does not reach this module"))
+                    continue
+                if base is None or got is None:
+                    moved.append((mod, name, lineno, "the replay could not answer"))
+                    continue
+                diff = {k: (base["hits"].get(k, 0), got["hits"].get(k, 0))
+                        for k in set(base["hits"]) | set(got["hits"])
+                        if base["hits"].get(k, 0) != got["hits"].get(k, 0)}
+                if diff:
+                    moved.append((mod, name, lineno, "; ".join(
+                        "%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
+                else:
+                    # DELETED WITH EVERY SUITE GREEN, and the evidence happened not to
+                    # notice. That is not the same as tested, and it is the whole
+                    # difference between this arm's number and its meaning.
+                    excused.append((mod, name, lineno))
+        for s in suites:
+            assert _run(s) == 0, "%s was not restored" % mod
+    return total, moved, excused
 
 
 def main(argv):
@@ -706,8 +757,8 @@ def main(argv):
         swept += n
         print("\n%d early refusal(s) tested, %d move a verdict on the stored evidence"
               % (n, len(moved)))
-        for name, ln, what in moved:
-            print("  oracle.py:%-6d %-26s %s" % (ln, name, what[:80]))
+        for mod, name, ln, what in moved:
+            print("  %s:%-6d %-26s %s" % (mod, ln, name, what[:80]))
         # AND HOW MANY WERE EXCUSED RATHER THAN TESTED. `0 move a verdict` reads as
         # `all of them are covered`; on this fleet eighteen were caught by a case and
         # thirty-two by traffic that happened not to reach them.
@@ -716,8 +767,8 @@ def main(argv):
                   "\n  verdict on the stored evidence. The evidence excused them; no case"
                   "\n  tested them, and on a workspace with different traffic they are"
                   "\n  unmeasured." % len(excused_here))
-            for name, ln in excused_here:
-                print("    oracle.py:%-6d %s" % (ln, name))
+            for mod, name, ln in excused_here:
+                print("    %s:%-6d %s" % (mod, ln, name))
         excused += len(excused_here)
         bad += len(moved)
 
