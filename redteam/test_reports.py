@@ -3322,6 +3322,41 @@ def main():
         _stale = [k for k in _declared if k not in _QUAL]
         check("...and explains none that is not one", not _stale, str(_stale))
 
+    # AND AN EXEMPTION IS A CLAIM LIKE ANY OTHER. The loop above asks whether a surface
+    # carries a qualifier OR explains why not, and never whether the explanation is true.
+    # `build_index` declared `trials` as "this page publishes a fleet total rather than a
+    # per-row count" while every card on it ended `<model> · N trials · <pct>` -- both
+    # halves at once, and nothing to say so.
+    #
+    # Asked of the PAGE rather than of the source, because that is where the claim is
+    # false: a substring test cannot tell a module reading `row["trials"]` out of an
+    # artifact from one printing it to a reader, which is exactly the difference between
+    # the two surfaces that still exempt it and this one.
+    import build_index as _bi_q, pathlib as _pl_q, tempfile as _tf_q, contextlib as _cx_q
+    _qw = _tf_q.mkdtemp()
+    with open(os.path.join(_qw, "results_qbot.json"), "w", encoding="utf-8") as _f:
+        json.dump({"meta": {"target": "qbot", "model": "m", "trials": 7, "attacks_n": 1,
+                            "broke": 0, "caps": []},
+                   "results": [{"attack": {"id": "a", "category": "x"},
+                                "headline": "DEFENDED", "rate": "0/7", "fired": [],
+                                "locks": {}, "trials": [{"verdict": "DEFENDED",
+                                                         "fired": [], "probe": {}}]}]}, _f)
+    _real_bi = _bi_q.OUT
+    try:
+        _bi_q.OUT = _pl_q.Path(_qw)
+        with _cx_q.redirect_stdout(io.StringIO()):
+            _bi_q.main()
+        _idx = io.open(os.path.join(_qw, "index.html"), encoding="utf-8").read()
+    finally:
+        _bi_q.OUT = _real_bi
+    check("the dashboard prints the trial count it used to exempt itself from",
+          "7 trials" in _idx, _idx[_idx.find("qbot"):][:160])
+    check("...so `trials` is not among the qualifiers it says it does not carry",
+          "trials" not in _declared_in(
+              io.open(os.path.join(HERE, "build_index.py"), encoding="utf-8").read())[0],
+          str(sorted(_declared_in(io.open(os.path.join(HERE, "build_index.py"),
+                                          encoding="utf-8").read())[0])))
+
 
     # --- THE QUALIFIER THE SUMMARY PAGES DID NOT CARRY ---------------------------------
     # A breach on a detector the target also trips with nobody attacking it is the

@@ -30,11 +30,16 @@ def esc(s):
 from workspace import BROKE   # one definition of what counts as a breach
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
+#
+# `trials` WAS IN HERE, explained as "this page publishes a fleet total rather than a
+# per-row count". Every card on the page ends `<model> · N trials · <pct>`, and has for as
+# long as the exemption has. A declared exemption is a claim like any other, and the gate
+# over this table asks whether a surface carries a qualifier OR explains itself -- never
+# whether the explanation is true, so a page could do both and nothing would say so.
 QUALIFIERS_NOT_CARRIED = {
     "delivery": "this page links to the scorecard, which carries the note in full; a fleet "
                 "index that repeated one run's paragraph would be quoting out of context",
     "arsenal": "the fleet page carries the instrument spread; this one links to it",
-    "trials": "same, and this page publishes a fleet total rather than a per-row count",
     "when": "rows here are dated by the fleet page they link to",
     "inert": "named per target on the scorecard this page links to",
     "not_applicable": "the coverage split is the defence report's panel, linked from here",
