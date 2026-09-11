@@ -242,7 +242,7 @@ def sweep_guards(only=()):
     twice, having reported on one module. Pointed at the three files a change touched it is
     minutes, and that is the version somebody runs before pushing.
     """
-    survivors, tested, undocumented = [], 0, 0
+    survivors, tested, undocumented, held = [], 0, 0, []
     mods = sorted(f for f in os.listdir(RT)
                   if f.endswith(".py") and not f.startswith("test_"))
     if only:
@@ -281,7 +281,17 @@ def sweep_guards(only=()):
             survivors += [(mod, i + 1, lines[i].strip(), "(nothing imports it)") for i in hits]
             continue
         if any(_run(s) for s in suites):
+            # AND CARRIED, not only printed. This line scrolled past and the summary below
+            # closed with `Nothing this sweep deleted went unnoticed` -- a clean verdict over
+            # a module nothing was deleted from. It happened: `test_fleet_limits` exited 1
+            # one run in twelve from its own teardown, `runner.py` imports into it, and
+            # twenty-nine documented guards went unswept behind that sentence.
+            #
+            # The same discipline the undocumented count already gets one screen down: what
+            # was NOT looked at belongs in the summary, because a reader takes the closing
+            # line for a verdict on what they asked about.
             print("%-24s SKIPPED (its suites are not green to begin with)" % mod)
+            held.append((mod, len(hits)))
             continue
         caught = 0
         with source_restored(path):
@@ -296,7 +306,7 @@ def sweep_guards(only=()):
                     survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
         assert not any(_run(s) for s in suites), "%s was not restored" % mod
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
-    return tested, survivors, undocumented
+    return tested, survivors, undocumented, held
 
 
 def _or_branches(node):
@@ -827,9 +837,10 @@ def main(argv):
     # fix, pointed the other way, and it shipped for as long as it took to run the other
     # arm once.
     bad = swept = excused = 0
+    unswept = []
     if both or args.guards:
         print("=== documented guards ===")
-        tested, survivors, undocumented = sweep_guards(args.only)
+        tested, survivors, undocumented, held = sweep_guards(args.only)
         swept += tested
         print("\n%d documented guard(s) tested, %d survived deletion" % (tested, len(survivors)))
         if undocumented:
@@ -838,9 +849,18 @@ def main(argv):
             # verdict on the file, and on `workspace.py` that was one branch of twenty-one.
             print("  %d more guard(s) of the same shape carry no comment and were not "
                   "touched. Their silence here is not a result." % undocumented)
+        if held:
+            # WHICH SUITE, because the reader's next move is to run it. A module is held
+            # back by a suite that is red HERE -- a flake, a missing practice fleet, a
+            # platform this machine is not -- and none of those is a fact about the module.
+            print("  %d module(s) were not swept at all, because a suite that can see "
+                  "them is not green on this machine: %s.\n  Nothing below is a "
+                  "verdict about them."
+                  % (len(held), ", ".join("%s (%d guard(s))" % (m, n) for m, n in held)))
         for mod, ln, src, who in survivors:
             print("  %s:%d  %s   [%s]" % (mod, ln, src[:70], who))
         bad += len(survivors)
+        unswept += held
     if both or args.rules:
         print("\n=== rules inside multi-rule detectors ===")
         n, free = sweep_rules()
@@ -908,9 +928,24 @@ def main(argv):
               "than tested by a case." % excused)
     elif swept:
         print("\nNothing this sweep deleted went unnoticed.")
+    elif unswept:
+        # NOT `every branch was undocumented`, which is a statement about the CODE. Nothing
+        # was deleted because a suite that watches these modules is red on this machine,
+        # which is a statement about the machine, and the two send a reader to different
+        # places -- one to the module, one to the suite.
+        print("\nNOTHING WAS DELETED: every module named was held back.")
     else:
         print("\nNOTHING WAS DELETED, so nothing here is a verdict. Every branch this "
               "sweep\nlooked at was either undocumented or not of the shape it takes.")
+    # AFTER THE SENTENCE, WHATEVER THE SENTENCE WAS. A module nobody opened qualifies a
+    # clean bill, a list of findings and an empty sweep alike, and putting it inside one
+    # branch is how it went missing from the other three. `Nothing this sweep deleted went
+    # unnoticed` over a module nothing was deleted from is the shape this whole file exists
+    # to refuse, and it is the shape that hid a suite failing one run in twelve.
+    if unswept:
+        print("%d module(s) were NEVER SWEPT (%s), because a suite that can see them is not "
+              "green\nhere. Nothing above is a verdict about them."
+              % (len(unswept), ", ".join(m for m, _n in unswept)))
     return 0
 
 
