@@ -977,6 +977,8 @@ def main():
           bool(_calls) and "trials=" in _calls[0], str(_calls))
     check("...and how many rows the budget stopped before they were sent",
           bool(_calls) and "never_sent=" in _calls[0], str(_calls))
+    check("...and whether it was the TARGET that stopped the run",
+          bool(_calls) and "wall=" in _calls[0], str(_calls))
 
     # A ROW THAT WAS NEVER SENT DID NOT ERROR EITHER. Walked: a forty-request budget against a
     # forty-five attack sweep left seven rows headed ERROR whose error reads "this run's
@@ -1036,6 +1038,53 @@ def main():
     _cred = _cl(0, 10, 6, stopped="requests", never_sent=4, why_errored="the token expired")
     check("why the rows errored survives a run that also spent its budget",
           "the token expired" in _cred, _cred)
+
+    # --- AND WHOSE LIMIT STOPPED IT -----------------------------------------------------
+    #
+    # `stopped` is OUR budget and the wall is THEIRS, and they were handed over as one
+    # string, so the sentence could not say which: `the run stopped on its budget (the
+    # endpoint answered every one of the last 5 with a rate limit)` is two different events
+    # read as one, and they send a reader to two different places -- a line in their own
+    # config, or somebody else's deployment.
+    _W_r = ("the endpoint answered every one of the last 5 with a rate limit and has not "
+            "answered anything else since, so the rest was NOT sent")
+    _w_mid = _cl(0, 10, 5, never_sent=2, wall=_W_r)
+    check("a run the target stopped does not call it this run's budget",
+          "the run stopped: " in _w_mid and "its budget" not in _w_mid, _w_mid)
+    check("...and a run OUR budget stopped still calls it ours",
+          "on its budget (requests)" in _cl(0, 10, 5, never_sent=2, stopped="requests"),
+          _cl(0, 10, 5, never_sent=2, stopped="requests"))
+    # AND IN THE BRANCH WHERE NOTHING WAS SCORED, where the advice differs: raising a budget
+    # that was never the reason is a re-run that fails the same way.
+    _w_all = _cl(0, 10, 5, never_sent=5, wall=_W_r)
+    check("a target that stopped a run is not blamed on a budget nobody spent",
+          "raising it will not change this" not in _w_all and _W_r in _w_all, _w_all)
+    check("...while a budget that WAS the reason still says raising it will not help",
+          "raising it will not change this"
+          in _cl(0, 10, 5, never_sent=5, stopped="requests"),
+          _cl(0, 10, 5, never_sent=5, stopped="requests"))
+    # AND THE WALL CAN STOP A RUN WITH NO ERRORED ROW IN THE COUNT. A unit is an attack with
+    # its trials, CONTROLS are units, and an arsenal whose controls are refused trips the wall
+    # while `errored` -- which excludes controls -- stays at zero.
+    _w_none = _cl(0, 10, 0, never_sent=10, wall=_W_r)
+    check("a run stopped before it scored anything names the limit that stopped it",
+          _W_r in _w_none and "its budget" not in _w_none, _w_none)
+    # THE REASON GOES LAST. The wall's sentence ends `so the rest was NOT sent`, and in front
+    # of `before scoring any of 10 attacks` the two run together into a clause that says the
+    # opposite of each half.
+    check("...and the sentence does not run into it",
+          _w_none.index("before scoring any of 10 attacks") < _w_none.index(_W_r), _w_none)
+    check("...while our own budget still reads as ours",
+          "on its budget (requests) before scoring any of 10 attacks"
+          in _cl(0, 10, 0, never_sent=10, stopped="requests"),
+          _cl(0, 10, 0, never_sent=10, stopped="requests"))
+
+    # AND A LIMIT THAT COST NOTHING IS NOT A CAVEAT. A budget that ran out on the last probe
+    # of a full run lost no attack, and a caveat on a run that covered everything is one
+    # nobody reads -- which is the failure mode on the other side of this whole line.
+    check("a run that lost nothing to a limit says nothing about one",
+          "stopped" not in _cl(3, 45, 0, stopped="requests", wall=_W_r),
+          _cl(3, 45, 0, stopped="requests", wall=_W_r))
 
     # --- THE ROW-LEVEL FACT THE SENTENCE NEEDED ---------------------------------------
     #

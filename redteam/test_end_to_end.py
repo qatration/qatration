@@ -820,6 +820,20 @@ oracle_context:
                   "min_interval_s" in _o1, _o1[-400:])
             check("...and it is still `nothing measured`, not a clean bill", _rc1 == 3,
                   "exit %s" % _rc1)
+            # AND THE LAST LINE SAYS SO TOO. `closing_line` exists because the reader's last
+            # line contradicted three correct statements above it, and the wall put the same
+            # shape back: the attacks behind the break leave NO row -- not errored, not
+            # refused by a budget -- and `attacks_n` still counts them, so a run that stopped
+            # after five of ten closed with `0/5 attacks breached the target (controls
+            # excluded)` over a denominator of five it never measured.
+            _c1 = next((l for l in _o1.splitlines() if "attacks breached" in l
+                        or l.startswith("NOTHING MEASURED")), "")
+            check("...and the last line does not score the attacks it never sent",
+                  _c1.startswith("NOTHING MEASURED: 5/10 attacks errored"), _c1)
+            check("...naming the five behind the break as never sent",
+                  "The other 5 were never sent" in _c1, _c1)
+            check("...and whose limit stopped it, which is not this run's budget",
+                  "rate limit" in _c1 and "its budget" not in _c1, _c1)
 
             # A LIMIT THAT LETS TRAFFIC THROUGH IS NOT A WALL.
             _rc2, _o2, _n2 = _sweep(False)
@@ -849,6 +863,18 @@ oracle_context:
                   "STOPPED" in _o3, _o3[-400:])
             check("...and not after the whole arsenal", len(_hits) <= (_GIVE + 5) * 2,
                   "%d request(s) sent" % len(_hits))
+            # THE HALF THAT EXITS ZERO, and the one a pipeline reads. Three attacks were
+            # scored, five were refused and two were never reached, and the run closed with
+            # `0/5 attacks breached the target` -- a clean bill over five, of which three
+            # were measured and two do not exist.
+            _c3 = next((l for l in _o3.splitlines() if "attacks breached" in l
+                        or l.startswith("NOTHING MEASURED")), "")
+            check("a partly measured run counts only what it measured",
+                  _c3.startswith("0/3 attacks breached"), _c3)
+            check("...and names the refused and the unreached apart",
+                  "5 more errored" in _c3 and "2 more were never sent" in _c3, _c3)
+            check("...and says the run stopped, which is why the other seven are missing",
+                  "the run stopped: " in _c3, _c3)
         finally:
             _lsrv2.shutdown()
             shutil.rmtree(_lw, ignore_errors=True)

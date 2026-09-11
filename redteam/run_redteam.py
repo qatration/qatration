@@ -151,7 +151,7 @@ def error_split(results):
 
 
 def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored="",
-                 never_sent=0):
+                 never_sent=0, wall=""):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -211,26 +211,62 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
     package composes -- a credential accepted early in a run and rejected later -- and the
     budget branch dropped it on the floor.
 
+    AND AN ATTACK THE RUN NEVER REACHED IS NOT ONE IT SCORED CLEAN. `RateLimitWall` breaks
+    the attack loop, so the arsenal behind the break leaves no row at all -- neither errored
+    nor never-sent -- and `attacks_n` still counts it. Measured against a scripted endpoint
+    answering 429 to everything after three: ten attacks, three scored, five refused, two
+    never reached, and the run closed with `0/5 attacks breached the target (controls
+    excluded)` and exited 0. The denominator was five, the measurement was three, and the
+    number is the strongest clean claim this command makes.
+
+    `never_sent` therefore carries both kinds of unsent row: the ones the budget refused and
+    the ones the loop never got to. They leave the denominator together.
+
+    AND WHOSE LIMIT STOPPED IT. `stopped` is OUR budget and `wall` is THEIRS, and merging
+    them into one string was what made the sentence unable to say which -- `the run stopped
+    on its budget (the endpoint answered every one of the last 5 with a rate limit)` is two
+    different events read as one. Named apart, because they send a reader to two different
+    places: one is a line in their own config, the other is somebody else's deployment.
+
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
     scored = attacks_n - errored - never_sent
     _budget = (" (%s)" % stopped) if stopped else ""
+    _lost = errored or never_sent
     _parts = []
     if errored:
         _parts.append("%d more errored and were not scored" % errored)
     if never_sent:
-        _parts.append("%d more were never sent: the run stopped on its budget%s"
-                      % (never_sent, _budget))
+        _parts.append("%d more were never sent" % never_sent)
+    # ONLY WHEN SOMETHING WAS LOST TO IT. A budget that ran out on the last probe of a full
+    # run cost nothing, and a caveat on a run that covered everything is one nobody reads.
+    if stopped and _lost:
+        _parts.append("the run stopped on its budget%s" % _budget)
+    if wall and _lost:
+        _parts.append("the run stopped: %s" % wall)
     _rest = ("; ".join(_parts) + ".") if _parts else ""
     if attacks_n and errored + never_sent >= attacks_n:
         _why = (" " + why_errored) if why_errored else ""
         if not errored:
-            return ("NOTHING MEASURED: the run stopped on its budget%s before scoring any "
-                    "of %d attacks. This is not 0 breaches, it is no measurement.%s"
-                    % (_budget, attacks_n, _why))
+            # NOTHING WENT OUT AT ALL, which the wall can produce on its own: a unit is an
+            # attack with its trials, CONTROLS are units, and an arsenal whose controls are
+            # refused trips the wall with no errored row in the count at all.
+            #
+            # THE REASON GOES LAST. The wall's sentence ends `so the rest was NOT sent`, and
+            # in front of `before scoring any of 10 attacks` the two run together into a
+            # clause that says the opposite of each half.
+            _head = ("the run stopped on its budget%s before scoring any of %d attacks"
+                     % (_budget, attacks_n) if stopped else
+                     "the run stopped before scoring any of %d attacks: %s"
+                     % (attacks_n, wall) if wall else
+                     "the run stopped before scoring any of %d attacks" % attacks_n)
+            return ("NOTHING MEASURED: %s. This is not 0 breaches, it is no measurement.%s"
+                    % (_head, _why))
         _also = ("" if not never_sent else
                  " The other %d were never sent: the budget%s went on the failures, so "
-                 "raising it will not change this." % (never_sent, _budget))
+                 "raising it will not change this." % (never_sent, _budget) if stopped else
+                 " The other %d were never sent: %s." % (never_sent, wall) if wall else
+                 " The other %d were never sent." % never_sent)
         return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
                 "0 breaches, it is no measurement.%s%s"
                 % (errored, attacks_n, _also, _why))
@@ -1322,8 +1358,14 @@ def main():
     _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
     # A RUN THE TARGET STOPPED IS A RUN THAT DID NOT FINISH, and the closing line is where
     # the reader looks first. `exhausted` says the same thing about OUR budget; this says it
-    # about theirs.
-    _budget_note = _budget_note or _rl_stopped
+    # about theirs -- and they are handed over SEPARATELY, because a sentence given one
+    # string cannot say which of the two it is describing.
+    # AND EVERY ATTACK BEHIND THE BREAK. The wall ends the loop, so the rest of the arsenal
+    # leaves no row: not errored, not refused by the budget, and still inside `attacks_n`.
+    # Those were never sent, and that is where they belong.
+    _reached = sum(1 for r in results
+                   if (r.get("attack") or {}).get("category") != "control")
+    _never_sent_rows += max(0, attacks_n - _reached)
     # THE REASON, FROM THE ROWS THIS COUNT CAME FROM. Every trial's error is already in
     # `results`; the one kind that says `the rest of this run is not evidence` was
     # written by `signing` and read by nobody.
@@ -1332,7 +1374,7 @@ def main():
                            for r in results for _t in (r.get("trials") or [])])
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials, why_errored=_why_err,
-                              never_sent=_never_sent_rows))
+                              never_sent=_never_sent_rows, wall=_rl_stopped))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
@@ -1595,7 +1637,8 @@ def main():
     # named neither the errors nor the attacks nobody sent.
     _abs_code, _abs_lines = absolute_verdict(
         gate, exploited_n, broke, attacks_n, _errored_rows,
-        skipped=skipped, stopped=_budget_note, never_sent=_never_sent_rows)
+        skipped=skipped, stopped=_budget_note or _rl_stopped,
+        never_sent=_never_sent_rows)
     if _abs_lines:
         print("")
         for _l in _abs_lines:
