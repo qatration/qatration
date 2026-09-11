@@ -362,6 +362,65 @@ def main():
           "no reason given for: %s"
           % ", ".join(sorted(k for k, v in _ROOT_FILES.items() if not v)))
 
+
+    # --- THE PAGE WITH NO GENERATOR -----------------------------------------------------
+    #
+    # `out/compare.html` is three models against one target, and nothing in this repository
+    # writes it: it arrived with the squash, nothing links to it, and the committed-page
+    # gate in `test_reports` cannot rebuild it because there is no command to rebuild it
+    # with. So every number on it was a declaration, which is the one thing this project
+    # says a number may not be -- and all of them were wrong in the same direction.
+    #
+    # The run holds SIXTEEN attacks and the page said fifteen, so every count on it was one
+    # short. Worse, its headline paragraph said the cells that differ between models "are
+    # also flaky (2/3, 1/3) ... a single-shot test would miss them": no cell in the run is
+    # 2/3, four cells differ, and three of the four are 3/3 against one model and 0/3
+    # against the others -- which a single-shot test would find every time.
+    #
+    # Recounted here from `out/compare/`, the evidence the page was built from, the way
+    # `test_readme` recounts every other published number.
+    _cmp_dir = os.path.join(ROOT, "out", "compare")
+    _cmp_page = os.path.join(ROOT, "out", "compare.html")
+    if os.path.isdir(_cmp_dir) and os.path.exists(_cmp_page):
+        _runs = {}
+        for _f in sorted(_g_a.glob(os.path.join(_cmp_dir, "results_*.json"))):
+            _m = json.load(io.open(_f, encoding="utf-8"))
+            _runs[_m["model"]] = _m["results"]
+        _html = io.open(_cmp_page, encoding="utf-8").read()
+        check("the comparison page's evidence is three runs of one arsenal",
+              len(_runs) == 3 and len({len(v) for v in _runs.values()}) == 1,
+              str({k: len(v) for k, v in _runs.items()}))
+        _n = len(next(iter(_runs.values())))
+        check("...and the page says how many attacks that was",
+              ("Same %d attacks" % _n) in _html, "recounted %d" % _n)
+        for _model, _rows in sorted(_runs.items()):
+            _ex = sum(1 for r in _rows if r["headline"] == "EXPLOITED")
+            _de = sum(1 for r in _rows if r["headline"] == "DEFENDED")
+            check("...and %s's fully-exploited count is the one in the run" % _model,
+                  ('%d<span class="of">/%d</span>' % (_ex, _n)) in _html,
+                  "%d of %d" % (_ex, _n))
+            check("...and %s's resisted/breached pair adds up to it" % _model,
+                  ("resisted %d \u00b7 breached %d" % (_de, _n - _de)) in _html,
+                  "resisted %d, breached %d" % (_de, _n - _de))
+        # AND THE CLAIM ABOUT FLAKINESS, which is what the page is FOR. A cell that differs
+        # between models and is 3/3 or 0/3 is not flaky, and saying otherwise tells a reader
+        # they need repeated trials to see something one trial would have found.
+        _ids = sorted({r["payload"]["id"] for _rows in _runs.values() for r in _rows})
+        _by = {m: {r["payload"]["id"]: (r["headline"], r.get("pass_rate"))
+                   for r in rows} for m, rows in _runs.items()}
+        _differ = [i for i in _ids
+                   if len({_by[m].get(i, (None,))[0] for m in _by}) > 1]
+        _flaky = [i for i in _differ
+                  if any(_by[m].get(i, (None, None))[1] not in ("0/3", "3/3", None)
+                         for m in _by)]
+        check("the page's count of differing cells is the number that differ",
+              str(len(_differ)) in ("4",) and "Four cells differ" in _html,
+              "%d differ: %s" % (len(_differ), _differ))
+        check("...and it names the one that is actually flaky, and only it",
+              len(_flaky) == 1 and _flaky[0] in _html
+              and all(("<code>%s</code>" % i) in _html for i in _differ),
+              "flaky: %s of %s" % (_flaky, _differ))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
