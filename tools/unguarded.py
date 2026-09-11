@@ -574,6 +574,17 @@ def sweep_refusals():
 
     Needs `out/` to hold evidence. With an empty workspace it reports every survivor, which
     is the unfiltered list and is said rather than silently skipped.
+
+    AND THE FILTER IS NOT THE SAME AS A FIXTURE, which this arm used to leave the reader
+    to work out. `50 tested, 0 move a verdict` was true and read as `all fifty are
+    tested`; the split behind it was EIGHTEEN caught by a case in `test_oracle` and
+    THIRTY-TWO deleted with every suite green, excused only by the stored evidence not
+    happening to exercise them. Those thirty-two are unmeasured on any workspace whose
+    traffic differs from this one, and the summary said nothing about them at all.
+
+    So the count comes back in three parts. A guard the suite catches is tested; a guard
+    only the evidence excuses is not, and saying so is the same debt the documented-guard
+    arm pays with `their silence here is not a result`.
     """
     path = os.path.join(RT, "oracle.py")
     orig = io.open(path, encoding="utf-8").read()
@@ -590,7 +601,7 @@ def sweep_refusals():
     if base is None or not base.get("n"):
         print("  ! no stored evidence in out/, so every survivor below is unfiltered")
     lines = orig.split("\n")
-    moved = []
+    moved, excused = [], []
     with source_restored(path):
         for name, lineno in sites:
             idx = lineno - 1
@@ -612,8 +623,13 @@ def sweep_refusals():
             if diff:
                 moved.append((name, lineno, "; ".join(
                     "%s %d->%d" % (k, a, b) for k, (a, b) in sorted(diff.items()))))
+            else:
+                # DELETED WITH EVERY SUITE GREEN, and the evidence happened not to
+                # notice. That is not the same as tested, and it is the whole
+                # difference between this arm's number and its meaning.
+                excused.append((name, lineno))
     assert _run("test_oracle.py") == 0, "oracle.py was not restored"
-    return len(sites), moved
+    return len(sites), moved, excused
 
 
 def main(argv):
@@ -643,7 +659,7 @@ def main(argv):
     # the summary read `NOTHING WAS DELETED`: the same defect as the one it was written to
     # fix, pointed the other way, and it shipped for as long as it took to run the other
     # arm once.
-    bad = swept = 0
+    bad = swept = excused = 0
     if both or args.guards:
         print("=== documented guards ===")
         tested, survivors, undocumented = sweep_guards(args.only)
@@ -686,12 +702,23 @@ def main(argv):
         bad += len(free)
     if both or args.refusals:
         print("\n=== guards against false positives ===")
-        n, moved = sweep_refusals()
+        n, moved, excused_here = sweep_refusals()
         swept += n
         print("\n%d early refusal(s) tested, %d move a verdict on the stored evidence"
               % (n, len(moved)))
         for name, ln, what in moved:
             print("  oracle.py:%-6d %-26s %s" % (ln, name, what[:80]))
+        # AND HOW MANY WERE EXCUSED RATHER THAN TESTED. `0 move a verdict` reads as
+        # `all of them are covered`; on this fleet eighteen were caught by a case and
+        # thirty-two by traffic that happened not to reach them.
+        if excused_here:
+            print("  %d of those were deleted with every suite green and changed no"
+                  "\n  verdict on the stored evidence. The evidence excused them; no case"
+                  "\n  tested them, and on a workspace with different traffic they are"
+                  "\n  unmeasured." % len(excused_here))
+            for name, ln in excused_here:
+                print("    oracle.py:%-6d %s" % (ln, name))
+        excused += len(excused_here)
         bad += len(moved)
 
     # NOT AN EXIT CODE THAT FAILS A BUILD. Some survivors are equivalent mutations -- a guard
@@ -705,6 +732,13 @@ def main(argv):
     # holds nothing to test.
     if bad:
         print("\n%d decision(s) to look at." % bad)
+    elif excused:
+        # NOT THE SAME SENTENCE. Nothing is a finding, and %d of what was deleted was
+        # missed by every suite and excused by traffic instead. `Nothing went unnoticed`
+        # over that is the shape this whole file exists to refuse.
+        print("\nNothing this sweep deleted moved a verdict, and %d of it went\n"
+              "unnoticed by every suite, excused by the stored evidence rather\n"
+              "than tested by a case." % excused)
     elif swept:
         print("\nNothing this sweep deleted went unnoticed.")
     else:

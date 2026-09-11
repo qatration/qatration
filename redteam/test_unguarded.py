@@ -250,6 +250,82 @@ def main():
     check("...and each one adds what it deleted to the number the verdict reads",
           _uncounted == [], str(_uncounted))
 
+    # --- CAUGHT BY A CASE IS NOT THE SAME AS EXCUSED BY EVIDENCE -------------------
+    #
+    # `sweep_refusals` deletes each early `return False` in a detector -- every one of them
+    # a reason NOT to call something a finding -- and reports how many moved a verdict on
+    # the stored probes. On this repository it printed `50 tested, 0 move a verdict`, and
+    # the run ended `Nothing this sweep deleted went unnoticed.`
+    #
+    # Measured: eighteen of the fifty were caught by a case in `test_oracle`. The other
+    # THIRTY-TWO were deleted with every suite green and were excused only by traffic that
+    # happens not to reach them. Those thirty-two went unnoticed by every suite, under a
+    # sentence saying none did -- which is this tool's own subject, in the tool.
+    #
+    # Driven over a scripted oracle with a scripted replay, because the split is the
+    # property and reading the source would assert the shape of the code instead. The
+    # fixture produces one of each: a guard a case holds, a guard nothing holds and the
+    # evidence never exercises, and a guard nothing holds that the evidence does.
+    import shutil as _sh_x
+    _xw = tempfile.mkdtemp()
+    _old_rt_x = unguarded.RT
+    try:
+        unguarded.RT = _xw
+        io.open(os.path.join(_xw, "oracle.py"), "w", encoding="utf-8", newline="").write(
+            "def d_caught(p, c):" + chr(10)
+            + "    if 'zzskip' in p:" + chr(10)
+            + "        return False" + chr(10)
+            + "    return 'zzhit' in p" + chr(10)
+            + chr(10)
+            + "def d_excused(p, c):" + chr(10)
+            + "    if 'zznever' in p:" + chr(10)
+            + "        return False" + chr(10)
+            + "    return 'zzhit' in p" + chr(10)
+            + chr(10)
+            + "def d_moves(p, c):" + chr(10)
+            + "    if 'zzquiet' in p:" + chr(10)
+            + "        return False" + chr(10)
+            + "    return 'zzhit' in p" + chr(10)
+            + chr(10)
+            + "DETECTORS = {'caught': d_caught, 'excused': d_excused, 'moves': d_moves}"
+            + chr(10))
+        # The suite holds ONE of the three guards. `d_excused` and `d_moves` have no case.
+        io.open(os.path.join(_xw, "test_oracle.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import oracle" + chr(10)
+            + "assert not oracle.d_caught('zzhit and zzskip', {})" + chr(10)
+            + "assert oracle.d_caught('zzhit', {})" + chr(10)
+            + "print('ok')" + chr(10))
+        # The evidence: one probe the `zzquiet` guard silences and nothing carrying
+        # `zznever`. So deleting `d_moves`' guard changes a count and deleting
+        # `d_excused`' guard changes nothing.
+        io.open(os.path.join(_xw, "detector_coverage.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import oracle" + chr(10)
+            + "PROBES = ['zzhit and zzquiet', 'nothing here']" + chr(10)
+            + "def replay(*a, **k):" + chr(10)
+            + "    hits = {}" + chr(10)
+            + "    for name, fn in oracle.DETECTORS.items():" + chr(10)
+            + "        for p in PROBES:" + chr(10)
+            + "            if fn(p, {}):" + chr(10)
+            + "                hits[name] = hits.get(name, 0) + 1" + chr(10)
+            + "    return hits, {}, len(PROBES), {}, {}" + chr(10))
+        _n_x, _moved_x, _excused_x = unguarded.sweep_refusals()
+    finally:
+        unguarded.RT = _old_rt_x
+        _sh_x.rmtree(_xw, ignore_errors=True)
+    check("the refusals arm sweeps every early refusal in the fixture",
+          _n_x == 3, str(_n_x))
+    check("...and reports the one whose deletion moves a verdict",
+          [f[0] for f in _moved_x] == ["d_moves"], str(_moved_x))
+    check("...and reports the one no case held and no evidence noticed, separately",
+          [f[0] for f in _excused_x] == ["d_excused"], str(_excused_x))
+    check("...and does not report the one a case does hold",
+          not any(f[0] == "d_caught" for f in _moved_x + _excused_x),
+          str(_moved_x + _excused_x))
+
     # --- WHAT A KILLED RUN LEAVES BEHIND -------------------------------------------
     #
     # Every arm writes a mutant over a real source file and writes the original back a few
