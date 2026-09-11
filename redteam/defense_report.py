@@ -1040,6 +1040,27 @@ def arsenal_ran():
     return out
 
 
+def _arsenal_cell(name):
+    """The arsenal a run recorded, and whether a reader can still open it.
+
+    THE COLUMN EXISTS SO THE JUDGEMENT CAN STAY THE READER'S: the paragraph beside it
+    says the pair of numbers and the name are what they can use. `lcagent` on the shipped
+    page names `attacks_slice_tmp.yaml`, a development slice that is not in this
+    repository and never was — a reader told to weigh the coverage against that file
+    cannot open it, and nothing on the page said so.
+
+    The name is what the RUN recorded and stays exactly as recorded: rewriting history to
+    the nearest file that does exist would be worse. What is added is the second fact,
+    which is about this checkout rather than about that run.
+    """
+    if not name:
+        return "—"
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(here, str(name))) or os.path.exists(str(name)):
+        return esc(str(name))
+    return esc(str(name)) + ' <span class="dim">(not in this checkout)</span>'
+
+
 def controls_fired():
     """Control rows that came back as a breach: [(target, attack id, rate, fired, reply)].
 
@@ -1573,7 +1594,7 @@ def main():
             f'<td>{_na if isinstance(_na, int) else "—"}</td>'
             f'<td>{_ns if isinstance(_ns, int) else "—"}</td>'
             f'<td>{skipped}</td>'
-            f'<td class="mono dim">{esc(arsenal or "—")}</td></tr>'
+            f'<td class="mono dim">{_arsenal_cell(arsenal)}</td></tr>'
             for t, (sent, skipped, arsenal, _na, _ns, _in) in sorted(ran.items()))
         fewest = min(v[0] for v in ran.values())
         # THE OTHER HALF OF COVERAGE: not how much of the arsenal was sent, but how much of

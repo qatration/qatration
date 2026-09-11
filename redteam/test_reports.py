@@ -1900,6 +1900,27 @@ def main():
     # NOT THE SHAPE, THE CONTENT. Checking the tuple is six long passed with the count
     # replaced by None -- six slots, one of them empty. Eleven shipped artifacts record
     # `inert`, so at least one row must come back with a real number or nothing is reading it.
+    # --- AND THE ARSENAL NAMED BESIDE THOSE COUNTS -------------------------------------
+    #
+    # The paragraph over that table tells a reader the pair of numbers and the name of the
+    # arsenal are what they can use, and that the coverage is only reassuring if the named
+    # arsenal is the one written for a system like theirs. `lcagent` on the shipped page
+    # names `attacks_slice_tmp.yaml` -- a development slice that is not in this repository
+    # and never was. A reader asked to weigh coverage against a file they cannot open was
+    # given a name and no way to know it was gone.
+    #
+    # The name stays exactly as the run recorded it. What is added is the second fact, and
+    # it is about this checkout rather than about that run.
+    from defense_report import _arsenal_cell as _ac
+    check("an arsenal this checkout has is named plainly",
+          _ac("attacks_generic.yaml") == "attacks_generic.yaml", _ac("attacks_generic.yaml"))
+    check("...and one it does not have says so, without rewriting what the run recorded",
+          "attacks_slice_tmp.yaml" in _ac("attacks_slice_tmp.yaml")
+          and "not in this checkout" in _ac("attacks_slice_tmp.yaml"),
+          _ac("attacks_slice_tmp.yaml"))
+    check("...and a run that recorded no arsenal at all is still a dash",
+          _ac(None) == "\u2014", _ac(None))
+
     _real = [v[5] for v in _dr2.arsenal_ran().values() if isinstance(v[5], int)]
     check("the coverage reader carries a real mute count from the shipped evidence",
           bool(_real) and max(_real) > 0,
