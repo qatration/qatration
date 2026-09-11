@@ -562,8 +562,9 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
 
 
 def memory_phrase(profile, unknown="not measured", no="no",
-                  clears="yes, reset clears", sticks="yes, RESET DOES NOT CLEAR"):
-    """How this target's memory answered — in THREE states, and the third is the point.
+                  clears="yes, reset clears", sticks="yes, RESET DOES NOT CLEAR",
+                  chain_only="no, across single sends; this target carries chains"):
+    """How this target's memory answered — in FOUR states, and the last two are the point.
 
     Every renderer computed this as `not st.get("remembers")` -> "no", so a profile where
     the fingerprint never got that far — an errored probe, or one written before the question
@@ -575,12 +576,21 @@ def memory_phrase(profile, unknown="not measured", no="no",
     recon panel and the fleet table — and fixing one left two saying the old thing. That is
     the lesson `compose` and `isolation` had just finished teaching: when a shared judgement
     is wrong, every copy of the QUESTION is wrong, not every caller of the function.
+
+    AND THE FOURTH: the probe plants and recalls over two `send()` calls, which is the
+    only channel it has. A target that declares `chain` keeps its memory in the growing
+    message list of `send_chain` and is stateless across single sends BY CONSTRUCTION,
+    so the probe answers no and the page said `stateless` — about `memorybot`, the one
+    bot in the fleet written to carry a poisoned standing rule into a later turn, and
+    about eight of its nine neighbours. The sentence above is the argument: that word is
+    the conclusion a reader acts on, and it was measured on a channel the memory does
+    not live in.
     """
     st = profile.get("statefulness") or {}
     if "remembers" not in st:
         return unknown
     if not st.get("remembers"):
-        return no
+        return chain_only if "chain" in (profile.get("capabilities") or ()) else no
     return clears if st.get("reset_clears") else sticks
 
 

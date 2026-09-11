@@ -21,7 +21,7 @@ except Exception:
 from target import Target, Probe
 from recon import (MEMO_TOKEN, fingerprint, style_of, refusal_quote, pattern_from,
                    marker_candidates, hints, suggest_config, format_profile,
-                   token_lock_state)
+                   token_lock_state, memory_phrase)
 
 BASELINE = ("I can help with billing questions and account changes. "
             "I am a support assistant for the billing team.")
@@ -627,6 +627,42 @@ def main():
     told = fingerprint(_Speech([("error", "x")]), {"tool_names": ["error"]})
     check("a target whose real tool IS called 'error' keeps it, the config being authority",
           told.get("tools_seen"), ["error"])
+
+    # --- STATELESS IS A CLAIM ABOUT A CHANNEL, NOT ABOUT A TARGET ----------------------
+    #
+    # The memory probe plants and recalls over two `send()` calls, which is the only
+    # channel it has. A target that declares `chain` keeps its memory in the growing
+    # message list of `send_chain` and is stateless across single sends BY CONSTRUCTION.
+    #
+    # All ten shipped profiles record `remembers: false`, and nine of the ten declare
+    # `chain` -- including `memorybot`, the one bot in the fleet written to carry a
+    # poisoned standing rule into a later turn. The fleet page called it `stateless`, and
+    # `memory_phrase`'s own docstring says why that is the dangerous word: a stateless bot
+    # cannot carry a poisoned rule forward, which is exactly the conclusion a reader draws.
+    _prof_chain = {"target": "t", "statefulness": {"remembers": False,
+                                                   "reset_clears": None},
+                   "capabilities": ["chain"], "style": {}, "hints": [],
+                   "tool_channel": "real", "refusal_vocab": []}
+    _prof_plain = {"statefulness": {"remembers": False}, "capabilities": []}
+    check("a target that declares chain is not called stateless on a single-send probe",
+          "single sends" in memory_phrase(_prof_chain), True)
+    check("...while one that declares no chain still answers plainly",
+          memory_phrase(_prof_plain), "no")
+    # AND THE OTHER THREE STATES ARE UNTOUCHED, or the fourth was bought by breaking them.
+    check("...and a probe that never landed still says so",
+          memory_phrase({"statefulness": {"why": "the probes did not land"}}),
+          "not measured")
+    check("...and a target that DID remember is still reported as remembering",
+          memory_phrase({"statefulness": {"remembers": True, "reset_clears": False},
+                         "capabilities": ["chain"]}), "yes, RESET DOES NOT CLEAR")
+    # AND ALL THREE RENDERERS CARRY IT. The function exists because there were three
+    # copies of the question and fixing one left two saying the old thing.
+    import compare_recon as _cr_m, report_engine as _re_m
+    check("the fleet table says it too",
+          "single sends" in str(_cr_m._row(_prof_chain, "t", "2026-01-01")), True)
+    check("...and so does the scorecard's recon panel",
+          "single sends" in _re_m._recon_panel({"when": "t", "profile": _prof_chain}),
+          True)
 
     # Counted as they run, not declared, and taken HERE rather than partway up. A hardcoded
     # total is a coverage claim nothing keeps true — five of these suites had drifted below

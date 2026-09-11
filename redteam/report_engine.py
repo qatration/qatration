@@ -163,7 +163,8 @@ def _recon_panel(recon):
     # console summary and the fleet table again
     mem = memory_phrase(p, unknown="not measured", no="no",
                         clears="yes — reset clears",
-                        sticks="yes — <b>reset does NOT clear</b>")
+                        sticks="yes — <b>reset does NOT clear</b>",
+                        chain_only="not across single sends — <b>this target carries chains</b>")
     s = p.get("style", {})
     shapes = ", ".join(k for k in ("headers", "bullets", "numbered", "code_fence", "json",
                                    "emoji") if s.get(k)) or "plain prose"

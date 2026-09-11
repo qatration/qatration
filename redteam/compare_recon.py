@@ -60,7 +60,8 @@ def _row(profile, name, when):
     # property the run never measured. A stateless bot cannot carry a poisoned standing rule
     # into a later turn, which is exactly the conclusion a reader would draw from the word.
     mem = memory_phrase(profile, unknown="unmeasured", no="stateless",
-                        clears="remembers, reset clears", sticks="RESET DOES NOT CLEAR")
+                        clears="remembers, reset clears", sticks="RESET DOES NOT CLEAR",
+                        chain_only="single sends: no <span class=\"dim\">(carries chains)</span>")
     warns = [h["text"] for h in profile.get("hints", [])
              if isinstance(h, dict) and h.get("level") == "warn"]
     lock = profile.get("token_lock") or {}
