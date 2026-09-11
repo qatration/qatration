@@ -269,7 +269,11 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     from runner import run_attack, headline, judged_ctx
 
     out = {"target": tcfg.get("name") or "?", "claims": 0, "holds": 0, "unclear": 0,
-           "stale": 0, "stale_ids": [], "note": "", "sent": 0}
+           "stale": 0, "stale_ids": [], "note": "", "sent": 0,
+           # WHY IT STOPPED AND WHAT IT DID NOT REACH. Both are empty on a run that
+           # finished, and a reader of this dict must not have to infer either from a
+           # count that happens to be short.
+           "why": "", "advice": "", "unchecked": 0}
     # IS THERE A CLAIM TO VERIFY, before anything is built. This sat below the loader, so
     # a workspace with no artifact for this target still constructed one — and where
     # the adapter could not be imported the answer came back as `not loaded`, which is a
@@ -339,12 +343,31 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         print()
         print("%-30s %-10s %-10s %s" % ("attack", "recorded", "now", "verdict"))
 
+    # AND THIS COMMAND HAD NO WALL, which is the one that most needed one. It exists to be
+    # run on a schedule into a log, and its own opening paragraph says why: it exists because
+    # a target changed, and A TARGET THAT IS SIMPLY DOWN CHANGES NOTHING. Walked at a refused
+    # port with eight claims in the artifact: ninety-eight seconds, twenty-four retry lines,
+    # eight rows of `0/0 unclear`, and the one sentence that mattered at the bottom. On
+    # `--all` that is once per target.
+    #
+    # `run` and `benign` stop after five unusable units in a row. The counter is shared
+    # rather than written a third time.
+    from runner import GiveUpWall as _Wall
+    _wall = _Wall()
+    _checked = 0
     for attack, hits, was in rows:
-        def send(n, _a=attack):
+        if _wall.reason:
+            break
+        _probes = []
+
+        def send(n, _a=attack, _p=_probes):
             # `headline` returns (verdict, rate); the verdict is what decides a breach, and
             # reading the tuple as a string here would have made every row look clean.
-            return tally(run_attack(target, _a, judged_ctx(_a, ctx), trials=n),
-                         lambda r: headline([r])[0])
+            # THE PROBES ARE KEPT as well as scored: `tally` answers how many landed and the
+            # wall has to know WHY the ones that did not failed, which only the probe says.
+            _recs = run_attack(target, _a, judged_ctx(_a, ctx), trials=n)
+            _p.extend(r.get("probe") for r in _recs)
+            return tally(_recs, lambda r: headline([r])[0])
 
         # A TARGET THAT THROWS IS A ROW, NOT A TRACEBACK, which is the whole reason this
         # function was split out and was not honoured for the sending half: the first fleet
@@ -366,7 +389,12 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
             print("  %-28s %-10s %-10s %s"
                   % (str(attack.get("id"))[:28], "%d/%d" % (hits, was),
                      "%d/%d" % (now_hits, now_n), v), flush=True)
+        _checked += 1
+        _wall.saw(_probes)
 
+    out["why"], out["advice"] = _wall.reason, _wall.advice
+    # A CLAIM NOBODY RE-SENT IS NOT A CLAIM THAT HELD, and it leaves no row to say so.
+    out["unchecked"] = max(0, len(rows) - _checked)
     if not out["sent"]:
         # NOTHING SENT IS NOT A PASS, and it is the failure this command is most likely to
         # meet: it exists because a target changed, and a target that is simply down changes
@@ -374,6 +402,52 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         out["note"] = "unreachable: nothing was measured"
         out["stale"], out["holds"], out["unclear"], out["stale_ids"] = 0, 0, 0, []
     return out
+
+
+def audit_close(rows, total_stale):
+    """-> (exit code, the lines a fleet audit ends with).
+
+    Pure, like `note_verdict` above and `absolute_verdict` one module over, and for the
+    reason their docstrings give: this is the sentence a scheduled job's log keeps and the
+    code a pipeline reads, and neither should be reachable only by owning forty targets.
+
+    A TARGET CHECKED IN PART IS NOT A TARGET CHECKED. The wall stops a target that answered
+    for a while and then stopped answering, and those rows leave no line in the table above:
+    the target reads as reached, its counts read as complete, and `every claim on every
+    reachable target still reproduces` covers claims nobody re-sent. Exit 0 on top of that
+    is what a schedule reads as `the published findings still hold`.
+
+    UNREACHABLE IS NEITHER A PASS NOR A FAILURE, and rounding it into either is the one
+    thing this command must not do. It keeps its own line and decides no code.
+    """
+    out = []
+    reached = [r for r in rows if not r.get("note")]
+    out += ["", "%d of %d targets reachable, %d claims re-sent"
+            % (len(reached), len(rows), sum(r.get("claims") or 0 for r in reached))]
+    partial = [r for r in reached if r.get("unchecked")]
+    if total_stale:
+        out += ["", "%d claim(s) no longer reproduce:" % len(total_stale)]
+        out += ["   %-18s %-26s %s" % (t, aid, why) for t, aid, why in total_stale]
+    elif partial:
+        out += ["", "every claim RE-SENT still reproduces, and %d were not re-sent."
+                % sum(r["unchecked"] for r in partial)]
+    else:
+        out += ["", "every claim on every reachable target still reproduces."]
+    if partial:
+        out += ["", "stopped part way (%d): %s"
+                % (len(partial), ", ".join("%s (%d not re-sent: %s)"
+                                           % (r.get("target"), r["unchecked"],
+                                              r.get("why") or "no reason recorded")
+                                           for r in partial[:8]))]
+    missed = [r for r in rows if r.get("note")]
+    if missed:
+        out += ["", "not checked (%d): %s"
+                % (len(missed), ", ".join("%s (%s)" % (r.get("target"),
+                                                       str(r["note"]).split(":")[0])
+                                          for r in missed[:8]))]
+    if total_stale:
+        return 1, out
+    return (3 if partial else 0), out
 
 
 def audit(trials, confirm_trials):
@@ -421,23 +495,10 @@ def audit(trials, confirm_trials):
                               % (r["claims"], r["holds"], r["unclear"], r["stale"])),
               flush=True)
 
-    reached = [r for r in rows if not r["note"]]
-    print("\n%d of %d targets reachable, %d claims re-sent"
-          % (len(reached), len(rows), sum(r["claims"] for r in reached)))
-    if total_stale:
-        print("\n%d claim(s) no longer reproduce:" % len(total_stale))
-        for t, aid, why in total_stale:
-            print("   %-18s %-26s %s" % (t, aid, why))
-    else:
-        print("\nevery claim on every reachable target still reproduces.")
-    # UNREACHABLE IS NEITHER A PASS NOR A FAILURE, and rounding it into either is the one thing
-    # this command must not do. It gets its own line and no exit code of its own.
-    missed = [r for r in rows if r["note"]]
-    if missed:
-        print("\nnot checked (%d): %s" % (len(missed),
-              ", ".join("%s (%s)" % (r["target"], r["note"].split(":")[0])
-                        for r in missed[:8])))
-    return 1 if total_stale else 0
+    code, lines = audit_close(rows, total_stale)
+    for _l in lines:
+        print(_l)
+    return code
 
 
 def main():
@@ -488,6 +549,13 @@ def main():
         where = sys.stderr if code else sys.stdout
         print()
         print(line, file=where)
+        # THE ENDPOINT'S OWN WORDS, where there are any. `unreachable` says a target was not
+        # reached and sends nobody anywhere; the error on those rows says whether it is the
+        # URL, the port or a deployment that is not up, and the wall already has it.
+        if r.get("why"):
+            print("  %s" % r["why"], file=where)
+        if r.get("advice"):
+            print("  %s" % r["advice"], file=where)
         return code
 
     print()
@@ -498,11 +566,26 @@ def main():
         print("\nThe artifact overstates what this target does today. Re-run the sweep to "
               "replace it, and read the difference as a change in the TARGET only after "
               "checking that nothing changed here.")
+    elif r.get("unchecked"):
+        # NOT `every claimed breach still reproduces`, which is a claim over rows nobody
+        # sent. The same rule the sweep's closing line keeps: the denominator is what was
+        # measured, and a caveat anywhere but beside the sentence it qualifies is not
+        # delivered.
+        print("every claim this run RE-SENT still reproduces, and %d were not re-sent."
+              % r["unchecked"])
     else:
         print("every claimed breach still reproduces.")
+    if r.get("unchecked"):
+        print("\n%d claim(s) were not re-sent: %s" % (r["unchecked"], r["why"]))
+        if r.get("advice"):
+            print("   %s" % r["advice"])
     print("\nNot checked: the rows this artifact records as defended. A target that got worse "
           "is a sweep's question.")
-    return 1 if r["stale_ids"] else 0
+    if r["stale_ids"]:
+        return 1
+    # 3, NOT 0. A verification that could not finish measured less than it was asked to, and
+    # zero is the code a schedule reads as `the published findings still hold`.
+    return 3 if r.get("unchecked") else 0
 
 
 if __name__ == "__main__":
