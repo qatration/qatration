@@ -229,7 +229,23 @@ def main():
               % ("shell that can reach the working directory" if name
                  else "interpreter on PATH by name"))
     else:
-        with _tf.TemporaryDirectory() as d:
+        # NOT `with TemporaryDirectory()`, WHICH RAISES OUT OF ITS OWN CLEANUP. This block
+        # starts a server whose script lives inside the directory, and `os.kill(pid, SIGTERM)`
+        # on Windows is `TerminateProcess`: it returns before the process has released its
+        # handles. The rmtree then hits `WinError 32 ... being used by another process`, the
+        # exception escapes `main`, and the suite exits 1 having printed eight PASS lines and
+        # no tally at all.
+        #
+        # Measured: one run in twelve on this machine. It is the mirror of the rule this
+        # repository already gates -- a suite that exits 0 while printing FAIL -- and its cost
+        # was not theoretical: `tools/unguarded.py` derives the suites that can see a module,
+        # refuses to sweep one whose suites are not green, and skipped `runner.py` for this,
+        # then closed with `Nothing this sweep deleted went unnoticed`.
+        #
+        # A GATE THAT GOES RED FOR A PROPERTY OF THE RUNNER IS ONE PEOPLE LEARN TO RE-RUN
+        # UNTIL GREEN, which is the sentence written forty lines down about the connect loop.
+        d = _tf.mkdtemp()
+        try:
             os.makedirs(os.path.join(d, "tools"))
             os.makedirs(os.path.join(d, "mybot"))
             os.makedirs(os.path.join(d, "out"))
@@ -293,6 +309,20 @@ def main():
                     os.kill(int(io.open(pidfile).read().strip()), _sig.SIGTERM)
                 except Exception:
                     pass
+                # AND WAIT FOR IT TO ACTUALLY GO. The signal is a request; the port answering
+                # is the proof that it has not been honoured yet. Bounded, and it leaves on
+                # the first refused connect, so a healthy machine pays nothing.
+                for _ in range(40):
+                    with socket.socket() as _gone:
+                        _gone.settimeout(0.2)
+                        if _gone.connect_ex(("127.0.0.1", port)) != 0:
+                            break
+                    time.sleep(0.1)
+        finally:
+            # IGNORE_ERRORS AS THE BACKSTOP, not as the plan: the wait above is what makes
+            # the directory removable, and this is what keeps a slow release from failing a
+            # suite that has already answered its question.
+            _sh.rmtree(d, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

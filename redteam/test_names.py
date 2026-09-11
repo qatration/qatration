@@ -499,6 +499,79 @@ def main():
                 break
     check("...over the suites that use that signature", _ok_files >= 20, str(_ok_files))
 
+    # --- A SUITE THAT PASSED EVERY CHECK AND EXITED 1 WHILE TIDYING UP -------------------
+    #
+    # `test_fleet_limits` started a server whose script lived inside a
+    # `with TemporaryDirectory()`, killed it with `os.kill(pid, SIGTERM)` and left the block.
+    # On Windows that signal is `TerminateProcess`, which returns before the process releases
+    # its handles, so the rmtree hit `WinError 32 ... being used by another process`, the
+    # exception escaped `main`, and the suite exited 1 having printed eight PASS lines and no
+    # tally at all. One run in twelve.
+    #
+    # It is the mirror of the rule this file already keeps -- a suite that exits 0 while
+    # printing FAIL -- and its cost was not theoretical: `tools/unguarded.py` refuses to
+    # sweep a module whose suites are not green, and skipped `runner.py` for this.
+    #
+    # `TemporaryDirectory` RAISES OUT OF ITS OWN CLEANUP, so the rule is about the context
+    # manager rather than about temp directories: `mkdtemp` with `rmtree(ignore_errors=True)`
+    # says the same thing and cannot fail a run that has already answered its question.
+    # `Popen` AND `kill`, NOT `run`. `subprocess.run` waits, so whatever it started is gone
+    # before the block ends; these two are the shapes that leave a process alive -- a Popen
+    # nobody waited for, and a pid signalled rather than reaped, which is what this suite did.
+    _SPAWNS = {"Popen", "kill"}
+    def _live_teardowns(src, name):
+        """-> the lines where a `with TemporaryDirectory()` holds a process that outlives it."""
+        try:
+            _tree = _ast_s.parse(src)
+        except SyntaxError:
+            return []
+        _out = []
+        for _n in _ast_s.walk(_tree):
+            if not isinstance(_n, _ast_s.With):
+                continue
+            if not any(isinstance(_i.context_expr, _ast_s.Call)
+                       and getattr(_i.context_expr.func, "attr", None) == "TemporaryDirectory"
+                       for _i in _n.items):
+                continue
+            for _c in _ast_s.walk(_n):
+                if (isinstance(_c, _ast_s.Call)
+                        and getattr(_c.func, "attr", None) in _SPAWNS):
+                    _out.append("%s:%d" % (name, _n.lineno))
+                    break
+        return _out
+
+    # ON A PLANTED ONE FIRST, in this process, every time -- the rule this file opens with.
+    # With the tree clean there is nothing for this scan to find, so weakening it changes no
+    # answer: `_SPAWNS = set()` and `_is_tmpdir = False` both stayed green until the planted
+    # case existed. A check that passes because it found nothing to look at is the defect
+    # this whole file is about.
+    _PLANTED = ("import subprocess, tempfile, os\n"
+                "def go():\n"
+                "    with tempfile.TemporaryDirectory() as d:\n"
+                "        p = subprocess.Popen(['sleep', '1'], cwd=d)\n"
+                "        os.kill(p.pid, 15)\n")
+    check("the teardown scan finds a directory deleted under a live process",
+          _live_teardowns(_PLANTED, "planted.py") == ["planted.py:3"],
+          str(_live_teardowns(_PLANTED, "planted.py")))
+    _OK_SRC = ("import subprocess, tempfile\n"
+               "def go():\n"
+               "    with tempfile.TemporaryDirectory() as d:\n"
+               "        subprocess.run(['ls', d])\n")
+    check("...and does not flag one that only ran a command to completion",
+          not _live_teardowns(_OK_SRC, "ok.py"), str(_live_teardowns(_OK_SRC, "ok.py")))
+    _teardown = []
+    for _sp in sorted(glob.glob(os.path.join(HERE, "test_*.py"))):
+        _teardown += _live_teardowns(io.open(_sp, encoding="utf-8").read(),
+                                     os.path.basename(_sp))
+    check("no suite deletes a directory a process it started may still be in",
+          not _teardown, "; ".join(sorted(set(_teardown))[:8]))
+    # AND THE SCAN CAN SEE THE SHAPE IT IS ABOUT, or the claim above is about nothing: the
+    # suites DO use `TemporaryDirectory`, just not around a process.
+    _tmp_users = sum(
+        1 for _sp in sorted(glob.glob(os.path.join(HERE, "test_*.py")))
+        if "TemporaryDirectory" in io.open(_sp, encoding="utf-8").read())
+    check("...over the suites that use one at all", _tmp_users >= 5, str(_tmp_users))
+
     # --- A CONSTANT `workspace` OWNS, WRITTEN OUT AGAIN SOMEWHERE ELSE -----------------
     #
     # `workspace.BROKE` carries the comment that predicted this: the tuple `("EXPLOITED",
