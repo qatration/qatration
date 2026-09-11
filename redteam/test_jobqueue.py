@@ -500,6 +500,49 @@ def main():
     finally:
         shutil.rmtree(_tr, ignore_errors=True)
 
+    # --- THE ONE LINE A QUEUE READER GETS FOR A RUN THAT ENDED EARLY --------------------
+    #
+    # A run ends early for two reasons and only one of them is ours: the request budget the
+    # operator set, and the target refusing every attack until `GiveUpWall` gives up on it.
+    # The run record carries the reason in its own words and the queue's note asserted the
+    # other one over the top of it -- `budget stopped it: the endpoint answered every one of
+    # the last 5 with a rate limit` -- in the line a reader sees instead of the run.
+    import worker as _wk
+    _wall_note = ("the endpoint answered every one of the last 5 with a rate limit and has "
+                  "not answered anything else since; the remaining attacks were never sent")
+    _said = _wk.stopped_note({"note": _wall_note})
+    check("a run the target stopped is not reported as a budget of ours",
+          "budget" not in _said, _said)
+    check("...and the record's own reason is what is carried",
+          _wall_note in _said, _said)
+    check("...under a word that says it did not finish",
+          _said.startswith("stopped part way"), _said)
+    # AND OURS STILL READS AS OURS, because the record says so in its own words.
+    _ours = _wk.stopped_note({"note": "budget spent (requests); the remaining attacks were "
+                                      "never sent"})
+    check("a run our own budget stopped still says so", "budget spent (requests)" in _ours,
+          _ours)
+    # AND A RECORD THAT SAYS NOTHING GETS A SENTENCE RATHER THAN AN EMPTY ONE: a note that
+    # is blank reads as a job with nothing to report, which is the opposite of the truth.
+    check("...and a record with no reason still says the rest was not sent",
+          "the remaining attacks were not sent" in _wk.stopped_note({}),
+          _wk.stopped_note({}))
+    check("...and so does one that is missing entirely",
+          _wk.stopped_note(None) == _wk.stopped_note({}), _wk.stopped_note(None))
+    # AND THE JOB RUNNER ASKS IT. The rule above is only a fix while `execute` still calls
+    # it, and the one state that reaches it -- a queued sweep the target stopped part way --
+    # needs a queue, a worker and an endpoint that answers and then refuses.
+    import ast as _ast_w
+    _wsrc = open(os.path.join(os.path.dirname(os.path.abspath(_wk.__file__)),
+                              "worker.py"), encoding="utf-8").read()
+    _ex = next((_n for _n in _ast_w.walk(_ast_w.parse(_wsrc))
+                if isinstance(_n, _ast_w.FunctionDef) and _n.name == "execute"), None)
+    check("the job runner asks for that line rather than composing one",
+          bool(_ex) and any(isinstance(_c, _ast_w.Call)
+                            and getattr(_c.func, "id", "") == "stopped_note"
+                            for _c in _ast_w.walk(_ex)),
+          "execute does not call stopped_note")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

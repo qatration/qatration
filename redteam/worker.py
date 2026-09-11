@@ -116,6 +116,25 @@ def _run(cmd, out, python=None, deadline=None):
         return _Timeout(os.path.basename(cmd[0]), secs)
 
 
+def stopped_note(rec):
+    """-> the one line a queue reader gets for a run that ended early.
+
+    `stopped`, NOT `budget stopped`, which is what this said. A run ends early for two
+    reasons and only one of them is ours: the request budget the operator set, and the
+    target refusing every attack until `GiveUpWall` gives up on it. The record carries the
+    reason in its own words -- `the endpoint answered every one of the last 5 with a rate
+    limit and has not answered anything else since` -- and the prefix asserted the other one
+    over the top of it, in the line a queue reader sees instead of the run.
+
+    A function rather than a line inside `execute`, for the reason `audit_close` and
+    `closing_line` are functions: this is a sentence somebody reads to decide what to do
+    next, and inside the job runner it was reachable only by owning a queue and a target
+    that stops.
+    """
+    return "stopped part way: %s" % ((rec or {}).get("note")
+                                     or "the remaining attacks were not sent")
+
+
 def execute(job, root, python=None):
     """Baseline, then sweep, then the deliverable. Returns (state, note, run_id)."""
     out = run_dir(root, job)
@@ -172,12 +191,12 @@ def execute(job, root, python=None):
 
     # Join the job to the run it produced. The run record is the thing that knows what it cost
     # and how it ended; without the link, the queue can only say a job "finished" and the
-    # question an operator actually asks — how far did it get before the budget stopped it —
+    # question an operator actually asks — how far did it get before something stopped it —
     # has no answer.
     rec = (_runs.listing(out) or [None])[0]
     run_id = rec.get("run_id") if rec else None
     if rec and rec.get("state") == "stopped" and state == "done":
-        note = f"budget stopped it: {rec.get('note') or 'the remaining attacks were not sent'}"
+        note = stopped_note(rec)
     if state != "done" and not note:
         note = (proc.stderr or proc.stdout or "").strip()[-300:]
 
