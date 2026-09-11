@@ -305,6 +305,21 @@ def mapping_note(error):
             f"empty reply and an empty reply scores as a target that held.")
 
 
+# WHICH CODE EACH OF THEM IS, because the label already carries three answers and the exit
+# carried one. Both callers refused with 5 for all three, and `docs/ci.md` glosses 5 as "a
+# precondition failed - usually the canary was never planted, so nothing could have been
+# detected". A pipeline reading that over a refused connection sends somebody to the system
+# prompt they just edited, which is the stranger `unreachable_note` was written for.
+#
+#   NOT PLANTED  5  the precondition genuinely failed: the snippet is not in the deployment
+#   BAD MAPPING  2  the config was refused, which is what `onboard`'s own report exits 2 for
+#   NO ANSWER    3  the question could not be answered; nothing was measured
+#
+# Here rather than at either call site, for the reason `verify_refusal` is one function: two
+# callers asking one question must not answer it two ways.
+VERIFY_EXIT = {"NOT PLANTED": 5, "BAD MAPPING": 2, "NO ANSWER": 3}
+
+
 def verify_refusal(probe, verify):
     """-> None when the honeytoken is planted, else (label, sentence) saying why not.
 

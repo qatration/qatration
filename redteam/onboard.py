@@ -559,7 +559,10 @@ def main():
             if _why[0] == "NOT PLANTED":
                 print(f"\nwhat it said instead: {(probe.output or '')[:200]!r}",
                       file=sys.stderr)
-            sys.exit(5)
+            # THE CODE THE LABEL EARNS. All three exited 5, and 5 is documented as the
+            # canary one -- so a build that stopped here over a refused connection was told
+            # to go and look at a system prompt that was fine.
+            sys.exit(_ht.VERIFY_EXIT.get(_why[0], 5))
 
     ok, rep = check(args.config)
     render(ok, rep)

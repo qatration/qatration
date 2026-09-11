@@ -1829,7 +1829,7 @@ def main():
     # either page: a `sys.exit(n)`, a `raise SystemExit(n)` or a `return n` in any shipped
     # module is a code somebody can receive.
     import ast as _ast_x
-    _emitted = set()
+    _emitted, _refused, _tabled = set(), set(), set()
     for _fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
         if os.path.basename(_fp).startswith("test_"):
             continue
@@ -1861,10 +1861,44 @@ def main():
             if (isinstance(_v, _ast_x.Constant) and isinstance(_v.value, int)
                     and not isinstance(_v.value, bool) and 0 <= _v.value <= 9):
                 _emitted.add(_v.value)
+            # AND THE CODES THAT NEVER PASS THROUGH A LITERAL `sys.exit`. This scan is a SET,
+            # and the set was `a constant standing at an exit`. `run_redteam` refuses through
+            # `_refuse(code, note)` -- which writes the run record and THEN exits -- so every
+            # code it gives was invisible here, including two `_refuse(5, ...)` canary
+            # preconditions. The claim `every code the engine can emit is documented` held
+            # for 5 only because `onboard` happened to spell one `sys.exit(5)`; the moment
+            # that line became a lookup, the check reported 5 as a code nothing emits while
+            # the sweep went on emitting it.
+            if (isinstance(_n, _ast_x.Call)
+                    and getattr(_n.func, "id", "") in {"_refuse", "refuse"}
+                    and _n.args and isinstance(_n.args[0], _ast_x.Constant)
+                    and isinstance(_n.args[0].value, int)
+                    and not isinstance(_n.args[0].value, bool)
+                    and 0 <= _n.args[0].value <= 9):
+                _refused.add(_n.args[0].value)
+            # AND A TABLE THAT DECIDES ONE. `honeytoken.VERIFY_EXIT` maps three causes to
+            # three codes and is read by two commands; nothing at either call site is a
+            # constant, so the codes live only here.
+            if (isinstance(_n, _ast_x.Assign)
+                    and any(getattr(_tg, "id", "").endswith("_EXIT") for _tg in _n.targets)):
+                for _c in _ast_x.walk(_n.value):
+                    if (isinstance(_c, _ast_x.Constant) and isinstance(_c.value, int)
+                            and not isinstance(_c.value, bool) and 0 <= _c.value <= 9):
+                        _tabled.add(_c.value)
 
     def _documented(path):
         return {int(m.group(1)) for m in
                 re.finditer(r"^\| `(\d)` \| ", io.open(path, encoding="utf-8").read(), re.M)}
+
+    # NAMED APART AND THEN UNIONED, so each half can be shown to have found something. A
+    # scan that silently stops recognising a shape is a scan whose universal claim is about
+    # whatever it still sees, which is the defect this whole check exists to prevent one
+    # level up.
+    check("the scan can see the engine's refusal helper", len(_refused) >= 2,
+          str(sorted(_refused)))
+    check("...and the table that decides a code from a cause", len(_tabled) >= 2,
+          str(sorted(_tabled)))
+    _emitted |= _refused | _tabled
 
     _readme_codes = _documented(README)
     _ci_codes = _documented(os.path.join(ROOT, "docs", "ci.md"))

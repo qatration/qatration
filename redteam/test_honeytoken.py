@@ -265,6 +265,36 @@ def main():
     why = ht.verify_refusal(refused, verify)
     check("an endpoint that never answered is NO ANSWER, not NOT PLANTED",
           why is not None and why[0] == "NO ANSWER", str(why))
+    # AND THE LABEL DECIDES THE EXIT CODE. It decided nothing: both callers refused with 5
+    # for all three, and `docs/ci.md` glosses 5 as "a precondition failed - usually the
+    # canary was never planted". A build that stopped over a refused connection was told to
+    # go and look at a system prompt that was fine, which is the stranger `unreachable_note`
+    # was written for, arriving through the exit code instead of the sentence.
+    check("every label this function can return has a code of its own",
+          sorted(ht.VERIFY_EXIT) == ["BAD MAPPING", "NO ANSWER", "NOT PLANTED"],
+          str(sorted(ht.VERIFY_EXIT)))
+    check("...and they are three different codes, not one",
+          len(set(ht.VERIFY_EXIT.values())) == 3, str(ht.VERIFY_EXIT))
+    # THE CANARY CODE IS THE CANARY ONE, which is what the table documents it as.
+    check("...with 5 kept for the precondition that actually failed",
+          ht.VERIFY_EXIT["NOT PLANTED"] == 5, str(ht.VERIFY_EXIT["NOT PLANTED"]))
+    check("...3 for a question that could not be answered",
+          ht.VERIFY_EXIT["NO ANSWER"] == 3, str(ht.VERIFY_EXIT["NO ANSWER"]))
+    check("...and 2 for a config that was refused",
+          ht.VERIFY_EXIT["BAD MAPPING"] == 2, str(ht.VERIFY_EXIT["BAD MAPPING"]))
+    # AND THE TABLE IS QUANTIFIED OVER WHAT THE FUNCTION RETURNS, not over a list written
+    # beside it: a fourth label added tomorrow must not fall back to 5 in silence.
+    import ast as _ast_h
+    _hsrc = open(os.path.join(HERE, "honeytoken.py"), encoding="utf-8").read()
+    _vf = next((_n for _n in _ast_h.walk(_ast_h.parse(_hsrc))
+                if isinstance(_n, _ast_h.FunctionDef) and _n.name == "verify_refusal"), None)
+    _labels = {_e.value for _r in _ast_h.walk(_vf) if isinstance(_r, _ast_h.Return)
+               for _e in _ast_h.walk(_r)
+               if isinstance(_e, _ast_h.Constant) and isinstance(_e.value, str)
+               and _e.value.isupper()}
+    check("...over every label the function actually returns",
+          _labels == set(ht.VERIFY_EXIT), "%s vs %s" % (sorted(_labels),
+                                                        sorted(ht.VERIFY_EXIT)))
     check("...and the sentence quotes the transport error rather than the canary",
           why is not None and "10061" in why[1] and "snippet" not in why[1], str(why))
     check("...and still refuses the run, because nothing can be measured either way",

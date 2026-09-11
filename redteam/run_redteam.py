@@ -860,7 +860,11 @@ def main():
                      if _why[0] == "NOT PLANTED" else "")
             print(f"ABORT — {_why[1]}\n{_said}"
                   f"  nothing was sent and nothing was written.", file=sys.stderr)
-            _refuse(5, f"{_why[1]}; nothing was sent and nothing was written")
+            # THE CODE THE LABEL EARNS, through the one table that owns it. See
+            # `honeytoken.VERIFY_EXIT`: a refused connection is not a canary that was never
+            # planted, and 5 is documented as the second of those.
+            _refuse(_ht.VERIFY_EXIT.get(_why[0], 5),
+                    f"{_why[1]}; nothing was sent and nothing was written")
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
 
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,

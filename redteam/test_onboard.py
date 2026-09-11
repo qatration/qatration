@@ -552,6 +552,46 @@ def main():
         check("...it says there was no answer, and after how long",
               "no answer" in printed, printed[:200])
 
+        # --- THREE CAUSES, THREE PLACES TO GO, AND ONE EXIT CODE FOR ALL OF THEM ----------
+        #
+        # `qatration init` prints `onboard --verify-honeytoken ...` as the step after writing
+        # a config, so this is the first exit code a newcomer's pipeline ever sees. All three
+        # refusals gave 5, and `docs/ci.md` glosses 5 as "a precondition failed - usually the
+        # canary was never planted, so nothing could have been detected". A build stopped by
+        # a refused connection was told to go and look at a system prompt that was fine,
+        # which is the stranger `honeytoken.unreachable_note` was written for, arriving
+        # through the code rather than through the sentence.
+        def _verify(cfg_path, token="QAT-VERIFY-AAAA1111"):
+            return subprocess.run(
+                [sys.executable, os.path.join(HERE, "onboard.py"),
+                 "--target-config", cfg_path, "--verify-honeytoken", token],
+                capture_output=True, text=True, timeout=120)
+
+        _r_dead = _verify(dead)
+        check("a verify against an endpoint that does not answer is `nothing measured`",
+              _r_dead.returncode == 3, "exit %s: %s"
+              % (_r_dead.returncode, (_r_dead.stdout + _r_dead.stderr)[-200:]))
+        check("...and says so rather than naming the canary",
+              "NO ANSWER" in (_r_dead.stdout + _r_dead.stderr),
+              (_r_dead.stdout + _r_dead.stderr)[-200:])
+        _r_map = _verify(wrong)
+        check("a reply path that points nowhere is the config being refused",
+              _r_map.returncode == 2, "exit %s: %s"
+              % (_r_map.returncode, (_r_map.stdout + _r_map.stderr)[-200:]))
+        check("...and is called a mapping problem rather than an unplanted canary",
+              "BAD MAPPING" in (_r_map.stdout + _r_map.stderr),
+              (_r_map.stdout + _r_map.stderr)[-200:])
+        # AND THE ONE 5 IS ACTUALLY FOR: the endpoint answered, and the token is not in what
+        # it said. That is a precondition of the whole assessment and the code the table
+        # documents.
+        _r_plain = _verify(write("plainbot", "choices.0.message.content"))
+        check("a bot that answers without the token is still the canary precondition",
+              _r_plain.returncode == 5, "exit %s: %s"
+              % (_r_plain.returncode, (_r_plain.stdout + _r_plain.stderr)[-200:]))
+        check("...and it is the one that quotes what the bot said instead",
+              "what it said instead" in (_r_plain.stdout + _r_plain.stderr),
+              (_r_plain.stdout + _r_plain.stderr)[-300:])
+
         # --- nothing is queued for a config that failed the check --------------------------
         # A job submitted against an unreachable target is an hour of queue time spent to
         # produce the sentence this command already printed.

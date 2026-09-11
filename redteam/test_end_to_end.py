@@ -916,6 +916,33 @@ oracle_context:
             check("...and says the run stopped, which is why the other seven are missing",
                   "the run stopped: " in _c3, _c3)
 
+            # --- THE SWEEP'S HONEYTOKEN PREFLIGHT, AND WHICH CAUSE IT REFUSED FOR ------
+            #
+            # `run` confirms a declared honeytoken reached the deployment before it sends a
+            # single attack, and refused with 5 whatever the reason. `docs/ci.md` glosses 5 as
+            # "a precondition failed - usually the canary was never planted, so nothing could
+            # have been detected", so a build stopped by a refused connection was sent to a
+            # system prompt that was fine. `honeytoken.VERIFY_EXIT` owns the mapping now and
+            # this is its second caller -- the one no fixture reached, because no shipped
+            # config declares a honeytoken at all.
+            _hcfg = os.path.join(_lw, "targets_htbot.yaml")
+            with open(_hcfg, "w", encoding="utf-8") as _f:
+                _f.write('name: htbot\nadapter: http\nurl: "http://127.0.0.1:1/c"\n'
+                         'request:\n  message: "{prompt}"\nresponse:\n  reply: "reply"\n'
+                         'oracle_context:\n  canaries: ["QAT-CANARY-AAAA1111BBBB2222"]\n'
+                         '  honeytoken_verify: "QAT-VERIFY-AAAA1111"\n')
+            _hr = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                 "--target-config", _hcfg, "--attacks", _latk, "--trials", "1",
+                 "--overwrite-evidence"],
+                capture_output=True, text=True, timeout=600,
+                env=dict(env, QATRATION_OUT=_lw), cwd=os.path.dirname(HERE))
+            _ho = (_hr.stdout or "") + (_hr.stderr or "")
+            check("a sweep whose honeytoken probe never reached the endpoint says NO ANSWER",
+                  "NO ANSWER" in _ho or "did not answer" in _ho, _ho[-300:])
+            check("...and answers `nothing measured` rather than the canary precondition",
+                  _hr.returncode == 3, "exit %s: %s" % (_hr.returncode, _ho[-200:]))
+
             # --- AND THE OTHER WAY A TARGET STOPS BEING USABLE -------------------------
             #
             # The wall was written against an endpoint answering 429 to everything. The
