@@ -431,6 +431,48 @@ def main():
     finally:
         _sh_r.rmtree(_w, ignore_errors=True)
 
+    # --- `HOW DID IT END` ANSWERED WITH ONE WORD ----------------------------------------
+    #
+    # This module opens by saying it answers four things somebody will actually ask, and
+    # `how did it end` is one of them. The listing answered with a single word -- `stopped`,
+    # `aborted`, `failed` -- while the record beside it carried the sentence: `no attack in
+    # this arsenal applies to guardedrag-mitigated`, `stopped by hand after 7 of 357 attacks
+    # in 42 minutes`, `budget spent (requests)`. Three endings that send a reader to three
+    # different places, printed as one word each.
+    #
+    # The module already composes this sentence for the SCORECARD -- `unfinished_note` puts
+    # it on the page built from the artifact -- and the command whose whole subject is the
+    # records did not carry it.
+    from runs import ending as _ending
+    _stopped = {"state": "stopped", "note": "budget spent (requests); the remaining "
+                                            "attacks were never sent"}
+    check("a run that did not finish says why, in the record's own words",
+          _ending(_stopped) == _stopped["note"], _ending(_stopped))
+    check("...and a run that finished says nothing, so the reason stays worth reading",
+          _ending({"state": "finished", "note": "anything"}) == "",
+          repr(_ending({"state": "finished", "note": "anything"})))
+    # `started` IS A DIFFERENT QUESTION and has its own heading: not why it ended, but
+    # whether it has. `open_verdict` answers that one and this must not double it.
+    check("...and an open run is left to the section that asks whether it ended",
+          _ending({"state": "started", "note": "anything"}) == "",
+          repr(_ending({"state": "started", "note": "anything"})))
+    check("...and a record with no note claims nothing",
+          _ending({"state": "aborted"}) == "", repr(_ending({"state": "aborted"})))
+    check("...and neither does a record that is not there",
+          _ending(None) == "", repr(_ending(None)))
+    # AND THE COMMAND PRINTS IT. The rule is only a fix while `main` still asks for it, and
+    # the records that reach it are somebody's workspace rather than a fixture.
+    import ast as _ast_r, runs as _runs_r
+    _rsrc = open(os.path.join(os.path.dirname(os.path.abspath(_runs_r.__file__)),
+                              "runs.py"), encoding="utf-8").read()
+    _main = next((_n for _n in _ast_r.walk(_ast_r.parse(_rsrc))
+                  if isinstance(_n, _ast_r.FunctionDef) and _n.name == "main"), None)
+    check("the listing asks for the reason rather than printing the state alone",
+          bool(_main) and any(isinstance(_c, _ast_r.Call)
+                              and getattr(_c.func, "id", "") == "ending"
+                              for _c in _ast_r.walk(_main)),
+          "main does not call ending")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -248,6 +248,29 @@ def summarise(rec):
             f"{str(rec.get('target','?')) + '  ':<26}"
             f"scope={_scope(rec):<6}auth={auth:<11}{cost}")
 
+def ending(rec):
+    """-> why this run ended, for the line under its row, or "" when it finished.
+
+    `runs` opens by saying it answers four things somebody will actually ask, and `how did
+    it end` is one of them. It answered with a single word -- `stopped`, `aborted`, `failed`
+    -- while the record beside it carried the sentence: `budget spent (requests); the
+    remaining attacks were never sent`, `no attack in this arsenal applies to draftbot`,
+    `the endpoint answered every one of the last 5 with a rate limit`. Three endings that
+    send a reader to three different places, printed as one word each.
+
+    The evidence was in the record and the module even composes this sentence already, for
+    the SCORECARD: `unfinished_note` puts it on the page built from the artifact, and the
+    command whose whole subject is the records did not carry it.
+
+    Empty for a run that finished, because a reason under every row is a reason nobody
+    reads, and empty for `started` -- those get `open_verdict` under their own heading,
+    which answers a different question: not why it ended, but whether it has.
+    """
+    if not rec or rec.get("state") in ("finished", "started", None):
+        return ""
+    return (rec.get("note") or "").strip()
+
+
 def _say_torn(torn, args):
     """Which records could not be read, and what a filter cannot claim about them."""
     if not torn:
@@ -321,6 +344,12 @@ def main(argv=None):
     shown = picked if args.limit <= 0 else picked[:args.limit]
     for rec in shown:
         print(summarise(rec))
+        # UNDER THE ROW RATHER THAN IN IT. The reason is a sentence and the row is a table;
+        # joined, the columns stop lining up and the sentence is cut at whatever width the
+        # last one left. Same shape as the open-runs section below.
+        _why = ending(rec)
+        if _why:
+            print("    %s" % _why)
     if len(shown) < len(picked):
         print(f"  ... and {len(picked) - len(shown)} more (--limit 0 for all)")
 
