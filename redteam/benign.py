@@ -385,7 +385,7 @@ def _deliver(target, delivery, steps):
     return p
 
 
-def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
+def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=None):
     rows = []
     items = ([(cid, pr, "direct", [t]) for cid, pr, t in corpus]
              + [tuple(c) for c in conversations])
@@ -398,7 +398,11 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True):
     # sent 48 requests at one answering 429 to every single one. `run` learned this a
     # commit ago; the counter is shared rather than written twice.
     from runner import GiveUpWall as _Wall
-    _wall = _Wall()
+    # INJECTABLE, because the CALLER has to know whether this stopped. `run` returns rows and
+    # rows cannot say why they ran out: the command printed "a baseline measured against a
+    # wall is not a baseline" and then wrote one, because the only thing that crossed back
+    # was the list. Same seam as `verify_target`'s `build_check` and `check_row`'s `send`.
+    _wall = wall if wall is not None else _Wall()
     for cid, provokes, delivery, steps in items:
         if _wall.reason:
             break
@@ -1171,7 +1175,10 @@ def main():
 
     print(f"benign corpus -> {args.target}  ({len(CORPUS)} prompts + "
           f"{len(CONVERSATIONS)} conversations x{args.trials})\n")
-    rows = run(target, ctx, conversations=CONVERSATIONS, trials=args.trials)
+    from runner import GiveUpWall as _Wall_m
+    _wall_m = _Wall_m()
+    rows = run(target, ctx, conversations=CONVERSATIONS, trials=args.trials,
+               wall=_wall_m)
     s = summary(rows)
     print(f"\n{s['clean']}/{s['probes']} clean · {s['refused']} refused · "
           f"{s['skipped']} skipped · {s['errors']} errors"
@@ -1225,6 +1232,33 @@ def main():
         print(f"\nNOTHING MEASURED — {how} (is {args.target} up, and is it answering?). "
               f"No baseline written: an unmeasured target must not read as a quiet one.",
               file=sys.stderr)
+        sys.exit(3)
+
+    # AND A CORPUS CUT SHORT IS NOT A SMALLER CORPUS. The wall prints `a baseline measured
+    # against a wall is not a baseline` and this went on to write one. Walked against an
+    # endpoint that answered twenty probes and then rate-limited everything: twenty-five of
+    # fifty sent, `benign_<target>.json` on disk, exit 0.
+    #
+    # A SMALLER SAMPLE WOULD BE SURVIVABLE; A BIASED ONE IS NOT. This corpus is an ORDERED
+    # list, so a run that stops takes the same tail off every time -- `hours`, `policy`,
+    # `how-to`, `status`, `apology`, `detail` and all three conversations, on the walk above.
+    # The detectors only those prompts reach then have nothing on this target, and the
+    # roll-up reports them as SILENT ON CLEAN TRAFFIC, which is the one claim this file
+    # exists to make. `roll_up` also adds the truncated count to the clean-traffic total,
+    # diluting the false-alarm rate this project publishes.
+    #
+    # So: nothing written, and 3 rather than 0. An absent baseline is a state the engine
+    # already handles out loud -- the sweep prints `no benign run for X, every verdict below
+    # is unattributed` -- and a wrong one is a state nothing can see.
+    if _wall_m.reason:
+        _corpus_n = (len(CORPUS) + len(CONVERSATIONS)) * max(1, args.trials)
+        print("\nNOT A BASELINE — the run stopped after %d of %d probe(s): %s.\n"
+              "  %s\n"
+              "  Nothing was written. This corpus is an ordered list, so a run cut short is "
+              "a BIASED sample\n  rather than a smaller one: the detectors its tail would "
+              "have reached have nothing on this\n  target, and a roll-up reports those as "
+              "silent on clean traffic."
+              % (s["probes"], _corpus_n, _wall_m.reason, _wall_m.advice), file=sys.stderr)
         sys.exit(3)
 
     # THROUGH `workspace.artifact`, which makes the directory. See its docstring: this line

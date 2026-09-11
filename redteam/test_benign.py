@@ -938,12 +938,23 @@ def main():
     from http.server import BaseHTTPRequestHandler as _BH_b
     from http.server import ThreadingHTTPServer as _TS_b
     from runner import GIVE_UP_AFTER as _GIVE_B
-    _bhits, _ball = [], {"v": True}
+    _bhits, _ball, _bafter = [], {"v": True}, {"n": 0}
 
     class _Limiting(_BH_b):
         def do_POST(self):
             self.rfile.read(int(self.headers.get("content-length") or 0))
             _bhits.append(1)
+            # ANSWER THE FIRST N, THEN REFUSE EVERYTHING. The commonest real shape, and the
+            # one that produced a written baseline: a metered endpoint whose quota runs out
+            # part way through the corpus.
+            if _bafter["n"] and len(_bhits) <= _bafter["n"]:
+                _bb = _js8.dumps({"reply": "Shipping takes 3-5 days."}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_bb)))
+                self.end_headers()
+                self.wfile.write(_bb)
+                return
             if not _ball["v"] and (len(_bhits) - 1) % 5 == 4:
                 _bb = _js8.dumps({"reply": "Shipping takes 3-5 days."}).encode()
                 self.send_response(200)
@@ -998,6 +1009,40 @@ def main():
               "STOPPED" not in _bo2, _bo2[-400:])
         check("...and reaches the whole corpus", _bn2 > _bn * 4,
               "%d probe(s) against %d" % (_bn2, _bn))
+        # AND THAT ONE LEAVES A BASELINE, which is what makes the refusal below a refusal
+        # rather than a command that never writes.
+        check("...and writes the baseline it measured",
+              os.path.exists(os.path.join(_bw, "benign_rlbot.json")),
+              str(sorted(os.listdir(_bw))))
+
+        # --- A CORPUS CUT SHORT IS NOT A SMALLER CORPUS ------------------------------
+        #
+        # The wall prints `a baseline measured against a wall is not a baseline` and the
+        # command went on to write one: `run` returns rows and rows cannot say why they ran
+        # out, so the only thing that crossed back was the list. Walked against an endpoint
+        # that answered twenty probes and then rate-limited everything: twenty-five of fifty
+        # sent, `benign_<target>.json` on disk, exit 0.
+        #
+        # A smaller sample would be survivable; a BIASED one is not. This corpus is an
+        # ordered list, so a run that stops takes the same tail off every time, the
+        # detectors only those prompts reach have nothing on this target, and the roll-up
+        # reports them as silent on clean traffic -- the one claim this file exists to make.
+        os.remove(os.path.join(_bw, "benign_rlbot.json"))
+        _bafter["n"] = 20
+        _bc3, _bo3, _bn3 = _bench(True)
+        check("a baseline the wall cut short is not written",
+              not os.path.exists(os.path.join(_bw, "benign_rlbot.json")),
+              str(sorted(os.listdir(_bw))))
+        check("...and it is the partial case rather than a target that never answered",
+              "NOT A BASELINE" in _bo3 and "NOTHING MEASURED" not in _bo3, _bo3[-500:])
+        check("...saying how much of the corpus it got through",
+              "the run stopped after" in _bo3 and "of %d probe(s)"
+              % (len(CORPUS) + len(CONVERSATIONS)) in _bo3, _bo3[-500:])
+        check("...and why a shorter corpus is not a smaller one",
+              "BIASED sample" in _bo3, _bo3[-500:])
+        check("...and it is nothing measured, not a clean baseline", _bc3 == 3,
+              "exit %s" % _bc3)
+        _bafter["n"] = 0
 
         # AND THE OTHER WAY A TARGET STOPS BEING USABLE. This is the command the
         # documentation tells an operator to run FIRST, before a single attack, against an
