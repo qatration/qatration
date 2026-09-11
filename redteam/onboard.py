@@ -188,6 +188,19 @@ def check(cfg_path, probe_text=PROBE):
     from honeytoken import weak_canaries as _weak
     for _c, _why in _weak((cfg or {}).get("oracle_context") or {}):
         rep["notes"].append("canary %r %s" % (_c, _why))
+    # AND WHETHER THE TEMPLATE'S OWN WORDS ARE STILL IN IT. `init` writes `YOUR-MODEL-ID`
+    # expecting the endpoint to reject it, which is true of an API that validates the field
+    # and false of every local server that ignores it -- so the run goes out against
+    # whatever model that server picks, and every artifact records the placeholder as the
+    # model tested. This command exists to answer `what is wrong with my config`, and it
+    # printed `ready to queue` over one nobody had finished.
+    from init_config import placeholders_left as _placeholders
+    for _where, _what in _placeholders(cfg):
+        rep["notes"].append(
+            "%s is still %r, the placeholder `qatration init` wrote. Your endpoint answered "
+            "anyway, so it is ignoring the field: the run will go against whatever model it "
+            "picks, and every artifact will record %r as the one tested."
+            % (_where, _what, _what))
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "

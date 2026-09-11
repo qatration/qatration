@@ -139,6 +139,23 @@ def main():
     check("there are shipped configs to check", len(_seen_cfgs) >= 20, str(len(_seen_cfgs)))
     check("no shipped config declares a context key nothing reads", not _bad, str(_bad))
 
+    # --- THE TEMPLATE'S OWN WORDS, STILL IN THE CONFIG --------------------------------
+    #
+    # `init` writes `model: YOUR-MODEL-ID` expecting the endpoint to reject it, which is
+    # true of an API that validates the field and false of Ollama, LM Studio, vLLM and any
+    # hand-written `request:` shape. Walked from a fresh `init` against an endpoint that
+    # answers: the body went out as `{"model": "YOUR-MODEL-ID", ...}`, and this command --
+    # whose whole job is `what is wrong with my config` -- printed the reply and `ready to
+    # queue`. `workspace.config_model` reads that field into `meta["model"]`, so the run's
+    # artifact, scorecard, SARIF export and model confound would all have recorded the
+    # placeholder as the model tested.
+    import init_config as _ic_o
+    _ok_ph, _rep_ph = True, {"notes": []}
+    _cfg_ph = {"request": {"model": _ic_o.DEFAULT_MODEL}}
+    check("the placeholder rule is the template's own, not a second spelling of it",
+          _ic_o.placeholders_left(_cfg_ph) == [("request.model", _ic_o.DEFAULT_MODEL)],
+          str(_ic_o.placeholders_left(_cfg_ph)))
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Bot)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -551,6 +568,34 @@ def main():
               printed[:200])
         check("...it says there was no answer, and after how long",
               "no answer" in printed, printed[:200])
+
+        # AND THE NOTE REACHES THE REPORT, on a config that still carries it and an
+        # endpoint that answers anyway. A rule nothing renders is a rule nobody reads.
+        _ph_cfg = write("phbot", "choices.0.message.content",
+                        extra="")
+        _ph_src = io.open(_ph_cfg, encoding="utf-8").read().replace(
+            "model: scripted", "model: %s" % _ic_o.DEFAULT_MODEL)
+        io.open(_ph_cfg, "w", encoding="utf-8", newline="").write(_ph_src)
+        _ph_ok, _ph_rep = onboard.check(_ph_cfg)
+        check("a config still carrying the template's model placeholder is noted",
+              any("still" in _n and _ic_o.DEFAULT_MODEL in _n for _n in _ph_rep["notes"]),
+              str(_ph_rep["notes"])[:300])
+        check("...and says the endpoint is ignoring the field rather than failing the run",
+              any("ignoring the field" in _n for _n in _ph_rep["notes"]),
+              str(_ph_rep["notes"])[:300])
+        check("...and what every artifact would then record",
+              any("as the one tested" in _n for _n in _ph_rep["notes"]),
+              str(_ph_rep["notes"])[:300])
+        # A NOTE RATHER THAN A PROBLEM: the mapping works, and refusing here would block a
+        # reader whose endpoint genuinely ignores the field and who knows it.
+        check("...and it does not fail the check, because the mapping is fine", _ph_ok,
+              str(_ph_rep["problems"])[:200])
+        # AND A CONFIG SOMEBODY FILLED IN CARRIES NO SUCH NOTE, or the caveat lands on every
+        # onboarding and stops being read.
+        _fine_ok, _fine_rep = onboard.check(write("finebot", "choices.0.message.content"))
+        check("...while a config with a real model id is not told about a placeholder",
+              not any(_ic_o.DEFAULT_MODEL in _n for _n in _fine_rep["notes"]),
+              str(_fine_rep["notes"])[:200])
 
         # --- THREE CAUSES, THREE PLACES TO GO, AND ONE EXIT CODE FOR ALL OF THEM ----------
         #

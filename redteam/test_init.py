@@ -50,7 +50,74 @@ def check(label, ok, detail=""):
         fails.append("%s: %s" % (label, detail))
 
 
+def _placeholder_checks():
+    """The template's own words, and who notices when they are still there.
+
+    `DEFAULT_MODEL` is written to be rejected -- the comment above it says a plausible id
+    "reads as configured and gets sent", so this one "cannot be mistaken for an answer".
+    That holds on an API that VALIDATES the field, and Ollama, LM Studio, vLLM and any
+    hand-written `request:` shape do not. Walked from a fresh `init` against an endpoint
+    that answers: the body went out as `{"model": "YOUR-MODEL-ID", ...}`, `onboard` printed
+    the reply and `ready to queue`, and nothing said the field was never filled in.
+
+    `workspace.config_model` reads `request.model`, so the run's artifact, its scorecard,
+    its SARIF export and `history`'s model confound would every one of them have recorded
+    YOUR-MODEL-ID as the model tested -- a report that cannot say what it was about.
+    """
+    import init_config as _ic
+    _fresh = {"request": {"model": _ic.DEFAULT_MODEL}}
+    check("the template's own model placeholder is recognised when it is still there",
+          _ic.placeholders_left(_fresh) == [("request.model", _ic.DEFAULT_MODEL)],
+          str(_ic.placeholders_left(_fresh)))
+    check("...and a config somebody filled in carries none",
+          _ic.placeholders_left({"request": {"model": "llama3.2:3b"}}) == [],
+          str(_ic.placeholders_left({"request": {"model": "llama3.2:3b"}})))
+    check("...and a config with no request block is not accused of anything",
+          _ic.placeholders_left({}) == [], str(_ic.placeholders_left({})))
+    check("...nor is one whose model is empty, which is a different mistake",
+          _ic.placeholders_left({"request": {"model": ""}}) == [],
+          str(_ic.placeholders_left({"request": {"model": ""}})))
+    # AND WHAT `init` ACTUALLY WRITES IS WHAT THE RULE LOOKS FOR, or the two drift and the
+    # rule is about a string nothing produces.
+    _written = yaml.safe_load(_ic.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                         verify="QAT-VERIFY-AAAA1111")) or {}
+    check("...and the config this template writes is one of them",
+          bool(_ic.placeholders_left(_written)), str(_ic.placeholders_left(_written)))
+
+    # AND BOTH COMMANDS THAT SEND TRAFFIC ASK. `onboard` answers "what is wrong with my
+    # config" and `run` writes the artifact that records the model; a reader can skip the
+    # first, so the second cannot rely on it.
+    # AS A CALL, NOT AS A SUBSTRING. Written as `is the name in the source`, this passed on
+    # a module that imported the rule and then iterated an empty list -- the name was there
+    # and the function was not being used, which is the shape this repository has already
+    # been caught by once.
+    import ast as _ast_i
+    for _mod in ("onboard.py", "run_redteam.py"):
+        _tree = _ast_i.parse(io.open(os.path.join(HERE, _mod), encoding="utf-8").read())
+        # THE LOCAL NAME, because both callers import it under an alias. A check written
+        # against the original spelling looks at a name neither file uses.
+        _bound = {(_a.asname or _a.name) for _n in _ast_i.walk(_tree)
+                  if isinstance(_n, _ast_i.ImportFrom) and _n.module == "init_config"
+                  for _a in _n.names if _a.name == "placeholders_left"}
+        _calls = [_n for _n in _ast_i.walk(_tree)
+                  if isinstance(_n, _ast_i.Call)
+                  and getattr(_n.func, "id", "") in _bound and _n.args]
+        check("%s asks which placeholders are left" % _mod,
+              bool(_bound) and bool(_calls),
+              "bound as %s, %d call(s) with an argument" % (sorted(_bound), len(_calls)))
+
+    # AND THE PLACEHOLDER HAS TO LOOK LIKE ONE. The comment above `DEFAULT_MODEL` is the
+    # whole argument for its value: "a plausible one reads as configured and gets sent, and
+    # the endpoint's rejection then looks like the tool rather than the placeholder. This
+    # one cannot be mistaken for an answer." Nothing kept it that way, so the value could
+    # become `gpt-4o` with every check here green -- and a reader would then see a real
+    # model id in their config and take it for a decision somebody made.
+    check("the placeholder cannot be mistaken for a model somebody meant",
+          "YOUR" in _ic.DEFAULT_MODEL.upper(), _ic.DEFAULT_MODEL)
+
+
 def main():
+    _placeholder_checks()
     text = init_config.render(out="mybot.yaml", url="https://bot.example.com/chat",
                               name="mybot")
 

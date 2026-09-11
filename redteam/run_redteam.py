@@ -937,6 +937,17 @@ def main():
     from honeytoken import weak_canaries as _weak_canaries
     for _c, _why in _weak_canaries(ctx):
         print("  ! canary %r %s" % (_c, _why))
+    # AND THE TEMPLATE'S OWN WORDS, IF THEY ARE STILL THERE. `onboard` says this too and a
+    # reader can skip `onboard`; this is the command that writes the artifact, and
+    # `config_model` reads `request.model` straight into `meta["model"]`, from where the
+    # scorecard, the SARIF export and `history`'s model confound all take it. A report
+    # naming YOUR-MODEL-ID cannot say what it was about.
+    from init_config import placeholders_left as _placeholders
+    for _where, _what in _placeholders(tcfg):
+        print("  ! %s is still %r, the placeholder `qatration init` wrote. This endpoint "
+              "answers\n    anyway, so it is ignoring the field, and every artifact this "
+              "run writes will record\n    %r as the model that was tested."
+              % (_where, _what, _what))
     # SCOPING IS ONE RULE IN ONE PLACE. `run_isolation` had the same expression written
     # out again, and the hazard they share does not survive being copied: an `applies_to`
     # without brackets is a string, and `name in "httpbot"` is a substring test.

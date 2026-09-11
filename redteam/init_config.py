@@ -39,6 +39,30 @@ DEFAULT_URL = "http://localhost:8000/chat"
 # rather than the placeholder. This one cannot be mistaken for an answer.
 DEFAULT_MODEL = "YOUR-MODEL-ID"
 
+def placeholders_left(cfg):
+    """-> [(where, what)] for the template's own words still sitting in a config.
+
+    `DEFAULT_MODEL` is written to be rejected: the comment above it says a plausible id
+    "reads as configured and gets sent", so this one "cannot be mistaken for an answer".
+    That works on an endpoint that VALIDATES the field. Ollama, LM Studio, vLLM and any
+    hand-written `request:` shape do not, and there the rejection never comes.
+
+    Walked from a fresh `init` against an endpoint that answers: the request body went out
+    as `{"model": "YOUR-MODEL-ID", ...}`, `onboard` printed the reply and `ready to queue`,
+    and nothing said the field was never filled in. `workspace.config_model` reads
+    `request.model`, so the run's artifact, its scorecard, its SARIF export and `history`'s
+    model confound would every one of them record YOUR-MODEL-ID as the model that was
+    tested -- a report that cannot say what it was about.
+
+    Here, beside the value, because a rule about the template belongs with the template and
+    the alternative is the string spelled a second time in whatever reads it.
+    """
+    out = []
+    if str(((cfg or {}).get("request") or {}).get("model") or "").strip() == DEFAULT_MODEL:
+        out.append(("request.model", DEFAULT_MODEL))
+    return out
+
+
 # The template is a format string with four holes and no logic. It is checked by
 # `redteam/test_init.py`, which parses what this writes and BUILDS a real target out of it, so
 # a key that the adapter would reject cannot survive here -- the alternative is a second,
