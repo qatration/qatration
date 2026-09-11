@@ -449,6 +449,16 @@ def _pattern_positions(tree, src, det, list_name):
                if isinstance(n, ast.FunctionDef) and n.name == det), None)
     if fn is None:
         return (), "there is no %s to read" % det
+    # THE LIST HANDED WHOLE TO A HELPER THAT UNPACKS IT. `_hits(out, _rules(DECLINE))`
+    # binds nothing here, so the loop below has nothing to read; the helper says which
+    # half it keeps and that is the same answer one call further out.
+    unpack = _unpackers(tree)
+    for call in ast.walk(fn):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                and call.func.id in unpack and call.args
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id == list_name):
+            return (unpack[call.func.id],), ""
     for node in ast.walk(fn):
         if not isinstance(node, (ast.For, ast.comprehension)):
             continue
@@ -482,6 +492,39 @@ def _pattern_positions(tree, src, det, list_name):
 _RE_METHODS = ("search", "match", "fullmatch", "finditer", "findall", "sub", "split")
 
 
+def _unpackers(tree):
+    """-> {helper: which index of a pair it returns}.
+
+    A THIRD WAY TO SAY WHICH HALF IS THE RULE. `refusal.py` does not unpack its pairs at
+    the call site at all — six lists are read as `_hits(out, _rules(DECLINE))`, and
+    `_rules` is `[p for p, _ in pairs]`. Nothing in the reading function binds the two
+    names, so the loop-based derivation has nothing to look at and the whole module
+    comes back as `cannot tell which half is the rule`.
+
+    Derived from the helper rather than assumed: the comprehension names one of the
+    targets it binds, and which one is the answer. A helper that returns something else
+    is not an unpacker and is not listed.
+    """
+    out = {}
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        rets = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
+        if len(rets) != 1 or not isinstance(rets[0].value, ast.ListComp):
+            continue
+        comp = rets[0].value
+        if len(comp.generators) != 1:
+            continue
+        tgt = comp.generators[0].target
+        if not isinstance(tgt, (ast.Tuple, ast.List)):
+            continue
+        names = [e.id if isinstance(e, ast.Name) else None for e in tgt.elts]
+        if not isinstance(comp.elt, ast.Name) or comp.elt.id not in names:
+            continue
+        out[fn.name] = names.index(comp.elt.id)
+    return out
+
+
 def _never_matches(node):
     """-> source that matches nothing, in the shape the rule is written in, or None.
 
@@ -498,7 +541,7 @@ def _never_matches(node):
         return 're.compile("ZZ-MATCHES-NOTHING")'
     return None
 
-def sweep_patterns():
+def sweep_patterns(modules=SWEPT_MODULES):
     """Neutralise each pattern in a detector's rule list; report the ones nothing missed.
 
     `sweep_rules` reads `return True`, so a rule that lives as an ELEMENT of a pattern
@@ -517,7 +560,18 @@ def sweep_patterns():
     mentioned no absence. A number that reads as coverage over a set nobody named is the
     defect this whole tool is pointed at, arrived at from the inside.
     """
-    path = os.path.join(RT, "oracle.py")
+    total, free, skipped = 0, [], []
+    for mod in modules:
+        total_here, free_here, skipped_here = _sweep_patterns_in(mod)
+        total += total_here
+        free += free_here
+        skipped += skipped_here
+    return total, free, skipped
+
+
+def _sweep_patterns_in(mod):
+    """One module's pattern rules, neutralised one at a time."""
+    path = os.path.join(RT, mod)
     orig = io.open(path, encoding="utf-8").read()
     tree = ast.parse(orig)
     lists = {}
@@ -545,7 +599,12 @@ def sweep_patterns():
     # a list of rules, then reports nineteen of them as untested.
     used = {}
     for node in ast.walk(tree):
-        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("d_")):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        # A DETECTOR IN `oracle.py`, ANY FUNCTION ANYWHERE ELSE. `d_` is what a rule
+        # list's reader is called there and nowhere else; asking for it in another
+        # module selects nothing and reports the file clean.
+        if mod == "oracle.py" and not node.name.startswith("d_"):
             continue
         for ref in ast.walk(node):
             if (isinstance(ref, ast.Name) and ref.id in lists
@@ -570,7 +629,8 @@ def sweep_patterns():
                     # CANNOT TELL WHICH HALF IS THE RULE, and that is a result of its
                     # own: guessing invents findings, and staying quiet about it is
                     # how five rules went untested behind a number that read clean.
-                    skipped.append((name, det, why or "no index inside this entry"))
+                    skipped.append((mod, name, det,
+                                    why or "no index inside this entry"))
                     continue
                 targets = [el.elts[p] for p in here]
             else:
@@ -579,8 +639,14 @@ def sweep_patterns():
                 if _never_matches(target):
                     sites.append((name, det, i, target))
                 else:
-                    skipped.append((name, det, "the rule is not a literal or a compile"))
-    assert _run("test_oracle.py") == 0, "test_oracle is not green to begin with"
+                    skipped.append((mod, name, det,
+                                    "the rule is not a literal or a compile"))
+    suites = ["test_oracle.py"] if mod == "oracle.py" else _suites_touching(mod)
+    if not suites:
+        print("  ! nothing imports %s, so its silence here is not a result" % mod)
+        return 0, [], []
+    for s in suites:
+        assert _run(s) == 0, "%s is not green to begin with" % s
     free = []
     with source_restored(path):
         for name, det, i, node in sites:
@@ -595,7 +661,7 @@ def sweep_patterns():
                 lines[ln:node.end_lineno] = [
                     head + lines[node.end_lineno - 1][node.end_col_offset:]]
             write_mutant(path, "\n".join(lines), orig)
-            red = _run("test_oracle.py")
+            red = any(_run(s) for s in suites)
             clear_mutant(path, orig)
             # WHICH RULE, not which entry: an entry can hold two, and `danger` with a
             # case beside `safe` without one is the difference between a detector that
@@ -604,8 +670,9 @@ def sweep_patterns():
             print("  %-20s %-26s %s  %s"
                   % (name, det, "kept" if red else "NO CASE OF ITS OWN", shown[:44]))
             if not red:
-                free.append((name, det, shown))
-    assert _run("test_oracle.py") == 0, "oracle.py was not restored"
+                free.append((mod, name, det, shown))
+    for s in suites:
+        assert _run(s) == 0, "%s was not restored" % mod
     return len(sites), free, skipped
 
 
@@ -788,8 +855,8 @@ def main(argv):
         swept += n
         print("\n%d pattern rule(s) tested, %d with no case of their own"
               % (n, len(free)))
-        for name, det, pat in free:
-            print("  %-20s %-26s %s" % (name, det, pat[:60]))
+        for mod, name, det, pat in free:
+            print("  %-12s %-18s %-24s %s" % (mod, name, det, pat[:48]))
         # SAY WHAT WAS NOT LOOKED AT, the same debt the guard arm above pays. This arm
         # ran for a week counting eighty-two and never mentioning the five it walked
         # past, which is a number that reads as coverage of a set nobody named.
@@ -798,7 +865,7 @@ def main(argv):
                   "  They were not touched, and their silence here is not a result."
                   % len(skipped))
             for _k in sorted(set(skipped)):
-                print("    %-20s %-26s %s" % _k)
+                print("    %-12s %-18s %-24s %s" % _k)
         bad += len(free)
     if both or args.refusals:
         print("\n=== guards against false positives ===")

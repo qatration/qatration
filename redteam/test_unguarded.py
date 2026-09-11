@@ -665,7 +665,8 @@ def main():
             + "assert oracle.d_pair('a zzdanger reply', {})" + chr(10)
             + "assert not oracle.d_pair('zzdanger but zzexcuse', {})" + chr(10)
             + "print('ok')" + chr(10))
-        _n_p, _free_p, _skip_p = unguarded.sweep_patterns()
+        # NAMED, because the arm's default is two modules now and this fixture has one.
+        _n_p, _free_p, _skip_p = unguarded.sweep_patterns(("oracle.py",))
     finally:
         unguarded.RT = _old_rt2
         _sh_p.rmtree(_pw, ignore_errors=True)
@@ -678,22 +679,65 @@ def main():
     # an arm that never looked at K, which is the whole defect wearing the check's own
     # clothes. `zzmerged` has no case in the fixture suite, so the arm has to report it.
     check("...including one merged into a local before it is read",
-          "K" in [f[0] for f in _free_p], str(_free_p))
+          "K" in [f[1] for f in _free_p], str(_free_p))
     # ...AND A NAME IN A COMMENT IS NOT A READ. Selecting on text rather than on the tree
     # picks up prose, and `ALWAYS_PARTIAL` is named in two comments inside detectors --
     # nineteen detector names that would have been reported as untested rules.
     check("...and a list only named in prose is not swept as rules",
-          not any(f[0] == "GHOSTS" for f in _free_p + _skip_p), str(_free_p + _skip_p))
+          not any(f[1] == "GHOSTS" for f in _free_p + _skip_p), str(_free_p + _skip_p))
     check("...and a compiled rule is not one it walks past",
-          not any(f[0] == "N" for f in _free_p), str(_free_p))
+          not any(f[1] == "N" for f in _free_p), str(_free_p))
     check("...and a list whose halves it cannot read is not called clean",
-          [s[0] for s in _skip_p] == ["M"], str(_skip_p))
+          [s[1] for s in _skip_p] == ["M"], str(_skip_p))
     check("...and that refusal carries its reason",
-          all(s[2] for s in _skip_p), str(_skip_p))
+          all(s[3] for s in _skip_p), str(_skip_p))
     check("...and does not appear as a rule with no case",
-          not any(f[0] == "M" for f in _free_p), str(_free_p))
+          not any(f[1] == "M" for f in _free_p), str(_free_p))
     check("...and names the rules with no case, and only those",
-          sorted(f[2] for f in _free_p) == ["'zzfree'", "'zzmerged'"], str(_free_p))
+          sorted(f[3] for f in _free_p) == ["'zzfree'", "'zzmerged'"], str(_free_p))
+    check("...and every row names the module it came from",
+          all(f[0] == "oracle.py" for f in _free_p + _skip_p), str(_free_p + _skip_p))
+
+    # --- A MODULE THAT NEVER UNPACKS ITS PAIRS AT THE CALL SITE ------------------------
+    #
+    # Which half of an entry is the rule was read from the loop that binds the two names.
+    # `refusal.py` binds neither: six lists are read as `_hits(out, _rules(DECLINE))`, and
+    # `_rules` is `[p for p, _ in pairs]` one function away. With nothing to look at, every
+    # list in that module came back `cannot tell which half is the rule` -- twenty-six
+    # rules reported as unreadable rather than swept.
+    #
+    # Derived from the helper, not assumed to be the first half: the comprehension names
+    # one of the targets it binds, and which one is the answer.
+    _hw = tempfile.mkdtemp()
+    _old_rt3 = unguarded.RT
+    try:
+        unguarded.RT = _hw
+        io.open(os.path.join(_hw, "locks.py"), "w", encoding="utf-8", newline="").write(
+            "import re" + chr(10)
+            # (specimen, pattern): the way round that makes "the first half" the wrong guess.
+            + "L = [('a zzcovered reply', 'zzcovered'),"
+              " ('a zzfree reply', 'zzfree')]" + chr(10)
+            + "def _rules(pairs):" + chr(10)
+            + "    return [p for _s, p in pairs]" + chr(10)
+            + "def named(text):" + chr(10)
+            + "    return [p for p in _rules(L) if re.search(p, text)]" + chr(10))
+        io.open(os.path.join(_hw, "test_locks.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import locks" + chr(10)
+            + "assert locks.named('a zzcovered reply')" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_h, _free_h, _skip_h = unguarded.sweep_patterns(("locks.py",))
+    finally:
+        unguarded.RT = _old_rt3
+        _sh_p.rmtree(_hw, ignore_errors=True)
+    check("the pattern arm reads a list whose pairs are unpacked by a helper",
+          _n_h == 2, "%s  skipped=%s" % (_n_h, _skip_h))
+    check("...and takes the half the helper keeps, not the first one",
+          [f[3] for f in _free_h] == ["'zzfree'"], str(_free_h))
+    check("...and claims nothing it could not read",
+          _skip_h == [], str(_skip_h))
 
     # AND IT IS REACHABLE FROM THE COMMAND.
     _tool_src2 = io.open(_tool, encoding="utf-8").read()
