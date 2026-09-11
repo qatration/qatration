@@ -6,7 +6,7 @@ detectors, and each attack's probe) — target-agnostic, works for any adapter.
 import html
 import re
 from recon import memory_phrase
-from workspace import measured
+from workspace import measured, BROKE
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -115,9 +115,27 @@ def _payload_text(attack):
 
 
 def _proof(trials):
+    """The evidence for one row: the worst trial it produced, and which one that was.
+
+    THE FOOTER TELLS THE READER TO OPEN THE ROW AND READ THE TRIALS. What opened was a
+    single payload and a single reply, chosen as the worst of them, with nothing saying it
+    was one of three or what the other two did. On an INTERMITTENT row that is the breach
+    presented as the case: the fraction is in the row above, and the proof under it reads
+    like the whole story.
+
+    The line costs one sentence and is measured from the trials themselves.
+    """
     best = sorted(trials, key=lambda t: ORDER.get(t["verdict"], 9))[0]
     p = best.get("probe") or {}
     parts = []
+    if len(trials) > 1:
+        _n = len(trials)
+        _i = trials.index(best) + 1
+        _broke = sum(1 for _t in trials if _t.get("verdict") in BROKE)
+        parts.append(
+            '<div class="ph">Which trial</div><p class="dim">trial %d of %d, the %s one '
+            '%s %d of %d broke</p>'
+            % (_i, _n, esc(str(best.get("verdict", "?")).lower()), "\u2014", _broke, _n))
     tcs = p.get("tool_calls") or []
     if tcs:
         rows = "".join(f'<div class="tc"><span class="tool">{esc(t)}</span>'

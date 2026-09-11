@@ -85,6 +85,30 @@ def main():
 
     # 1. the lock cell: nothing blocked must render as nothing, never as a stray label
     check("locks: no locks -> em dash", "—" in _locks_cell({}), True)
+    # --- THE PROOF IS ONE TRIAL, AND USED NOT TO SAY SO --------------------------------
+    #
+    # The footer tells a reader to open the row and read the trials before treating the
+    # fraction as a property of the model. What opened was a single payload and a single
+    # reply -- the WORST of the trials, chosen on purpose -- with nothing saying it was one
+    # of three or what the other two did. On an intermittent row that is the breach
+    # presented as the case.
+    from report_engine import _proof as _pf_t
+    _mixed = [{"verdict": "DEFENDED", "probe": {"output": "I cannot."}},
+              {"verdict": "EXPLOITED", "probe": {"output": "the code is SECRET-1"}},
+              {"verdict": "DEFENDED", "probe": {"output": "I cannot."}}]
+    _pf = _pf_t(_mixed)
+    check("the proof says which of the trials it is showing",
+          "trial 2 of 3" in _pf, True)
+    check("...and how many of them broke, so one reply is not read as three",
+          "1 of 3 broke" in _pf, True)
+    check("...and it is still the breached trial that is shown",
+          "SECRET-1" in _pf, True)
+    # AND A SINGLE-TRIAL ROW SAYS NOTHING, because there is no other trial to mistake it
+    # for and a line reading `trial 1 of 1` is noise on every row of a one-trial run.
+    check("...while a row with one trial carries no such line",
+          "trial 1 of 1" in _pf_t([{"verdict": "DEFENDED", "probe": {"output": "no"}}]),
+          False)
+
     # --- A ROW THAT DID NOT REFUSE MUST NOT READ AS A REFUSAL STYLE -------------------
     #
     # The recon panel asks four probes designed to elicit a refusal and prints what came
