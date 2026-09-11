@@ -349,7 +349,22 @@ def main():
     # is the input: `urlopen` computes Content-Length for you and can never send these.
     import http.client as _hc, threading as _th2, tempfile as _tf2, shutil as _sh2
 
-    def _ask(port, length, body=b'{}', path='/runs', method='POST'):
+    def _ask(port, length, body=b'{}', path='/runs', method='POST',
+             send_body=True):
+        """Send one request by hand. -> (status, first 400 characters of the body).
+
+        `send_body=False` FOR A REFUSAL DECIDED ON THE HEADER. The door answers
+        `Content-Length: abc` and `Content-Length: -1` without reading anything and closes,
+        which is correct and is a race for whoever is still writing: on Windows the write
+        lands on a closed socket, the receive buffer goes with it, and the 400 that was
+        already on the wire is unrecoverable. Twice in a hundred full runs this suite
+        failed with `ConnectionAbortedError` on exactly those two checks, and the server
+        had done nothing wrong either time.
+
+        The body is not part of what those two assert. Where one IS sent, a failed write is
+        not allowed to hide the answer either: the response is read regardless, because
+        `refused early and closed` is a pass and `refused early` is what we are asking.
+        """
         c = _hc.HTTPConnection('127.0.0.1', port, timeout=10)
         try:
             c.putrequest(method, path, skip_accept_encoding=True)
@@ -357,8 +372,11 @@ def main():
                 c.putheader('Content-Length', str(length))
             c.putheader('Content-Type', 'application/json')
             c.endheaders()
-            if body:
-                c.send(body)
+            if body and send_body:
+                try:
+                    c.send(body)
+                except OSError:
+                    pass
             r = c.getresponse()
             return r.status, r.read(400).decode('utf-8', 'replace')
         except Exception as e:
@@ -377,11 +395,13 @@ def main():
         check("the intake door answers a well-formed request",
               _st == 400 and "config" in _tx, "%s %s" % (_st, _tx[:80]))
 
-        _st, _tx = _ask(_iport, 'abc')
+        # NO BODY ON THESE TWO. The header is the whole input and the door refuses on it
+        # alone; writing after that is a write into a connection the server has closed.
+        _st, _tx = _ask(_iport, 'abc', send_body=False)
         check("...and a Content-Length that is not a number is a 400, not a traceback",
               _st == 400 and "not a number" in _tx, "%s %s" % (_st, _tx[:80]))
 
-        _st, _tx = _ask(_iport, -1)
+        _st, _tx = _ask(_iport, -1, send_body=False)
         check("...and a negative one is refused before it reaches read(-1)",
               _st == 400 and "negative" in _tx, "%s %s" % (_st, _tx[:80]))
 
