@@ -133,6 +133,12 @@ def authorization(method, url, headers, payload, service, region,
 # in two files, so it moves here with this one.
 REJECTED = "CredentialRejected"
 RATE_LIMITED = "RateLimited"
+# AND THE THIRD ONE, which was spelled in `targets_http` and read by NOBODY. The budget
+# writes `it was never sent` onto a probe, and with no reader for it the only signal
+# downstream was `rate.exhausted` -- a RUN-level flag used to describe every unscored ROW.
+# That is how a sweep against a refused port closed with `the run stopped on its budget`
+# while twenty-five of its rows had died on the connection.
+NEVER_SENT = "BudgetExhausted"
 
 
 def credential_note(errors):

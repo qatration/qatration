@@ -1065,9 +1065,43 @@ oracle_context:
         import jobqueue as jq, worker
         qroot = os.path.join(work, "queue")
         with open(dead_cfg, "w", encoding="utf-8") as f:
+            # THREE REQUESTS, so this config produces BOTH kinds of unscored row: the first
+            # attacks reach the port and are refused, those refusals spend the budget, and
+            # the rest are never sent at all. That mixture is the whole fixture below.
             f.write(open(cfg_path, encoding="utf-8").read()
                     .replace(f"127.0.0.1:{port}", "127.0.0.1:1")
-                    .replace("name: e2e-bot", "name: e2e-dead"))
+                    .replace("name: e2e-bot", "name: e2e-dead")
+                    .replace("max_requests: 50", "max_requests: 3"))
+
+        # --- THE LAST LINE OF A SWEEP INTO A REFUSED PORT ------------------------------
+        #
+        # `closing_line` is pure and its fixtures are exact; what nothing could reach was the
+        # sweep handing it the right numbers. Walked as a stranger against a port with nothing
+        # behind it: twenty-five attacks died on `No connection could be made`, those failures
+        # spent the fifty-request budget, and the run closed with
+        #
+        #   NOTHING MEASURED: the run stopped on its budget (requests) before scoring any of
+        #   52 attacks.
+        #
+        # The endpoint being down is not in that sentence. `stopped` is a RUN-level flag and
+        # it was being used to describe every unscored ROW, so a reader raises `max_requests`
+        # and spends it again on a bot that is not up.
+        _dead_run = subprocess.run(
+            [sys.executable, os.path.join(HERE, "run_redteam.py"),
+             "--target-config", dead_cfg, "--attacks", atk_path, "--trials", "1"],
+            timeout=300, capture_output=True, text=True, env=env, cwd=os.path.dirname(HERE))
+        _last = [l for l in (_dead_run.stdout or "").splitlines() if l.strip()]
+        _closing = next((l for l in _last if l.startswith("NOTHING MEASURED")), "")
+        check("a sweep into a refused port measures nothing, and says so",
+              bool(_closing), (_dead_run.stdout or "")[-300:])
+        check("...and blames the endpoint that answered nothing, not the budget",
+              _closing.startswith("NOTHING MEASURED: 2/4 attacks errored"), _closing)
+        check("...and says raising the budget will not change it",
+              "raising it will not change this" in _closing, _closing)
+        check("...while still naming the rows the budget stopped before sending",
+              "The other 2 were never sent" in _closing, _closing)
+        check("...and exits 3, because nothing measured is not a clean run",
+              _dead_run.returncode == 3, str(_dead_run.returncode))
         # A throwaway job for the contention check, so cancelling it cannot take one of the
         # two real jobs with it — submit times here are second-resolution, so "the oldest" is
         # a coin toss between jobs queued in the same second.

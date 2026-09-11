@@ -839,6 +839,17 @@ def main():
         _c, _s = _av("any", 0, 0, 45, 3, stopped="max_requests spent")
         check("...and a budget that stopped the run is named in its own words",
               "max_requests spent" in _s[0], str(_s))
+        # AND A ROW THE BUDGET STOPPED IS NOT AN ERRORED ROW. Both counts arrived here as
+        # one, so the coverage caveat on a sweep against a refused port said `52 errored`
+        # when twenty-seven of those were never sent at all -- and `scored` subtracted only
+        # the errors, leaving rows nobody sent inside the denominator of the line that says
+        # what the pass is a pass over.
+        _c, _s = _av("any", 0, 0, 52, 25, stopped="requests", never_sent=27)
+        check("rows the budget never sent leave the gate's denominator too",
+              "Scored 0 attack(s)" in _s[0], str(_s))
+        check("...and are named as unsent rather than counted as errors",
+              "25 errored" in _s[0] and "27 the budget stopped before sending" in _s[0],
+              str(_s))
         # `exploited` IS THE NARROWER GATE and must stay narrower: a PARTIAL row breaches
         # but is not fully exploited, and this gate is what a team picks when it wants only
         # the unambiguous ones.
@@ -862,7 +873,8 @@ def main():
         check("the sweep asks absolute_verdict rather than deciding inline",
               len(_cl) == 1, str(len(_cl)))
         check("...and hands it what it could not see: the errors and the unsent",
-              bool(_cl) and {k.arg for k in _cl[0].keywords} >= {"skipped", "stopped"},
+              bool(_cl) and {k.arg for k in _cl[0].keywords} >= {"skipped", "stopped",
+                                                                 "never_sent"},
               str([k.arg for k in _cl[0].keywords]) if _cl else "no call")
     finally:
         H.OUT, H.HIST = real_out3, real_hist3
@@ -963,6 +975,8 @@ def main():
     check("the run has exactly one closing line to get right", len(_calls) == 1, str(_calls))
     check("...and it tells it how many trials it ran",
           bool(_calls) and "trials=" in _calls[0], str(_calls))
+    check("...and how many rows the budget stopped before they were sent",
+          bool(_calls) and "never_sent=" in _calls[0], str(_calls))
 
     # A ROW THAT WAS NEVER SENT DID NOT ERROR EITHER. Walked: a forty-request budget against a
     # forty-five attack sweep left seven rows headed ERROR whose error reads "this run's
@@ -970,20 +984,86 @@ def main():
     # blames the target for a limit the operator set, and the run record two hundred lines
     # below says `stopped` while the terminal closed as a finished run.
     check("attacks the budget stopped are never sent, not errored",
-          "never sent" in _cl(1, 45, 7, stopped="requests")
-          and "errored" not in _cl(1, 45, 7, stopped="requests"),
-          _cl(1, 45, 7, stopped="requests"))
+          "never sent" in _cl(1, 45, 0, stopped="requests", never_sent=7)
+          and "errored" not in _cl(1, 45, 0, stopped="requests", never_sent=7),
+          _cl(1, 45, 0, stopped="requests", never_sent=7))
     check("...and the budget that stopped them is named",
-          "stopped on its budget (requests)" in _cl(1, 45, 7, stopped="requests"),
-          _cl(1, 45, 7, stopped="requests"))
+          "stopped on its budget (requests)" in _cl(1, 45, 0, stopped="requests",
+                                                    never_sent=7),
+          _cl(1, 45, 0, stopped="requests", never_sent=7))
     check("...while a run with no budget trouble still calls an error an error",
           "errored" in _cl(1, 45, 7), _cl(1, 45, 7))
     check("a run the budget stopped before it scored anything says which",
-          "stopped on its budget" in _cl(0, 45, 45, stopped="seconds")
-          and "NOTHING MEASURED" in _cl(0, 45, 45, stopped="seconds"),
-          _cl(0, 45, 45, stopped="seconds"))
+          "stopped on its budget" in _cl(0, 45, 0, stopped="seconds", never_sent=45)
+          and "NOTHING MEASURED" in _cl(0, 45, 0, stopped="seconds", never_sent=45),
+          _cl(0, 45, 0, stopped="seconds", never_sent=45))
     check("...and a clean run says nothing about a budget",
           "budget" not in _cl(3, 45, 0, stopped="requests"), _cl(3, 45, 0, stopped="requests"))
+
+    # --- AND THE FIX FOR THAT MADE THE MIRROR MISTAKE ---------------------------------
+    #
+    # `stopped` is a RUN-level flag, and the two checks above were satisfied by using it to
+    # describe every unscored ROW: once the budget ran out, rows that HAD been sent and had
+    # failed were reported as rows nobody sent.
+    #
+    # Walked against a refused port. Twenty-five attacks died on `No connection could be
+    # made`, those twenty-five failures and their retries spent the fifty-request budget, the
+    # remaining twenty-seven were never sent, and the run closed with `NOTHING MEASURED: the
+    # run stopped on its budget (requests) before scoring any of 52 attacks`. The endpoint
+    # being down is not in that sentence. A reader raises `max_requests` and spends it again.
+    _dead = _cl(0, 52, 25, stopped="requests", never_sent=27)
+    check("a run where every send failed leads with the failures, not with the budget",
+          _dead.startswith("NOTHING MEASURED: 25/52 attacks errored"), _dead)
+    check("...and says that raising the budget will not change it",
+          "raising it will not change this" in _dead, _dead)
+    check("...while still naming the rows the budget stopped, because they bound a re-run",
+          "The other 27 were never sent" in _dead, _dead)
+    # AND A GENUINE BUDGET STOP STILL READS AS ONE. Nothing went out, so there is nothing to
+    # blame on the target and the budget is the whole answer.
+    check("a budget that stopped a run before anything went out is still the reason",
+          _cl(0, 52, 0, stopped="requests", never_sent=52).startswith(
+              "NOTHING MEASURED: the run stopped on its budget (requests)"),
+          _cl(0, 52, 0, stopped="requests", never_sent=52))
+    # BOTH COUNTS ON A PARTLY-SCORED RUN, each with the reason that belongs to it.
+    _mix = _cl(1, 45, 3, stopped="requests", never_sent=4)
+    check("errored rows and never-sent rows are counted apart",
+          "3 more errored" in _mix and "4 more were never sent" in _mix, _mix)
+    check("...and neither of them is left in the denominator",
+          "1/38 attacks breached" in _mix, _mix)
+    # AND THE REASON SURVIVES THIS BRANCH NOW. `why_errored` carries the strongest sentence
+    # this package composes -- a credential accepted early in a run and rejected later -- and
+    # the budget branch dropped it on the floor.
+    _cred = _cl(0, 10, 6, stopped="requests", never_sent=4, why_errored="the token expired")
+    check("why the rows errored survives a run that also spent its budget",
+          "the token expired" in _cred, _cred)
+
+    # --- THE ROW-LEVEL FACT THE SENTENCE NEEDED ---------------------------------------
+    #
+    # The budget writes its reason onto the probe and nothing downstream read it, so the only
+    # signal a printer had was a run-level flag. Named now, in the module that writes it, and
+    # read here: `targets_http.NEVER_SENT`.
+    from run_redteam import error_split as _split
+
+    def _row(head, errors, cat="extraction"):
+        return {"headline": head, "attack": {"category": cat},
+                "trials": [{"probe": {"error": e}} for e in errors]}
+
+    _rows = [_row("ERROR", ["URLError: refused", "URLError: refused"]),
+             _row("ERROR", ["BudgetExhausted: this run's request budget (50) was spent"]),
+             _row("ERROR", ["BudgetExhausted: spent", "URLError: refused"]),
+             _row("EXPLOITED", [""]),
+             _row("ERROR", ["BudgetExhausted: spent"], cat="control")]
+    check("a row the budget never sent is counted apart from one the target failed",
+          _split(_rows) == (2, 1), str(_split(_rows)))
+    # A ROW THAT REACHED THE ENDPOINT ONCE WAS SENT, whatever happened on the trial after it:
+    # what came back is the target's answer and dropping it would flatter the target.
+    check("...and a row sent once before the budget ran out counts as sent",
+          _split([_rows[2]]) == (1, 0), str(_split([_rows[2]])))
+    check("...and a control is out of both counts, as it is out of the denominator",
+          _split([_rows[4]]) == (0, 0), str(_split([_rows[4]])))
+    check("...and a row with no trials at all is not silently called never-sent",
+          _split([{"headline": "ERROR", "attack": {}, "trials": []}]) == (1, 0),
+          str(_split([{"headline": "ERROR", "attack": {}, "trials": []}])))
 
     # --- the gate a pull request uses, every branch of it ---------------------------------
     #

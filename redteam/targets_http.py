@@ -686,12 +686,15 @@ class HttpConfiguredTarget(Target):
         prompt = payload(prompt)
         if not self.rate.take():
             # Said as a gap, not as a property of the target.
+            # THROUGH THE PREFIX, because it is a contract between modules and this was the
+            # only place it was spelled: `signing.NEVER_SENT` carries the argument.
+            import signing as _sg
             spent = self.rate.exhausted
             limit = (f"request budget ({self.rate.max_requests})" if spent == "requests"
                      else f"time budget ({self.rate.max_seconds:.0f}s, "
                           f"{self.rate.used} request(s) in)")
             return Probe(prompt=prompt, output="",
-                         error=f"BudgetExhausted: this run's {limit} was spent before this "
+                         error=f"{_sg.NEVER_SENT}: this run's {limit} was spent before this "
                                f"probe; it was never sent")
         data = json.dumps(self._body(prompt, history)).encode("utf-8")
         headers = dict(self.headers)

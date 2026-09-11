@@ -455,6 +455,46 @@ def main():
         check("...and a send that failed twice counts the retry it made",
               _pf.retries == 1 and _pf.error, "retries=%s" % _pf.retries)
 
+        # --- A RETRY THE BUDGET REFUSED IS NOT A SEND, AND IS NOT THIS ROW'S ANSWER -----
+        #
+        # `rate.take()` refuses before a socket is opened, so re-sending a probe the budget
+        # already declined is guaranteed to fail and costs nothing but a stderr line per
+        # attack -- which is one more line burying the one line worth reading.
+        #
+        # The half that changes a number: when the FIRST attempt reached the endpoint and
+        # came back with something about the target, and the budget ran out between the two,
+        # the retry's `it was never sent` replaced that answer. Exactly one row per run sits
+        # on that boundary, and `run_redteam.error_split` reads this field to decide whether
+        # a reader is sent to their network or to their config.
+        from signing import NEVER_SENT as _NS_r
+        _spent = {"n": 0}
+
+        def _budget_only():
+            _spent["n"] += 1
+            return _P_r(prompt="x", error="%s: this run's request budget (50) was spent "
+                                          "before this probe; it was never sent" % _NS_r)
+
+        _pb = _rs_r(_budget_only, "never-sent")
+        check("a probe the budget refused is not sent again", _spent["n"] == 1,
+              "sent %d time(s)" % _spent["n"])
+        check("...and claims no retry, because nothing went out", _pb.retries == 0,
+              "retries=%s" % _pb.retries)
+
+        _mixed = {"n": 0}
+
+        def _then_budget():
+            _mixed["n"] += 1
+            if _mixed["n"] == 1:
+                return _P_r(prompt="x", error="URLError: <urlopen error refused>")
+            return _P_r(prompt="x", error="%s: spent; it was never sent" % _NS_r)
+
+        _pm = _rs_r(_then_budget, "boundary")
+        check("a retry that never went out does not overwrite the attempt that did",
+              _pm.error.startswith("URLError"), repr(_pm.error)[:70])
+        check("...and the row is not charged for a send the budget declined",
+              _pm.retries == 0 and _mixed["n"] == 2,
+              "retries=%s attempts=%d" % (_pm.retries, _mixed["n"]))
+
         # THE RUN RECORD IS WHERE IT LANDS. `_spend` reports cost only for the adapter
         # that counts one; retries are counted by `runner` and are known for every
         # target, so they are reported either way — and `None` for a run that never

@@ -100,9 +100,16 @@ def _resilient_send(fn, attack_id):
     transient Ollama blip or a single hang doesn't sink the attack. Retries are
     logged to stderr (never silently swallowed) — a run that limped is not a
     clean run and the report reader deserves to know."""
+    from signing import NEVER_SENT as _NEVER
     probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
     attempts = 1
     while probe.error and attempts <= RETRIES:
+        # A BUDGET THAT SAID NO WILL SAY NO AGAIN, 0.0 seconds later. Same shape as the 429
+        # below and cheaper to see: `rate.take()` refuses before a socket is opened, so the
+        # retry costs nothing but a stderr line per attack that makes the one line worth
+        # reading harder to find.
+        if str(probe.error or "").startswith(_NEVER):
+            break
         # A 429 IS THE ONE ERROR WHERE RETRYING AT ONCE IS BOTH USELESS AND RUDE. The
         # endpoint said stop; sending again 0.0 seconds later doubles the traffic at
         # exactly that moment and cannot succeed. The adapter attaches the pause the
@@ -120,7 +127,16 @@ def _resilient_send(fn, attack_id):
               + (f" after {_wait:g}s" if _wait else ""), file=sys.stderr)
         if _wait:
             time.sleep(_wait)
-        probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
+        _next = _invoke_with_timeout(fn, SEND_TIMEOUT)
+        # AND A RETRY THAT NEVER WENT OUT IS NOT THIS ROW'S ANSWER. The first attempt reached
+        # the endpoint and came back with something about the TARGET; the budget then ran out
+        # between the two, and overwriting the answer with `it was never sent` files a row
+        # that was sent under the one heading that means nobody sent it. Exactly one row per
+        # run sits on that boundary, and it is the row that decides whether a reader is sent
+        # to their network or to their config.
+        if str(_next.error or "").startswith(_NEVER):
+            break
+        probe = _next
         attempts += 1
     # AND SAID WHERE A READER CAN SEE IT. The stderr line above is gone with the
     # terminal; this rides on the answer into the artifact and the run record.

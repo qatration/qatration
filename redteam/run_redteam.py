@@ -119,7 +119,39 @@ def load_target_or_explain(cfg, config_path, was_default):
         raise SystemExit("\n".join(lines))
 
 
-def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored=""):
+def error_split(results):
+    """-> (errored, never sent) over the unscored rows of a run.
+
+    TWO WAYS TO END UP WITH NO VERDICT AND ONLY ONE OF THEM IS ABOUT THE TARGET, which is the
+    distinction `closing_line` was fixed for once and then lost in the other direction. It had
+    no row-level fact to work from: the budget writes its reason onto the probe, nothing read
+    it, and the only signal downstream was `rate.exhausted` -- a RUN-level flag being used to
+    describe every row. So a sweep where twenty-five attacks died on a refused connection and
+    twenty-seven were then never sent closed with `the run stopped on its budget`, naming a
+    limit the operator set and never mentioning that nothing answered.
+
+    A row is never-sent only if EVERY one of its trials was never sent. A row that reached the
+    endpoint once and ran out of budget on the second trial was sent, and what happened to it
+    is the target's answer.
+    """
+    from signing import NEVER_SENT
+    errored = never = 0
+    for r in results or []:
+        if r.get("headline") != "ERROR":
+            continue
+        if (r.get("attack") or {}).get("category") == "control":
+            continue
+        errs = [str((_t.get("probe") or {}).get("error") or "")
+                for _t in (r.get("trials") or [])]
+        if errs and all(e.startswith(NEVER_SENT) for e in errs):
+            never += 1
+        else:
+            errored += 1
+    return errored, never
+
+
+def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored="",
+                 never_sent=0):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -163,20 +195,45 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
     paragraph is the argument: a run of 403s is indistinguishable, in a report, from a
     deployment that refused every attack.
 
+    AND THE FIX FOR THAT MADE THE MIRROR MISTAKE. `stopped` is a RUN-level flag, and it was
+    used to describe every unscored ROW: once the budget ran out, rows that had been sent and
+    failed were reported as rows nobody sent. Walked against a refused port -- twenty-five
+    attacks died on `No connection could be made`, those failures spent the fifty-request
+    budget, the remaining twenty-seven were never sent, and the run closed with `the run
+    stopped on its budget (requests) before scoring any of 52 attacks`. The endpoint being
+    down is not mentioned. A reader raises `max_requests` and spends it again.
+
+    So the two are counted apart, by `error_split`, and the errors lead: when everything that
+    went out failed, the budget is a CONSEQUENCE of the failures and saying it first sends the
+    reader to the wrong file. It is still named, because it bounds what a re-run will do.
+
+    AND THE REASON SURVIVES THIS BRANCH NOW. `why_errored` carries the strongest sentence this
+    package composes -- a credential accepted early in a run and rejected later -- and the
+    budget branch dropped it on the floor.
+
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
-    scored = attacks_n - errored
-    _rest = ("%d more were never sent: the run stopped on its budget (%s)."
-             % (errored, stopped) if stopped and errored else
-             "%d more errored and were not scored." % errored if errored else "")
-    if attacks_n and errored >= attacks_n:
-        if stopped:
-            return ("NOTHING MEASURED: the run stopped on its budget (%s) before scoring any "
-                    "of %d attacks. This is not 0 breaches, it is no measurement."
-                    % (stopped, attacks_n))
+    scored = attacks_n - errored - never_sent
+    _budget = (" (%s)" % stopped) if stopped else ""
+    _parts = []
+    if errored:
+        _parts.append("%d more errored and were not scored" % errored)
+    if never_sent:
+        _parts.append("%d more were never sent: the run stopped on its budget%s"
+                      % (never_sent, _budget))
+    _rest = ("; ".join(_parts) + ".") if _parts else ""
+    if attacks_n and errored + never_sent >= attacks_n:
+        _why = (" " + why_errored) if why_errored else ""
+        if not errored:
+            return ("NOTHING MEASURED: the run stopped on its budget%s before scoring any "
+                    "of %d attacks. This is not 0 breaches, it is no measurement.%s"
+                    % (_budget, attacks_n, _why))
+        _also = ("" if not never_sent else
+                 " The other %d were never sent: the budget%s went on the failures, so "
+                 "raising it will not change this." % (never_sent, _budget))
         return ("NOTHING MEASURED: %d/%d attacks errored and none was scored. This is not "
-                "0 breaches, it is no measurement.%s"
-                % (errored, attacks_n, (" " + why_errored) if why_errored else ""))
+                "0 breaches, it is no measurement.%s%s"
+                % (errored, attacks_n, _also, _why))
     _once = (" Each was sent once (--trials 1), which cannot tell a reliable break from a "
              "lucky one, or a defence from a bot that would have broken on the second ask."
              if trials == 1 and scored else "")
@@ -186,7 +243,7 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
 
 
 def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
-                     skipped=0, stopped=""):
+                     skipped=0, stopped="", never_sent=0):
     """(exit code, lines to print) for `--fail-on exploited` and `--fail-on any`.
 
     THE LAST LINE OF A RUN WAS `CI GATE: PASS (any).` AND IT NAMED NOTHING IT HAD NOT SEEN.
@@ -209,15 +266,23 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
     Pure, like `regression_verdict` and for the reason its docstring gives: every branch here
     is a decision about somebody else's build going red, and a decision like that should not
     be reachable only by spending an hour of GPU to get to it.
+
+    AND A ROW THE BUDGET STOPPED IS NOT AN ERRORED ROW, the same split `closing_line` makes
+    one function above. Both counts came in as one here, so the gate's coverage caveat said
+    `52 errored` over a sweep where twenty-seven attacks were never sent at all -- and
+    `scored` subtracted only the errors, leaving rows nobody sent inside the denominator of
+    the line that says what the pass is a pass over.
     """
     unseen = []
     if errored:
         unseen.append("%d errored" % errored)
+    if never_sent:
+        unseen.append("%d the budget stopped before sending" % never_sent)
     if skipped:
         unseen.append("%d were never sent" % skipped)
     if stopped:
         unseen.append("the run stopped on its budget (%s)" % stopped)
-    scored = max(0, attacks_n - errored)
+    scored = max(0, attacks_n - errored - never_sent)
     # THREE EXACT COUNTS AND NO DERIVED TOTAL. `attacks_n` is what remained after the
     # withholding and `skipped` counts what was taken out, and the two are not cleanly
     # disjoint -- a scoped-out control sits in one and not the other -- so an `N of M`
@@ -1248,9 +1313,10 @@ def main():
     # them. A caveat that lives anywhere except beside the number it qualifies has not been
     # delivered -- the rule this repository already applied to the scorecard's panels, in the
     # place a person actually looks first.
-    _errored_rows = sum(1 for r in results
-                        if r.get("headline") == "ERROR"
-                        and (r.get("attack") or {}).get("category") != "control")
+    # SPLIT, because the two have different causes and different fixes: `error_split` reads
+    # the budget's own prefix off each probe instead of inferring a row's fate from a
+    # run-level flag.
+    _errored_rows, _never_sent_rows = error_split(results)
     # THE BUDGET'S OWN WORDS, read here rather than at the record two hundred lines below,
     # because this is where the number is stated and the caveat belongs beside it.
     _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
@@ -1265,7 +1331,8 @@ def main():
     _why_err = _cred_note([(_t.get("probe") or {}).get("error")
                            for r in results for _t in (r.get("trials") or [])])
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
-                              trials=trials, why_errored=_why_err))
+                              trials=trials, why_errored=_why_err,
+                              never_sent=_never_sent_rows))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
@@ -1528,7 +1595,7 @@ def main():
     # named neither the errors nor the attacks nobody sent.
     _abs_code, _abs_lines = absolute_verdict(
         gate, exploited_n, broke, attacks_n, _errored_rows,
-        skipped=skipped, stopped=_budget_note)
+        skipped=skipped, stopped=_budget_note, never_sent=_never_sent_rows)
     if _abs_lines:
         print("")
         for _l in _abs_lines:
