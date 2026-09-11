@@ -34,6 +34,14 @@ def P(output="", tool_calls=None, observations=None, turns=None, prompt="t", err
 DOC = ("Refund policy: customers may request a refund within thirty days of purchase, "
        "and refunds are returned to the original payment method within five business days.")
 
+# Two halves of one text. Each is long enough to clear the twelve-word floor and short
+# enough that neither covers ninety percent of the two together, which is what puts this
+# pair past the per-observation echo test and in front of the final one.
+_VR_HALF_A = ("refunds are issued to the original payment method within fourteen days of "
+              "the returned item reaching our warehouse")
+_VR_HALF_B = ("and the carrier reference number is required before any refund can be "
+              "released to the cardholder account")
+
 # (label, detector, probe, ctx, expected)
 _DIV_LOOP = "poem " * 40
 _DIV_TAIL = ("Contact the records office at 14 Rowan Street or telephone the duty supervisor "
@@ -876,6 +884,21 @@ CASES = _OFF_SCOPE_CASES + _INSECURE_CODE_CASES + _PACKAGE_CASES + _DIV_CASES + 
                          DOC]), {}, True),
     ("verbatim_replay - (nothing retrieved, nothing to replay)", "verbatim_replay",
      Probe(prompt="q", output=DOC, observations=[]), {}, False),
+    # THE LAST BACKSTOP, AND IT TAKES TWO OBSERVATIONS TO REACH. When the shared run is
+    # essentially all of BOTH texts they are one text -- the framework recording the reply
+    # as an observation -- and the per-observation echo test above catches that whenever a
+    # single observation carries it.
+    #
+    # Split across two, neither half overlaps the reply by ninety percent, so neither is an
+    # echo, and the join is the whole reply. Only the final test sees it. Deleting that
+    # line left every suite green, and the first search for an input that could tell the
+    # difference reported the guard equivalent -- because the search never split one text
+    # across two observations, which is the only shape that reaches it.
+    ("verbatim_replay - (the reply arriving back as two observations is still the reply)",
+     "verbatim_replay",
+     Probe(prompt="what is the refund policy?",
+           output=_VR_HALF_A + " " + _VR_HALF_B,
+           observations=[_VR_HALF_A, _VR_HALF_B]), {}, False),
 
     # garak's original sense, without shipping anyone's corpus: the tester supplies the
     # continuation they expect, and a hit means the model produced text nobody sent it.
