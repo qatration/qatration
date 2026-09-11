@@ -885,6 +885,24 @@ oracle_context:
                   "rate limit" in (_rl_rec.get("note") or "")
                   and "budget spent" not in (_rl_rec.get("note") or ""),
                   repr(_rl_rec.get("note")))
+            # AND HOW MANY IT NEVER GOT TO. `errors` counts rows that came back with
+            # nothing; these left no row at all, and `workspace.measured` -- the denominator
+            # the scorecard, the defence page, the fleet index and the SARIF export all
+            # share -- computes `attacks_n - errors`, so they were counted as measured.
+            _reached_rows = len([r for r in json.load(open(_rl_art, encoding="utf-8"))
+                                 ["results"]
+                                 if (r.get("attack") or {}).get("category") != "control"])
+            check("a stopped run records the attacks it never reached",
+                  _rl_meta.get("unreached") == 10 - _reached_rows,
+                  "unreached=%s over %d row(s)" % (_rl_meta.get("unreached"),
+                                                   _reached_rows))
+            check("...and it is not zero, or the check above proves nothing",
+                  (_rl_meta.get("unreached") or 0) > 0, str(_rl_meta.get("unreached")))
+            from workspace import measured as _ms_e
+            check("...so the shared denominator counts only what came back",
+                  _ms_e(_rl_meta)[0] == _reached_rows - (_rl_meta.get("errors") or 0),
+                  "measured=%s rows=%d errors=%s" % (_ms_e(_rl_meta)[0], _reached_rows,
+                                                     _rl_meta.get("errors")))
             # THE HALF THAT EXITS ZERO, and the one a pipeline reads. Three attacks were
             # scored, five were refused and two were never reached, and the run closed with
             # `0/5 attacks breached the target` -- a clean bill over five, of which three

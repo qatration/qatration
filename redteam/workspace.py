@@ -259,10 +259,15 @@ def verdict_for(meta):
     # invent one. So a breach that was found stands however much of the run failed, and a clean
     # bill does not, because the attack that would have broken it may be among the rows that
     # never ran. `_resilient_send` already retries, so a row reaching ERROR failed after retry.
+    # AND THROUGH `measured`, which is this same arithmetic written twice in this one file --
+    # here, and twelve hundred lines down with the reasoning attached to the copy this one
+    # never called. The two disagreed the moment a run could stop part way: attacks the sweep
+    # never reached leave no ERROR behind, so a run stopped on its CONTROLS -- which are
+    # excluded from `errors` -- came back "Hardened".
     if (meta.get("broke") or 0) > 0:
         return "Vulnerable"
-    measured = (meta.get("attacks_n") or 0) - (meta.get("errors") or 0)
-    if measured <= 0 or (meta.get("errors") or 0) > 0:
+    _n, _errs = measured(meta)
+    if _n <= 0 or _errs > 0 or (meta.get("unreached") or 0) > 0:
         return "Not measured"
     return "Hardened"
 
@@ -1305,10 +1310,17 @@ def measured(meta):
     nineteen error rows folded shut one by one in the table — while the index beside it
     scored the same run "not measured". The machine-readable SARIF said it correctly too,
     which left the two human surfaces as the only ones that did not.
+
+    AND AN ATTACK THE RUN NEVER REACHED LEAVES NO ROW TO ERROR. This arithmetic assumed
+    every attack in `attacks_n` produced one, which was true until `GiveUpWall` could break
+    the loop: a sweep stopped at eight of ten stores `attacks_n: 10`, `errors: 5` and eight
+    rows, so this returned five measured when three were. The number moved in the one
+    direction a coverage figure must never drift, which is the paragraph above.
     """
     meta = meta or {}
     errs = meta.get("errors") or 0
-    return max(0, (meta.get("attacks_n") or 0) - errs), errs
+    unreached = meta.get("unreached") or 0
+    return max(0, (meta.get("attacks_n") or 0) - errs - unreached), errs
 
 
 def measured_when(meta, path=None):

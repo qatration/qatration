@@ -109,6 +109,23 @@ def main():
           "trial 1 of 1" in _pf_t([{"verdict": "DEFENDED", "probe": {"output": "no"}}]),
           False)
 
+    # --- THE THIRD REASON AN ATTACK IS NOT ON THIS PAGE ------------------------------
+    #
+    # Two tiles already separate what the BOT cannot take from what the INVOCATION held
+    # back. A run that stopped part way is a third thing, and its rows leave no ERROR
+    # behind -- so they were counted under `attacks measured`, the tile a reader takes as
+    # the size of the assessment.
+    from report_engine import build_html as _bh_u
+    _u = _bh_u({"target": "t", "trials": 3, "attacks_n": 10, "errors": 5, "unreached": 2,
+                "broke": 3}, [])
+    check("the page counts only the attacks that were measured",
+          '<div class="n">3</div><div class="l">attacks measured</div>' in _u, True)
+    check("...and gives the ones the run never reached their own tile",
+          "never sent \u2014 the run stopped" in _u, True)
+    check("...and a run that reached everything carries no such tile",
+          "never sent \u2014 the run stopped"
+          in _bh_u({"target": "t", "trials": 3, "attacks_n": 10, "errors": 0}, []), False)
+
     # --- A ROW THAT DID NOT REFUSE MUST NOT READ AS A REFUSAL STYLE -------------------
     #
     # The recon panel asks four probes designed to elicit a refusal and prints what came

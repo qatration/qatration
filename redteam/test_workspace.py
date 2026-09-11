@@ -1528,6 +1528,40 @@ def main():
     check("...and every one of them refuses to replace a committed file",
           not _unguarded, "; ".join(_unguarded))
 
+    # --- AN ATTACK THE RUN NEVER REACHED IS NOT ONE IT MEASURED --------------------------
+    #
+    # `measured` is the denominator four surfaces share -- the scorecard, the defence page,
+    # the fleet index and the SARIF export -- and its arithmetic assumed every attack in
+    # `attacks_n` produced a row. True until `GiveUpWall` could break the attack loop: a
+    # sweep stopped at eight of ten stores `attacks_n: 10`, `errors: 5` and eight rows, so
+    # this returned five measured when three were. The number moved in the one direction the
+    # function's own docstring says a coverage figure must never drift.
+    from workspace import measured as _ms, verdict_for as _vf
+    check("attacks the run never reached leave the denominator",
+          _ms({"attacks_n": 10, "errors": 5, "unreached": 2}) == (3, 5),
+          str(_ms({"attacks_n": 10, "errors": 5, "unreached": 2})))
+    check("...and an artifact written before the field existed is read as before",
+          _ms({"attacks_n": 10, "errors": 5}) == (5, 5),
+          str(_ms({"attacks_n": 10, "errors": 5})))
+    check("...and a run that reached everything is unchanged",
+          _ms({"attacks_n": 10, "errors": 0, "unreached": 0}) == (10, 0),
+          str(_ms({"attacks_n": 10, "errors": 0, "unreached": 0})))
+    # AND THE VERDICT IS THE SAME ARITHMETIC, written a second time in this same module with
+    # the reasoning attached to the copy it never called. The two disagreed the moment a run
+    # could stop part way: attacks the sweep never reached leave no ERROR behind, so a run
+    # stopped on its CONTROLS -- which are excluded from `errors` -- came back Hardened.
+    check("a run stopped before it reached the arsenal is not hardened",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 0}) == "Not measured",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 0}))
+    check("...while a run that reached all of it and found nothing still is",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 0, "broke": 0}) == "Hardened",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 0, "broke": 0}))
+    # ASYMMETRIC, AND THAT ASYMMETRY IS THE RULE: an unreached row can hide a breach, it
+    # cannot invent one, so a breach that WAS found stands however much of the run was lost.
+    check("...and a breach found before it stopped still stands",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 2}) == "Vulnerable",
+          _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 2}))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

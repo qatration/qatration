@@ -1520,6 +1520,10 @@ def main():
             # exactly what `history` told a reader: `arsenal 10 -> 8 attacks`, sending them
             # to their own attacks file over a target that rate-limited them.
             "stopped": _budget_note or _rl_stopped,
+            # AND HOW MANY IT NEVER GOT TO. `errors` counts rows that came back with
+            # nothing; these left no row at all, and every reader of this file computes
+            # "measured" as `attacks_n - errors`, which counts them as measured.
+            "unreached": max(0, attacks_n - _reached),
             "baseline": ctx.get("baseline_tool_inputs"),
             # carried into the HTML, because the reader of the scorecard is exactly the
             # person who needs to know the breach count is not attributable

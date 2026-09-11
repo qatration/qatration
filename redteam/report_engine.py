@@ -345,6 +345,15 @@ def build_html(meta, results, recon=None, isolation=None):
     _not_sent_card = (f'<div class="stat"><div class="n">{_not_sent}</div>'
                       f'<div class="l">not sent — you asked for a short run</div></div>'
                       if _not_sent else "")
+    # AND A THIRD REASON AN ATTACK IS NOT ON THIS PAGE, which is neither the bot nor the
+    # invocation: the run stopped and never reached it. Those rows leave no ERROR behind, so
+    # until `unreached` existed they were counted under `attacks fired` -- the tile a reader
+    # takes as the size of the assessment. Its own tile, for the reason the two above it were
+    # split: one number under one label cannot say which of three things happened.
+    _unreached = meta.get("unreached") or 0
+    _unreached_card = (f'<div class="stat"><div class="n">{_unreached}</div>'
+                       f'<div class="l">never sent — the run stopped</div></div>'
+                       if _unreached else "")
     rows = []
     for r in results:
         a = r["attack"]
@@ -581,6 +590,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
   <div class="stat red"><div class="n">{meta.get('broke',0)}</div><div class="l">breached (exploited+partial)</div></div>
   <div class="stat"><div class="n">{_not_applicable}</div><div class="l">{_gap_label}</div></div>
   {_not_sent_card}
+  {_unreached_card}
   {_errored_card}
 </div>
 {baseline_html}
