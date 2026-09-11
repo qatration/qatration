@@ -9,7 +9,8 @@ import sys, threading, time
 from oracle import judge, ORDER
 from encoders import apply_encoding
 from target import Probe, payload
-from workspace import BROKE            # one definition of what counts as a breach
+from workspace import BROKE, clipped   # one definition of what counts as a breach,
+                                       # and one of how a quoted note is cut
 
 # When judging one reply is slow enough that an operator would think the run had
 # hung. Ten seconds, because the measured cost of the whole oracle on a hostile
@@ -24,47 +25,91 @@ RETRIES = 1               # extra attempts after the first, on timeout / error
 # day; refusing to wait at all is what this is fixing. Beyond the ceiling the retry
 # is abandoned and the row says the endpoint asked for longer than a run can give.
 MAX_BACKOFF = 30
-# How many units of work in a row may come back entirely rate-limited before the
-# command stops sending. Five is enough to be sure it is not one busy moment and
-# small enough to matter: measured against an endpoint answering 429 to everything,
-# a sweep sent 92 requests and a benign run 48 before this existed.
-RATE_LIMIT_GIVE_UP = 5
+# How many units of work in a row may come back unusable before the command stops
+# sending. Five is enough to be sure it is not one busy moment and small enough to
+# matter: measured against an endpoint answering 429 to everything, a sweep sent 92
+# requests and a benign run 48 before this existed.
+GIVE_UP_AFTER = 5
 
 
-class RateLimitWall(object):
-    """Counts units of work the target refused with a rate limit, in a row.
+class GiveUpWall(object):
+    """Counts units of work the target could not answer, in a row, and says stop.
 
     A `unit` is whatever the caller sends and scores as one thing: an attack with its
     trials in a sweep, one probe in a benign run. `saw` takes the probes for one unit
-    and returns True once the wall is reached; `reason` is the sentence to print.
+    and returns True once the wall is reached; `reason` is the sentence to print and
+    `advice` is the line that tells the reader where to go.
 
-    `IN A ROW` IS THE WHOLE RULE. A single 429 in the middle of a working run does not
-    end it -- a limit that lets some traffic through is one the run can live within,
-    and stopping on it throws away a measurement the operator can have. A first draft
-    also required that nothing had ever succeeded, which is a hole rather than a
-    safeguard: the commonest real shape is a metered endpoint answering happily until
-    the quota runs out, and every one of those has succeeded.
+    TWO WAYS A TARGET STOPS BEING USABLE, AND THIS KNEW ONE. The rate-limit half was
+    written against an endpoint answering 429 to everything. The other half is an
+    endpoint that answers NOTHING -- a wrong port, a URL with a typo, a deployment
+    that is not up -- and it was the commonest failure of all and had no wall at all:
+    a sweep at a refused port walked the whole arsenal, one `No connection could be
+    made` per attack per trial, and the one line that mattered arrived at the end
+    under fifty of them. The engine gave up when a target said `slow down` and never
+    when it said nothing.
+
+    `IN A ROW` IS THE WHOLE RULE for the rate limit. A single 429 in the middle of a
+    working run does not end it -- a limit that lets some traffic through is one the
+    run can live within, and stopping on it throws away a measurement the operator can
+    have. A first draft also required that nothing had ever succeeded, which is a hole
+    rather than a safeguard: the commonest real shape is a metered endpoint answering
+    happily until the quota runs out, and every one of those has succeeded.
+
+    AND THE FAILURE HALF TAKES EXACTLY THAT CONDITION, because for failures it is not
+    a hole but the safeguard. An endpoint that answered and then throws is a blip, a
+    restart, or one payload it did not like, and ending the run there throws away a
+    measurement that can still be had. An endpoint that has not answered ONE of the
+    first five is not about to: there is nothing to throw away, and every probe after
+    it is a request nobody will read.
+
+    A probe the budget refused is neither: nothing was sent, so it says nothing about
+    the target and it must not push either streak along.
     """
 
-    def __init__(self, limit=RATE_LIMIT_GIVE_UP):
+    LIMIT_ADVICE = ("Raise the limit on their side, or lower `rate.min_interval_s` on "
+                    "ours, and run it again.")
+    DEAD_ADVICE = ("The error on those rows is the endpoint's, not this tool's: check "
+                   "the URL, the port, and that the deployment is up.")
+
+    def __init__(self, limit=GIVE_UP_AFTER):
         self.limit = limit
-        self.streak = 0
+        self.streak = 0        # units refused with a rate limit, in a row
+        self.failed = 0        # units that errored outright, in a row
+        self.answered = False  # has anything at all come back from this target
         self.reason = ""
+        self.advice = ""
 
     def saw(self, probes):
         probes = [p for p in (probes or []) if p is not None]
-        # THROUGH THE CONSTANT `targets_http` writes, not a second spelling of it.
-        from signing import RATE_LIMITED as _RL
-        if probes and all(str(getattr(p, "error", "") or "").startswith(_RL)
-                          for p in probes):
+        # THROUGH THE CONSTANTS `targets_http` writes, not a second spelling of them.
+        from signing import RATE_LIMITED as _RL, NEVER_SENT as _NS
+        errs = [str(getattr(p, "error", "") or "") for p in probes]
+        if any(not e for e in errs):
+            self.answered = True
+        if probes and all(e.startswith(_RL) for e in errs):
             self.streak += 1
         else:
             self.streak = 0
+        if probes and all(errs) and not any(e.startswith(_NS) for e in errs):
+            self.failed += 1
+        else:
+            self.failed = 0
         if self.streak >= self.limit and not self.reason:
             self.reason = (
                 "the endpoint answered every one of the last %d with a rate limit "
                 "and has not answered anything else since, so the rest was NOT sent"
                 % self.streak)
+            self.advice = self.LIMIT_ADVICE
+        elif self.failed >= self.limit and not self.answered and not self.reason:
+            # THE ERROR ITSELF, because it is the whole answer and it is the target's
+            # own words. `honeytoken.unreachable_note` records the stranger who was
+            # told their canary was not planted when their bot was simply not up, and
+            # went to check the file they had just edited.
+            self.reason = (
+                "the endpoint has not answered ONE of the %d sent so far (%s), so the "
+                "rest was NOT sent" % (self.failed, clipped(errs[-1], 90)))
+            self.advice = self.DEAD_ADVICE
         return bool(self.reason)
 
 

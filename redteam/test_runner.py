@@ -294,7 +294,7 @@ def main():
     # the command the documentation tells an operator to run FIRST -- sent 48. The counter
     # is shared rather than written twice, and the shape of the rule is what matters: `in
     # a row`.
-    from runner import RateLimitWall as _W, RATE_LIMIT_GIVE_UP as _GIVE
+    from runner import GiveUpWall as _W, GIVE_UP_AFTER as _GIVE
     from target import Probe as _P
 
     def _lim():
@@ -330,12 +330,63 @@ def main():
         _w4.saw([])
     check("...and neither does a unit that sent nothing", _w4.reason == "", _w4.reason)
     # AND AN ORDINARY ERROR IS NOT A RATE LIMIT: a socket reset says nothing about what
-    # the endpoint wants, and stopping on one would end a run over a blip.
+    # the endpoint WANTS, and the advice for one is not the advice for the other.
     _w5 = _W()
     for _ in range(_GIVE * 2):
         _w5.saw([_P(prompt="x", output="", error="URLError: connection reset")])
-    check("...and an ordinary error is not the target asking", _w5.reason == "",
-          _w5.reason)
+    check("...and an ordinary error is not the target asking",
+          "rate limit" not in _w5.reason, _w5.reason)
+
+    # --- AND THE OTHER WAY A TARGET STOPS BEING USABLE ---------------------------------
+    #
+    # The wall was written against an endpoint answering 429 to everything. The commonest
+    # failure of all is an endpoint that answers NOTHING -- a wrong port, a typo in the
+    # URL, a deployment that is not up -- and that had no wall at all: a sweep at a refused
+    # port walked the whole arsenal, one `No connection could be made` per attack per trial,
+    # and the one line that mattered arrived at the end under fifty of them.
+    check("a target that answers nothing at all stops the run too", bool(_w5.reason),
+          "ten errored units and the run keeps sending")
+    check("...saying the rest was not sent", "was NOT sent" in _w5.reason, _w5.reason)
+    check("...and quoting the endpoint's own error, which is the whole answer",
+          "connection reset" in _w5.reason, _w5.reason)
+    # THE ADVICE IS NOT THE SAME ADVICE. `Raise the limit on their side` under an endpoint
+    # that is not up is an instruction to fix the wrong thing.
+    check("...and sends the reader to the URL and the port, not to a rate limit",
+          "the port" in _w5.advice and "min_interval_s" not in _w5.advice, _w5.advice)
+    _w6 = _W()
+    for _ in range(_GIVE):
+        _w6.saw([_lim()])
+    check("...while a rate-limited run is still sent to the limit",
+          "min_interval_s" in _w6.advice, _w6.advice)
+
+    # A TARGET THAT ANSWERED AND THEN THROWS IS A BLIP, and this is the condition the rate
+    # limit half deliberately does NOT take: there, a metered endpoint answering happily
+    # until its quota runs out is the commonest real shape. Here it is the safeguard rather
+    # than a hole -- a restart or one payload the endpoint disliked must not end a run that
+    # still has a measurement to give, and an endpoint that has not answered one of the
+    # first five is not about to.
+    _w7 = _W()
+    _w7.saw([_ok()])
+    for _ in range(_GIVE * 3):
+        _w7.saw([_P(prompt="x", output="", error="HTTPError 500")])
+    check("a target that answered once is not written off for failing after it",
+          _w7.reason == "", _w7.reason)
+    # AND A PROBE THAT WAS NEVER SENT SAYS NOTHING ABOUT THE TARGET. The budget refuses
+    # before a socket is opened, so counting those would end a run on OUR limit while
+    # reporting it as theirs.
+    from signing import NEVER_SENT as _NS_w
+    _w8 = _W()
+    for _ in range(_GIVE * 3):
+        _w8.saw([_P(prompt="x", output="",
+                    error="%s: this run's request budget (50) was spent" % _NS_w)])
+    check("...and a probe the budget never sent is not the target failing",
+          _w8.reason == "", _w8.reason)
+    # AND THE WALL IS REACHED AT THE DECLARED NUMBER, not one either side of it.
+    _w9 = _W()
+    _tripped9 = [_w9.saw([_P(prompt="x", output="", error="URLError: refused")])
+                 for _ in range(_GIVE)]
+    check("...and it takes the declared number of them",
+          _tripped9 == [False] * (_GIVE - 1) + [True], str(_tripped9))
 
     # --- AND THE CLOSING LINE IS WHERE IT HAS TO ARRIVE -----------------------------
     #

@@ -57,7 +57,7 @@ except Exception:
     pass
 
 import yaml
-from workspace import (OUT as WORKSPACE_OUT, safe_target_name, BROKE,
+from workspace import (OUT as WORKSPACE_OUT, safe_target_name, BROKE, clipped as _clipped,
                        NOT_MEASURED, results_files, target_of)
 
 OUT_DIR = WORKSPACE_OUT
@@ -254,21 +254,6 @@ def note_verdict(note):
         return 3, ("NOTHING MEASURED - every claimed row errored or came back empty. "
                    "The artifact is untouched and unverified.")
     return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
-
-
-def _clipped(text, width):
-    """A note cut at a word, with a mark, rather than in the middle of one.
-
-    `which is not vendored in thi` is what a fixed slice produces, and a sentence that
-    stops mid-word reads as a bug in the tool rather than as a message about the target.
-    The same lesson as `format_map`'s column widths one module over: a truncated map is a
-    misread map.
-    """
-    text = " ".join(str(text or "").split())
-    if len(text) <= width:
-        return text
-    cut = text[:width].rsplit(" ", 1)[0] or text[:width]
-    return cut.rstrip(" ,.;:") + "\u2026"
 
 
 def verify_target(tcfg, path, trials, confirm_trials, quiet=False,

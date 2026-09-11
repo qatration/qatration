@@ -810,7 +810,7 @@ oracle_context:
                 return _r.returncode, (_r.stdout or "") + (_r.stderr or ""), len(_hits)
 
             _rc1, _o1, _n1 = _sweep(True)
-            from runner import RATE_LIMIT_GIVE_UP as _GIVE
+            from runner import GIVE_UP_AFTER as _GIVE
             check("a sweep stops when every attack comes back rate-limited",
                   "STOPPED" in _o1, _o1[-400:])
             check("...long before the arsenal is spent", _n1 <= (_GIVE + 2) * 2,
@@ -875,6 +875,42 @@ oracle_context:
                   "5 more errored" in _c3 and "2 more were never sent" in _c3, _c3)
             check("...and says the run stopped, which is why the other seven are missing",
                   "the run stopped: " in _c3, _c3)
+
+            # --- AND THE OTHER WAY A TARGET STOPS BEING USABLE -------------------------
+            #
+            # The wall was written against an endpoint answering 429 to everything. The
+            # commonest failure of all is an endpoint that answers NOTHING -- a wrong port,
+            # a typo in the URL, a deployment that is not up -- and that had no wall at all.
+            # Walked as a stranger: fifty-two attacks at a refused port, one `No connection
+            # could be made` per attack per trial, and the one line that mattered arrived at
+            # the end underneath fifty of them. The engine gave up when a target said `slow
+            # down` and never when it said nothing.
+            _dcfg = os.path.join(_lw, "targets_dead.yaml")
+            with open(_dcfg, "w", encoding="utf-8") as _f:
+                _f.write('name: deadbot\nadapter: http\nurl: "http://127.0.0.1:1/c"\n'
+                         'request:\n  message: "{prompt}"\nresponse:\n  reply: "reply"\n'
+                         'oracle_context:\n  canaries: ["ACME-CANARY-9931"]\n')
+            _rd = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                 "--target-config", _dcfg, "--attacks", _latk, "--trials", "1",
+                 "--overwrite-evidence"],
+                capture_output=True, text=True, timeout=600,
+                env=dict(env, QATRATION_OUT=_lw), cwd=os.path.dirname(HERE))
+            _od = (_rd.stdout or "") + (_rd.stderr or "")
+            check("a sweep at a port with nothing behind it stops instead of walking on",
+                  "STOPPED" in _od, _od[-400:])
+            _cd = next((l for l in _od.splitlines() if "attacks breached" in l
+                        or l.startswith("NOTHING MEASURED:")), "")
+            check("...after the declared number, not after the arsenal",
+                  _cd.startswith("NOTHING MEASURED: %d/10 attacks errored" % _GIVE), _cd)
+            check("...and the other five are named as never sent",
+                  "The other %d were never sent" % (10 - _GIVE) in _cd, _cd)
+            # THE ADVICE IS NOT THE SAME ADVICE. `Raise the limit on their side` under an
+            # endpoint that is not up is an instruction to fix the wrong thing.
+            check("...and the reader is sent to the URL and the port, not to a rate limit",
+                  "the port" in _od and "min_interval_s" not in _od, _od[-500:])
+            check("...and it is `nothing measured`, not a clean bill", _rd.returncode == 3,
+                  "exit %s" % _rd.returncode)
         finally:
             _lsrv2.shutdown()
             shutil.rmtree(_lw, ignore_errors=True)

@@ -211,7 +211,7 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
     package composes -- a credential accepted early in a run and rejected later -- and the
     budget branch dropped it on the floor.
 
-    AND AN ATTACK THE RUN NEVER REACHED IS NOT ONE IT SCORED CLEAN. `RateLimitWall` breaks
+    AND AN ATTACK THE RUN NEVER REACHED IS NOT ONE IT SCORED CLEAN. `GiveUpWall` breaks
     the attack loop, so the arsenal behind the break leaves no row at all -- neither errored
     nor never-sent -- and `attacks_n` still counts it. Measured against a scripted endpoint
     answering 429 to everything after three: ten attacks, three scored, five refused, two
@@ -1276,7 +1276,7 @@ def main():
     # shape is a metered endpoint that answers happily until the quota runs out, and every one
     # of those has succeeded. It would have kept hammering exactly the deployment this exists
     # to protect. Two mutations survived on it, which is how it was found.
-    from runner import RateLimitWall as _Wall
+    from runner import GiveUpWall as _Wall
     _wall, _rl_stopped = _Wall(), ""
     for a in attacks:
         if _rl_stopped:
@@ -1329,10 +1329,12 @@ def main():
         if _wall.saw([r.get("probe") for r in recs]):
             _rl_stopped = _wall.reason.replace("of the last", "of the last").replace(
                 "the rest was", "the rest of the arsenal was")
+            # THE ADVICE COMES FROM THE WALL, because there are two ways to hit it and
+            # they send a reader to two different places. `Raise the limit on their side`
+            # under an endpoint that is not up is an instruction to fix the wrong thing.
             print("\n  ! STOPPED — %s.\n"
-                  "    Nothing here is a result about %s. Raise the limit on their side, "
-                  "or lower\n    `rate.min_interval_s` on ours, and run it again."
-                  % (_rl_stopped, target.name), file=sys.stderr)
+                  "    Nothing here is a result about %s. %s"
+                  % (_rl_stopped, target.name, _wall.advice), file=sys.stderr)
 
     attacks_n = sum(1 for a in attacks if a["category"] != "control")
     # The same ruler as the header. This was `"-" * 78` while the line above it is as wide as

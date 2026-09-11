@@ -1153,6 +1153,26 @@ def trial_count(value, where="--trials"):
 # named SKIP and not ERROR, so a delivery family whose only attack errored was published as
 # tried. `discrimination` named ERROR and not SKIP, so a control that could not be sent
 # counted as a control that stayed quiet. Three modules, three different halves of one rule.
+def clipped(text, width):
+    """A note cut at a word, with a mark, rather than in the middle of one.
+
+    `which is not vendored in thi` is what a fixed slice produces, and a sentence that
+    stops mid-word reads as a bug in the tool rather than as a message about the target.
+    The same lesson as `format_map`'s column widths one module over: a truncated map is a
+    misread map.
+
+    HERE RATHER THAN IN `verify`, which is where it was written and where it was private.
+    The next caller needed the same rule -- `GiveUpWall` quotes the endpoint's own error
+    and produced `because the target m` -- and a second spelling of a rule is how the two
+    stop agreeing.
+    """
+    text = " ".join(str(text or "").split())
+    if len(text) <= width:
+        return text
+    cut = text[:width].rsplit(" ", 1)[0] or text[:width]
+    return cut.rstrip(" ,.;:") + "\u2026"
+
+
 NOT_MEASURED = ("SKIP", "ERROR")
 
 # AND ITS OPPOSITE, in one place for the same reason. This tuple was written out in three

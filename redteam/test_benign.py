@@ -937,7 +937,7 @@ def main():
     import threading as _th_b
     from http.server import BaseHTTPRequestHandler as _BH_b
     from http.server import ThreadingHTTPServer as _TS_b
-    from runner import RATE_LIMIT_GIVE_UP as _GIVE_B
+    from runner import GIVE_UP_AFTER as _GIVE_B
     _bhits, _ball = [], {"v": True}
 
     class _Limiting(_BH_b):
@@ -998,6 +998,35 @@ def main():
               "STOPPED" not in _bo2, _bo2[-400:])
         check("...and reaches the whole corpus", _bn2 > _bn * 4,
               "%d probe(s) against %d" % (_bn2, _bn))
+
+        # AND THE OTHER WAY A TARGET STOPS BEING USABLE. This is the command the
+        # documentation tells an operator to run FIRST, before a single attack, against an
+        # endpoint they have just typed a URL for -- so a typo in that URL is the likeliest
+        # state this command will ever meet, and the wall knew only about rate limits. The
+        # whole corpus went at a refused port, one error line per prompt.
+        _dcfg_b = os.path.join(_bw, "targets_deadbot.yaml")
+        with open(_dcfg_b, "w", encoding="utf-8") as _f:
+            _f.write("name: deadbot\nadapter: http\n")
+            _f.write('url: "http://127.0.0.1:1/c"\n')
+            _f.write("request:\n  message: \"{prompt}\"\n")
+            _f.write("response:\n  reply: \"reply\"\n")
+            _f.write("oracle_context:\n  canaries: [\"ACME-CANARY-9931\"]\n")
+        _rd_b = _sp4.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--target-config", _dcfg_b],
+                         capture_output=True, text=True, errors="replace", timeout=900,
+                         env=dict(os.environ, QATRATION_OUT=_bw,
+                                  PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        _od_b = (_rd_b.stdout or "") + (_rd_b.stderr or "")
+        check("a baseline at a port with nothing behind it stops as well",
+              "STOPPED" in _od_b, _od_b[-400:])
+        check("...quoting what the endpoint actually did, which is the whole answer",
+              "has not answered ONE of the" in _od_b, _od_b[-400:])
+        # THE ADVICE IS NOT THE SAME ADVICE. `Raise the limit on their side` under an
+        # endpoint that is not up is an instruction to fix the wrong thing.
+        check("...and sends the reader to the URL and the port, not to a rate limit",
+              "the port" in _od_b and "min_interval_s" not in _od_b, _od_b[-400:])
+        check("...and it is nothing measured, not a clean baseline", _rd_b.returncode == 3,
+              "exit %s" % _rd_b.returncode)
     finally:
         _bsrv.shutdown()
         _sh8.rmtree(_bw, ignore_errors=True)
