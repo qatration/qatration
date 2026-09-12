@@ -396,7 +396,19 @@ def build(results, target_config=None, out_dir=None):
     # words of its own docstring: zero breaches out of zero attacks is not a defence. It was
     # never consulted here; `meta["attacks_n"]` was read only to fill in `properties`.
     unmeasured = workspace.verdict_for(meta) == "Not measured"
-    if unmeasured and not (unrun or skipped):
+    # THE SENTENCE IS A COUNT, SO THE CONDITION IS THE COUNT. `verdict_for` answers in three
+    # words and `Not measured` is the conservative one: it covers a run that measured nothing
+    # AND a run that measured most of the arsenal and did not reach the rest, because a clean
+    # bill must not stand over missing rows. Read as the trigger for this text it produces
+    # `This run measured nothing` over a sweep that measured forty attacks -- reachable where
+    # the wall stopped a run on its CONTROLS, which leave no errored row among the attacks and
+    # nothing in `skipped`.
+    #
+    # `executionSuccessful` keeps the three-word verdict: a run that did not reach the end of
+    # its arsenal did not complete the analysis, whatever it measured on the way. What that
+    # run gets instead is `run/unfinished` below, which carries the record's own reason.
+    _n_measured, _ = workspace.measured(meta)
+    if not _n_measured and not (unrun or skipped):
         notifications.append({
             "level": "error",
             "message": {"text": "This run measured nothing: %s attack(s) were sent against %s. "

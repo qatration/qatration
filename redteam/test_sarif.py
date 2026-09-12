@@ -570,6 +570,28 @@ check("...and a run that recorded only the sum is not given a split it never had
       "not applicable to this target" not in _coverage_text(_MERGED)
       and "333" in _coverage_text(_MERGED), _coverage_text(_MERGED))
 
+# --- `THIS RUN MEASURED NOTHING` OVER A RUN THAT MEASURED MOST OF THE ARSENAL ----------
+#
+# `verdict_for` answers in three words and `Not measured` is the conservative one: it covers
+# a run that measured nothing AND a run that measured most of the arsenal and did not reach
+# the rest, because a clean bill must not stand over missing rows. Read as the trigger for
+# this notification's text it produces `This run measured nothing` over a sweep that measured
+# forty attacks.
+#
+# Reachable where the wall stopped a run on its CONTROLS: those leave no errored row among
+# the attacks and nothing in `skipped`, so both guards beside it are satisfied.
+_PARTIAL = {"meta": dict(_CLEAN["meta"], attacks_n=45, errors=0, unreached=5, skipped=0),
+            "results": _CLEAN["results"]}
+check("a run that measured most of the arsenal is not told it measured nothing",
+      "coverage/nothing-measured" not in _notes(_PARTIAL), str(_notes(_PARTIAL)))
+check("...and is still not a successful invocation, because it did not finish",
+      _inv(_PARTIAL)["executionSuccessful"] is False,
+      "a run that never reached the end exported as complete")
+# AND THE RUN THAT REALLY MEASURED NOTHING KEEPS THE SENTENCE, or the fix above is a
+# deletion: `_ZERO` is the artifact the notification was written for.
+check("...while a run that measured nothing still says so",
+      "coverage/nothing-measured" in _notes(_ZERO), str(_notes(_ZERO)))
+
 check("a real clean run is still successful", _inv(_CLEAN)["executionSuccessful"] is True)
 check("...and so is one that found a breach and reported it",
       _inv(_BROKE)["executionSuccessful"] is True)
