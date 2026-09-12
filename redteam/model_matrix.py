@@ -91,7 +91,7 @@ def main():
         ap.error("--models is required unless --from-disk is given")
 
     from workspace import load_yaml_or_refuse as _load_yaml
-    cfg = _load_yaml(args.target_config, "target config", "matrix") or {}
+    cfg = _load_yaml(args.target_config, "target config", "matrix")
     from workspace import refuse_unusable_config as _refuse
     _refuse(cfg, "matrix")
     from workspace import config_name as _config_name

@@ -54,7 +54,7 @@ def main():
     # THROUGH THE ONE READER. This refusal was written out here, and separately inside
     # `run` as a closure, while five siblings had neither and crashed.
     from workspace import load_yaml_or_refuse as _load_yaml
-    tcfg = _load_yaml(args.target_config, "target config", "generate") or {}
+    tcfg = _load_yaml(args.target_config, "target config", "generate")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "generate")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the

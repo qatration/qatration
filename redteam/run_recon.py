@@ -55,7 +55,7 @@ def main():
     args = ap.parse_args()
 
     from workspace import load_yaml_or_refuse as _load_yaml
-    tcfg = _load_yaml(args.target_config, "target config", "recon") or {}
+    tcfg = _load_yaml(args.target_config, "target config", "recon")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "recon")
     # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the

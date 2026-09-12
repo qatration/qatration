@@ -593,6 +593,61 @@ def esc(s):
     return _html.escape(plain(s))
 
 
+# WHAT EACH KIND OF DOCUMENT HAS TO BE, and the words for what it is instead.
+#
+# THE OTHER HALF OF `load_yaml_or_refuse`. That reader exists because a path that could not be
+# READ came out as a traceback under the sentence "This is a bug in qatration, not a finding
+# about your target and not a problem with your config" -- wrong on the last clause, and it
+# asks the reader to file a bug for their own typo. It fixed the READ and never asked whether
+# what came back is the document the command wanted.
+#
+# So a target config that parses to a YAML list, to a scalar, or to nothing at all reached the
+# commands as itself, and every one of them called `.get` or `.items` on it. Walked: `run`,
+# `recon`, `verify`, `matrix`, `isolation`, `generate` and `onboard` each answered with that
+# same traceback and that same sentence. `attacks: []` written at the top of an arsenal does it
+# from the other side, and an EMPTY arsenal crashed the one rule that did exist for this --
+# 210 lines into `run`, where no sibling can call it, on `enumerate(None)` before it spoke.
+#
+# A TABLE RATHER THAN A PARAMETER at the call sites, so a caller cannot opt out by omission;
+# `test_workspace` reads every call's `what` out of the AST and asks that this table knows it.
+DOC_SHAPES = {
+    "target config": (dict, "a mapping of keys -- `adapter`, `url`, `request`, `response`, "
+                            "`oracle_context`"),
+    "arsenal": (list, "a bare list of attack mappings, each with an `id`; a file whose top "
+                      "level is `attacks:` loads as a mapping, not a list"),
+    "objectives file": (list, "a list of objectives"),
+}
+
+# "a single string" in the same words `bad_context_shapes` uses one screen down, because
+# it is the same mistake at the other level of the file.
+_SHAPE_WORDS = {dict: "a mapping", list: "a list", str: "a single string"}
+
+
+def wrong_shape(doc, what, path=""):
+    """-> why this document is not a `what`, or "" when it is one.
+
+    EMPTY IS ONE OF THE WRONG SHAPES and not a special case: a target config with nothing in
+    it configures nothing, and the commands that read it as `{}` went on to ask an endpoint
+    they were never given for an adapter nobody named.
+
+    "" for a kind `DOC_SHAPES` does not know, because inventing a shape for an unnamed
+    document would refuse a caller on a guess. `test_workspace` gates the table against the
+    call sites, so silence cannot be how a caller skips this.
+    """
+    want = DOC_SHAPES.get(what)
+    if want is None:
+        return ""
+    kind, says = want
+    if isinstance(doc, kind):
+        return ""
+    where = ("the %s at %s" % (what, path)) if path else ("the %s" % what)
+    if doc is None:
+        return "%s is empty -- nothing parsed out of it. A %s is %s." % (where, what, says)
+    return ("%s is %s, not %s. A %s is %s."
+            % (where, _SHAPE_WORDS.get(type(doc), "a " + type(doc).__name__),
+               _SHAPE_WORDS.get(kind, kind.__name__), what, says))
+
+
 def load_yaml_or_refuse(path, what="target config", where=""):
     """Read a YAML path somebody typed, or refuse it. -> the parsed document.
 
@@ -625,11 +680,20 @@ def load_yaml_or_refuse(path, what="target config", where=""):
                          % (path, what))
     try:
         with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            doc = yaml.safe_load(f)
     except FileNotFoundError:
         why = "no %s at %s." % (what, path)
     except Exception as e:
         why = "could not read the %s at %s: %s: %s" % (what, path, type(e).__name__, e)
+    else:
+        # AND WHAT CAME BACK IS THE DOCUMENT THAT WAS ASKED FOR, which is the half this
+        # reader did not have. See `wrong_shape` above: the refusal for a path that could
+        # not be read was written, and the one for a file that read fine and is not a
+        # config was not, so the traceback it exists to stop was still the answer.
+        bad = wrong_shape(doc, what, path)
+        if not bad:
+            return doc
+        why = bad
     lines = [lead + "ABORT — " + why + " Nothing was sent."]
     if not os.path.splitext(str(path))[1] and not os.path.dirname(str(path)):
         lines += [

@@ -1057,7 +1057,7 @@ def main():
     # above both of them, not inside one.
     if args.target_config:
         from workspace import load_yaml_or_refuse as _load_yaml
-        cfg = _load_yaml(args.target_config, "target config", "benign") or {}
+        cfg = _load_yaml(args.target_config, "target config", "benign")
         # THE COMMAND THIS TOOL TELLS AN OPERATOR TO RUN to measure their false-positive
         # rate. With `canaries: "ACME"` it would report a wall of noise, and the operator
         # would read that as the detector being broken rather than the config.

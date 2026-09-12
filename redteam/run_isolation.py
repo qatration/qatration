@@ -36,7 +36,7 @@ def load_target(cfg_path, model=None):
     """Reuse run_redteam's adapter registry and target config verbatim — one place
     to add a target, both entry points get it."""
     from workspace import load_yaml_or_refuse as _load_yaml
-    tcfg = _load_yaml(cfg_path, "target config", "isolation") or {}
+    tcfg = _load_yaml(cfg_path, "target config", "isolation")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "isolation")
     # AUTHORISATION FIRST, before a target is even built. Isolation sends real traffic — a
@@ -131,7 +131,7 @@ def main():
 
     path = objectives_path(args.objectives)
     from workspace import load_yaml_or_refuse as _load_yaml
-    objectives = _load_yaml(path, "objectives file", "isolation") or []
+    objectives = _load_yaml(path, "objectives file", "isolation")
     # The same rule, on the corpus where a typo is worst: an unknown name leaves nothing to
     # evaluate, every trial misses, and an objective whose properties are all locked reads as
     # HARDENED — the strongest claim this command makes.

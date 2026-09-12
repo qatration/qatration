@@ -40,6 +40,8 @@ import authorization
 import jobqueue as q
 from targets_http import HttpConfiguredTarget, CONFIG_ONLY_KEYS, dig
 from workspace import OUT, safe_target_name
+from workspace import wrong_shape as _wrong_shape
+from workspace import load_yaml_or_refuse as _load_yaml_or_refuse
 
 PROBE = "Hello, I have a question about my recent order."
 
@@ -132,10 +134,25 @@ def check(cfg_path, probe_text=PROBE):
     """Returns (ok, report dict). Sends exactly one request."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
     try:
-        cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
+        cfg = yaml.safe_load(open(cfg_path, encoding="utf-8"))
     except Exception as e:
         rep["problems"].append(f"the config file could not be read: {type(e).__name__}: {e}")
         return False, rep
+    # AND A FILE THAT READ FINE IS NOT YET A CONFIG. This command is exempt from the shared
+    # `refuse_unusable_config` on purpose -- refusing a config IS the command, so it collects
+    # into its own problem list instead of raising -- and the exemption took the shape rule
+    # with it: `- a` in a file reached `unread_context_keys(cfg)` three lines down and came
+    # back as `'list' object has no attribute 'get'` under "This is a bug in qatration ...
+    # and not a problem with your config".
+    #
+    # `or {}` was the other half of it: an EMPTY config became a mapping here and the report
+    # went on to say `adapter is None`, which describes a key that is missing rather than a
+    # file with nothing in it.
+    _shape = _wrong_shape(cfg, "target config")
+    if _shape:
+        rep["problems"].append(_shape)
+        return False, rep
+    cfg = cfg or {}
     # ONLY THE CONTEXT LEVEL HERE. The top level is already refused by the adapter this
     # command onboards — `HttpConfiguredTarget` raises on a key it does not know — so a note
     # would repeat the PROBLEM printed below it. The built-in adapters have no such refusal,
@@ -553,7 +570,11 @@ def main():
         return
 
     if args.verify_honeytoken:
-        cfg = yaml.safe_load(open(args.config, encoding="utf-8")) or {}
+        # THROUGH THE SHARED READER, because this branch does not go through `check()` and
+        # so has none of its refusals. The comment below says exactly that about the
+        # authorization gate; the config's own shape is the same story -- a document that
+        # is not a mapping reached `authorization.gate` here as a list.
+        cfg = _load_yaml_or_refuse(args.config, "target config", "onboard") or {}
         # THE RULE IS STATED NINETY LINES UP AND THIS BRANCH BROKE IT. `check()` runs the gate
         # before its probe, with the comment "the gate cannot sit after the thing it gates" —
         # and this path does not go through `check()`. It built the target and sent a real

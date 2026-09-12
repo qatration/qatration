@@ -455,6 +455,127 @@ def check_every_command_refuses():
     check("...with an exit code the contract documents",
           sorted(_bare_code), [])
 
+    # --- AND A DOCUMENT THAT PARSED IS NOT YET THE DOCUMENT THAT WAS ASKED FOR -----------
+    #
+    # The reader above exists because a path that could not be READ came back as a traceback
+    # under that same sentence. It fixed the read and never asked what came back. A target
+    # config holding `- a` reached seven commands as a list, every one of them called `.get`
+    # or `.items` on it, and every one printed "not a problem with your config" about the
+    # reader's own file. An empty one did it too, through the `or {}` at seven call sites.
+    check("a target config that is a YAML list is not a config",
+          "is a list, not a mapping" in _ws.wrong_shape([], "target config"), True)
+    check("...nor is a bare scalar",
+          "is a single string, not a mapping" in _ws.wrong_shape("hi", "target config"), True)
+    check("...nor is an empty file, which `or {}` used to turn into one",
+          "is empty" in _ws.wrong_shape(None, "target config"), True)
+    check("...while a mapping is one",
+          _ws.wrong_shape({"adapter": "http"}, "target config"), "")
+    # THE OTHER DIRECTION, which is the one that had a rule -- 210 lines into `run`, where no
+    # sibling can call it, and on `enumerate(None)` before it could speak.
+    check("an arsenal that is a mapping is not an arsenal",
+          "is a mapping, not a list" in _ws.wrong_shape({"attacks": []}, "arsenal"), True)
+    check("...nor is an empty arsenal file an empty arsenal",
+          "is empty" in _ws.wrong_shape(None, "arsenal"), True)
+    check("...while a list is one", _ws.wrong_shape([{"id": "a"}], "arsenal"), "")
+    check("the file is named when the caller knows its path",
+          "at mybot.yaml" in _ws.wrong_shape([], "target config", "mybot.yaml"), True)
+
+    # AND EVERY KIND OF DOCUMENT A CALL SITE ASKS FOR IS IN THE TABLE. `wrong_shape` is silent
+    # about a kind it does not know, which is the right answer for an unnamed document and the
+    # wrong one for a caller that simply typed a new label: silence there is indistinguishable
+    # from a clean bill. Read as the ARGUMENT of the call, not as a word in the file.
+    import ast as _ast_s
+    _kinds, _unknown_kind, _sites = set(), [], 0
+    for _fp in sorted(_g.glob(_os.path.join(_here, "*.py"))):
+        _nm = _os.path.basename(_fp)
+        if _nm.startswith("test_"):
+            continue
+        _src_k = _io.open(_fp, encoding="utf-8").read()
+        if "load_yaml_or_refuse" not in _src_k:
+            continue
+        try:
+            _tk = _ast_s.parse(_src_k)
+        except SyntaxError:
+            continue
+        _reader_names = set()
+        for _n in _ast_s.walk(_tk):
+            if isinstance(_n, _ast_s.ImportFrom) and _n.module == "workspace":
+                for _a in _n.names:
+                    if _a.name == "load_yaml_or_refuse":
+                        _reader_names.add(_a.asname or _a.name)
+        # AND ONE LEVEL OF WRAPPER. `run` reads both of its documents through a closure that
+        # takes `what` and passes it along, so the two literals sit at the CLOSURE's call
+        # sites: a scan that looked only at calls to the reader itself would see neither of
+        # them, and `run` is the one command that reads both kinds.
+        for _n in _ast_s.walk(_tk):
+            if not isinstance(_n, _ast_s.FunctionDef):
+                continue
+            if "what" not in [_arg.arg for _arg in _n.args.args]:
+                continue
+            for _m in _ast_s.walk(_n):
+                if (isinstance(_m, _ast_s.Call) and isinstance(_m.func, _ast_s.Name)
+                        and _m.func.id in _reader_names):
+                    _reader_names.add(_n.name)
+        for _n in _ast_s.walk(_tk):
+            if not (isinstance(_n, _ast_s.Call) and isinstance(_n.func, _ast_s.Name)
+                    and _n.func.id in _reader_names):
+                continue
+            _w = _n.args[1] if len(_n.args) > 1 else None
+            for _kw in _n.keywords:
+                if _kw.arg == "what":
+                    _w = _kw.value
+            if isinstance(_w, _ast_s.Constant) and isinstance(_w.value, str):
+                _sites += 1
+                _kinds.add(_w.value)
+                if _w.value not in _ws.DOC_SHAPES:
+                    _unknown_kind.append("%s: %r" % (_nm, _w.value))
+    check("every kind of document a command asks the reader for has a shape",
+          sorted(_unknown_kind), [])
+    check("...and the scan found the call sites it is quantified over", _sites >= 8, True)
+    check("...including the second kind, which only `run` reads", "arsenal" in _kinds, True)
+
+    # AND THE COMMANDS THEMSELVES, DRIVEN, for the reason the bare loop above gives: the rule
+    # is a function with fixtures, and the defect was that nine commands reached their own
+    # `.get` before anything called it.
+    _NO_COMMAND = {
+        "run_adaptive.py": "has no entry in the CLI table: it is reachable only by invoking "
+                           "the module, and it goes through the same reader",
+        "sarif.py": "takes --target-config as a PATH to anchor findings at and never reads "
+                    "the document, so a file of any shape anchors the same way",
+    }
+    _EXTRA_S = {"run": ["--attacks", _os.path.join(_here, "attacks_ansi.yaml")],
+                "matrix": ["--models", "a"], "benign": ["--trials", "1"]}
+    _cfg_list = _os.path.join(_tfp.mkdtemp(), "cfg_list.yaml")
+    _io.open(_cfg_list, "w", encoding="utf-8", newline="").write("- a\n- b\n")
+    _silent, _crashed = [], []
+    for _nm in sorted(_readers):
+        if _nm in _NO_COMMAND:
+            continue
+        _cmd = _mod_to_cmd.get(_nm)
+        if not _cmd:
+            _silent.append("%s has no command and no exemption" % _nm)
+            continue
+        _p = _sp.run([_sys.executable, _os.path.join(_here, "cli.py"), _cmd,
+                      "--target-config", _cfg_list] + _EXTRA_S.get(_cmd, []),
+                     capture_output=True, text=True, timeout=300, env=_bare_env,
+                     cwd=_bare_cwd)
+        _raw = (_p.stdout or "") + (_p.stderr or "")
+        if "Traceback (most recent call last)" in _raw:
+            _crashed.append(_cmd)
+        # SAID, not merely survived. A command that aborts earlier for a reason of its own --
+        # a missing arsenal, an argument it wanted -- never reaches the config, and a gate
+        # that accepted silence would be green over exactly that.
+        if "is a list, not a mapping" not in _raw:
+            _silent.append("%s: %s" % (_cmd, (_raw.strip().splitlines() or [""])[-1][:70]))
+    check("no command answers a config that is not a config with a traceback",
+          sorted(_crashed), [])
+    check("...and every one of them says what the file is instead", sorted(_silent), [])
+    check("...over the commands that take --target-config",
+          len(set(_readers) - set(_NO_COMMAND)) >= 7, True)
+    check("every exemption names a module that still takes --target-config",
+          sorted(set(_NO_COMMAND) - set(_readers)), [])
+    check("...and gives a reason", all(_NO_COMMAND.values()), True)
+
     # AND THE READER ITSELF SAYS WHICH OF THE THREE THINGS WENT WRONG, because `no such
     # file`, `that is a directory` and `that is not YAML` have different remedies.
     def _read(path):

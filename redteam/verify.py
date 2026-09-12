@@ -575,7 +575,7 @@ def main():
                  "stored artifact in this workspace")
 
     from workspace import load_yaml_or_refuse as _load_yaml
-    tcfg = _load_yaml(args.target_config, "target config", "verify") or {}
+    tcfg = _load_yaml(args.target_config, "target config", "verify")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "verify")
     if not tcfg.get("name"):
