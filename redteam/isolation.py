@@ -26,6 +26,7 @@ reuse the same detectors as the arsenal, and refusals are labelled by refusal.py
 this module only sequences probes and compares outcomes.
 """
 import json
+import os
 from oracle import DETECTORS, inert_for, visible_text
 from refusal import classify
 from target import payload
@@ -423,6 +424,46 @@ def map_target(stem, meta, names):
     if stamped:
         return stamped
     return target_of(stem, names)
+
+
+def would_lose_a_measurement(path, maps, read=None):
+    """-> the sentence refusing to replace a measured map with an unmeasured one, or "".
+
+    `run` refuses exactly this trade and writes down why: `a file of ERROR rows would
+    overwrite the record of a run that did measure something, and the next history diff
+    would read it as five findings fixed`. `benign` refuses it -- `an unmeasured target must
+    not read as a quiet one` -- and so does `recon`. This command wrote.
+
+    Measured: a stored map recording COUPLING on one objective, the endpoint then refused
+    every connection, and the re-run replaced it with UNMEASURED and stamped today's date on
+    it. COUPLING is the finding this module exists to produce -- each lock open on its own,
+    the combination refused -- and it is the one `coverage` and the scorecard read.
+
+    NOT A REFUSAL TO WRITE THE FIRST ONE. The comment this replaces argued that an
+    all-unmeasured map is an honest record that a run happened and learned nothing, which is
+    true where there is nothing to lose, and that is exactly when this stays silent: no file
+    yet, or a stored one that measured nothing either. The trade it refuses is the
+    replacement.
+
+    `read` is injected so the branch can be exercised without a stored artifact.
+    """
+    if not maps or not all(m.get("verdict") == "UNMEASURED" for m in maps):
+        return ""
+    if not os.path.exists(path):
+        return ""
+    try:
+        stored, _meta = (read or read_maps)(path)
+    except Exception:
+        # A MAP NOBODY CAN READ IS NOT A MAP THAT MEASURED SOMETHING, and refusing over one
+        # would leave a target with no map at all and no way to get one.
+        return ""
+    if not stored or all((m or {}).get("verdict") == "UNMEASURED" for m in stored):
+        return ""
+    _kept = sorted({str((m or {}).get("verdict")) for m in stored
+                    if (m or {}).get("verdict") != "UNMEASURED"})
+    return ("Leaving %s as it was: it records %s and this run measured nothing, so writing "
+            "would replace a map that answered with one that could not."
+            % (os.path.basename(path), ", ".join(_kept)))
 
 
 def write_maps(path, maps, meta=None, when=None):

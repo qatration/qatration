@@ -53,6 +53,62 @@ def run(rules, trials=2):
     return run_isolation(Scripted(rules), OBJ, CTX, trials=trials)
 
 
+def _replacement_checks(check):
+    """A run that measured nothing must not replace a map that measured something.
+
+    `run` refuses this trade and writes down why -- `a file of ERROR rows would overwrite
+    the record of a run that did measure something, and the next history diff would read it
+    as five findings fixed` -- `benign` refuses it, `recon` refuses it, and this command
+    wrote. Measured: a stored map recording COUPLING on one objective, the endpoint then
+    refused every connection, and the re-run replaced it with UNMEASURED and stamped today
+    onto it. COUPLING is the finding this module exists to produce, and `coverage` and the
+    scorecard are what read it.
+    """
+    import os as _os_r
+    import isolation as _iso_r
+    _UN = [{"objective": "o", "verdict": "UNMEASURED"}]
+    _GOOD = [{"objective": "o", "verdict": "COUPLING"}]
+    _HERE_R = _os_r.path.dirname(_os_r.path.abspath(__file__))
+    _REAL = _os_r.path.join(_HERE_R, "isolation.py")          # a path that exists
+
+    def _stored(rows):
+        return lambda _p: (rows, {})
+
+    _said = _iso_r.would_lose_a_measurement(_REAL, _UN, read=_stored(_GOOD))
+    check("an unmeasured run refuses to replace a map that answered", bool(_said), True)
+    check("...naming what the stored map says, so the refusal can be judged",
+          "COUPLING" in _said, True)
+    # NOT A REFUSAL TO WRITE THE FIRST ONE. An all-unmeasured map is an honest record that a
+    # run happened and learned nothing, which is true where there is nothing to lose -- and
+    # that is exactly when this stays silent.
+    check("...while a map that measured nothing either is replaced without ceremony",
+          _iso_r.would_lose_a_measurement(_REAL, _UN, read=_stored(_UN)), "")
+    check("...and so is one with no stored map at all",
+          _iso_r.would_lose_a_measurement(_REAL + ".nope", _UN, read=_stored(_GOOD)), "")
+    # AND A RUN THAT MEASURED IS NEVER REFUSED, whatever is on disk: the new map is the
+    # better one, and refusing would freeze the first answer forever.
+    check("a run that measured something always writes",
+          _iso_r.would_lose_a_measurement(_REAL, _GOOD, read=_stored(_GOOD)), "")
+    # AND A MAP NOBODY CAN READ IS NOT A MAP THAT MEASURED SOMETHING. Refusing over one
+    # would leave a target with no map and no way to get one.
+
+    def _torn(_p):
+        raise ValueError("torn")
+
+    check("...and a stored map that cannot be read does not block the new one",
+          _iso_r.would_lose_a_measurement(_REAL, _UN, read=_torn), "")
+    # AND THE COMMAND ASKS. The rule is only a fix while `run_isolation` still calls it, and
+    # the state that reaches it needs a stored map and an endpoint that stops answering.
+    import ast as _ast_i
+    _rsrc = io.open(_os_r.path.join(_HERE_R, "run_isolation.py"),
+                    encoding="utf-8").read()
+    _main_i = next((_n for _n in _ast_i.walk(_ast_i.parse(_rsrc))
+                    if isinstance(_n, _ast_i.FunctionDef) and _n.name == "main"), None)
+    check("the command asks before it writes",
+          bool(_main_i) and any(isinstance(_c, _ast_i.Call)
+                                and getattr(_c.func, "id", "") == "would_lose_a_measurement"
+                                for _c in _ast_i.walk(_main_i)), True)
+
 def main():
     fails, checks = [], 0
 
@@ -63,6 +119,8 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'}  {label:<46} -> {got}")
         if not ok:
             fails.append(f"{label}: expected {want}, got {got}")
+
+    _replacement_checks(check)
 
     # 1. both locks open alone, combination ALSO open -> straightforward break
     r = run([("PROBE_SENDER", "sent", CALL),

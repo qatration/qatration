@@ -21,7 +21,8 @@ except Exception:
     pass
 
 import yaml
-from isolation import run_isolation, format_map, apply_keysearch, prop_ctx, write_maps
+from isolation import (run_isolation, format_map, apply_keysearch, prop_ctx, write_maps,
+                       would_lose_a_measurement)
 from keysearch import search, format_search, load_frames
 from compose import compose, format_compose
 
@@ -259,16 +260,24 @@ def main():
             # so a pipeline must not read it as a finding.
             print(_refusal, file=sys.stderr)
             return 2
-        os.makedirs(os.path.dirname(out), exist_ok=True)
+        # AND A RUN THAT MEASURED NOTHING DOES NOT REPLACE ONE THAT DID. `run` refuses the
+        # same trade in as many words, `benign` refuses it, `recon` refuses it; this wrote.
+        # The rule lives in `isolation` beside the writer it guards.
+        _lost = would_lose_a_measurement(out, maps)
+        if _lost:
+            print("\n" + _lost, file=sys.stderr)
+        else:
+            os.makedirs(os.path.dirname(out), exist_ok=True)
         # through write_maps, so the artifact carries the build that produced it — lock maps
         # were a bare list with no meta and could not be stamped even in principle
         # THE MOMENT THIS MEASURED, said here because this is what knows it. `write_maps`
         # will not invent one: `rejudge --write` rewrites these files for probes recorded
         # weeks earlier, and a default would stamp today onto that evidence.
-        import datetime as _dt_i
-        write_maps(out, maps, {"target": target.name, "objectives": os.path.basename(path)},
-                   when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
-        print(f"\nwrote {out}")
+            import datetime as _dt_i
+            write_maps(out, maps,
+                       {"target": target.name, "objectives": os.path.basename(path)},
+                       when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
+            print(f"\nwrote {out}")
 
     # 3 WHEN NOTHING WAS MEASURED, WHICH THE VERDICT ALREADY KNEW. `_verdict` learned to
     # answer UNMEASURED after a dead target came back HARDENED, and the exit code was left
