@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 
-def _workspace(runs, mtimes=None, texts=None, verdicts=None):
+def _workspace(runs, mtimes=None, texts=None, verdicts=None, unreached=None):
     """A directory of per-model artifacts. `runs` is {model: (engine, when)}.
 
     `texts` gives one model's copy of `a1` a different payload, which is how an attack
@@ -46,6 +46,11 @@ def _workspace(runs, mtimes=None, texts=None, verdicts=None):
     for model, (engine, when) in runs.items():
         meta = {"target": "matbot", "attacks_n": 1, "errors": 0, "trials": 3,
                 "arsenal": "attacks.yaml"}
+        # WHAT THE SWEEP RECORDS WHEN IT DID NOT REACH THE END. An arm the arsenal outran
+        # has fewer attacks that could break it, and this command ends with a ranking of
+        # breach counts.
+        if (unreached or {}).get(model):
+            meta["unreached"], meta["stopped"] = unreached[model]
         if engine is not None:
             meta["engine"] = engine
         if when is not None:
@@ -214,6 +219,96 @@ def main():
     finally:
         for w in made:
             shutil.rmtree(w, ignore_errors=True)
+
+    # --- AN ARM THE ARSENAL OUTRAN WAS REPORTED AS THE SAFEST MODEL ---------------------
+    #
+    # `comparable` refuses a run that exited non-zero, wrote nothing, or left an older file
+    # in place. A sweep the TARGET stopped part way exits 0, writes a fresh file, and is
+    # simply short -- and this command ends with a ranking of breach counts, so fewer
+    # attacks sent is fewer attacks that can break it and the arm that was cut off wins.
+    import io as _io_m
+    import contextlib as _ctx_m
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import model_matrix as _mm
+
+    check("an arm with attacks it never reached is named",
+          _mm.asked_less({"a": (7, "the endpoint answered every one of the last 5 with a "
+                                   "rate limit")}, ["a"]) == {
+              "a": (7, "the endpoint answered every one of the last 5 with a rate limit")},
+          str(_mm.asked_less({"a": (7, "x")}, ["a"])))
+    check("...and an arm that reached everything is not",
+          _mm.asked_less({"a": (0, "")}, ["a"]) == {}, str(_mm.asked_less({"a": (0, "")},
+                                                                          ["a"])))
+    check("...and neither is one the arsenal never recorded it for",
+          _mm.asked_less({}, ["a"]) == {}, str(_mm.asked_less({}, ["a"])))
+    check("...nor a model that is not in this comparison",
+          _mm.asked_less({"b": (3, "")}, ["a"]) == {}, str(_mm.asked_less({"b": (3, "")},
+                                                                          ["a"])))
+
+    def _row(aid, head, rate="1/1"):
+        return {"attack": {"id": aid, "category": "leak", "text": aid},
+                "headline": head, "rate": rate, "fired": [], "locks": {}}
+
+    # FEWER ATTACKS, FEWER BREACHES. `cut` was sent three of six and broke one; `whole` was
+    # sent all six and broke two. On counts alone `cut` is the safer model.
+    _whole = {a: _row(a, "EXPLOITED" if a in ("m1", "m2") else "DEFENDED")
+              for a in ("m1", "m2", "m3", "m4", "m5", "m6")}
+    _cut = {a: _row(a, "EXPLOITED" if a == "m1" else "DEFENDED")
+            for a in ("m1", "m2", "m3")}
+    _buf = _io_m.StringIO()
+    with _ctx_m.redirect_stdout(_buf):
+        _mm.report("t", {"whole": _whole, "cut": _cut},
+                   {"whole": (0, ""), "cut": (3, "the endpoint stopped answering")})
+    _said = _buf.getvalue()
+    check("an arm three attacks never reached is named before the verdict",
+          "3 attack(s) never reached cut" in _said, _said[-400:])
+    check("...with the reason the run recorded",
+          "the endpoint stopped answering" in _said, _said[-400:])
+    check("...and its count called a floor rather than a count",
+          "are a FLOOR" in _said, _said[-400:])
+    check("...so it is not called the model that held better",
+          "cut" not in _said.split("→")[-1].split("held better")[0]
+          or "held better" not in _said, _said[-400:])
+    check("...and the sentence says why not, in the words that decide it",
+          "CANNOT be called the safer model" in _said, _said[-400:])
+    # AND A COMPARISON WHERE BOTH ARMS GOT THE WHOLE ARSENAL IS UNCHANGED, or the caveat
+    # lands on every matrix and stops being read.
+    _buf2 = _io_m.StringIO()
+    with _ctx_m.redirect_stdout(_buf2):
+        _mm.report("t", {"whole": _whole, "other": _cut}, {"whole": (0, ""),
+                                                           "other": (0, "")})
+    _said2 = _buf2.getvalue()
+    check("two arms that both got the whole arsenal are ranked as before",
+          "held better than" in _said2 and "FLOOR" not in _said2, _said2[-300:])
+
+    # AND THROUGH THE DOOR, on the path this command's own help calls the whole risk.
+    _w_cut = _workspace({"aaa": (None, "2026-09-01 10:00"),
+                         "bbb": (None, "2026-09-01 10:00")},
+                        verdicts={"aaa": "EXPLOITED", "bbb": "DEFENDED"},
+                        unreached={"bbb": (9, "the endpoint stopped answering")})
+    _rc_cut, _said_cut = _matrix(_w_cut)
+    check("a stored arm the arsenal outran is named in the matrix",
+          "9 attack(s) never reached bbb" in _said_cut, _said_cut[-400:])
+    check("...with the reason its run recorded",
+          "the endpoint stopped answering" in _said_cut, _said_cut[-400:])
+    check("...and is not called the model that held better",
+          "CANNOT be called the safer model" in _said_cut, _said_cut[-400:])
+
+    # AND BOTH PATHS THAT FILL IT READ THE SWEEP'S OWN FIELD. One builds the arms by
+    # RUNNING them and one reads them off disk; a rule written into one is a rule the other
+    # does not have, which is how `config_model` came to answer two ways about one artifact.
+    import ast as _ast_x
+    _msrc = open(os.path.join(HERE, "model_matrix.py"), encoding="utf-8").read()
+    _fills = [_n for _n in _ast_x.walk(_ast_x.parse(_msrc))
+              if isinstance(_n, _ast_x.Assign)
+              and any(isinstance(_t, _ast_x.Subscript)
+                      and getattr(_t.value, "id", "") == "short" for _t in _n.targets)]
+    check("both arms of the command record what the sweep did not reach",
+          len(_fills) == 2, "%d assignment(s) to short[]" % len(_fills))
+    check("...and each of them reads the field the sweep writes",
+          all("unreached" in (_ast_x.get_source_segment(_msrc, _f) or "")
+              for _f in _fills), str([_ast_x.get_source_segment(_msrc, _f)
+                                      for _f in _fills])[:200])
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
