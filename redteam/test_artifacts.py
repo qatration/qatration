@@ -202,6 +202,60 @@ def main():
     check("a results file with no results list is recognised and refused",
           read_artifact(_nores)[1] is not None, str(read_artifact(_nores)[1]))
 
+    # --- AND THE SHAPES IT COULD SAY THE MOST ABOUT WERE THE ONES IT PASSED ---------------
+    #
+    # Both rules opened `if not isinstance(data, dict): return None` -- "nothing wrong with
+    # this file", from the two functions whose only job is to say what is wrong. A document
+    # that is not a mapping is as unusable as an artifact gets: nothing in it can be looked up
+    # by key, which is all either family is ever read by.
+    #
+    # `sarif` believed it and died on `.get` one frame later, under the sentence telling the
+    # reader it is a bug in this tool rather than a fact about their file. Walked with `[1, 2]`,
+    # with `"hello"` and with `null`, through every command that takes `--results`.
+    def _artifact(name, body):
+        _fp = os.path.join(tempfile.mkdtemp(), name)
+        io.open(_fp, "w", encoding="utf-8").write(json.dumps(body))
+        return read_artifact(_fp)
+
+    for _lbl, _body in (("a list", [1, 2]), ("a string", "hello"), ("null", None)):
+        _d3, _why3 = _artifact("results_x.json", _body)
+        check("a results file that is %s is refused, not handed on" % _lbl,
+              _d3 is None and _why3 is not None, str(_why3))
+        check("...and the reason says it is not a mapping",
+              "not a mapping" in (_why3 or ""), str(_why3))
+        _d4, _why4 = _artifact("benign_x.json", _body)
+        check("a benign baseline that is %s is refused too" % _lbl,
+              _d4 is None and _why4 is not None, str(_why4))
+    # AND THE RULE DIED ON ONE OF THEM ITSELF. `(data.get("meta") or {}).get("target")` is a
+    # `.get` on whatever `meta` happens to be, so `meta: [1]` raised AttributeError out of the
+    # guard written to stop exactly this -- the checker crashing on the file it was checking.
+    try:
+        _d5, _why5 = _artifact("results_x.json", {"meta": [1], "results": []})
+    except Exception as _e5:
+        # A CRASH IS NOT A REASON. Caught so the mutation that puts the raise back reads as a
+        # named failure here rather than as this suite dying on its own fixture.
+        _d5, _why5 = None, "CRASHED %s: %s" % (type(_e5).__name__, _e5)
+    check("a results file whose meta is not a mapping is named rather than raising",
+          _d5 is None and "meta is list" in (_why5 or ""), str(_why5))
+    # AND A MISSING `meta` KEEPS THE ANSWER IT ALREADY HAD, which is a different fact from a
+    # `meta` of the wrong kind and had a better sentence for it.
+    _d6, _why6 = _artifact("results_x.json", {"results": []})
+    check("...while a results file with no meta at all still names the key",
+          "meta.target" in (_why6 or ""), str(_why6))
+
+    # AND NOT BY REFUSING EVERY LIST, which is the fix that would have passed every line
+    # above. SIXTEEN artifacts stored here ARE top-level lists -- every `isolation_*.json`
+    # coupling map -- and they come through this same reader; a rule that refused a list
+    # outright would take all of them out of the pages that read them.
+    _lists = [_p for _p in sorted(_g_a.glob(os.path.join(ROOT, "out", "*.json")))
+              if isinstance(json.load(io.open(_p, encoding="utf-8")), list)]
+    check("the artifacts that are lists by design can be found", len(_lists) >= 5,
+          str(len(_lists)))
+    _listrefused = {os.path.basename(_p): read_artifact(_p)[1]
+                    for _p in _lists if read_artifact(_p)[1]}
+    check("...and not one of them is refused for being a list", _listrefused == {},
+          str(_listrefused))
+
     # AND THERE HAVE TO BE SOME. "no shipped file is refused" is satisfied by shipping no
     # files, and an empty `out/` is exactly the state a `--depth 1` clone of a fork can be in.
     # Measured by deleting the artifacts in a clone and re-running: this suite passed.

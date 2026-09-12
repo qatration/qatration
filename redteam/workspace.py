@@ -1528,15 +1528,22 @@ def _unusable_benign(data, name=""):
     Identified by `rows` + a target, which is what a benign artifact IS; a results file has
     `results` and reaches the rule above instead.
     """
-    if not isinstance(data, dict) or "results" in data:
+    # BY NAME FIRST, and the isinstance after it. Written the other way round, a benign
+    # baseline that is not a mapping returned None here -- "nothing wrong with this file" from
+    # one of the two functions whose only job is to say what is wrong -- before the name was
+    # ever consulted. The results rule below had the same line and the same hole.
+    if not name.startswith("benign_"):
+        return None
+    if not isinstance(data, dict):
+        return ("a benign baseline that is %s, not a mapping: every key the roll-up reads -- "
+                "`meta` and `rows` both -- is looked up on it" % type(data).__name__)
+    if "results" in data:
         return None
     # BY NAME ONLY, and that is the lesson of the results rule pointed the other way. A
     # `rows` list is not enough to say "this is a benign baseline": `rejudge` hands this
     # reader a re-scoring input with rows and no `meta.probes`, which is fine for what it is,
     # and content-based identification refused it. The name is what this engine decides on
     # purpose -- `workspace.artifact` picks the prefix -- so the name is what identifies.
-    if not name.startswith("benign_"):
-        return None
     if not isinstance(data.get("rows"), list):
         return ("a benign baseline with no rows: %s" % _BENIGN_REQUIRE["rows"])
     meta = data.get("meta")
@@ -1566,13 +1573,34 @@ def _unusable_results(data, name=""):
     RESULTS FILES ONLY. Benign baselines, lock maps and recon profiles come through this
     same reader with their own shapes, and a rule that guessed at those would refuse them.
     """
+    # A DOCUMENT THAT IS NOT A MAPPING IS AS UNUSABLE AS AN ARTIFACT GETS, and this answered
+    # None for it: "nothing wrong with this file", from the function whose only job is to say
+    # what is wrong. `sarif` believed it and died on `.get` one frame later, under the sentence
+    # telling the reader it is a bug in this tool rather than a fact about their file. Walked
+    # with `[1, 2]`, with `"hello"` and with `null`.
+    #
+    # BY NAME, for the reason the benign rule above gives: SIXTEEN artifacts stored here ARE
+    # top-level lists -- every `isolation_*.json` coupling map -- and they come through this
+    # same reader. A rule that refused a list outright would refuse all of them.
     if not isinstance(data, dict):
-        return None
+        if not name.startswith("results_"):
+            return None
+        return ("a results file that is %s, not a mapping: every key the pages read -- "
+                "`meta` and `results` both -- is looked up on it"
+                % type(data).__name__)
     if not (name.startswith("results_") or isinstance(data.get("results"), list)):
         return None
     if not isinstance(data.get("results"), list):
         return "a results file with no results list to read"
-    if not (data.get("meta") or {}).get("target"):
+    # AND THE RULE ITSELF DIED ON ONE OF THEM. `(data.get("meta") or {}).get("target")` is a
+    # `.get` on whatever `meta` happens to be, so `meta: [1]` raised AttributeError out of the
+    # guard written to stop exactly that -- the checker crashing on the file it was checking,
+    # and reported as a bug in this tool.
+    _meta = data.get("meta")
+    if _meta is not None and not isinstance(_meta, dict):
+        return ("a results file whose meta is %s, not a mapping: %s"
+                % (type(_meta).__name__, _RESULTS_REQUIRE["meta.target"]))
+    if not (_meta or {}).get("target"):
         return ("a results file with no meta.target: %s"
                 % _RESULTS_REQUIRE["meta.target"])
     for i, r in enumerate(data["results"]):
