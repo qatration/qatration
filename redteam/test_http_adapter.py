@@ -118,6 +118,126 @@ def main():
     # silence, which is this file's own subject one level up.
     check("...over a real number of configs", _seen >= 5, str(_seen))
 
+    # --- AND A KEY IT KNOWS, CARRYING A VALUE IT CANNOT USE ------------------------------
+    #
+    # The refusal above answers a key this adapter does not KNOW with a sentence that names
+    # the config. A key whose VALUE is the wrong kind went straight through it: `headers:
+    # [a, b]` reached `.items()`, `method: 7` reached `.upper()`, `rate: {max_requests:
+    # "many"}` reached `int()`, and each came out as a raw traceback under "This is a bug in
+    # qatration, not a finding about your target and not a problem with your config" -- which
+    # is wrong on the last clause about the reader's own file.
+    #
+    # FOUR FIELDS HAD THE RULE AND FOUR DID NOT, and the four that had it are the four read
+    # LAST: `request`, `response`, `history` and `rate` each carried their own copy of
+    # `if x is not None and not isinstance(x, dict)`, while `method`, `headers`, `auth` and
+    # `env` are read at the top of the constructor and had nothing at all.
+    #
+    # DERIVED, so a field cannot join the signature without a shape. The table is read out of
+    # the constructor's own AST -- the names bound by the `for` that walks it -- and set
+    # against `inspect.signature`, with the exemptions named and reasoned.
+    import ast as _ast_v
+    _ht_src = open(os.path.join(HERE, "targets_http.py"), encoding="utf-8").read()
+    _covered = {}
+    for _n in _ast_v.walk(_ast_v.parse(_ht_src)):
+        if not (isinstance(_n, _ast_v.For) and isinstance(_n.target, _ast_v.Tuple)
+                and len(_n.target.elts) == 4):
+            continue
+        if [getattr(_e, "id", "") for _e in _n.target.elts] != ["_f", "_v", "_want", "_says"]:
+            continue
+        for _row in getattr(_n.iter, "elts", []):
+            _cells = getattr(_row, "elts", [])
+            if len(_cells) != 4 or not isinstance(_cells[0], _ast_v.Constant):
+                continue
+            # THE KIND TOO, not only the name. A fuzz that fed every field the same three
+            # values called `env: [1, 2]` a defect -- it is a LIST, which is what that field
+            # wants, and the elements go through `str()` by design. What is wrong for a field
+            # depends on what it asks for, so the wants are read with the names.
+            _covered[_cells[0].value] = getattr(_cells[2], "id", "")
+    check("the adapter's shape table can be read out of its own source",
+          len(_covered) >= 6, str(sorted(_covered)))
+    _SHAPE_EXEMPT = {
+        "url": "has a refusal of its own two lines down: it must start http:// or https://, "
+               "which answers every wrong kind by way of `str(url)`",
+        "name": "goes through `workspace.safe_target_name`, which decides what a name may be "
+                "for every adapter and accepts a number as the name `42`",
+        "timeout_s": "has its own guard, and it is the one that caught both TypeError and "
+                     "ValueError while the budget beside it caught only the first",
+    }
+    check("every field this adapter accepts has a shape or a reason",
+          not (_accepts - set(_covered) - set(_SHAPE_EXEMPT)),
+          str(sorted(_accepts - set(_covered) - set(_SHAPE_EXEMPT))))
+    check("...and every exemption names a field that still exists",
+          not (set(_SHAPE_EXEMPT) - _accepts), str(sorted(set(_SHAPE_EXEMPT) - _accepts)))
+    check("...and gives a reason", all(_SHAPE_EXEMPT.values()), str(_SHAPE_EXEMPT))
+
+    # AND THE CONSTRUCTOR ITSELF, DRIVEN with a wrong kind in every one of those fields. A
+    # table that lists a field proves nothing about the line that reads it.
+    _OKCFG = dict(url="http://127.0.0.1:9/x", name="shapebot",
+                  request={"message": "{prompt}"}, response={"reply": "reply"})
+    _WRONG_FOR = {"dict": ([1, 2], "a string", 7),
+                  "list": ({"a": 1}, "a string", 7),
+                  "str": ([1, 2], {"a": 1}, 7)}
+    check("every kind the table asks for has a wrong value to try",
+          not (set(_covered.values()) - set(_WRONG_FOR)),
+          str(sorted(set(_covered.values()) - set(_WRONG_FOR))))
+    _crashed, _accepted = [], []
+    for _f in sorted(_covered):
+        for _v in _WRONG_FOR.get(_covered[_f], ()):
+            _kw = dict(_OKCFG)
+            _kw[_f] = _v
+            try:
+                HttpConfiguredTarget(**_kw)
+                _accepted.append("%s=%r" % (_f, _v))
+            except SystemExit:
+                pass
+            except Exception as _e:
+                _crashed.append("%s=%r -> %s: %s" % (_f, _v, type(_e).__name__, _e))
+    check("no field of a config crashes the adapter it configures",
+          not _crashed, "; ".join(_crashed[:4]))
+    check("...and none of them is accepted either", not _accepted, "; ".join(_accepted[:4]))
+
+    # A STRING IS ITERABLE, WHICH IS WHY `env` IS WORTH NAMING ON ITS OWN. `env: HOME` was
+    # ACCEPTED and became the allow-list ['H', 'O', 'M', 'E'], so `${HOME}` in a header matched
+    # nothing, the header went out with the placeholder still in it, and every probe reached
+    # the endpoint unauthenticated -- a whole arsenal scored DEFENDED against a bot that
+    # refused all of it at the door.
+    def _refusal(**kw):
+        _k = dict(_OKCFG)
+        _k.update(kw)
+        try:
+            HttpConfiguredTarget(**_k)
+            return ""
+        except SystemExit as _e:
+            return str(_e)
+        except Exception as _e:
+            # A CRASH IS NOT A REFUSAL, and telling them apart is the whole of this block: the
+            # defect was a traceback standing where a sentence belonged, and a helper that
+            # reported both as "it said something" would be green over it.
+            return "CRASHED %s: %s" % (type(_e).__name__, _e)
+
+    check("a scalar `env:` is refused rather than read one letter at a time",
+          "one letter at a time" in _refusal(env="HOME"), _refusal(env="HOME")[:120])
+    check("...and a crash is not counted as a refusal anywhere in this block",
+          _refusal(env="HOME").startswith("targets_http:"), _refusal(env="HOME")[:120])
+    check("...while a list of names is what it wants",
+          not _refusal(env=["HOME"]), _refusal(env=["HOME"])[:120])
+    # AND THE BUDGET'S VALUES, beside the guard that caught only its KEYS. `max_requests:
+    # "many"` is what a person types, and `int()` answered it with a traceback three lines
+    # above a `timeout_s` guard that catches exactly this.
+    _rate_said = _refusal(rate={"max_requests": "many"})
+    check("a budget that is not a number is refused rather than crashing the run",
+          bool(_rate_said) and not _rate_said.startswith("CRASHED"),
+          _rate_said[:140] or "it was accepted")
+    check("...and the key that cannot be read is named",
+          "max_requests" in _rate_said, _rate_said[:140])
+    check("...while a budget that is a number still builds",
+          not _refusal(rate={"max_requests": 10}), _refusal(rate={"max_requests": 10})[:120])
+    # AND A MISSPELLED BUDGET KEY STILL GETS ITS OWN SENTENCE, which is the half that worked:
+    # widening the `except` must not swallow the answer that was already right.
+    check("a budget key nobody recognises still says what it takes",
+          "min_interval_s" in _refusal(rate={"max_reqests": 10}),
+          _refusal(rate={"max_reqests": 10})[:140])
+
     # --- AND THE TWELVE ADAPTERS THAT NEVER LOOK ----------------------------------------
     #
     # The refusal above belongs to this adapter. The built-in targets are constructed from a

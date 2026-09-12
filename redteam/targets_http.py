@@ -341,6 +341,18 @@ class RateLimit:
 # Keys that belong to the HARNESS rather than to the adapter: they are read elsewhere and are
 # stripped before construction. Kept here, beside the adapter that rejects everything else, so
 # that "what may appear in a target config" has exactly one answer.
+# THE SAME WORDS `workspace.wrong_shape` USES for the document one level out, because the
+# mistake is the same one and a reader who meets both should not have to notice that it is.
+SHAPE_WORDS = {dict: "a mapping", list: "a list", str: "a single string",
+               int: "a number", float: "a number", bool: "a true/false value"}
+
+# AND THE SAME WORDS FOR WHAT THE FIELD MUST BE, where "single" is the wrong half: it is
+# there to name the iterable trap on the other side, and a field that wants a string is
+# simply asking for a string.
+WANTED_WORDS = dict(SHAPE_WORDS)
+WANTED_WORDS[str] = "a string"
+
+
 # EVERY CHANNEL A `response:` MAPPING MAY NAME, and every key a `history:` mapping may.
 #
 # `__init__` refuses an unknown TOP-LEVEL key, with the reason written beside it: a key this
@@ -390,6 +402,59 @@ class HttpConfiguredTarget(Target):
                 + ", ".join(sorted(unknown))
                 + ". Nothing was sent — a key this adapter does not read is a key that does "
                   "nothing, and a config that silently does nothing produces a clean report.")
+        # AND A VALUE THIS ADAPTER CANNOT USE IS THE SAME TYPO ONE LEVEL IN. The block above
+        # answers a key it does not KNOW with a sentence that names the config; a key whose
+        # VALUE is the wrong kind went straight through it into `.upper()`, `.items()` and
+        # `dict()`, and came out as `AttributeError: 'list' object has no attribute 'items'`
+        # under "This is a bug in qatration, not a finding about your target and not a problem
+        # with your config" -- which is wrong on the last clause about the reader's own file.
+        #
+        # FOUR FIELDS HAD THE RULE AND FOUR DID NOT, and the four that did are the four read
+        # LAST. `request`, `response`, `history` and `rate` each wrote out their own copy of
+        # `if x is not None and not isinstance(x, dict)`; `method`, `headers`, `auth` and `env`
+        # are read at the top of this constructor and had nothing. Walked: eleven of the thirty-
+        # six wrong-kind values a config can carry here crashed, all of them in those four.
+        #
+        # ONE IMPLEMENTATION, one sentence each. The four copies are gone and their words are
+        # in the table, which also moves every one of these checks AHEAD of the code that uses
+        # the field -- `headers` was expanded into `${VAR}` lookups two lines before the guard
+        # for `request` could run, and a gate after the thing it guards is a record of a
+        # decision rather than a control.
+        for _f, _v, _want, _says in (
+            ("method", method, str,
+             "The verb goes out as written, upper-cased: POST, PUT or PATCH."),
+            ("headers", headers, dict,
+             "It is a mapping of header name to value, and every value may name a variable "
+             "from `env:`."),
+            ("auth", auth, dict,
+             "It is a mapping with a `type:`, e.g. `auth: {type: bearer, token: ${KEY}}`."),
+            # A STRING IS ITERABLE, WHICH IS WHY THIS ONE IS WORTH A SENTENCE OF ITS OWN.
+            # `env: HOME` was ACCEPTED and became the allow-list ['H', 'O', 'M', 'E'], so
+            # `${HOME}` in a header matched nothing, the header went out with the literal
+            # `${HOME}` in it, and every probe reached the endpoint unauthenticated. A whole
+            # arsenal comes back DEFENDED from a bot that refused all of it at the door --
+            # this project's own defect class, arriving through a missing pair of brackets.
+            ("env", env, list,
+             "It is a LIST of variable names: `env: [OPENAI_API_KEY]`. A single string is "
+             "iterable, so it would be read one letter at a time and no `${VAR}` would "
+             "expand -- every request would go out with the placeholder still in it."),
+            ("rate", rate, dict,
+             "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("request", request, dict,
+             "The body is built by walking a mapping, and history splicing has nothing to "
+             "splice into without one."),
+            ("response", response, dict,
+             "It is a mapping of channel to path, e.g. "
+             "`response: {reply: choices.0.message.content}`."),
+            ("history", history, dict,
+             "It takes `field:` (where the transcript goes) and `mode:` (splice or replace)."),
+        ):
+            if _v is None or isinstance(_v, _want):
+                continue
+            raise SystemExit(
+                "targets_http: `%s:` for %r is %s, not %s. %s Nothing was sent."
+                % (_f, name, SHAPE_WORDS.get(type(_v), "a " + type(_v).__name__),
+                   WANTED_WORDS.get(_want, _want.__name__), _says))
         if not url:
             raise SystemExit("targets_http: `url` is required")
         if not str(url).lower().startswith(("http://", "https://")):
@@ -428,11 +493,6 @@ class HttpConfiguredTarget(Target):
         self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
                         for k, v in (headers or {}).items()}
         self.headers.setdefault("Content-Type", "application/json")
-        if request is not None and not isinstance(request, dict):
-            raise SystemExit(
-                f"targets_http: `request:` for {name!r} is {type(request).__name__}, not a "
-                f"mapping. The body is built by walking a mapping, and history splicing has "
-                f"nothing to splice into without one.")
         self.request = request or {"message": "{prompt}"}
         # THE TEMPLATE MUST BE ABLE TO CARRY THE PAYLOAD. `fill()` substitutes the literal token
         # `{prompt}` and nothing else, so a template without it sends one constant body for every
@@ -492,11 +552,6 @@ class HttpConfiguredTarget(Target):
                 f"targets_http: the `request:` template for {name!r} has no `{{prompt}}` in it, "
                 f"so every probe would send the same body and every attack would score as "
                 f"DEFENDED against a bot that was never asked anything.{_hint}")
-        if response is not None and not isinstance(response, dict):
-            raise SystemExit(
-                f"targets_http: `response:` for {name!r} is {type(response).__name__}, not a "
-                f"mapping of channel to path, e.g. `response: {{reply: choices.0.message."
-                f"content}}`.")
         resp = response or {}
         _bad = sorted(k for k in resp if k not in RESPONSE_KEYS)
         if _bad:
@@ -522,11 +577,6 @@ class HttpConfiguredTarget(Target):
         # that channel spent the run judging an empty list — the difference between "your tool
         # surface is clean" and "this run never saw your tool calls".
         self.resolutions = {"tool_calls": 0, "resolved": 0, "observations": 0}
-        if history is not None and not isinstance(history, dict):
-            raise SystemExit(
-                f"targets_http: `history:` for {name!r} is {type(history).__name__}, not a "
-                f"mapping. It takes `field:` (where the transcript goes) and `mode:` "
-                f"(splice or replace).")
         if isinstance(history, dict):
             _bad = sorted(k for k in history if k not in HISTORY_KEYS)
             if _bad:
@@ -586,9 +636,12 @@ class HttpConfiguredTarget(Target):
         # nobody recognised, which names the internal class and not the config that caused it.
         # The budget is the one thing standing between an arsenal and somebody's rate limit, so
         # a misspelling here is worth a sentence.
-        if rate is not None and not isinstance(rate, dict):
-            raise SystemExit(f"targets_http: `rate:` for {name!r} is "
-                             f"{type(rate).__name__}, not a mapping.")
+        # AND THE VALUES, not only the keys. This caught `TypeError` -- a budget key nobody
+        # recognised -- and let `ValueError` through, which is the one a person actually types:
+        # `max_requests: "many"` reached `int()` and came out as a traceback, three lines above
+        # a `timeout_s` guard that catches exactly both. The comment above says the budget is
+        # the one thing standing between an arsenal and somebody's rate limit and that a
+        # misspelling there is worth a sentence; an unusable NUMBER stops the run just as dead.
         try:
             self.rate = RateLimit(**(rate or {}))
         except TypeError as e:
@@ -596,6 +649,14 @@ class HttpConfiguredTarget(Target):
             known = [p for p in inspect.signature(RateLimit).parameters if p != "self"]
             raise SystemExit(f"targets_http: `rate:` for {name!r} — {e}. It takes: "
                              f"{', '.join(known)}.")
+        except ValueError as e:
+            _culprits = ", ".join(
+                "%s: %r" % (_k, _v) for _k, _v in sorted((rate or {}).items())
+                if not isinstance(_v, (int, float)) and _v is not None)
+            raise SystemExit(f"targets_http: `rate:` for {name!r} is not a number of "
+                             f"requests or seconds — {e}. It reads {_culprits or 'these keys'} "
+                             f"as a budget, and a budget it cannot read is a run with no "
+                             f"ceiling on somebody else's endpoint. Nothing was sent.")
         try:
             self.timeout = float(timeout_s if timeout_s is not None else 300)
         except (TypeError, ValueError):
