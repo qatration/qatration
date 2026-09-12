@@ -242,7 +242,7 @@ def sweep_guards(only=()):
     twice, having reported on one module. Pointed at the three files a change touched it is
     minutes, and that is the version somebody runs before pushing.
     """
-    survivors, tested, undocumented, held = [], 0, 0, []
+    survivors, tested, undocumented, held, empty = [], 0, 0, [], []
     mods = sorted(f for f in os.listdir(RT)
                   if f.endswith(".py") and not f.startswith("test_"))
     if only:
@@ -274,6 +274,15 @@ def sweep_guards(only=()):
                 continue
             hits.append(i)
         if not hits:
+            # A MODULE SOMEBODY NAMED AND GOT SILENCE ABOUT. Package-wide this is the right
+            # thing to do quietly -- most files hold no guard of this shape and listing them
+            # would be the noise that stops a report being read. Under `--only` it is not:
+            # the reader typed the name, and nothing came back about it. `init_config.py`,
+            # `history.py` and `worker.py` were asked for in one run and produced no line at
+            # all, which is indistinguishable from not having been looked at -- the same
+            # distinction this arm already draws for a module whose suites are red.
+            if only:
+                empty.append(mod)
             continue
         suites = _suites_touching(mod)
         if not suites:
@@ -306,7 +315,7 @@ def sweep_guards(only=()):
                     survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
         assert not any(_run(s) for s in suites), "%s was not restored" % mod
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
-    return tested, survivors, undocumented, held
+    return tested, survivors, undocumented, held, empty
 
 
 def _or_branches(node):
@@ -840,7 +849,7 @@ def main(argv):
     unswept = []
     if both or args.guards:
         print("=== documented guards ===")
-        tested, survivors, undocumented, held = sweep_guards(args.only)
+        tested, survivors, undocumented, held, empty = sweep_guards(args.only)
         swept += tested
         print("\n%d documented guard(s) tested, %d survived deletion" % (tested, len(survivors)))
         if undocumented:
@@ -849,6 +858,11 @@ def main(argv):
             # verdict on the file, and on `workspace.py` that was one branch of twenty-one.
             print("  %d more guard(s) of the same shape carry no comment and were not "
                   "touched. Their silence here is not a result." % undocumented)
+        if empty:
+            # SAID, because the reader named them. "No guard of this shape here" is an
+            # answer; silence is not, and it reads as the module having been swept clean.
+            print("  %d module(s) you asked for hold no documented guard of this shape, so "
+                  "nothing\n  was deleted from them: %s" % (len(empty), ", ".join(empty)))
         if held:
             # WHICH SUITE, because the reader's next move is to run it. A module is held
             # back by a suite that is red HERE -- a flake, a missing practice fleet, a

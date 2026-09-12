@@ -94,10 +94,28 @@ def sweep_in(source, only=(), suite=None):
 
 def main():
     # --- the counter that keeps the denominator honest ------------------------------------
-    tested, survivors, undocumented, held = sweep_in(DOCUMENTED)
+    tested, survivors, undocumented, held, _empty = sweep_in(DOCUMENTED)
     check("a guard with no comment above it is counted, not dropped",
           undocumented == 1, "counted %d" % undocumented)
     check("...and a module nothing held back holds nothing back", not held, str(held))
+
+    # --- A MODULE SOMEBODY NAMED AND GOT SILENCE ABOUT ----------------------------------
+    #
+    # Package-wide, a file with no guard of this shape is passed over quietly, and that is
+    # right: most hold none and listing them is the noise that stops a report being read.
+    # Under `--only` it is not. The reader typed the name. `init_config.py`, `history.py`
+    # and `worker.py` were asked for in one run and produced no line at all, which is
+    # indistinguishable from not having been looked at -- the distinction this arm already
+    # draws for a module whose suites are red.
+    _bare = 'def f(x):\n    return x\n'
+    _t5, _s5, _u5, _h5, _e5 = sweep_in(_bare, only=("fixture_mod",))
+    check("a named module with no guard of this shape is named back",
+          _e5 == ["fixture_mod.py"], str(_e5))
+    check("...and nothing was deleted from it", (_t5, _s5) == (0, []),
+          "%d tested, %d survivor(s)" % (_t5, len(_s5)))
+    # AND NOT PACKAGE-WIDE, where it would be a list of forty files nobody reads.
+    check("...while a sweep nobody narrowed says nothing about them",
+          not sweep_in(_bare)[4], str(sweep_in(_bare)[4]))
 
     # --- A MODULE THE SWEEP NEVER OPENED DID NOT REPORT CLEAN -----------------------------
     #
@@ -112,14 +130,14 @@ def main():
     # for the case where a whole module is skipped.
     _RED = ("import sys\nimport fixture_mod\nprint('FAIL  planted')\nsys.exit(1)\n")
     _GREEN = ("import fixture_mod\nprint('PASS  planted')\n")
-    _t3, _s3, _u3, _h3 = sweep_in(DOCUMENTED, suite=_RED)
+    _t3, _s3, _u3, _h3, _e3 = sweep_in(DOCUMENTED, suite=_RED)
     check("a module whose suite is red is held back, not reported on",
           _h3 == [("fixture_mod.py", 1)], str(_h3))
     check("...and nothing was deleted from it", _t3 == 0 and not _s3,
           "%d tested, %d survivor(s)" % (_t3, len(_s3)))
     # AND A GREEN ONE IS SWEPT, or the check above is satisfied by a harness that cannot
     # reach the other arm at all.
-    _t4, _s4, _u4, _h4 = sweep_in(DOCUMENTED, suite=_GREEN)
+    _t4, _s4, _u4, _h4, _e4 = sweep_in(DOCUMENTED, suite=_GREEN)
     check("...while a module whose suite is green is swept", _t4 == 1 and not _h4,
           "%d tested, held %s" % (_t4, _h4))
     # AND THE GUARD IT SWEPT IS A SURVIVOR HERE, because the planted suite asserts nothing:
@@ -169,6 +187,16 @@ def main():
                         ["fixture_mod"])
     check("...while a sweep with nothing held back carries no such caveat",
           "NEVER SWEPT" not in _said_ok, _said_ok[-300:])
+    # AND THE MODULE SOMEBODY NAMED THAT HOLDS NOTHING OF THIS SHAPE. The returned tuple
+    # knowing it is not the same as the reader being told: this whole file is about a
+    # summary that did not carry what the sweep did not do.
+    _said_bare = _closing({"fixture_mod": ("def f(x):\n    return x\n", _GREEN)},
+                          ["fixture_mod"])
+    check("a named module with no guard of this shape is named in the summary",
+          "hold no documented guard of this shape" in _said_bare
+          and "fixture_mod.py" in _said_bare, _said_bare[-400:])
+    check("...and the run does not close as though it had swept it",
+          "went unnoticed" not in _said_bare, _said_bare[-300:])
 
     # AND THE CASE THAT ACTUALLY HAPPENED: one module swept, another held. The closing line
     # there was `Nothing this sweep deleted went unnoticed` -- true of the module it opened
@@ -221,7 +249,8 @@ def main():
     # --- a module with no guard of this shape at all ----------------------------------------
     #
     # An empty answer from a file that HAS branches would be the same silence one level in.
-    _plain, _plain_s, _plain_u, _plain_h = sweep_in('def f(x):\n    return x\n')
+    _plain, _plain_s, _plain_u, _plain_h, _plain_e = sweep_in(
+        'def f(x):\n    return x\n')
     check("a module with no guard of this shape reports nothing and claims nothing",
           (_plain, _plain_s, _plain_u) == (0, [], 0),
           str((_plain, _plain_s, _plain_u)))
@@ -243,7 +272,7 @@ def main():
           "no_such_module" in why, why)
     # AND A NAME THAT DOES MATCH STILL RUNS, or the refusal above is a filter that refuses
     # everything and the check passes for the wrong reason.
-    _t2, _s2, _u2, _h2 = sweep_in(DOCUMENTED, only=("fixture_mod",))
+    _t2, _s2, _u2, _h2, _e2 = sweep_in(DOCUMENTED, only=("fixture_mod",))
     check("...while a name that matches one still sweeps it",
           _u2 == 1 and len(_s2) == 1, "%d undocumented, %d survivor(s)" % (_u2, len(_s2)))
 
