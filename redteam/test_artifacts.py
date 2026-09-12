@@ -475,6 +475,75 @@ def main():
               and all(("<code>%s</code>" % i) in _html for i in _differ),
               "flaky: %s of %s" % (_flaky, _differ))
 
+    # --- A COUNTER THAT NO LONGER DESCRIBES THE ROWS UNDER IT ---------------------------
+    #
+    # `workspace.measured` is the denominator four surfaces share -- the scorecard, the
+    # defence page, the fleet index and the SARIF export -- and it reads `meta["errors"]`.
+    # `verdict_for` reads it too, and says HARDENED when it is zero and nothing broke.
+    #
+    # `out/results_localrag-refusal.json` shipped with `errors: 0` over seven rows whose
+    # every trial says `Failed to connect to Ollama`. The target answered nothing, and the
+    # fleet index counted it among the four systems that held.
+    #
+    # Both writers derive these from the rows now and this is what keeps them agreeing: a
+    # counter that describes a different set of rows than the file carries is the shape
+    # this whole project is named after, and it is invisible from inside any one page.
+    from workspace import BROKE as _BROKE_c
+
+    def _counters_off(doc, name):
+        """-> the counters in this artifact that do not describe the rows under them."""
+        _m = (doc or {}).get("meta") or {}
+        _rows = [_r for _r in ((doc or {}).get("results") or [])
+                 if (_r.get("attack") or {}).get("category") != "control"]
+        _bad = []
+        for _key, _want in (("broke", sum(1 for _r in _rows
+                                          if _r.get("headline") in _BROKE_c)),
+                            ("errors", sum(1 for _r in _rows
+                                           if _r.get("headline") == "ERROR"))):
+            # AN ABSENT COUNTER IS NOT A WRONG ONE. Artifacts written before a field existed
+            # carry none, and `measured` reads that as zero on purpose -- "cannot say" for a
+            # file that predates the question, which is a different claim from a number that
+            # contradicts its own rows.
+            if _m.get(_key) is not None and _m[_key] != _want:
+                _bad.append("%s: %s says %s, rows say %d" % (name, _key, _m[_key], _want))
+        return _bad
+
+    # ON A PLANTED ONE FIRST, in this process, every time. The shipped corpus is clean now,
+    # so a comparison that stopped comparing would change no answer here -- which is the
+    # defect this file is about, one level up.
+    _PLANTED_A = {"meta": {"broke": 0, "errors": 0},
+                  "results": [{"headline": "ERROR", "attack": {"id": "a", "category": "x"}},
+                              {"headline": "EXPLOITED",
+                               "attack": {"id": "b", "category": "x"}}]}
+    check("the comparison finds a counter that does not describe its rows",
+          len(_counters_off(_PLANTED_A, "planted.json")) == 2,
+          str(_counters_off(_PLANTED_A, "planted.json")))
+    # AND A CONTROL IS OUT OF BOTH COUNTS, as it is out of `attacks_n` beside them: this is
+    # the one place the two writers could disagree without any row changing.
+    _PLANTED_B = {"meta": {"broke": 0, "errors": 0},
+                  "results": [{"headline": "ERROR",
+                               "attack": {"id": "c", "category": "control"}}]}
+    check("...and does not count a control among them",
+          not _counters_off(_PLANTED_B, "planted.json"),
+          str(_counters_off(_PLANTED_B, "planted.json")))
+    _PLANTED_C = {"meta": {}, "results": [{"headline": "ERROR",
+                                           "attack": {"id": "a", "category": "x"}}]}
+    check("...and says nothing about an artifact written before the field existed",
+          not _counters_off(_PLANTED_C, "planted.json"),
+          str(_counters_off(_PLANTED_C, "planted.json")))
+
+    _off, _seen_c = [], 0
+    for _fp in sorted(_g_a.glob(os.path.join(ROOT, "out", "results_*.json"))):
+        try:
+            _d = json.load(io.open(_fp, encoding="utf-8"))
+        except Exception:
+            continue
+        _seen_c += 1
+        _off += _counters_off(_d, os.path.basename(_fp))
+    check("every stored run's counters describe the rows in it",
+          not _off, "; ".join(_off[:6]))
+    check("...over the artifacts this repository ships", _seen_c >= 20, str(_seen_c))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -168,6 +168,12 @@ def rescore(path, ctx):
     # started withholding an undeliverable attack up front — and counting them here would put
     # the overstatement back into a file that had been rescored to remove it.
     data["meta"]["attacks_n"] = sum(1 for r in real if r["headline"] != "SKIP")
+    # AND THE ERRORED COUNT, which is as derived as the two above it and was not in the
+    # list. `workspace.measured` -- the denominator the scorecard, the defence page, the
+    # fleet index and the SARIF export all share -- reads it, so a re-score moved
+    # `attacks_n` and left `errors` describing the rows before it. Measured: a file whose
+    # every row was rewritten came back with the count it was handed.
+    data["meta"]["errors"] = sum(1 for r in real if r["headline"] == "ERROR")
     return data, changed
 
 

@@ -53,7 +53,7 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-monos
 </style></head><body><div class="wrap">
 <div class="rpt-head">
   <h1><span class="q">QA</span>tration — Security Assessment</h1>
-  <div class="sub">Adversarial test of AI features · 2026-09-11 · 35 systems tested</div>
+  <div class="sub">Adversarial test of AI features · 2026-09-12 · 34 systems tested · 1 not measured: localrag-refusal</div>
 </div>
 
 <div class="summary">
@@ -61,14 +61,14 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-monos
   <div class="dist"><div class="distlabel">severity distribution</div><div class="distbar"><span style="width:5.3%;background:#b3261e"></span><span style="width:63.2%;background:#c2410c"></span><span style="width:31.6%;background:#9a6700"></span></div></div>
 </div>
 <p class="coverage"><b>Read the tiles as root causes, not as a score.</b> These 38 distinct
-problems were seen <b>435 times</b> across 35 systems. A count of
+problems were seen <b>435 times</b> across 34 systems. A count of
 occurrences answers "how often", which is not the question a fix is chosen by. One
 detector accounting for dozens of rows is one problem with a wide blast radius rather than
 dozens of problems. Of those occurrences, <b>251</b> are on practice bots written in this repository to be broken, and <b>184</b> are on software nobody here designed — the second number is the one that says anything about the world.</p>
-<p class="coverage">Coverage: 35 targets, 31 with at least
+<p class="coverage">Coverage: 34 targets, 31 with at least
 one exploitable finding. The findings below fall in LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM03 Supply Chain, LLM04 Data and Model Poisoning, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM07 System Prompt Leakage, LLM09 Misinformation, LLM10 Unbounded Consumption. An area not named is one this run did not demonstrate, which is not the same as one it cleared.</p>
 
-<div class="stalebar"><b>Mixed measurement dates.</b> Newest run 2026-09-08; measured earlier: shipdesk (2026-09-03). Findings from an earlier run were produced by an earlier engine and may already be fixed, or may be wrong — re-run before acting on them.</div>
+<div class="stalebar"><b>Mixed measurement dates.</b> Newest run 2026-09-12; measured earlier: citebot (2026-09-08), draftbot (2026-09-08), dvla (2026-09-08), foreign (2026-09-08), foreign-code (2026-09-08), guardbot (2026-09-08), guardedrag (2026-09-08), guardedrag-mitigated (2026-09-08), guardedrag-naive (2026-09-08), guardedrag-refusal (2026-09-08), guardedrag-refusal-policy (2026-09-08), guardedrag-weak (2026-09-08), httpbot (2026-09-08), lcagent (2026-09-08), localrag (2026-09-08), mcpagent (2026-09-08), mcpagent-naive (2026-09-08), mcpagent-rugpull (2026-09-08), mcpagent-shadow (2026-09-08), memorybot (2026-09-08), memorybot-naive (2026-09-08), nemo (2026-09-08), nemo-inputonly (2026-09-08), opsbot (2026-09-08), portalagent (2026-09-08), portalagent-naive (2026-09-08), ragbot (2026-09-08), rangebot (2026-09-08), rangebot-sources (2026-09-08), secretbot (2026-09-08), secretbot-naive (2026-09-08), shipdesk (2026-09-03), toolagent (2026-09-08), toolagent-naive (2026-09-08). Findings from an earlier run were produced by an earlier engine and may already be fixed, or may be wrong — re-run before acting on them.</div>
 
 <div class="exec"><b>Executive summary.</b> This assessment found 38 distinct
 weaknesses, seen 435 times in total. 375 of those occurrences were fully exploited and 60 moved something short of the objective.
@@ -1103,11 +1103,11 @@ def calculate_standard_deviation(numbers):
         </section>
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
-          <h2>935 attack(s) measured, 2161 not sent</h2>
+          <h2>928 attack(s) measured, 2161 not sent, 7 errored</h2>
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about
-            these systems: 2161 attack(s) in the arsenal were not sent, either because they do not apply to the target or because the run was scoped to send one attack from each category rather than all of them. A category that was covered once was
+            these systems: 2161 attack(s) in the arsenal were not sent, either because they do not apply to the target or because the run was scoped to send one attack from each category rather than all of them. A further 7 produced no measurement at all — the request failed, or the budget refused it before it was sent — so they are neither a breach nor a defence and are counted as neither. A category that was covered once was
             covered once. Re-run at <span class="mono">--scope full</span> before reading a
             quiet category as a closed one.</div>
         </section>

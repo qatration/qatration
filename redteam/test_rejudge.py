@@ -558,6 +558,10 @@ def main():
             _tmp = json.load(io.open(_stripped, encoding="utf-8"))
             _tmp["meta"].pop("delivery", None)
             _tmp["meta"].pop("attribution", None)
+            # A COUNTER THAT DOES NOT DESCRIBE THE ROWS, carried in on purpose: the stored
+            # file is already right, so a check over it passes whether or not the re-score
+            # derives anything.
+            _tmp["meta"]["errors"] = 777
             io.open(_stripped, "w", encoding="utf-8", newline="\n").write(
                 json.dumps(_tmp, indent=2, default=str))
             _env = dict(os.environ, QATRATION_OUT=_d, PYTHONIOENCODING="utf-8")
@@ -578,6 +582,20 @@ def main():
             check("...and the replay reaches the framing verdict, not just the background",
                   "unframed" in (_meta.get("delivery") or ""),
                   str(_meta.get("delivery"))[-200:])
+            # AND THE COUNTERS MOVE WITH THE ROWS. `rescore` says so above the two it
+            # updates -- "the headline counters in meta are derived, so they have to move
+            # too" -- and `errors` was not one of them, while `workspace.measured` reads it
+            # as the denominator the scorecard, the defence page, the fleet index and the
+            # SARIF export all share. A file whose every row was rewritten came back
+            # carrying the count it was handed.
+            _rows_lr = [_r for _r in json.load(io.open(_stripped, encoding="utf-8"))["results"]
+                        if (_r.get("attack") or {}).get("category") != "control"]
+            check("a re-scored run's errored count describes the rows it now holds",
+                  _meta.get("errors") == sum(1 for _r in _rows_lr
+                                             if _r.get("headline") == "ERROR"),
+                  "meta says %s, rows say %d"
+                  % (_meta.get("errors"),
+                     sum(1 for _r in _rows_lr if _r.get("headline") == "ERROR")))
             # THE COUNTS, NOT JUST THE HEADING. A note printed with both rates empty would
             # satisfy a substring check and say nothing.
             check("...carrying the background this run measured, not a quoted one",
