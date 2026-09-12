@@ -597,6 +597,55 @@ def main():
               not any(_ic_o.DEFAULT_MODEL in _n for _n in _fine_rep["notes"]),
               str(_fine_rep["notes"])[:200])
 
+        # --- IT PRINTED `PROBLEM`, SAID READY TO QUEUE, AND EXITED 0 ----------------------
+        #
+        # Every branch of `check` that finds something fatal returns False on the spot, and
+        # two do not: `bad_patterns` and `bad_context_shapes` COLLECT into `rep["problems"]`
+        # and fall through to the end, where the verdict was the literal `True`. Those two
+        # are the pair `workspace.refuse_unusable_config` opens by naming -- "two failures,
+        # both of which produce a run that looks exactly like a real one" -- and every other
+        # command that reads a config refuses them.
+        #
+        # Walked with `canaries: "ACME-9931"`, which is used one character at a time:
+        #
+        #     PROBLEM   oracle_context.canaries is a single string ...
+        #     ready to queue
+        #     queued      2026-09-12T1407-6c0cd7
+        _scalar = write("scalarcanary", "choices.0.message.content",
+                        extra='oracle_context:\n  canaries: "ACME-9931"\n')
+        _sc_ok, _sc_rep = onboard.check(_scalar)
+        check("a config whose canary is a string does not pass",
+              not _sc_ok, str(_sc_rep["problems"])[:200])
+        check("...and the problem is the one that says why",
+              any("one character at a time" in _p for _p in _sc_rep["problems"]),
+              str(_sc_rep["problems"])[:200])
+        # AND THE OTHER HALF OF THAT PAIR: a refusal vocabulary the engine cannot use.
+        _badpat = write("badpattern", "choices.0.message.content",
+                        extra='oracle_context:\n  refusal_patterns:\n'
+                              '    decline: ["i (cannot"]\n')
+        _bp_ok, _bp_rep = onboard.check(_badpat)
+        check("...and neither does a refusal pattern that will not compile",
+              not _bp_ok, str(_bp_rep["problems"])[:200])
+        # AND A CONFIG WITH NOTHING WRONG STILL PASSES, or the fix is a command that always
+        # refuses.
+        _fine_ok2, _fine_rep2 = onboard.check(
+            write("cleanbot", "choices.0.message.content"))
+        check("...while a config with no problem in it still passes",
+              _fine_ok2, str(_fine_rep2["problems"])[:200])
+
+        # AND THE QUEUE IS WHAT THIS COSTS. `--submit` is guarded by that verdict, so the
+        # door queued a job for a config the engine refuses at the next command.
+        _sq = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--target-config", _scalar,
+             "--submit", "--root", os.path.join(work, "queue_scalar")],
+            capture_output=True, text=True, timeout=120)
+        check("a config the check refused is not queued",
+              _sq.returncode == 2, "exit %s: %s" % (_sq.returncode,
+                                                    (_sq.stdout + _sq.stderr)[-200:]))
+        check("...and nothing reached the queue",
+              not q.listing(os.path.join(work, "queue_scalar")),
+              str(q.listing(os.path.join(work, "queue_scalar"))))
+
         # --- THREE CAUSES, THREE PLACES TO GO, AND ONE EXIT CODE FOR ALL OF THEM ----------
         #
         # `qatration init` prints `onboard --verify-honeytoken ...` as the step after writing

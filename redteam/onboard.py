@@ -415,7 +415,26 @@ def check(cfg_path, probe_text=PROBE):
                     f"trials, {need_req} requests) needs roughly {need / 60:.0f} min against a budget of "
                     f"{rate.max_seconds / 60:.0f} min. It will STOP part way, and the attacks "
                     f"it never sent are a gap rather than rows that held.")
-    return True, rep
+    # NOT `True`. Every branch above that found something fatal returns False on the spot,
+    # and two do not: `bad_patterns` and `bad_context_shapes` COLLECT into the same list and
+    # fall through to here, where the verdict ignored it. Those two are the pair
+    # `workspace.refuse_unusable_config` opens by naming -- "two failures, both of which
+    # produce a run that looks exactly like a real one" -- and every other command that
+    # reads a config refuses them.
+    #
+    # Walked with `canaries: "ACME-9931"`: this printed
+    #
+    #     PROBLEM   oracle_context.canaries is a single string ... used one character at a
+    #               time ('A', 'C', 'M'...)
+    #     ready to queue
+    #     queued      2026-09-12T1407-6c0cd7
+    #
+    # and exited 0. The command whose whole job is to say what is wrong with a config said
+    # it, and then told the shell and the queue that the config was fine.
+    #
+    # The list is the answer: `problems` is the word, `notes` is the other list, and a
+    # verdict that reads neither is a verdict about nothing.
+    return not rep["problems"], rep
 
 
 def render(ok, rep):
