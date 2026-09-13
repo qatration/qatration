@@ -243,6 +243,122 @@ def main():
     check("...while a results file with no meta at all still names the key",
           "meta.target" in (_why6 or ""), str(_why6))
 
+    # --- AND THE MEASUREMENT THAT BUILT THIS RULE WAS HALF OF ONE -------------------------
+    #
+    # The table above was measured by DROPPING each key from a real artifact and running all
+    # five consumers: twelve crashes across four keys. Dropping a key asks whether it is
+    # THERE. A page subscripting it needs it to be USABLE, and nothing asked that.
+    #
+    # Re-measured by giving each key a string, a number and a mapping in turn and running the
+    # same five pages: SIXTEEN of forty variants crash, every one as "This is a bug in
+    # qatration, not a finding about your target and not a problem with your config" about
+    # the reader's own file. Three of the keys were not in the table at all.
+    _SHAPES = [
+        ({"meta": {"target": 7}, "results": []}, "meta.target", "int", "not str"),
+        ({"meta": {"target": {}}, "results": []}, "meta.target", "dict", "not str"),
+        ({"meta": {"target": "t", "attacks_n": "many"}, "results": []},
+         "meta.attacks_n", "str", "not int"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": {}, "attack": {"id": "a"}, "fired": []}]},
+         "headline", "dict", "not str"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": "a", "fired": []}]},
+         "attack", "str", "not dict"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": {"id": 7}, "fired": []}]},
+         "attack.id", "int", "not str"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": 7}]},
+         "fired", "int", "not list"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": [],
+                       "trials": "many"}]}, "trials", "str", "not list"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": [],
+                       "trials": [{"verdict": 7}]}]}, "verdict", "int", "not str"),
+    ]
+    for _body, _key, _kind, _want in _SHAPES:
+        _d7, _why7 = _artifact("results_x.json", _body)
+        check("a results file whose %s is %s is refused" % (_key, _kind),
+              _d7 is None and _why7 is not None, str(_why7))
+        check("...and the reason names the key and what it holds",
+              _key in (_why7 or "") and _kind in (_why7 or ""), str(_why7))
+        # AND SAYS WHAT IT SHOULD HAVE BEEN. Without this a mutation that stopped checking
+        # `trials` at all stayed green: the loop below it iterates the string, the first
+        # CHARACTER is not a mapping, and the file is refused by a sentence about
+        # `trials[0]` that names both the key and the kind. Refused for the wrong reason
+        # reads the same from outside unless the reason is read.
+        check("...and what it should have been",
+              _want in (_why7 or ""), str(_why7))
+    # AND THE KEY THAT MAY BE ABSENT STILL MAY BE. `attacks_n` is missing from artifacts
+    # written before the field existed and `measured` reads that as zero on purpose: absent
+    # is "this file predates the question", a string is a denominator nothing can divide by.
+    check("an artifact written before attacks_n existed is not refused for lacking it",
+          _artifact("results_x.json",
+                    {"meta": {"target": "t"}, "results": []})[1] is None,
+          str(_artifact("results_x.json", {"meta": {"target": "t"}, "results": []})[1]))
+    # AND THE THREE THAT ONE PAGE READS ARE NOT REQUIRED OF THE FILE, because refusing the
+    # artifact for them would make one page's need cost the other four -- the inverse of this
+    # reader's own rule that one bad file costs one file. They are answered where they are
+    # read: `fixes` says which finding it could not quote, `compare` groups an unnamed row
+    # under a name that cannot collide with a real id.
+    _thin = {"meta": {"target": "t"},
+             "results": [{"headline": "EXPLOITED", "attack": {"category": "c"},
+                          "fired": []}]}
+    check("a row with no trials and no attack id is not refused for the whole file",
+          _artifact("results_x.json", _thin)[1] is None,
+          str(_artifact("results_x.json", _thin)[1]))
+    # AND THE PAGES THAT READ THEM SURVIVE IT, which is the other half of that decision and
+    # the half a shape rule cannot make true on its own.
+    import defense_report as _dr_a
+    _drw = tempfile.mkdtemp()
+    io.open(os.path.join(_drw, "results_thin.json"), "w", encoding="utf-8").write(
+        json.dumps(dict(_thin, meta={"target": "thin", "attacks_n": 1, "broke": 1,
+                                     "errors": 0})))
+    _real_dr = _dr_a.OUT_DIR
+    try:
+        import pathlib as _pl_a
+        _dr_a.OUT_DIR = _pl_a.Path(_drw)
+        _found = _dr_a.load_all()[0]
+        check("`fixes` reads a finding whose row has no trials", len(_found) == 1,
+              str(len(_found)))
+        check("...and quotes nothing rather than the first trial it can find",
+              _found and _found[0][4] == {}, str(_found[:1])[:160])
+    finally:
+        _dr_a.OUT_DIR = _real_dr
+    # AND `compare`, THE OTHER PAGE THAT READS AN ATTACK ID. Driven through the environment
+    # the way the command is, because that module reads the workspace at import time.
+    import importlib as _il_a
+    _was_a = os.environ.get("QATRATION_OUT")
+    os.environ["QATRATION_OUT"] = _drw
+    try:
+        import workspace as _ws_a, compare_targets as _ct_a
+        _il_a.reload(_ws_a)
+        _il_a.reload(_ct_a)
+        _ct_err = ""
+        try:
+            import contextlib as _ctx_a
+            with _ctx_a.redirect_stdout(io.StringIO()):
+                _ct_a.main()
+        except SystemExit:
+            pass
+        except Exception as _e_a:
+            _ct_err = "%s: %s" % (type(_e_a).__name__, _e_a)
+        check("`compare` draws a page over a row whose attack has no id", not _ct_err,
+              _ct_err)
+        check("...and the row is grouped under a name that cannot collide with a real id",
+              "(unnamed attack)" in io.open(os.path.join(_drw, "compare_targets.html"),
+                                            encoding="utf-8").read(),
+              sorted(os.listdir(_drw)))
+    finally:
+        if _was_a is None:
+            os.environ.pop("QATRATION_OUT", None)
+        else:
+            os.environ["QATRATION_OUT"] = _was_a
+        import workspace as _ws_b, compare_targets as _ct_b
+        _il_a.reload(_ws_b)
+        _il_a.reload(_ct_b)
+
     # AND NOT BY REFUSING EVERY LIST, which is the fix that would have passed every line
     # above. SIXTEEN artifacts stored here ARE top-level lists -- every `isolation_*.json`
     # coupling map -- and they come through this same reader; a rule that refused a list

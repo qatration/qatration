@@ -790,9 +790,24 @@ def load_all(known=None):
         dates[tgt] = measured_when((d.get("meta") or {}), fp)[0][:10]
         for r in d["results"]:
             if r["headline"] in BROKE and r["attack"].get("category") != "control":
-                best = sorted(r["trials"], key=lambda t: 0 if t["verdict"] in BROKE else 1)[0]
+                # THE ROW, NOT THE FILE. `workspace._unusable_results` types every key the
+                # pages read and REQUIRES the ones every page needs; these three --
+                # `trials`, the `verdict` inside one, and the `id` inside an attack -- are
+                # subscripted here and nowhere else, so refusing the artifact for them would
+                # make one page's need cost the other four. They came back as `KeyError:
+                # 'trials'` and `KeyError: 'verdict'` under "This is a bug in qatration, not
+                # a finding about your target and not a problem with your config".
+                #
+                # A finding with no quotable trial is still a finding: the headline, the
+                # detectors and the attack are all in the row. What is lost is the EXAMPLE,
+                # and the page says so where the example would have been rather than
+                # printing whichever trial sorted first as though it were the worst.
+                _trials = [_t for _t in (r.get("trials") or []) if isinstance(_t, dict)]
+                _best = sorted(_trials,
+                               key=lambda t: 0 if t.get("verdict") in BROKE else 1)
                 findings.append((tgt, r["attack"], r["headline"], r["fired"],
-                                 best.get("probe") or {}, r.get("rate", "")))
+                                 (_best[0].get("probe") or {}) if _best else {},
+                                 r.get("rate", "")))
     return findings, targets, dates, _unreadable, unmeasured
 
 
@@ -945,7 +960,8 @@ def _unobservable():
                     (asked if _named else unasked)[tgt] = \
                         (asked if _named else unasked).get(tgt, 0) + 1
                 for b in blind_spots(pr, cfg):
-                    out.setdefault(tgt, {}).setdefault(b, set()).add(r["attack"]["id"])
+                    out.setdefault(tgt, {}).setdefault(b, set()).add(
+                        (r.get("attack") or {}).get("id") or "(unnamed attack)")
     return out, asked, unasked
 
 
@@ -1635,7 +1651,8 @@ def main():
         by_det = {}
         for tgt, attack, head, probe, rate, fired in unmapped:
             for d in fired:
-                by_det.setdefault(d, []).append((tgt, attack["id"], head, rate))
+                by_det.setdefault(d, []).append(
+                    (tgt, (attack or {}).get("id") or "(unnamed attack)", head, rate))
         rows = ""
         for det in sorted(by_det, key=lambda d: -len(by_det[d])):
             items = by_det[det]
@@ -1960,8 +1977,15 @@ def main():
                     bits.append(f'<span class="age">open since {esc(first[:10])}</span>')
             return "".join(bits)
 
-        trig = "".join(f'<li><span class="mono">{esc(t)}</span> · {esc(a["id"])}'
-                       f'<span class="rate">{esc(rt)}</span>{_meta(t, a["id"])}</li>'
+        # `.get`, NOT A SUBSCRIPT. Four places in this file read an attack's id and every
+        # one of them assumed it was there; `workspace._unusable_results` types the key and
+        # leaves it optional, because `fixes` and `compare` read it and the other three
+        # pages do not. A row with no id is still a finding with a headline, detectors and
+        # a target, and it renders under a name that cannot collide with a real one.
+        trig = "".join(f'<li><span class="mono">{esc(t)}</span> · '
+                       f'{esc((a or {}).get("id") or "(unnamed attack)")}'
+                       f'<span class="rate">{esc(rt)}</span>'
+                       f'{_meta(t, (a or {}).get("id") or "(unnamed attack)")}</li>'
                        for t, a, h, p, rt in items)
         sections += f"""
         <section class="finding">
@@ -1976,7 +2000,7 @@ def main():
           <div class="fix"><span class="fixlabel">Remediation</span>{esc(rem['fix'])}</div>
           {chan_html}
           <details>
-            <summary>Evidence — <span class="mono">{esc(a0['id'])}</span> on <span class="mono">{esc(t0)}</span></summary>
+            <summary>Evidence — <span class="mono">{esc((a0 or {}).get('id') or '(unnamed attack)')}</span> on <span class="mono">{esc(t0)}</span></summary>
             <div class="ph">attack</div><pre>{esc(payload_text(a0))}</pre>
             {tc_html}
             <div class="ph">what happened</div><pre>{esc(reply)}</pre>

@@ -431,7 +431,12 @@ def main():
             continue
         by_id, worst = {}, None
         for r in d["results"]:
-            aid = r["attack"]["id"]
+            # AN UNNAMED ATTACK IS STILL A ROW. This subscript was the only thing between
+            # a row whose `attack` carries no `id` and a traceback telling the reader it is
+            # a bug in this tool; `workspace._unusable_results` types the key and leaves it
+            # optional, because it is read here and in `fixes` and by neither of the other
+            # three pages. Grouped under a name that cannot collide with a real id.
+            aid = (r.get("attack") or {}).get("id") or "(unnamed attack)"
             # THE CATEGORY TRAVELS. Dropping it here is why `pair_diffs` was the one
             # module in nine that scored a control as a finding: eight others exclude
             # `category == "control"` and this one could not see it. Appended third, so

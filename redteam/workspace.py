@@ -1495,16 +1495,71 @@ def read_artifact(path):
     return (None, why) if why else (data, None)
 
 
-# Keys the pages SUBSCRIPT rather than `.get`, with what happens when one is absent.
-# Measured by dropping each key from a real artifact in turn and running all five
-# consumers: twelve crashes across these four, every one arriving as `this is a bug in
-# qatration, please send it` for a variation in somebody's data.
+# Keys the pages SUBSCRIPT rather than `.get`, with the shape each one has to be in and
+# what reads it. Measured by dropping each key from a real artifact in turn and running all
+# five consumers: twelve crashes across four keys.
+#
+# AND THE MEASUREMENT WAS HALF OF ONE. Dropping a key asks whether it is THERE; a page
+# subscripting it needs it to be USABLE, and nothing asked that. Re-measured by giving each
+# key a string, a number and a mapping in turn and running the same five: SIXTEEN of forty
+# variants crash a page, every one of them as "This is a bug in qatration, not a finding
+# about your target and not a problem with your config" about the reader's own file.
+#
+#     results[].trials absent      KeyError: 'trials'
+#     results[].trials: "many"     TypeError: string indices must be integers
+#     results[].attack: "a"        AttributeError: 'str' object has no attribute 'get'
+#     meta.target: 7               three pages
+#     meta.target: {}              all five
+#
+# Three of the keys were not in this table at all -- `trials`, the `verdict` inside a trial,
+# and the `id` inside an attack -- and each is subscripted by a page that ships.
+#
+# `attacks_n` IS THE ONE THAT MAY BE ABSENT. Artifacts written before the field existed carry
+# none and `measured` reads that as zero on purpose, which is a different claim from a value
+# of the wrong kind: absent is "this file predates the question", a string is a denominator
+# nothing can divide by.
 _RESULTS_REQUIRE = {
-    "meta.target": "`index`, `compare` and `coverage` key every page by it",
-    "results[].headline": "`fixes`, `compare` and `discrimination` sort and count on it",
-    "results[].attack": "`compare`, `coverage` and `discrimination` read its id",
-    "results[].fired": "`compare` reads the detector list off it",
+    "meta.target": (str, True, "`index`, `compare` and `coverage` key every page by it"),
+    "meta.attacks_n": (int, False,
+                       "`index` and `compare` size a run's coverage with it"),
+    "results[].headline": (str, True,
+                           "`fixes`, `compare` and `discrimination` sort and count on it"),
+    "results[].attack": (dict, True,
+                         "`compare`, `coverage` and `discrimination` read its id"),
+    "results[].attack.id": (str, False,
+                            "`fixes` and `compare` group every row under it, and `verify` "
+                            "and `history` key their own records by it"),
+    "results[].fired": (list, True, "`compare` reads the detector list off it"),
+    "results[].trials": (list, False,
+                         "`fixes` picks the worst trial out of it and `coverage` replays "
+                         "them"),
+    "results[].trials[].verdict": (str, False,
+                                   "`fixes` chooses which trial to quote by it"),
 }
+
+
+def _shape_fault(where, value, present):
+    """-> why this value cannot be used under `where`, or None. One rule for every row above.
+
+    `present` says whether the key was there at all, which is the distinction the first
+    version of this rule was missing in the other direction: a key that is absent and a key
+    holding something unusable are different facts with different remedies.
+
+    WHAT IS REQUIRED IS WHAT EVERY PAGE NEEDS, and the `False` rows are the line. `trials`,
+    the `verdict` inside one and the `id` inside an attack are each subscripted by ONE
+    consumer, and refusing the whole artifact for them would make one page's need cost every
+    page -- the inverse of `read_artifact`'s own rule that one bad file costs one file.
+    Those three are answered where they are read instead, by the page that reads them, which
+    can say what it could not quote rather than refusing to draw anything. A value of the
+    wrong KIND is different: nothing downstream can use it and no page can work around it.
+    """
+    kind, required, why = _RESULTS_REQUIRE[where]
+    if not present:
+        return ("a results file with no %s: %s" % (where, why)) if required else None
+    if isinstance(value, kind) and not (kind is int and isinstance(value, bool)):
+        return None
+    return ("a results file whose %s is %s, not %s: %s"
+            % (where, type(value).__name__, kind.__name__, why))
 
 
 # The same measurement, for the benign family. `meta.probes` is the denominator of every
@@ -1599,17 +1654,32 @@ def _unusable_results(data, name=""):
     _meta = data.get("meta")
     if _meta is not None and not isinstance(_meta, dict):
         return ("a results file whose meta is %s, not a mapping: %s"
-                % (type(_meta).__name__, _RESULTS_REQUIRE["meta.target"]))
-    if not (_meta or {}).get("target"):
-        return ("a results file with no meta.target: %s"
-                % _RESULTS_REQUIRE["meta.target"])
+                % (type(_meta).__name__, _RESULTS_REQUIRE["meta.target"][2]))
+    _meta = _meta or {}
+    for _k in ("target", "attacks_n"):
+        _why = _shape_fault("meta.%s" % _k, _meta.get(_k), bool(_meta.get(_k) is not None))
+        if _why:
+            return _why
     for i, r in enumerate(data["results"]):
         if not isinstance(r, dict):
             return "results[%d] is %s, not a mapping" % (i, type(r).__name__)
-        for k in ("headline", "attack", "fired"):
-            if k not in r:
-                return ("a results file whose results[%d] has no %r: %s"
-                        % (i, k, _RESULTS_REQUIRE["results[].%s" % k]))
+        for _k in ("headline", "attack", "fired", "trials"):
+            _why = _shape_fault("results[].%s" % _k, r.get(_k), _k in r)
+            if _why:
+                return _why.replace("results[].", "results[%d]." % i)
+        _why = _shape_fault("results[].attack.id", (r.get("attack") or {}).get("id"),
+                            "id" in (r.get("attack") or {}))
+        if _why:
+            return _why.replace("results[].", "results[%d]." % i)
+        for j, _tr in enumerate(r.get("trials") or []):
+            if not isinstance(_tr, dict):
+                return ("results[%d].trials[%d] is %s, not a mapping"
+                        % (i, j, type(_tr).__name__))
+            _why = _shape_fault("results[].trials[].verdict", _tr.get("verdict"),
+                                "verdict" in _tr)
+            if _why:
+                return _why.replace("results[].trials[].",
+                                    "results[%d].trials[%d]." % (i, j))
     return None
 
 
