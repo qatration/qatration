@@ -112,6 +112,59 @@ def main():
     check("every frame in the shipped library carries a hypothesis",
           all(f.get("why") and "{task}" in f["template"] for f in load_frames()), True)
 
+    # 7a. AND A LIBRARY THAT IS NOT FRAMES IS NOT A LIBRARY. `--frames` takes any path, and
+    #     this loader was the last one in the package opening a typed path with a bare
+    #     `open`: a missing file came back as a FileNotFoundError traceback under "This is a
+    #     bug in qatration, not a finding about your target and not a problem with your
+    #     config", which is what the shared reader exists to stop.
+    #
+    #     THE ACCEPTED ONES ARE WORSE. A string is iterable and a mapping iterates its keys,
+    #     so `--frames` pointed at either was COUNTED and searched with: a file holding
+    #     "hello" printed `frame library: 5 frames` and ran the search on the five letters
+    #     of the word. A frame that cannot be sent misses, a property no frame opened reads
+    #     as LOCKED, and every property locked reads as HARDENED.
+    import os as _os_k
+    import tempfile as _tf_k
+    _kw = _tf_k.mkdtemp()
+
+    def _frames_from(text):
+        _p = _os_k.path.join(_kw, "fr.yaml")
+        open(_p, "w", encoding="utf-8").write(text)
+        try:
+            return "", load_frames(_p)
+        except SystemExit as _e:
+            return str(_e), None
+
+    for _label, _text, _want in (
+            ("a mapping", '{"a": 1}', "not a list"),
+            ("a bare string", '"hello"', "a single string"),
+            ("empty", "", "is empty"),
+            ("a list of numbers", "[1, 2]", "not a list of frames"),
+            ("a list of strings", '["a"]', "not a list of frames"),
+            ("frames with no template", '[{"id": "f1"}]', "no template text"),
+            ("frames with no id", '[{"template": "{task}"}]', "no id")):
+        _said, _got = _frames_from(_text)
+        check("a frame library that is %s is refused" % _label, bool(_said) and _got is None,
+              True)
+        check("...and the reason says what the file holds (%s)" % _label,
+              _want in _said, True)
+    _said_missing, _ = _frames_from("[]")
+    check("...while an empty list is a library with nothing in it, not a malformed one",
+          _said_missing, "")
+    # A PATH THAT IS NOT THERE IS THE OTHER HALF, and it is the shared reader's own sentence.
+    try:
+        load_frames(_os_k.path.join(_kw, "no_such_frames.yaml"))
+        _missing_said = ""
+    except SystemExit as _e:
+        _missing_said = str(_e)
+    check("a --frames path that is not there is refused, not crashed into",
+          "no frame library at" in _missing_said, True)
+    check("...and the command that stopped is named",
+          _missing_said.startswith("isolation:"), True)
+    # NOT THE ONE THAT SHIPS, or a rule that refuses everything passes all of that.
+    check("...while the library this package ships is accepted", len(load_frames()) >= 5,
+          True)
+
     # 8. THE FALSE NEGATIVE THIS EXISTS TO PREVENT: a frame whose mechanism is rewriting the
     #    ask cannot be delivered by wrapping one. Running it anyway yields a clean 0/N that
     #    reads as "the technique failed here" when nothing testable was ever sent.

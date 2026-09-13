@@ -34,8 +34,33 @@ def load_frames(path=None, families=None):
     frame that makes the others mean something.
     """
     path = path or os.path.join(HERE, "frames.yaml")
-    with open(path, encoding="utf-8") as f:
-        frames = yaml.safe_load(f) or []
+    # THROUGH THE SHARED READER, which is the last loader in this package that opened a
+    # path somebody typed with a bare `open`. `--frames nope.yaml` came back as a
+    # FileNotFoundError traceback under "This is a bug in qatration, not a finding about
+    # your target and not a problem with your config" -- which is what that reader exists
+    # to stop, and what it already does for the config, the arsenal and the objectives.
+    from workspace import load_yaml_or_refuse as _load_yaml
+    frames = _load_yaml(path, "frame library", "isolation") or []
+    # AND A LIBRARY THAT IS NOT FRAMES IS NOT A LIBRARY. A string is iterable and a mapping
+    # iterates its keys, so `--frames` pointed at either was COUNTED and searched with:
+    # "hello" printed `frame library: 5 frames` and searched with the five letters of the
+    # word. A frame that cannot be sent misses, a property no frame opened reads as LOCKED,
+    # and every property locked reads as HARDENED -- this command's strongest claim, out of
+    # a library that was never a library.
+    _bad = [(i, fr) for i, fr in enumerate(frames)
+            if not isinstance(fr, dict) or not fr.get("id")
+            or not isinstance(fr.get("template"), str)]
+    if _bad:
+        i, fr = _bad[0]
+        raise SystemExit(
+            "isolation: the frame library at %s is not a list of frames: entry %d is %s, "
+            "and %d like it. A frame is a mapping with an `id`, a `family` and a "
+            "`template` holding `{task}`; the search sends the template and files the "
+            "result under the id."
+            % (path, i,
+               "%s (%.40r)" % (type(fr).__name__, fr) if not isinstance(fr, dict)
+               else "a mapping with no id" if not fr.get("id")
+               else "a frame with no template text", len(_bad)))
     if families:
         want = {f.strip() for f in families if f and f.strip()}
         frames = [fr for fr in frames

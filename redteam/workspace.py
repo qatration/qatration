@@ -616,6 +616,8 @@ DOC_SHAPES = {
     "arsenal": (list, "a bare list of attack mappings, each with an `id`; a file whose top "
                       "level is `attacks:` loads as a mapping, not a list"),
     "objectives file": (list, "a list of objectives"),
+    "frame library": (list, "a list of frames, each with an `id`, a `family` and a "
+                            "`template` holding `{task}`"),
 }
 
 # "a single string" in the same words `bad_context_shapes` uses one screen down, because
