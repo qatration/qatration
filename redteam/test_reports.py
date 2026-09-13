@@ -2570,10 +2570,14 @@ def main():
         import run_redteam as _rr9
         _iw = _tf5.mkdtemp()
         try:
-            def _panel_date(body):
+            # THE KEY THE CALLER REALLY PASSES. `side_artifact` now asks whether what
+            # parsed IS the artifact that key names -- a lock map is a list of maps, a
+            # profile is a mapping -- so a recon fixture read as `maps` is refused, which
+            # is the point of the rule and not a fault in these three dates.
+            def _panel_date(body, key="maps"):
                 _fp9 = os.path.join(_iw, "isolation_x.json")
                 _js5.dump(body, io.open(_fp9, "w", encoding="utf-8", newline=""))
-                _g9 = _rr9._side_artifact(_fp9, "isolation_x.json", "maps")
+                _g9 = _rr9._side_artifact(_fp9, "isolation_x.json", key)
                 return (_g9 or {}).get("when") or ""
 
             _dated = _panel_date({"meta": {"target": "x", "when": "2026-05-06 07:08"},
@@ -2585,7 +2589,7 @@ def main():
                   _undated.endswith("(file)"), _undated)
             # A RECON PROFILE KEEPS ITS DATE AT THE TOP LEVEL, which is the shape it already
             # had; reading only `meta` here would mark every one of them as file-dated.
-            _prof = _panel_date({"target": "x", "when": "2026-05-06 07:08"})
+            _prof = _panel_date({"target": "x", "when": "2026-05-06 07:08"}, "profile")
             check("a recon profile that recorded its date is dated by it",
                   _prof == "2026-05-06 07:08", _prof)
             # AND THE BARE LIST STILL READS. `data.get` on a list raises, and the panel the

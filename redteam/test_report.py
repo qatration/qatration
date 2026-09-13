@@ -188,6 +188,52 @@ def main():
     check("...while an artifact that is simply absent adds no note",
           "could not be read" in bare, False)
 
+    # AND A FILE THAT PARSES AND IS NOT THE ARTIFACT IS THE THIRD STATE. `side_artifact`
+    # unwrapped `{meta: ..., maps: [...]}` and wrote `else []` under it, so every other
+    # shape became an EMPTY panel -- the same silence this reader was moved here to stop,
+    # one level in. Walked through `run --isolation`: a map file holding a scalar, a list
+    # of strings, a list of numbers or `null` each reached the renderer and came back as a
+    # traceback, and `{"a": 1}` published a report with an empty lock panel and exit 0.
+    import json as _json_s
+    import os as _os_s
+    import tempfile as _tf_s
+    from workspace import side_artifact as _side_s
+    _sw = _tf_s.mkdtemp()
+
+    def _side_of(body, key):
+        _p = _os_s.path.join(_sw, "side.json")
+        open(_p, "w", encoding="utf-8").write(_json_s.dumps(body))
+        return _side_s(_p, "unused.json", key)
+
+    for _label, _body in (("a scalar", "hello"), ("a list of strings", ["a", "b"]),
+                          ("a list of numbers", [1, 2]), ("nothing at all", None),
+                          ("a mapping with no maps in it", {"a": 1})):
+        _got = _side_of(_body, "maps")
+        check("a lock map that is %s is reported, not rendered" % _label,
+              bool(_got and _got.get("unreadable")) and _got.get("maps") is None, True)
+        check("...and the reason says what the file holds instead (%s)" % _label,
+              "not the list of maps" in ((_got or {}).get("unreadable") or ""), True)
+    # NOT THE ONES THAT ARE FINE, or a reader that refuses everything passes all of that.
+    # Both containers this engine has written are real: the wrapped one and the bare list.
+    check("a wrapped lock map is still read",
+          _side_of({"meta": {"when": "2026-09-13"}, "maps": [{"objective": "o"}]},
+                   "maps")["maps"], [{"objective": "o"}])
+    check("...and so is the bare list an older run wrote",
+          _side_of([{"objective": "o"}], "maps")["maps"], [{"objective": "o"}])
+    # AN EMPTY MAP LIST IS A REAL RECORD: `isolation` writes one when nothing applied, and
+    # this suite's sibling asserts that it does.
+    check("...and an empty list of maps is a record, not a malformed file",
+          _side_of({"meta": {}, "maps": []}, "maps")["maps"], [])
+    # AND THE OTHER FAMILY, which is read by key on the panel that sits above every warning
+    # saying the numbers below cannot be trusted yet.
+    for _label, _body in (("a list", [1, 2]), ("a scalar", "hello")):
+        _gotp = _side_of(_body, "profile")
+        check("a recon profile that is %s is reported too" % _label,
+              bool(_gotp and _gotp.get("unreadable")) and _gotp.get("profile") is None,
+              True)
+    check("...while a profile that is a mapping is read",
+          _side_of({"target": "b"}, "profile")["profile"], {"target": "b"})
+
     # 2a. WHAT IS MISSING FROM A RUN HAS TWO CAUSES AND THE SCORECARD USED TO NAME ONE.
     # A single tile read "not applicable / skipped", and its number added the attacks this
     # deployment cannot take to the attacks `--scope quick` held back. Walked from an install

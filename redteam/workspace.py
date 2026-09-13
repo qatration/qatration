@@ -989,11 +989,41 @@ def side_artifact(explicit, default_name, key, root=None, warn=None):
     # the list. The caller's key IS "maps" for that family, so the unwrapping replaces it:
     # handing the renderer the wrapper instead of the rows makes the panel render empty, which
     # is the same silence this reader was moved here to stop.
-    if key == "maps" and isinstance(data, dict):
-        _inner = data.get("maps")
-        if isinstance(_inner, dict):
-            _inner = _inner.get("maps")
-        out[key] = _inner if isinstance(_inner, list) else []
+    if key == "maps":
+        _rows = data
+        if isinstance(data, dict):
+            _inner = data.get("maps")
+            if isinstance(_inner, dict):
+                _inner = _inner.get("maps")
+            _rows = _inner
+        # AND WHAT COMES OUT OF THE WRAPPER HAS TO BE THE ROWS. The unwrapping above was
+        # asked only of a dict, and the `else []` under it turned every other shape into an
+        # EMPTY panel -- the same silence this reader was moved here to stop, one level in.
+        # Walked through `run --isolation`: a map file holding a scalar, a list of strings,
+        # a list of numbers or `null` each reached the renderer and came back as a
+        # traceback, and `{"a": 1}` published a report with an empty lock panel and exit 0.
+        if not isinstance(_rows, list) or any(not isinstance(_m, dict) for _m in _rows):
+            _why = ("it is %s, not the list of maps a lock file holds. `qatration "
+                    "isolation` writes `{meta: ..., maps: [...]}`, and an older one is a "
+                    "bare list of those maps."
+                    % ("nothing" if _rows is None else "a %s" % type(_rows).__name__))
+            if warn:
+                warn(path, _why)
+            # THE SAME CHANNEL A TORN FILE USES, for the reason written above it: the
+            # report renders `unreadable` as a panel that says so, and renders None as no
+            # panel at all. A reader who asked for a lock map and got nothing must be told
+            # which of the two happened.
+            return {key: None, "when": "", "unreadable": _why, "path": path}
+        out[key] = _rows
+    # AND A PROFILE IS A MAPPING, the same question for the other family. `_recon_panel`
+    # reads it by key, and its own note says that section sits "above all the warnings that
+    # say the numbers below cannot be trusted yet".
+    if key == "profile" and not isinstance(data, dict):
+        _why = ("it is %s, not the mapping a recon profile is. `qatration recon` writes "
+                "one." % ("nothing" if data is None else "a %s" % type(data).__name__))
+        if warn:
+            warn(path, _why)
+        return {key: None, "when": "", "unreadable": _why, "path": path}
     return out
 
 
