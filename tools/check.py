@@ -139,9 +139,20 @@ def run_suite(path):
     # Ctrl-C no longer reaches the suite on its own, which is why the interrupt is caught here
     # and turned into the same tree kill.
     opts = {} if os.name == "nt" else {"start_new_session": True}
+    # UTF-8, SAID RATHER THAN INHERITED. `text=True` alone decodes with whatever
+    # `locale.getpreferredencoding` returns on the machine, and every suite here writes UTF-8
+    # -- each one opens with `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`.
+    # The two agree wherever the machine's locale already is UTF-8, and they do not on
+    # the Windows CI runner: `test_payload` prints a fullwidth prompt whose UTF-8 contains
+    # byte 0x81, which cp1252 has no character for. What reached this process there was not
+    # what the suite printed, and the line it needed -- `31/31 passed` -- was not in it, so
+    # the suite that ran thirty-one checks was reported as one that ran none.
+    #
+    # `errors="replace"` for the same reason the suites use it: a byte this cannot render is
+    # a reason to show a placeholder, never a reason to lose the output around it.
     proc = subprocess.Popen([sys.executable, path], stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, cwd=ROOT,
-                            env=child_env(), **opts)
+                            stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                            errors="replace", cwd=ROOT, env=child_env(), **opts)
     try:
         out, err = proc.communicate(timeout=DEADLINE)
         return proc.returncode, (out or "") + (err or ""), False, False
@@ -269,6 +280,13 @@ def main(argv):
         if rc == 0 and checks_reported(text) == 0:
             lied.append("it reported 0 checks: a run that did nothing reads exactly like "
                         "a run that did everything, so this is not a pass")
+            # AND WHAT IT DID SAY, because `it reported 0` is a verdict and not evidence.
+            # The first time this fired on CI it named the suite and nothing else, and the
+            # cause was in the output nobody was shown: the runner had mangled it reading
+            # UTF-8 as cp1252. A reader of a failed build should not have to guess that.
+            _tail = [l.rstrip() for l in text.splitlines() if l.strip()][-3:]
+            lied += ["    it printed: " + l[:120] for l in _tail] or \
+                    ["    it printed nothing at all"]
         if rc == 0 and not lied:
             print("  ok   %-28s %5.1fs" % (name[5:-3], secs))
             # AND WHAT IT DID NOT CHECK. Output from a passing suite is discarded, so a suite

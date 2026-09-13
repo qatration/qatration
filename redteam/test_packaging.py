@@ -1290,6 +1290,39 @@ against a normal 110 seconds, in the suite that checks the packaging of the whol
         _sh_c.rmtree(_cwork, ignore_errors=True)
     print("  ok  the runner fails a suite that exits 0 having run nothing")
 
+    # AND IT READS WHAT THE SUITE PRINTED, not a re-encoding of it. `text=True` alone decodes
+    # with whatever `locale.getpreferredencoding` returns, and every suite here writes UTF-8:
+    # each opens with `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`. The two
+    # agree on a machine whose locale is UTF-8 and do not on the Windows CI runner, where
+    # `test_payload` prints
+    # a fullwidth prompt whose UTF-8 holds byte 0x81 -- undefined in cp1252. What reached the
+    # runner there was not what the suite printed, the line it needed was not in it, and a
+    # suite that ran thirty-one checks was reported as one that ran none.
+    _uw = _tf_c.mkdtemp()
+    try:
+        _wide = "\uff4d\uff41\uff52\uff4b"      # fullwidth, and 0x8D/0x81 in its UTF-8
+        io.open(os.path.join(_uw, "test_wide_output.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys\n"
+            "try:\n"
+            "    sys.stdout.reconfigure(encoding='utf-8', errors='replace')\n"
+            "except Exception:\n"
+            "    pass\n"
+            "print('PASS  ' + %r)\n"
+            "print('')\n"
+            "print('1/1 passed')\n" % _wide)
+        _rc_w, _out_w, _hung_w, _orph_w = chk.run_suite(
+            os.path.join(_uw, "test_wide_output.py"))
+        assert _rc_w == 0, "the fixture suite did not exit 0: %r" % _rc_w
+        assert _wide in _out_w, (
+            "the runner did not read what the suite printed: it decoded %r as %r"
+            % (_wide, [l for l in _out_w.splitlines() if l.startswith("PASS")][:1]))
+        assert chk.checks_reported(_out_w) == 1, \
+            "the count was lost with the characters: %r" % chk.checks_reported(_out_w)
+    finally:
+        _sh_c.rmtree(_uw, ignore_errors=True)
+    print("  ok  the runner reads a suite's output as the UTF-8 every suite writes")
+
 
 def test_the_runner_refuses_a_tree_with_no_suites():
     """`tools/check.py` is how every other check in this repository is run. Asked to run
