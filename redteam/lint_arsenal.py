@@ -777,11 +777,31 @@ def main():
     import argparse
     # THE ONE SPELLING, from the table this command is listed in.
     from cli import parser as _cli_parser
-    _cli_parser(
+    _ap = _cli_parser(
         "lint",
         description="Check the attack corpus for the mistakes that read as findings: a "
                     "detector name nothing defines, a target that does not exist, an "
-                    "expectation no probe can satisfy.").parse_args()
+                    "expectation no probe can satisfy.")
+    # THE CORPUS A CUSTOMER WRITES COULD NOT BE LINTED. This command took no arguments and
+    # read the arsenals beside itself, and three comments in this file already say what that
+    # cost -- "only the shipped corpus was checked", "`run --attacks mine.yaml` takes any
+    # file", "a corpus the linter cannot be pointed at". Those moved three rules into
+    # `unusable_entries` so the RUN would catch them; the command whose whole job is to catch
+    # them before a run still could not be aimed.
+    #
+    # Walked from a working directory holding `attacks_mine.yaml` with `delivery: chian` and
+    # `success: canary_in_outpt` in it:
+    #
+    #     linted 1060 attacks across 41 file(s) - 66 detectors - 43 targets
+    #     OK - arsenal clean (0 warning(s)).
+    #
+    # Exit 0, about 41 files the reader did not write, naming none of them, and their own file
+    # never opened. That is a gap reported as a measurement, in the command this project
+    # offers as the cheap check before you spend anybody's request budget.
+    _ap.add_argument("--attacks", default=None, metavar="PATH",
+                     help="an arsenal file, or a directory of attacks*.yaml, to lint "
+                          "instead of the corpus this package ships")
+    _args = _ap.parse_args()
     targets = known_targets()
     # lint EVERY arsenal file (attacks.yaml + every attacks_*.yaml focus file), not just
     # the baseline — an unlinted focus file with a typo'd detector is the same silent
@@ -790,7 +810,15 @@ def main():
     _ATTACK_KEYS = attack_keys_read()
     # THROUGH THE SHARED ENUMERATION. This globbed, so one leftover scratch file made
     # `qatration lint` report an error in a file nobody ships and exit 1.
-    files = _arsenal_files(ROOT)
+    # A FILE OR A DIRECTORY, because both are what somebody has. `arsenal_files` is the one
+    # enumeration -- it drops the scratch files an interrupted suite leaves -- and a path
+    # named outright is taken as given: a reader who points at a file means that file.
+    if _args.attacks:
+        corpus = os.path.abspath(_args.attacks)
+        files = [corpus] if os.path.isfile(corpus) else _arsenal_files(corpus)
+    else:
+        corpus = ROOT
+        files = _arsenal_files(ROOT)
     errors, warns = [], []
     total = 0
 
@@ -801,6 +829,11 @@ def main():
     # YAML is a runner with nothing to run". Measured on an installed layout with the
     # YAML stripped: "linted 0 attacks across 0 file(s) · OK — arsenal clean".
     if not files:
+        if _args.attacks:
+            print(f"REFUSED: no arsenal at {corpus} — a file that is not there cannot be\n"
+                  f"linted. Point --attacks at an arsenal file, or at a directory holding\n"
+                  f"attacks*.yaml files.")
+            return 5
         print(f"REFUSED: no attacks*.yaml beside {ROOT} — an arsenal that is not there\n"
               f"cannot be linted, and this is what a packaging mistake looks like from\n"
               f"inside an installed copy. Check [tool.setuptools.package-data].")
@@ -936,15 +969,31 @@ def main():
     if not total:
         errors.append(f"{len(files)} arsenal file(s) and not one attack between them")
 
-    print(f"linted {total} attacks across {len(files)} file(s) · {len(DETECTORS)} detectors · {len(targets)} targets")
+    print(f"linted {total} attacks across {len(files)} file(s) in {corpus} · "
+          f"{len(DETECTORS)} detectors · {len(targets)} targets")
+    # AND WHAT WAS NOT LINTED, WHEN IT IS SITTING RIGHT THERE. A clean bill reads as a claim
+    # about the arsenal the reader has, and with no --attacks it is a claim about the one this
+    # package ships. The two differ exactly when a customer wrote their own, which is the
+    # reader this line is for; the check is the working directory, because that is where they
+    # are standing when they type the command.
+    _theirs = []
+    if not _args.attacks and os.path.abspath(os.getcwd()) != os.path.abspath(ROOT):
+        _theirs = [os.path.basename(p) for p in _arsenal_files(os.getcwd())]
     for w in warns:
         print(f"  WARN  {w}")
     for e in errors:
         print(f"  ERROR {e}")
     if errors:
-        print(f"\nFAIL — {len(errors)} error(s), {len(warns)} warning(s).")
+        print(f"\nFAIL — {len(errors)} error(s), {len(warns)} warning(s) "
+              f"in {corpus}.")
         sys.exit(1)
-    print(f"\nOK — arsenal clean ({len(warns)} warning(s)).")
+    print(f"\nOK — the arsenal in {corpus} is clean ({len(warns)} warning(s)).")
+    if _theirs:
+        print(f"  ! not this one: {', '.join(_theirs[:4])} "
+              f"{'and %d more ' % (len(_theirs) - 4) if len(_theirs) > 4 else ''}"
+              f"{'is' if len(_theirs) == 1 else 'are'} in the directory you ran this from "
+              f"and\n    {'was' if len(_theirs) == 1 else 'were'} not opened. "
+              f"`qatration lint --attacks {_theirs[0]}` lints it.")
 
 
 if __name__ == "__main__":

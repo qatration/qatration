@@ -382,7 +382,13 @@ only the third.
   above alone, a build would conclude the opposite of what happened.
 - **`lint`** exits `1` when the attack corpus has an error: an attack that cannot be delivered,
   a detector name nothing registers, a payload naming a host somebody could own. The finding is
-  in the arsenal, and it is caught before anything is sent.
+  in the arsenal, and it is caught before anything is sent. WHICH arsenal is named on the line
+  that counts it and again in the verdict, because it used to be neither: with no `--attacks`
+  this reads the corpus that ships inside the package, so a clean bill run from a directory
+  holding somebody's own `attacks_*.yaml` was a clean bill about forty-one files they did not
+  write. That case now names their file and says it was not opened. `--attacks` takes a file or
+  a directory and lints that instead; a path that is not there exits `5`, because a filename
+  somebody mistyped is a precondition and not a packaging fault in this install.
 - **`benign --dry-run`** exits `1` when a detector fires on the corpus with a bland reply — that
   is, when a detector is reading the QUESTION and reporting it as the target's answer. The
   finding is in this tool's own oracle, and no target was contacted at all.

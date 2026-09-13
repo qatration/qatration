@@ -292,6 +292,83 @@ def check_refusal(check):
     check("`run` puts a customer's arsenal through the entry rule", _called_i,
           "imported as %r, called: %s" % (_alias_i, _called_i))
 
+    # --- AND THE CORPUS A CUSTOMER WROTE COULD NOT BE LINTED ------------------------------
+    #
+    # This command took no arguments and read the arsenals beside itself. Three comments in
+    # `lint_arsenal` already say what that cost -- "only the shipped corpus was checked",
+    # "`run --attacks mine.yaml` takes any file", "a corpus the linter cannot be pointed at" --
+    # and each of them moved a rule into `unusable_entries` so the RUN would catch it. The
+    # command whose whole job is to catch them BEFORE a run still could not be aimed.
+    #
+    # Walked from a directory holding `attacks_mine.yaml` with `delivery: chian` and
+    # `success: canary_in_outpt` in it: `linted 1060 attacks across 41 file(s)`, `OK --
+    # arsenal clean`, exit 0, about 41 files the reader did not write, naming none of them,
+    # their own file never opened.
+    #
+    # DRIVEN, because what is under test is what a shell sees, and the defect was the exit
+    # code and the sentence rather than any rule.
+    import subprocess as _sp_l
+    import tempfile as _tf_l
+    _lwork = _tf_l.mkdtemp()
+    io.open(os.path.join(_lwork, "attacks_mine.yaml"), "w", encoding="utf-8").write(
+        "- id: mine-1\n  category: fz\n  delivery: chian\n  steps: [a]\n"
+        "  success: [canary_in_outpt]\n")
+    _lenv = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
+                 QATRATION_OUT=_tf_l.mkdtemp())
+
+    def _lint(*extra):
+        _p = _sp_l.run([sys.executable, os.path.join(HERE, "cli.py"), "lint"] + list(extra),
+                       capture_output=True, text=True, timeout=300, env=_lenv, cwd=_lwork)
+        return _p.returncode, (_p.stdout or "") + (_p.stderr or "")
+
+    _rc_own, _said_own = _lint("--attacks", "attacks_mine.yaml")
+    check("lint can be pointed at an arsenal somebody else wrote", _rc_own == 1,
+          "exit %s: %s" % (_rc_own, _said_own.strip()[-200:]))
+    check("...and finds the delivery name that falls through to the direct branch",
+          "'chian' is not one this build has" in _said_own, _said_own[-300:])
+    check("...and the detector name nothing defines",
+          "canary_in_outpt" in _said_own, _said_own[-300:])
+    # A DIRECTORY IS WHAT SOMEBODY HAS TOO, and it goes through the one enumeration that
+    # drops the scratch files an interrupted suite leaves behind.
+    _rc_dir, _said_dir = _lint("--attacks", _lwork)
+    check("...and a directory of arsenals is linted the same way", _rc_dir == 1,
+          "exit %s: %s" % (_rc_dir, _said_dir.strip()[-200:]))
+    # A PATH THAT IS NOT THERE IS A PRECONDITION, not a packaging fault in this install:
+    # the shipped-corpus refusal below says to check `package-data`, which is the wrong
+    # errand for a reader who mistyped their own filename.
+    _rc_no, _said_no = _lint("--attacks", "nope.yaml")
+    check("a --attacks path that is not there is refused as a precondition", _rc_no == 5,
+          "exit %s: %s" % (_rc_no, _said_no.strip()[-200:]))
+    check("...and is not sent to look at this package's packaging",
+          "package-data" not in _said_no, _said_no[-200:])
+
+    # AND THE CLEAN BILL SAYS WHAT IT IS ABOUT. `OK -- arsenal clean` reads as a claim about
+    # the arsenal the reader has; with no --attacks it is a claim about the one this package
+    # ships, and the two differ exactly when the reader wrote their own.
+    _rc_bare, _said_bare = _lint()
+    check("a clean bill names the corpus it is about", _rc_bare == 0 and HERE in _said_bare,
+          "exit %s: %s" % (_rc_bare, _said_bare.strip()[-200:]))
+    # ON THE LINE THAT COUNTS, and not only on the verdict under it. "linted 1060 attacks
+    # across 41 file(s)" is the sentence that read as a claim about the reader's own arsenal,
+    # and a count with no place in it is the whole of how it did that. Asked of that line
+    # alone, because the same string anywhere in the output satisfies a whole-output test --
+    # which is what a mutation stripping it from the header showed.
+    _hdr = [_l for _l in _said_bare.splitlines() if _l.startswith("linted ")]
+    check("...on the line that says how much was linted",
+          bool(_hdr) and HERE in _hdr[0], str(_hdr[:1]))
+    check("...and names the arsenal in the reader's own directory that it did not open",
+          "attacks_mine.yaml" in _said_bare and "not opened" in _said_bare,
+          _said_bare.strip()[-300:])
+    check("...and says the flag that would lint it",
+          "--attacks attacks_mine.yaml" in _said_bare, _said_bare.strip()[-300:])
+    # NOT WHEN THERE IS NOTHING TO SAY, or the line is noise on every run in every directory.
+    # ASKED OF THE `--attacks` RUN ALREADY MADE ABOVE rather than of a second bare one: a bare
+    # lint reads 1060 attacks across 41 files and costs a minute, and this suite would have
+    # paid it twice for one sentence. A corpus named outright is the case where the caveat has
+    # nothing to add, and an unconditional caveat shows up here too.
+    check("...and says nothing of the kind when a corpus was named outright",
+          "not opened" not in _said_own, _said_own.strip()[-200:])
+
     # --- WHERE AN ARSENAL TELLS THE TARGET TO SEND THE DATA ------------------------------
     #
     # `lint` refuses a registrable host in the corpus this repository ships: an agent told
