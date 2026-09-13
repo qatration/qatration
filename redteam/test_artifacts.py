@@ -359,6 +359,52 @@ def main():
         _il_a.reload(_ws_b)
         _il_a.reload(_ct_b)
 
+    # --- AND THE BENIGN RULE WAS MEASURED THE SAME WAY, SO IT WAS HALF OF ONE TOO ---------
+    #
+    # `benign --summary`, `compare`, `index`, `fixes` and `coverage`, over a baseline whose
+    # keys are present and unusable: TWELVE of fifty variants crash, and not one of them is
+    # an absent key. The denominator of every rate this project publishes is `meta.probes`,
+    # and a string there came back as `unsupported operand type(s) for +=`.
+    _BSHAPES = [
+        ({"meta": {"target": 7, "probes": 1}, "rows": []}, "meta.target", "int", "not str"),
+        ({"meta": {"target": "t", "probes": "many"}, "rows": []},
+         "meta.probes", "str", "not int"),
+        ({"meta": {"target": "t", "probes": 1}, "rows": "oops"}, "rows", "str", "not list"),
+        ({"meta": {"target": "t", "probes": 1}, "rows": [1]}, "rows[0]", "int",
+         "not dict"),
+        ({"meta": {"target": "t", "probes": 1}, "rows": [{"fired": 7}]},
+         "rows[0].fired", "int", "not list"),
+        ({"meta": {"target": "t", "probes": 1}, "rows": [{"probe": "x"}]},
+         "rows[0].probe", "str", "not dict"),
+        # THE ELEMENTS TOO, which the results family did not need: `fired: [1]` is a list, so
+        # a kind on the field itself passes it, and the roll-up counts detectors BY NAME.
+        ({"meta": {"target": "t", "probes": 1}, "rows": [{"fired": [1]}]},
+         "rows[0].fired[0]", "int", "not str"),
+    ]
+    for _body, _key, _kind, _want in _BSHAPES:
+        _d8, _why8 = _artifact("benign_x.json", _body)
+        check("a benign baseline whose %s is %s is refused" % (_key, _kind),
+              _d8 is None and _why8 is not None, str(_why8))
+        check("...and the reason names the key, what it holds and what it should be",
+              all(_s in (_why8 or "") for _s in (_key, _kind, _want)), str(_why8))
+    # AND `probe: null` IS A SHAPE THIS ENGINE WRITES. A row records it when the probe was
+    # skipped or errored, and `baseline.rates` reads it on purpose -- "a row with no probe
+    # was skipped or errored: it is not evidence of quiet". Writing the key with nothing in
+    # it says what leaving it out says, and a rule that told them apart would refuse a
+    # baseline the tool produced itself.
+    _skipped = {"meta": {"target": "t", "probes": 2},
+                "rows": [{"fired": [], "probe": None}, {"fired": ["d"], "probe": {}}]}
+    check("a benign row whose probe was never sent is not a malformed baseline",
+          _artifact("benign_x.json", _skipped)[1] is None,
+          str(_artifact("benign_x.json", _skipped)[1]))
+    # AND THE TWO FAMILIES SHARE ONE RULE, so a kind learned on one side is not a kind the
+    # other is still blind to.
+    check("both families are judged by the same shape rule",
+          "benign baseline" in (_artifact("benign_x.json", _BSHAPES[0][0])[1] or "")
+          and "results file" in (_artifact("results_x.json",
+                                           {"meta": {"target": 7}, "results": []})[1] or ""),
+          str(_artifact("benign_x.json", _BSHAPES[0][0])[1]))
+
     # AND NOT BY REFUSING EVERY LIST, which is the fix that would have passed every line
     # above. SIXTEEN artifacts stored here ARE top-level lists -- every `isolation_*.json`
     # coupling map -- and they come through this same reader; a rule that refused a list

@@ -1538,7 +1538,7 @@ _RESULTS_REQUIRE = {
 }
 
 
-def _shape_fault(where, value, present):
+def _shape_fault(where, value, present, table=None, what="results file"):
     """-> why this value cannot be used under `where`, or None. One rule for every row above.
 
     `present` says whether the key was there at all, which is the distinction the first
@@ -1553,22 +1553,45 @@ def _shape_fault(where, value, present):
     can say what it could not quote rather than refusing to draw anything. A value of the
     wrong KIND is different: nothing downstream can use it and no page can work around it.
     """
-    kind, required, why = _RESULTS_REQUIRE[where]
-    if not present:
-        return ("a results file with no %s: %s" % (where, why)) if required else None
+    kind, required, why = (table if table is not None else _RESULTS_REQUIRE)[where]
+    # `None` IS ABSENT, NOT A WRONG KIND, and one fixture in this repository is the argument:
+    # a benign row records `probe: null` when the probe was skipped or errored, which
+    # `baseline.rates` reads on purpose -- "a row with no probe was skipped or errored: it is
+    # not evidence of quiet". Writing the key with nothing in it says the same thing as
+    # leaving it out, and a rule that told them apart would refuse a shape the engine writes.
+    if not present or value is None:
+        return ("a %s with no %s: %s" % (what, where, why)) if required else None
     if isinstance(value, kind) and not (kind is int and isinstance(value, bool)):
         return None
-    return ("a results file whose %s is %s, not %s: %s"
-            % (where, type(value).__name__, kind.__name__, why))
+    return ("a %s whose %s is %s, not %s: %s"
+            % (what, where, type(value).__name__, kind.__name__, why))
 
 
-# The same measurement, for the benign family. `meta.probes` is the denominator of every
-# rate this project publishes and `rows` is the evidence under it; the roll-up subscripts
-# both, so a file missing either arrives as a KeyError reported as a bug in this tool.
+# The same measurement, for the benign family, and the same half of one. `meta.probes` is the
+# denominator of every rate this project publishes and `rows` is the evidence under it; the
+# roll-up subscripts both, so a file missing either arrives as a KeyError reported as a bug in
+# this tool -- which is what dropping each key in turn found.
+#
+# Re-measured by giving each key a string, a number, a mapping and a list in turn and running
+# `benign --summary`, `compare`, `index`, `fixes` and `coverage`: TWELVE of fifty variants
+# crash, and not one of them is an absent key.
+#
+#     meta.target: 7        TypeError: sequence item 0: expected str instance, int found
+#     meta.probes: "many"   TypeError: unsupported operand type(s) for +=: 'int' and 'str'
+#     rows: [1]             four consumers
+#     rows[].probe: "x"     `coverage` replays it
+#
+# THE ELEMENTS TOO, which the results family did not need: `fired: [1]` is a list, so a kind
+# on the field itself passes it, and the roll-up counts detectors BY NAME out of it.
 _BENIGN_REQUIRE = {
-    "meta.target": "every rate is filed under it",
-    "meta.probes": "it is the denominator of the false-alarm rate",
-    "rows": "the evidence the rate is counted from",
+    "meta.target": (str, True, "every rate is filed under it"),
+    "meta.probes": (int, True, "it is the denominator of the false-alarm rate"),
+    "rows": (list, True, "the evidence the rate is counted from"),
+    "rows[]": (dict, True, "each one is a probe and whatever fired on it"),
+    "rows[].fired": (list, False, "the roll-up counts a detector by name out of it"),
+    "rows[].fired[]": (str, False, "a detector is counted by its name"),
+    "rows[].probe": (dict, False,
+                     "`coverage` replays what was sent and what came back from it"),
 }
 
 
@@ -1599,15 +1622,31 @@ def _unusable_benign(data, name=""):
     # reader a re-scoring input with rows and no `meta.probes`, which is fine for what it is,
     # and content-based identification refused it. The name is what this engine decides on
     # purpose -- `workspace.artifact` picks the prefix -- so the name is what identifies.
-    if not isinstance(data.get("rows"), list):
-        return ("a benign baseline with no rows: %s" % _BENIGN_REQUIRE["rows"])
+    def _bad(where, value, present):
+        return _shape_fault(where, value, present, _BENIGN_REQUIRE, "benign baseline")
+
+    _why = _bad("rows", data.get("rows"), "rows" in data)
+    if _why:
+        return _why
     meta = data.get("meta")
     if not isinstance(meta, dict):
-        return "a benign baseline with no meta: %s" % _BENIGN_REQUIRE["meta.target"]
+        return ("a benign baseline with no meta: %s" % _BENIGN_REQUIRE["meta.target"][2])
     for k in ("target", "probes"):
-        if k not in meta:
-            return ("a benign baseline with no meta.%s: %s"
-                    % (k, _BENIGN_REQUIRE["meta.%s" % k]))
+        _why = _bad("meta.%s" % k, meta.get(k), k in meta)
+        if _why:
+            return _why
+    for i, row in enumerate(data["rows"]):
+        _why = _bad("rows[]", row, True)
+        if _why:
+            return _why.replace("rows[]", "rows[%d]" % i)
+        for _k in ("fired", "probe"):
+            _why = _bad("rows[].%s" % _k, row.get(_k), _k in row)
+            if _why:
+                return _why.replace("rows[].", "rows[%d]." % i)
+        for j, _f in enumerate(row.get("fired") or []):
+            _why = _bad("rows[].fired[]", _f, True)
+            if _why:
+                return _why.replace("rows[].fired[]", "rows[%d].fired[%d]" % (i, j))
     return None
 
 
