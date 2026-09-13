@@ -455,6 +455,82 @@ def main():
             os.environ["QATRATION_HOSTED"] = old_env
         importlib.reload(az)
 
+    # --- THE REFUSAL CARRIES ITS REASON, NOT JUST ITS CODE ---------------------------------
+    #
+    # `gate` printed its sentence to stderr and raised `SystemExit(4)`. Uncaught that is
+    # right. CAUGHT, it is everything a caller needs minus the part that says why:
+    # `str(SystemExit(4))` is the string "4", and `onboard` wrote it into its report as
+    #
+    #     PROBLEM   not authorised: 4
+    #
+    # with the sentence explaining it twenty-nine lines above, on the other stream, over a
+    # full report nobody would connect it to.
+    _na = None
+    try:
+        az.gate({"name": "remotebot", "url": "https://not-a-real-bot.example.com/chat"},
+                "test")
+    except az.NotAuthorised as _e:
+        _na = _e
+    except SystemExit as _e:
+        _na = _e
+    check("a remote target with no secret is refused", _na is not None, "it passed")
+    check("...as the exception that carries a reason",
+          isinstance(_na, az.NotAuthorised), type(_na).__name__)
+    check("...whose code is still the one the table reserves", getattr(_na, "code", None) == 4,
+          str(getattr(_na, "code", None)))
+    check("...and whose reason names the target and what is missing",
+          "remotebot" in getattr(_na, "why", "")
+          and "QATRATION_AUTH_SECRET" in getattr(_na, "why", ""),
+          getattr(_na, "why", "")[:160])
+    # AND IT IS STILL A `SystemExit`, which is what the eight commands that do NOT catch it
+    # depend on: they let it out, and `workspace.run_command` returns `e.code` unchanged.
+    check("...and an uncaught refusal still exits rather than raising something new",
+          isinstance(_na, SystemExit), type(_na).__name__)
+
+    # AND THE ONE COMMAND THAT CATCHES IT SAYS BOTH. Driven, because the defect was in what
+    # a reader sees and in what a pipeline reads, and neither is visible from the function.
+    import subprocess as _sp_a
+    import tempfile as _tf_a
+    _aw = _tf_a.mkdtemp()
+    _aenv = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
+                 QATRATION_OUT=_tf_a.mkdtemp())
+    _aenv.pop("QATRATION_AUTH_SECRET", None)
+    _sp_a.run([sys.executable, os.path.join(HERE, "cli.py"), "init"],
+              capture_output=True, text=True, env=_aenv, cwd=_aw, timeout=180)
+    _acfg = os.path.join(_aw, "mybot.yaml")
+    _atxt = open(_acfg, encoding="utf-8").read().replace(
+        'url: "http://localhost:8000/chat"', 'url: "https://not-a-real-bot.example.com/chat"')
+    open(_acfg, "w", encoding="utf-8", newline="").write(_atxt)
+    _ap = _sp_a.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                     "--target-config", _acfg],
+                    capture_output=True, text=True, env=_aenv, cwd=_aw, timeout=180)
+    _aout = (_ap.stdout or "") + (_ap.stderr or "")
+    _aproblem = [l for l in _aout.splitlines() if "not authorised" in l and "PROBLEM" in l]
+    check("onboard's report says why it is not authorised",
+          bool(_aproblem) and "QATRATION_AUTH_SECRET" in _aproblem[0],
+          str(_aproblem[:1]) or _aout[-200:])
+    check("...and not the exit code in place of the reason",
+          bool(_aproblem) and not _aproblem[0].rstrip().endswith(": 4"),
+          str(_aproblem[:1]))
+    # ONE CAUSE, ONE CODE. `run` exits 4 for this exact refusal; this door exited 2, so a
+    # pipeline asking "may I test this target" got `refused or crashed` from one and `not
+    # authorised` from the other.
+    check("...and the shell is told `not authorised`, the code `run` uses for the same cause",
+          _ap.returncode == 4, "exit %s" % _ap.returncode)
+    # AND NOT FOR EVERY REFUSAL, or the code stops meaning anything: an ordinary broken
+    # config is still `the invocation was refused`.
+    _bad = os.path.join(_aw, "broken.yaml")
+    open(_bad, "w", encoding="utf-8", newline="").write(
+        "adapter: http\nname: localbot\nurl: \"http://127.0.0.1:9/chat\"\n"
+        "request: {message: \"{prompt}\"}\nresponse: {reply: reply}\n"
+        "oracle_context:\n  canaries: \"ACME-9931\"\n")
+    _bp = _sp_a.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                     "--target-config", _bad],
+                    capture_output=True, text=True, env=_aenv, cwd=_aw, timeout=180)
+    check("a config that is merely wrong still exits 2", _bp.returncode == 2,
+          "exit %s: %s" % (_bp.returncode,
+                           ((_bp.stdout or "") + (_bp.stderr or "")).strip()[-160:]))
+
     # --- EVERY DOOR, WALKED, NOT GREPPED ----------------------------------------------------
     #
     # The two checks above ask whether a file CONTAINS a gate call and whether the gate's line

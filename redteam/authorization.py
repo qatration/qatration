@@ -501,6 +501,29 @@ def unreachable_by_policy(url, resolve=None):
     return None
 
 
+class NotAuthorised(SystemExit):
+    """A refusal to probe a target, carrying the reason as well as the code.
+
+    `gate` printed its sentence and raised `SystemExit(4)`. Uncaught that is right: the
+    reason is on stderr and the shell gets 4, the code this project's table reserves for
+    `not authorised`. CAUGHT, it is everything the caller needs minus the part that says
+    why -- `str(SystemExit(4))` is the string "4", and `onboard` wrote it into its report:
+
+        PROBLEM   not authorised: 4
+
+    The sentence explaining it had gone to stderr twenty-nine lines earlier, above a full
+    report, where nobody reading the PROBLEM list would connect them.
+
+    A `SystemExit` subclass rather than an exception of its own, because eight commands call
+    this gate and let it exit. `self.code` stays the integer 4, so every one of them behaves
+    exactly as before; `self.why` is for the one that catches.
+    """
+
+    def __init__(self, why):
+        SystemExit.__init__(self, 4)
+        self.why = why
+
+
 def gate(cfg, where):
     """Refuse to probe a REMOTE target without proof, and say what is missing.
 
@@ -521,22 +544,24 @@ def gate(cfg, where):
     if hosted():
         why = unreachable_by_policy(url)
         if why:
-            print(f"ABORT — {where}: refusing {url!r}: {why}. Nothing was sent.",
-                  file=sys.stderr)
-            sys.exit(4)
+            _said = f"{where}: refusing {url!r}: {why}. Nothing was sent."
+            print(f"ABORT — {_said}", file=sys.stderr)
+            raise NotAuthorised(_said)
     elif not url or is_local(url):
         return None
     if not url:
         return None
     secret = os.environ.get("QATRATION_AUTH_SECRET")
     if not secret:
-        print(f"ABORT — {where}: {cfg.get('name')} is a remote target and "
-              f"QATRATION_AUTH_SECRET is not set, so no proof of authorization can be "
-              f"verified. Nothing was sent.", file=sys.stderr)
-        sys.exit(4)
+        _said = (f"{where}: {cfg.get('name')} is a remote target and "
+                 f"QATRATION_AUTH_SECRET is not set, so no proof of authorization can be "
+                 f"verified. Nothing was sent.")
+        print(f"ABORT — {_said}", file=sys.stderr)
+        raise NotAuthorised(_said)
     ok, why = check(cfg, secret)
     if not ok:
-        print(f"ABORT — {where}: not authorised to probe {cfg.get('name')} "
-              f"({origin_of(url)}): {why}. Nothing was sent.", file=sys.stderr)
-        sys.exit(4)
+        _said = (f"{where}: not authorised to probe {cfg.get('name')} "
+                 f"({origin_of(url)}): {why}. Nothing was sent.")
+        print(f"ABORT — {_said}", file=sys.stderr)
+        raise NotAuthorised(_said)
     return record(cfg, why)

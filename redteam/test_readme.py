@@ -597,22 +597,48 @@ def main():
           len(_mods) >= 25, str(len(_mods)))
     check("...and the derivation reaches the one that raises 4",
           "authorization" in _mods, str(_mods[:8]))
+    def _exit_arg(node):
+        """-> the AST node holding the code this statement would exit with, or None.
+
+        AND A `SystemExit` SUBCLASS THAT FIXES ITS OWN CODE, which none of the three shapes
+        below could see. `authorization.NotAuthorised` sets its code in a constructor --
+        `SystemExit.__init__(self, 4)` -- and is now the only way 4 leaves this engine: the
+        moment it replaced three `sys.exit(4)` calls, this scan reported 4 as a code the
+        table documents and the code cannot produce. The rule was right and the SET it read
+        was wrong, which is the one failure mutation cannot find.
+        """
+        if isinstance(node, _ast_x.Return):
+            return node.value
+        if not isinstance(node, _ast_x.Call):
+            return None
+        _f = node.func
+        if (isinstance(_f, _ast_x.Attribute) and _f.attr == "__init__"
+                and isinstance(_f.value, _ast_x.Name) and _f.value.id == "SystemExit"
+                and len(node.args) > 1):
+            return node.args[1]
+        _is_exit = ((isinstance(_f, _ast_x.Attribute) and _f.attr == "exit")
+                    or (isinstance(_f, _ast_x.Name)
+                        and _f.id in ("SystemExit", "_refuse", "exit")))
+        return node.args[0] if _is_exit and node.args else None
+
+    # AND THE SCAN CAN SEE THAT SHAPE, asked of a planted one rather than of the corpus: the
+    # engine has exactly one such class today, so a reader of this scan cannot tell a rule
+    # that handles the shape from one that happens to agree about `authorization.py`.
+    _planted = _ast_x.parse("class X(SystemExit):\n"
+                            "    def __init__(self, why):\n"
+                            "        SystemExit.__init__(self, 7)\n")
+    _pcodes = {_c.value for _nn in _ast_x.walk(_planted)
+               for _c in [_exit_arg(_nn)]
+               if isinstance(_c, _ast_x.Constant) and isinstance(_c.value, int)}
+    check("the exit scan sees a SystemExit subclass that fixes its own code",
+          _pcodes == {7}, str(_pcodes))
     for _m in _mods:
         _p = os.path.join(HERE, _m + ".py")
         if not os.path.exists(_p):
             continue
         _tree = _ast_x.parse(open(_p, encoding="utf-8").read())
         for _n in _ast_x.walk(_tree):
-            _got = None
-            if isinstance(_n, _ast_x.Call):
-                _f = _n.func
-                _is_exit = ((isinstance(_f, _ast_x.Attribute) and _f.attr == "exit")
-                            or (isinstance(_f, _ast_x.Name)
-                                and _f.id in ("SystemExit", "_refuse", "exit")))
-                if _is_exit and _n.args:
-                    _got = _n.args[0]
-            elif isinstance(_n, _ast_x.Return):
-                _got = _n.value
+            _got = _exit_arg(_n)
             # TWO SHAPES, AND ONLY TWO. `return 1 if total_stale else 0` is an IfExp rather
             # than a constant, which is exactly how `verify` returns its 1 -- so a version of
             # this that asked whether the returned node WAS an integer could not see the one
@@ -652,15 +678,10 @@ def main():
         _t1 = _ast_x.parse(open(_p1, encoding="utf-8").read())
         for _n1 in _ast_x.walk(_t1):
             _v = None
-            if isinstance(_n1, _ast_x.Call):
-                _f1 = _n1.func
-                if (((isinstance(_f1, _ast_x.Attribute) and _f1.attr == "exit")
-                     or (isinstance(_f1, _ast_x.Name)
-                         and _f1.id in ("SystemExit", "_refuse", "exit")))
-                        and _n1.args):
-                    _v = _n1.args[0]
-            elif isinstance(_n1, _ast_x.Return):
-                _v = _n1.value
+            # THROUGH THE SAME READER as the scan above, so a shape one of them learns is
+            # not a shape the other is still blind to. They ask different questions of the
+            # same statements: which codes exist, and which module emits a 1.
+            _v = _exit_arg(_n1)
             for _b in ([_v] if not isinstance(_v, _ast_x.IfExp) else [_v.body, _v.orelse]):
                 if (isinstance(_b, _ast_x.Constant) and _b.value == 1
                         and not isinstance(_b.value, bool)):
@@ -1870,7 +1891,7 @@ def main():
     # either page: a `sys.exit(n)`, a `raise SystemExit(n)` or a `return n` in any shipped
     # module is a code somebody can receive.
     import ast as _ast_x
-    _emitted, _refused, _tabled = set(), set(), set()
+    _emitted, _refused, _tabled, _classed = set(), set(), set(), set()
     for _fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
         if os.path.basename(_fp).startswith("test_"):
             continue
@@ -1926,6 +1947,19 @@ def main():
                     if (isinstance(_c, _ast_x.Constant) and isinstance(_c.value, int)
                             and not isinstance(_c.value, bool) and 0 <= _c.value <= 9):
                         _tabled.add(_c.value)
+            # AND AN EXCEPTION THAT FIXES ITS OWN CODE. `authorization.NotAuthorised` sets 4
+            # in its constructor and is now the only way 4 leaves this engine: the moment it
+            # replaced three `sys.exit(4)` calls, every scan in this file reported 4 as a code
+            # the two published tables document and nothing emits. Three recognisers, one
+            # blind spot each -- which is this check's own subject, one level up.
+            if (isinstance(_n, _ast_x.Call)
+                    and getattr(_n.func, "attr", "") == "__init__"
+                    and getattr(getattr(_n.func, "value", None), "id", "") == "SystemExit"
+                    and len(_n.args) > 1 and isinstance(_n.args[1], _ast_x.Constant)
+                    and isinstance(_n.args[1].value, int)
+                    and not isinstance(_n.args[1].value, bool)
+                    and 0 <= _n.args[1].value <= 9):
+                _classed.add(_n.args[1].value)
 
     def _documented(path):
         return {int(m.group(1)) for m in
@@ -1939,7 +1973,9 @@ def main():
           str(sorted(_refused)))
     check("...and the table that decides a code from a cause", len(_tabled) >= 2,
           str(sorted(_tabled)))
-    _emitted |= _refused | _tabled
+    check("...and the exception that carries a code of its own", _classed == {4},
+          str(sorted(_classed)))
+    _emitted |= _refused | _tabled | _classed
 
     _readme_codes = _documented(README)
     _ci_codes = _documented(os.path.join(ROOT, "docs", "ci.md"))

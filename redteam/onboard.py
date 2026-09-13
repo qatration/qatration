@@ -253,6 +253,17 @@ def check(cfg_path, probe_text=PROBE):
     # request to somebody else's endpoint, so the gate cannot sit after the thing it gates.
     try:
         rep["authorization"] = authorization.gate(cfg, cfg_path)
+    except authorization.NotAuthorised as e:
+        # THE REASON, NOT THE CODE. `str(SystemExit(4))` is the string "4", and this line
+        # used to print `PROBLEM not authorised: 4` while the sentence that explains it sat
+        # on stderr above the whole report.
+        rep["problems"].append(f"not authorised: {e.why}")
+        # AND THE CODE THE TABLE RESERVES. `run` exits 4 for this exact refusal and this
+        # command exited 2, so a pipeline asking "am I allowed to test this target" got
+        # `the invocation was refused or crashed` from one door and `not authorised` from
+        # the other, for one cause. docs/ci.md: 4 is `not authorised`.
+        rep["exit"] = 4
+        return False, rep
     except SystemExit as e:
         rep["problems"].append(f"not authorised: {e}")
         return False, rep
@@ -642,7 +653,11 @@ def main():
     ok, rep = check(args.config)
     render(ok, rep)
     if not ok:
-        sys.exit(2)
+        # 2 UNLESS THE REPORT SAYS OTHERWISE. Every problem this command finds is a refused
+        # invocation except one: a target nobody proved they may probe is `not authorised`,
+        # which the exit table gives its own code so a pipeline can tell "fix your config"
+        # from "get permission first".
+        sys.exit(rep.get("exit") or 2)
     if not args.submit:
         return
 

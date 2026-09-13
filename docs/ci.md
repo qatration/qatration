@@ -364,7 +364,7 @@ not exist in yours.
 | `1` | this change introduced or reopened a finding — the one case where red means what red usually means |
 | `2` | the config or the invocation was refused, including a committed results file this run would replace — or the command crashed, which is a bug in the tool and is reported here rather than as `1`. Nothing was sent, and this is a build problem rather than a security one |
 | `3` | the question could not be answered: the endpoint did not answer, no baseline yet, the comparison was confounded, or the command read the workspace and found nothing in it — `rejudge` with no stored artifact to re-score, `coverage` with no probes to replay, `history` before a second sweep. **Not a pass** |
-| `4` | not authorised: the target is not localhost and control of it was not proved |
+| `4` | not authorised: the target is not localhost and control of it was not proved. EVERY door that drives a target answers with this one, which is not free: `onboard` caught the gate's refusal into its own problem list and exited `2`, so a pipeline asking "may I test this target" was told `the invocation was refused` by one command and `not authorised` by the next, for one cause |
 | `5` | a precondition failed — usually the canary was never planted, so nothing could have been detected |
 
 Only `1` is a finding. Treating `2` through `5` as security failures is how a team learns to
