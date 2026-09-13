@@ -189,6 +189,46 @@ def main():
         check("...and the remedy is a command a reader can run",
               "run_recon.py" not in _msaid and "qatration recon" in _msaid, True)
 
+        # AND A PROFILE THAT IS THERE AND IS NOT A PROFILE IS THE THIRD STATE. This command
+        # opened the path and handed whatever came back to `prohibitions`, which reads it by
+        # key, so a file holding a list, a scalar or `null` came back as `AttributeError:
+        # 'list' object has no attribute 'get'` under "This is a bug in qatration, not a
+        # finding about your target and not a problem with your config" -- about a file
+        # `qatration recon` writes. The target config twenty lines above it in the same
+        # function has gone through the shared reader since that reader existed.
+        import json as _js_b
+        for _label, _body, _want in (("a list", [1, 2], "is a list, not a mapping"),
+                                     ("a scalar", "hello", "is a single string"),
+                                     ("nothing at all", None, "is empty")):
+            _bp = os.path.join(_work, "recon_bad.json")
+            io.open(_bp, "w", encoding="utf-8", newline="").write(_js_b.dumps(_body))
+            sys.argv = ["generate", "--target-config", _cfg, "--recon", _bp]
+            _bsaid, _brc = "", None
+            _buf_b = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(_buf_b):
+                    _brc = _rg.main()
+            except SystemExit as _e_b:
+                _bsaid = str(_e_b)
+            except Exception as _e_b:
+                # A CRASH IS NOT A REFUSAL, and telling them apart is the whole of this
+                # block: the defect was a traceback standing where a sentence belonged.
+                _bsaid = "CRASHED %s: %s" % (type(_e_b).__name__, _e_b)
+            # `check(label, got, want)` in this file, not `(label, ok, detail)`: the two
+            # shapes live in neighbouring suites and the mix-up prints a passing property
+            # as a failure -- which the comment forty lines up already says, and which the
+            # first draft of this block did anyway.
+            check("a recon profile that is %s is refused, not crashed into" % _label,
+                  _bsaid.startswith("generate:") or _bsaid[:60], True)
+            check("...and the reason says what the file holds instead (%s)" % _label,
+                  (_want in _bsaid) or _bsaid[:60], True)
+            # AND WHICH DOCUMENT IT IS ABOUT. Every kind in the table that has to be a
+            # mapping produces the same clause, so a reader handed "the target config at
+            # recon_bot.json is a list" is sent to the wrong file -- and this command reads
+            # both, twenty lines apart.
+            check("...and which of this command's two inputs it is (%s)" % _label,
+                  ("recon profile" in _bsaid) or _bsaid[:60], True)
+
         # A PROFILE THAT STATES NO PROHIBITIONS IS A DIFFERENT ANSWER: the input was there
         # and read, and the target declares no rules. That is 0, and the two endings have
         # to be told apart or the exit code stops meaning anything.

@@ -82,8 +82,15 @@ def main():
         print(f"no recon profile at {prof_path} - profile the target first:"
               f"\n    qatration recon --target-config {args.target_config}")
         return 3
-    with open(prof_path, encoding="utf-8") as f:
-        profile = json.load(f)
+    # THROUGH THE ONE READER, like the target config twenty lines up. This opened the path
+    # and handed whatever came back to `prohibitions`, which reads it by key: a profile
+    # holding a list, a scalar or `null` came back as `AttributeError: 'list' object has no
+    # attribute 'get'` under "This is a bug in qatration, not a finding about your target
+    # and not a problem with your config" -- about a file `qatration recon` writes.
+    #
+    # `load_yaml_or_refuse` reads JSON too: YAML is a superset of it, which is why the
+    # target config and the recon profile can share one door.
+    profile = _load_yaml(prof_path, "recon profile", "generate")
 
     rules = prohibitions(profile)
     objs, skipped = objectives_from_profile(profile, ctx, name)

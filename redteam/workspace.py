@@ -618,6 +618,7 @@ DOC_SHAPES = {
     "objectives file": (list, "a list of objectives"),
     "frame library": (list, "a list of frames, each with an `id`, a `family` and a "
                             "`template` holding `{task}`"),
+    "recon profile": (dict, "the mapping `qatration recon` writes, read by key"),
 }
 
 # "a single string" in the same words `bad_context_shapes` uses one screen down, because
