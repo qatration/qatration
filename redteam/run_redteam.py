@@ -942,12 +942,14 @@ def main():
     # `config_model` reads `request.model` straight into `meta["model"]`, from where the
     # scorecard, the SARIF export and `history`'s model confound all take it. A report
     # naming YOUR-MODEL-ID cannot say what it was about.
-    from init_config import placeholders_left as _placeholders
+    #
+    # AND NOTHING HAS BEEN SENT YET, which this said otherwise. The sentence was "This
+    # endpoint answers anyway, so it is ignoring the field" -- printed in the pre-flight
+    # block, before a single probe leaves the machine, about an endpoint nobody had spoken
+    # to. One sentence, three states, in `init_config` beside the placeholder it is about.
+    from init_config import placeholders_left as _placeholders, placeholder_note as _ph_note
     for _where, _what in _placeholders(tcfg):
-        print("  ! %s is still %r, the placeholder `qatration init` wrote. This endpoint "
-              "answers\n    anyway, so it is ignoring the field, and every artifact this "
-              "run writes will record\n    %r as the model that was tested."
-              % (_where, _what, _what))
+        print("  ! " + _ph_note(_where, _what, None))
     # SCOPING IS ONE RULE IN ONE PLACE. `run_isolation` had the same expression written
     # out again, and the hazard they share does not survive being copied: an `applies_to`
     # without brackets is a string, and `name in "httpbot"` is a substring test.

@@ -211,13 +211,14 @@ def check(cfg_path, probe_text=PROBE):
     # whatever model that server picks, and every artifact records the placeholder as the
     # model tested. This command exists to answer `what is wrong with my config`, and it
     # printed `ready to queue` over one nobody had finished.
+    # THE FACT HERE, THE SENTENCE WHERE THE ANSWER IS KNOWN. This ran before the probe and
+    # said "Your endpoint answered anyway", so a config whose endpoint refused the connection
+    # got that note printed two lines under `PROBLEM the endpoint returned an error`. The
+    # branch that sets `rep["answered"] = False` carries the lesson already -- "a thing that
+    # did not happen, reported in the vocabulary of the thing that did" -- and this note was
+    # doing it three screens further down the same function, onto the same report.
     from init_config import placeholders_left as _placeholders
-    for _where, _what in _placeholders(cfg):
-        rep["notes"].append(
-            "%s is still %r, the placeholder `qatration init` wrote. Your endpoint answered "
-            "anyway, so it is ignoring the field: the run will go against whatever model it "
-            "picks, and every artifact will record %r as the one tested."
-            % (_where, _what, _what))
+    rep["placeholders"] = _placeholders(cfg)
     if (cfg.get("adapter") or "") != "http":
         rep["problems"].append(
             f"adapter is {cfg.get('adapter')!r}; this command onboards `adapter: http` configs, "
@@ -454,6 +455,20 @@ def check(cfg_path, probe_text=PROBE):
     return not rep["problems"], rep
 
 
+def answered_state(rep):
+    """-> True, False or None: it answered, it did not, or nothing was sent.
+
+    THREE STATES, and the third is the one a boolean could not hold. `rep.get("answered",
+    True)` is only safe once a probe has come back at all: before that the default reads as
+    "it answered" for an endpoint nobody has spoken to. Two lines in this file need the
+    distinction -- the header, which says `answered in 4.1s` or `no answer after 4.1s`, and
+    the placeholder note, which used to claim an answer it had not seen.
+    """
+    if rep.get("seconds") is None:
+        return None
+    return bool(rep.get("answered", True))
+
+
 def render(ok, rep):
     print(f"config      {rep.get('config')}")
     print(f"target      {rep.get('name')}  {rep.get('url') or ''}")
@@ -461,8 +476,9 @@ def render(ok, rep):
     if auth:
         print(f"authorised  {auth.get('method')}" + (f"  {auth.get('origin')}"
                                                      if auth.get("origin") else ""))
-    if rep.get("seconds") is not None:
-        print(f"answered    in {rep['seconds']}s" if rep.get("answered", True)
+    _answered = answered_state(rep)
+    if _answered is not None:
+        print(f"answered    in {rep['seconds']}s" if _answered
               else f"no answer   after {rep['seconds']}s")
     if rep.get("reply"):
         print(f"reply       {rep['reply'][:120]!r}")
@@ -509,6 +525,12 @@ def render(ok, rep):
         print(f"\n  PROBLEM   {p}")
     for nline in rep.get("notes") or []:
         print(f"  note      {nline}")
+    # LAST, AND AFTER THE ANSWER IS KNOWN. See `init_config.placeholder_note`: what the
+    # artifacts would record is certain, and whether the endpoint ignores the field is a fact
+    # about somebody's server that only an answer can settle.
+    from init_config import placeholder_note as _ph_note
+    for _where, _what in rep.get("placeholders") or []:
+        print(f"  note      {_ph_note(_where, _what, _answered)}")
     print()
     print("ready to queue" if ok else "not queued — fix the problem above first")
 

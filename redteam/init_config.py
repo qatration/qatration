@@ -63,6 +63,42 @@ def placeholders_left(cfg):
     return out
 
 
+def placeholder_note(where, what, answered=None):
+    """The sentence for a placeholder still in a config. `answered` is THREE-state.
+
+    THE NOTE CLAIMED A MEASUREMENT NOBODY HAD MADE. Both callers said "Your endpoint answered
+    anyway, so it is ignoring the field", and neither had asked. Walked from a fresh `init`
+    with nothing listening, following this tool's own printed instructions:
+
+        PROBLEM   the endpoint returned an error: URLError: ... actively refused it
+        note      request.model is still 'YOUR-MODEL-ID' ... Your endpoint answered anyway,
+                  so it is ignoring the field ...
+
+    Two lines apart, and the second one contradicts the first. `run` was worse: its copy
+    prints in the pre-flight block, before a single probe leaves the machine, so "This
+    endpoint answers anyway" was unconditional.
+
+    The CONSEQUENCE is certain and the INFERENCE is not, which is the whole of the fix. That
+    the artifacts would record the placeholder as the model tested follows from
+    `workspace.config_model` reading `request.model` and nothing else; whether the endpoint
+    ignores the field is a fact about somebody's server, and it is only known once something
+    has come back.
+    """
+    _core = ("%s is still %r, the placeholder `qatration init` wrote." % (where, what))
+    _cost = ("every artifact this run writes will record %r as the model that was tested, "
+             "and a report that cannot say what model it was about cannot be compared with "
+             "anything." % what)
+    if answered is True:
+        return ("%s Your endpoint answered anyway, so it is ignoring the field: the run "
+                "will go against whatever model it picks, and %s" % (_core, _cost))
+    if answered is False:
+        return ("%s Nothing answered here, so whether your endpoint would reject the field "
+                "is unmeasured. If it answers later and ignores it, %s" % (_core, _cost))
+    return ("%s Nothing has been sent yet, so it is not known whether your endpoint rejects "
+            "the field: if it does, every probe errors, and if it ignores it, %s"
+            % (_core, _cost))
+
+
 # The template is a format string with four holes and no logic. It is checked by
 # `redteam/test_init.py`, which parses what this writes and BUILDS a real target out of it, so
 # a key that the adapter would reject cannot survive here -- the alternative is a second,

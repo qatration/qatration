@@ -106,6 +106,107 @@ def _placeholder_checks():
               bool(_bound) and bool(_calls),
               "bound as %s, %d call(s) with an argument" % (sorted(_bound), len(_calls)))
 
+    # --- AND THE NOTE CLAIMED A MEASUREMENT NOBODY HAD MADE -------------------------------
+    #
+    # Both callers said "Your endpoint answered anyway, so it is ignoring the field", and
+    # neither had asked. Walked from a fresh `init` with nothing listening, following this
+    # tool's own printed instructions:
+    #
+    #     PROBLEM   the endpoint returned an error: URLError: ... actively refused it
+    #     note      request.model is still 'YOUR-MODEL-ID' ... Your endpoint answered anyway
+    #
+    # Two lines apart and the second contradicts the first. `run` was worse: its copy prints
+    # in the pre-flight block, before a probe leaves the machine, so the claim was
+    # unconditional.
+    check("an endpoint that answered is said to be ignoring the field",
+          "answered anyway" in _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, True),
+          _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, True))
+    check("...one that did not answer leaves it unmeasured",
+          "unmeasured" in _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, False),
+          _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, False))
+    check("...and before anything is sent, nothing is claimed about it at all",
+          "Nothing has been sent yet"
+          in _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, None),
+          _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, None))
+    for _state in (True, False, None):
+        _said = _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, _state)
+        # THE CONSEQUENCE IS CERTAIN IN ALL THREE, which is what makes the note worth
+        # printing at all: `workspace.config_model` reads `request.model` and nothing else.
+        check("the cost of leaving it is stated whatever the endpoint did (%r)" % _state,
+              "as the model that was tested" in _said, _said)
+        check("...and the placeholder itself is named (%r)" % _state,
+              _ic.DEFAULT_MODEL in _said, _said)
+    # AND NOT THE CLAIM, IN THE TWO STATES THAT HAVE NOT EARNED IT.
+    for _state in (False, None):
+        check("nothing answered is not reported as an answer (%r)" % _state,
+              "answered anyway"
+              not in _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, _state),
+              _ic.placeholder_note("request.model", _ic.DEFAULT_MODEL, _state))
+
+    # AND THE CALLERS, DRIVEN, because the sentence was right in a function and wrong in the
+    # two places that printed it. `onboard` against a port nothing is listening on is the
+    # walk that found it; `run` is the copy that never asked at all.
+    import subprocess as _sp_p
+    import tempfile as _tf_p
+    _pw = _tf_p.mkdtemp()
+    _penv = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
+                 QATRATION_OUT=_tf_p.mkdtemp())
+    _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), "init"],
+              capture_output=True, text=True, env=_penv, cwd=_pw, timeout=180)
+    _cfgp = os.path.join(_pw, "mybot.yaml")
+    check("`init` wrote a config to walk", os.path.isfile(_cfgp), _pw)
+    # PORT 9 IS discard/, which nothing serves: the connection is refused rather than hanging.
+    _txt = io.open(_cfgp, encoding="utf-8").read().replace(
+        'url: "http://localhost:8000/chat"', 'url: "http://127.0.0.1:9/chat"')
+    io.open(_cfgp, "w", encoding="utf-8", newline="").write(_txt)
+    _p = _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                    "--target-config", _cfgp],
+                   capture_output=True, text=True, env=_penv, cwd=_pw, timeout=180)
+    _out = (_p.stdout or "") + (_p.stderr or "")
+    check("onboard against a dead endpoint still says the placeholder is there",
+          "YOUR-MODEL-ID" in _out and "placeholder" in _out, _out[-300:])
+    check("...and does not say the endpoint answered",
+          "answered anyway" not in _out,
+          [l for l in _out.splitlines() if "answered anyway" in l][:1] or _out[-200:])
+    check("...and the header does not call it an answer either",
+          "answered    in" not in _out,
+          [l for l in _out.splitlines() if "answered" in l][:2])
+
+    # AND THE STATE A BOOLEAN COULD NOT HOLD, reached the way a reader reaches it: a remote
+    # url with no `authorization:` block is refused BEFORE the probe, so there is no elapsed
+    # time and nothing came back. `rep.get("answered", True)` defaults to the word `answered`
+    # for an endpoint nobody has spoken to, which is what the third state is for.
+    _txt2 = io.open(_cfgp, encoding="utf-8").read().replace(
+        'url: "http://127.0.0.1:9/chat"', 'url: "https://not-a-real-bot.example.com/chat"')
+    io.open(_cfgp, "w", encoding="utf-8", newline="").write(_txt2)
+    _p2 = _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                     "--target-config", _cfgp],
+                    capture_output=True, text=True, env=_penv, cwd=_pw, timeout=180)
+    _out2 = (_p2.stdout or "") + (_p2.stderr or "")
+    check("a config refused before the probe says nothing has been sent",
+          "Nothing has been sent yet" in _out2,
+          [l for l in _out2.splitlines() if "placeholder" in l][:1] or _out2[-200:])
+    check("...and does not report an answer it never waited for",
+          "answered" not in _out2, [l for l in _out2.splitlines() if "answered" in l][:2])
+
+    # AND `run` PASSES THE STATE IT IS IN, which is the one this gate cannot reach by driving:
+    # reaching that line needs a live endpoint and a planted honeytoken. Read as the ARGUMENT
+    # of the call: `run` prints this in its pre-flight block, before a probe leaves the
+    # machine, so the only state it can honestly pass is the one that claims nothing.
+    _rr_tree = _ast_i.parse(io.open(os.path.join(HERE, "run_redteam.py"),
+                                    encoding="utf-8").read())
+    _nb = {(_a.asname or _a.name) for _n in _ast_i.walk(_rr_tree)
+           if isinstance(_n, _ast_i.ImportFrom) and _n.module == "init_config"
+           for _a in _n.names if _a.name == "placeholder_note"}
+    _ncalls = [_n for _n in _ast_i.walk(_rr_tree)
+               if isinstance(_n, _ast_i.Call) and getattr(_n.func, "id", "") in _nb]
+    check("`run` says the placeholder note itself", bool(_nb) and bool(_ncalls),
+          "bound as %s, %d call(s)" % (sorted(_nb), len(_ncalls)))
+    check("...and tells it that nothing has been sent",
+          bool(_ncalls) and all(len(_c.args) >= 3 and isinstance(_c.args[2], _ast_i.Constant)
+                                and _c.args[2].value is None for _c in _ncalls),
+          str([_ast_i.dump(_c)[:80] for _c in _ncalls]))
+
     # AND THE PLACEHOLDER HAS TO LOOK LIKE ONE. The comment above `DEFAULT_MODEL` is the
     # whole argument for its value: "a plausible one reads as configured and gets sent, and
     # the endpoint's rejection then looks like the tool rather than the placeholder. This

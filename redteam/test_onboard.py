@@ -577,15 +577,20 @@ def main():
             "model: scripted", "model: %s" % _ic_o.DEFAULT_MODEL)
         io.open(_ph_cfg, "w", encoding="utf-8", newline="").write(_ph_src)
         _ph_ok, _ph_rep = onboard.check(_ph_cfg)
+        # THE FACT IN THE REPORT, THE SENTENCE AT RENDER TIME. `check` used to append the
+        # finished sentence here, before the probe, and the sentence said "Your endpoint
+        # answered anyway" -- so a config whose endpoint refused the connection got that
+        # note two lines under `PROBLEM the endpoint returned an error`. What is known at
+        # this point is only that the placeholder is still there.
         check("a config still carrying the template's model placeholder is noted",
-              any("still" in _n and _ic_o.DEFAULT_MODEL in _n for _n in _ph_rep["notes"]),
-              str(_ph_rep["notes"])[:300])
-        check("...and says the endpoint is ignoring the field rather than failing the run",
-              any("ignoring the field" in _n for _n in _ph_rep["notes"]),
-              str(_ph_rep["notes"])[:300])
+              _ph_rep.get("placeholders") == [("request.model", _ic_o.DEFAULT_MODEL)],
+              str(_ph_rep.get("placeholders"))[:300])
+        _ph_said = _ic_o.placeholder_note("request.model", _ic_o.DEFAULT_MODEL,
+                                          onboard.answered_state(_ph_rep))
+        check("...and this endpoint answered, so it is said to be ignoring the field",
+              "ignoring the field" in _ph_said, _ph_said[:300])
         check("...and what every artifact would then record",
-              any("as the one tested" in _n for _n in _ph_rep["notes"]),
-              str(_ph_rep["notes"])[:300])
+              "as the model that was tested" in _ph_said, _ph_said[:300])
         # A NOTE RATHER THAN A PROBLEM: the mapping works, and refusing here would block a
         # reader whose endpoint genuinely ignores the field and who knows it.
         check("...and it does not fail the check, because the mapping is fine", _ph_ok,
@@ -594,8 +599,9 @@ def main():
         # onboarding and stops being read.
         _fine_ok, _fine_rep = onboard.check(write("finebot", "choices.0.message.content"))
         check("...while a config with a real model id is not told about a placeholder",
-              not any(_ic_o.DEFAULT_MODEL in _n for _n in _fine_rep["notes"]),
-              str(_fine_rep["notes"])[:200])
+              not (_fine_rep.get("placeholders") or [])
+              and not any(_ic_o.DEFAULT_MODEL in _n for _n in _fine_rep["notes"]),
+              str(_fine_rep.get("placeholders"))[:200])
 
         # --- IT PRINTED `PROBLEM`, SAID READY TO QUEUE, AND EXITED 0 ----------------------
         #
