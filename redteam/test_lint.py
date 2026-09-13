@@ -274,6 +274,24 @@ def check_refusal(check):
           _ue2([dict(_base, owner="sec")], "mine.yaml") == [],
           str(_ue2([dict(_base, owner="sec")], "mine.yaml")))
 
+    # AND THE DOOR A CUSTOMER'S ARSENAL COMES THROUGH CALLS IT. Every check above calls the
+    # rule directly, which is how a rule comes to be perfect and unreachable; `run --attacks
+    # mine.yaml` is the one path that matters, and the import alone is not the call -- an
+    # import nothing invokes is exactly the shape of that defect.
+    import ast as _ast_i
+    _rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    _alias_i, _called_i = None, False
+    for _n in _ast_i.walk(_ast_i.parse(_rr)):
+        if isinstance(_n, _ast_i.ImportFrom) and _n.module == "lint_arsenal":
+            for _a in _n.names:
+                if _a.name == "unusable_entries":
+                    _alias_i = _a.asname or _a.name
+        elif (isinstance(_n, _ast_i.Call) and isinstance(_n.func, _ast_i.Name)
+              and _alias_i and _n.func.id == _alias_i):
+            _called_i = True
+    check("`run` puts a customer's arsenal through the entry rule", _called_i,
+          "imported as %r, called: %s" % (_alias_i, _called_i))
+
     # --- WHERE AN ARSENAL TELLS THE TARGET TO SEND THE DATA ------------------------------
     #
     # `lint` refuses a registrable host in the corpus this repository ships: an agent told
@@ -659,6 +677,37 @@ def check_refusal(check):
     def _refuse(entry):
         _o = _ue([dict({"id": "d", "category": "c"}, **entry)], "mine.yaml")
         return " ".join(_o)
+
+    # --- AN ID THAT IS NOT A STRING -------------------------------------------------------
+    #
+    # This function collects the entry faults a RUN cannot survive, and the id went through
+    # it twice over. The id is the key everything downstream is filed under, and the engine
+    # takes it at its word in two places: the duplicate check inside this very function puts
+    # it in a dict, so `id: [a]` came back as `TypeError: unhashable type: 'list'` out of the
+    # rule written to protect the run; and `run` measures the id column with `len()`, so
+    # `id: 7` came back as `object of type 'int' has no len()` before a single probe was
+    # sent. Both arrive as "This is a bug in qatration, not a finding about your target and
+    # not a problem with your config", about the reader's own arsenal.
+    check("an id that is a list is refused rather than raising",
+          "not a string" in _refuse({"id": ["a"], "text": "x"}),
+          _refuse({"id": ["a"], "text": "x"}))
+    # A STRING RATHER THAN MERELY HASHABLE: a number survives the dict and fails further
+    # out, in a file somebody else reads.
+    check("...and so is one that is a number",
+          "not a string" in _refuse({"id": 7, "text": "x"}),
+          _refuse({"id": 7, "text": "x"}))
+    check("...and the reason says what is keyed by it",
+          "SARIF ruleId" in _refuse({"id": 7, "text": "x"}),
+          _refuse({"id": 7, "text": "x"}))
+    check("...while an ordinary id is not refused",
+          _refuse({"id": "chain-1", "text": "x"}) == "",
+          _refuse({"id": "chain-1", "text": "x"}))
+    # AND THE CHECK THAT CRASHED ON IT STILL WORKS, which is the half a `continue` could
+    # quietly have taken away.
+    _dupe = " ".join(_ue([{"id": "same", "category": "c", "text": "x"},
+                          {"id": "same", "category": "c", "text": "y"}], "mine.yaml"))
+    check("...and two entries under one id are still both named", "duplicate id" in _dupe,
+          _dupe)
 
     check("a delivery this build does not have is refused",
           "is not one this build has" in _refuse({"delivery": "chian",

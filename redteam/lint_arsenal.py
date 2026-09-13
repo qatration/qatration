@@ -690,6 +690,25 @@ def unusable_entries(attacks, fname="arsenal"):
         if not aid:
             out.append("%s #%d (??): missing 'id'" % (fname, i))
             continue
+        # AN ID THAT IS NOT A STRING IS A FAULT A RUN CANNOT SURVIVE, which is the whole of
+        # what this function collects -- and it went through, twice over. The id is the key
+        # everything downstream is filed under, and three lines of this engine take it at its
+        # word: the duplicate check below puts it in a dict, so `id: [a]` came back as
+        # `TypeError: unhashable type: 'list'` out of the rule written to protect the run;
+        # and `run` measures the id column with `len()`, so `id: 7` came back as `object of
+        # type 'int' has no len()` before a single probe was sent. Both arrive as "This is a
+        # bug in qatration, not a finding about your target and not a problem with your
+        # config", about the reader's own arsenal.
+        #
+        # A STRING RATHER THAN MERELY HASHABLE. `history`, `verify` and `rejudge` key their
+        # rows by this, the SARIF export publishes it as a `ruleId`, which that format
+        # defines as a string, and `build_index` puts it in an anchor. A number would survive
+        # the dict and fail further out, in a file somebody else reads.
+        if not isinstance(aid, str):
+            out.append("%s #%d: id is %s, not a string (%.40r). Every artifact a run writes "
+                       "is keyed by this -- history, verify, rejudge and the SARIF ruleId "
+                       "all read it as one." % (fname, i, type(aid).__name__, aid))
+            continue
         if aid in seen:
             out.append("%s: %s: duplicate id (also at #%d)" % (fname, aid, seen[aid]))
         seen[aid] = i
