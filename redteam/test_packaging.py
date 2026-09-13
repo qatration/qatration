@@ -1175,6 +1175,122 @@ def test_the_offline_claim_is_enforced_rather_than_stated():
     print("  ok  a suite may reach this machine and nowhere else")
 
 
+def test_the_runner_reads_what_a_suite_says_it_ran():
+    """A suite that exits 0 having run none of its checks was reported `ok`.
+
+    `tools/check.py` has the rule and read it one output format wide: it looked for the
+    literal `0/0 passed`. Fifty of the fifty-one suites end that way. THIS ONE does not --
+    it prints `packaging: 24 checks` and then runs the twenty-four functions it finds by
+    name -- so breaking that name is enough:
+
+        fns = [... if k.startswith("tset_")]
+        packaging: 0 checks
+        all packaging checks passed
+        ok   packaging   0.1s
+
+against a normal 110 seconds, in the suite that checks the packaging of the whole tool.
+    The rule was right and the SET it read was one format wide, which is the failure
+    mutation cannot find.
+
+    AND A FORM NOBODY LISTED IS NOT A PASS EITHER. `checks_reported` returns None rather
+    than zero for output it cannot count, because a suite whose result cannot be read is
+    indistinguishable from one that ran nothing -- which is the sentence that rule already
+    carried about `0/0`.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "check_counts_under_test", os.path.join(ROOT_DIR, "tools", "check.py"))
+    chk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(chk)
+
+    for text, want, what in (
+            ("PASS a\n\n61/61 passed\n", 61, "the form forty-eight suites end with"),
+            ("PASS a\noracle tests: 843/843 passed - 66/66 detectors covered\n", 843,
+             "that form behind a prefix, which `oracle` uses"),
+            ("packaging: 24 checks\n  ok  a\nall packaging checks passed\n", 24,
+             "the form `packaging` announces"),
+            ("packaging: 0 checks\nall packaging checks passed\n", 0,
+             "that same form having run nothing"),
+            ("PASS a\nPASS b\nPASS c\nOK - done\n", 3,
+             "the per-check lines themselves, which `unguarded` prints and nothing else"),
+            ("\n0/0 passed\n", 0, "the literal the rule used to look for"),
+            ("it went fine, honestly\n", 0, "output nobody can count")):
+        got = chk.checks_reported(text)
+        assert got == want, "%s read as %r, wanted %r" % (what, got, want)
+    print("  ok  the runner reads how many checks a suite says it ran, in every form")
+
+    # AND THE RUNNER ACTS ON IT, which is the half a rule test cannot see: this was a
+    # perfect literal in a function that one suite's output never matched.
+    import re as _re_c
+    src = io.open(os.path.join(ROOT_DIR, "tools", "check.py"), encoding="utf-8").read()
+    assert "0/0 passed" not in src or "checks_reported" in src, \
+        "the count rule is still a literal"
+    assert _re_c.search(r"checks_reported\(text\)", src), \
+        "tools/check.py does not ask how many checks a suite ran"
+    # EVERY SUITE IN THIS TREE SAYS SOMETHING COUNTABLE, or the clause above turns the whole
+    # build red for a formatting choice rather than for a defect. Read from the files rather
+    # than from a list: a new suite joins by existing.
+    import glob as _g_c
+    _quiet = []
+    for _fp in sorted(_g_c.glob(os.path.join(ROOT_DIR, "redteam", "test_*.py"))):
+        _src = io.open(_fp, encoding="utf-8").read()
+        if ("passed" not in _src) and ("checks" not in _src):
+            _quiet.append(os.path.basename(_fp))
+    assert not _quiet, "suite(s) that print no countable result: %s" % _quiet
+    print("  ok  every suite in the tree prints a result this runner can count")
+
+    # AND THE RUNNER ITSELF, DRIVEN. Everything above asks the RULE, and the rule was never
+    # the part that was wrong: it was a perfect literal in a loop that one suite's output
+    # never matched. So: a tree holding suites that exit 0 and say nothing ran, put through
+    # `main` the way CI puts the real tree through it.
+    import tempfile as _tf_c
+    import shutil as _sh_c
+    _cwork = _tf_c.mkdtemp()
+    _real_suites = chk.SUITES
+    try:
+        chk.SUITES = _cwork
+        # ONE AT A TIME, NOT AS A BATCH. Asked of all three together, any one clause still
+        # failing the run makes the whole call non-zero, and a first version of this stayed
+        # green while either clause was deleted. Each silent shape has to fail on its own.
+        for _nm, _body, _why in (
+                ("test_zero_in_the_common_form.py",
+                 "print('')\nprint('0/0 passed')\n",
+                 "reported 0 in the form forty-eight suites use"),
+                ("test_zero_in_the_other_form.py",
+                 "print('zero: 0 checks')\nprint('all zero checks passed')\n",
+                 "reported 0 in the form `packaging` uses"),
+                ("test_no_count_at_all.py",
+                 "print('it went fine, honestly')\n",
+                 "reported nothing anybody can count")):
+            for _old in os.listdir(_cwork):
+                os.remove(os.path.join(_cwork, _old))
+            io.open(os.path.join(_cwork, _nm), "w", encoding="utf-8",
+                    newline="").write(_body)
+            try:
+                _rc_c = chk.main([])
+            except SystemExit as _e_c:
+                _rc_c = _e_c.code
+            assert _rc_c != 0, (
+                "tools/check.py passed a suite that exited 0 and %s; returned %r"
+                % (_why, _rc_c))
+        # AND A SUITE THAT REALLY RAN SOMETHING IS STILL A PASS, or the guard makes the
+        # whole tree red and gets switched off.
+        for _nm in os.listdir(_cwork):
+            os.remove(os.path.join(_cwork, _nm))
+        io.open(os.path.join(_cwork, "test_one_real_check.py"), "w", encoding="utf-8",
+                newline="").write("print('PASS something')\nprint('')\n"
+                                  "print('1/1 passed')\n")
+        try:
+            _rc_ok = chk.main([])
+        except SystemExit as _e_c:
+            _rc_ok = _e_c.code
+        assert _rc_ok == 0, "a suite that ran one check was failed: %r" % _rc_ok
+    finally:
+        chk.SUITES = _real_suites
+        _sh_c.rmtree(_cwork, ignore_errors=True)
+    print("  ok  the runner fails a suite that exits 0 having run nothing")
+
+
 def test_the_runner_refuses_a_tree_with_no_suites():
     """`tools/check.py` is how every other check in this repository is run. Asked to run
     nothing, it used to say so and exit 0.

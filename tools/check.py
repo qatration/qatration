@@ -22,6 +22,7 @@ starts needing a fleet will fail here first, which is the right place to find ou
 """
 
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -30,6 +31,40 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SUITES = os.path.join(ROOT, "redteam")
+
+# HOW A SUITE SAYS WHAT IT RAN, in every form the suites here actually use. Derived from
+# them rather than imposed, by running all fifty-one and reading what came out:
+#
+#   `61/61 passed`                  forty-eight of them, sometimes behind a prefix --
+#                                   `oracle tests: 843/843 passed · 66/66 detectors`
+#   `packaging: 24 checks`          announced before the functions it found by name run
+#   the `PASS ` lines themselves    `unguarded` prints those and no summary at all
+#
+# THE LAST ONE IS WHY THIS RETURNS A NUMBER RATHER THAN None. A suite that prints neither
+# a summary nor a single per-check line has reported ZERO, and zero is the answer: output
+# nobody can count is indistinguishable from a run that did nothing, which is the sentence
+# the `0/0 passed` literal already carried for one of the three forms.
+_COUNT_FORMS = (
+    re.compile(r"(\d+)\s*/\s*\d+\s+passed\b"),
+    re.compile(r"^\s*[A-Za-z_][A-Za-z_0-9]*:\s*(\d+)\s+checks?\b"),
+)
+
+
+def checks_reported(text):
+    """-> how many checks a suite says it ran. Zero means it said nothing countable."""
+    lines = text.splitlines()
+    # THE PER-CHECK LINES ARE A COUNT IN THEMSELVES, and for `unguarded` they are the only
+    # one it prints. Counted here rather than noticed in the loop below and counted again
+    # underneath it, which is how a first version of this had the same rule twice and a
+    # mutation of either half changed no answer.
+    best = sum(1 for l in lines if l.startswith("PASS") or l.startswith("FAIL"))
+    for line in lines:
+        for pat in _COUNT_FORMS:
+            m = pat.search(line)
+            if m:
+                best = max(best, int(m.group(1)))
+    return best
+
 
 # One suite per line of output would hide the failures among the passes, so only failures print
 # their tail. This is how much of it to show: enough to see the assertion, not the whole run.
@@ -222,10 +257,18 @@ def main(argv):
         # A SUITE THAT PRINTS FAILURES AND EXITS 0 IS NOT A PASS. The exit code was the
         # only signal, and `capture_output=True` discards the output on success, so
         # nobody would ever see it. Every suite here exits correctly today; nothing made
-        # that true of the next one. `0/0 passed` is caught by the same rule: a suite
-        # that ran no checks is indistinguishable from one that ran sixty-six.
-        lied = [ln for ln in text.splitlines()
-                if ln.strip().startswith("FAIL") or ln.strip().startswith("0/0 passed")]
+        # that true of the next one.
+        lied = [ln for ln in text.splitlines() if ln.strip().startswith("FAIL")]
+        # AND A SUITE THAT RAN NOTHING IS NOT A PASS EITHER, which this asked as a literal:
+        # `0/0 passed`. Fifty of the fifty-one suites end that way and one does not --
+        # `packaging` prints `packaging: 24 checks` and runs twenty-four functions it finds
+        # by name. Measured by breaking that name: the list came back empty, the suite
+        # printed `packaging: 0 checks` and `all packaging checks passed`, exited 0, and
+        # this runner said `ok packaging 0.1s` against a normal 110 seconds. The rule was
+        # right and the SET it read was one output format wide.
+        if rc == 0 and checks_reported(text) == 0:
+            lied.append("it reported 0 checks: a run that did nothing reads exactly like "
+                        "a run that did everything, so this is not a pass")
         if rc == 0 and not lied:
             print("  ok   %-28s %5.1fs" % (name[5:-3], secs))
             # AND WHAT IT DID NOT CHECK. Output from a passing suite is discarded, so a suite
@@ -241,8 +284,14 @@ def main(argv):
             continue
         if rc == 0:
             failed.append(name)
-            print("  LIED %-28s %5.1fs  exited 0 while reporting failures"
-                  % (name[5:-3], secs))
+            # THE CAUSE, NOT ONE OF THE TWO. A suite can exit 0 while printing failures and
+            # a suite can exit 0 having run nothing, and a reader who sees the wrong sentence
+            # goes looking in the wrong place.
+            print("  LIED %-28s %5.1fs  exited 0 %s"
+                  % (name[5:-3], secs,
+                     "while reporting failures"
+                     if any(l.strip().startswith("FAIL") for l in lied)
+                     else "without running what it claims to"))
             for line in lied[:TAIL]:
                 print("       | " + line)
             continue
