@@ -314,7 +314,12 @@ def bad_entry_shapes(entries):
     out = []
     if not want:
         return out
-    for e in entries:
+    for e in entries or []:
+        # SKIPPED, BECAUSE BY HERE IT CANNOT HAPPEN. An entry that is not a mapping is
+        # reported by whichever door loaded the corpus -- `unusable_entries` for an arsenal,
+        # `unusable_objectives` for an objectives file -- and both run before
+        # `refuse_unknown_detectors` calls this. A third copy of that sentence here would be
+        # the shape this project keeps deleting: one rule, one implementation.
         if not isinstance(e, dict):
             continue
         who = e.get("id") or e.get("name") or "?"
@@ -721,6 +726,74 @@ def unusable_entries(attacks, fname="arsenal"):
     # anything is sent -- shape before spelling, with the reason written there. Adding it
     # to this function too would be a second implementation of one rule at one door, which
     # is the mistake `workspace.BROKE` and `runner.attacker_side` were each collapsed out of.
+    return out
+
+
+def unusable_objectives(objectives, fname="objectives"):
+    """The entry faults an ISOLATION RUN cannot survive, as a list of sentences.
+
+    THE SISTER OF `unusable_entries`, AND IT DID NOT EXIST. `run --attacks mine.yaml` goes
+    through that rule before anything is sent; `isolation --objectives mine.yaml` takes a
+    path the same way and had only the SPELLING rule -- `refuse_unknown_detectors`, which
+    asks what the detector names are and not what the entries ARE.
+
+    Walked, one shape at a time, against a target that never had to answer:
+
+        [{"id": "o1"}]                        KeyError: 'properties'
+        [{"id": "o1", "properties": "x"}]     AttributeError: 'str' has no attribute 'get'
+        [{"id": "o1", "properties": [1]}]     AttributeError: 'int' has no attribute 'get'
+        [{"id": "o1", "properties": [{...}]}] KeyError: 'probe'
+
+    Every one of them arrives as "This is a bug in qatration, not a finding about your
+    target and not a problem with your config", about the reader's own corpus.
+
+    THE STAKE IS THE ONE `unknown_detectors` NAMES. In isolation a probe that cannot run is
+    not a gap that shows: every trial misses, `hits == 0` reads as LOCKED, and an objective
+    whose properties are all locked reads as HARDENED -- the strongest claim this command
+    makes, out of a corpus that never ran.
+    """
+    out, seen = [], {}
+    for i, o in enumerate(objectives or []):
+        if not isinstance(o, dict):
+            out.append("%s #%d: entry is %s, not a mapping"
+                       % (fname, i, type(o).__name__))
+            continue
+        oid = o.get("id")
+        if not oid:
+            out.append("%s #%d (??): missing 'id'" % (fname, i))
+            continue
+        if not isinstance(oid, str):
+            out.append("%s #%d: id is %s, not a string. The map this run writes is keyed by "
+                       "it and `--only` selects on it." % (fname, i, type(oid).__name__))
+            continue
+        if oid in seen:
+            out.append("%s: %s: duplicate id (also at #%d)" % (fname, oid, seen[oid]))
+        seen[oid] = i
+        props = o.get("properties")
+        if not isinstance(props, list) or not props:
+            out.append("%s: %s: 'properties' is %s, and an objective IS its properties -- "
+                       "the map has one row per property and the combined payload is judged "
+                       "against all of them"
+                       % (fname, oid, "missing" if props is None
+                          else "empty" if isinstance(props, list)
+                          else "%s, not a list" % type(props).__name__))
+            continue
+        for j, p in enumerate(props):
+            if not isinstance(p, dict):
+                out.append("%s: %s: properties[%d] is %s, not a mapping"
+                           % (fname, oid, j, type(p).__name__))
+                continue
+            if not p.get("name"):
+                out.append("%s: %s: properties[%d] has no 'name', which is the row it "
+                           "becomes in the map" % (fname, oid, j))
+            # `steps` OR `probe`, which is the same pair `bad_delivery` draws for an
+            # attack: memorybot's whole threat needs a conversation, and a property with
+            # neither has nothing to send.
+            if not p.get("steps") and p.get("probe") is None:
+                out.append("%s: %s: properties[%d] (%s) has neither 'probe' nor 'steps', so "
+                           "nothing would be sent for it -- and a property nothing was sent "
+                           "for reads as LOCKED, which is this command's strongest claim"
+                           % (fname, oid, j, p.get("name") or "??"))
     return out
 
 

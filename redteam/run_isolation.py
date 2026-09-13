@@ -135,7 +135,20 @@ def main():
     # The same rule, on the corpus where a typo is worst: an unknown name leaves nothing to
     # evaluate, every trial misses, and an objective whose properties are all locked reads as
     # HARDENED — the strongest claim this command makes.
-    from lint_arsenal import refuse_unknown_detectors
+    # SHAPE BEFORE SPELLING, the order `refuse_unknown_detectors` already keeps inside
+    # itself, and the half that was missing out here: that rule asks what the DETECTOR
+    # NAMES are, and an objectives file whose entries are not objectives reached
+    # `scoped_to` and the probe loop as a traceback. `run --attacks mine.yaml` has had
+    # `unusable_entries` at its door since the day a customer's arsenal could reach one.
+    from lint_arsenal import refuse_unknown_detectors, unusable_objectives
+    _unusable = unusable_objectives(objectives, os.path.basename(path))
+    if _unusable:
+        print("isolation: %d objective(s) in %s cannot be used. Nothing was sent."
+              % (len(_unusable), path), file=sys.stderr)
+        for _u in _unusable[:8]:
+            print("    " + _u, file=sys.stderr)
+        # 2: the invocation was refused. Not 1, which is a finding about the target.
+        return 2
     refuse_unknown_detectors(objectives, "isolation", path, nested=True)
 
     target, ctx = load_target(args.target_config, args.model)

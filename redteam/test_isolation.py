@@ -749,6 +749,90 @@ def main():
         check("...before a probe is sent", "Nothing was sent" in _tout, True)
         check("...and not as a crash in this tool", "Traceback" in _tout, False)
 
+        # AND ABOUT ITS SHAPE, WHICH IS THE HALF THAT WAS MISSING. The rule above asks what
+        # the DETECTOR NAMES are. `run --attacks mine.yaml` has had `unusable_entries` at
+        # its door since the day a customer's arsenal could reach one; this corpus comes
+        # through the same kind of door and had only the spelling rule, so an objectives
+        # file whose entries are not objectives reached `scoped_to` and the probe loop as a
+        # traceback. In isolation that is the expensive direction: a probe that cannot run
+        # misses every trial, `hits == 0` reads as LOCKED, and every property locked reads
+        # as HARDENED.
+        from lint_arsenal import unusable_objectives as _uo
+        for _label, _corpus, _want in (
+                ("an entry that is not a mapping", ["a", "b"], "not a mapping"),
+                ("an objective with no properties", [{"id": "o"}], "is missing"),
+                ("properties that are not a list", [{"id": "o", "properties": "x"}],
+                 "not a list"),
+                ("an empty properties list", [{"id": "o", "properties": []}], "is empty"),
+                ("a property that is not a mapping",
+                 [{"id": "o", "properties": [1]}], "properties[0] is int"),
+                ("a property with no name",
+                 [{"id": "o", "properties": [{"probe": "p"}]}], "no 'name'"),
+                ("a property with nothing to send",
+                 [{"id": "o", "properties": [{"name": "n"}]}], "neither 'probe' nor 'steps'"),
+                ("an id that is not a string",
+                 [{"id": 7, "properties": [{"name": "n", "probe": "p"}]}], "not a string"),
+                ("two objectives under one id",
+                 [{"id": "o", "properties": [{"name": "n", "probe": "p"}]},
+                  {"id": "o", "properties": [{"name": "m", "probe": "q"}]}],
+                 "duplicate id")):
+            check("%s cannot be used" % _label,
+                  any(_want in _s for _s in _uo(_corpus, "mine.yaml")), True)
+        # NOT THE ONES THAT ARE FINE, or a door that refuses everything passes all of that.
+        check("a well-formed objective is not refused",
+              _uo([{"id": "o", "applies_to": ["b"],
+                    "properties": [{"name": "n", "probe": "p",
+                                    "success": ["canary_in_output"]}]}], "mine.yaml"), [])
+        # AND A CONVERSATION IS A PROBE TOO: memorybot's whole threat needs more than one
+        # turn, and a rule that demanded `probe` would refuse the corpus this repository
+        # ships for it.
+        check("...and so is one whose property is a conversation",
+              _uo([{"id": "o", "properties": [{"name": "n", "steps": ["a", "b"]}]}],
+                  "mine.yaml"), [])
+        # AND AN EMPTY PROBE IS NOT AN ABSENT ONE, the same distinction the arsenal rule
+        # draws: the one probe whose payload IS the empty string has to be writable.
+        check("...nor one whose probe is deliberately empty",
+              _uo([{"id": "o", "properties": [{"name": "n", "probe": ""}]}], "mine.yaml"),
+              [])
+        # AND EVERY OBJECTIVES CORPUS THIS REPOSITORY SHIPS PASSES IT, or the rule is about
+        # files nobody has.
+        import glob as _g_o, yaml as _y_o
+        _shipped_o = sorted(_g_o.glob(_os_w.path.join(
+            _os_w.path.dirname(_os_w.path.abspath(__file__)), "isolation*.yaml")))
+        check("there are objectives corpora to check", len(_shipped_o) >= 4, True)
+        _refused_o = {}
+        for _p in _shipped_o:
+            _faults = _uo(_y_o.safe_load(io.open(_p, encoding="utf-8")) or [],
+                          _os_w.path.basename(_p))
+            if _faults:
+                _refused_o[_os_w.path.basename(_p)] = _faults[:1]
+        check("...and not one of them is refused by the shape rule",
+              sorted(_refused_o), [])
+
+        # AND THE COMMAND ASKS, which is what the rule above cannot see. Refused before a
+        # probe, so this needs no endpoint at all.
+        _sob = _os_w.path.join(_uw, "isolation_shape.yaml")
+        # AN OBJECTIVE THAT IS A MAPPING AND IS NOT AN OBJECTIVE. A list of strings is
+        # refused by `bad_entry_shapes` as well, so it would leave this green with the
+        # new rule gone; this shape has no misspelt key and no unknown detector, and
+        # `unusable_objectives` is the only thing between it and `obj["properties"]`.
+        io.open(_sob, "w", encoding="utf-8").write(
+            "- id: obj-shape\n  applies_to: [deadbot]\n")
+        _sp2 = _sp_u.run(
+            [sys.executable,
+             _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+             "isolation", "--target-config", _ucfg, "--objectives", _sob, "--trials", "1"],
+            capture_output=True, text=True, timeout=900,
+            env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                     PYTHONIOENCODING="utf-8"))
+        _sout = (_sp2.stdout or "") + (_sp2.stderr or "")
+        check("an objectives file whose entries are not objectives is refused",
+              _sp2.returncode, 2)
+        check("...saying what the objective is missing",
+              "'properties' is missing" in _sout, True)
+        check("...before a probe is sent", "Nothing was sent" in _sout, True)
+        check("...and not as a crash in this tool", "Traceback" in _sout, False)
+
         # AND NO TWO COLUMNS RUN TOGETHER. `status` was a fixed width of 10 and
         # `unmeasured` is exactly 10 characters, so this table printed `unmeasured0/1`
         # -- the two columns a reader needs most in an outage, with no space between
