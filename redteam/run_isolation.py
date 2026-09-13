@@ -280,7 +280,8 @@ def main():
         if _lost:
             print("\n" + _lost, file=sys.stderr)
         else:
-            os.makedirs(os.path.dirname(out), exist_ok=True)
+            from workspace import writable_path as _writable
+            out = _writable(out, "maps", "isolation")
         # through write_maps, so the artifact carries the build that produced it — lock maps
         # were a bare list with no meta and could not be stamped even in principle
         # THE MOMENT THIS MEASURED, said here because this is what knows it. `write_maps`

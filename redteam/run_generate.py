@@ -127,7 +127,8 @@ def main():
     # Every other artifact this tool writes goes to `$QATRATION_OUT`, and this is a generated
     # artifact like the rest of them.
     out = args.out or os.path.join(WORKSPACE_OUT, f"isolation_generated_{name}.yaml")
-    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    from workspace import writable_path as _writable
+    out = _writable(out, "objectives", "generate")
     with open(out, "w", encoding="utf-8") as f:
         f.write(to_yaml(objs, name))
     print(f"\nwrote {out}")

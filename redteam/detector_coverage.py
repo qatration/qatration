@@ -394,7 +394,8 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
     path = where_to if os.path.isabs(where_to) else os.path.join(ROOT, where_to)
     _dir = os.path.dirname(path)
     if _dir:
-        os.makedirs(_dir, exist_ok=True)
+        from workspace import writable_path as _writable
+        path = _writable(path, "coverage buckets", "coverage")
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"probes": n,
                    "measured": bool(n),

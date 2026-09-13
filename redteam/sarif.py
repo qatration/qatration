@@ -519,7 +519,12 @@ def main():
 
     log = build(results, target_config=args.target_config,
                 out_dir=os.path.dirname(os.path.abspath(args.results)))
-    dest = args.out or os.path.splitext(args.results)[0] + ".sarif"
+    # THROUGH THE ONE RULE. This opened `dest` directly, so a `--out` naming a directory
+    # that does not exist, or naming a directory, came back as a traceback about a path the
+    # reader typed. `workspace.writable_path` makes the parent and refuses the rest.
+    from workspace import writable_path as _writable
+    dest = _writable(args.out or os.path.splitext(args.results)[0] + ".sarif",
+                     "SARIF export", "sarif")
     with open(dest, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2)
 

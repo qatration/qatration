@@ -651,6 +651,48 @@ def wrong_shape(doc, what, path=""):
                _SHAPE_WORDS.get(kind, kind.__name__), what, says))
 
 
+def writable_path(path, what="file", where=""):
+    """Make a path a reader typed ready to be written to, or refuse it. -> the path.
+
+    THE MIRROR OF `load_yaml_or_refuse`, AND IT DID NOT EXIST. That reader answers a path
+    somebody typed to be READ; six commands take a path to be WRITTEN -- `--out` on `sarif`,
+    `compare` and `generate`, `--json` on `recon`, `isolation` and `coverage` -- and each of
+    them opened it directly.
+
+    Walked:
+
+        sarif --out nodir/x.sarif     FileNotFoundError, as a traceback
+        sarif --out <a directory>     IsADirectoryError / PermissionError, as a traceback
+        coverage --json <a directory> the same
+
+    all of them under "This is a bug in qatration, not a finding about your target and not a
+    problem with your config", about a path the reader typed.
+
+    AND THE PARENT DIRECTORY WAS ALREADY MADE IN EIGHT PLACES, spelled out at each one, so
+    `coverage --json nodir/x.json` worked and `sarif --out nodir/x.sarif` did not -- one
+    question, two answers, decided by which command somebody happened to be running.
+
+    A DIRECTORY IS NOT A FILE and is refused rather than resolved into one: guessing a
+    filename inside it would write an artifact where nobody asked for one, and the reader
+    who typed a directory meant a file they can now name.
+    """
+    import errno
+    lead = (where + ": ") if where else ""
+    if os.path.isdir(path):
+        raise SystemExit(lead + "ABORT — %s is a directory, not a file to write the %s to. "
+                         "Name the file itself. Nothing was written." % (path, what))
+    parent = os.path.dirname(os.path.abspath(path))
+    try:
+        os.makedirs(parent, exist_ok=True)
+    except OSError as e:
+        # NOT A GUESS ABOUT WHY. A parent that is itself a file, a permission, a read-only
+        # mount: the errno is what the operating system said and the reader has to act on it.
+        raise SystemExit(lead + "ABORT — cannot make %s to write the %s into: %s: %s. "
+                         "Nothing was written."
+                         % (parent, what, errno.errorcode.get(e.errno, type(e).__name__), e))
+    return path
+
+
 def load_yaml_or_refuse(path, what="target config", where=""):
     """Read a YAML path somebody typed, or refuse it. -> the parsed document.
 

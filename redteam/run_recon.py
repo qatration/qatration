@@ -132,7 +132,8 @@ def main():
             # a pipeline must not read it as a finding.
             print(_refusal, file=sys.stderr)
             return 2
-        os.makedirs(os.path.dirname(out), exist_ok=True)
+        from workspace import writable_path as _writable
+        out = _writable(out, "profile", "recon")
         # AND WHEN IT WAS MEASURED. The fleet page dates every recon profile by the
         # file's mtime, which git does not preserve: in a clone all ten carry the clone
         # time. Nothing on disk could answer it, so the writer answers it.

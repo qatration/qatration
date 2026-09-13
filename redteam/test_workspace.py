@@ -576,6 +576,82 @@ def check_every_command_refuses():
           sorted(set(_NO_COMMAND) - set(_readers)), [])
     check("...and gives a reason", all(_NO_COMMAND.values()), True)
 
+    # --- AND THE MIRROR: A PATH SOMEBODY TYPED TO WRITE TO ------------------------------
+    #
+    # The reader below answers a path typed to be READ. Six commands take a path to be
+    # WRITTEN -- `--out` on `sarif`, `compare` and `generate`, `--json` on `recon`,
+    # `isolation` and `coverage` -- and each opened it directly. Walked:
+    #
+    #     sarif --out nodir/x.sarif      FileNotFoundError, as a traceback
+    #     sarif --out <a directory>      as a traceback
+    #     coverage --json <a directory>  as a traceback
+    #
+    # and the parent directory was already being made in EIGHT places, spelled out at each,
+    # so `coverage --json nodir/x.json` worked and `sarif --out nodir/x.sarif` did not: one
+    # question, two answers, decided by which command somebody happened to be running.
+    _ww = _tfp.mkdtemp()
+
+    def _writable(path):
+        try:
+            return "", _ws.writable_path(path, "page", "test")
+        except SystemExit as _e:
+            return str(_e), None
+
+    _deep = _os.path.join(_ww, "a", "b", "page.html")
+    _said_deep, _got_deep = _writable(_deep)
+    check("a parent directory that is not there is made", _said_deep, "")
+    check("...so the file can actually be opened there",
+          bool(_got_deep) and _os.path.isdir(_os.path.dirname(_deep)), True)
+    _said_dir, _got_dir = _writable(_ww)
+    check("a path that is a directory is refused rather than written into",
+          "is a directory, not a file" in _said_dir, True)
+    check("...and the command that stopped is named", _said_dir.startswith("test:"), True)
+    check("...and nothing was written", _got_dir, None)
+    # A PARENT THAT IS ITSELF A FILE is the third shape, and the reason is the operating
+    # system's rather than a guess: a reader acts on the errno, not on our summary of it.
+    _afile = _os.path.join(_ww, "afile")
+    _io.open(_afile, "w", encoding="utf-8").write("x")
+    _said_under, _ = _writable(_os.path.join(_afile, "page.html"))
+    check("a parent that is itself a file is refused with the system's own reason",
+          "cannot make" in _said_under and "Nothing was written" in _said_under, True)
+    # AND AN ORDINARY PATH IN AN ORDINARY DIRECTORY IS UNTOUCHED, or a rule that refuses
+    # everything passes all of that.
+    check("...while an ordinary path is returned as it came",
+          _writable(_os.path.join(_ww, "plain.html"))[1],
+          _os.path.join(_ww, "plain.html"))
+
+    # AND THE COMMANDS, DRIVEN, because the rule is a function and the defect was six
+    # commands that never called one. `sarif` and `coverage` are the two the walk crashed.
+    _cw = _tfp.mkdtemp()
+    _cout = _os.path.join(_cw, "out")
+    _os.makedirs(_cout)
+    import shutil as _sh_w
+    _src_res = _os.path.join(_here, "..", "out", "results_citebot.json")
+    _have_res = _os.path.exists(_src_res)
+    if _have_res:
+        _sh_w.copy(_src_res, _os.path.join(_cout, "results_citebot.json"))
+    check("there is a stored artifact to drive these commands with", _have_res, True)
+    _cenv = dict(_os.environ, QATRATION_OUT=_cout, PYTHONDONTWRITEBYTECODE="1",
+                 PYTHONIOENCODING="utf-8")
+
+    def _cmd_out(args):
+        _p = _sp.run([_sys.executable, _os.path.join(_here, "cli.py")] + args,
+                     capture_output=True, text=True, timeout=300, env=_cenv, cwd=_cw)
+        return _p.returncode, (_p.stdout or "") + (_p.stderr or "")
+
+    _res_path = _os.path.join(_cout, "results_citebot.json")
+    for _label, _args, _want_rc in (
+            ("sarif into a directory that does not exist",
+             ["sarif", "--results", _res_path,
+              "--out", _os.path.join(_cw, "nodir", "x.sarif")], 0),
+            ("sarif at a directory",
+             ["sarif", "--results", _res_path, "--out", _cout], 2),
+            ("coverage at a directory", ["coverage", "--json", _cout], 2)):
+        _rc_w, _out_w = _cmd_out(_args)
+        check("%s is answered, not crashed into" % _label,
+              "Traceback (most recent call last)" not in _out_w, True)
+        check("...with the code that says which happened (%s)" % _label, _rc_w, _want_rc)
+
     # AND THE READER ITSELF SAYS WHICH OF THE THREE THINGS WENT WRONG, because `no such
     # file`, `that is a directory` and `that is not YAML` have different remedies.
     def _read(path):
@@ -1195,7 +1271,13 @@ def main():
             tree = _ast2.parse(open(fp, encoding="utf-8").read())
         except SyntaxError:
             continue
+        # THREE WAYS TO HAVE MADE IT, and the third was added after this check went red for
+        # a module that had stopped calling `makedirs` by NAME. `workspace.writable_path` is
+        # the one rule for a path a reader typed to be written to -- it makes the parent and
+        # refuses a directory -- and five commands call it instead of spelling `makedirs`
+        # out. A scan quantified over the old spelling is a scan about the spelling.
         makes = any(getattr(n.func, "attr", None) == "makedirs"
+                    or getattr(n.func, "id", None) in ("writable_path", "_writable")
                     for n in _ast2.walk(tree) if isinstance(n, _ast2.Call))
         goes_through = any(getattr(n.func, "attr", None) == "artifact"
                            for n in _ast2.walk(tree) if isinstance(n, _ast2.Call))
