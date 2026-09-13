@@ -349,6 +349,19 @@ def compare(before, after):
     return out
 
 
+# WHAT A RECORDED CORPUS HAS TO BE, in the form `workspace.shape_fault` reads. This command
+# WRITES the file it is later pointed at, and it answered a malformed one with a traceback
+# under "This is a bug in qatration, not a finding about your target and not a problem with
+# your config" -- about a file the tool itself produced. Walked: six of seven wrong shapes,
+# including the three a `.get` on a list gives.
+_CORPUS_REQUIRE = {
+    "servers": (dict, True,
+                "each key is a server name and each value is what that run recorded for it"),
+    "servers[]": (dict, True,
+                  "the command, the package and the version the recorded run read"),
+}
+
+
 def _compare_command(path, timeout):
     """Re-read every server the recorded corpus names, and report what moved.
 
@@ -361,7 +374,29 @@ def _compare_command(path, timeout):
     except Exception as e:
         print("could not read %s: %s: %s" % (path, type(e).__name__, e))
         return 2
-    srv = (before or {}).get("servers") or {}
+    # AND WHAT PARSED HAS TO BE A CORPUS. `(before or {}).get` is a `.get` on whatever the
+    # file held, so `[1, 2]` came back as `AttributeError: 'list' object has no attribute
+    # 'get'`, and a `servers` holding a list took the loop below down the same way. The
+    # rule is `workspace.shape_fault`, the one the results and benign families already use,
+    # so a reader who meets two of these messages meets one voice.
+    from workspace import shape_fault as _shape
+    if not isinstance(before, dict):
+        print("%s is %s, not a mapping. A recorded corpus is what `qatration mcp` wrote: a "
+              "mapping with a `servers` key. Nothing was re-read."
+              % (path, type(before).__name__))
+        return 2
+    _why = _shape("servers", before.get("servers"), "servers" in before,
+                  _CORPUS_REQUIRE, "recorded corpus")
+    if _why:
+        print("%s: %s. Nothing was re-read." % (path, _why))
+        return 2
+    srv = before.get("servers") or {}
+    for _n, _rec in sorted(srv.items()):
+        _why = _shape("servers[]", _rec, True, _CORPUS_REQUIRE, "recorded corpus")
+        if _why:
+            print("%s: %s. Nothing was re-read."
+                  % (path, _why.replace("servers[]", "servers[%r]" % _n)))
+            return 2
     # NOT AN EMPTY DIFF. A corpus recorded before the command was stored has nothing to
     # replay, and printing `nothing moved` over it would be the strongest possible
     # answer to a question nobody asked.

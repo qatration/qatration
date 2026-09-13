@@ -1538,7 +1538,7 @@ _RESULTS_REQUIRE = {
 }
 
 
-def _shape_fault(where, value, present, table=None, what="results file"):
+def shape_fault(where, value, present, table=None, what="results file"):
     """-> why this value cannot be used under `where`, or None. One rule for every row above.
 
     `present` says whether the key was there at all, which is the distinction the first
@@ -1623,7 +1623,7 @@ def _unusable_benign(data, name=""):
     # and content-based identification refused it. The name is what this engine decides on
     # purpose -- `workspace.artifact` picks the prefix -- so the name is what identifies.
     def _bad(where, value, present):
-        return _shape_fault(where, value, present, _BENIGN_REQUIRE, "benign baseline")
+        return shape_fault(where, value, present, _BENIGN_REQUIRE, "benign baseline")
 
     _why = _bad("rows", data.get("rows"), "rows" in data)
     if _why:
@@ -1696,17 +1696,17 @@ def _unusable_results(data, name=""):
                 % (type(_meta).__name__, _RESULTS_REQUIRE["meta.target"][2]))
     _meta = _meta or {}
     for _k in ("target", "attacks_n"):
-        _why = _shape_fault("meta.%s" % _k, _meta.get(_k), bool(_meta.get(_k) is not None))
+        _why = shape_fault("meta.%s" % _k, _meta.get(_k), bool(_meta.get(_k) is not None))
         if _why:
             return _why
     for i, r in enumerate(data["results"]):
         if not isinstance(r, dict):
             return "results[%d] is %s, not a mapping" % (i, type(r).__name__)
         for _k in ("headline", "attack", "fired", "trials"):
-            _why = _shape_fault("results[].%s" % _k, r.get(_k), _k in r)
+            _why = shape_fault("results[].%s" % _k, r.get(_k), _k in r)
             if _why:
                 return _why.replace("results[].", "results[%d]." % i)
-        _why = _shape_fault("results[].attack.id", (r.get("attack") or {}).get("id"),
+        _why = shape_fault("results[].attack.id", (r.get("attack") or {}).get("id"),
                             "id" in (r.get("attack") or {}))
         if _why:
             return _why.replace("results[].", "results[%d]." % i)
@@ -1714,7 +1714,7 @@ def _unusable_results(data, name=""):
             if not isinstance(_tr, dict):
                 return ("results[%d].trials[%d] is %s, not a mapping"
                         % (i, j, type(_tr).__name__))
-            _why = _shape_fault("results[].trials[].verdict", _tr.get("verdict"),
+            _why = shape_fault("results[].trials[].verdict", _tr.get("verdict"),
                                 "verdict" in _tr)
             if _why:
                 return _why.replace("results[].trials[].",

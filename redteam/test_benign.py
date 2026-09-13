@@ -442,6 +442,52 @@ def main():
               _up and "1.0" in _up[0][2] and "1.1" in _up[0][2], str(_up))
         check("...and a fleet that did not move reports nothing",
               _cmp_m(_fleet("1.0", "clean"), _fleet("1.0", "clean")) == [], "moved")
+        # AND A CORPUS THAT IS NOT ONE IS ANSWERED, NOT CRASHED INTO. `--compare` takes a
+        # path, and the file it is pointed at is one THIS COMMAND WROTE, so a malformed one
+        # is a fact about the reader's workspace and never about their target. It came back
+        # as a traceback under "This is a bug in qatration, not a finding about your target
+        # and not a problem with your config": six of seven wrong shapes, including the
+        # three that a `.get` on a list gives.
+        #
+        # DRIVEN, because the fault was in a command's answer rather than in `compare`, and
+        # every shape below stops before anything is started.
+        import subprocess as _sp_m
+        import tempfile as _tf_m
+        _mw = _tf_m.mkdtemp()
+        _menv = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8",
+                     QATRATION_OUT=_tf_m.mkdtemp())
+
+        def _mcompare(text):
+            _p = os.path.join(_mw, "corpus.json")
+            open(_p, "w", encoding="utf-8", newline="").write(text)
+            _r = _sp_m.run([sys.executable, os.path.join(HERE, "cli.py"), "mcp",
+                            "--compare", _p], capture_output=True, text=True,
+                           timeout=180, env=_menv, cwd=_mw)
+            return _r.returncode, (_r.stdout or "") + (_r.stderr or "")
+
+        for _label, _text, _want in (
+                ("a list", "[1, 2]", "not a mapping"),
+                ("a scalar", '"hello"', "not a mapping"),
+                ("nothing at all", "null", "not a mapping"),
+                ("no servers key", "{}", "no servers"),
+                ("servers holding a list", '{"servers": [1, 2]}', "servers is list"),
+                ("a server that is not a record", '{"servers": {"a": 1}}',
+                 "servers['a'] is int")):
+            _rc_m, _out_m = _mcompare(_text)
+            check("a recorded corpus that is %s is refused, not crashed into" % _label,
+                  "Traceback (most recent call last)" not in _out_m and _rc_m == 2,
+                  "exit %s: %s" % (_rc_m, _out_m.strip()[-160:]))
+            check("...and the reason says what the file is instead",
+                  _want in _out_m, _out_m.strip()[-200:])
+        # AND A CORPUS THAT IS FINE IS NOT REFUSED BY ANY OF THAT. A server recorded with no
+        # command cannot be re-read and says so -- exit 3, nothing measured -- which is a
+        # different answer from a file that is not a corpus.
+        _rc_ok, _out_ok = _mcompare('{"servers": {"a": {"package": "p", '
+                                    '"version": "1.0", "tools": []}}}')
+        check("...while a corpus whose servers record no command is nothing measured",
+              _rc_ok == 3 and "record no command" in _out_ok,
+              "exit %s: %s" % (_rc_ok, _out_ok.strip()[-160:]))
+
         # A TOOL THAT APPEARED UNDER A PINNED VERSION IS THE SAME EVENT. The poison does
         # not have to arrive inside a description somebody already approved.
         _added = _cmp_m(_fleet("1.0", "clean"),
