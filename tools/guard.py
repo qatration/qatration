@@ -455,12 +455,32 @@ def _staged_contents(paths):
     return _read_blobs(blobs)
 
 
+UNREADABLE = object()
+
+
 def _read_tree(path):
+    """The file's text, or `UNREADABLE`. -> str | UNREADABLE
+
+    NOT-READ AND EMPTY ARE DIFFERENT THINGS, and this returned "" for both. `scan_files`
+    skips a falsy reader result, so a file this could not open was skipped in silence and
+    the tree was reported clean. Walked: a file holding `ghp_` + forty characters, then
+    `icacls /deny`, then
+
+        ok  guard: the tree - no credential, no copyleft dependency, no Cyrillic
+
+    exit 0, in the gate that runs before every commit. A tracked file can become unreadable
+    for ordinary reasons -- a permission, a lock held by another process, a path Windows
+    will not open -- and every one of them is a reason to stop rather than to pass.
+
+    `_read_blobs_report` beside this was written for exactly this distinction and says so:
+    "NOT-A-BLOB AND NOT-READABLE ARE DIFFERENT THINGS". That lesson reached the history
+    scan and not the one a person runs by hand.
+    """
     full = os.path.join(ROOT, path)
     try:
         return open(full, encoding="utf-8", errors="replace").read()
     except OSError:
-        return ""
+        return UNREADABLE
 
 
 def _cyrillic_outside_model_output(text):
@@ -563,6 +583,13 @@ def scan_files(items, reader, refusals, path_of=None):
         if path.lower().endswith(BINARY):
             continue
         text = reader(item)
+        if text is UNREADABLE:
+            # A FILE THAT COULD NOT BE READ IS NOT A FILE THAT IS CLEAN. See `_read_tree`:
+            # every rule below this line is quantified over `text`, so a silent skip here
+            # is a clean bill for whatever the file holds.
+            refusals.append(f"{item}: could not be read, so what it holds is unknown. "
+                            f"Nothing was scanned in it")
+            continue
         if not text:
             continue
         if ARTIFACT.search(path):

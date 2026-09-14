@@ -92,6 +92,55 @@ def main():
         guard.scan_files([path], lambda _p: text, refusals)
         return refusals
 
+    # --- A FILE THAT COULD NOT BE READ IS NOT A FILE THAT IS CLEAN --------------------------
+    #
+    # `_read_tree` returned "" both for a file it read that was empty and for one it could
+    # not open, and `scan_files` skips a falsy reader result. So every rule below that line
+    # was quantified over nothing and the tree came back clean. Walked: a file holding `ghp_`
+    # and forty characters, then `icacls /deny`, then
+    #
+    #     ok  guard: the tree - no credential, no copyleft dependency, no Cyrillic
+    #
+    # exit 0, in the gate that runs before every commit. A tracked file becomes unreadable
+    # for ordinary reasons -- a permission, a lock another process holds, a path Windows
+    # will not open -- and every one of them is a reason to stop rather than to pass.
+    #
+    # `_read_blobs_report` beside it was written for exactly this distinction and says so in
+    # its own docstring. The lesson reached the history scan and not the one a person runs.
+    _unread = []
+    guard.scan_files(["locked.py"], lambda _p: guard.UNREADABLE, _unread)
+    check("a file the guard could not read is refused, not skipped", bool(_unread),
+          "the tree was reported clean over it")
+    check("...and the refusal names the file", any("locked.py" in r for r in _unread),
+          str(_unread))
+    check("...and says nothing in it was scanned",
+          any("Nothing was scanned" in r for r in _unread), str(_unread))
+    # AN EMPTY FILE IS STILL AN EMPTY FILE, which is the distinction this is about: refusing
+    # it too would make the rule useless on any repository that has one.
+    # `check(label, ok, detail)` in this file: the first draft passed the RESULT as the
+    # verdict, and an empty list is falsy, so a passing property printed as a failure.
+    check("...while a file that really is empty is not refused",
+          not scan("empty.py", ""), str(scan("empty.py", "")))
+    # AND THE READER RETURNS THE TWO APART. The rule above is a function with a stub; this is
+    # the seam the hook actually uses.
+    import tempfile as _tf_g
+    _gw = _tf_g.mkdtemp()
+    _real_root = guard.ROOT
+    try:
+        guard.ROOT = _gw
+        io.open(os.path.join(_gw, "there.txt"), "w", encoding="utf-8").write("hello")
+        io.open(os.path.join(_gw, "blank.txt"), "w", encoding="utf-8").write("")
+        check("the reader hands back the text of a file that is there",
+              guard._read_tree("there.txt") == "hello",
+              repr(guard._read_tree("there.txt")))
+        check("...an empty string for one that is empty",
+              guard._read_tree("blank.txt") == "", repr(guard._read_tree("blank.txt")))
+        check("...and UNREADABLE for one it cannot open",
+              guard._read_tree("no_such_file_here.txt") is guard.UNREADABLE,
+              repr(guard._read_tree("no_such_file_here.txt")))
+    finally:
+        guard.ROOT = _real_root
+
     # --- THE PATTERNS CAN FIRE AT ALL -------------------------------------------------------
     broken = guard.selftest()
     check("every credential pattern matches its own sample", not broken, "; ".join(broken))
