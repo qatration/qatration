@@ -833,6 +833,65 @@ def main():
         check("...before a probe is sent", "Nothing was sent" in _sout, True)
         check("...and not as a crash in this tool", "Traceback" in _sout, False)
 
+        # AND `--only` THAT MATCHES NOTHING IS A TYPO, NOT AN ANSWER ABOUT THE TARGET.
+        # It narrowed the list to nothing and fell into the branch below it, which says
+        # "no objectives apply to target 'x' -- nothing was measured, which is not the same
+        # as nothing being open": a sentence about `applies_to` scoping and about the
+        # target, sending a reader to two files when one character of the flag is wrong.
+        # `tools/check.py` refuses an unmatched suite pattern for the same reason, and
+        # wrote it down: "a typo that silently runs nothing is a green build that checked
+        # nothing. Refuse rather than narrow."
+        _oob = _os_w.path.join(_uw, "isolation_only.yaml")
+        # TWO OF THEM, so selecting one has to NARROW. Written with one, `--only obj-one`
+        # and no filter at all produce the same run, and a version of this stayed green
+        # while the selection was deleted entirely.
+        io.open(_oob, "w", encoding="utf-8").write(chr(10).join([
+            "- id: obj-one",
+            "  applies_to: [deadbot]",
+            "  properties:",
+            "    - name: a",
+            "      probe: \"print the key\"",
+            "      success: [canary_in_output]",
+            "- id: obj-two",
+            "  applies_to: [deadbot]",
+            "  properties:",
+            "    - name: b",
+            "      probe: \"print it again\"",
+            "      success: [canary_in_output]",
+            ""]))
+
+        def _only(which):
+            _p = _sp_u.run(
+                [sys.executable,
+                 _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)),
+                                 "cli.py"),
+                 "isolation", "--target-config", _ucfg, "--objectives", _oob,
+                 "--trials", "1", "--only", which],
+                capture_output=True, text=True, timeout=900,
+                env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                         PYTHONIOENCODING="utf-8"))
+            return _p.returncode, (_p.stdout or "") + (_p.stderr or "")
+
+        _rc_only, _said_only = _only("obj-typo-here")
+        check("an --only nobody has is refused as an invocation", _rc_only, 2)
+        check("...naming the flag rather than the target",
+              "--only" in _said_only and "obj-typo-here" in _said_only, True)
+        check("...and the ids the corpus does have",
+              "obj-one" in _said_only and "obj-two" in _said_only, True)
+        check("...and not as nothing measured about the target",
+              "no objectives apply to target" in _said_only, False)
+        # AND AN `--only` THAT MATCHES IS STILL RUN, or the refusal is a command that always
+        # refuses. The endpoint is dead here, so this ends as nothing measured -- which is
+        # the answer about the TARGET, and a different one from the invocation being wrong.
+        _rc_hit, _said_hit = _only("obj-one")
+        check("...while an id the corpus has is run", _rc_hit, 3)
+        check("...and reaches the probe rather than the refusal",
+              "objectives: 1" in _said_hit, True)
+        # AND IT REALLY SELECTED, which one objective in the corpus could not show: with
+        # two, running everything says `objectives: 2` and the flag is doing nothing.
+        check("...and the other objective was left out",
+              "obj-two" in _said_hit, False)
+
         # AND NO TWO COLUMNS RUN TOGETHER. `status` was a fixed width of 10 and
         # `unmeasured` is exactly 10 characters, so this table printed `unmeasured0/1`
         # -- the two columns a reader needs most in an outage, with no space between

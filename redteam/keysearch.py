@@ -63,6 +63,21 @@ def load_frames(path=None, families=None):
                else "a frame with no template text", len(_bad)))
     if families:
         want = {f.strip() for f in families if f and f.strip()}
+        # A FAMILY NOBODY HAS IS A TYPO, NOT A SCOPE. `--frame-families nonesuch` scoped the
+        # library down to the bare control -- correctly, since the control is unremovable --
+        # and printed `frame library: 1 frames (families: nonesuch)`. The search then ran one
+        # frame, opened nothing, and every property came back LOCKED, which reads as HARDENED.
+        # A filter that matches nothing is the same event `tools/check.py` refuses for a suite
+        # pattern: "a typo that silently runs nothing is a green build that checked nothing".
+        _have = {str(fr.get("family")) for fr in frames if isinstance(fr, dict)}
+        _absent = sorted(w for w in want if w not in _have)
+        if _absent:
+            raise SystemExit(
+                "isolation: no frame in %s belongs to %s. The search would run the bare "
+                "control alone, open nothing, and every property would read LOCKED. The "
+                "library has: %s."
+                % (path, ", ".join(repr(a) for a in _absent),
+                   ", ".join(sorted(f for f in _have if f and f != "None"))))
         frames = [fr for fr in frames
                   if fr.get("family") in want or fr.get("family") == "control"]
     return frames

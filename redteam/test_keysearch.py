@@ -105,8 +105,30 @@ def main():
     check("scoping keeps the bare control", scoped[0]["id"], "bare")
     check("scoping keeps only the asked-for family",
           {f["family"] for f in scoped}, {"control", "assertion"})
-    check("an unknown family scopes down to the control alone",
-          [f["id"] for f in load_frames(families=["nonesuch"])], ["bare"])
+    # AND A FAMILY NOBODY HAS IS A TYPO, NOT A SCOPE. This asserted that it scoped down to
+    # the control alone, which is what it did: the search then ran ONE frame, opened nothing,
+    # and every property came back LOCKED -- which reads as HARDENED, this command's
+    # strongest claim, out of a flag with one letter wrong. The control staying unremovable
+    # is the line above; this is a different question and it now has a different answer.
+    try:
+        load_frames(families=["nonesuch"])
+        _fam_said = ""
+    except SystemExit as _e:
+        _fam_said = str(_e)
+    check("a family no frame belongs to is refused, not scoped to nothing",
+          "belongs to 'nonesuch'" in _fam_said, True)
+    check("...and the reason says what the search would have reported",
+          "would read LOCKED" in _fam_said, True)
+    check("...and names the families the library does have",
+          "assertion" in _fam_said and "control" in _fam_said, True)
+    # ONE WRONG NAME AMONG SEVERAL IS STILL WRONG, or a typo hides behind a real family.
+    try:
+        load_frames(families=["assertion", "nonesuch"])
+        _mixed_said = ""
+    except SystemExit as _e:
+        _mixed_said = str(_e)
+    check("...and a wrong name beside a real one is still refused",
+          "nonesuch" in _mixed_said, True)
     check("the shipped frame library is not empty, or every claim about it is vacuous",
           len(load_frames()) >= 5, True)
     check("every frame in the shipped library carries a hypothesis",

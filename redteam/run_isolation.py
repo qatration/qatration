@@ -157,9 +157,35 @@ def main():
     # without brackets is a string, and `name in "guardbot"` is a substring test. The
     # shape itself is refused a few lines up, by `refuse_unknown_detectors`.
     from workspace import scoped_to as _scoped
+    # THE IDS AS LOADED, kept before scoping: the filter below runs on what is left, and
+    # reporting "it has: none" about a corpus that has three -- all of them for another bot
+    # -- answers the wrong question.
+    _all_ids = [str(o.get("id")) for o in objectives]
     objectives = [o for o in objectives if _scoped(o, target.name)]
     if args.only:
-        objectives = [o for o in objectives if o.get("id") == args.only]
+        # AN ID NOBODY HAS IS A TYPO, NOT AN ANSWER ABOUT THE TARGET. This narrowed to
+        # nothing and fell into the branch below, which says "no objectives apply to target
+        # 'x' -- nothing was measured" -- a sentence about `applies_to` scoping and about the
+        # target, sending a reader to look at two files when one character of the flag is
+        # wrong. `tools/check.py` refuses an unmatched suite pattern for the same reason:
+        # "a typo that silently runs nothing is a green build that checked nothing. Refuse
+        # rather than narrow."
+        _named = [o for o in objectives if o.get("id") == args.only]
+        if not _named and args.only in _all_ids:
+            # IT EXISTS AND IS FOR ANOTHER BOT, which is a different mistake from a typo and
+            # has a different remedy: the reader has the right id and the wrong target.
+            print("isolation: --only %r is an objective in %s, but its `applies_to` "
+                  "excludes %r, so it was scoped out before the filter ran. Nothing was "
+                  "sent." % (args.only, path, target.name), file=sys.stderr)
+            return 2
+        if not _named:
+            print("isolation: --only %r matches no objective in %s. It has: %s."
+                  % (args.only, path, ", ".join(_all_ids) or "none"),
+                  file=sys.stderr)
+            # 2: the invocation was refused. Not 3, which says the target was asked and
+            # could not answer.
+            return 2
+        objectives = _named
     if not objectives:
         # 3, NOT 0. No objective ran, so nothing was measured, and returning None made
         # `cli` exit 0 -- which a pipeline reads as a clean lock map. `run` already exits

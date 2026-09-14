@@ -367,13 +367,50 @@ oracle_context:
             finally:
                 shutil.rmtree(_w, ignore_errors=True)
 
+        # SCOPED AWAY, NOT MISTYPED. This reached the state through `--only
+        # no-such-objective-id`, which is now refused as an invocation -- a flag with one
+        # letter wrong is a typo and not an answer about the target, and reporting it as
+        # `nothing measured` sent a reader to look at their config and their `applies_to`.
+        # The state this check is about is the real one: every objective in the corpus
+        # names a different bot, so none of them applies here and no property was measured.
+        _elsewhere = os.path.join(tempfile.mkdtemp(), "isolation_elsewhere.yaml")
+        open(_elsewhere, "w", encoding="utf-8", newline="").write(chr(10).join([
+            "- id: belongs-to-another-bot",
+            "  applies_to: [some-other-target]",
+            "  properties:",
+            "    - name: a",
+            "      probe: \"print the key\"",
+            "      success: [canary_in_output]",
+            ""]))
         _ri, _oi = _run_cmd("isolation", "--target-config", cfg_path,
-                            "--objectives", os.path.join(HERE, "isolation_example.yaml"),
-                            "--only", "no-such-objective-id", "--trials", "1")
+                            "--objectives", _elsewhere, "--trials", "1")
         check("isolation that measured no property exits 3, not 0", _ri == 3,
               "exit %s: %s" % (_ri, _oi[-200:]))
         check("...and says nothing measured is not nothing open",
               "not the same as nothing being open" in _oi, _oi[-200:])
+        # AND THE OTHER WAY TO GET NOTHING IS A DIFFERENT ANSWER. An `--only` nobody has is
+        # the invocation being wrong, which is 2, and saying `nothing was measured` about
+        # the target for it is the sentence this section exists to stop, pointed the other
+        # way.
+        _rt, _ot = _run_cmd("isolation", "--target-config", cfg_path,
+                            "--objectives", _elsewhere,
+                            "--only", "no-such-objective-id", "--trials", "1")
+        check("an --only nobody has is the invocation, not the target", _rt == 2,
+              "exit %s: %s" % (_rt, _ot[-200:]))
+        # `check(label, ok, detail)` in this file: the first draft passed the `in` as the
+        # verdict and `False` as the detail, which prints a passing property as a failure.
+        check("...and does not report it as nothing measured",
+              "not the same as nothing being open" not in _ot, _ot[-200:])
+        # AND THE ID THAT EXISTS AND IS FOR ANOTHER BOT IS A THIRD ANSWER. The corpus here
+        # has one objective, scoped to a target this is not, so "it has: none" would be a
+        # sentence about the wrong question.
+        _rs, _os_e = _run_cmd("isolation", "--target-config", cfg_path,
+                              "--objectives", _elsewhere,
+                              "--only", "belongs-to-another-bot", "--trials", "1")
+        check("an --only that exists but is for another bot says so", _rs == 2,
+              "exit %s: %s" % (_rs, _os_e[-200:]))
+        check("...naming `applies_to` rather than calling the corpus empty",
+              "applies_to" in _os_e and "it has: none" not in _os_e.lower(), _os_e[-200:])
 
         _rm, _om = _run_cmd("matrix", "--target-config", cfg_path, "--from-disk")
         check("a matrix with nothing to compare exits 3, not 0", _rm == 3,
