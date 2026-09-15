@@ -226,6 +226,20 @@ def _pairs(raw):
 
 
 
+_DEFAULT_PORT = {"http": 80, "https": 443}
+
+
+def _effective_port(parts):
+    """The port a URL really speaks to, default included. -> int or None.
+
+    Written out because `urlparse(...).port` is None for `http://h` and 80 for
+    `http://h:80`, and a rule comparing those two directly calls the same origin a move.
+    """
+    if parts.port:
+        return parts.port
+    return _DEFAULT_PORT.get((parts.scheme or "").lower())
+
+
 class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
     """Allow a redirect only if it keeps the same host and still passes the network policy.
 
@@ -237,6 +251,20 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
     Same host, and re-checked against the policy anyway: `http://bot.example` redirecting to
     `https://bot.example` is an ordinary upgrade, and a host that resolves into private space on
     the second hop is not.
+
+    THE HOST IS NOT THE ORIGIN, and for its first version this rule compared only the
+    hostname. A 302 from `127.0.0.1:8080` to `127.0.0.1:9000` passed it: same host, a
+    completely different service, chosen by the system under test. Walked end to end with
+    two scripted servers -- the probe landed on the second one, its reply was judged as the
+    target's answer, and the run exited 0. On a machine running a practice fleet, or an
+    operator's laptop, the ports next door are the other applications; on a hosted target
+    they are whatever is not meant to be public. `authorization.origin_of` is what this
+    project means by identity everywhere else, and an origin is scheme, host AND port.
+
+    AND A DOWNGRADE IS NOT AN UPGRADE. The paragraph above blesses http -> https and the
+    code read neither: https -> http was allowed, which puts the request and every header
+    configured with it on the wire in clear, on the target's instruction. The direction is
+    the whole point, so it is now the only scheme change permitted.
     """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -247,6 +275,22 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
                 req.full_url, code,
                 f"redirect to a different host refused: {old.hostname} -> {new.hostname}. "
                 f"The target does not choose where this request goes.",
+                headers, fp)
+        _old_s, _new_s = (old.scheme or "").lower(), (new.scheme or "").lower()
+        _upgrade = (_old_s, _new_s) == ("http", "https")
+        if _old_s != _new_s and not _upgrade:
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                f"redirect to a different scheme refused: {_old_s} -> {_new_s}. "
+                f"An upgrade to https is the only move the target gets to make.",
+                headers, fp)
+        _old_p, _new_p = _effective_port(old), _effective_port(new)
+        if _new_p != _old_p and not (_upgrade and _old_p == 80 and _new_p == 443):
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                f"redirect to a different port refused: {old.hostname}:{_old_p} -> "
+                f"{new.hostname}:{_new_p}. A port is a different service, and the target "
+                f"does not choose where this request goes.",
                 headers, fp)
         try:
             import authorization as _az

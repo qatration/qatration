@@ -1100,6 +1100,86 @@ def main():
             check("a redirect to %s is refused" % _why,
                   "different host refused" in _err, _err[:120])
 
+        # A DIFFERENT PORT IS A DIFFERENT SERVICE, and for its first version this rule
+        # compared only the hostname. Driven with a SECOND SERVER rather than asserted
+        # from an error string, because the thing that was wrong was that the probe
+        # arrived: walked end to end, the reply from the second server was judged as the
+        # target's answer and the run exited 0.
+        _second = []
+
+        class _Elsewhere(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def _said(self):
+                _second.append(self.path)
+                _b = json.dumps({"reply": "the other service answered"}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            do_GET = do_POST = _said
+
+        _esrv = ThreadingHTTPServer(("127.0.0.1", 0), _Elsewhere)
+        _eport = _esrv.server_address[1]
+        threading.Thread(target=_esrv.serve_forever, daemon=True).start()
+        try:
+            _to["u"] = "http://127.0.0.1:%d/moved" % _eport
+            _p2 = _rt.send("hi")
+            _err2 = str(getattr(_p2, "error", None) or "")
+            check("a redirect to another port on the same host is refused",
+                  "different port refused" in _err2, _err2[:140])
+            check("...and the other service was never contacted at all",
+                  _second == [], str(_second))
+            check("...and its reply was not judged as the target's",
+                  "the other service answered" not in (_p2.output or ""),
+                  (_p2.output or "")[:80])
+        finally:
+            _esrv.shutdown()
+
+        # AND A DOWNGRADE IS NOT AN UPGRADE. The rule's own paragraph blesses
+        # http -> https, and the code read neither direction: https -> http put the
+        # request and every configured header on the wire in clear, chosen by the target.
+        # Asserted through `redirect_request` directly, since a real TLS hop needs a
+        # certificate this suite has no business minting.
+        import targets_http as _th_r
+        from email.message import Message as _EmailMessage
+
+        def _hop(frm, to):
+            # A REAL Request, because the permitted path hands one to the base handler and
+            # a stand-in that only carries `full_url` fails there for a reason that has
+            # nothing to do with this rule -- which is a check that cannot tell allowed
+            # from broken.
+            import urllib.request as _ur_r
+            try:
+                _th_r._GuardedRedirect().redirect_request(
+                    _ur_r.Request(frm, method="POST"), None, 302, "Found",
+                    _EmailMessage(), to)
+                return ""
+            except Exception as _e_r:
+                return str(_e_r)
+
+        check("https downgraded to http is refused",
+              "different scheme refused" in _hop("https://bot.example/a",
+                                                 "http://bot.example/b"),
+              _hop("https://bot.example/a", "http://bot.example/b")[:140])
+        # AND THE UPGRADE THE PARAGRAPH PROMISES STILL WORKS, default ports and all: 80
+        # and 443 are the same origin moving in the direction this rule exists to allow.
+        check("...while http upgraded to https is still followed",
+              _hop("http://bot.example/a", "https://bot.example/b") == "",
+              _hop("http://bot.example/a", "https://bot.example/b")[:140])
+        check("...and a port written out is not read as a move",
+              _hop("http://bot.example:80/a", "http://bot.example/b") == "",
+              _hop("http://bot.example:80/a", "http://bot.example/b")[:140])
+        check("...while an upgrade that also changes port is not a free ride",
+              "different port refused" in _hop("http://bot.example:8080/a",
+                                               "https://bot.example:9443/b"),
+              _hop("http://bot.example:8080/a", "https://bot.example:9443/b")[:140])
+
         # AND NOT BY REFUSING EVERYTHING. A guard that blocked same-host redirects too
         # would pass every check above and break ordinary endpoints that redirect /chat
         # to /chat/.
