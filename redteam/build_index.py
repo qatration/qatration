@@ -141,19 +141,17 @@ def provenance():
     headline of "279 findings across 30 targets" invites a reader to assume the first number
     is about software in the world, and most of it is not.
     """
-    import glob, yaml, os
+    # THROUGH THE ONE ENUMERATION. This kept a sixth copy of the loop, and it differed
+    # from `configs_by_name` in both directions: it swallowed a config it could not parse
+    # -- which drops that target's provenance and so counts it as `unstated` on the page,
+    # the under-reporting `fleet_names` was written against -- and it did NOT ask whether
+    # what parsed was a mapping, so `c.get("provenance")` on a config reading `- name:
+    # listy` was `AttributeError` out of a page builder.
+    import os
+    from workspace import configs_by_name as _by_name
     here = os.path.dirname(os.path.abspath(__file__))
-    out = {}
-    for fp in target_configs(here):
-        try:
-            c = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        except Exception:
-            continue
-        from workspace import config_name as _config_name
-        name = _config_name(fp, c)
-        out.setdefault(name, (c.get("provenance") or "unstated",
-                              c.get("provenance_note") or ""))
-    return out
+    return {name: (c.get("provenance") or "unstated", c.get("provenance_note") or "")
+            for name, (_fp, c) in _by_name(here).items()}
 
 
 def classify(rows):

@@ -1214,7 +1214,23 @@ def configs_by_name(directory=None, collisions=None):
     directory = directory or _os.path.dirname(_os.path.abspath(__file__))
     out = {}
     for fp in target_configs(directory):
-        cfg = _yaml.safe_load(open(fp, encoding="utf-8")) or {}
+        cfg = _yaml.safe_load(open(fp, encoding="utf-8"))
+        # AND WHAT PARSED IS A CONFIG. `config_name` below already asks -- it falls back to
+        # the filename for a document that is not a mapping -- and then this handed that
+        # same document on, so the enumeration half-knew and the crash landed three modules
+        # away. Walked with one config reading `- name: listy` beside a working one:
+        # `compare` and `fixes` answered `AttributeError: 'list' object has no attribute
+        # 'get'`, `index` and `coverage` the same, and the first two did it with EXIT 1,
+        # which `docs/ci.md` reserves for a finding.
+        #
+        # REFUSED, NOT SKIPPED, which is what `target_configs` does one frame up for a
+        # `QATRATION_CONFIGS` path that is not a file: "Nothing was read, rather than
+        # reading less than asked." A fleet quietly short one member is the shape this
+        # project is named after -- `fleet_names` below says the same thing about a config
+        # nobody can parse, and this is the other half of that answer.
+        bad = wrong_shape(cfg, "target config", fp)
+        if bad:
+            raise SystemExit("ABORT -- " + bad + " Nothing was read.")
         name = config_name(fp, cfg)
         if name in out:
             if collisions is not None:

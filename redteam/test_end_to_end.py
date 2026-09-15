@@ -367,6 +367,42 @@ oracle_context:
             finally:
                 shutil.rmtree(_w, ignore_errors=True)
 
+        # ONE CONFIG IN THE FLEET THAT PARSES AND IS NOT A CONFIG. Four commands scan
+        # every target config to build their page, and each of them did `.get` on whatever
+        # came back: `- name: listy` in the fleet ended `index`, `compare`, `fixes` and
+        # `coverage` with `AttributeError: 'list' object has no attribute 'get'`.
+        #
+        # AND TWO OF THEM DID IT WITH EXIT 1. `defense_report` reads the configs while it
+        # is being IMPORTED, and `cli.py` imported the module before `run_command` had
+        # wrapped anything, so the translation that exists precisely so a crash is not
+        # read as a breach was one frame too late to see it. Walked here rather than
+        # asserted from the source, for the reason the paragraph above gives.
+        _brk = tempfile.mkdtemp()
+        try:
+            _bad_cfg = os.path.join(_brk, "targets_notaconfig.yaml")
+            with open(_bad_cfg, "w", encoding="utf-8", newline="") as _f_b:
+                _f_b.write("- name: listy" + chr(10))
+            for _cmd_b in ("index", "compare", "fixes", "coverage"):
+                _w_b = tempfile.mkdtemp()
+                try:
+                    _r_b = subprocess.run(
+                        [sys.executable, os.path.join(HERE, "cli.py"), _cmd_b],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(env, QATRATION_OUT=_w_b, QATRATION_CONFIGS=_bad_cfg),
+                        cwd=os.path.dirname(HERE))
+                    _out_b = (_r_b.stdout or "") + (_r_b.stderr or "")
+                finally:
+                    shutil.rmtree(_w_b, ignore_errors=True)
+                check("`%s` does not crash on a config that is not a config" % _cmd_b,
+                      "Traceback (most recent call last)" not in _out_b,
+                      _out_b[-200:])
+                check("...and does not report it to a pipeline as a finding",
+                      _r_b.returncode == 2, "exit %s" % _r_b.returncode)
+                check("...and names the file it could not use",
+                      "targets_notaconfig.yaml" in _out_b, _out_b[-200:])
+        finally:
+            shutil.rmtree(_brk, ignore_errors=True)
+
         # SCOPED AWAY, NOT MISTYPED. This reached the state through `--only
         # no-such-objective-id`, which is now refused as an invocation -- a flag with one
         # letter wrong is a typo and not an answer about the target, and reporting it as

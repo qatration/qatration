@@ -159,7 +159,6 @@ def main(argv=None):
         return 2
 
     module_name = COMMANDS[name][0]
-    module = importlib.import_module(module_name)
 
     # The module parses `sys.argv` itself, so it has to see its own name in slot 0 or argparse
     # prints "usage: qatration" for a command called "qatration run" and the reader is told to
@@ -179,7 +178,14 @@ def main(argv=None):
         # repository the default config works, so the path is invisible exactly where the
         # code is written. That argument applies to the file door word for word.
         from workspace import run_command as _run_command
-        return _run_command(module.main)
+        # THE IMPORT IS INSIDE THE TRANSLATION, because a module body is code the command
+        # runs. `defense_report` computes the fleet's oracle contexts at import, and
+        # `compare` and `fixes` therefore did their first read of the target configs before
+        # `run_command` had wrapped anything: one config that parses and is not a mapping
+        # ended both with an `AttributeError` AND EXIT 1, the code this tool documents as a
+        # finding. The translation existed and the crash walked past it, which is the same
+        # defect as the one the comment above records, one frame earlier.
+        return _run_command(lambda: importlib.import_module(module_name).main())
     finally:
         sys.argv = saved
 

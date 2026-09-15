@@ -138,14 +138,14 @@ def _declared_pairs():
     together, and the strongest measurement here was missing from the page entirely.
     A declared relationship also carries WHAT changed, which a suffix cannot.
     """
-    # `target_configs`, not a raw glob — the thirteenth call site. A temporary e2e config
-    # left in this directory by a suite that is still running would enter the A/B pairing.
-    from target import target_configs as _tc
+    # `configs_by_name`, not a raw glob and no longer a loop of its own — the thirteenth
+    # call site of the enumeration. A temporary e2e config left in this directory by a
+    # suite that is still running would enter the A/B pairing; and `cfg.get` here was one
+    # of the four places a config that parses and is not a mapping ended a command with an
+    # AttributeError.
+    from workspace import configs_by_name as _by_name
     pairs = {}
-    for fp in _tc(os.path.dirname(os.path.abspath(__file__))):
-        cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-        from workspace import config_name as _config_name
-        name = _config_name(fp, cfg)
+    for name, (fp, cfg) in _by_name(os.path.dirname(os.path.abspath(__file__))).items():
         if cfg.get("compare_with"):
             pairs[name] = (cfg["compare_with"], cfg.get("compare_label")
                            or f"{name} vs {cfg['compare_with']}")

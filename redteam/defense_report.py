@@ -1517,16 +1517,16 @@ def main():
     # repository to be broken; counting a finding on one of them beside a finding on software
     # somebody else shipped is counting your own homework. `provenance` exists in every target
     # config for exactly this and the aggregate had never read it.
-    prov_of = {}
-    try:
-        import yaml as _yaml
-        from target import target_configs as _tc
-        for _fp in _tc(os.path.dirname(os.path.abspath(__file__))):
-            _c = _yaml.safe_load(open(_fp, encoding="utf-8")) or {}
-            if _c.get("name"):
-                prov_of[_c["name"]] = _c.get("provenance", "unstated")
-    except Exception:
-        prov_of = {}
+    # THROUGH THE ONE ENUMERATION, and without the blanket `except` that used to wrap it.
+    # That `except Exception: prov_of = {}` caught the `AttributeError` a config which is
+    # not a mapping raises, and answered it with an empty map -- so every target became
+    # `unstated`, `own` became zero, and the sentence below reported the whole breach count
+    # as software in the world. A number that means `we could not read the fleet` printed
+    # in the place reserved for `we read it and none of it was ours`.
+    from workspace import configs_by_name as _by_name
+    prov_of = {name: (c.get("provenance") or "unstated")
+               for name, (_fp, c) in
+               _by_name(os.path.dirname(os.path.abspath(__file__))).items()}
     own = sum(1 for f in findings if prov_of.get(f[0]) == "practice")
     world = n_breaches - own
 

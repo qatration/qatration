@@ -1672,6 +1672,32 @@ def main():
             _f9.write("name: gamma\noracle_context:\n")
         check("an empty oracle_context is a mapping, not None",
               _ocs(_d9)["gamma"] == {}, repr(_ocs(_d9).get("gamma")))
+
+        # AND A DOCUMENT THAT PARSES IS NOT YET A CONFIG. `config_name` already asked --
+        # it falls back to the filename for anything that is not a mapping -- and this map
+        # handed the document itself on, so the crash landed in whoever did `.get` next:
+        # `oracle_contexts` for `compare`, `fixes` and `coverage`, `provenance` for
+        # `index`. Walked with `- name: listy` beside a working config, all four answered
+        # `AttributeError: 'list' object has no attribute 'get'`.
+        for _body9, _what9 in (("- name: listy\n", "a list"),
+                               ("just a sentence\n", "a string"),
+                               ("7\n", "a number"),
+                               ("", "empty")):
+            _bad9 = os.path.join(_d9, "targets_broken.yaml")
+            with open(_bad9, "w", encoding="utf-8") as _f9:
+                _f9.write(_body9)
+            _said9 = ""
+            try:
+                _cbn(_d9)
+            except SystemExit as _e9:
+                _said9 = str(_e9)
+            check("a config that is %s is refused, not handed on" % _what9,
+                  _said9.startswith("ABORT"), _said9[:90] or "nothing was raised")
+            check("...and the refusal names the file",
+                  "targets_broken.yaml" in _said9, _said9[:90])
+        os.remove(_bad9)
+        check("...and the map works again once it is gone",
+              sorted(_cbn(_d9)) == ["alpha", "beta", "gamma"], str(sorted(_cbn(_d9))))
     finally:
         __import__("shutil").rmtree(_d9, ignore_errors=True)
 
@@ -1686,6 +1712,17 @@ def main():
         ("detector_coverage.py", "contexts"),
         ("defense_report.py", "_contexts"),
         ("test_benign.py", "contexts"),
+        # THE THREE THAT KEPT THEIR OWN LOOP. Each opened the configs itself, and each
+        # differed from this map in a way that cost something: `provenance` swallowed a
+        # config it could not parse, so that target's provenance read `unstated` on the
+        # index; `declared_pairs` crashed on one that is not a mapping; and
+        # `coverage`'s aggregate in `defense_report` matched on `cfg["name"]` alone, so
+        # the eleven shipped configs that omit the key were invisible to it and their
+        # breaches counted as software in the world. That sentence published 251 on our
+        # own bots and 184 on everyone else's; it is 373 and 62.
+        ("build_index.py", "provenance"),
+        ("compare_targets.py", "_declared_pairs"),
+        ("defense_report.py", "main"),
     ]
     # NAMES, NOT PROSE. Written first as `is the string in the function`, it read the
     # docstring: emptying `rejudge.contexts` to `return {}` left the paragraph explaining
