@@ -155,6 +155,50 @@ def same_run(a, b):
             and a.get("rows") == b.get("rows"))
 
 
+def unusable_snapshot(rec):
+    """-> why this timeline line is not a snapshot, or None.
+
+    `load` already tells a torn line from a whole one and counts it. A line that PARSES and
+    is not a record went into the list as itself, and `diff` reads it by key. Walked, one
+    line at a time, in a timeline whose first entry is real:
+
+        [1, 2]        TypeError: list indices must be integers
+        "hello"       TypeError: string indices must be integers
+        7             TypeError: 'int' object is not subscriptable
+        null          TypeError: 'NoneType' object is not subscriptable
+        {"when": 7}   KeyError: 'rows'
+
+    Five of five as "This is a bug in qatration, not a finding about your target and not a
+    problem with your config" -- about a file this tool writes itself, one line per run,
+    appended and never rewritten.
+
+    `rows` IS WHAT EVERY READER OF A SNAPSHOT NEEDS, and the only thing required here.
+    `diff` reads it three times and as a mapping: `set(cur["rows"])`, `cur["rows"].get(aid)`,
+    `cur["rows"].items()`. Without one a line cannot be compared with anything, which is the
+    whole of what a timeline is for.
+
+    THE LISTING SUBSCRIPTS THREE MORE -- `r["run"]`, `r["broke"]`, `r["attacks"]` -- and they
+    are NOT required, for the reason `workspace._unusable_results` gives about the same
+    choice: a key one consumer reads is answered where it is read, because refusing the file
+    for it would make one reader's need cost the others. A run whose count is missing is
+    still a run with a date and a row set, and the listing says which number it does not
+    have rather than refusing to print the line. Found by driving the report over a fixture
+    in this repository's own suite that wrote every field but that one.
+
+    Everything else is read with `.get`, and a snapshot written before a field existed has to
+    keep loading: the rule this module already keeps for `h`, `inert` and `scoped`.
+    """
+    if not isinstance(rec, dict):
+        return ("the line is %s, not a snapshot: every entry is one run, read by key"
+                % ("nothing" if rec is None else "a %s" % type(rec).__name__))
+    if not isinstance(rec.get("rows"), dict):
+        return ("the line has no `rows` mapping (%s): `diff` reads every attack id out of "
+                "it, so a line without one cannot be compared with anything"
+                % ("absent" if rec.get("rows") is None
+                   else "it is a %s" % type(rec["rows"]).__name__))
+    return None
+
+
 def load(target, unreadable=None):
     """The timeline for one target, newest last. Corrupt lines are skipped and COUNTED.
 
@@ -174,10 +218,22 @@ def load(target, unreadable=None):
         if not line:
             continue
         try:
-            out.append(json.loads(line))
+            rec = json.loads(line)
         except Exception as e:
             if unreadable is not None:
                 unreadable.append((n, f"{type(e).__name__}: {e}"))
+            continue
+        # AND A LINE THAT PARSED AND IS NOT A SNAPSHOT IS UNREADABLE TOO. See
+        # `unusable_snapshot`: it reaches `diff` as itself and is read by key there, which
+        # is a traceback about a file this tool writes. The same channel and the same line
+        # number as a torn line, for the reason this docstring already gives -- skipping it
+        # in silence makes the timeline shorter than it is.
+        why = unusable_snapshot(rec)
+        if why:
+            if unreadable is not None:
+                unreadable.append((n, why))
+            continue
+        out.append(rec)
     return out
 
 
@@ -275,7 +331,8 @@ def diff(target):
         _why = ("need two runs to compare" if len(runs) == 1
                 else "no line of this target's stored timeline could be read" if torn
                 else "no runs recorded for this target")
-        return {"runs": len(runs), "reason": _why, "torn": len(torn)}
+        return {"runs": len(runs), "reason": _why, "torn": len(torn),
+                "torn_why": [f"line {n}: {w}" for n, w in torn[:3]]}
     prev, cur = runs[-2], runs[-1]
 
 
@@ -425,7 +482,9 @@ def diff(target):
     return {"runs": len(runs), "prev": prev["run"], "cur": cur["run"],
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
             "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
-            "torn": len(torn), "confounds": confounds}
+            "torn": len(torn),
+            "torn_why": [f"line {n}: {w}" for n, w in torn[:3]],
+            "confounds": confounds}
 
 
 def _streaks(target):
@@ -592,7 +651,17 @@ def main():
                 if r.get("note"):
                     mark = (" (backfilled)" if r.get("dated_by_run")
                             else " (backfilled, dated by the file)")
-                print(f"  {r['run']}  {r['broke']:>3}/{r['attacks']} broken  "
+                # `.get`, NOT A SUBSCRIPT. These three are read here and nowhere else,
+                # so `unusable_snapshot` leaves them optional and this says which number it
+                # does not have -- a run with a date and a row set is still a run. A
+                # subscript here cost a `KeyError: 'broke'` over a snapshot missing one
+                # field, which is a traceback about a file this tool writes itself.
+                _broke = r.get("broke")
+                _att = r.get("attacks")
+                _count = ("%3s/%s" % (_broke, _att) if _broke is not None
+                          and _att is not None else "  ?/%s" % (_att if _att is not None
+                                                                else "?"))
+                print(f"  {r.get('run') or '(undated run)'}  {_count} broken  "
                       f"{r.get('model') or ''}{mark}")
         if "reason" in d:
             _tail = (" — a single run is a snapshot, not a trend"
@@ -601,6 +670,13 @@ def main():
             if d.get("torn"):
                 print(f"  {d['torn']} line(s) could not be read, so this is not a "
                       f"statement about how often this target has been swept")
+                # AND WHICH LINE, AND WHY. A count is enough to act on when the line is
+                # torn -- open the file and look for broken JSON. It is not enough for the
+                # cause added beside that one: a line that PARSES and is not a snapshot
+                # looks correct to a reader, who would go hunting for a syntax error that
+                # is not there.
+                for _w in d.get("torn_why") or []:
+                    print(f"    {_w}")
             continue
         for label, key in (("REGRESSED", "regressed"), ("new", "new"),
                            ("fixed", "fixed"), ("still open", "open"),

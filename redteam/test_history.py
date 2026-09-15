@@ -941,10 +941,16 @@ def main():
     d = tempfile.mkdtemp()
     os.makedirs(os.path.join(d, "history"), exist_ok=True)
 
-    def snap(when, v):
-        return json.dumps({"run": when, "target": "t", "model": "m", "trials": 3,
-                           "attacks": 1,
-                           "rows": {"x": {"v": v, "rate": "3/3", "fired": []}}})
+    def snap(when, v, broke=True):
+        # `broke` IS WHAT THE ENGINE WRITES and this fixture did not have it, which is how
+        # the listing's subscript was found: `history --target t` over a timeline built from
+        # it came back `KeyError: 'broke'`. Optional here, so the same helper can build the
+        # snapshot that is missing one.
+        _s = {"run": when, "target": "t", "model": "m", "trials": 3, "attacks": 1,
+              "rows": {"x": {"v": v, "rate": "3/3", "fired": []}}}
+        if broke:
+            _s["broke"] = 1 if v in ("EXPLOITED", "PARTIAL") else 0
+        return json.dumps(_s)
 
     with open(os.path.join(d, "history", "t.jsonl"), "w", encoding="utf-8") as f:
         f.write(snap("2026-01-01 00:00:00", "EXPLOITED") + "\n")
@@ -964,6 +970,127 @@ def main():
     check("...and is reported with its line number", bool(torn) and torn[0][0] == 2, str(torn))
     check("...and the diff says the history behind it is incomplete",
           any("could not be read" in c for c in dd["confounds"]), str(dd["confounds"]))
+
+    # AND A LINE THAT PARSED AND IS NOT A SNAPSHOT IS THE OTHER HALF. `load` told a torn
+    # line from a whole one and counted it; a line that PARSES went into the list as itself
+    # and `diff` read it by key. Walked, one line at a time, in a timeline whose first entry
+    # is real:
+    #
+    #     [1, 2]        TypeError: list indices must be integers
+    #     "hello"       TypeError: string indices must be integers
+    #     7             TypeError: 'int' object is not subscriptable
+    #     null          TypeError: 'NoneType' object is not subscriptable
+    #     {"when": 7}   KeyError: 'rows'
+    #
+    # Five of five as "This is a bug in qatration, not a finding about your target and not
+    # a problem with your config", about a file this tool writes itself.
+    for _label, _bad in (("a list", "[1, 2]"), ("a bare string", '"hello"'),
+                         ("a number", "7"), ("nothing at all", "null"),
+                         ("a mapping with no rows", '{"when": 7}')):
+        _d3 = tempfile.mkdtemp()
+        os.makedirs(os.path.join(_d3, "history"), exist_ok=True)
+        with open(os.path.join(_d3, "history", "t.jsonl"), "w", encoding="utf-8") as _f4:
+            _f4.write(snap("2026-01-01 00:00:00", "EXPLOITED") + "\n")
+            _f4.write(_bad + "\n")
+            _f4.write(snap("2026-01-03 00:00:00", "EXPLOITED") + "\n")
+        _r3, _h3 = H.OUT, H.HIST
+        try:
+            H.OUT, H.HIST = _d3, os.path.join(_d3, "history")
+            _torn3 = []
+            _runs3 = H.load("t", _torn3)
+            _crash3 = ""
+            try:
+                _dd3 = H.diff("t")
+            except Exception as _e3:
+                _dd3, _crash3 = {}, "%s: %s" % (type(_e3).__name__, _e3)
+        finally:
+            H.OUT, H.HIST = _r3, _h3
+            shutil.rmtree(_d3, ignore_errors=True)
+        check("a timeline line that is %s does not reach the diff" % _label,
+              not _crash3, _crash3)
+        check("...and costs its own run and not the timeline (%s)" % _label,
+              len(_runs3) == 2, str(len(_runs3)))
+        check("...and is counted with its line number (%s)" % _label,
+              bool(_torn3) and _torn3[0][0] == 2, str(_torn3))
+        # AND THE REASON, WHICH A COUNT CANNOT CARRY HERE. A torn line is found by opening
+        # the file and looking for broken JSON; a line that parses looks correct, and a
+        # reader told only "could not be read" goes hunting for a syntax error that is not
+        # there.
+        check("...and says why, not just that it could not be read (%s)" % _label,
+              bool(_torn3) and ("not a snapshot" in _torn3[0][1]
+                                or "no `rows` mapping" in _torn3[0][1]),
+              str(_torn3[:1]))
+        check("...and the diff still says the history behind it is incomplete (%s)" % _label,
+              any("could not be read" in c for c in _dd3.get("confounds") or []),
+              str(_dd3.get("confounds")))
+    # AND THE REPORT PRINTS THE REASON, which is the half a rule test cannot see: the
+    # first version of this grepped the source for the field name, and deleting either the
+    # line that builds it or the loop that prints it left that green.
+    import io as _io_r, contextlib as _cx_r
+    _d4 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(_d4, "history"), exist_ok=True)
+    with open(os.path.join(_d4, "history", "t.jsonl"), "w", encoding="utf-8") as _f5:
+        _f5.write(snap("2026-01-01 00:00:00", "EXPLOITED") + "\n")
+        _f5.write('{"when": 7}\n')
+    _r4, _h4, _argv4 = H.OUT, H.HIST, sys.argv[:]
+    _buf4 = _io_r.StringIO()
+    try:
+        H.OUT, H.HIST = _d4, os.path.join(_d4, "history")
+        sys.argv = ["history", "--target", "t"]
+        with _cx_r.redirect_stdout(_buf4):
+            H.main()
+    finally:
+        H.OUT, H.HIST, sys.argv = _r4, _h4, _argv4
+        shutil.rmtree(_d4, ignore_errors=True)
+    _page4 = _buf4.getvalue()
+    check("the report says a line could not be read", "could not be read" in _page4,
+          _page4[-300:])
+    check("...and names the line and the reason under it",
+          "line 2:" in _page4 and "no `rows` mapping" in _page4, _page4[-300:])
+
+    # AND THE THREE KEYS THE LISTING READS ARE ANSWERED WHERE IT READS THEM. They are not
+    # required of a snapshot -- refusing the whole line for a count would make one reader's
+    # need cost the other -- so a run missing one still prints, saying which number it does
+    # not have. A subscript here cost a `KeyError: 'broke'` over a fixture in this suite.
+    _d5 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(_d5, "history"), exist_ok=True)
+    with open(os.path.join(_d5, "history", "t.jsonl"), "w", encoding="utf-8") as _f6:
+        _f6.write(snap("2026-01-01 00:00:00", "EXPLOITED", broke=False) + chr(10))
+        _f6.write(snap("2026-01-02 00:00:00", "DEFENDED", broke=False) + chr(10))
+    _r5, _h5, _argv5 = H.OUT, H.HIST, sys.argv[:]
+    _buf5 = _io_r.StringIO()
+    _crash5 = ""
+    try:
+        H.OUT, H.HIST = _d5, os.path.join(_d5, "history")
+        sys.argv = ["history", "--target", "t"]
+        with _cx_r.redirect_stdout(_buf5):
+            H.main()
+    except Exception as _e5:
+        _crash5 = "%s: %s" % (type(_e5).__name__, _e5)
+    finally:
+        H.OUT, H.HIST, sys.argv = _r5, _h5, _argv5
+        shutil.rmtree(_d5, ignore_errors=True)
+    _page5 = _buf5.getvalue()
+    check("a run that recorded no count still lists", not _crash5, _crash5)
+    check("...and both runs are still there", "(2 run(s))" in _page5, _page5[:200])
+    check("...and the line says which number it does not have",
+          "?/1 broken" in _page5, _page5[:300])
+    # NOT THE SNAPSHOTS THIS ENGINE WRITES, or the rule refuses every timeline in `out/`.
+    import glob as _g_h
+    _refused_h = {}
+    for _fp in sorted(_g_h.glob(os.path.join(HERE, "..", "out", "history", "*.jsonl"))):
+        for _n, _line in enumerate(open(_fp, encoding="utf-8"), 1):
+            if not _line.strip():
+                continue
+            _why_h = H.unusable_snapshot(json.loads(_line))
+            if _why_h:
+                _refused_h[os.path.basename(_fp) + ":" + str(_n)] = _why_h
+    check("no snapshot this repository ships is refused by the rule", not _refused_h,
+          str(_refused_h))
+    check("...over a real number of them",
+          sum(1 for _fp in _g_h.glob(os.path.join(HERE, "..", "out", "history", "*.jsonl"))
+              for _l in open(_fp, encoding="utf-8") if _l.strip()) >= 20,
+          "too few timelines to mean anything")
 
     # --- THE LAST LINE OF A RUN, WHICH IS THE ONE A PERSON READS ------------------------
     #
