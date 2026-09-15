@@ -972,6 +972,42 @@ def check_refusal(check):
     check("...over every corpus that ships", _seen >= 40, str(_seen))
 
 
+def _known_targets_reads_the_fleet(check):
+    """`lint` resolves target names through the one map, and does not crash on a fleet
+    with a config that parses and is not a config.
+
+    It kept its own loop: `config_name(path, {})` for the filename fallback, then
+    `cfg.get("name", base)` on the document -- the same rule in two halves, and the second
+    half is a `.get` on whatever parsed. Walked: `qatration lint --attacks a.yaml` with
+    `- name: listy` in `QATRATION_CONFIGS` answered `AttributeError: 'list' object has no
+    attribute 'get'` and exit 2 from the command that exists to report mistakes.
+    """
+    import subprocess as _sp_k, sys as _sys_k, tempfile as _tf_k, shutil as _sh_k
+    _d = _tf_k.mkdtemp()
+    try:
+        _bad = os.path.join(_d, "targets_notaconfig.yaml")
+        with open(_bad, "w", encoding="utf-8") as _f:
+            _f.write("- name: listy" + chr(10))
+        _atk = os.path.join(_d, "a.yaml")
+        with open(_atk, "w", encoding="utf-8") as _f:
+            _f.write(chr(10).join(["- id: k-1", "  category: c", "  delivery: direct",
+                                   "  text: hello", "  success: [canary_in_output]", ""]))
+        _p = _sp_k.run([_sys_k.executable, os.path.join(HERE, "cli.py"), "lint",
+                        "--attacks", _atk],
+                       capture_output=True, text=True, timeout=300,
+                       cwd=os.path.dirname(HERE),
+                       env=dict(os.environ, QATRATION_CONFIGS=_bad,
+                                QATRATION_OUT=_d, PYTHONDONTWRITEBYTECODE="1",
+                                PYTHONIOENCODING="utf-8"))
+        _out = (_p.stdout or "") + (_p.stderr or "")
+    finally:
+        _sh_k.rmtree(_d, ignore_errors=True)
+    check("lint does not crash on a fleet holding a config that is not a config",
+          "Traceback (most recent call last)" not in _out, _out[-200:])
+    check("...and names the file it could not use",
+          "targets_notaconfig.yaml" in _out, _out[-200:])
+
+
 def main():
     fails, checks = [], 0
 
@@ -989,6 +1025,8 @@ def main():
     # applied, reported as one that was. `paired_with` misspelled unpairs an A/B comparison;
     # `plants` misspelled makes a finding unattributable. Only `success` was covered, and
     # only because `lint` warns when an attack has neither `success` nor `partial`.
+    _known_targets_reads_the_fleet(check)
+
     from lint_arsenal import attack_keys_read, WRITTEN_NOT_READ
     _ak = attack_keys_read()
     check("the attack keys the engine reads can be enumerated", len(_ak) > 10, str(len(_ak)))

@@ -28,13 +28,14 @@ from workspace import arsenal_files as _arsenal_files
 def known_targets():
     """Every runnable target name: a config's explicit `name`, else its basename
     (no-name configs use the adapter's default, which equals the basename)."""
-    names = set()
-    for cfg_path in target_configs(ROOT):
-        from workspace import config_name as _config_name
-        base = _config_name(cfg_path, {})
-        cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
-        names.add(cfg.get("name", base))
-    return names
+    # THROUGH `workspace.configs_by_name`, which answers exactly this. The loop here
+    # reimplemented it and got the shape question wrong: `cfg.get` on a config reading
+    # `- name: listy` ended `qatration lint` with `AttributeError: 'list' object has no
+    # attribute 'get'`, out of the command whose whole job is to say what is wrong with a
+    # corpus. It also called `config_name` with `{}` to get the filename fallback and then
+    # asked the config for `name` itself, which is the same rule computed in two halves.
+    from workspace import configs_by_name as _by_name
+    return set(_by_name(ROOT))
 
 
 # RFC 2606 RESERVED SPACE, and nothing else. A host inside a payload is where this tool asks

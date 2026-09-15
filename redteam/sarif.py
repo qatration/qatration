@@ -162,19 +162,16 @@ def build(results, target_config=None, out_dir=None):
     # So: the named config, else a config of that name that actually exists — `target_configs`
     # reads QATRATION_CONFIGS, so one kept outside this package resolves too — else nothing.
     def _config_for(name):
-        for fp in target_configs():
-            try:
-                cfg = yaml.safe_load(open(fp, encoding="utf-8")) or {}
-            except Exception:
-                continue
-            # THROUGH `workspace.config_name`, which is where this rule lives. Comparing
-            # `cfg["name"]` alone meant the eleven shipped configs that omit the key could
-            # never match, so every finding for those targets exported with no location at
-            # all - 95 of 95 on httpbot - while the comment above says the fallback exists
-            # precisely so a reviewer gets a file that is really there.
-            if workspace.config_name(fp, cfg) == name:
-                return fp
-        return None
+        # THROUGH `workspace.configs_by_name`, which is the whole of this question. The
+        # rule that a config without a `name:` key is named by its file lives in
+        # `config_name` -- comparing `cfg["name"]` alone meant the eleven shipped configs
+        # that omit the key could never match, so every finding for those targets exported
+        # with no location at all, 95 of 95 on httpbot -- and this called that rule while
+        # keeping its own loop, its own parse and its own `except Exception: continue`
+        # around them. A config it could not read was skipped here and refused four
+        # modules over, which is two answers to "is this fleet readable".
+        found = workspace.configs_by_name().get(name)
+        return found[0] if found else None
 
     anchor = target_config or _config_for(target)
     uri = _uri(anchor) if anchor else None

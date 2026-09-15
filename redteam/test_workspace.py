@@ -1723,6 +1723,15 @@ def main():
         ("build_index.py", "provenance"),
         ("compare_targets.py", "_declared_pairs"),
         ("defense_report.py", "main"),
+        # AND THE TWO THAT ASKED "WHICH CONFIG MEANS THIS NAME" WITH THEIR OWN LOOP.
+        # `sarif` called `config_name` and then wrapped it in a parse and an
+        # `except Exception: continue` of its own; `lint` called `config_name` with `{}`
+        # to get the filename fallback and then asked the config for `name` itself, which
+        # is one rule computed in two halves -- and `cfg.get` on a config reading
+        # `- name: listy` ended `qatration lint` with an AttributeError, out of the
+        # command whose whole job is to say what is wrong with a corpus.
+        ("sarif.py", "_config_for"),
+        ("lint_arsenal.py", "known_targets"),
     ]
     # NAMES, NOT PROSE. Written first as `is the string in the function`, it read the
     # docstring: emptying `rejudge.contexts` to `return {}` left the paragraph explaining
