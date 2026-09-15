@@ -173,6 +173,38 @@ def main():
     check("a customer's endpoint is not local",
           not az.is_local("https://api.acmeshop.example/v1/chat"))
 
+    # AND EVERY OTHER SPELLING OF THIS MACHINE. `is_local` was a membership test against
+    # five strings, two hundred lines above `_as_address`, which exists for exactly the
+    # spellings a resolver accepts and a strict parser does not -- and whose own docstring
+    # says a policy that reads one way while the socket reads the other disagrees exactly
+    # where it matters. Every address below is 127.0.0.1 to `socket.inet_aton` and was
+    # answered "somebody else's system", which in `gate` is the difference between a
+    # practice bot that runs and exit 4 about `QATRATION_AUTH_SECRET`.
+    #
+    # NOT ASSERTED AS A LIST OF STRINGS THAT HAPPENS TO PASS: each one is cross-checked
+    # against the reader that decides, so the pair moves together or this goes red.
+    for _spelling in ("127.0.0.2", "127.1", "127.0.1", "0177.0.0.1", "2130706433",
+                      "::ffff:127.0.0.1"):
+        _host = "[%s]" % _spelling if ":" in _spelling else _spelling
+        _addr = az._as_address(_spelling)
+        check("%s is this machine to the reader that decides" % _spelling,
+              _addr is not None and _addr.is_loopback, repr(_addr))
+        check("...and `is_local` agrees with it", az.is_local("http://%s:1/" % _host),
+              "%s was called somebody else's system" % _spelling)
+
+    # AND THE EXEMPTION DOES NOT WIDEN PAST LOOPBACK. This is the branch that skips proving
+    # authorisation, so every address it accepts is traffic nobody is asked about.
+    for _not_ours in ("10.0.0.5", "169.254.169.254", "192.168.1.1", "8.8.8.8",
+                      "100.64.0.1"):
+        check("%s is not this machine" % _not_ours,
+              not az.is_local("http://%s:1/" % _not_ours), _not_ours)
+    # A NAME THAT RESOLVES HERE IS STILL NOT LOCAL, deliberately: `_as_address` answers None
+    # for names because a name can be pointed elsewhere between this check and the socket.
+    check("a name is not exempted by what it resolves to today",
+          not az.is_local("http://bot.example:1/"), "bot.example")
+    check("...and an empty host is not this machine either",
+          not az.is_local("not a url at all"), "an unparseable url")
+
     # EVERY entry point that drives a target, which is the point: the last guard added to this
     # engine went into the sweep and not into benign.py, and the very next run used the other
     # door. A benign baseline is still traffic against somebody's production endpoint, and it

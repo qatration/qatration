@@ -250,16 +250,44 @@ def record(cfg, sentence, secret_id="local"):
             "verified_by": secret_id, "detail": sentence}
 
 
+# THE SPELLINGS THAT ARE NOT ADDRESSES. `localhost` is a name, and `0.0.0.0` is
+# unspecified rather than loopback -- `ipaddress` is right about that and a socket still
+# sends it here -- so neither can be decided by the reader below and both stay written out.
 LOCAL = {"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"}
 
 
 def is_local(url):
-    """A practice target on this machine. Everything else is somebody's system."""
+    """A practice target on this machine. Everything else is somebody's system.
+
+    THROUGH `_as_address`, WHICH IS THE OTHER READER OF THE SAME QUESTION. This was a
+    membership test against five strings, two hundred lines above a function written for
+    exactly the spellings it missed, whose own docstring says "a policy that parses with
+    the strict reader and a socket that connects with the lenient one disagree exactly
+    where it matters". Measured, every one of these is 127.0.0.1 to `_as_address`, to
+    `socket.inet_aton` and to every resolver, and every one of them was answered `this is
+    somebody else's system`:
+
+        127.0.0.2   127.1   127.0.1   0177.0.0.1   2130706433   ::ffff:127.0.0.1
+
+    What that cost is `gate` below: a local URL is the EXEMPTION from proving authorisation,
+    so a practice bot bound to 127.0.0.2, or a config that writes the loopback address the
+    short way, exited 4 with a sentence about `QATRATION_AUTH_SECRET` -- for a target on the
+    operator's own machine. A gate that makes the practice fleet unusable is the one this
+    file says would be turned off within a day.
+
+    WIDER ONLY WHERE THE ADDRESS IS REALLY LOOPBACK. A NAME that resolves to 127.0.0.1 is
+    still not local here: `_as_address` answers None for names, deliberately, because a name
+    can be pointed somewhere else between this check and the socket.
+    """
     from urllib.parse import urlparse
     try:
-        return (urlparse(url).hostname or "") in LOCAL
+        host = urlparse(url).hostname or ""
     except Exception:
         return False
+    if host.lower() in LOCAL:
+        return True
+    addr = _as_address(host)
+    return bool(addr is not None and addr.is_loopback)
 
 
 def hosted():
