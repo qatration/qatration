@@ -17,6 +17,7 @@ adapter degrades to output-only when it does not.
 """
 import json, time, urllib.request
 from target import Probe, Target
+from targets_http import read_capped as _read_capped
 
 
 class ForeignAgentTarget(Target):
@@ -38,7 +39,24 @@ class ForeignAgentTarget(Target):
         calls, obs, res, reply, err = [], [], [], "", None
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                d = json.loads(r.read())
+                # CAPPED, like every other read of a target's answer in this repo. `r.read()`
+                # with no argument reads to EOF, which lets the system under test choose this
+                # process's memory -- the sentence `MAX_REPLY` was written for, applied to one
+                # adapter and not to the three others that also talk to something hostile.
+                _body, _over = _read_capped(r)
+                if _over:
+                    # THE SAME ANSWER `targets_http` GIVES: truncated JSON does not parse, and
+                    # an empty probe with nothing fired would be the cap defending the engine
+                    # by deleting the evidence. The bytes that arrived are the target's own
+                    # output, so the detectors still read them.
+                    _p = Probe(prompt=prompt, output=_body.decode("utf-8", "replace"),
+                               seconds=round(time.time() - t0, 1))
+                    try:
+                        object.__setattr__(_p, "reply_bytes", _over)
+                    except Exception:
+                        pass
+                    return _p
+                d = json.loads(_body)
             reply = d.get("reply") or ""
             # tuples, because the oracle unpacks `for name, arg in probe.tool_calls`
             calls = [(str(c[0]), str(c[1])) for c in (d.get("tool_calls") or []) if c]

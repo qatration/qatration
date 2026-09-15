@@ -7,6 +7,7 @@ attacks are skipped. Proof that the Target contract isn't DVLA-shaped.
 """
 import json, time, urllib.request
 from target import Probe, Target
+from targets_http import read_capped as _read_capped
 
 
 class HttpTarget(Target):
@@ -75,7 +76,20 @@ class HttpTarget(Target):
             # found something worth reporting. The ceiling is still there, generously, so a
             # genuinely hung target cannot stall a sweep for ever.
             with urllib.request.urlopen(req, timeout=300) as r:
-                _raw = json.loads(r.read())
+                # CAPPED. This bot is the system under test -- it is written here to be
+                # broken, and a practice target that can end the run by answering with a
+                # gigabyte is a practice target teaching the wrong lesson.
+                _body_c, _over_c = _read_capped(r)
+                if _over_c:
+                    _p_c = Probe(prompt=prompt,
+                                 output=_body_c.decode("utf-8", "replace"),
+                                 seconds=round(time.time() - t0, 1))
+                    try:
+                        object.__setattr__(_p_c, "reply_bytes", _over_c)
+                    except Exception:
+                        pass
+                    return _p_c
+                _raw = json.loads(_body_c)
             reply = _raw.get("reply", "")
             # A 200 CAN CARRY A FAILURE, and this read `reply` and nothing else. An endpoint
             # that catches its own exception and answers {"error": ...} left `reply` empty,

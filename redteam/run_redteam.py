@@ -437,7 +437,19 @@ def _build_mismatch(tcfg):
     probe = f"{u.scheme}://{u.netloc}/"
     try:
         with urllib.request.urlopen(probe, timeout=5) as r:
-            got = _json.loads(r.read().decode("utf-8", "replace"))
+            # CAPPED, and this one is not even a reply: it is a build banner read from the
+            # target's own root before a sweep, parsed as JSON. Uncapped it let the system
+            # under test choose this process's memory in the one place that runs BEFORE any
+            # attack is sent, so a target could end the run by answering its front page
+            # with a gigabyte.
+            from targets_http import read_capped as _read_capped
+            _b, _over_b = _read_capped(r, 1_000_000)
+            if _over_b:
+                print(f"  ! {probe} answered {_over_b:,} bytes to a build check. That is "
+                      f"not a build banner, so this run is not verified against "
+                      f"expect_build {want}")
+                return ""
+            got = _json.loads(_b.decode("utf-8", "replace"))
     except Exception as e:
         print(f"  ! could not ask {probe} what build it is ({type(e).__name__}) — this run "
               f"is not verified against expect_build {want}")

@@ -1032,6 +1032,91 @@ def main():
 
     # --- A TARGET MAY NOT STEER THE TOOL SOMEWHERE ELSE ---------------------------------
     #
+    # --- AN ERROR BODY IS QUOTED, NOT SWALLOWED -----------------------------------------
+    #
+    # The comment at that call site said "Bounded and never parsed: a body is
+    # attacker-influenced text on a target we do not trust, so it is truncated" -- and the
+    # truncation to 300 characters happened after `e.read()` had the whole thing in memory,
+    # decoded it, and split it into words. Measured against 200 MB of spaced text on a 500:
+    # 2.67 GB held and 112.7 seconds, to keep 300 characters. `MAX_REPLY` is the same
+    # sentence for the 200 path and it was there all along, twelve hundred lines up.
+    #
+    # ASSERTED AS MEMORY, because the defect is not visible in the output: the 300
+    # characters were correct either way, which is why it survived.
+    import tracemalloc as _tm_e
+
+    class _BigError(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        size = 64 * 1024 * 1024
+
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _chunk = b"word " * 13107
+            self.send_response(500)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(self.size))
+            self.end_headers()
+            _sent = 0
+            try:
+                while _sent < self.size:
+                    _n = min(len(_chunk), self.size - _sent)
+                    self.wfile.write(_chunk[:_n])
+                    _sent += _n
+            except Exception:
+                pass
+
+    _esrv0 = ThreadingHTTPServer(("127.0.0.1", 0), _BigError)
+    threading.Thread(target=_esrv0.serve_forever, daemon=True).start()
+    try:
+        _et = HttpConfiguredTarget(
+            url="http://127.0.0.1:%d/chat" % _esrv0.server_address[1], name="bigerror",
+            request={"body": {"m": "{prompt}"}}, response={"reply": "reply"}, timeout_s=60)
+        _tm_e.start()
+        _ep = _et.send("hi")
+        _peak = _tm_e.get_traced_memory()[1]
+        _tm_e.stop()
+        _eerr = str(getattr(_ep, "error", None) or "")
+        check("a 500 still quotes the remote's own words",
+              "500" in _eerr and "word" in _eerr, _eerr[:90])
+        check("...and the quote is still short",
+              len(_eerr) < 500, "%d characters" % len(_eerr))
+        check("...and the body was never held whole to produce it",
+              _peak < 8 * 1024 * 1024,
+              "peak %s bytes for a %s byte body"
+              % ("{:,}".format(_peak), "{:,}".format(_BigError.size)))
+    finally:
+        _esrv0.shutdown()
+
+    # AND NO OTHER READ OF A TARGET'S ANSWER IS UNCAPPED. Four were: the error body above,
+    # `targets_foreign`, `targets_httpbot` and `targets_localrag`, plus the build probe in
+    # `run_redteam` that runs BEFORE any attack is sent. One of them had the rule and the
+    # rest had the same sentence in front of them and no argument in the call.
+    #
+    # Asked of the parse tree over every module that opens a URL, so the next adapter
+    # answers this before it ships rather than after somebody measures it.
+    import ast as _ast_e
+    _uncapped, _openers = [], []
+    for _f_e in sorted(os.listdir(HERE)):
+        if not _f_e.endswith(".py") or _f_e.startswith("test_"):
+            continue
+        with open(os.path.join(HERE, _f_e), encoding="utf-8") as _fh_e:
+            _src_e = _fh_e.read()
+        if "urlopen" not in _src_e and "_OPENER" not in _src_e:
+            continue
+        _openers.append(_f_e)
+        for _n_e in _ast_e.walk(_ast_e.parse(_src_e)):
+            if (isinstance(_n_e, _ast_e.Call)
+                    and isinstance(_n_e.func, _ast_e.Attribute)
+                    and _n_e.func.attr == "read"
+                    and not _n_e.args and not _n_e.keywords):
+                _uncapped.append("%s:%d" % (_f_e, _n_e.lineno))
+    check("the scan found the modules that open a url",
+          len(_openers) >= 4, str(_openers))
+    check("no adapter reads a target's answer to EOF", _uncapped == [], str(_uncapped))
+
     # `_GuardedRedirect` refuses a redirect that leaves the host and re-checks the network
     # policy on the one that stays. It is the difference between a scanner and an SSRF
     # proxy with an attack arsenal attached: a hosted worker probing an approved endpoint

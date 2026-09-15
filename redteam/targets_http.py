@@ -96,6 +96,19 @@ def expand_env(value, where, allowed=None):
 # has to keep working. This is twenty times that.
 MAX_REPLY = int(os.environ.get("QATRATION_MAX_REPLY", 1_000_000))
 
+# AND HOW MUCH OF AN ERROR BODY. A different question from the one above: a reply's length is
+# evidence -- `unbounded_output` judges it -- and an error body is only ever quoted, truncated
+# to 300 characters, as the remote's own words. So this is a display budget and it does not
+# need to learn the true size.
+#
+# It was `e.read()`, with a comment three lines above it saying "Bounded and never parsed: a
+# body is attacker-influenced text on a target we do not trust, so it is truncated". The
+# truncation happened after the whole thing was in memory, decoded, and split into words.
+# Measured against a scripted endpoint answering 500 with 200 MB of spaced text: the 200 path
+# held 2 MB and took 0.1s, the 500 path held 2.67 GB and took 112.7 seconds, to keep 300
+# characters. A non-200 is also the easier answer for a hostile target to choose.
+MAX_ERROR_BODY = int(os.environ.get("QATRATION_MAX_ERROR_BODY", 64 * 1024))
+
 
 def read_capped(response, limit=None):
     """Read a response body up to `limit`, and say how long it really was.
@@ -956,7 +969,7 @@ class HttpConfiguredTarget(Target):
                 # do not trust, so it is truncated, stripped of newlines, and shown as the
                 # remote's own words rather than interpreted as anything.
                 try:
-                    body = (e.read() or b"").decode("utf-8", "replace")
+                    body = (e.read(MAX_ERROR_BODY) or b"").decode("utf-8", "replace")
                 except Exception:
                     body = ""
                 body = " ".join(body.split())[:300]
