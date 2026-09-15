@@ -266,9 +266,20 @@ def main():
         return 2
 
     secret, verify = _ht.mint()
-    io.open(args.out, "w", encoding="utf-8", newline="\n").write(
-        render(out=args.out, url=args.url, name=args.name, secret=secret, verify=verify,
-               model=args.model))
+    # WRITTEN BESIDE, THEN MOVED INTO PLACE. The paragraph above says what this file is --
+    # "that file may hold a canary you have already planted" -- and then `--force` opened it
+    # with `"w"`, which TRUNCATES before it writes. Interrupt that (Ctrl-C, a full disk, a
+    # machine reclaimed) and the canary and the endpoint mapping are both gone, by the one
+    # command that had just told the reader what they were worth. A refusal guarding a
+    # destructive write is not much use if the write destroys the file on its way past.
+    #
+    # `workspace.atomic_write` is that rule for this repository, and `tools/i18n.py` learned
+    # it the same way on a hand-written dictionary: "a typo in this very function emptied
+    # tr.json mid-session, and the backup the next command took copied the empty file."
+    from workspace import atomic_write as _atomic
+    with _atomic(args.out) as _fh:
+        _fh.write(render(out=args.out, url=args.url, name=args.name, secret=secret,
+                         verify=verify, model=args.model))
 
     print("Wrote %s, with a canary nobody else has.\n" % args.out)
     # THE SNIPPET COMES FROM ONE PLACE. `mint` prints the same block through the same function;

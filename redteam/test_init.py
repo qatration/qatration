@@ -311,6 +311,37 @@ def main():
         check("...unless --force says so", forced.returncode == 0,
               (forced.stdout + forced.stderr)[-200:])
 
+        # AND THE FORCED WRITE CANNOT LEAVE HALF A CONFIG. `open(path, "w")` truncates
+        # before it writes, so an interruption between those moments empties the file the
+        # refusal above exists to protect -- the one holding a canary that may already be
+        # planted in a live system. Asserted by making the write fail rather than by
+        # reading the source: the config has to be either the old one or the new one.
+        _before = io.open(out, encoding="utf-8").read()
+        import init_config as _ic_t, workspace as _ws_t
+        _real_render = _ic_t.render
+
+        def _boom(*a, **k):
+            raise RuntimeError("killed while writing")
+
+        _ic_t.render = _boom
+        _argv = sys.argv
+        try:
+            sys.argv = ["qatration init", "--out", out, "--force"]
+            try:
+                _ic_t.main()
+            except RuntimeError:
+                pass
+            except SystemExit:
+                pass
+        finally:
+            _ic_t.render = _real_render
+            sys.argv = _argv
+        check("a forced init that dies mid-write leaves the config it was replacing",
+              io.open(out, encoding="utf-8").read() == _before,
+              repr(io.open(out, encoding="utf-8").read()[:80]))
+        check("...and leaves nothing beside it either",
+              not os.path.exists(out + ".tmp"), out + ".tmp")
+
     # --- IT IS REACHABLE, AND IT IS FIRST ----------------------------------------------------
     import cli
     check("init is in the CLI dispatch table", "init" in cli.COMMANDS, sorted(cli.COMMANDS))
