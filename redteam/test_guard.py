@@ -21,6 +21,7 @@ three of those.
 
     python test_guard.py       # exits 1 on any failure (CI gate)
 """
+import ast
 import importlib.util
 import io
 import json
@@ -37,6 +38,34 @@ except Exception:
     pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+
+
+def tools_guard_needs(path=None):
+    """-> the files a working copy of `tools/guard.py` needs, read from its imports.
+
+    A LIST KEPT BY HAND BESIDE A LIST KEPT BY THE COMPILER. The hook fixtures below build a
+    repository in a temp directory and copy `guard.py` into it, and for as long as that
+    copy was a literal tuple it was a second answer to a question `guard.py` was already
+    answering with its import statements. The day the gate began asking `unguarded.py`
+    whether a killed mutation sweep still held a source file, the hook under test exited on
+    a traceback rather than on a verdict: three checks red, none of them about what they
+    were asserting, and each one an argument for editing the tuple rather than for reading
+    it. The next module the gate leans on will not come with a reminder either.
+
+    Only what lives in `tools/`. The standard library is on the interpreter's path in the
+    temp tree as much as it is here, and `licences` and `unguarded` are not.
+    """
+    src = io.open(path or os.path.join(ROOT, "tools", "guard.py"),
+                  encoding="utf-8").read()
+    local = set()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Import):
+            local.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            local.add(node.module.split(".")[0])
+    return ["guard.py"] + sorted(
+        n + ".py" for n in local
+        if os.path.exists(os.path.join(ROOT, "tools", n + ".py")))
 
 
 def _load(name, path):
@@ -906,6 +935,36 @@ def main():
     #
     # Three outcomes, and only the last is a failure: it ran and passed, it could not start
     # here and said so, or it ran and gave the wrong answer.
+    # WHAT THE FIXTURES BELOW COPY, AND WHERE THAT LIST COMES FROM.
+    _needs = tools_guard_needs()
+    check("the gate's own imports say which files a copy of it needs",
+          set(_needs) >= {"guard.py", "licences.py", "unguarded.py"}, str(_needs))
+    check("...and nothing is copied that does not exist in tools/",
+          all(os.path.exists(os.path.join(ROOT, "tools", _f_n)) for _f_n in _needs),
+          str(_needs))
+    # ASKED OF A FILE THAT IS NOT `guard.py`, so that "it read the imports" and "it
+    # happened to name the two modules guard.py imports today" are different answers. The
+    # first draft used one specimen whose imports matched the real gate's, and deleting
+    # the argument entirely left every check green.
+    with tempfile.TemporaryDirectory() as _dn:
+        _one = os.path.join(_dn, "imports_one.py")
+        io.open(_one, "w", encoding="utf-8", newline="").write(
+            "import os, re" + chr(10)
+            + "import licences" + chr(10)
+            + "import nothing_of_the_sort" + chr(10))
+        _two = os.path.join(_dn, "imports_from.py")
+        io.open(_two, "w", encoding="utf-8", newline="").write(
+            "from unguarded import live_mutation" + chr(10))
+        _derived, _from = tools_guard_needs(_one), tools_guard_needs(_two)
+    check("...read from the file it was handed, not from the gate every time",
+          _derived == ["guard.py", "licences.py"], str(_derived))
+    check("...and a `from X import y` dependency is brought along too",
+          _from == ["guard.py", "unguarded.py"], str(_from))
+    check("...while the standard library is not copied into the temp tree",
+          "os.py" not in _derived and "re.py" not in _derived, str(_derived))
+    check("...nor a name that is not a file in tools/ at all",
+          "nothing_of_the_sort.py" not in _derived, str(_derived))
+
     with tempfile.TemporaryDirectory() as d:
         henv = git_env(d)
 
@@ -914,12 +973,7 @@ def main():
 
         shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(d, ".githooks"))
         os.makedirs(os.path.join(d, "tools"), exist_ok=True)
-        # EVERY FILE THE GATE READS, not the two it used to. `guard.py` asks
-        # `unguarded.py` whether a killed mutation sweep is still holding a source
-        # file, and a fixture missing that import made the hook exit on a traceback
-        # rather than on a verdict -- a list of dependencies kept by hand beside a
-        # list kept by the import statements.
-        for f in ("guard.py", "licences.py", "unguarded.py"):
+        for f in tools_guard_needs():
             shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(d, "tools", f))
         io.open(os.path.join(d, "pyproject.toml"), "w", encoding="utf-8").write(
             "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
@@ -994,12 +1048,7 @@ def main():
         _sp.run(["git", "init", "-q", "--bare", bare], capture_output=True, text=True, env=penv)
         shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(work, ".githooks"))
         os.makedirs(os.path.join(work, "tools"), exist_ok=True)
-        # EVERY FILE THE GATE READS, not the two it used to. `guard.py` asks
-        # `unguarded.py` whether a killed mutation sweep is still holding a source
-        # file, and a fixture missing that import made the hook exit on a traceback
-        # rather than on a verdict -- a list of dependencies kept by hand beside a
-        # list kept by the import statements.
-        for f in ("guard.py", "licences.py", "unguarded.py"):
+        for f in tools_guard_needs():
             shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(work, "tools", f))
         io.open(os.path.join(work, "pyproject.toml"), "w", encoding="utf-8").write(
             "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
