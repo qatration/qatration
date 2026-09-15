@@ -106,9 +106,20 @@ def _note_path():
     """Where the note lives: outside the tree, keyed to this checkout.
 
     Not inside the repository, because a file that appears there mid-sweep is one more
-    thing for `guard.py`, the suites and `git status` to trip over — and this note
+    thing for `guard.py`, the suites and `git status` to trip over -- and this note
     exists precisely for the runs that never get to clean up after themselves.
+
+    AND A SUITE MUST NOT WRITE THE REAL ONE. Two suites exercise this mechanism, and both
+    did it against the note belonging to the checkout they happened to be running in:
+    `test_packaging`'s killed-run fixture ends in `_drop_note`, so `tools/check.py` could
+    delete the only record of a sweep killed an hour before it -- the exact failure this
+    note exists to prevent, caused by the command you run to find out whether anything is
+    wrong. `QATRATION_UNGUARDED_NOTE` gives a suite one of its own, and the child
+    processes a suite starts inherit it.
     """
+    override = os.environ.get("QATRATION_UNGUARDED_NOTE")
+    if override:
+        return override
     key = hashlib.sha1(os.path.abspath(HERE).encode("utf-8")).hexdigest()[:12]
     return os.path.join(tempfile.gettempdir(), "unguarded-recovery-%s.json" % key)
 
@@ -142,6 +153,41 @@ def clear_mutant(path, orig):
     _drop_note()
 
 
+def live_mutation():
+    """-> (path, original text) for a mutant a killed run left on disk, or None.
+
+    THE NOTE HAD ONE READER, and that is most of why it did not work. It exists so that a
+    run killed between the mutant and the original cannot leave a deleted decision in the
+    tree in silence -- and the only program that ever opened it was the next run of this
+    same file. Nobody starts this tool twice in a row; it takes minutes. What runs next is
+    `tools/check.py` and `tools/guard.py`, and neither could read the note, so a killed
+    sweep left a working tree that both of them called clean. `check.py` stays green over
+    exactly the guards this sweep exists to find -- the ones no suite can see -- and
+    `guard.py --tree` printed `ok` over a deleted guard in `oracle.py`, measured rather
+    than reasoned about. Split out of `recover` so that a gate can ASK without repairing.
+
+    LIVE means the named file still holds exactly that mutant. A note from a run killed
+    last week, over a file rewritten since, describes nothing that is on disk now, and a
+    gate that refuses on one is a worse version of the problem it was added for.
+    """
+    try:
+        note = json.loads(io.open(_note_path(), encoding="utf-8").read())
+    except (OSError, ValueError):
+        return None
+    # A NOTE THAT PARSES IS NOT YET A NOTE. It is written by a process that was killed
+    # once already; half of one, or somebody else's file under the same name, parses as
+    # JSON and answers `note["path"]` with a TypeError rather than with a path.
+    if not isinstance(note, dict) or not isinstance(note.get("path"), str):
+        return None
+    try:
+        now = io.open(note["path"], encoding="utf-8").read()
+    except OSError:
+        return None
+    if now != note.get("mutant") or not isinstance(note.get("orig"), str):
+        return None
+    return note["path"], note["orig"]
+
+
 def recover():
     """-> the file a killed run left mutated, put back, or None.
 
@@ -149,21 +195,14 @@ def recover():
     a tool that quietly repairs the tree teaches its user that the tree can be trusted
     without looking, which is the habit that found this in the first place.
     """
-    p = _note_path()
-    try:
-        note = json.loads(io.open(p, encoding="utf-8").read())
-    except (OSError, ValueError):
-        return None
-    restored = None
-    try:
-        now = io.open(note["path"], encoding="utf-8").read()
-    except (OSError, KeyError):
-        now = None
-    if now is not None and now == note.get("mutant"):
-        io.open(note["path"], "w", encoding="utf-8", newline="").write(note["orig"])
-        restored = note["path"]
+    live = live_mutation()
+    if live:
+        io.open(live[0], "w", encoding="utf-8", newline="").write(live[1])
+    # THE NOTE GOES EITHER WAY. A stale one names nothing on disk, and leaving it there
+    # would refuse every commit from now until somebody deletes a file out of a temp
+    # directory they have never heard of.
     _drop_note()
-    return restored
+    return live[0] if live else None
 
 GUARD = re.compile(r"^(\s+)if\s+.+:\s*$")
 BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\))\s*$")
@@ -829,6 +868,8 @@ def main(argv):
                     help="guards against false positives only (needs evidence in out/)")
     ap.add_argument("--only", metavar="MODULE", nargs="+", default=(),
                     help="restrict the documented-guard sweep to these modules")
+    ap.add_argument("--recover", action="store_true",
+                    help="put back a file a killed run left mutated, and stop")
     args = ap.parse_args(argv)
     # BEFORE ANYTHING IS TOUCHED, and out loud. A run of this file killed in the gap
     # between the mutant and the original leaves a deleted decision in the tree, and
@@ -836,6 +877,14 @@ def main(argv):
     _back = recover()
     if _back:
         print("A previous run was killed mid-mutation. Restored %s." % _back)
+    # AND A WAY TO DO ONLY THAT. `guard.py` refuses a commit while a mutant is live and has
+    # to be able to name the fix; the fix cannot be `git checkout`, which would also throw
+    # away whatever uncommitted work that file was carrying, and it cannot be a full sweep,
+    # which is minutes. Without this flag the refusal had no answer short of both.
+    if args.recover:
+        if not _back:
+            print("Nothing to recover: no run of this file left a mutant behind.")
+        return 0
     both = not (args.guards or args.rules or args.refusals or args.patterns)
     # WHAT WAS ACTUALLY DELETED, ACROSS EVERY ARM, which is a different number from what
     # was found. The closing verdict rests on this rather than on `bad`, because zero

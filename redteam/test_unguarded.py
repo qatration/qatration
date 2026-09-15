@@ -35,6 +35,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
+import json as _json_k  # noqa: E402
+import shutil as _sh_k  # noqa: E402
+import subprocess as _sp_k  # noqa: E402
 import unguarded  # noqa: E402
 
 PASS = FAIL = 0
@@ -879,6 +882,137 @@ def main():
     _tool_src2 = io.open(_tool, encoding="utf-8").read()
     check("the pattern arm has a flag of its own",
           "--patterns" in _tool_src2, "no --patterns flag")
+
+    # ------------------------------------------------------------------------------
+    # THE NOTE A KILLED RUN LEAVES, AND WHO READS IT.
+    #
+    # `write_mutant` writes a note before it writes the mutant, so that a run killed in
+    # the gap can be undone -- and for as long as that note existed, ONE program opened
+    # it: the next run of this same tool. Nobody starts it twice in a row; it takes
+    # minutes. What runs next is `tools/check.py` and `tools/guard.py`, and a killed
+    # sweep left a tree that both of them called clean. Measured, not reasoned about: a
+    # documented guard deleted out of `oracle.py` with the note live, and
+    # `guard.py --tree` printed `ok  guard: the tree`.
+    #
+    # And the deletion nothing else catches is the likeliest one to be sitting there --
+    # the whole point of this sweep is the guards no suite can see, so `check.py` being
+    # green over it is the designed behaviour of `check.py`, not a gap in it.
+    _kw = tempfile.mkdtemp()
+    # ITS OWN NOTE, NOT THE CHECKOUT'S. Writing the real one would mean `tools/check.py`
+    # destroying the recovery record of a sweep somebody killed an hour earlier.
+    _real_note = unguarded._note_path()
+    os.environ["QATRATION_UNGUARDED_NOTE"] = os.path.join(_kw, "note.json")
+    _note = unguarded._note_path()
+    _gate = [sys.executable, os.path.join(ROOT, "tools", "guard.py"), "--tree"]
+
+    def _guard_says():
+        _p = _sp_k.run(_gate, capture_output=True, text=True, cwd=ROOT,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                PYTHONIOENCODING="utf-8"))
+        return _p.returncode, ((_p.stdout or "") + (_p.stderr or ""))
+
+    try:
+        check("a suite gets a note of its own, away from this checkout's",
+              _note != _real_note and _note.startswith(_kw), "%s == %s" % (_note, _real_note))
+        _victim = os.path.join(_kw, "subject.py")
+        _orig_v = "def f():" + chr(10) + "    return 1" + chr(10)
+        io.open(_victim, "w", encoding="utf-8", newline="").write(_orig_v)
+
+        check("with no note at all, nothing is live",
+              unguarded.live_mutation() is None, str(unguarded.live_mutation()))
+        _rc0, _out0 = _guard_says()
+        check("...and the gate that runs before every commit is happy",
+              _rc0 == 0, "rc=%s %s" % (_rc0, _out0[-90:]))
+
+        unguarded.write_mutant(_victim, "MUTANT" + chr(10), _orig_v)
+        check("a killed run leaves the mutant on disk",
+              io.open(_victim, encoding="utf-8").read() == "MUTANT" + chr(10),
+              repr(io.open(_victim, encoding="utf-8").read()))
+        _live = unguarded.live_mutation()
+        check("...and the note says which file and what was in it",
+              _live == (_victim, _orig_v), str(_live))
+        # THE ONE THAT MATTERS. Before this, the answer here was `rc=0  ok  guard: the
+        # tree`, with a deleted decision on disk.
+        _rc1, _out1 = _guard_says()
+        check("...and the pre-commit gate now refuses instead of saying ok",
+              _rc1 == 1, "rc=%s %s" % (_rc1, _out1[-120:]))
+        check("...naming the file it will not commit around",
+              "subject.py" in _out1, _out1[-160:])
+        check("...and naming a fix that does not throw away uncommitted work",
+              "--recover" in _out1 and "git checkout" in _out1, _out1[-200:])
+
+        # A STALE NOTE IS NOT A LIVE ONE. The file was rewritten since -- by hand, by a
+        # branch switch, by the person who noticed -- and a gate that keeps refusing over
+        # a file that no longer holds the mutant is a worse version of this defect.
+        io.open(_victim, "w", encoding="utf-8", newline="").write(_orig_v)
+        check("a note whose file no longer holds the mutant is not live",
+              unguarded.live_mutation() is None, str(unguarded.live_mutation()))
+        _rc2, _out2 = _guard_says()
+        check("...so the gate does not refuse forever over a note nobody can find",
+              _rc2 == 0, "rc=%s %s" % (_rc2, _out2[-90:]))
+
+        # A NOTE THAT PARSES IS NOT YET A NOTE. It is written by a process that was
+        # killed once already.
+        for _junk, _what in ((["a", "b"], "a list"), ('"hello"', "a string"),
+                             ('{"path": 7}', "a path that is not a path"),
+                             ('{"path": ["a"]}', "a path that is a list"),
+                             ('{"path": "%s"}' % _victim.replace(chr(92), chr(92) * 2),
+                              "no mutant and no original"),
+                             ("{not json", "not JSON at all")):
+            io.open(_note, "w", encoding="utf-8", newline="").write(
+                _junk if isinstance(_junk, str) else _json_k.dumps(_junk))
+            check("a note holding %s is not read as a live mutation" % _what,
+                  unguarded.live_mutation() is None, str(unguarded.live_mutation()))
+
+        # AND THE FLAG THE REFUSAL NAMES EXISTS AND WORKS.
+        io.open(_victim, "w", encoding="utf-8", newline="").write(_orig_v)
+        unguarded.write_mutant(_victim, "MUTANT" + chr(10), _orig_v)
+        _rec_out, _rec_ran_on = "", False
+        try:
+            _p_rec = _sp_k.run([sys.executable, _tool, "--recover"], capture_output=True,
+                               text=True, timeout=120, cwd=ROOT,
+                               env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                        PYTHONIOENCODING="utf-8"))
+            _rec_out = _p_rec.stdout or ""
+        except _sp_k.TimeoutExpired:
+            _rec_ran_on = True
+        check("`--recover` puts the file back",
+              io.open(_victim, encoding="utf-8").read() == _orig_v,
+              repr(io.open(_victim, encoding="utf-8").read()))
+        check("...and says which file it touched, rather than repairing in silence",
+              "subject.py" in _rec_out, _rec_out[-120:])
+        check("...and stops there rather than starting a sweep of minutes",
+              not _rec_ran_on and "documented guards" not in _rec_out,
+              "still running after 120s" if _rec_ran_on else _rec_out[:120])
+        check("...and clears the note, so the next commit is not refused",
+              unguarded.live_mutation() is None and not os.path.exists(_note),
+              str(unguarded.live_mutation()))
+        _rc3, _out3 = _guard_says()
+        check("...which the gate agrees with",
+              _rc3 == 0, "rc=%s %s" % (_rc3, _out3[-90:]))
+    finally:
+        os.environ.pop("QATRATION_UNGUARDED_NOTE", None)
+        _sh_k.rmtree(_kw, ignore_errors=True)
+
+    # AND EVERY OTHER SUITE THAT TOUCHES THE MECHANISM, asked of the tree rather than
+    # remembered. The rule is not "test_unguarded is careful"; it is that no suite may
+    # write the note of the checkout it runs in, and the next suite to reach for
+    # `write_mutant` will not have read this comment.
+    _touchers, _careless = [], []
+    for _f in sorted(os.listdir(HERE)):
+        if not _f.startswith("test_") or not _f.endswith(".py"):
+            continue
+        _src_n = io.open(os.path.join(HERE, _f), encoding="utf-8").read()
+        if not any(_w in _src_n for _w in
+                   ("write_mutant", "clear_mutant", "_drop_note", "source_restored")):
+            continue
+        _touchers.append(_f)
+        if "QATRATION_UNGUARDED_NOTE" not in _src_n:
+            _careless.append(_f)
+    check("the suites that write a mutation note were found at all",
+          len(_touchers) >= 2, str(_touchers))
+    check("...and not one of them writes the note belonging to this checkout",
+          _careless == [], str(_careless))
     if FAIL:
         return 1
     print("\nOK — the instrument that names untested guards is not one of them.")

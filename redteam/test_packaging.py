@@ -1387,6 +1387,10 @@ def test_the_mutation_tool_puts_the_file_back_when_it_is_killed():
     spec.loader.exec_module(ung)
 
     work = tempfile.mkdtemp()
+    # NOT THE CHECKOUT'S NOTE. `source_restored` ends in `_drop_note`, and this fixture
+    # runs inside `tools/check.py` -- the command a person runs after killing a sweep,
+    # which would have torn up the record of what that sweep was holding.
+    os.environ["QATRATION_UNGUARDED_NOTE"] = os.path.join(work, "note.json")
     try:
         victim = os.path.join(work, "subject.py")
         original = "def f():\n    return 1\n"
@@ -1409,7 +1413,10 @@ def test_the_mutation_tool_puts_the_file_back_when_it_is_killed():
         with ung.source_restored(victim) as held:
             assert held == original, "the helper handed back the wrong text"
         assert io.open(victim, encoding="utf-8").read() == original
+        assert os.environ.get("QATRATION_UNGUARDED_NOTE", "").startswith(work), \
+            "the fixture was writing the recovery note of this checkout"
     finally:
+        os.environ.pop("QATRATION_UNGUARDED_NOTE", None)
         shutil.rmtree(work, ignore_errors=True)
     print("  ok  the mutation tool restores its subject on an interrupt and on an error")
 

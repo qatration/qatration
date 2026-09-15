@@ -914,7 +914,12 @@ def main():
 
         shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(d, ".githooks"))
         os.makedirs(os.path.join(d, "tools"), exist_ok=True)
-        for f in ("guard.py", "licences.py"):
+        # EVERY FILE THE GATE READS, not the two it used to. `guard.py` asks
+        # `unguarded.py` whether a killed mutation sweep is still holding a source
+        # file, and a fixture missing that import made the hook exit on a traceback
+        # rather than on a verdict -- a list of dependencies kept by hand beside a
+        # list kept by the import statements.
+        for f in ("guard.py", "licences.py", "unguarded.py"):
             shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(d, "tools", f))
         io.open(os.path.join(d, "pyproject.toml"), "w", encoding="utf-8").write(
             "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))
@@ -989,7 +994,12 @@ def main():
         _sp.run(["git", "init", "-q", "--bare", bare], capture_output=True, text=True, env=penv)
         shutil.copytree(os.path.join(ROOT, ".githooks"), os.path.join(work, ".githooks"))
         os.makedirs(os.path.join(work, "tools"), exist_ok=True)
-        for f in ("guard.py", "licences.py"):
+        # EVERY FILE THE GATE READS, not the two it used to. `guard.py` asks
+        # `unguarded.py` whether a killed mutation sweep is still holding a source
+        # file, and a fixture missing that import made the hook exit on a traceback
+        # rather than on a verdict -- a list of dependencies kept by hand beside a
+        # list kept by the import statements.
+        for f in ("guard.py", "licences.py", "unguarded.py"):
             shutil.copy(os.path.join(ROOT, "tools", f), os.path.join(work, "tools", f))
         io.open(os.path.join(work, "pyproject.toml"), "w", encoding="utf-8").write(
             "\n".join(["[project]", 'name = "x"', 'version = "0"', "dependencies = []", ""]))

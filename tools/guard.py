@@ -937,6 +937,33 @@ def main(argv=None):
     import licences
     refusals += licences.problems(os.path.join(ROOT, "pyproject.toml"))
 
+    # AND WHETHER A SWEEP IS STILL HOLDING A SOURCE FILE. `tools/unguarded.py` writes a
+    # mutant over a real source file and writes the original back a few lines later; killed
+    # in that gap -- a background job stopped, a runner reclaiming a machine -- it leaves the
+    # mutant, and leaves a note saying which file and what was in it. That note had exactly
+    # one reader, the next run of that same tool, which nobody starts twice in a row.
+    #
+    # WHAT THAT COSTS: this gate runs before every commit and printed `ok` over a deleted
+    # guard in `oracle.py`, measured by killing a run and asking. `check.py` is green there
+    # too, and not by accident -- the guards that sweep exists to find are the ones no suite
+    # can see, so the one deletion nothing else would catch is the one most likely to be
+    # sitting in the tree. It happened: `isolation._status`'s zero-trials guard, and later
+    # `oracle.py`, both caught by `git status` out of habit rather than by any gate here.
+    import unguarded
+    _live = unguarded.live_mutation()
+    if _live:
+        _where = _live[0]
+        try:
+            _where = os.path.relpath(_where, ROOT)
+        except ValueError:
+            pass          # another drive: the absolute path is the only honest answer
+        refusals.append(
+            "%s is not what it looks like: tools/unguarded.py was killed while it held a "
+            "mutant there, and the file still holds it. Run `python tools/unguarded.py "
+            "--recover`, which puts back the text that run was holding -- not `git "
+            "checkout`, which would also throw away any uncommitted work in that file."
+            % _where)
+
     # WHO WROTE IT AND WHERE FROM, IN EVERY MODE. These two rules lived only in
     # `scan_history`, which only `--range` reaches, which only `pre-push` runs — a hook that
     # is opt-in, skippable and, until this pass, verified by grepping its own text. They are
