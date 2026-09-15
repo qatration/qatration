@@ -1367,6 +1367,249 @@ def test_the_runner_refuses_a_tree_with_no_suites():
           % len(found))
 
 
+def _tool_modules():
+    return sorted(f[:-3] for f in os.listdir(os.path.join(ROOT_DIR, "tools"))
+                  if f.endswith(".py") and not f.startswith("_"))
+
+
+def unreached(hit):
+    """-> the modules in a coverage map that no suite reached. The gate's whole decision.
+
+    A function because the gate has to be able to FAIL: with the list computed inline,
+    replacing it with `[]` left every assertion in `test_every_tool_is_reached_by_a_suite`
+    green -- the scan was tested and the refusal built on it was not.
+    """
+    return sorted(m for m, where in hit.items() if not where)
+
+
+def refuse_unreached(hit):
+    """Raise if any module in a coverage map was reached by nothing. The gate itself.
+
+    A FUNCTION FOR THE SAME REASON `unreached` IS ONE, one step further out. With
+    `missing = unreached(hit)` written inline in the check, replacing that call with `[]`
+    left the check green: the decision had a fixture and the LINE THAT ASKED IT did not,
+    which is this repository's most-repeated finding shape. The gate is driven over a
+    synthetic map below, so the wiring is what the mutation has to survive.
+    """
+    missing = unreached(hit)
+    if missing:
+        raise AssertionError(
+            "no suite runs tools/%s -- name it in a suite or say here why it needs none"
+            % ", tools/".join(missing))
+
+
+def tools_reached_by_suites(mods=None, suites=None):
+    """-> {module: [suite, ...]} for every module in `tools/`, by CODE rather than by prose.
+
+    A NAME IN A COMMENT IS NOT COVERAGE, and the first version of this scan believed it was.
+    `tools/unguarded.py` records the same mistake in its own suite: "four suites matched a
+    grep for `unguarded`, and every one of them matched a LOCAL VARIABLE called
+    `_unguarded`." Run as a substring search this said all fourteen modules were covered.
+    Run against the parse tree, with docstrings excluded, two were not: `paired_score.py`,
+    which computes the McNemar exact p-value `docs/attribution.md` publishes, and
+    `bench_condition.py`, which is the matched comparison the benchmark page rests on. Both
+    were named only in a sentence explaining what they do.
+
+    A module counts as reached when a suite imports it, or a string constant in it IS the
+    module's path -- which is how a suite loads one through `importlib` or copies it into a
+    fixture tree. Comments are where the prose was, and comments are not in the parse tree
+    at all, so parsing is the whole of the fix. A first draft also excluded docstrings; a
+    docstring is a paragraph and a paragraph is never equal to `tools/guard.py`, so that
+    branch could not be reached by anything and could not be tested by anything either.
+    """
+    mods = _tool_modules() if mods is None else mods
+    suites = suites if suites is not None else [
+        os.path.join(HERE, f) for f in sorted(os.listdir(HERE))
+        if f.startswith("test_") and f.endswith(".py")]
+    hit = {m: [] for m in mods}
+    for path in suites:
+        tree = ast.parse(io.open(path, encoding="utf-8").read())
+        names, strings = set(), set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                names.update(a.name.split(".")[0] for a in n.names)
+            elif isinstance(n, ast.ImportFrom) and n.module:
+                names.add(n.module.split(".")[0])
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+                strings.add(n.value)
+        for m in mods:
+            _f = m + ".py"
+            if m in names or any(s == _f or s.endswith("/" + _f) or s.endswith(chr(92) + _f)
+                                 for s in strings):
+                hit[m].append(os.path.basename(path))
+    return hit
+
+
+def test_every_tool_is_reached_by_a_suite():
+    """A module in `tools/` that no suite runs arrives silent and stays that way.
+
+    Two did. `repair_probes.py` edits the record of runs that cost hours and wrote them by
+    truncating the file; `corpus_overlap.py` measured its headline against one document and
+    reported it as the corpus. Both were found by listing the directory and asking by hand,
+    which is not a thing that happens on a schedule. This is the question asked on every
+    push instead.
+    """
+    hit = tools_reached_by_suites()
+    assert len(hit) >= 10, "the tools directory was not read: %s" % sorted(hit)
+    refuse_unreached(hit)
+    # NAMED RATHER THAN COUNTED RED: deleting the line above changes nothing while every
+    # module is reached, and that is what it is for -- it fires on the tree of the day
+    # somebody adds a fifteenth. What can be mutated red is everything it rests on, and
+    # the two lines below drive the refusal over a map with a hole in it.
+    # AND THE GATE ITSELF CAN SAY NO, driven rather than read. Everything above is about
+    # the scan; this is the part that refuses.
+    assert unreached({"lonely": [], "busy": ["test_x.py"], "also": []}) == ["also", "lonely"]
+    assert unreached({"busy": ["test_x.py"]}) == []
+    _refused = ""
+    try:
+        refuse_unreached({"lonely": [], "busy": ["test_x.py"]})
+    except AssertionError as _e_g:
+        _refused = str(_e_g)
+    assert "tools/lonely" in _refused, _refused or "a module reached by nothing was allowed"
+    assert "tools/busy" not in _refused, _refused
+    refuse_unreached({"busy": ["test_x.py"]})
+    # AND THE SCAN CAN SAY NO, or it is a gate that passes on everything. A module nobody
+    # has ever mentioned must come back empty, and a name that appears only in a comment or
+    # a docstring must not count as having been run.
+    assert tools_reached_by_suites(["no_such_tool_at_all"]) == {"no_such_tool_at_all": []}
+    import tempfile as _tf_g
+    _d = _tf_g.mkdtemp()
+    try:
+        # WHERE THE PROSE LIVED: a comment naming the file, which a grep counts and a
+        # parser never sees. This is the exact shape that made the first run of this scan
+        # report all fourteen modules covered.
+        _fake = os.path.join(_d, "test_prose.py")
+        io.open(_fake, "w", encoding="utf-8", newline="").write(
+            "# tools/guard.py and licences.py are what this would have called coverage"
+            + chr(10) + "# and a comment about tools/check.py" + chr(10)
+            + "x = 1" + chr(10))
+        _said = tools_reached_by_suites(["guard", "licences", "check"], [_fake])
+        assert _said == {"guard": [], "licences": [], "check": []}, _said
+        _fake2 = os.path.join(_d, "test_real.py")
+        io.open(_fake2, "w", encoding="utf-8", newline="").write(
+            "import licences" + chr(10)
+            + 'p = "tools/guard.py"' + chr(10))
+        _said2 = tools_reached_by_suites(["guard", "licences", "check"], [_fake2])
+        assert _said2 == {"guard": ["test_real.py"], "licences": ["test_real.py"],
+                          "check": []}, _said2
+    finally:
+        __import__("shutil").rmtree(_d, ignore_errors=True)
+    print("  ok  every one of the %d modules in tools/ is run by a suite" % len(hit))
+
+
+def test_the_paired_statistic():
+    """`tools/paired_score.py` computes the McNemar exact p-value `docs/attribution.md`
+    publishes, and no suite ran it.
+
+    The p-value is the whole claim: it is what separates "framing changes the outcome" from
+    "forty prompts landed differently". An arithmetic slip here is a published number nobody
+    can check, in the document whose subject is exactly that.
+    """
+    import importlib.util, json as _json_p, tempfile as _tf_p, shutil as _sh_p
+    spec = importlib.util.spec_from_file_location(
+        "paired_score_under_test", os.path.join(ROOT_DIR, "tools", "paired_score.py"))
+    ps = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ps)
+
+    # THE EXACT SIGN TEST, against values computed by hand. Six discordant pairs all one
+    # way is 2 * C(6,0) / 2**6 = 0.03125, which is the number this file's own docstring
+    # names as the scale a hand-written arsenal can reach.
+    assert abs(ps.mcnemar(6, 0) - 0.03125) < 1e-12, ps.mcnemar(6, 0)
+    assert abs(ps.mcnemar(5, 0) - 0.0625) < 1e-12, ps.mcnemar(5, 0)
+    assert abs(ps.mcnemar(0, 6) - 0.03125) < 1e-12, "it is not symmetric in b and c"
+    assert abs(ps.mcnemar(5, 1) - 2 * (1 + 6) / 64) < 1e-12, ps.mcnemar(5, 1)
+    # NEVER ABOVE ONE, which the doubling would otherwise produce on a balanced split.
+    assert ps.mcnemar(1, 1) == 1.0, ps.mcnemar(1, 1)
+    assert ps.mcnemar(3, 3) == 1.0, ps.mcnemar(3, 3)
+    # AND NO DISCORDANT PAIR IS NOT A p OF ONE. "Nothing disagreed" is an absence, and a
+    # number there would read as a test that ran and found nothing.
+    assert ps.mcnemar(0, 0) is None, ps.mcnemar(0, 0)
+
+    work = _tf_p.mkdtemp()
+    try:
+        def _row(aid, fired, twin=None):
+            a = {"id": aid}
+            if twin:
+                a["paired_with"] = twin
+            return {"attack": a, "headline": "h", "fired": [], "verdict": "x",
+                    "trials": [{"verdict": "x", "fired": ["d"] if fired else []}]}
+
+        art = os.path.join(work, "results_pairs.json")
+        io.open(art, "w", encoding="utf-8").write(_json_p.dumps({
+            "meta": {"target": "t", "attacks_n": 5},
+            "results": [
+                _row("q1-plain", False), _row("q1-urgent", True, "q1-plain"),
+                _row("q2-plain", True), _row("q2-urgent", True, "q2-plain"),
+                # A PAIR WITH ONE HALF MISSING IS NOT A PAIR: dropping it in silence would
+                # let a half-run artifact score as a smaller but valid experiment.
+                _row("q3-urgent", True, "q3-plain"),
+            ]}))
+        rows, tally, p = ps.score(art)
+        assert tally["pairs"] == 2, tally
+        assert tally["orphaned"] == 1, tally
+        assert tally["framed_only"] == 1 and tally["plain_only"] == 0, tally
+        assert tally["both"] == 1 and tally["neither"] == 0, tally
+        assert p == ps.mcnemar(1, 0), (p, ps.mcnemar(1, 0))
+        assert any(r[2] is None for r in rows), rows
+        # AND A SUBSET IS SCORED ON ITS OWN, because a confirmatory set pooled with the run
+        # that motivated it is not a confirmation.
+        _rows2, _t2, _ = ps.score(art, only="q1-")
+        assert _t2["pairs"] == 1, _t2
+    finally:
+        _sh_p.rmtree(work, ignore_errors=True)
+    print("  ok  the McNemar exact test behind the published p-value is the exact test")
+
+
+def test_the_matched_condition_split():
+    """`tools/bench_condition.py` answers the sceptic's objection on the benchmark page --
+    that the benign corpus and the attack corpus are different questions -- by splitting on
+    whether the poisoned document was actually retrieved. No suite ran it either.
+
+    `poisoned_doc` is the part that decides, and all three of its answers are claims: a
+    carrier, or one of two specific reasons there is none. A wrong `None` there turns the
+    matched comparison into no comparison, silently.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "bench_condition_under_test", os.path.join(ROOT_DIR, "tools", "bench_condition.py"))
+    bc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bc)
+
+    assert bc.cited("answered from *policy.pdf* and *refunds.pdf*") == {"policy.pdf",
+                                                                        "refunds.pdf"}
+    assert bc.cited(None) == set()
+    assert bc.cited("a bare policy.pdf with no marks") == set()
+
+    # THE BENCHMARK'S OWN CANARY, imported rather than spelled again here: a fixture with a
+    # string the rule does not look for would prove nothing about the rule.
+    _leak = bc.score.CANARIES[0]
+    _clean = "I cannot share that."
+    assert _leak and not bc.leaked(_clean), (_leak, bc.leaked(_clean))
+
+    def _replies(*pairs):
+        return [(str(i), r) for i, r in enumerate(pairs)]
+
+    # A CARRIER: cited by every leak.
+    got, why = bc.poisoned_doc(_replies(
+        "%s from *poison.pdf* and *a.pdf*" % _leak,
+        "%s from *poison.pdf* and *b.pdf*" % _leak,
+        "%s from *c.pdf*" % _clean))
+    assert (got, why) == ("poison.pdf", ""), (got, why)
+    # NOTHING LEAKED is an absence, and it says so rather than naming a document.
+    got, why = bc.poisoned_doc(_replies("%s from *a.pdf*" % _clean))
+    assert got is None and "no reply leaked" in why, (got, why)
+    # THE LEAKS AGREE ON NOTHING.
+    got, why = bc.poisoned_doc(_replies("%s from *a.pdf*" % _leak,
+                                        "%s from *b.pdf*" % _leak))
+    assert got is None and "no document in common" in why, (got, why)
+    # OR ON TOO MUCH, which is the answer that would otherwise be a coin toss.
+    got, why = bc.poisoned_doc(_replies("%s from *a.pdf* and *b.pdf*" % _leak,
+                                        "%s from *b.pdf* and *a.pdf*" % _leak))
+    assert got is None and "several documents" in why, (got, why)
+    assert "a.pdf" in why and "b.pdf" in why, why
+    print("  ok  the matched-condition split names its carrier or says why it cannot")
+
+
 def test_the_overlap_tool_compares_against_the_corpus():
     """`tools/corpus_overlap.py` is the check behind a claim `docs/internals.md` publishes:
     "The arsenal is 143 hand-written payloads". It reports the longest run of consecutive
