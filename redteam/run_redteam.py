@@ -443,7 +443,7 @@ def _build_mismatch(tcfg):
             # attack is sent, so a target could end the run by answering its front page
             # with a gigabyte.
             from targets_http import read_capped as _read_capped
-            _b, _over_b = _read_capped(r, 1_000_000)
+            _b, _over_b = _read_capped(r, 1_000_000, seconds=5)
             if _over_b:
                 print(f"  ! {probe} answered {_over_b:,} bytes to a build check. That is "
                       f"not a build banner, so this run is not verified against "

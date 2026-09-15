@@ -110,23 +110,47 @@ MAX_REPLY = int(os.environ.get("QATRATION_MAX_REPLY", 1_000_000))
 MAX_ERROR_BODY = int(os.environ.get("QATRATION_MAX_ERROR_BODY", 64 * 1024))
 
 
-def read_capped(response, limit=None):
+def read_capped(response, limit=None, seconds=None):
     """Read a response body up to `limit`, and say how long it really was.
 
-    -> (bytes, full_length_or_None). The second value is None when the body fit. When it did
-    not, it is the length that was actually delivered, because THE LENGTH IS A FINDING:
-    `unbounded_output` judges it, and a truncation that also hid the size would defend the
-    engine by deleting the evidence.
+    -> (bytes, at_least_or_None). The second value is None when the body fit. When it did
+    not, it is how much was delivered before a bound stopped the counting, because THE
+    LENGTH IS A FINDING: `unbounded_output` judges it, and a truncation that also hid the
+    size would defend the engine by deleting the evidence. A LOWER BOUND, not the true
+    size: the drain below gives up at a budget, and it always could -- the sentence that
+    said "the length that was actually delivered" was describing the case where the target
+    stops on its own.
+
+    AND THE BUDGET WAS IN BYTES, WHICH IS NOT WHAT IT WAS DEFENDING. "A target that streams
+    forever cannot hold the loop" is a claim about TIME, and a target does not have to
+    stream fast. Measured with a scripted endpoint that answers the first chunk at once and
+    then sends one byte every 200 ms: `timeout_s` was 5, and the probe had not returned
+    after 40 seconds -- the socket timeout is per-read and data kept arriving, so it never
+    fired. At that rate the byte budget alone is seven hours.
+
+    `seconds` is the wall clock the drain gets, and callers pass the target's own timeout:
+    the drain is bookkeeping rather than measurement, so spending longer on it than the
+    request itself was allowed is never right. `read1` where the response has it, because
+    `read(n)` returns only when it HAS n bytes -- one call to it can outlast any deadline
+    the loop checks between calls.
+
+    WHAT THIS DOES NOT COVER, said rather than left to be discovered: the first read above.
+    A target that dribbles from the first byte holds it the same way, and what bounds that
+    today is `runner`'s watchdog, which `docs/internals.md` is careful to say "returns
+    control but leaves the socket open".
     """
+    import time as _time
     limit = int(limit or MAX_REPLY)
     body = response.read(limit + 1)
     if len(body) <= limit:
         return body, None
-    # Drain to learn the true size without keeping it. Bounded by its own budget so a target
-    # that streams forever cannot hold the loop either.
     extra, budget = 0, 64 * limit
+    _deadline = (_time.time() + float(seconds)) if seconds else None
+    _read1 = getattr(response, "read1", None)
     while extra < budget:
-        chunk = response.read(65536)
+        if _deadline is not None and _time.time() >= _deadline:
+            break
+        chunk = _read1(65536) if _read1 else response.read(65536)
         if not chunk:
             break
         extra += len(chunk)
@@ -840,7 +864,7 @@ class HttpConfiguredTarget(Target):
         t0 = time.time()
         try:
             with _OPENER.open(req, timeout=self.timeout) as r:
-                _body, _over = read_capped(r)
+                _body, _over = read_capped(r, seconds=self.timeout)
                 if _over:
                     # A REPLY OVER THE CAP IS A FINDING, NOT A PARSE FAILURE. Truncated JSON
                     # does not parse, so the first version of this returned an empty probe with

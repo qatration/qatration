@@ -1032,6 +1032,123 @@ def main():
 
     # --- A TARGET MAY NOT STEER THE TOOL SOMEWHERE ELSE ---------------------------------
     #
+    # --- A TARGET THAT DRIBBLES DOES NOT HOLD THE PROBE ---------------------------------
+    #
+    # `read_capped` drains past the cap to learn how long the reply really was, and that
+    # loop was bounded in BYTES -- 64 times the cap -- under a comment saying "a target
+    # that streams forever cannot hold the loop either". Streaming forever is a claim about
+    # time, and a target does not have to stream fast. One byte every 200 ms never idles
+    # long enough for the socket timeout to fire, because the socket timeout is per-read
+    # and data keeps arriving; at that rate the byte budget alone is seven hours.
+    #
+    # Measured before the fix with `timeout_s=5`: the probe had not returned after 40
+    # seconds. Here the cap is lowered so the drain is reached in a few bytes, and the
+    # assertion is the clock.
+    import targets_http as _th_cap
+    _dribble_stop = threading.Event()
+
+    class _Dribbler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(10 * 1000 * 1000))
+            self.end_headers()
+            try:
+                # The first chunk arrives at once, so the cap is passed and the drain
+                # begins; then one byte at a time, slowly, for as long as anyone reads.
+                self.wfile.write(b"a" * (_th_cap.MAX_REPLY + 1))
+                self.wfile.flush()
+                while not _dribble_stop.is_set():
+                    self.wfile.write(b"a")
+                    self.wfile.flush()
+                    time.sleep(0.2)
+            except Exception:
+                pass
+
+    _old_cap = _th_cap.MAX_REPLY
+    _th_cap.MAX_REPLY = 2000
+    _dsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Dribbler)
+    threading.Thread(target=_dsrv.serve_forever, daemon=True).start()
+    try:
+        _dt = HttpConfiguredTarget(
+            url="http://127.0.0.1:%d/chat" % _dsrv.server_address[1], name="dribbler",
+            request={"body": {"m": "{prompt}"}}, response={"reply": "reply"}, timeout_s=3)
+        _d_done = []
+
+        def _drive():
+            _t0 = time.time()
+            _dt.send("hi")
+            _d_done.append(time.time() - _t0)
+
+        _dth = threading.Thread(target=_drive, daemon=True)
+        _dth.start()
+        _dth.join(25)
+        check("a target that dribbles does not hold the probe past its own timeout",
+              bool(_d_done), "still running after 25s, with timeout_s=3")
+        if _d_done:
+            check("...and the drain gives up on the clock, not after the byte budget",
+                  _d_done[0] < 15, "%.1fs for a 3s timeout" % _d_done[0])
+        # AND THE BYTE BUDGET IS THE OTHER BOUND, for the target that streams FAST rather
+        # than slowly. The clock never stops that one -- it is over in milliseconds -- and
+        # without the budget the drain reads a flood to EOF to learn a number. Asserted as
+        # the number itself: what comes back is a LOWER BOUND, and it has to be the
+        # budget's rather than the target's.
+        class _Flood(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+            size = 10 * 1000 * 1000
+
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length") or 0))
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(self.size))
+                self.end_headers()
+                _c = b"a" * 65536
+                _s = 0
+                try:
+                    while _s < self.size:
+                        _n = min(len(_c), self.size - _s)
+                        self.wfile.write(_c[:_n])
+                        _s += _n
+                except Exception:
+                    pass
+
+        _fsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Flood)
+        threading.Thread(target=_fsrv.serve_forever, daemon=True).start()
+        try:
+            _ft = HttpConfiguredTarget(
+                url="http://127.0.0.1:%d/chat" % _fsrv.server_address[1], name="flood",
+                request={"body": {"m": "{prompt}"}}, response={"reply": "reply"},
+                timeout_s=30)
+            _fp = _ft.send("hi")
+            _fsize = getattr(_fp, "reply_bytes", None)
+            check("a flood is counted only as far as the budget, not to the end of it",
+                  _fsize is not None and _fsize < _Flood.size // 10,
+                  "reported %r of %s" % (_fsize, "{:,}".format(_Flood.size)))
+            check("...and the size that is reported is the budget's own",
+                  _fsize is not None
+                  and abs(_fsize - (65 * _th_cap.MAX_REPLY + 1)) <= 65536,
+                  "reported %r, budget says %r"
+                  % (_fsize, 65 * _th_cap.MAX_REPLY + 1))
+            check("...while the bytes kept are still only the cap",
+                  len(_fp.output or "") == _th_cap.MAX_REPLY,
+                  "%d characters kept" % len(_fp.output or ""))
+        finally:
+            _fsrv.shutdown()
+    finally:
+        _dribble_stop.set()
+        _th_cap.MAX_REPLY = _old_cap
+        _dsrv.shutdown()
+
     # --- AN ERROR BODY IS QUOTED, NOT SWALLOWED -----------------------------------------
     #
     # The comment at that call site said "Bounded and never parsed: a body is

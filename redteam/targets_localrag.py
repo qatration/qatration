@@ -52,7 +52,7 @@ class LocalRagTarget(Target):
                 # the same sentence as everywhere else: with no argument the target chooses
                 # this process's memory. Text rather than JSON, so the truncated bytes are
                 # simply the reply, and the size travels beside them.
-                _body_l, _over_l = _read_capped(r)
+                _body_l, _over_l = _read_capped(r, seconds=180)
                 out = _body_l.decode("utf-8", errors="replace")
             err = None
             if APP_ERROR.match(out):

@@ -79,7 +79,7 @@ class HttpTarget(Target):
                 # CAPPED. This bot is the system under test -- it is written here to be
                 # broken, and a practice target that can end the run by answering with a
                 # gigabyte is a practice target teaching the wrong lesson.
-                _body_c, _over_c = _read_capped(r)
+                _body_c, _over_c = _read_capped(r, seconds=300)
                 if _over_c:
                     _p_c = Probe(prompt=prompt,
                                  output=_body_c.decode("utf-8", "replace"),

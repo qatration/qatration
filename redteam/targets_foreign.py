@@ -43,7 +43,7 @@ class ForeignAgentTarget(Target):
                 # with no argument reads to EOF, which lets the system under test choose this
                 # process's memory -- the sentence `MAX_REPLY` was written for, applied to one
                 # adapter and not to the three others that also talk to something hostile.
-                _body, _over = _read_capped(r)
+                _body, _over = _read_capped(r, seconds=self.timeout)
                 if _over:
                     # THE SAME ANSWER `targets_http` GIVES: truncated JSON does not parse, and
                     # an empty probe with nothing fired would be the cap defending the engine
