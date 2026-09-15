@@ -379,6 +379,42 @@ def main():
         finally:
             EXTRA.pop("trace", None)
 
+        # AND A SHAPE THAT CANNOT BE ITERATED AT ALL. `_pairs` says in its own docstring that
+        # anything it does not understand "is reported as unusable rather than guessed at", and
+        # it was -- for a string, for a list of scalars, for None -- because all three are
+        # iterable and the loop simply produced nothing from them. A NUMBER is not, so
+        # `tool_calls: 7` came out as `TypeError: 'int' object is not iterable`.
+        #
+        # WHAT THAT COSTS, WALKED against an endpoint returning exactly that: every trial
+        # errored and the run exited 3, NOTHING MEASURED. The prose reply was there and
+        # judgeable, and the whole sweep was lost because a SECOND channel held a number -- a
+        # measurement an odd endpoint can delete. `_observations` beside it has never had this
+        # hole: it ends with "everything else is one observation" rather than a loop.
+        for _shape in (7, 7.5, True, 0, object()):
+            _said = ""
+            try:
+                _got = _pairs(_shape)
+            except Exception as _e_p:
+                _got, _said = None, "%s: %s" % (type(_e_p).__name__, _e_p)
+            check("a tool-call channel holding %s yields no pairs" % type(_shape).__name__,
+                  _got == [], _said or repr(_got))
+        # AND THE SHAPES IT DOES UNDERSTAND STILL COME THROUGH, or the fix is a normaliser that
+        # returns nothing. Both containers this adapter has met are real: OpenAI's list of
+        # function objects, and the {name: arguments} mapping.
+        # `check(label, ok, detail)` in this file: a list as the second argument is a
+        # truthiness test, not a comparison, which is what `test_names` refuses.
+        check("...while the OpenAI shape is still read",
+              _pairs([{"function": {"name": "f", "arguments": "{}"}}]) == [("f", "{}")],
+              str(_pairs([{"function": {"name": "f", "arguments": "{}"}}])))
+        check("...and so is a mapping of name to arguments",
+              _pairs({"a": "1"}) == [("a", "1")], str(_pairs({"a": "1"})))
+        check("...and a tuple of pairs, which a list check alone would have dropped",
+              _pairs((("f", "{}"),)) == [("f", "{}")], str(_pairs((("f", "{}"),))))
+        # AND A STRING IS STILL NEVER ITERATED, which is the defect `_observations` was written
+        # against and the one this channel shares.
+        check("...and a bare string is not thirty tool calls of one letter",
+              _pairs("oops") == [], str(_pairs("oops")))
+
         # AND A PATH THAT REALLY FINDS NOTHING IS STILL NAMED, or the three checks above
         # would pass on a report that had stopped saying anything at all.
         _tm = HttpConfiguredTarget(

@@ -188,7 +188,19 @@ def _pairs(raw):
     out = []
     if isinstance(raw, dict):
         raw = [{"name": k, "arguments": v} for k, v in raw.items()]
-    for item in raw or []:
+    # AND A SHAPE THAT CANNOT BE ITERATED AT ALL. The docstring above says anything this does
+    # not understand "is reported as unusable rather than guessed at", and it was -- for a
+    # string, for a list of scalars, for None -- because all three are iterable and the loop
+    # below simply produced nothing from them. A NUMBER is not, so `tool_calls: 7` came out of
+    # here as `TypeError: 'int' object is not iterable`.
+    #
+    # Walked end to end against an endpoint returning exactly that: every trial errored and
+    # the run exited 3, NOTHING MEASURED. The prose reply was there and judgeable; the whole
+    # sweep was lost because a SECOND channel held a number, which is a measurement an odd
+    # endpoint can delete.
+    if not isinstance(raw, (list, tuple)):
+        return out
+    for item in raw:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
             out.append((str(item[0]), str(item[1])))
         elif isinstance(item, dict):
