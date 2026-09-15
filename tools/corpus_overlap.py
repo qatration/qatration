@@ -102,21 +102,37 @@ def longest_run(a_words, b_words):
     return best
 
 
-def main(argv):
-    if not argv:
-        print(__doc__.strip().splitlines()[0])
-        print("usage: python tools/corpus_overlap.py <corpus.json> [...]", file=sys.stderr)
-        return 2
-    mine, theirs = ours(), published(argv)
-    print("%d prompts here, %d published strings from %d corpus file(s)\n"
-          % (len(mine), len(theirs), len(argv)))
+def compare(mine, theirs):
+    """-> (hits, exact_n). One row per prompt of ours, against the whole corpus.
 
-    # An inverted index, so each of ours is compared against the documents it could match
-    # rather than against all of them.
+    THE HEADLINE WAS COMPUTED AGAINST ONE DOCUMENT. This file's own docstring says the
+    measurement is "the longest run of consecutive words any of our prompts shares with any
+    published one", and what it did was pick the published string sharing the most five-word
+    shingles and measure the run against THAT one. Those are different documents whenever a
+    long generic prompt shares thirty ordinary shingles while some other entry shares one
+    verbatim sentence and nothing else: the first wins the shingle count, the run is measured
+    against it, and the copied sentence in the second is never looked at.
+
+    The closing line -- "prompts sharing a run of 8+ consecutive words with a published one"
+    -- is the check behind a claim `docs/internals.md` publishes, that the arsenal is
+    hand-written. A zero there was an answer about one document per prompt, printed as an
+    answer about the corpus.
+
+    EVERY CANDIDATE NOW, IN DESCENDING SHINGLE ORDER, AND THE BOUND IS EXACT. A run of R
+    words contributes at most R - SHINGLE + 1 distinct shingles, so a candidate sharing `c`
+    of them cannot run longer than c + SHINGLE - 1: once that ceiling drops to the best run
+    already found, the rest of the list cannot beat it and is not walked. The work is the
+    same as before on the common case and correct on the case that matters.
+
+    What is still not compared is a published string sharing no five-word shingle with ours.
+    Such a string cannot share five consecutive words, let alone eight, so it cannot carry
+    the finding this exists to report -- but a run of four or fewer may be understated, and
+    the number is not offered as a general similarity score.
+    """
     index = defaultdict(set)
     their_words = []
-    for k, (tag, t) in enumerate(theirs):
-        ws = words(t)
+    for k, (_tag, txt) in enumerate(theirs):
+        ws = words(txt)
         their_words.append(ws)
         for sh in shingles(ws):
             index[sh].add(k)
@@ -135,16 +151,30 @@ def main(argv):
         for sh in mine_sh:
             for k in index.get(sh, ()):
                 counts[k] += 1
-        best_k, shared = (None, 0)
-        for k, c in counts.items():
-            if c > shared:
-                best_k, shared = k, c
-        run = longest_run(ws, their_words[best_k]) if best_k is not None else 0
-        hits.append((run, shared / len(mine_sh), aid, src,
+        best_k, best_run, shared = None, 0, 0
+        for k, c in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+            if c + SHINGLE - 1 <= best_run:
+                break
+            run = longest_run(ws, their_words[k])
+            if run > best_run:
+                best_k, best_run, shared = k, run, c
+        hits.append((best_run, shared / len(mine_sh), aid, src,
                      theirs[best_k][0] if best_k is not None else "-",
                      " ".join(their_words[best_k][:14]) if best_k is not None else ""))
 
     hits.sort(reverse=True)
+    return hits, exact_n
+
+
+def main(argv):
+    if not argv:
+        print(__doc__.strip().splitlines()[0])
+        print("usage: python tools/corpus_overlap.py <corpus.json> [...]", file=sys.stderr)
+        return 2
+    mine, theirs = ours(), published(argv)
+    print("%d prompts here, %d published strings from %d corpus file(s)\n"
+          % (len(mine), len(theirs), len(argv)))
+    hits, exact_n = compare(mine, theirs)
     print("EXACT matches after normalisation: %d of %d" % (exact_n, len(mine)))
     print("\nthe ten closest, by longest run of consecutive shared words:")
     print("%-5s %-7s %-30s %s" % ("run", "shingle", "our attack", "closest published text"))
