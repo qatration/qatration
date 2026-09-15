@@ -215,6 +215,19 @@ def load(root, job_id):
         _d, _why = read_artifact(p)           # the worker before the package is set up
         if _why:
             raise ValueError(_why)
+        # AND WHAT CAME BACK IS A JOB. `read_artifact` names its families by FILE NAME --
+        # `results_`, `benign_` -- and a `job_*.json` is neither, so a file holding `[1, 2]`
+        # or `"hello"` came back with no complaint and every reader called `.get` on it:
+        # `listing` crashed with `AttributeError: 'list' object has no attribute 'get'`, and
+        # that listing is what `onboard --submit` prints and what the worker claims from.
+        #
+        # Into the same record the line below builds, for the reason it gives: unreadable is
+        # not absent, and a job file that is not a job must not look like a job nobody
+        # submitted.
+        if not isinstance(_d, dict):
+            raise ValueError("the file is %s, not a job record, which every reader of the "
+                             "queue looks a key up on"
+                             % ("nothing" if _d is None else "a %s" % type(_d).__name__))
         return _d
     except Exception as e:
         # Unreadable is not absent. A torn job file must not look like a job nobody submitted.

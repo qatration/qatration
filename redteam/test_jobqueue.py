@@ -140,6 +140,32 @@ def main():
               torn and torn["state"] == "unreadable", str(torn))
         check("...and an unreadable job is never claimed as work",
               all(j["job_id"] != "torn" for j in q.listing(root, "queued")))
+        # AND A FILE THAT PARSES AND IS NOT A JOB IS THE OTHER HALF. `load` goes through
+        # `read_artifact`, which names its families by FILE NAME -- `results_`, `benign_` --
+        # and a `job_*.json` is neither, so a file holding `[1, 2]` came back with no
+        # complaint and every reader of the queue called `.get` on it. `listing` crashed
+        # with `AttributeError: 'list' object has no attribute 'get'`, and that listing is
+        # what `onboard --submit` prints and what the worker claims from.
+        for _lbl, _body in (("a list", "[1, 2]"), ("a scalar", '"hello"'),
+                            ("nothing at all", "null")):
+            _jp = os.path.join(root, "job_shape.json")
+            with open(_jp, "w", encoding="utf-8") as _fj:
+                _fj.write(_body)
+            _shaped = q.load(root, "shape")
+            check("a job file that is %s reads as unreadable, not as a job" % _lbl,
+                  bool(_shaped) and _shaped.get("state") == "unreadable", str(_shaped))
+            check("...and the note says what the file holds instead (%s)" % _lbl,
+                  "not a job record" in ((_shaped or {}).get("note") or ""), str(_shaped))
+            _crash = ""
+            try:
+                _rows = q.listing(root)
+            except Exception as _ej:
+                _rows, _crash = [], "%s: %s" % (type(_ej).__name__, _ej)
+            check("...and the listing survives it (%s)" % _lbl, not _crash, _crash)
+            check("...and never offers it as work (%s)" % _lbl,
+                  all(j.get("job_id") != "shape" for j in q.listing(root, "queued")),
+                  str(q.listing(root, "queued")))
+            os.remove(_jp)
         src = open(os.path.join(HERE, "jobqueue.py"), encoding="utf-8").read()
         check("jobs are replaced, not written in place", "os.replace(" in src)
         check("...and nothing is left behind",
