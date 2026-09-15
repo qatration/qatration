@@ -69,15 +69,32 @@ def failure_in(text):
     return None
 
 
-def walk(out_dir):
-    """-> [(path, artifact, [(row_index, trial_index, shape, text), ...]), ...]"""
+def walk(out_dir, unreadable=None):
+    """-> [(path, artifact, [(row_index, trial_index, shape, text), ...]), ...]
+
+    `unreadable` collects `(path, why)` for artifacts this could not read, the out-parameter
+    idiom the rest of the package uses. IT USED TO BE `except Exception: continue`, and the
+    closing line still said "N probe(s) across M file(s)" -- a count over the files that
+    happened to parse, printed as a count over the directory. A truncated artifact is
+    exactly what an interrupted write leaves, which is the failure THIS tool is one edit
+    away from causing, and it was the one file the tool would not mention.
+    """
+    from workspace import read_artifact as _read
     found = []
     for fp in sorted(glob.glob(os.path.join(out_dir, "results_*.json"))):
-        try:
-            doc = json.loads(io.open(fp, encoding="utf-8").read())
-        except Exception:
+        doc, why = _read(fp)
+        if why is not None:
+            if unreadable is not None:
+                unreadable.append((os.path.basename(fp), why))
             continue
-        rows = doc if isinstance(doc, list) else (doc.get("results") or [])
+        # A MAPPING, DECIDED ONE FRAME UP. The loop used to read
+        # `doc if isinstance(doc, list) else doc.get("results")` -- a `.get` on whatever
+        # JSON held, which a document holding a string answered with an AttributeError out
+        # of a tool whose whole contract is that it is safe to point at somebody's
+        # evidence. `read_artifact` refuses a list, a string, a number and a null with a
+        # sentence naming the file, so writing a second answer to that question here would
+        # be a branch nothing can reach and nothing can test.
+        rows = doc.get("results") or []
         hits = []
         for i, r in enumerate(rows):
             for j, t in enumerate(r.get("trials") or []):
@@ -104,7 +121,14 @@ def main(argv=None):
         from workspace import OUT
         out_dir = OUT
 
-    found = walk(out_dir)
+    unreadable = []
+    found = walk(out_dir, unreadable)
+    # SAID BEFORE ANYTHING ELSE, because the list below is what somebody reads before
+    # allowing this tool to edit their evidence, and a file missing from it is a file they
+    # will believe was checked and clean.
+    for _name, _why in unreadable:
+        print("  ! %s could not be read (%s). It was not examined, and nothing below "
+              "describes whatever it holds." % (_name, _why))
     if not found:
         print("nothing to repair in %s — no stored reply opens with a backend failure."
               % out_dir)
@@ -130,10 +154,20 @@ def main(argv=None):
                 pr["error"] = "AppError: %s" % " ".join(text.split())[:200]
                 pr["output"] = ""
         if args.write:
-            io.open(fp, "w", encoding="utf-8", newline="").write(
-                json.dumps(doc, indent=2, ensure_ascii=False))
+            # ATOMIC, like every other writer of an artifact in this repository. This one
+            # rewrites the record of runs that cost hours, and it did it by truncating the
+            # file and writing over it: interrupt that -- Ctrl-C, a full disk, a machine
+            # reclaimed -- and what is left is the truncated artifact `read_artifact` was
+            # written to describe. The tool whose argument is that an absence must stay
+            # distinguishable from an answer was one keystroke from destroying both.
+            from workspace import atomic_write as _atomic
+            with _atomic(fp) as _fh:
+                _fh.write(json.dumps(doc, indent=2, ensure_ascii=False))
 
-    print("\n%d probe(s) across %d file(s)." % (total, len(found)))
+    print("\n%d probe(s) across %d file(s)%s."
+          % (total, len(found),
+             "" if not unreadable else
+             ", and %d file(s) nobody could read" % len(unreadable)))
     if args.write:
         print("written. Re-score with: qatration rejudge --write")
     else:

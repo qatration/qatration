@@ -1367,6 +1367,134 @@ def test_the_runner_refuses_a_tree_with_no_suites():
           % len(found))
 
 
+def test_the_tool_that_edits_stored_evidence():
+    """`tools/repair_probes.py` moves a backend failure out of `output` and into `error`.
+
+    NOTHING ASSERTED ANY OF IT. It is one of two modules in `tools/` that no suite named,
+    and it is the one that REWRITES the record of runs that cost hours -- the thing this
+    repository treats as evidence, and the thing `rejudge --write` is read-only by default
+    to protect. Its own docstring says so: "these files are the record of expensive runs,
+    and a tool that edits them has no business doing it before somebody has read the list."
+
+    Three things were wrong with it and each is the same rule applied everywhere else here:
+
+      * it wrote the file by truncating it, where `runs`, `jobqueue` and `rejudge` all go
+        through `workspace.atomic_write`. Interrupted, that leaves the truncated artifact
+        `read_artifact` exists to describe -- caused by the tool whose whole argument is
+        that an absence must stay distinguishable from an answer;
+      * `except Exception: continue` over an artifact it could not parse, under a closing
+        line that reads "N probe(s) across M file(s)" -- a count over the files that
+        happened to parse, printed as a count over the directory;
+      * `doc.get` on whatever JSON held, so a results file holding a string ended it with
+        an AttributeError.
+    """
+    import importlib.util, json as _json_r, shutil as _sh_r, tempfile as _tf_r
+    spec = importlib.util.spec_from_file_location(
+        "repair_probes_under_test", os.path.join(ROOT_DIR, "tools", "repair_probes.py"))
+    rp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rp)
+
+    def _artifact(reply):
+        # A USABLE RESULTS FILE, because that is what `read_artifact` answers for and this
+        # tool now asks it. A file the pages cannot key to a target is one this tool has no
+        # business editing either, and it says so instead of skipping it.
+        return {"meta": {"target": "t", "attacks_n": 1},
+                "results": [
+                    {"attack": {"id": "a-1"}, "headline": "h", "verdict": "exploited",
+                     "fired": [],
+                     "trials": [{"verdict": "exploited",
+                                 "probe": {"output": reply, "error": ""}}]}]}
+
+    work = _tf_r.mkdtemp()
+    try:
+        _fail = "Failed to connect to Ollama at 127.0.0.1."
+        _good = os.path.join(work, "results_good.json")
+        io.open(_good, "w", encoding="utf-8").write(_json_r.dumps(_artifact(_fail)))
+
+        # A FAILURE IS FOUND, or the rest of this proves nothing about a tool that
+        # simply never matches.
+        _hits = rp.walk(work)
+        assert len(_hits) == 1 and len(_hits[0][2]) == 1, \
+            "the fixture never reached the rule: %r" % (_hits,)
+        assert rp.failure_in(_fail) == "connection", rp.failure_in(_fail)
+        # ANCHORED AT THE START. Every corpus in this fleet is deliberately poisoned, so a
+        # retrieved document carrying that sentence must not be able to rewrite the record.
+        assert rp.failure_in("The bot said: failed to connect to Ollama") is None, \
+            "a planted document can make this tool edit a real reply"
+
+        # UNREADABLE IS NAMED, NOT SKIPPED.
+        _torn = os.path.join(work, "results_torn.json")
+        io.open(_torn, "w", encoding="utf-8").write('{"results": [')
+        _scalar = os.path.join(work, "results_scalar.json")
+        io.open(_scalar, "w", encoding="utf-8").write('"hello"')
+        _unread = []
+        _hits = rp.walk(work, _unread)
+        assert sorted(n for n, _ in _unread) == ["results_scalar.json",
+                                                 "results_torn.json"], _unread
+        assert all(_why for _, _why in _unread), _unread
+        assert len(_hits) == 1, "a readable artifact was lost with the unreadable ones"
+
+        # AND THE COMMAND SAYS SO, rather than counting the files that happened to parse.
+        _buf = io.StringIO()
+        _old_out = sys.stdout
+        try:
+            sys.stdout = _buf
+            _rc = rp.main(["--out", work])
+        finally:
+            sys.stdout = _old_out
+        _said = _buf.getvalue()
+        assert _rc == 0, _rc
+        assert "results_torn.json" in _said and "could not be read" in _said, _said
+        assert "2 file(s) nobody could read" in _said, _said
+        assert "nothing was written" in _said, _said
+        assert _json_r.loads(io.open(_good, encoding="utf-8").read()) == _artifact(_fail), \
+            "the preview wrote to the artifact"
+
+        # --write MOVES THE BYTES AND DOES NOT DISCARD THEM.
+        _buf2 = io.StringIO()
+        try:
+            sys.stdout = _buf2
+            rp.main(["--out", work, "--write"])
+        finally:
+            sys.stdout = _old_out
+        _after = _json_r.loads(io.open(_good, encoding="utf-8").read())
+        _probe = _after["results"][0]["trials"][0]["probe"]
+        assert _probe["output"] == "", _probe
+        assert _fail.split(".")[0] in _probe["error"], _probe
+        assert _probe["error"].startswith("AppError:"), _probe
+        # IDEMPOTENT: a probe already recorded as a failure is left alone.
+        assert rp.walk(work) == [], rp.walk(work)
+        # AND THE GUARD THAT SAYS SO IS THE `error` FIELD, not the empty output. An adapter
+        # that records the failure AND leaves its text in `output` is the case that guard
+        # is for, and without it this tool would rewrite the error it had already written
+        # -- second-hand, truncated to 200 characters, once per run. Asserted with a probe
+        # in exactly that state, because after a --write pass `output` is empty and the
+        # match fails anyway, so the guard could not be caught doing nothing.
+        _both = _artifact(_fail)
+        _both["results"][0]["trials"][0]["probe"]["error"] = "AppError: already recorded"
+        _twice = os.path.join(work, "results_both.json")
+        io.open(_twice, "w", encoding="utf-8").write(_json_r.dumps(_both))
+        assert [h for h in rp.walk(work) if h[0] == _twice] == [], \
+            "a probe already recorded as a failure is picked up again"
+
+        # AND THE WRITE IS ATOMIC. Truncate-and-write over the record of an expensive run
+        # leaves nothing at all when it is interrupted; this must go through the one
+        # writer that replaces the file only once it is whole.
+        _src = io.open(os.path.join(ROOT_DIR, "tools", "repair_probes.py"),
+                       encoding="utf-8").read()
+        _writes = [n for n in ast.walk(ast.parse(_src))
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                   and n.func.attr == "open"
+                   and any(isinstance(a, ast.Constant) and a.value == "w" for a in n.args)]
+        assert not _writes, ("tools/repair_probes.py opens an artifact for writing directly "
+                             "at line(s) %s" % [n.lineno for n in _writes])
+        assert "atomic_write" in _src, "it does not use the one atomic writer"
+    finally:
+        _sh_r.rmtree(work, ignore_errors=True)
+    print("  ok  the tool that edits stored evidence is atomic, idempotent and says what "
+          "it could not read")
+
+
 def test_the_mutation_tool_puts_the_file_back_when_it_is_killed():
     """`tools/unguarded.py` writes a mutant over a real source file and writes the original
     back a few lines later. Interrupted in that gap, the mutant is what stays on disk.
