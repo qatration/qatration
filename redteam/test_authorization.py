@@ -205,6 +205,44 @@ def main():
     check("...and an empty host is not this machine either",
           not az.is_local("not a url at all"), "an unparseable url")
 
+    # --- ONE TABLE OF DEFAULT PORTS ------------------------------------------------------
+    #
+    # `targets_http._GuardedRedirect` refuses a redirect that moves the port, because a port
+    # is a different service; the first version of that rule arrived carrying its own copy of
+    # `DEFAULT_PORT`. A second table of the same three facts is the arrangement this
+    # repository keeps finding and calling a defect, and it is the kind that stays true for
+    # years and then does not.
+    from urllib.parse import urlparse as _up_p
+    check("a default port is filled in from the scheme",
+          az.effective_port(_up_p("http://h/x")) == 80
+          and az.effective_port(_up_p("https://h/x")) == 443,
+          "%r / %r" % (az.effective_port(_up_p("http://h/x")),
+                       az.effective_port(_up_p("https://h/x"))))
+    check("...and one written out is the one that is used",
+          az.effective_port(_up_p("http://h:8080/x")) == 8080,
+          repr(az.effective_port(_up_p("http://h:8080/x"))))
+    check("...so a port written out is not a different origin from the default",
+          az.effective_port(_up_p("http://h:80/x"))
+          == az.effective_port(_up_p("http://h/x")),
+          "80 and the default disagree")
+    check("...and a scheme nobody has a default for answers nothing rather than guessing",
+          az.effective_port(_up_p("ftp://h/x")) is None,
+          repr(az.effective_port(_up_p("ftp://h/x"))))
+    # AND THE REDIRECT GUARD READS THIS ONE. Named by import rather than by a grep, so a
+    # copy reappearing in that file is what fails here.
+    import ast as _ast_p
+    with open(os.path.join(HERE, "targets_http.py"), encoding="utf-8") as _fh_p:
+        _th_src = _fh_p.read()
+    _th_tree = _ast_p.parse(_th_src)
+    _asks = [n for n in _ast_p.walk(_th_tree)
+             if isinstance(n, _ast_p.ImportFrom) and n.module == "authorization"
+             and any(a.name == "effective_port" for a in n.names)]
+    check("the redirect guard asks this file for the table", len(_asks) == 1,
+          "%d import(s) of effective_port" % len(_asks))
+    check("...and keeps no table of its own",
+          "DEFAULT_PORT" not in _th_src.replace("from authorization import", ""),
+          "targets_http.py still spells out a port table")
+
     # EVERY entry point that drives a target, which is the point: the last guard added to this
     # engine went into the sweep and not into benign.py, and the very next run used the other
     # door. A benign baseline is still traffic against somebody's production endpoint, and it

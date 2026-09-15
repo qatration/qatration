@@ -57,6 +57,23 @@ def issue(target_url, secret, issued=None):
 DEFAULT_PORT = {"http": 80, "https": 443}
 
 
+def effective_port(parts):
+    """The port a parsed URL really speaks to, its scheme's default included. -> int|None.
+
+    HERE BECAUSE THE TABLE IS HERE. `targets_http._GuardedRedirect` needs the same answer --
+    a redirect that moves the port moves the request to a different service -- and the
+    version of it written there arrived with a second copy of `DEFAULT_PORT`, which is the
+    arrangement this project keeps finding and calling a defect. One table, one reader.
+
+    `urlparse("http://h").port` is None and `urlparse("http://h:80").port` is 80, so a rule
+    that compares those two directly calls one origin a move; that is the whole of what this
+    is for, and `origin_of` below has always needed it too.
+    """
+    if parts.port:
+        return parts.port
+    return DEFAULT_PORT.get((parts.scheme or "").lower())
+
+
 def origin_of(url):
     """The origin two URLs share, normalised so that one host has one answer.
 
@@ -98,7 +115,7 @@ def origin_of(url):
     # COMPARED AS A NUMBER. `":80" in netloc` is true of `:8000` and `:8099`, which is the
     # substring trap this file warns about elsewhere and which caught the first probe
     # written to measure this very defect.
-    if port is not None and port != DEFAULT_PORT.get(scheme):
+    if port is not None and effective_port(u) != DEFAULT_PORT.get(scheme):
         host = f"{host}:{port}"
     userinfo = u.netloc.rsplit("@", 1)[0] + "@" if "@" in u.netloc else ""
     return f"{scheme}://{userinfo}{host}"

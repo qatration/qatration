@@ -263,20 +263,6 @@ def _pairs(raw):
 
 
 
-_DEFAULT_PORT = {"http": 80, "https": 443}
-
-
-def _effective_port(parts):
-    """The port a URL really speaks to, default included. -> int or None.
-
-    Written out because `urlparse(...).port` is None for `http://h` and 80 for
-    `http://h:80`, and a rule comparing those two directly calls the same origin a move.
-    """
-    if parts.port:
-        return parts.port
-    return _DEFAULT_PORT.get((parts.scheme or "").lower())
-
-
 class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
     """Allow a redirect only if it keeps the same host and still passes the network policy.
 
@@ -321,7 +307,21 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
                 f"redirect to a different scheme refused: {_old_s} -> {_new_s}. "
                 f"An upgrade to https is the only move the target gets to make.",
                 headers, fp)
-        _old_p, _new_p = _effective_port(old), _effective_port(new)
+        # THE TABLE LIVES IN `authorization`, beside `origin_of`, which is what this
+        # project means by the identity of an endpoint everywhere else. The first version
+        # of this rule brought its own copy of it; a second table of default ports is the
+        # arrangement this repository keeps finding and calling a defect.
+        #
+        # Imported the way the policy check below is, because this module is loaded by the
+        # worker before the package is set up. Without it, ANY port change is refused --
+        # the conservative direction, and the one that cannot be talked into a mistake by
+        # an import failure.
+        try:
+            from authorization import effective_port as _eport
+        except ImportError:
+            def _eport(parts):
+                return parts.port or -1
+        _old_p, _new_p = _eport(old), _eport(new)
         if _new_p != _old_p and not (_upgrade and _old_p == 80 and _new_p == 443):
             raise urllib.error.HTTPError(
                 req.full_url, code,
