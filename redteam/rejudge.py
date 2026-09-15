@@ -319,7 +319,7 @@ def main():
             # whenever they were measured.
             from target import judged_now as _judged_now
             data["meta"] = _judged_now(data["meta"])
-            with open(path, "w", encoding="utf-8") as f:
+            with workspace.atomic_write(path) as f:
                 json.dump(data, f, indent=2, default=str)
             html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)
             # WITH THE PANELS THE RUN PUT THERE. This rebuilt the page from the results
@@ -331,7 +331,7 @@ def main():
                 None, f"recon_{name}.json", "profile", root=OUT_DIR)
             _iso = workspace.side_artifact(
                 None, f"isolation_{name}.json", "maps", root=OUT_DIR)
-            with open(html, "w", encoding="utf-8") as f:
+            with workspace.atomic_write(html) as f:
                 f.write(build_html(data["meta"], data["results"],
                                    recon=_recon, isolation=_iso))
 
@@ -392,7 +392,7 @@ def main():
                 # the fingerprint, which is the same deletion pointed the other way.
                 _recon2 = workspace.side_artifact(
                     None, f"recon_{tgt}.json", "profile", root=OUT_DIR)
-                with open(html, "w", encoding="utf-8") as f:
+                with workspace.atomic_write(html) as f:
                     f.write(build_html(rd["meta"], rd["results"], recon=_recon2,
                                        isolation={"maps": maps, "when": when}))
                 print(f"  rebuilt {os.path.basename(html)}")

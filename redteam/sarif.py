@@ -525,7 +525,8 @@ def main():
     from workspace import writable_path as _writable
     dest = _writable(args.out or os.path.splitext(args.results)[0] + ".sarif",
                      "SARIF export", "sarif")
-    with open(dest, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(dest) as f:
         json.dump(log, f, indent=2)
 
     run = log["runs"][0]

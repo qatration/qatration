@@ -163,7 +163,8 @@ def submit(root, body, policy=None, wake=None):
     cfg_dir = os.path.join(str(root), "configs")
     os.makedirs(cfg_dir, exist_ok=True)
     cfg_path = os.path.join(cfg_dir, f"{name}-{uuid.uuid4().hex[:12]}.yaml")
-    with open(cfg_path, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(cfg_path) as f:
         yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
 
     # One probe, through the same check `onboard.py` runs, so the operator hears "your endpoint

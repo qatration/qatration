@@ -110,8 +110,27 @@ def main():
               any(r["run_id"] == "torn" for r in runs.listing(root)))
 
         # --- and writing is atomic, so a killed run cannot leave a torn one ---------------
-        src = open(os.path.join(HERE, "runs.py"), encoding="utf-8").read()
-        check("records are replaced, not written in place", "os.replace(" in src)
+        #
+        # DRIVEN, NOT GREPPED. This asked whether `runs.py` CONTAINS `os.replace(`, and the
+        # moment that rule moved into `workspace.atomic_write` -- one implementation for the
+        # sixteen artifact writers that never had it -- the check went red over a property
+        # that had not changed. A gate quantified over a spelling in one file is a gate
+        # about the spelling.
+        from workspace import atomic_write as _atomic_r
+        _rid = runs.listing(root)[0]["run_id"]
+        _before_r = open(runs._path(root, _rid), encoding="utf-8").read()
+        try:
+            with _atomic_r(runs._path(root, _rid)) as _fr:
+                _fr.write('{"run_id": "half')
+                raise RuntimeError("killed mid-write")
+        except RuntimeError:
+            pass
+        check("a record killed mid-write leaves the previous one intact",
+              open(runs._path(root, _rid), encoding="utf-8").read() == _before_r,
+              open(runs._path(root, _rid), encoding="utf-8").read()[:80])
+        check("...and it still reads back as the run it was",
+              (runs.load(root, _rid) or {}).get("run_id") == _rid,
+              str(runs.load(root, _rid))[:120])
         check("...and nothing is left behind on success",
               not [f for f in os.listdir(root) if f.endswith(".tmp")], str(os.listdir(root)))
     finally:

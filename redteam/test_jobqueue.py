@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import jobqueue as q
+from workspace import atomic_write as workspace_atomic
 
 
 def main():
@@ -166,8 +167,25 @@ def main():
                   all(j.get("job_id") != "shape" for j in q.listing(root, "queued")),
                   str(q.listing(root, "queued")))
             os.remove(_jp)
-        src = open(os.path.join(HERE, "jobqueue.py"), encoding="utf-8").read()
-        check("jobs are replaced, not written in place", "os.replace(" in src)
+        # DRIVEN, NOT GREPPED. This asked whether `jobqueue.py` CONTAINS `os.replace(`, and
+        # the moment that rule moved into `workspace.atomic_write` -- one implementation for
+        # the sixteen artifact writers that never had it -- the check went red over a
+        # property that had not changed. A gate quantified over a spelling in one file is a
+        # gate about the spelling.
+        _keep = q.load(root, b["job_id"])
+        _before = open(q._path(root, b["job_id"]), encoding="utf-8").read()
+        try:
+            with workspace_atomic(q._path(root, b["job_id"])) as _f:
+                _f.write('{"job_id": "half')
+                raise RuntimeError("killed mid-write")
+        except RuntimeError:
+            pass
+        check("a job killed mid-write leaves the previous record intact",
+              open(q._path(root, b["job_id"]), encoding="utf-8").read() == _before,
+              open(q._path(root, b["job_id"]), encoding="utf-8").read()[:80])
+        check("...and it is still the job the queue had",
+              (q.load(root, b["job_id"]) or {}).get("state") == (_keep or {}).get("state"),
+              str(q.load(root, b["job_id"])))
         check("...and nothing is left behind",
               not [f for f in os.listdir(root) if f.endswith(".tmp")], str(os.listdir(root)))
 

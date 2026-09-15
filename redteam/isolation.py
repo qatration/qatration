@@ -491,5 +491,6 @@ def write_maps(path, maps, meta=None, when=None):
     # because two other artifact families were rewritten by the same command without it.
     body = {"meta": judged_now({**(meta or {}),
                                 **({"when": when} if when else {})}), "maps": maps}
-    with open(path, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(path) as f:
         json.dump(body, f, indent=2, ensure_ascii=False)

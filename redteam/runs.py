@@ -139,13 +139,15 @@ def finish(root, rec, state="finished", spent=None, note=None, when=None):
 
 def _write(root, rec):
     os.makedirs(str(root), exist_ok=True)
-    tmp = _path(root, rec["run_id"]) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(rec, f, indent=2, ensure_ascii=False)
     # Replaced rather than written in place: a run killed mid-write would otherwise leave a
     # truncated record, and a record that cannot be read is worse than one that says the run
     # died — the timeline already learned that lesson from a torn line in its own file.
-    os.replace(tmp, _path(root, rec["run_id"]))
+    # THE RULE ITSELF IS IN `workspace.atomic_write` now: this was one of two copies, and
+    # the sixteen writers that lacked it are the artifacts every published number is
+    # recounted from.
+    from workspace import atomic_write as _atomic
+    with _atomic(_path(root, rec["run_id"])) as f:
+        json.dump(rec, f, indent=2, ensure_ascii=False)
 
 
 def load(root, run_id):

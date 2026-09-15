@@ -129,7 +129,8 @@ def main():
     out = args.out or os.path.join(WORKSPACE_OUT, f"isolation_generated_{name}.yaml")
     from workspace import writable_path as _writable
     out = _writable(out, "objectives", "generate")
-    with open(out, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(out) as f:
         f.write(to_yaml(objs, name))
     print(f"\nwrote {out}")
     # THE COMMAND, NOT THE FILE. `run_isolation.py` exists in a checkout of this repository

@@ -106,7 +106,8 @@ def promote(res, target_name, goal, success):
              # absence is what stops anyone treating an unproven one as proven.
              "confirmed_on": []}
     existing.append(entry)
-    with open(LEARNED, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(LEARNED) as f:
         f.write(HEADER)
         yaml.safe_dump(existing, f, sort_keys=False, allow_unicode=True, width=88)
     return entry
@@ -174,7 +175,8 @@ def main():
     if _refusal:
         print(_refusal, file=sys.stderr)
         return 2
-    with open(path, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic2
+    with _atomic2(path) as f:
         json.dump({"target": target.name, "goal": args.goal, "attacker": args.attacker_model,
                    "result": res}, f, indent=2, default=str)
     print(f"transcript → {path}")

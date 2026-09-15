@@ -652,6 +652,90 @@ def check_every_command_refuses():
               "Traceback (most recent call last)" not in _out_w, True)
         check("...with the code that says which happened (%s)" % _label, _rc_w, _want_rc)
 
+    # --- AND NOTHING THIS TOOL WRITES IS WRITTEN IN PLACE --------------------------------
+    #
+    # `jobqueue._write` and `runs._write` each built a `.tmp` and replaced it, and `runs`
+    # wrote down why: "a run killed mid-write would otherwise leave a truncated record, and
+    # a record that cannot be read is worse than one that says the run died". Sixteen other
+    # writes were an ordinary `open(path, "w")`, and they are the ARTIFACTS -- the results
+    # file, the benign baseline, the lock map, the recon profile, the coverage buckets, the
+    # SARIF export and every HTML page.
+    #
+    # `read_artifact` exists because of what that costs and names the cause in its own
+    # docstring: "a truncated artifact is not hypothetical: it is what an interrupted write
+    # leaves, and a sweep stopped by hand produces one". The READER was hardened and the
+    # WRITER never was, in the files every published number here is recounted from.
+    _aw = _tfp.mkdtemp()
+    _apath = _os.path.join(_aw, "artifact.json")
+    _io.open(_apath, "w", encoding="utf-8").write("the previous artifact")
+    try:
+        with _ws.atomic_write(_apath) as _af:
+            _af.write("half of the new one")
+            raise RuntimeError("killed mid-write")
+    except RuntimeError:
+        pass
+    check("a write killed half way leaves the previous file intact",
+          _io.open(_apath, encoding="utf-8").read(), "the previous artifact")
+    check("...and nothing is left beside it",
+          [f for f in _os.listdir(_aw) if f.endswith(".tmp")], [])
+    with _ws.atomic_write(_apath) as _af:
+        _af.write("the new one")
+    check("...while a write that finishes replaces it",
+          _io.open(_apath, encoding="utf-8").read(), "the new one")
+    check("...and leaves nothing beside it either",
+          [f for f in _os.listdir(_aw) if f.endswith(".tmp")], [])
+
+    # AND EVERY WRITER GOES THROUGH IT. Read as the CALL, not as a word in the file: the two
+    # gates that used to ask this of `jobqueue` and `runs` grepped their own source for
+    # `os.replace(`, and both went red the moment the rule moved into one place -- over a
+    # property that had not changed.
+    _writers, _in_place = [], []
+    _ATOMIC = {"atomic_write", "_atomic", "_atomic2", "_atomic_r", "workspace_atomic"}
+    for _fp in sorted(_g.glob(_os.path.join(_here, "*.py"))):
+        _nm = _os.path.basename(_fp)
+        if _nm.startswith("test_"):
+            continue
+        try:
+            _tw = _ast_s.parse(_io.open(_fp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        for _n in _ast_s.walk(_tw):
+            if not (isinstance(_n, _ast_s.Call) and isinstance(_n.func, _ast_s.Name)
+                    and _n.func.id == "open" and len(_n.args) > 1):
+                continue
+            _mode = _n.args[1]
+            if not (isinstance(_mode, _ast_s.Constant) and "w" in str(_mode.value)):
+                continue
+            _writers.append("%s:%d" % (_nm, _n.lineno))
+            _in_place.append("%s:%d %s" % (_nm, _n.lineno,
+                                           _ast_s.unparse(_n.args[0])[:40]))
+    # THE ONE THAT IS ALLOWED TO TRUNCATE is the rule itself, which is what makes the
+    # temporary file it replaces from.
+    _in_place = [w for w in _in_place if not w.startswith("workspace.py")]
+    check("no module writes a file in place", sorted(_in_place), [])
+    # `check(label, got, want)` in this file. The only truncating write left is the one
+    # inside the rule, which is what it makes the temporary file from, so the scan finding
+    # exactly it is the proof that the scan still works.
+    check("...and the scan can still see a truncating write, the rule's own",
+          [w for w in _writers if w.startswith("workspace.py")] != [], True)
+    # AND THE CALLS THAT REPLACED THEM ARE REAL. A scan that found nothing because every
+    # writer vanished would pass the line above.
+    _atomic_calls = 0
+    for _fp in sorted(_g.glob(_os.path.join(_here, "*.py"))):
+        if _os.path.basename(_fp).startswith("test_"):
+            continue
+        try:
+            _tw = _ast_s.parse(_io.open(_fp, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        for _n in _ast_s.walk(_tw):
+            if isinstance(_n, _ast_s.Call) and (
+                    getattr(_n.func, "id", "") in _ATOMIC
+                    or getattr(_n.func, "attr", "") == "atomic_write"):
+                _atomic_calls += 1
+    check("...and the writers that replaced them go through the one rule",
+          _atomic_calls >= 14, True)
+
     # AND THE READER ITSELF SAYS WHICH OF THE THREE THINGS WENT WRONG, because `no such
     # file`, `that is a directory` and `that is not YAML` have different remedies.
     def _read(path):

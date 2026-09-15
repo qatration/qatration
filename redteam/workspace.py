@@ -26,6 +26,7 @@ Read at import, deliberately: a run must not change where it is writing halfway 
 a module-level constant is what the offline suites monkeypatch to point a scripted fleet at a
 temp directory.
 """
+import contextlib
 import os
 import re
 
@@ -649,6 +650,47 @@ def wrong_shape(doc, what, path=""):
     return ("%s is %s, not %s. A %s is %s."
             % (where, _SHAPE_WORDS.get(type(doc), "a " + type(doc).__name__),
                _SHAPE_WORDS.get(kind, kind.__name__), what, says))
+
+
+@contextlib.contextmanager
+def atomic_write(path, encoding="utf-8"):
+    """Open a file for writing so an interrupted write cannot leave half of one.
+
+    THE RULE EXISTS HERE TWICE AND WAS APPLIED TO THE WRONG HALF. `jobqueue._write` and
+    `runs._write` both build a `.tmp` and `os.replace` it, and `runs` writes down why: "a run
+    killed mid-write would otherwise leave a truncated record, and a record that cannot be
+    read is worse than one that says the run died -- the timeline already learned that lesson
+    from a torn line in its own file." `test_jobqueue` gates it: "jobs are replaced, not
+    written in place."
+
+    Sixteen other writes are an ordinary `open(path, "w")`, and they are the ARTIFACTS: the
+    results file, the benign baseline, the lock map, the recon profile, the coverage buckets,
+    the SARIF export and every HTML page. `read_artifact` exists because of what that costs
+    and names the cause in its own docstring -- "a truncated artifact is not hypothetical: it
+    is what an interrupted write leaves, and a sweep stopped by hand produces one". The
+    READER was hardened against it and the WRITER never was, in the files every published
+    number here is recounted from.
+
+    The temporary file is removed on the way out of a failed write, so a run that dies leaves
+    the previous artifact intact and nothing beside it.
+
+    NOT `newline=""`. These writers use the default translation today and the artifacts in
+    this repository were written with it; changing that would rewrite every file's line
+    endings the next time anything touched it, which is a diff about nothing.
+    """
+    tmp = "%s.tmp" % path
+    fh = open(tmp, "w", encoding=encoding)
+    try:
+        yield fh
+    except BaseException:
+        fh.close()
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    fh.close()
+    os.replace(tmp, path)
 
 
 def writable_path(path, what="file", where=""):

@@ -1567,7 +1567,8 @@ def main():
     # These are the paths the overwrite guard was asked about before the run started, not a
     # second derivation of them.
     json_path, html_path = _json_path, _html_path
-    with open(json_path, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(json_path) as f:
         json.dump({"meta": meta, "results": results}, f, indent=2, default=str)
     # Closed with what it actually cost, and with the ending named: a run stopped by its
     # budget is not a run that finished, and the attacks it never sent are a gap rather than a
@@ -1606,7 +1607,7 @@ def main():
                            root=OUT_DIR, warn=_missing_side)
     isolation = _side_artifact(args.isolation, f"isolation_{target.name}.json", "maps",
                                root=OUT_DIR, warn=_missing_side)
-    with open(html_path, "w", encoding="utf-8") as f:
+    with _atomic(html_path) as f:
         f.write(build_html(meta, results, recon=recon, isolation=isolation))
     print(f"report → {html_path}")
 

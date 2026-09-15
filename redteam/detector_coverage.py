@@ -396,7 +396,8 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
     if _dir:
         from workspace import writable_path as _writable
         path = _writable(path, "coverage buckets", "coverage")
-    with open(path, "w", encoding="utf-8") as f:
+    from workspace import atomic_write as _atomic
+    with _atomic(path) as f:
         json.dump({"probes": n,
                    "measured": bool(n),
                    "demonstrated": {k: hits[k] for k in demo},

@@ -139,7 +139,8 @@ def main():
         # time. Nothing on disk could answer it, so the writer answers it.
         import datetime as _dt
         profile.setdefault("when", _dt.datetime.now().isoformat(" ", "seconds")[:16])
-        with open(out, "w", encoding="utf-8") as f:
+        from workspace import atomic_write as _atomic
+        with _atomic(out) as f:
             json.dump(profile, f, indent=2, ensure_ascii=False)
         print(f"\nwrote {out}")
     return 0

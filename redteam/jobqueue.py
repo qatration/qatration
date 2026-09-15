@@ -42,10 +42,12 @@ def _path(root, job_id):
 
 def _write(root, job):
     os.makedirs(str(root), exist_ok=True)
-    tmp = _path(root, job["job_id"]) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # THE ONE RULE. This was the first of three copies of `tmp` + `os.replace` and the
+    # only half of the tool that had it; `workspace.atomic_write` is that rule for every
+    # file this engine writes, artifacts included.
+    from workspace import atomic_write as _atomic
+    with _atomic(_path(root, job["job_id"])) as f:
         json.dump(job, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, _path(root, job["job_id"]))
 
 
 def _marker(root, job_id):

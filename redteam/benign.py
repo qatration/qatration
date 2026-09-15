@@ -860,7 +860,7 @@ def main():
                 # that is the one running now. `when` stays as measured.
                 from target import judged_now as _judged_now
                 d["meta"] = _judged_now(d.get("meta") or {})
-                with open(fp, "w", encoding="utf-8") as f:
+                with workspace.atomic_write(fp) as f:
                     json.dump(d, f, indent=2)
         verb = "rescored" if args.write else "would change"
         # Say how much was actually looked at. "0 rows would change" reads as a clean bill
@@ -1265,7 +1265,7 @@ def main():
     # is the one that lost fifty probes to a FileNotFoundError after sending every one of
     # them, with the traceback scrolling past above a tally that read like success.
     path = workspace.artifact(f"benign_{args.target}.json", root=OUT_DIR)
-    with open(path, "w", encoding="utf-8") as f:
+    with workspace.atomic_write(path) as f:
         # THE BUILD THAT JUDGED IT, the way `run_redteam` stamps its own results. Every
         # attribution in the engine rests on this file, and nothing in it said which oracle
         # produced the fires it records. Two costs, both measured on a baseline written
