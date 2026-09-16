@@ -102,6 +102,7 @@ def main():
           undocumented == 1, "counted %d" % undocumented)
     check("...and a module nothing held back holds nothing back", not held, str(held))
 
+
     # --- A MODULE SOMEBODY NAMED AND GOT SILENCE ABOUT ----------------------------------
     #
     # Package-wide, a file with no guard of this shape is passed over quietly, and that is
@@ -147,6 +148,42 @@ def main():
     # deleting the guard cannot make it red, which is exactly what this tool reports.
     check("...and a guard no case keeps is still reported from it",
           len(_s4) == 1 and "if x is None:" in _s4[0][2], str(_s4[:1]))
+
+    # --- `break` AND `continue` ARE GUARDS ------------------------------------------------
+    #
+    # The body pattern read `return`, `raise` and `sys.exit`, and a branch that skips an
+    # item reads `continue`. `if not isinstance(doc, dict): continue` is the shape this
+    # repository found eight times in one day, and deleting it means the item is processed.
+    # Measured across the engine when this was widened: 41 documented guards were in scope
+    # and TEN were not -- and for `benign`, `compare_targets`, `defense_report` and
+    # `lint_arsenal`, the one documented guard each of them has was among the ten, so the
+    # sweep answered "no guard of this shape here" about a module that had one. The first
+    # run after widening found a survivor in `lint_arsenal`.
+    _LOOPS = ('"""A module whose guards skip and stop rather than return."""' + chr(10)
+              + chr(10) + chr(10)
+              + "def each(rows):" + chr(10)
+              + "    out = []" + chr(10)
+              + "    for r in rows:" + chr(10)
+              + "        # A ROW THAT IS NOT A MAPPING IS SKIPPED, and somebody paid for"
+              + " that." + chr(10)
+              + "        if not isinstance(r, dict):" + chr(10)
+              + "            continue" + chr(10)
+              + "        # AND THE LIST IS BOUNDED, which is also a branch." + chr(10)
+              + "        if len(out) >= 3:" + chr(10)
+              + "            break" + chr(10)
+              + "        out.append(r)" + chr(10)
+              + "    return out" + chr(10))
+    _tl, _sl, _ul, _hl, _el = sweep_in(_LOOPS, suite=_GREEN)
+    check("a documented guard whose body is `continue` or `break` is in scope",
+          _tl == 2, "tested %d" % _tl)
+    check("...and neither is counted as undocumented instead",
+          _ul == 0, "counted %d undocumented" % _ul)
+    check("...and both survive deletion here, since the fixture suite never calls them",
+          len(_sl) == 2, str(_sl))
+    # AND THE THREE THAT WERE ALWAYS IN SCOPE STILL ARE, or widening replaced them.
+    _tr, _sr, _ur, _hr, _er = sweep_in(DOCUMENTED, suite=_GREEN)
+    check("...while a guard whose body is `return` is still in scope too",
+          _tr == 1, "tested %d" % _tr)
 
     # AND THE SENTENCE THE TOOL CLOSES WITH, which is the one a reader takes for the
     # verdict. `main` is driven rather than read: a rule that only the returned tuple knows

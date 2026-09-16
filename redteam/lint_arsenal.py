@@ -315,14 +315,18 @@ def bad_entry_shapes(entries):
     out = []
     if not want:
         return out
+    # AN ENTRY IS A MAPPING BY HERE, and that is an invariant rather than a hope: an entry
+    # that is not one is reported by whichever door loaded the corpus -- `unusable_entries`
+    # for an arsenal, `unusable_objectives` for an objectives file -- and both run before
+    # `refuse_unknown_detectors` calls this. `test_lint` pins it, by index and by type,
+    # which is what makes the sentence above a fact.
+    #
+    # THERE WAS A `continue` HERE FOR IT. `tools/unguarded.py` deleted it and all five suites
+    # that can see this module stayed green, which is what a branch nothing can reach looks
+    # like from the outside. It was written as defence in depth and it is not that: a guard
+    # that cannot fire is a line telling the next reader the case is handled here, so they
+    # stop looking for the door that actually handles it.
     for e in entries or []:
-        # SKIPPED, BECAUSE BY HERE IT CANNOT HAPPEN. An entry that is not a mapping is
-        # reported by whichever door loaded the corpus -- `unusable_entries` for an arsenal,
-        # `unusable_objectives` for an objectives file -- and both run before
-        # `refuse_unknown_detectors` calls this. A third copy of that sentence here would be
-        # the shape this project keeps deleting: one rule, one implementation.
-        if not isinstance(e, dict):
-            continue
         who = e.get("id") or e.get("name") or "?"
         for k, v in e.items():
             if k not in want or v is None or isinstance(v, (list, tuple)):

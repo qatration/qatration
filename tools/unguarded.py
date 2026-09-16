@@ -205,7 +205,18 @@ def recover():
     return live[0] if live else None
 
 GUARD = re.compile(r"^(\s+)if\s+.+:\s*$")
-BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\))\s*$")
+# WHAT COUNTS AS A GUARD'S BODY. `break` and `continue` were not on this list, and they are
+# the same branch: `if not isinstance(doc, dict): continue` skips an artifact, and deleting it
+# means the artifact is processed -- which is the defect shape this repository found eight
+# times in one day. Measured across the engine: 41 documented guards were in scope and TEN
+# were not, and for four modules -- `benign`, `compare_targets`, `defense_report` and
+# `lint_arsenal` -- the single documented guard each of them has was the invisible one, so
+# this sweep reported "no guard of this shape here", which a reader takes for an answer about
+# the module.
+#
+# A scan whose universal claim is about whatever it still recognises is the failure this file
+# exists to report, one level in.
+BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\)|break|continue)\s*$")
 
 
 def _run(suite, timeout=420):

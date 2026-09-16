@@ -155,6 +155,22 @@ def check_refusal(check):
           len(bad_entry_shapes([{"id": "b", "applies_to": "httpbot"}])) == 1, "not caught")
     check("...naming the field rather than a letter from inside it",
           bad_entry_shapes([{"id": "a", "success": "x"}])[0][1] == "success", "wrong field")
+
+    # THE INVARIANT `bad_entry_shapes` RESTS ON. It reads `e.get("id")` with nothing in
+    # front of it, because an entry that is not a mapping has already been reported by the
+    # door that loaded the corpus. There WAS a `continue` there for it, and
+    # `tools/unguarded.py` deleted the line with every suite still green -- a branch that
+    # cannot be reached. What makes its absence safe is this, asserted rather than assumed:
+    # both doors name a non-mapping entry, by its index and by what it is.
+    from lint_arsenal import unusable_entries as _ue_s, unusable_objectives as _uo_s
+    _shapes = [["not", "a", "mapping"], "a string", 7, None]
+    for _door, _name, _fname in ((_ue_s, "unusable_entries", "a.yaml"),
+                                 (_uo_s, "unusable_objectives", "o.yaml")):
+        _said = _door(_shapes, _fname)
+        for _i, _kind in enumerate(("list", "str", "int", "NoneType")):
+            check("%s names entry #%d as %s, not a mapping" % (_name, _i, _kind),
+                  any(("#%d" % _i) in _s and _kind in _s for _s in _said),
+                  str(_said)[:120])
     check("a correct entry is not reported",
           not bad_entry_shapes([{"id": "c", "success": ["canary_in_output"],
                                  "applies_to": ["httpbot"]}]), "a valid entry was reported")

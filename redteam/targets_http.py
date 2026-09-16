@@ -148,6 +148,10 @@ def read_capped(response, limit=None, seconds=None):
     _deadline = (_time.time() + float(seconds)) if seconds else None
     _read1 = getattr(response, "read1", None)
     while extra < budget:
+        # THE BUDGET IS IN BYTES AND WHAT IT DEFENDS IS TIME. One byte every 200 ms never
+        # idles long enough for the socket timeout to fire, and at that rate the byte
+        # budget alone is seven hours; measured, a probe with `timeout_s=5` had not
+        # returned after 40 seconds.
         if _deadline is not None and _time.time() >= _deadline:
             break
         chunk = _read1(65536) if _read1 else response.read(65536)
@@ -301,6 +305,10 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
                 headers, fp)
         _old_s, _new_s = (old.scheme or "").lower(), (new.scheme or "").lower()
         _upgrade = (_old_s, _new_s) == ("http", "https")
+        # A DOWNGRADE IS NOT AN UPGRADE: https -> http puts the request and every header
+        # configured with it on the wire in clear, on the target's instruction. See the
+        # class docstring; the reason is here as well because `tools/unguarded.py` reads
+        # the line above a guard to decide whether anybody paid for it.
         if _old_s != _new_s and not _upgrade:
             raise urllib.error.HTTPError(
                 req.full_url, code,
@@ -322,6 +330,10 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
             def _eport(parts):
                 return parts.port or -1
         _old_p, _new_p = _eport(old), _eport(new)
+        # A PORT IS A DIFFERENT SERVICE. Measured with two scripted servers on one host:
+        # the probe landed on the second, its reply was judged as the target's answer and
+        # the run exited 0. 80 -> 443 alongside an http -> https upgrade is the one port
+        # change that is not one.
         if _new_p != _old_p and not (_upgrade and _old_p == 80 and _new_p == 443):
             raise urllib.error.HTTPError(
                 req.full_url, code,
