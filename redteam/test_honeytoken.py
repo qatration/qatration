@@ -430,6 +430,65 @@ def main():
     mn = open(os.path.join(HERE, "mint.py"), encoding="utf-8").read()
     check("there is one command that mints a pair and says how to plant it",
           "def instructions(" in mn and "canaries:" in mn)
+
+    # --- AND THE MESSAGE ITSELF, WHICH NO SUITE REACHED ---------------------------------
+    #
+    # `mint.py` is one of three modules in this package that no suite imports, and the only
+    # thing standing for coverage was the substring above -- a check about the TEXT of the
+    # file. What it renders is the first thing a stranger does with this tool: paste a block
+    # into a system prompt, copy two lines into a config, run one command to confirm the
+    # paste landed. Every one of those is a claim about three OTHER files, and a wrong one
+    # is silent: a canary the detectors cannot see reads as a deployment that held.
+    #
+    # DERIVED, NOT RESTATED. Each claim below is checked against the code that has to keep
+    # it true -- the config key `run_redteam` reads, the flag `onboard`'s parser declares,
+    # the command name in the dispatch table -- because a second copy of those strings here
+    # would go stale in exactly the same way the message can.
+    import mint as _mint_h
+    _s_h, _v_h = ht.mint()
+    _msg = _mint_h.instructions(_s_h, _v_h, "my.yaml")
+    check("the message carries the secret it just minted", _s_h in _msg, _msg[:80])
+    check("...and the verifier", _v_h in _msg, _msg[:80])
+    # THE PASTED KEY AND THE CONFIGURED ONE ARE THE SAME STRING. Two tokens are rendered a
+    # few lines apart, and a message that pastes one and configures the other is a run
+    # where every canary detector looks for something nobody planted.
+    _pasted = re.search(r"dispatch key:\s*(\S+)", _msg)
+    _configured = re.search(r'canaries:\s*\["([^"]+)"\]', _msg)
+    _declared = re.search(r'honeytoken_verify:\s*"([^"]+)"', _msg)
+    check("the key it tells you to paste is the one it tells you to configure",
+          bool(_pasted) and bool(_configured)
+          and _pasted.group(1) == _configured.group(1) == _s_h,
+          "%s vs %s" % (_pasted and _pasted.group(1), _configured and _configured.group(1)))
+    check("...and the verifier it declares is the public half, not the secret",
+          bool(_declared) and _declared.group(1) == _v_h and _s_h not in _declared.group(1),
+          str(_declared and _declared.group(1)))
+    # AND THE SENTENCE THE DEPLOYMENT IS ALLOWED TO ANSWER NAMES THE VERIFIER. If it named
+    # the canary, the instructions would tell the operator to authorise the leak the whole
+    # test is about.
+    _may = [l for l in _msg.splitlines() if "may tell them" in l]
+    check("the line the deployment may answer names the verifier",
+          _may and _v_h in _may[0], str(_may))
+    check("...and does not name the secret", _may and _s_h not in _may[0], str(_may))
+
+    # THE CONFIG KEYS ARE THE KEYS THE ENGINE READS.
+    _rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+    check("the key it tells you to set is the one the sweep reads",
+          'ctx.get("honeytoken_verify")' in _rr, "run_redteam reads a different key")
+    check("...and the message sets that one", "honeytoken_verify:" in _msg, _msg[:200])
+
+    # THE CONFIRMATION COMMAND EXISTS, with that flag, under that name.
+    import cli as _cli_h
+    _cmd = [l for l in _msg.splitlines() if "qatration onboard" in l]
+    check("the message names a command the dispatch table has",
+          _cmd and "onboard" in _cli_h.COMMANDS, str(_cmd))
+    _ob_src = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
+    check("...with a flag onboard's parser actually declares",
+          _cmd and '"--verify-honeytoken"' in _ob_src and "--verify-honeytoken" in _cmd[0],
+          str(_cmd))
+    check("...pointed at the config the caller named, not at a placeholder",
+          _cmd and "my.yaml" in _cmd[0], str(_cmd))
+    check("...and carrying the verifier rather than the secret",
+          _cmd and _v_h in _cmd[0] and _s_h not in _cmd[0], str(_cmd))
     check("...and onboarding prints that same text rather than a second copy of it",
           "_mint.instructions(" in ob)
 
