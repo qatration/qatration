@@ -49,6 +49,43 @@ def server_up(url, timeout=2.0):
         return False
 
 
+def fleet_plan(only=None, root=None):
+    """-> [(name, path, config, skip reason or "")] — who this sweep will run, and who it
+    will not.
+
+    A FUNCTION BECAUSE NOTHING COULD ASK. Every decision here was inline in `main`, between
+    two `print`s and a `subprocess.run` that sends real traffic to every practice bot, so
+    the only way to find out who a sweep would touch was to run one. The rest of this
+    repository has been through the same move -- `gate_verdict`, `verify.fleet_configs`,
+    `benign.adjudicated` -- with the same sentence: a decision rendered inside a print block
+    is a decision nothing can read.
+
+    THROUGH THE ONE ENUMERATION. This parsed each config itself and then asked whatever came
+    back for `name`, so a config reading `- name: listy` ended the fleet sweep with an
+    `AttributeError` before a single target was touched.
+
+    BOTH HALVES OF `--only`, because it matches either: the filename stem, which is what
+    somebody types for a config that declares no name, and the name the config declares. The
+    map answers the second and the path answers the first.
+
+    A TEMPLATE IS NOT A MEMBER OF THE FLEET. The generic adapter ships one, and sweeping it
+    would put a second copy of an existing bot into every aggregate under a different name --
+    one run counted twice, which is the arithmetic the per-model-copy rule exists to prevent.
+    Declared in the config so the sweep does not have to guess, and honoured here rather than
+    in the readers, which would each need their own copy of the rule.
+    """
+    from workspace import configs_by_name as _by_name, config_name as _config_name
+    out = []
+    for name, (cfg_path, cfg) in sorted(_by_name(root or ROOT).items()):
+        base = _config_name(cfg_path, {})
+        if only and base not in only and name not in only:
+            continue
+        why = ("template config (skip_in_fleet), run it explicitly"
+               if cfg.get("skip_in_fleet") else "")
+        out.append((name, cfg_path, cfg, why))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     from workspace import trial_count as _trial_count
@@ -81,25 +118,9 @@ def main():
     print("=" * 60)
     print(f"  QAtration fleet sweep — {len(configs)} target configs found")
     print("=" * 60)
-    # THROUGH THE ONE ENUMERATION. This parsed each config itself and then asked whatever
-    # came back for `name`, so a config reading `- name: listy` ended the fleet sweep with
-    # `AttributeError` before a single target was touched.
-    #
-    # BOTH HALVES ARE STILL HERE, because `--only` matches either: `base` is the filename
-    # stem, which is what somebody types for a config that declares no name, and `name` is
-    # what the config declares. The map answers the second and the path answers the first.
-    from workspace import configs_by_name as _by_name, config_name as _config_name
-    for name, (cfg_path, cfg) in sorted(_by_name(ROOT).items()):
-        base = _config_name(cfg_path, {})
-        if only and base not in only and name not in only:
-            continue
-        # A config can be a TEMPLATE rather than a member of the fleet — the generic adapter
-        # ships one, and sweeping it would put a second copy of an existing bot into every
-        # aggregate under a different name. Declared in the config so the sweep does not have
-        # to guess, and honoured here rather than in the readers, which would each need their
-        # own copy of the rule.
-        if cfg.get("skip_in_fleet"):
-            print(f"SKIP  {name:<22} template config (skip_in_fleet), run it explicitly")
+    for name, cfg_path, cfg, why in fleet_plan(only, ROOT):
+        if why:
+            print(f"SKIP  {name:<22} {why}")
             continue
         url = cfg.get("url")
         if url and not server_up(url):

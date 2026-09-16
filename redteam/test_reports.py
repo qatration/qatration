@@ -846,9 +846,61 @@ def main():
     # The generic adapter ships one, and a fleet sweep that ran it would put a second copy of
     # an existing bot into every aggregate under a different name — one run counted twice,
     # which is the same arithmetic the per-model-copy rule exists to prevent.
-    ra_src = open(os.path.join(HERE, "run_all.py"), encoding="utf-8").read()
+    # DRIVEN, NOT GREPPED. This read `run_all.py` for the substring
+    # `cfg.get("skip_in_fleet")`, which is a check about the text of a file: the loop around
+    # it was rewritten this week and the substring never moved, so the check could not have
+    # noticed. `fleet_plan` is that loop as a function, for the reason the rest of this
+    # repository extracts one -- the decision used to sit between two prints and a
+    # `subprocess.run` that sends real traffic to every practice bot, so the only way to ask
+    # who a sweep would touch was to run one.
+    import run_all as _ra
+    _plan = _ra.fleet_plan()
+    check("the fleet plan names the targets a sweep would run", len(_plan) > 10,
+          "%d entry(ies)" % len(_plan))
+    _skipped = {n for n, _p, _c, w in _plan if w}
+    _swept = {n for n, _p, _c, w in _plan if not w}
     check("a config marked skip_in_fleet is not swept",
-          'cfg.get("skip_in_fleet")' in ra_src and "template config" in ra_src)
+          _skipped and all((_c.get("skip_in_fleet") for n, _p, _c, w in _plan if w)),
+          str(sorted(_skipped)))
+    check("...and the reason travels with it, rather than only to a console",
+          all("skip_in_fleet" in w for _n, _p, _c, w in _plan if w),
+          str([w for _n, _p, _c, w in _plan if w][:2]))
+    check("...while everything else is still in the sweep",
+          _swept and not (_swept & _skipped), str(sorted(_swept))[:80])
+    # AND `--only` MATCHES EITHER HALF, on a fleet written to tell them apart. On the
+    # shipped configs the two lookups agree -- `targets_httpbot.yaml` declares `httpbot` --
+    # so dropping either one passes every check that uses them, which is a check that
+    # cannot see the thing it is about. Here the declared name and the filename are
+    # deliberately different, which is the only arrangement where the two answers differ.
+    import tempfile as _tf_f, shutil as _sh_f
+    _fd = _tf_f.mkdtemp()
+    try:
+        with open(os.path.join(_fd, "targets_byfile.yaml"), "w", encoding="utf-8") as _f:
+            _f.write("url: http://127.0.0.1:1/x" + chr(10))
+        with open(os.path.join(_fd, "targets_elsewhere.yaml"), "w", encoding="utf-8") as _f:
+            _f.write("name: declaredname" + chr(10) + "url: http://127.0.0.1:1/x" + chr(10))
+        _all = [n for n, _p, _c, _w in _ra.fleet_plan(root=_fd)]
+        check("a fleet names a config by its file and another by what it declares",
+              sorted(_all) == ["byfile", "declaredname"], str(sorted(_all)))
+        check("--only finds a target by the name it declares",
+              [n for n, _p, _c, _w in _ra.fleet_plan(only={"declaredname"}, root=_fd)]
+              == ["declaredname"],
+              str([n for n, _p, _c, _w in _ra.fleet_plan(only={"declaredname"}, root=_fd)]))
+        # THE HALF A DECLARED NAME HIDES. `targets_elsewhere.yaml` is what somebody types
+        # who has the file in front of them and has not read it, and the map does not know
+        # that string at all -- only the path does.
+        check("...and by the filename stem of a config that declares a different one",
+              [n for n, _p, _c, _w in _ra.fleet_plan(only={"elsewhere"}, root=_fd)]
+              == ["declaredname"],
+              str([n for n, _p, _c, _w in _ra.fleet_plan(only={"elsewhere"}, root=_fd)]))
+        check("...and by the filename stem of one that declares none",
+              [n for n, _p, _c, _w in _ra.fleet_plan(only={"byfile"}, root=_fd)] == ["byfile"],
+              str([n for n, _p, _c, _w in _ra.fleet_plan(only={"byfile"}, root=_fd)]))
+        check("--only with a name nobody has sweeps nothing",
+              _ra.fleet_plan(only={"no-such-target-at-all"}, root=_fd) == [],
+              "it swept something")
+    finally:
+        _sh_f.rmtree(_fd, ignore_errors=True)
     # The rule used to be "the filename contains `generic`", which was a proxy for the intent
     # rather than the intent, and it broke the moment a second good reason to skip arrived: a
     # config pointing at somebody's paid API. The real property is about WHERE a config sends
