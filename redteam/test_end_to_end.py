@@ -353,9 +353,17 @@ oracle_context:
         # into 0. A pipeline reads that as asked-and-answered.
         #
         # `isolation` with objectives that match nothing measured no property. `matrix`
-        # with fewer than two stored runs compared nothing. Both are walked here rather
-        # than asserted from the source, because the code a pipeline sees is the process's,
-        # not the function's.
+        # with fewer than two stored runs compared nothing. `recon` against a port with
+        # nothing behind it profiled a target that was never up. All three are walked here
+        # rather than asserted from the source, because the code a pipeline sees is the
+        # process's, not the function's.
+        #
+        # WHICH COMMANDS THIS SECTION ACTUALLY REACHES, because the heading says EVERY and
+        # ten modules can print that sentence. Four are driven into the state by their own
+        # suites -- `run` above, `benign`, `verify`, `discrimination` -- and three are not
+        # driven by anything: `compose`, `run_adaptive` and `defense_report`. Two of those
+        # three need a live model to reach the state at all, which is why they are named
+        # here instead of covered: the silence about them is not a result.
         def _run_cmd(*argv):
             _w = tempfile.mkdtemp()
             try:
@@ -447,6 +455,42 @@ oracle_context:
               "exit %s: %s" % (_rs, _os_e[-200:]))
         check("...naming `applies_to` rather than calling the corpus empty",
               "applies_to" in _os_e and "it has: none" not in _os_e.lower(), _os_e[-200:])
+
+        # RECON AGAINST A PORT WITH NOTHING BEHIND IT. The command the documentation tells
+        # a reader to run FIRST, and the one whose refusal is newest: every field of a
+        # profile already declines to guess from an errored probe, so a dead target
+        # produced a complete-LOOKING profile -- `tool channel: unobservable`, `memory: not
+        # measured`, four refusal probes at `error`, every line honest -- written to the
+        # workspace with exit 0, for `profiles` to read afterwards like any other.
+        #
+        # Nothing is sent anywhere: the port is closed, which is the point.
+        _dead_cfg = os.path.join(HERE, "targets_e2e_%d_dead_tmp.yaml" % os.getpid())
+        with open(_dead_cfg, "w", encoding="utf-8") as _fd_r:
+            _fd_r.write(chr(10).join([
+                "name: deadrecon", "adapter: http", 'url: "http://127.0.0.1:9/chat"',
+                "request:", "  model: m",
+                '  messages: [{role: user, content: "{prompt}"}]',
+                "response:", '  reply: "reply"',
+                "oracle_context:", "  canaries: [ACME-9931]", ""]))
+        _rr_w = tempfile.mkdtemp()
+        try:
+            _rr_p = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "recon",
+                 "--target-config", _dead_cfg],
+                capture_output=True, text=True, timeout=300,
+                env=dict(env, QATRATION_OUT=_rr_w), cwd=os.path.dirname(HERE))
+            _rr_out = (_rr_p.stdout or "") + (_rr_p.stderr or "")
+            _wrote = glob.glob(os.path.join(_rr_w, "recon_*.json"))
+        finally:
+            shutil.rmtree(_rr_w, ignore_errors=True)
+            if os.path.exists(_dead_cfg):
+                os.remove(_dead_cfg)
+        check("recon against a target that is down exits 3, not 0", _rr_p.returncode == 3,
+              "exit %s: %s" % (_rr_p.returncode, _rr_out[-200:]))
+        check("...and says nothing was measured",
+              "NOTHING MEASURED" in _rr_out, _rr_out[-200:])
+        check("...and writes no profile for `profiles` to read as a measurement",
+              _wrote == [], str(_wrote))
 
         _rm, _om = _run_cmd("matrix", "--target-config", cfg_path, "--from-disk")
         check("a matrix with nothing to compare exits 3, not 0", _rm == 3,
