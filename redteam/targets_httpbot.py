@@ -81,14 +81,9 @@ class HttpTarget(Target):
                 # gigabyte is a practice target teaching the wrong lesson.
                 _body_c, _over_c = _read_capped(r, seconds=300)
                 if _over_c:
-                    _p_c = Probe(prompt=prompt,
+                    return Probe(prompt=prompt, reply_bytes=_over_c,
                                  output=_body_c.decode("utf-8", "replace"),
                                  seconds=round(time.time() - t0, 1))
-                    try:
-                        object.__setattr__(_p_c, "reply_bytes", _over_c)
-                    except Exception:
-                        pass
-                    return _p_c
                 _raw = json.loads(_body_c)
             # AND WHAT PARSED IS A REPLY, the same question `targets_foreign` answers and
             # for the same reason: `[1, 2]` is valid JSON with no `.get`, and it arrived on

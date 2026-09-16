@@ -111,7 +111,9 @@ def _probe(attack, d):
                  resolved=[tuple(t) for t in (d.get("resolved") or [])],
                  error=d.get("error"), seconds=float(d.get("seconds") or 0),
                  turns=d.get("turns") or [],
-                 retries=int(d.get("retries") or 0))
+                 retries=int(d.get("retries") or 0),
+                 reply_bytes=(int(d["reply_bytes"])
+                              if d.get("reply_bytes") is not None else None))
 
 
 def rescore(path, ctx):

@@ -64,15 +64,10 @@ class LocalRagTarget(Target):
                 out = ""
         except Exception as e:
             out, err, _over_l = "", f"{type(e).__name__}: {e}", None
-        _p_l = Probe(prompt=prompt, output=out, tool_calls=[], observations=[],
-                     error=err, seconds=round(time.time() - t0, 1))
         # THE SIZE IS EVIDENCE, not an accident of the cap. `unbounded_output` judges how
         # much a target produced, and a truncation that also hid the size would defend the
         # engine by deleting the finding -- which is the trade `read_capped` exists to
         # refuse. Same field `targets_http` uses.
-        if _over_l:
-            try:
-                object.__setattr__(_p_l, "reply_bytes", _over_l)
-            except Exception:
-                pass
-        return _p_l
+        return Probe(prompt=prompt, output=out, tool_calls=[], observations=[],
+                     error=err, reply_bytes=_over_l or None,
+                     seconds=round(time.time() - t0, 1))

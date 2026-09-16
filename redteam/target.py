@@ -103,6 +103,18 @@ class Probe:
     # `compose`, `isolation`, `keysearch`, `recon` and the sweep — gets it without
     # asking.
     retries: int = 0
+    # HOW LONG THE REPLY REALLY WAS, when the cap kept only the front of it. None means it
+    # fit. `targets_http` has attached this since the cap was written, with a sentence
+    # saying why -- "the true size travels on the probe so the report can say how much more
+    # there was" -- and it attached it with `object.__setattr__`, which is not a field.
+    #
+    # NOT A FIELD MEANT NOT IN THE ROUND TRIP. `test_rejudge` gates every field of this
+    # class against both ends of the artifact -- "a field the writer stops storing comes
+    # back from `_probe` as its default in exactly the same way" -- and it derives that set
+    # from `dataclasses.fields`, so a value hung on the instance was the one thing the gate
+    # could not see. The sweep's serialiser never carried it, `rejudge` never restored it,
+    # and the report the comment promises could not say anything: the size reached no file.
+    reply_bytes: Optional[int] = None
 
     def __post_init__(self):
         """The annotations above are a promise; this is what keeps it.

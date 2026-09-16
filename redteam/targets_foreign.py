@@ -49,13 +49,9 @@ class ForeignAgentTarget(Target):
                     # an empty probe with nothing fired would be the cap defending the engine
                     # by deleting the evidence. The bytes that arrived are the target's own
                     # output, so the detectors still read them.
-                    _p = Probe(prompt=prompt, output=_body.decode("utf-8", "replace"),
-                               seconds=round(time.time() - t0, 1))
-                    try:
-                        object.__setattr__(_p, "reply_bytes", _over)
-                    except Exception:
-                        pass
-                    return _p
+                    return Probe(prompt=prompt, reply_bytes=_over,
+                                 output=_body.decode("utf-8", "replace"),
+                                 seconds=round(time.time() - t0, 1))
                 d = json.loads(_body)
             # AND WHAT PARSED IS A REPLY. A body of `[1, 2]`, `"hi"`, `7`, `true` or `null`
             # is valid JSON with no `.get`, so every one of them came back as

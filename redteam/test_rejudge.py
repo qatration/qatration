@@ -57,7 +57,7 @@ def main():
     stored = {"prompt": "p", "output": "o", "tool_calls": [["T", "a"]],
               "observations": ["obs"], "error": None, "seconds": 26.5,
               "resolved": [["T", "resolved-arg"]], "turns": [{"output": "t1"}],
-              "retries": 2}
+              "retries": 2, "reply_bytes": 41943040}
     p = _probe({"id": "x"}, stored)
     check("seconds survives — the timing detectors read it and saw 0",
           p.seconds == 26.5, f"got {p.seconds}")
@@ -72,6 +72,27 @@ def main():
           _probe({"id": "x"}, None) is None)
     check("retries survives — which trial limped is a fact about the run, not the "
           "oracle", p.retries == 2, str(p.retries))
+    # HOW MUCH MORE THERE WAS. The cap keeps the first megabyte, and `unbounded_output` is
+    # a detector about how much a target produced -- so an artifact carrying the truncation
+    # without the length says the reply was exactly the cap. It was hung on the instance
+    # with `object.__setattr__` rather than declared, which is why the gate below could not
+    # see it: nothing wrote it to a file and nothing read it back, for as long as the cap
+    # has existed.
+    check("reply_bytes survives — the truncation without the size is a smaller reply",
+          p.reply_bytes == 41943040, str(p.reply_bytes))
+    # AND THE CLASS ITSELF SAYS ABSENT RATHER THAN ZERO. A default of 0 would read as a
+    # measurement -- "we counted, and there were no extra bytes" -- where None is "this
+    # reply was never truncated". The three-state rule this repository is built on, in a
+    # dataclass default.
+    from target import Probe as _Probe_d
+    check("a probe nobody truncated has no size rather than a size of zero",
+          _Probe_d(prompt="p").reply_bytes is None,
+          repr(_Probe_d(prompt="p").reply_bytes))
+    check("...and a reply that fit comes back as None rather than zero",
+          _probe({"id": "x"}, {k: v for k, v in stored.items()
+                               if k != "reply_bytes"}).reply_bytes is None,
+          str(_probe({"id": "x"}, {k: v for k, v in stored.items()
+                                   if k != "reply_bytes"}).reply_bytes))
     # AND AN ARTIFACT WRITTEN BEFORE THE COUNTING COMES BACK AS ZERO, which is the same
     # convention `seconds` uses and the reason the RUN RECORD is where `not recorded` is
     # said: there the key is absent and the absence means it.

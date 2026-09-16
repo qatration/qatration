@@ -1352,6 +1352,12 @@ def main():
                 # survive the round trip, because one the file does not carry comes
                 # back as its default and a default reads as a measurement.
                 "retries": getattr(r["probe"], "retries", 0),
+                # HOW MUCH MORE THERE WAS. The cap keeps the first megabyte and the size
+                # is the finding: `unbounded_output` is about how much a target produced,
+                # and an artifact that carries the truncation without the length says the
+                # reply was exactly the cap. Absent means it fit, which is why the default
+                # is None rather than 0.
+                "reply_bytes": getattr(r["probe"], "reply_bytes", None),
             },
         } for r in recs]
         # WHAT THE SENDS COST IN SECOND ATTEMPTS. `_resilient_send` retries once and said

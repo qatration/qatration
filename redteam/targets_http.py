@@ -880,13 +880,12 @@ class HttpConfiguredTarget(Target):
                     print(f"  ! {self.name}: the reply was {_over:,} bytes; the first "
                           f"{MAX_REPLY:,} were read and judged as text.", file=sys.stderr)
                     _text = _body.decode("utf-8", "replace")
-                    _big = Probe(prompt=prompt, output=_text,
+                    # A FIELD, not an attribute hung on the instance. It was the second
+                    # form for as long as the cap has existed, and `test_rejudge` derives
+                    # the round-trip gate from `dataclasses.fields`, so the size was the
+                    # one thing that gate could not see -- and it reached no file.
+                    return Probe(prompt=prompt, output=_text, reply_bytes=_over,
                                  seconds=round(time.time() - t0, 1))
-                    try:
-                        object.__setattr__(_big, "reply_bytes", _over)
-                    except Exception:
-                        pass
-                    return _big
                 raw = json.loads(_body.decode("utf-8", "replace"))
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
