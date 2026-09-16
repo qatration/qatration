@@ -475,6 +475,66 @@ def list_context_keys(root=None):
     return keys
 
 
+_NUMBER_KEYS = None
+
+
+def number_context_keys(root=None):
+    """Every `oracle_context` key the engine reads as a NUMBER, scanned not listed.
+
+    THE SIBLING OF `list_context_keys`, AND IT DID NOT EXIST. That one refuses a scalar
+    where a list belongs, because `canaries: "ACME-9931"` makes every letter a canary and
+    manufactures a sweep of EXPLOITED rows. The other direction had no rule at all: a
+    threshold typed as a word reaches `oracle._num`, which does `type(default)(v)`, and
+
+        tool_enum_threshold: "many"   ->  ValueError: invalid literal for int()
+
+    out of `judge`, MID-SWEEP, after the attacks before it have been sent. Walked against a
+    scripted bot: exit 2 under "This is a bug in qatration, not a finding about your target
+    and not a problem with your config", which is wrong on the last clause. A list and a
+    mapping do the same. `lint_arsenal.bad_encoders` records this exact shape for `encode:`
+    and says why it has to be caught before anything is sent.
+
+    ASKED OF THE CALLS, NOT OF THE TEXT. The first version was a regex, and it found a
+    thirteenth key: `key`. Two places in this package write the numeric read out in prose to
+    explain it -- `CTX_READ_FORMS` above, and this docstring -- and a scan that reads text
+    reads those too, so every config carrying a key of that name would have been refused.
+    `ast` sees a call or it sees a string, and the difference is the whole point.
+
+    `_num` itself treats None, an empty string and a bool as absent and falls back to the
+    default, so those are not refused here: they are already a decision rather than a crash.
+    """
+    global _NUMBER_KEYS
+    if _NUMBER_KEYS is not None and root is None:
+        return _NUMBER_KEYS
+    import ast as _ast
+    import glob as _glob
+    import io as _io
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    keys = set()
+    for fn in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fn).startswith("test_"):
+            continue
+        try:
+            tree = _ast.parse(_io.open(fn, encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if (isinstance(node, _ast.Call)
+                    and getattr(node.func, "id", "") == "_num"
+                    and len(node.args) >= 2
+                    and getattr(node.args[0], "id", "") == "ctx"
+                    # A LITERAL, because `node.args[1].value` on a variable is an
+                    # AttributeError out of a scan that runs on every config read. No call
+                    # site passes one today, which is why this is defence rather than a
+                    # rule: it keeps a future `_num(ctx, key, d)` from taking the gate down.
+                    and isinstance(node.args[1], _ast.Constant)
+                    and isinstance(node.args[1].value, str)):
+                keys.add(node.args[1].value)
+    if root is None:
+        _NUMBER_KEYS = keys
+    return keys
+
+
 def bad_context_shapes(cfg):
     """-> [(key, what is wrong)] for context values of a shape the engine cannot use.
 
@@ -493,6 +553,27 @@ def bad_context_shapes(cfg):
     # opposite question and an empty set would accuse EVERY key — was written here too out of
     # symmetry, and a mutation proved it changed no input's answer.
     want = list_context_keys()
+    # AND THE KEYS READ AS NUMBERS, which had no rule. See `number_context_keys`: a
+    # threshold typed as a word reaches `oracle._num` and raises out of `judge` mid-sweep,
+    # under a sentence telling the operator it is not a problem with their config.
+    numeric = number_context_keys()
+    for k, v in ctx.items():
+        if k in numeric and v is not None:
+            # `_num` reads an empty string, None and a bool as absent and falls back to the
+            # default, so none of those is a crash and none is refused here. The empty
+            # string needs saying because `float("")` raises; a bool does not, because
+            # `float(True)` is 1.0 -- a guard for it here was written and deleted, since a
+            # branch that cannot change an answer is a line telling the next reader the
+            # case is handled where it is not.
+            if isinstance(v, str) and v.strip() == "":
+                continue
+            try:
+                float(v)
+            except (TypeError, ValueError):
+                out.append((k, "is %s; this key is read as a NUMBER, and a value that is "
+                               "not one raises out of the oracle mid-sweep, after the "
+                               "attacks before it have been sent" % (
+                                   repr(v) if isinstance(v, str) else type(v).__name__)))
     for k, v in ctx.items():
         if k not in want or v is None or isinstance(v, (list, tuple)):
             continue

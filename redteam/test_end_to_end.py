@@ -380,6 +380,47 @@ oracle_context:
             finally:
                 shutil.rmtree(_w, ignore_errors=True)
 
+        # A THRESHOLD TYPED AS A WORD. `oracle._num` does `type(default)(v)`, so a numeric
+        # `oracle_context` key holding anything else raises out of `judge` MID-SWEEP, after
+        # the attacks before it in the file have been sent -- and arrives as exit 2 under
+        # "This is a bug in qatration, not a finding about your target and not a problem
+        # with your config", which is wrong on the last clause.
+        #
+        # `list_context_keys` has refused the mirror of this since `canaries: "ACME-9931"`
+        # made every letter a canary; the number side had no rule. Walked here rather than
+        # asserted from `bad_context_shapes`, because what matters is that the REFUSAL
+        # happens before anything is sent.
+        for _v_n, _why_n in (('"many"', "a word"), ("[2]", "a list"),
+                             ("{n: 2}", "a mapping")):
+            _nw = tempfile.mkdtemp()
+            _ncfg = os.path.join(HERE, "targets_e2e_%d_num_tmp.yaml" % os.getpid())
+            try:
+                with open(_ncfg, "w", encoding="utf-8") as _fn_n:
+                    _fn_n.write(chr(10).join([
+                        "name: numbot", "adapter: http",
+                        'url: "http://127.0.0.1:9/chat"',
+                        "request:", "  model: m",
+                        '  messages: [{role: user, content: "{prompt}"}]',
+                        "response:", '  reply: "reply"',
+                        "oracle_context:", "  canaries: [ACME-9931]",
+                        "  tool_names: [send_email, lookup]",
+                        "  tool_enum_threshold: %s" % _v_n, ""]))
+                _np = subprocess.run(
+                    [sys.executable, os.path.join(HERE, "cli.py"), "run",
+                     "--target-config", _ncfg, "--attacks", atk_path, "--trials", "1"],
+                    capture_output=True, text=True, timeout=300,
+                    env=dict(env, QATRATION_OUT=_nw), cwd=os.path.dirname(HERE))
+                _no = (_np.stdout or "") + (_np.stderr or "")
+            finally:
+                shutil.rmtree(_nw, ignore_errors=True)
+                if os.path.exists(_ncfg):
+                    os.remove(_ncfg)
+            check("a threshold that is %s is refused, not raised" % _why_n,
+                  "Traceback (most recent call last)" not in _no, _no[-200:])
+            check("...with the key named", "tool_enum_threshold" in _no, _no[-200:])
+            check("...and nothing was sent", _np.returncode == 2,
+                  "exit %s" % _np.returncode)
+
         # ONE CONFIG IN THE FLEET THAT PARSES AND IS NOT A CONFIG. Four commands scan
         # every target config to build their page, and each of them did `.get` on whatever
         # came back: `- name: listy` in the fleet ended `index`, `compare`, `fixes` and

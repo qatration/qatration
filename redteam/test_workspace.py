@@ -868,6 +868,57 @@ def check_context_shapes():
           len(bad_context_shapes({"oracle_context": {"canaries": 5}})), 1)
     check("a null is left alone",
           bad_context_shapes({"oracle_context": {"canaries": None}}), [])
+
+    # --- AND THE OTHER DIRECTION: A WORD WHERE A THRESHOLD BELONGS -----------------------
+    #
+    # `list_context_keys` refuses a scalar where a list belongs, because
+    # `canaries: "ACME-9931"` makes every letter a canary and manufactures a sweep of
+    # EXPLOITED rows. The mirror had no rule at all: a threshold typed as a word reaches
+    # `oracle._num`, which does `type(default)(v)`, and walked against a scripted bot
+    # `tool_enum_threshold: "many"` came back as
+    #
+    #     ValueError: invalid literal for int() with base 10: 'many'
+    #
+    # out of `judge`, MID-SWEEP, under "This is a bug in qatration, not a finding about your
+    # target and not a problem with your config" -- which is wrong on the last clause, and
+    # the attacks before it in the file have already been sent. A list and a mapping the same.
+    from workspace import number_context_keys
+    _nums = number_context_keys()
+    check("the keys read as numbers are derived, not listed",
+          len(_nums) >= 8 and "tool_enum_threshold" in _nums and "max_tool_calls" in _nums,
+          True)
+    # ASKED OF THE CALLS, NOT OF THE TEXT. Two places in the package write the numeric read
+    # out in prose to explain it, and the first version of this scan was a regex that read
+    # them: it returned a key called `key`, and every config carrying one would have been
+    # refused for it.
+    check("...and no key comes from a sentence about the numeric read",
+          "key" in _nums, False)
+    for _bad_v, _why in (("many", "a word"), ([2], "a list"), ({"n": 2}, "a mapping")):
+        _said = bad_context_shapes({"oracle_context": {"tool_enum_threshold": _bad_v}})
+        check("a threshold that is %s is refused" % _why,
+              [k for k, _w in _said], ["tool_enum_threshold"])
+        check("...and the sentence says it is read as a number",
+              bool(_said) and "NUMBER" in _said[0][1], True)
+    # AND WHAT `_num` ALREADY DECIDES IS LEFT TO IT: it reads None, an empty string and a
+    # bool as absent and falls back to the default, so none of those is a crash and none is
+    # refused here. Refusing them would break configs that work today.
+    for _ok_v in (2, 2.5, "2", "", None, True, False):
+        check("a threshold of %r is accepted" % (_ok_v,),
+              bad_context_shapes({"oracle_context": {"tool_enum_threshold": _ok_v}}), [])
+    # AND EVERY SHIPPED CONFIG STILL PASSES, or the rule is one nobody can run.
+    from target import target_configs as _tc_n
+    import yaml as _yaml_n
+    _refused_n = {}
+    for _fp_n in _tc_n(HERE):
+        with open(_fp_n, encoding="utf-8") as _fh_n:
+            _cfg_n = _yaml_n.safe_load(_fh_n.read()) or {}
+        if not isinstance(_cfg_n, dict):
+            continue
+        _bad_n = bad_context_shapes(_cfg_n)
+        if _bad_n:
+            _refused_n[os.path.basename(_fp_n)] = _bad_n
+    check("no config this repository ships is refused by either shape rule",
+          _refused_n, {})
     check("no oracle_context is nothing to report", bad_context_shapes({}), [])
     check("an oracle_context that is not a mapping is itself the problem",
           len(bad_context_shapes({"oracle_context": ["oops"]})), 1)
