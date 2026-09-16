@@ -654,7 +654,7 @@ def main():
             + "assert oracle.d_or('a zzgamma reply', {})" + chr(10)
             + "print('ok')" + chr(10))
         # NAMED, because the arm's default is two modules now and this fixture has one.
-        _n_r, _free_r = unguarded.sweep_rules(("oracle.py",))
+        _n_r, _free_r, _un_r = unguarded.sweep_rules(("oracle.py",))
     finally:
         unguarded.RT = _old_rt_r
         _sh_r.rmtree(_rw, ignore_errors=True)
@@ -693,7 +693,7 @@ def main():
             + "import verdict2" + chr(10)
             + "assert verdict2.declined('a zzno reply')" + chr(10)
             + "print('ok')" + chr(10))
-        _n_q, _free_q = unguarded.sweep_rules(("verdict2.py",))
+        _n_q, _free_q, _un_q = unguarded.sweep_rules(("verdict2.py",))
     finally:
         unguarded.RT = _old_rt_q
         _sh_r.rmtree(_qw, ignore_errors=True)
@@ -705,6 +705,66 @@ def main():
 
     # --- WHICH HALF OF AN ENTRY IS THE RULE ----------------------------------------
     #
+    # --- AND THE ARM SAYS WHAT IT WALKED PAST ------------------------------------------
+    #
+    # It printed "31 rule site(s) tested, 0 with no case of their own" over an oracle of
+    # SIXTY-SIX detectors, with rules swept in twelve of them, and named neither number.
+    # `sweep_guards` names the guards that carry no comment and `sweep_patterns` names the
+    # lists where it cannot tell which half is the rule; this arm was the one of the three
+    # that still counted what it touched and said nothing about the rest.
+    #
+    # TWO REASONS, kept apart because they are different facts: a detector with exactly one
+    # `return True` has one way to fire, so that statement IS the detector and deleting it
+    # asks a different question; a detector with none fires by a shape this arm cannot read.
+    _shapes = (
+        "def d_one(p, c):" + chr(10)
+        + "    if 'zz1' in p:" + chr(10)
+        + "        return True" + chr(10)
+        + "    return False" + chr(10)
+        + chr(10)
+        + "def d_two(p, c):" + chr(10)
+        + "    if 'zz2' in p:" + chr(10)
+        + "        return True" + chr(10)
+        + "    if 'zz3' in p:" + chr(10)
+        + "        return True" + chr(10)
+        + "    return False" + chr(10)
+        + chr(10)
+        + "def d_none(p, c):" + chr(10)
+        + "    return 'zz4' in p" + chr(10))
+    _out = unguarded._rules_out_of_scope(_shapes, "oracle.py")
+    _named = {_n: _w for _m, _n, _w in _out}
+    check("a detector with one way to fire is named as out of scope",
+          "d_one" in _named and "one way to fire" in _named["d_one"], str(_named))
+    check("...and one this arm cannot read at all is named separately",
+          "d_none" in _named and "does not read" in _named["d_none"], str(_named))
+    check("...while the detector it DOES sweep is not in the remainder",
+          "d_two" not in _named, str(_named))
+    # AND THE TWO REASONS ARE NOT COLLAPSED INTO ONE SENTENCE, which is what makes the
+    # line worth printing: `not covered` and `not reachable from here` send a reader to
+    # different places.
+    check("...and the two reasons are different sentences",
+          _named.get("d_one") != _named.get("d_none"), str(_named))
+    # ON THE REAL ORACLE, because a fixture proves the rule and this proves the debt: the
+    # arm reports on rules in a minority of the detectors that exist.
+    _real = unguarded._rules_out_of_scope(
+        io.open(os.path.join(HERE, "oracle.py"), encoding="utf-8").read(), "oracle.py")
+    check("the real oracle has detectors this arm cannot report on", len(_real) > 20,
+          "%d" % len(_real))
+    # AND ONLY `oracle.py` HAS THIS SHAPE. `refusal.py` answers with an or-chain and is
+    # swept whole by the branch arm, so a remainder there would be an invented number.
+    check("...and the arm claims no remainder for a module it sweeps whole",
+          unguarded._rules_out_of_scope(
+              io.open(os.path.join(HERE, "refusal.py"), encoding="utf-8").read(),
+              "refusal.py") == [],
+          "refusal.py reported a remainder")
+    # ASKED WITH A MODULE THAT HAS THE SHAPE, because `refusal.py` has no `d_` function at
+    # all: it would answer empty whether or not the rule looked. `return True` means one way
+    # for a DETECTOR to fire and that is an `oracle.py` shape -- anywhere else the same
+    # statement is an ordinary early return, and counting it would invent a debt.
+    check("...even when that module is full of functions named like detectors",
+          unguarded._rules_out_of_scope(_shapes, "verdict2.py") == [],
+          str(unguarded._rules_out_of_scope(_shapes, "verdict2.py")))
+
     # `sweep_rules` reads `return True`, so a rule that lives as an ELEMENT of a pattern
     # list is invisible to it: the oracle keeps eighty-two of those and the first sweep
     # of them found forty-one with no case. `sweep_patterns` is that arm.

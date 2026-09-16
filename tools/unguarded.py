@@ -414,6 +414,39 @@ def _rule_sites(src, mod):
     return sites
 
 
+def _rules_out_of_scope(src, mod):
+    """-> [(module, detector, why)] for the detectors this arm cannot report on.
+
+    SAY WHAT WAS NOT LOOKED AT, which is the debt the other two arms have already paid and
+    this one had not. `sweep_guards` names the guards that carry no comment and
+    `sweep_patterns` names the lists where it cannot tell which half is the rule; this
+    printed "31 rule site(s) tested, 0 with no case of their own" over an oracle of SIXTY-SIX
+    detectors, rules swept in twelve of them. A number that reads as coverage over a set
+    nobody named is the defect this whole tool is pointed at, and it is the third time it has
+    been found inside it.
+
+    TWO REASONS, and they are different facts. A detector with exactly ONE `return True` has
+    one way to fire, so that statement IS the detector: deleting it is the question "does this
+    detector have a case at all", which is not the question this arm asks. A detector with
+    none fires by a shape this arm cannot read -- a returned comparison, a call -- so it is
+    not that its rules are covered, it is that they were never reachable from here.
+    """
+    if mod != "oracle.py":
+        return []
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.FunctionDef) or not node.name.startswith("d_"):
+            continue
+        rets = [c for c in ast.walk(node)
+                if isinstance(c, ast.Return) and isinstance(c.value, ast.Constant)
+                and c.value.value is True]
+        if len(rets) == 1:
+            out.append((mod, node.name, "one way to fire, so the rule IS the detector"))
+        elif not rets:
+            out.append((mod, node.name, "fires by a shape this arm does not read"))
+    return out
+
+
 def sweep_rules(modules=SWEPT_MODULES):
     """Neutralise each rule; report the ones nothing missed.
 
@@ -434,12 +467,13 @@ def sweep_rules(modules=SWEPT_MODULES):
     bounded. A tool that reads `oracle.py` and calls the answer a sweep is measuring one
     file and naming the engine.
     """
-    total, free = 0, []
+    total, free, untouched = 0, [], []
     for mod in modules:
         path = os.path.join(RT, mod)
         orig = io.open(path, encoding="utf-8").read()
         sites = _rule_sites(orig, mod)
         total += len(sites)
+        untouched += _rules_out_of_scope(orig, mod)
         suites = ["test_oracle.py"] if mod == "oracle.py" else _suites_touching(mod)
         if not suites:
             print("  ! nothing imports %s, so its silence here is not a result" % mod)
@@ -472,7 +506,7 @@ def sweep_rules(modules=SWEPT_MODULES):
                     free.append((mod, name, lineno, shown))
         for s in suites:
             assert _run(s) == 0, "%s was not restored" % mod
-    return total, free
+    return total, free, untouched
 
 
 _REPLAY = r"""
@@ -937,11 +971,25 @@ def main(argv):
         unswept += held
     if both or args.rules:
         print("\n=== rules inside multi-rule detectors ===")
-        n, free = sweep_rules()
+        n, free, untouched = sweep_rules()
         swept += n
         print("\n%d rule site(s) tested, %d with no case of their own" % (n, len(free)))
         for mod, name, ln, src in free:
             print("  %s:%d  %s  %s" % (mod, ln, name, src[:60]))
+        # AND THE DETECTORS THIS ARM CANNOT REPORT ON. Counting the sites it swept and
+        # saying nothing about the rest reads as a verdict on the oracle: rules were swept
+        # in twelve detectors of sixty-six.
+        if untouched:
+            _why_counts = {}
+            for _m, _name, _why in untouched:
+                _why_counts.setdefault(_why, []).append(_name)
+            print("  %d detector(s) were not touched by this arm, and their silence here "
+                  "is not a result:" % len(untouched))
+            for _why in sorted(_why_counts):
+                _names = sorted(_why_counts[_why])
+                print("    %3d  %s: %s%s"
+                      % (len(_names), _why, ", ".join(_names[:4]),
+                         " ..." if len(_names) > 4 else ""))
         bad += len(free)
     if both or args.patterns:
         print("\n=== rules that live in a pattern list ===")
