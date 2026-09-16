@@ -315,18 +315,23 @@ def bad_entry_shapes(entries):
     out = []
     if not want:
         return out
-    # AN ENTRY IS A MAPPING BY HERE, and that is an invariant rather than a hope: an entry
-    # that is not one is reported by whichever door loaded the corpus -- `unusable_entries`
-    # for an arsenal, `unusable_objectives` for an objectives file -- and both run before
-    # `refuse_unknown_detectors` calls this. `test_lint` pins it, by index and by type,
-    # which is what makes the sentence above a fact.
-    #
-    # THERE WAS A `continue` HERE FOR IT. `tools/unguarded.py` deleted it and all five suites
-    # that can see this module stayed green, which is what a branch nothing can reach looks
-    # like from the outside. It was written as defence in depth and it is not that: a guard
-    # that cannot fire is a line telling the next reader the case is handled here, so they
-    # stop looking for the door that actually handles it.
     for e in entries or []:
+        # SKIPPED, BECAUSE BY HERE IT CANNOT HAPPEN. An entry that is not a mapping is
+        # reported by whichever door loaded the corpus -- `unusable_entries` for an arsenal,
+        # `unusable_objectives` for an objectives file -- and both run before
+        # `refuse_unknown_detectors` calls this. `test_lint` pins that, by index and by
+        # type, which is what makes this sentence a fact rather than a hope.
+        #
+        # AND `tools/unguarded.py` WILL REPORT THIS AS A SURVIVOR, every run, correctly:
+        # deleting it leaves all five suites green because nothing can reach it. It stays
+        # anyway, and the reason is consistency rather than defence. Four sibling functions
+        # in this file -- `bad_encoders`, and two more below -- carry the same line, and a
+        # file where one reader trusts the invariant and four defend against it is worse
+        # than either answer. It was deleted once on the strength of that sweep, which is a
+        # list to read and not a mandate; this note is here so the next reader does not
+        # spend the same hour.
+        if not isinstance(e, dict):
+            continue
         who = e.get("id") or e.get("name") or "?"
         for k, v in e.items():
             if k not in want or v is None or isinstance(v, (list, tuple)):
