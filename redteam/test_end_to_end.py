@@ -359,11 +359,16 @@ oracle_context:
         # process's, not the function's.
         #
         # WHICH COMMANDS THIS SECTION ACTUALLY REACHES, because the heading says EVERY and
-        # ten modules can print that sentence. Four are driven into the state by their own
-        # suites -- `run` above, `benign`, `verify`, `discrimination` -- and three are not
-        # driven by anything: `compose`, `run_adaptive` and `defense_report`. Two of those
-        # three need a live model to reach the state at all, which is why they are named
-        # here instead of covered: the silence about them is not a result.
+        # ten modules can print that sentence. Checked one at a time rather than recalled:
+        # `run` above, `isolation`, `matrix`, `recon` and `benign` here; `verify`,
+        # `compose`, `discrimination` and `defense_report` in their own suites, each by a
+        # check that drives the command or the function into the state and reads the code.
+        #
+        # ONE IS NOT DRIVEN BY ANYTHING: `run_adaptive`, whose loop needs a model to stop
+        # for the reason the sentence is about. Named here, because a silence is not a
+        # result -- and named as ONE rather than as three, which is what a first pass at
+        # this comment said, from grepping for the module name instead of for the check
+        # that drives it.
         def _run_cmd(*argv):
             _w = tempfile.mkdtemp()
             try:
@@ -483,14 +488,40 @@ oracle_context:
             _wrote = glob.glob(os.path.join(_rr_w, "recon_*.json"))
         finally:
             shutil.rmtree(_rr_w, ignore_errors=True)
-            if os.path.exists(_dead_cfg):
-                os.remove(_dead_cfg)
+        # KEPT FOR THE BENIGN RUN BELOW, under a second name so each block owns the file it
+        # removes.
+        _dead_cfg2 = _dead_cfg + ".benign.yaml"
+        os.replace(_dead_cfg, _dead_cfg2)
         check("recon against a target that is down exits 3, not 0", _rr_p.returncode == 3,
               "exit %s: %s" % (_rr_p.returncode, _rr_out[-200:]))
         check("...and says nothing was measured",
               "NOTHING MEASURED" in _rr_out, _rr_out[-200:])
         check("...and writes no profile for `profiles` to read as a measurement",
               _wrote == [], str(_wrote))
+
+        # AND `benign` AGAINST THE SAME CLOSED PORT. It is the command every attribution
+        # claim is measured against -- a breach on a detector that also fires on ordinary
+        # traffic is not a breach -- so a baseline of nothing, filed as a baseline, silently
+        # re-weights every verdict on that target. Its own source says so: "NOTHING MEASURED
+        # IS NOT A CLEAN BASELINE."
+        _bw = tempfile.mkdtemp()
+        try:
+            _bp = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                 "--target-config", _dead_cfg2, "--trials", "1"],
+                capture_output=True, text=True, timeout=300,
+                env=dict(env, QATRATION_OUT=_bw), cwd=os.path.dirname(HERE))
+            _bo = (_bp.stdout or "") + (_bp.stderr or "")
+            _bfiles = glob.glob(os.path.join(_bw, "benign_*.json"))
+        finally:
+            shutil.rmtree(_bw, ignore_errors=True)
+            if os.path.exists(_dead_cfg2):
+                os.remove(_dead_cfg2)
+        check("a benign baseline against a target that is down exits 3, not 0",
+              _bp.returncode == 3, "exit %s: %s" % (_bp.returncode, _bo[-200:]))
+        check("...and says nothing was measured", "NOTHING MEASURED" in _bo, _bo[-200:])
+        check("...and writes no baseline for an attribution claim to rest on",
+              _bfiles == [], str(_bfiles))
 
         _rm, _om = _run_cmd("matrix", "--target-config", cfg_path, "--from-disk")
         check("a matrix with nothing to compare exits 3, not 0", _rm == 3,
