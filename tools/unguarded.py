@@ -587,8 +587,147 @@ def _pattern_positions(tree, src, det, list_name):
             elif isinstance(f.value, ast.Name):
                 used_as_pattern.add(f.value.id)
         found = tuple(i for i, nm in enumerate(names) if nm and nm in used_as_pattern)
-        return found, "" if found else "no name %s binds reaches a regex" % det
+        if found:
+            return found, ""
+        # AND AN ENTRY CAN HOLD A LIST OF RULES RATHER THAN A RULE. `classify` reads
+        # `for cls, rules in CLASSES:` and neither name reaches a regex, so everything
+        # above says `cannot tell which half is the rule` -- about five entries holding
+        # THIRTY-TWO patterns, reported as five, swept as none.
+        # THE LOOP THAT BINDS THEM, not the function. A function reading two lists
+        # this way binds the same two names twice, and a scan over the whole body
+        # answers the second loop with the first one's comprehension.
+        nested = _nested_positions(tree, node, names)
+        if nested:
+            return nested, ""
+        return (), "no name %s binds reaches a regex" % det
     return (), "%s does not read %s in a loop" % (det, list_name)
+
+
+def _nested_positions(tree, loop, names):
+    """-> ((outer index, index inside each entry of the list there), ...).
+
+    A list of lists. `CLASSES` in `refusal.py` is five `(class, rules)` entries and the
+    rules are the nested half:
+
+        for cls, rules in CLASSES:
+            sig = _hits(out, [p for p, _ in rules] + _extra(ctx, cls))
+
+    Neither `cls` nor `rules` is ever handed to `re.search`, so the derivation above it
+    reads no index and the arm skipped all five -- and printed `5 more rule(s)` over
+    thirty-two of them, a remainder named in entries and counted in rules. A number that
+    reads as coverage of a set nobody named is the thing this tool is pointed at.
+
+    The comprehension says which half of the nested entry is the rule, exactly as
+    `_unpackers` reads it one function away, and the consumer says the comprehension is
+    a list of rules rather than a list of anything else. Guessing that the first half of
+    a nested pair is the pattern would have been right here and wrong for `_SECRETS`
+    the other way round, which is the mistake this file has already made once.
+    """
+    consume = _consumers(tree)
+    out = []
+    for call in ast.walk(loop):
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            continue
+        k = consume.get(call.func.id)
+        if k is None or len(call.args) <= k:
+            continue
+        # `_hits(out, [p for p, _ in rules] + _extra(ctx, cls))` -- the comprehension is
+        # one term of the argument, not the argument, so walk it.
+        for comp in ast.walk(call.args[k]):
+            if not isinstance(comp, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+                continue
+            if len(comp.generators) != 1:
+                continue
+            gen = comp.generators[0]
+            if not (isinstance(gen.iter, ast.Name) and gen.iter.id in names):
+                continue
+            if not isinstance(gen.target, (ast.Tuple, ast.List)):
+                continue
+            inner = [e.id if isinstance(e, ast.Name) else None for e in gen.target.elts]
+            if not (isinstance(comp.elt, ast.Name) and comp.elt.id in inner):
+                continue
+            out.append((names.index(gen.iter.id), inner.index(comp.elt.id)))
+    return tuple(sorted(set(out)))
+
+
+def _consumers(tree):
+    """-> {helper: which argument of it is a list of rules it searches with}.
+
+    `_hits(text, patterns)` iterates its second argument and asks each item a regex
+    question. Derived rather than assumed, for the same reason as everything else here:
+    a helper taking (patterns, text) exists, and a tool that takes argument one because
+    argument one is usually right invents findings on the file where it is not.
+    """
+    out = {}
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        params = [a.arg for a in fn.args.args]
+        searched = set()
+        for call in ast.walk(fn):
+            f = getattr(call, "func", None)
+            if not (isinstance(call, ast.Call) and isinstance(f, ast.Attribute)
+                    and f.attr in _RE_METHODS):
+                continue
+            if isinstance(f.value, ast.Name) and f.value.id == "re":
+                if call.args and isinstance(call.args[0], ast.Name):
+                    searched.add(call.args[0].id)
+            elif isinstance(f.value, ast.Name):
+                searched.add(f.value.id)
+        for node in ast.walk(fn):
+            if not isinstance(node, (ast.For, ast.comprehension)):
+                continue
+            it, tgt = getattr(node, "iter", None), getattr(node, "target", None)
+            if (isinstance(it, ast.Name) and it.id in params
+                    and isinstance(tgt, ast.Name) and tgt.id in searched):
+                out[fn.name] = params.index(it.id)
+    return out
+
+
+def _entry_targets(pos, entry):
+    """-> (the rule nodes this position selects from one entry, how many it could not read).
+
+    A plain index takes one element. A `(outer, inner)` path descends into the list at
+    `outer` and takes `inner` from every entry of it -- and an entry down there that is
+    not a pair is counted rather than dropped, because a rule this cannot reach is the
+    one thing the summary of this arm is not allowed to lose.
+    """
+    if not isinstance(pos, tuple):
+        return [entry.elts[pos]], 0
+    outer, inner = pos
+    got, lost = [], 0
+    for sub in entry.elts[outer].elts:
+        if isinstance(sub, (ast.Tuple, ast.List)) and inner < len(sub.elts):
+            got.append(sub.elts[inner])
+        elif not isinstance(sub, (ast.Tuple, ast.List)) and inner == 0:
+            got.append(sub)
+        else:
+            lost += 1
+    return got, lost
+
+
+def _entry_weight(entry):
+    """How many rules one entry holds, for a skip that has to be counted without being read.
+
+    One, unless a half of it is a list -- `('guard_block', [five pairs])` is five rules,
+    and counting it as one is how thirty-two of them were reported as five.
+    """
+    if isinstance(entry, (ast.Tuple, ast.List)):
+        inner = [len(e.elts) for e in entry.elts
+                 if isinstance(e, (ast.List, ast.Tuple)) and e.elts
+                 and all(isinstance(s, (ast.List, ast.Tuple, ast.Constant))
+                         for s in e.elts)]
+        if inner:
+            return max(inner)
+    return 1
+
+
+def _position_fits(pos, entry):
+    """Whether this entry is shaped the way the position says the list is."""
+    if isinstance(pos, tuple):
+        return (pos[0] < len(entry.elts)
+                and isinstance(entry.elts[pos[0]], (ast.List, ast.Tuple)))
+    return pos < len(entry.elts)
 
 
 # EVERY WAY A COMPILED OR LITERAL PATTERN GETS ASKED A QUESTION.
@@ -712,7 +851,13 @@ def _sweep_patterns_in(mod):
         for ref in ast.walk(node):
             if (isinstance(ref, ast.Name) and ref.id in lists
                     and isinstance(ref.ctx, ast.Load)):
-                used.setdefault(ref.id, node.name)
+                # EVERY READER, NOT THE FIRST ONE. `CLASSES` is read by `classify`,
+                # which asks its patterns a regex question, and by `pattern_classes`,
+                # which collects the class names for a gate -- and `pattern_classes` is
+                # written first, so the arm derived the rule position from the function
+                # that never looks at a rule and skipped thirty-two patterns.
+                if node.name not in used.setdefault(ref.id, []):
+                    used[ref.id].append(node.name)
     # THE PATTERN, NOT THE PAIR. A tuple entry carries a label or a specimen beside the
     # rule, and that is the case: replacing the whole tuple deletes the case with the
     # rule and every one of them comes back green.
@@ -723,19 +868,43 @@ def _sweep_patterns_in(mod):
     # what had been neutralised was their prose. The detector unpacks the entry and
     # passes one of the names to `re.search`; that name's position is the answer.
     sites, skipped = [], []
-    for name, det in sorted(used.items()):
-        pos, why = _pattern_positions(tree, orig, det, name)
+    for name, dets in sorted(used.items()):
+        pos, why, det = (), "", dets[0]
+        for _cand in dets:
+            _p, _w = _pattern_positions(tree, orig, _cand, name)
+            if _p and not pos:
+                det = _cand
+            # A plain index and a nested path can both be in here, and they do not
+            # order against each other.
+            pos = tuple(sorted(set(pos) | set(_p),
+                               key=lambda q: (1, q) if isinstance(q, tuple)
+                               else (0, (q,))))
+            why = _w
+        if pos:
+            why = ""
         for i, el in enumerate(lists[name].elts):
             if isinstance(el, (ast.Tuple, ast.List)):
-                here = [p for p in pos if p < len(el.elts)]
+                here = [p for p in pos if _position_fits(p, el)]
                 if not here:
                     # CANNOT TELL WHICH HALF IS THE RULE, and that is a result of its
                     # own: guessing invents findings, and staying quiet about it is
                     # how five rules went untested behind a number that read clean.
-                    skipped.append((mod, name, det,
-                                    why or "no index inside this entry"))
+                    #
+                    # COUNTED IN RULES, because the summary says `rule(s)` and an entry
+                    # is not always one: five entries of `CLASSES` hold thirty-two
+                    # patterns, and `5 more rule(s)` was a fifth of the truth.
+                    for _ in range(_entry_weight(el)):
+                        skipped.append((mod, name, det,
+                                        why or "no index inside this entry"))
                     continue
-                targets = [el.elts[p] for p in here]
+                targets, unread = [], 0
+                for p in here:
+                    _got, _lost = _entry_targets(p, el)
+                    targets += _got
+                    unread += _lost
+                for _ in range(unread):
+                    skipped.append((mod, name, det,
+                                    "nested inside it, and not a shape this can read"))
             else:
                 targets = [el]
             for target in targets:
@@ -1006,8 +1175,15 @@ def main(argv):
             print("  %d more rule(s) sit where this sweep cannot tell which half is the rule.\n"
                   "  They were not touched, and their silence here is not a result."
                   % len(skipped))
-            for _k in sorted(set(skipped)):
-                print("    %-12s %-18s %-24s %s" % _k)
+            # WITH HOW MANY RULES EACH LINE ACCOUNTS FOR. Five entries of `CLASSES`
+            # printed as five lines while the count above them said five, and the
+            # thirty-two rules inside were in neither number.
+            _seen = {}
+            for _k in skipped:
+                _seen[_k] = _seen.get(_k, 0) + 1
+            for _k, _n in sorted(_seen.items()):
+                print("    %-12s %-18s %-24s %d rule(s): %s"
+                      % (_k[0], _k[1], _k[2], _n, _k[3]))
         bad += len(free)
     if both or args.refusals:
         print("\n=== guards against false positives ===")

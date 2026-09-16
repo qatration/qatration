@@ -975,6 +975,80 @@ def main():
     check("...and claims nothing it could not read",
           _skip_h == [], str(_skip_h))
 
+    # --- AN ENTRY THAT HOLDS A LIST OF RULES -------------------------------------------
+    #
+    # `CLASSES` in `refusal.py` is five `(class, rules)` entries and the rules are the
+    # nested half, read as `_hits(out, [p for p, _ in rules])`. Neither name the loop
+    # binds ever reaches a regex, so the arm could read no index, skipped all five, and
+    # printed `5 more rule(s)` over THIRTY-TWO patterns -- a remainder named in entries
+    # and counted in rules, which is this tool's own subject arrived at from the inside.
+    #
+    # Three things are being asked here, and the fixture is built so that each one can
+    # be got wrong on its own:
+    #
+    #   * the nested pair is (specimen, pattern), so an arm that assumes the rule is the
+    #     first half neutralises the specimen and reports the wrong name;
+    #   * `class_names` reads `C` and reads no rule out of it, and it is written FIRST --
+    #     which is exactly why the real one was skipped, since the arm derived the
+    #     position from `pattern_classes` and never asked `classify`;
+    #   * `D` is read by a loop that asks no regex question at all, so the arm still
+    #     cannot read it -- and what it says about it has to be counted in rules.
+    _nw = tempfile.mkdtemp()
+    _old_rt4 = unguarded.RT
+    try:
+        unguarded.RT = _nw
+        io.open(os.path.join(_nw, "locks.py"), "w", encoding="utf-8", newline="").write(
+            "import re" + chr(10)
+            + "C = [('one', [('a zzcovered specimen', 'zzcovered'),"
+              " ('a zzfree specimen', 'zzfree')])]" + chr(10)
+            + "D = [('two', [('alpha', 'x'), ('beta', 'y')])]" + chr(10)
+            + "def class_names():" + chr(10)
+            + "    return {c for c, _r in C}" + chr(10)
+            # (patterns, text), the way round that punishes an arm taking argument
+            # one because argument one is usually the rules.
+            + "def _hits(patterns, text):" + chr(10)
+            + "    return [p for p in patterns if re.search(p, text)]" + chr(10)
+            + "def classify(text):" + chr(10)
+            + "    for cls, rules in C:" + chr(10)
+            + "        if _hits([p for _s, p in rules], text):" + chr(10)
+            + "            return cls" + chr(10)
+            + "    for cls, rules in D:" + chr(10)
+            + "        if any(a in text for a, _b in rules):" + chr(10)
+            + "            return cls" + chr(10)
+            + "    return 'none'" + chr(10))
+        io.open(os.path.join(_nw, "test_locks.py"), "w", encoding="utf-8",
+                newline="").write(
+            "import sys, os" + chr(10)
+            + "sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))" + chr(10)
+            + "import locks" + chr(10)
+            + "assert locks.classify('a zzcovered reply') == 'one'" + chr(10)
+            + "assert locks.classify('a quiet reply') == 'none'" + chr(10)
+            + "assert locks.class_names() == {'one'}" + chr(10)
+            + "print('ok')" + chr(10))
+        _n_n, _free_n, _skip_n = unguarded.sweep_patterns(("locks.py",))
+    finally:
+        unguarded.RT = _old_rt4
+        _sh_p.rmtree(_nw, ignore_errors=True)
+    check("a rule nested inside an entry is swept, not skipped",
+          _n_n == 2, "%d tested, skipped %s" % (_n_n, _skip_n))
+    # AND THE HALF THE COMPREHENSION KEEPS, which here is the second one: taking the
+    # first would neutralise `'a zzfree specimen'` and name a specimen as an untested
+    # rule, a finding about nothing.
+    check("...and it is the half the comprehension keeps, not the first one",
+          [f[3] for f in _free_n] == ["'zzfree'"], str(_free_n))
+    # AND THE READER IT ASKS IS THE ONE THAT READS THEM AS RULES. `class_names` comes
+    # first in the file and reads no pattern out of `C`; the arm that took the first
+    # function mentioning a list derived from it and skipped the list.
+    check("...and the reader it asks is the one that reads them as rules",
+          [f[2] for f in _free_n] == ["classify"], str(_free_n))
+    # AND THE ONE IT STILL CANNOT READ IS COUNTED IN RULES. `len(skipped)` is what the
+    # summary prints as `N more rule(s)`, and one entry there is two patterns.
+    check("...while a nested list it cannot read is counted in rules, not entries",
+          len([s for s in _skip_n if s[1] == "D"]) == 2,
+          str([s for s in _skip_n if s[1] == "D"]))
+    check("...and the readable one is not among them",
+          not any(s[1] == "C" for s in _skip_n), str(_skip_n))
+
     # AND IT IS REACHABLE FROM THE COMMAND.
     _tool_src2 = io.open(_tool, encoding="utf-8").read()
     check("the pattern arm has a flag of its own",
