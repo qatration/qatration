@@ -493,20 +493,38 @@ def audit_close(rows, total_stale):
     return (3 if (partial or unsent) else 0), out
 
 
+def fleet_configs(directory=None):
+    """name -> that target's config, with the resolved name written into it.
+
+    THE NAME IS WRITTEN IN BECAUSE `verify_target` READS IT: its first line is
+    `tcfg.get("name") or "?"`, and eleven of the shipped configs do not carry a `name:`
+    key -- they are named by their file, which is the rule `workspace.config_name` owns.
+    Drop the write and those eleven report as `?` in the target column of the audit,
+    which is a table whose entire job is saying which target a claim was about.
+
+    A COPY, because the map comes from `configs_by_name` and is handed to whoever asks
+    next. Mutating a caller's config in place to add a field is invisible until two
+    readers disagree about which of them put it there.
+
+    A function rather than one line inside `audit`, so the rule can be driven over a
+    directory written to hold the case: the shipped fleet has eleven of them and a check
+    that uses `audit` cannot reach this without sending traffic.
+    """
+    from workspace import configs_by_name as _by_name
+    return {nm: dict(c, name=nm)
+            for nm, (_fp, c) in _by_name(directory or HERE).items()}
+
+
 def audit(trials, confirm_trials):
     """Every target that has an artifact, one table. Unreachable is its own answer."""
-    from target import target_configs
-    cfgs = {}
-    for fp in target_configs(HERE):
-        try:
-            with io.open(fp, encoding="utf-8") as f:
-                d = yaml.safe_load(f) or {}
-        except Exception:
-            continue
-        from workspace import config_name as _config_name
-        nm = _config_name(fp, d)
-        d["name"] = nm
-        cfgs[nm] = d
+    # THROUGH THE ONE ENUMERATION, above. This was the fifth private copy of the fleet
+    # loop and it differed from `configs_by_name` in both of the usual directions: it
+    # swallowed a config it could not parse, and it never asked whether what parsed was a
+    # mapping -- so `d["name"] = nm` on a config reading `- name: listy` ended
+    # `qatration verify` with `TypeError: list indices must be integers or slices, not
+    # str`, out of the command whose job is to say whether published findings still
+    # reproduce.
+    cfgs = fleet_configs()
 
     jobs = []
     for fp in results_files(OUT_DIR):

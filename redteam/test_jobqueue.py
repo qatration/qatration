@@ -24,6 +24,46 @@ import jobqueue as q
 from workspace import atomic_write as workspace_atomic
 
 
+def _collision_rule_on_an_unreadable_config(check):
+    """What a job contends for, when nobody can read the config that names it.
+
+    `contended_resource` answers None -- "this job contends for nothing anybody can name"
+    -- for a config that cannot be opened or cannot be parsed, and then asked a config that
+    parses to a LIST for its `url` and raised `AttributeError` out of the rule the queue
+    uses to decide what may run beside what. Two answers to one question, and the one that
+    raises is in the worker.
+    """
+    import tempfile as _tf_c, shutil as _sh_c
+    _d = _tf_c.mkdtemp()
+    try:
+        _cases = (("a list", "- name: listy" + chr(10)),
+                  ("a string", "just a sentence" + chr(10)),
+                  ("a number", "7" + chr(10)),
+                  ("empty", ""),
+                  ("not YAML", "a: [1, 2" + chr(10)))
+        for _why, _body in _cases:
+            _p = os.path.join(_d, "cfg_%s.yaml" % _why.replace(" ", "_"))
+            with open(_p, "w", encoding="utf-8") as _f:
+                _f.write(_body)
+            _said = ""
+            try:
+                _got = q.contended_resource(_p, "bot")
+            except Exception as _e:
+                _got, _said = "raised", "%s: %s" % (type(_e).__name__, _e)
+            check("a config that is %s contends for nothing nameable" % _why,
+                  _got is None, _said or repr(_got))
+        # AND A REAL CONFIG STILL NAMES ITS ORIGIN, or the guard above could answer None to
+        # everything and every sweep would be allowed to run beside every other.
+        _good = os.path.join(_d, "good.yaml")
+        with open(_good, "w", encoding="utf-8") as _f:
+            _f.write("name: bot" + chr(10) + "url: http://127.0.0.1:8123/chat" + chr(10))
+        check("...while a config that names an endpoint still contends for it",
+              q.contended_resource(_good, "bot") == "http://127.0.0.1:8123",
+              repr(q.contended_resource(_good, "bot")))
+    finally:
+        _sh_c.rmtree(_d, ignore_errors=True)
+
+
 def main():
     fails, checks = [], 0
 
@@ -33,6 +73,8 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'}  {label}")
         if not ok:
             fails.append(f"{label}: {detail}")
+
+    _collision_rule_on_an_unreadable_config(check)
 
     root = tempfile.mkdtemp()
     T0 = datetime.datetime(2026, 8, 18, 12, 0)

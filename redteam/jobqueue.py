@@ -153,6 +153,13 @@ def contended_resource(config_path, target):
         cfg = yaml.safe_load(open(config_path, encoding="utf-8")) or {}
     except Exception:
         return None
+    # AND A CONFIG THAT PARSES IS NOT A CONFIG. The `except` above answers `None` -- this
+    # job contends for nothing anybody can name -- for a config that cannot be opened or
+    # cannot be parsed, and then `cfg.get("url")` on one that parses to a LIST raised
+    # `AttributeError` out of the rule the queue uses to decide what may run beside what.
+    # Two answers to one question, and the one that raises is in the worker.
+    if not isinstance(cfg, dict):
+        return None
     url = cfg.get("url")
     if not url:
         return None

@@ -58,6 +58,68 @@ def _tempdir_v():
         _shm_v.rmtree(_d, ignore_errors=True)
 
 
+def _audit_over_a_fleet_with_a_bad_config(check):
+    """`verify --all` reads every target config to know which artifact belongs to whom.
+
+    It kept its own loop for that, and the loop is the one this repository has now found in
+    six places: a parse failure swallowed, and no question about whether the document was a
+    config. `d["name"] = nm` on a config reading `- name: listy` ended the command with
+    `TypeError: list indices must be integers or slices, not str`.
+
+    `audit` IS CALLED HERE, not the command. It is the function that holds the loop, and
+    the workspace it is pointed at is empty, so there is nothing to verify and nothing is
+    sent -- which is the only way this check belongs in an offline suite at all.
+    """
+    import tempfile as _tf_a, shutil as _sh_a
+    import verify as _v_a
+    _d = _tf_a.mkdtemp()
+    _old_out, _old_cfgs = _v_a.OUT_DIR, os.environ.get("QATRATION_CONFIGS")
+    try:
+        _bad = os.path.join(_d, "targets_notaconfig.yaml")
+        with open(_bad, "w", encoding="utf-8") as _f:
+            _f.write("- name: listy" + chr(10))
+        _v_a.OUT_DIR = os.path.join(_d, "out")
+        os.makedirs(_v_a.OUT_DIR)
+        os.environ["QATRATION_CONFIGS"] = _bad
+        _said, _raised = "", ""
+        try:
+            _v_a.audit(1, 1)
+        except SystemExit as _e_a:
+            _said = str(_e_a.code if isinstance(_e_a.code, str) else _e_a)
+        except Exception as _e_a:
+            _raised = "%s: %s" % (type(_e_a).__name__, _e_a)
+        check("verify's audit does not crash on a config that is not a config",
+              not _raised, _raised)
+        check("...it refuses, and names the file it could not use",
+              "targets_notaconfig.yaml" in _said, _said[:160] or "nothing was said")
+        # AND THE NAME IS WRITTEN IN, which `verify_target` reads on its first line as
+        # `tcfg.get("name") or "?"`. Eleven of the shipped configs carry no `name:` key --
+        # they are named by their file -- and without this write every one of them reports
+        # as `?` in the target column of the audit table.
+        _named = os.path.join(_d, "fleet")
+        os.makedirs(_named)
+        with open(os.path.join(_named, "targets_quiet.yaml"), "w", encoding="utf-8") as _f:
+            _f.write("url: http://127.0.0.1:1/x" + chr(10))
+        with open(os.path.join(_named, "targets_loud.yaml"), "w", encoding="utf-8") as _f:
+            _f.write("name: loudbot" + chr(10) + "url: http://127.0.0.1:1/x" + chr(10))
+        os.environ.pop("QATRATION_CONFIGS", None)
+        _map = _v_a.fleet_configs(_named)
+        check("a config with no `name:` is named by its file in the audit map",
+              (_map.get("quiet") or {}).get("name") == "quiet", str(sorted(_map)))
+        check("...and one that declares a name keeps it",
+              (_map.get("loudbot") or {}).get("name") == "loudbot", str(sorted(_map)))
+        check("...so no target in the audit table reports as `?`",
+              all((c.get("name") or "?") != "?" for c in _map.values()),
+              str({k: v.get("name") for k, v in _map.items()}))
+    finally:
+        _v_a.OUT_DIR = _old_out
+        if _old_cfgs is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _old_cfgs
+        _sh_a.rmtree(_d, ignore_errors=True)
+
+
 def main():
     fails, checks = [], 0
 
@@ -67,6 +129,8 @@ def main():
         print("%s  %s" % ("PASS" if ok else "FAIL", label))
         if not ok:
             fails.append("%s: %s" % (label, detail))
+
+    _audit_over_a_fleet_with_a_bad_config(check)
 
     # --- which rows carry a claim ---------------------------------------------------------
     rows = [

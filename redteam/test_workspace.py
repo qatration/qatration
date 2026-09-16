@@ -1732,6 +1732,12 @@ def main():
         # command whose whole job is to say what is wrong with a corpus.
         ("sarif.py", "_config_for"),
         ("lint_arsenal.py", "known_targets"),
+        # THE FIFTH PRIVATE COPY OF THE LOOP. `verify.audit` swallowed a config it could
+        # not parse and never asked whether what parsed was a mapping, so `d["name"] = nm`
+        # on a config reading `- name: listy` ended `qatration verify` with `TypeError:
+        # list indices must be integers or slices, not str` -- out of the command whose
+        # whole job is saying whether a published finding still reproduces.
+        ("verify.py", "fleet_configs"),
     ]
     # NAMES, NOT PROSE. Written first as `is the string in the function`, it read the
     # docstring: emptying `rejudge.contexts` to `return {}` left the paragraph explaining
