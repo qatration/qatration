@@ -60,7 +60,7 @@ def main():
     args = ap.parse_args()
 
     only = {s.strip() for s in args.only.split(",")} if args.only else None
-    configs = target_configs(ROOT)
+    configs = target_configs(ROOT)   # counted for the banner; read through the map below
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     ran, skipped, failed = [], [], []
 
@@ -81,11 +81,16 @@ def main():
     print("=" * 60)
     print(f"  QAtration fleet sweep — {len(configs)} target configs found")
     print("=" * 60)
-    for cfg_path in configs:
-        from workspace import config_name as _config_name
+    # THROUGH THE ONE ENUMERATION. This parsed each config itself and then asked whatever
+    # came back for `name`, so a config reading `- name: listy` ended the fleet sweep with
+    # `AttributeError` before a single target was touched.
+    #
+    # BOTH HALVES ARE STILL HERE, because `--only` matches either: `base` is the filename
+    # stem, which is what somebody types for a config that declares no name, and `name` is
+    # what the config declares. The map answers the second and the path answers the first.
+    from workspace import configs_by_name as _by_name, config_name as _config_name
+    for name, (cfg_path, cfg) in sorted(_by_name(ROOT).items()):
         base = _config_name(cfg_path, {})
-        cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
-        name = cfg.get("name", base)
         if only and base not in only and name not in only:
             continue
         # A config can be a TEMPLATE rather than a member of the fleet — the generic adapter

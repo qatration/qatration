@@ -62,11 +62,15 @@ BRANDS = ("acmeshop", "acmebank", "acmerange", "acmecloud", "acmehbank", "northg
 def fleet_literals():
     """Canaries and tool names any target config declares — the strings that pin an attack."""
     canaries, tools = set(), set()
-    for fp in target_configs(HERE):
-        try:
-            oc = (yaml.safe_load(open(fp, encoding="utf-8")) or {}).get("oracle_context") or {}
-        except Exception:
-            continue
+    # THROUGH `oracle_contexts`, which is this question with the name rule and the collision
+    # rule already attached. The loop here parsed each config itself and did
+    # `(...).get("oracle_context")` on whatever came back, so a config reading
+    # `- name: listy` raised `AttributeError` out of the generator that builds the arsenal
+    # -- and the `except Exception: continue` above it meant a config nobody could parse
+    # silently contributed no canaries, which is how an attack stops being pinned to
+    # anything without the corpus getting smaller.
+    from workspace import oracle_contexts as _ocs
+    for _name, oc in _ocs(HERE).items():
         import honeytoken as _ht
         for x in _ht.declared(oc):
             if str(x).strip():

@@ -1739,6 +1739,7 @@ def main():
         # whole job is saying whether a published finding still reproduces.
         ("verify.py", "fleet_configs"),
     ]
+
     # NAMES, NOT PROSE. Written first as `is the string in the function`, it read the
     # docstring: emptying `rejudge.contexts` to `return {}` left the paragraph explaining
     # where the map went, and the check passed on a caller that had stopped asking. Every
@@ -1784,6 +1785,77 @@ def main():
             _stray9.append("%s.%s" % (_mod9, _fn9))
     check("every command that resolves a target name asks the one map", not _stray9,
           "; ".join(_stray9))
+
+    # --- AND NOBODY ELSE OPENS THEM -------------------------------------------------------
+    #
+    # The list above is a list, which is the shape that let this recur SIX TIMES: a module
+    # reaches for `target_configs`, parses each file itself, and differs from the map in one
+    # of two directions -- it swallows a config nobody can read, or it asks a document that
+    # parses for a key it has not got. `build_index`, `compare_targets`, `defense_report`,
+    # `sarif`, `lint_arsenal`, `verify`, `run_all` and `build_generic` each did one or the
+    # other, and four of them ended a command with an AttributeError on `- name: listy`.
+    #
+    # So this asks the tree instead: a function that calls `target_configs` and also parses
+    # YAML in the same body is keeping its own copy of the loop. Two are allowed and each
+    # says why -- an entry naming a module that no longer does it fails here too.
+    _MAY_PARSE_THEIR_OWN = {
+        ("workspace.py", "configs_by_name"):
+            "IS the map; it is the one loop the rest of this rule points at",
+        ("workspace.py", "list_context_keys"):
+            "derives WHICH context keys are lists, and `configs_by_name` is built on "
+            "top of that answer, so it cannot ask for it",
+        ("honeytoken.py", "_shipped_floor"):
+            "reads the shortest canary on the fleet before any target name exists, and "
+            "wants every config's canaries rather than one target's",
+    }
+    _own_loops = []
+    for _f_p in sorted(os.listdir(HERE)):
+        if not _f_p.endswith(".py") or _f_p.startswith("test_"):
+            continue
+        with open(os.path.join(HERE, _f_p), encoding="utf-8") as _fh_p:
+            _src_p = _fh_p.read()
+        if "target_configs" not in _src_p:
+            continue
+        for _fn_p in _ast9.walk(_ast9.parse(_src_p)):
+            if not isinstance(_fn_p, (_ast9.FunctionDef, _ast9.AsyncFunctionDef)):
+                continue
+            _names_p = _asks(_fn_p)
+            if "target_configs" in _names_p and ("safe_load" in _names_p
+                                                 or "load_yaml_or_refuse" in _names_p):
+                _own_loops.append((_f_p, _fn_p.name))
+    def _unexcused_loops(found, excused):
+        """The private loops nobody wrote a reason for. The gate's whole decision.
+
+        A function because the decision has to be able to FAIL: computed inline,
+        replacing it with `[]` left every other assertion here green -- the scan had a
+        fixture and the line that judged its output did not, which is the shape this
+        repository finds most often and found twice in one evening.
+        """
+        return sorted(k for k in found if k not in excused)
+
+    # NAMED RATHER THAN COUNTED RED: with every private loop either gone or excused,
+    # deleting this call changes nothing today, and today is not what it is for -- it
+    # fires on the tree of the day somebody writes the seventh one. What can be mutated
+    # red is everything it rests on, and the two lines below drive the decision over a
+    # map with a hole in it.
+    _unexcused = _unexcused_loops(_own_loops, _MAY_PARSE_THEIR_OWN)
+    check("the gate's decision keeps what nobody excused",
+          _unexcused_loops([("a.py", "f"), ("b.py", "g")], {("b.py", "g"): "why"})
+          == [("a.py", "f")], "the excuse list is not read")
+    check("...and an excuse for a different function does not cover this one",
+          _unexcused_loops([("a.py", "f")], {("a.py", "other"): "why"})
+          == [("a.py", "f")], "an excuse matched on the file alone")
+    check("the scan found modules that enumerate the fleet at all",
+          any("target_configs" in open(os.path.join(HERE, _f), encoding="utf-8").read()
+              for _f in os.listdir(HERE)
+              if _f.endswith(".py") and not _f.startswith("test_")), "none found")
+    check("no module enumerates the fleet's configs and parses them itself",
+          not _unexcused,
+          "%s -- use workspace.configs_by_name, or say here why not"
+          % ", ".join("%s.%s" % k for k in _unexcused))
+    _stale_p = sorted(k for k in _MAY_PARSE_THEIR_OWN if k not in _own_loops)
+    check("...and no excuse outlives the loop it was written for", not _stale_p,
+          str(_stale_p))
     check("...and there are enough of them for that to mean something",
           len(_callers) >= 5, str(len(_callers)))
     # FOUR PLANTED MODULES, because every one of these shapes has already been written
