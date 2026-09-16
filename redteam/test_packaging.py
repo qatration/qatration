@@ -1520,6 +1520,30 @@ def test_the_paired_statistic():
     assert abs(ps.mcnemar(5, 1) - 2 * (1 + 6) / 64) < 1e-12, ps.mcnemar(5, 1)
     # NEVER ABOVE ONE, which the doubling would otherwise produce on a balanced split.
     assert ps.mcnemar(1, 1) == 1.0, ps.mcnemar(1, 1)
+
+    # AND IT IS THE ENGINE'S OWN TEST, not a second copy of it. There were two: this one
+    # and `redteam/stats.mcnemar_exact`, and compared over every (b, c) from 0 to 12 they
+    # agreed on 168 of 169 pairs and disagreed on exactly the corner each docstring
+    # singles out -- no discordant pair at all, where `stats` answers 1.0 ("measured and
+    # equal") and this answers None ("nothing to test"). Both readings are right for their
+    # own report, which is why the ARITHMETIC is shared and the WORDING is not.
+    import importlib.util as _ilu_m
+    _stats_spec = _ilu_m.spec_from_file_location(
+        "stats_under_test", os.path.join(HERE, "stats.py"))
+    _stats = _ilu_m.module_from_spec(_stats_spec)
+    _stats_spec.loader.exec_module(_stats)
+    _off = [(b, c) for b in range(13) for c in range(13)
+            if (b or c) and abs(_stats.mcnemar_exact(b, c) - ps.mcnemar(b, c)) > 1e-12]
+    assert not _off, ("two McNemar implementations disagree at %s" % _off[:4])
+    assert _stats.mcnemar_exact(0, 0) == 1.0, _stats.mcnemar_exact(0, 0)
+    assert ps.mcnemar(0, 0) is None, ps.mcnemar(0, 0)
+    # AND THE SHARING IS BY IMPORT RATHER THAN BY HAVING THE SAME NUMBERS TODAY.
+    _ps_src = io.open(os.path.join(ROOT_DIR, "tools", "paired_score.py"),
+                      encoding="utf-8").read()
+    assert "from stats import mcnemar_exact" in _ps_src, \
+        "tools/paired_score.py computes the p-value itself again"
+    assert "comb(" not in _ps_src, \
+        "tools/paired_score.py still has the binomial arithmetic of its own"
     assert ps.mcnemar(3, 3) == 1.0, ps.mcnemar(3, 3)
     # AND NO DISCORDANT PAIR IS NOT A p OF ONE. "Nothing disagreed" is an absence, and a
     # number there would read as a test that ran and found nothing.

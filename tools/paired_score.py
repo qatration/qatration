@@ -21,7 +21,6 @@ import io
 import json
 import os
 import sys
-from math import comb
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -29,12 +28,25 @@ sys.path.insert(0, os.path.join(ROOT, "redteam"))
 
 
 def mcnemar(b, c):
-    """Two-sided exact p for `b` pairs one way and `c` the other. None when none differ."""
-    n = b + c
-    if not n:
+    """Two-sided exact p for `b` pairs one way and `c` the other. None when none differ.
+
+    THE ARITHMETIC IS `stats.mcnemar_exact` AND WAS WRITTEN TWICE. Compared across every
+    (b, c) from 0 to 12 the two agreed on 168 of 169 pairs and disagreed on exactly the one
+    each docstring singles out: no discordant pair at all. `stats` answers 1.0 and argues
+    for it -- "two arms that answered identically on every shared attack are measured and
+    equal" -- and this answered None so `main` could print "no pair disagreed, so there is
+    nothing to test".
+
+    Both readings are right for their own report and they cannot both be one function's
+    contract. So the arithmetic is imported and the WORDING stays here: this returns None
+    for the degenerate case because that is what the line below it says, and the p-value
+    itself has one implementation. A second copy of a statistic is the arrangement this
+    repository keeps finding, and the disagreement is always in the corner nobody tests.
+    """
+    if b < 0 or c < 0 or b + c == 0:
         return None
-    k = min(b, c)
-    return min(1.0, sum(comb(n, i) for i in range(0, k + 1)) / 2 ** n * 2)
+    from stats import mcnemar_exact
+    return mcnemar_exact(b, c)
 
 
 def score(path, only=None):
