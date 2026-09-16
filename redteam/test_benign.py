@@ -702,6 +702,47 @@ def main():
         check("...so the absence is by design rather than a listing that refused",
               "refused" not in (_why_m.get("prompts") or ""), str(_why_m))
 
+        # AND A SERVER THAT LOGS TO STDOUT. `_await`'s own docstring says lines that are
+        # not JSON, and JSON that is not this id, are skipped -- and it kept half of that:
+        # `json.loads` raising was caught, and a line parsing to a LIST, a string, a number
+        # or a null went into `msg.get("id")` as an AttributeError. A JSON-lines log and a
+        # printed array are ordinary things to find on a server's stdout, and each of them
+        # ended `qatration mcp` with a traceback and the sentence "this is a bug in
+        # qatration", about a server that answered correctly on the very next line.
+        for _noise in ("server started", "[1, 2, 3]", '"hello"', "7", "null", "[]", "{}"):
+            _noisy = os.path.join(_w_srv, "noisy_%d.py" % (abs(hash(_noise)) % 100000))
+            with open(_noisy, "w", encoding="utf-8") as _f_n:
+                _f_n.write(
+                    "import json, sys" + chr(10)
+                    + "for line in sys.stdin:" + chr(10)
+                    + "    line = line.strip()" + chr(10)
+                    + "    if not line:" + chr(10)
+                    + "        continue" + chr(10)
+                    + "    try:" + chr(10)
+                    + "        m = json.loads(line)" + chr(10)
+                    + "    except Exception:" + chr(10)
+                    + "        continue" + chr(10)
+                    + "    print(%r); sys.stdout.flush()" % _noise + chr(10)
+                    + "    if m.get('method') == 'initialize':" + chr(10)
+                    + "        r = {'capabilities': {'tools': {}}}" + chr(10)
+                    + "    elif m.get('method') == 'tools/list':" + chr(10)
+                    + "        r = {'tools': [{'name': 't', 'description': 'clean'}]}"
+                    + chr(10)
+                    + "    else:" + chr(10)
+                    + "        continue" + chr(10)
+                    + "    print(json.dumps({'jsonrpc': '2.0', 'id': m['id'], "
+                      "'result': r}))" + chr(10)
+                    + "    sys.stdout.flush()" + chr(10))
+            _said = ""
+            try:
+                _f_m, _w_m, _c_m, _fa_m = _ls_m([sys.executable, _noisy], timeout=30)
+            except Exception as _e_m:
+                _f_m, _fa_m = {}, ""
+                _said = "%s: %s" % (type(_e_m).__name__, _e_m)
+            check("a server logging %s is still read" % _noise,
+                  not _said and not _fa_m and len(_f_m.get("tools") or []) == 1,
+                  _said or "%s %s" % (_fa_m, _f_m))
+
         # --- AND THE COMMAND, DRIVEN --------------------------------------------------
         #
         # `compare` has a dozen fixtures above and every one calls the function. The

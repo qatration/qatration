@@ -52,6 +52,20 @@ def _await(proc, want_id, deadline):
     and a reader that raises on the first unparseable line reports a working server as a
     broken one -- so lines that are not JSON, and JSON that is not this id, are skipped.
 
+    AND JSON THAT IS NOT A MESSAGE. The rule above was written and the code kept half of
+    it: `json.loads` raising is caught, and a line that parses to a LIST, a string, a
+    number or a null went straight into `msg.get("id")` as an AttributeError. Those are
+    ordinary things to find on a server's stdout -- a JSON-lines log, a printed array --
+    and each of them ended `qatration mcp` with a traceback and the sentence "this is a bug
+    in qatration", about a server that was answering correctly on the next line.
+
+    WHAT IS STILL NOT BOUNDED, said rather than left to be found: `readline()` reads until
+    a newline, so a server that writes without one holds this loop past the deadline and
+    takes the memory with it. Not capped here because the honest cap is generous -- a
+    `tools/list` reply carrying fifty descriptions is legitimately large -- and a truncated
+    line would parse as nothing and be reported as "no answer to tools/list", which is a
+    worse answer than a slow one: it names the server as the thing that failed.
+
     TWO CORRECT GREENS AND A SLOW SWEEP, recorded so the next one does not re-derive them.
     Deleting either blank-line guard is an EQUIVALENT mutation: an empty string reaches
     `json.loads`, raises ValueError and lands in the same `continue`. And deleting the id
@@ -69,7 +83,7 @@ def _await(proc, want_id, deadline):
             msg = json.loads(line)
         except ValueError:
             continue
-        if msg.get("id") == want_id:
+        if isinstance(msg, dict) and msg.get("id") == want_id:
             return msg
     return None
 
