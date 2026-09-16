@@ -1092,6 +1092,86 @@ def main():
               for _l in open(_fp, encoding="utf-8") if _l.strip()) >= 20,
           "too few timelines to mean anything")
 
+    # --- AND THE ORDER EVERY PUBLISHED DATE RESTS ON ------------------------------------
+    #
+    # `load` says "newest last" and `_streaks` walks the list in that order: the first run
+    # that saw a finding broken becomes its `first ever seen`, a later clean run ends the
+    # spell, and `first_seen` hands the result to `defense_report` as "open since". Every
+    # one of those is a date somebody answers to, and all of them assume the file is
+    # append-only and in time order.
+    #
+    # Nothing said so and nothing checked it. The file is written by `_append`, so the
+    # assumption holds for one machine recording one run at a time -- and it is exactly the
+    # kind that survives until two timelines are merged, a run is replayed with an older
+    # stamp, or somebody edits a line by hand.
+    def _out_of_order(timelines):
+        """Which of these timelines is not in run order. The decision, as a function.
+
+        A function because the shipped files are all ordered, so the loop below can never
+        make this check fail -- it is the gate for the day two timelines are merged. What
+        can be driven is the rule itself, over a map written to hold both answers.
+        """
+        return {_n: _ids[:4] for _n, _ids in timelines.items() if _ids != sorted(_ids)}
+
+    check("the rule can tell an ordered timeline from one that is not",
+          _out_of_order({"fine": ["a", "b", "c"], "merged": ["b", "a", "c"]})
+          == {"merged": ["b", "a", "c"]},
+          str(_out_of_order({"fine": ["a", "b", "c"], "merged": ["b", "a", "c"]})))
+    check("...and says nothing about a timeline of one run, or of none",
+          _out_of_order({"one": ["a"], "none": []}) == {},
+          str(_out_of_order({"one": ["a"], "none": []})))
+    _shipped = {}
+    for _fp in sorted(_g_h.glob(os.path.join(HERE, "..", "out", "history", "*.jsonl"))):
+        _t_h = os.path.basename(_fp)[:-len(".jsonl")]
+        _shipped[_t_h] = [_r.get("run") for _r in H.load(_t_h)]
+    check("there are timelines to read at all", len(_shipped) > 5, str(len(_shipped)))
+    check("every timeline this repository ships is in run order",
+          not _out_of_order(_shipped), str(_out_of_order(_shipped)))
+
+    # AND THE DEPENDENCE IS REAL, shown rather than asserted: the same three snapshots in a
+    # different order give a different answer to "open since". A check that only looked at
+    # the shipped files would be a check about today's data; this is the reason the order
+    # matters at all.
+    import tempfile as _tf_o, shutil as _sh_o
+    _od = _tf_o.mkdtemp()
+    _old_hist_h = H.HIST
+    try:
+        H.HIST = os.path.join(_od, "history")
+        os.makedirs(H.HIST, exist_ok=True)
+
+        def _snap_o(run, broken):
+            return {"run": run, "target": "ordered", "attacks": 1,
+                    "broke": 1 if broken else 0,
+                    "rows": {"a1": {"v": "EXPLOITED" if broken else "DEFENDED",
+                                    "rate": "1/1" if broken else "0/1",
+                                    "fired": ["canary_in_output"] if broken else []}}}
+
+        _lines = [_snap_o("2026-01-01", True), _snap_o("2026-02-01", False),
+                  _snap_o("2026-03-01", True)]
+        _p_o = os.path.join(H.HIST, "ordered.jsonl")
+        with open(_p_o, "w", encoding="utf-8") as _f_o:
+            for _s in _lines:
+                _f_o.write(json.dumps(_s) + chr(10))
+        check("a finding that closed and came back is open since it came back",
+              H.first_seen("ordered").get("a1") == "2026-03-01",
+              str(H.first_seen("ordered")))
+        check("...and the run that last measured it clean is remembered",
+              (H.reopened("ordered").get("a1") or ("", ""))[1] == "2026-02-01",
+              str(H.reopened("ordered")))
+        # THE SAME THREE SNAPSHOTS, OUT OF ORDER. Nothing in `load` sorts, so this is the
+        # answer a merged or replayed timeline would publish: open nine weeks longer than
+        # the engine's own evidence says.
+        with open(_p_o, "w", encoding="utf-8") as _f_o:
+            for _s in (_lines[1], _lines[0], _lines[2]):
+                _f_o.write(json.dumps(_s) + chr(10))
+        check("...and out of order the same evidence dates it differently",
+              H.first_seen("ordered").get("a1") == "2026-01-01",
+              "%s -- if this changed, `load` now sorts and the check above it is stale"
+              % str(H.first_seen("ordered")))
+    finally:
+        H.HIST = _old_hist_h
+        _sh_o.rmtree(_od, ignore_errors=True)
+
     # --- THE LAST LINE OF A RUN, WHICH IS THE ONE A PERSON READS ------------------------
     #
     # Walked against an endpoint returning 500 to every request: forty-five ERROR rows, and
