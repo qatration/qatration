@@ -90,6 +90,14 @@ class HttpTarget(Target):
                         pass
                     return _p_c
                 _raw = json.loads(_body_c)
+            # AND WHAT PARSED IS A REPLY, the same question `targets_foreign` answers and
+            # for the same reason: `[1, 2]` is valid JSON with no `.get`, and it arrived on
+            # the probe as `AttributeError`, which reads as a bug in the engine rather than
+            # as a bot that answered something this adapter cannot use.
+            if not isinstance(_raw, dict):
+                raise ValueError(
+                    "the endpoint answered valid JSON that is not an object: %s. This "
+                    "adapter reads `reply` off a mapping." % type(_raw).__name__)
             reply = _raw.get("reply", "")
             # A 200 CAN CARRY A FAILURE, and this read `reply` and nothing else. An endpoint
             # that catches its own exception and answers {"error": ...} left `reply` empty,

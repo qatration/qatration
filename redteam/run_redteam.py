@@ -454,6 +454,15 @@ def _build_mismatch(tcfg):
         print(f"  ! could not ask {probe} what build it is ({type(e).__name__}) — this run "
               f"is not verified against expect_build {want}")
         return ""
+    # AND WHAT PARSED IS A BANNER. `got.get(k)` sits OUTSIDE the try above, so a front page
+    # answering `[1, 2]` -- valid JSON, no `.get` -- raised an AttributeError out of `run`
+    # and ended it with "this is a bug in qatration", BEFORE a single attack was sent. The
+    # same answer as the over-size case beside it: this run is simply not verified.
+    if not isinstance(got, dict):
+        print(f"  ! {probe} answered JSON that is not an object "
+              f"({type(got).__name__}), so there is no build to compare — this run is "
+              f"not verified against expect_build {want}")
+        return ""
     bad = [f"{k}={got.get(k)!r} (config says {v!r})"
            for k, v in want.items() if str(got.get(k, "")).lower() != str(v).lower()]
     return "; ".join(bad)

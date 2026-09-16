@@ -613,6 +613,59 @@ def main():
     check("an unreachable server is unverified rather than mismatched", unreachable == "")
     check("...and the run says it was not verified", "not verified" in quiet.getvalue(),
           quiet.getvalue())
+
+    # AND A FRONT PAGE THAT ANSWERS JSON WHICH IS NOT A BANNER. `got.get(k)` sat OUTSIDE the
+    # try that wraps the request, so `[1, 2]` -- valid JSON, no `.get` -- raised an
+    # AttributeError out of `run` and ended it with "this is a bug in qatration", BEFORE a
+    # single attack was sent. This probe is the first thing a sweep does against a target's
+    # own root, which makes it the cheapest thing for a target to answer oddly.
+    import threading as _th_b
+    from http.server import BaseHTTPRequestHandler as _BH_b, \
+        ThreadingHTTPServer as _TS_b
+
+    _banner = {"body": b"[1, 2]"}
+
+    class _Front(_BH_b):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_banner["body"])))
+            self.end_headers()
+            self.wfile.write(_banner["body"])
+
+    _bsrv = _TS_b(("127.0.0.1", 0), _Front)
+    _th_b.Thread(target=_bsrv.serve_forever, daemon=True).start()
+    try:
+        _burl = "http://127.0.0.1:%d/chat" % _bsrv.server_address[1]
+        for _shape in (b"[1, 2]", b'"hi"', b"7", b"null", b"true"):
+            _banner["body"] = _shape
+            _said_b = io.StringIO()
+            _raised = ""
+            try:
+                with contextlib.redirect_stdout(_said_b):
+                    _got_b = rr._build_mismatch({"url": _burl,
+                                                 "expect_build": {"G": "off"}})
+            except Exception as _e_b:
+                _got_b, _raised = None, "%s: %s" % (type(_e_b).__name__, _e_b)
+            check("a front page answering %s does not crash the sweep" % _shape.decode(),
+                  not _raised, _raised)
+            check("...and is unverified rather than a mismatch", _got_b == "",
+                  repr(_got_b))
+            check("...and the run says so", "not verified" in _said_b.getvalue(),
+                  _said_b.getvalue()[:100])
+        # AND A REAL BANNER IS STILL COMPARED, or the guard above could refuse everything.
+        _banner["body"] = b'{"G": "on"}'
+        _quiet_b = io.StringIO()
+        with contextlib.redirect_stdout(_quiet_b):
+            _drift = rr._build_mismatch({"url": _burl, "expect_build": {"G": "off"}})
+        check("a banner that is an object is still compared", "G=" in _drift, repr(_drift))
+    finally:
+        _bsrv.shutdown()
     # EVERY entry point that drives a target, not just the sweep — a guard only covers where
     # it looks, and this one was written an hour before it failed to cover the second door.
     # It matters MORE for a benign run, not less: a baseline is what every attribution claim

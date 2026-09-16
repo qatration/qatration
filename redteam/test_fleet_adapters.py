@@ -161,6 +161,30 @@ def main():
         check("foreign: an error field inside a 200 is an error",
               bool(p.error) and "step limit" in str(p.error), repr(p.error))
 
+        # --- AND A JSON ANSWER THAT IS NOT AN OBJECT --------------------------------------
+        #
+        # The fourth question, and the one these two answered in the engine's own voice.
+        # `[1, 2]`, `"hi"`, `7`, `true` and `null` are all valid JSON with no `.get`, so
+        # each arrived on the probe as `AttributeError: 'list' object has no attribute
+        # 'get'` -- an error about THIS TOOL, filed in the one field an operator reads to
+        # decide whose problem it is. `targets_http` has the sentence for exactly this
+        # shape, twelve hundred lines away, and these two had a traceback.
+        #
+        # It is still an error and still a SKIP, which is right: an answer this adapter
+        # cannot read is not a measurement. What changes is that it says so.
+        for _adapter, _who in ((h, "httpbot"), (f, "foreign")):
+            for _shape in ("[1, 2]", '"hi"', "7", "true", "null"):
+                REPLY.update(status=200, content_type="application/json", body=_shape)
+                _p_s = _adapter.send("hello")
+                check("%s: a JSON %s is not a reply" % (_who, _shape),
+                      bool(_p_s.error), repr(_p_s.error))
+                check("...and the reason names the endpoint, not this engine",
+                      "AttributeError" not in str(_p_s.error or "")
+                      and "not an object" in str(_p_s.error or ""),
+                      repr(_p_s.error))
+                check("...and leaves no output for a detector to score",
+                      not (_p_s.output or ""), repr(_p_s.output))
+
         # --- AND THE SET IS SCANNED, so the next adapter joins by existing ----------------
         opens_socket, unchecked = [], []
         for fn in sorted(os.listdir(HERE)):

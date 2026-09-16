@@ -57,6 +57,17 @@ class ForeignAgentTarget(Target):
                         pass
                     return _p
                 d = json.loads(_body)
+            # AND WHAT PARSED IS A REPLY. A body of `[1, 2]`, `"hi"`, `7`, `true` or `null`
+            # is valid JSON with no `.get`, so every one of them came back as
+            # `AttributeError: 'list' object has no attribute 'get'` on the probe -- an
+            # error about this tool, filed against somebody else's deployment, in the one
+            # field an operator reads to decide whose problem it is. `targets_http` has the
+            # sentence for exactly this shape and these two siblings had a traceback.
+            if not isinstance(d, dict):
+                raise ValueError(
+                    "the endpoint answered valid JSON that is not an object: %s. This "
+                    "adapter reads `reply`, `tool_calls`, `observations` and `resolved` "
+                    "off a mapping." % type(d).__name__)
             reply = d.get("reply") or ""
             # tuples, because the oracle unpacks `for name, arg in probe.tool_calls`
             calls = [(str(c[0]), str(c[1])) for c in (d.get("tool_calls") or []) if c]
