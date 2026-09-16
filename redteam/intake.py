@@ -117,6 +117,19 @@ def submit(root, body, policy=None, wake=None):
         payload = json.loads(body or b"{}")
     except Exception as e:
         return _problem(400, f"the body is not JSON: {type(e).__name__}")
+    # AND WHAT PARSED IS A SUBMISSION. `[1,2]`, `"hi"`, `7`, `true` and `null` are all valid
+    # JSON and none of them has a `.get`, so five one-byte bodies reached
+    # `payload.get("config")` as an AttributeError. The try above catches a body that is not
+    # JSON; nothing asked whether the JSON was the document.
+    #
+    # Walked over a socket, which is where it matters: an unhandled exception inside
+    # `do_POST` never reaches `_send`, so `BaseHTTPRequestHandler` closes the connection with
+    # no reply at all -- `RemoteDisconnected` on the client, a traceback on this service's
+    # stderr, and a caller with no idea which half was wrong. Every other refusal in this
+    # file is a number and a sentence; this one was a dropped socket.
+    if not isinstance(payload, dict):
+        return _problem(400, f"the body must be a JSON object holding a `config`, not "
+                             f"{type(payload).__name__}")
     raw = payload.get("config")
     if not raw:
         return _problem(400, "no `config`: send the target YAML as a string, or an object")

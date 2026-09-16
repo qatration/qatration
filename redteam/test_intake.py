@@ -211,7 +211,64 @@ def main():
         check("the door refuses loopback even with the hosted flag unset",
               intake.submit(root, body())[0] == 422)
         check("a body that is not JSON is a 400", intake.submit(root, b"not json")[0] == 400)
-        check("an empty body is a 400", intake.submit(root, b"{}")[0] == 400)
+        # AND THE REASON IS THE RIGHT ONE. An empty body is a MISSING CONFIG, not a
+        # body of the wrong shape, and both are 400 -- so a code alone cannot tell them
+        # apart and the sentence is what the caller acts on.
+        _c_e, _o_e = intake.submit(root, b"{}")
+        check("an empty body is a 400", _c_e == 400, str(_o_e)[:70])
+        check("...and it is told the config is missing, not that the body is",
+              "`config`" in str(_o_e), str(_o_e)[:70])
+        # NO BODY AT ALL IS THE SAME MISSING CONFIG. `submit` defaults an empty body to an
+        # empty OBJECT on purpose: a caller who sent nothing is missing a config, and
+        # defaulting to any other shape would answer them with a sentence about JSON types
+        # for a request that simply had nothing in it.
+        for _nothing in (b"", None):
+            _c_n, _o_n = intake.submit(root, _nothing)
+            # THE WHOLE SENTENCE, because the wrong-shape refusal also names `config` and
+            # a substring test for that word cannot tell the two reasons apart -- which is
+            # the same collapse this block exists to keep open.
+            check("a body of %r is the missing-config refusal" % _nothing,
+                  _c_n == 400 and "no `config`" in str(_o_n),
+                  "%s %s" % (_c_n, str(_o_n)[:60]))
+
+        # AND A BODY THAT PARSES AND IS NOT A SUBMISSION. `[1,2]`, `"hi"`, `7`, `true` and
+        # `null` are all valid JSON and none of them has a `.get`, so each reached
+        # `payload.get("config")` as an AttributeError -- the try above catches a body that
+        # is not JSON and nothing asked whether the JSON was the document.
+        for _shape in (b"[1,2]", b'"hi"', b"7", b"true", b"null", b"[]"):
+            _c, _o = intake.submit(root, _shape)
+            check("a body of %s is refused with a sentence" % _shape.decode(),
+                  _c == 400 and "JSON object" in str(_o), "%s %s" % (_c, str(_o)[:70]))
+
+        # OVER A SOCKET, WHICH IS WHERE IT MATTERED. An unhandled exception inside `do_POST`
+        # never reaches `_send`, so `BaseHTTPRequestHandler` closes the connection with no
+        # reply at all: `RemoteDisconnected` on the client and a traceback on this service's
+        # stderr, where every other refusal here is a number and a sentence. Asserted through
+        # the handler rather than through `submit`, because the dropped socket is the part a
+        # caller sees and the part a unit call cannot show.
+        import http.client as _hc_i
+        from http.server import ThreadingHTTPServer as _THS_i
+        import threading as _th_i
+        _srv_i = _THS_i(("127.0.0.1", 0), intake.make_handler(root))
+        _th_i.Thread(target=_srv_i.serve_forever, daemon=True).start()
+        try:
+            for _shape in (b"{}", b"[1,2]", b'"hi"', b"7", b"null"):
+                _conn = _hc_i.HTTPConnection("127.0.0.1", _srv_i.server_address[1],
+                                             timeout=10)
+                _status, _why = None, ""
+                try:
+                    _conn.request("POST", "/runs", body=_shape,
+                                  headers={"Content-Type": "application/json",
+                                           "Content-Length": str(len(_shape))})
+                    _status = _conn.getresponse().status
+                except Exception as _e_i:
+                    _why = "%s: %s" % (type(_e_i).__name__, _e_i)
+                finally:
+                    _conn.close()
+                check("the door answers %s rather than dropping the connection"
+                      % _shape.decode(), _status == 400, _why or "HTTP %s" % _status)
+        finally:
+            _srv_i.shutdown()
         check("a config that is not a mapping is a 400",
               intake.submit(root, json.dumps({"config": "- just\n- a list"}).encode())[0] == 400)
         check("unparseable YAML is a 400, with the reason",
