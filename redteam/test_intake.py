@@ -142,8 +142,27 @@ def main():
               intake.status(root, "2026-01-01T0000-aaaaaa")[0] == 404)
         check("a job id shaped like a path is refused before any lookup",
               intake.status(root, "../../etc/passwd")[0] == 400)
-        check("...and so is one at the report route",
-              intake.report(root, "../../../secrets")[0] is None)
+        # THE REASON, NOT ONLY THE REFUSAL. `report` returns `(None, why)` from four
+        # different places, so `[0] is None` is satisfied by any of them -- and it was:
+        # deleting `if not ID_RE.match(job_id or "")` out of this function left every suite
+        # green, because `os.path.join(root, "runs", "../../../secrets", ...)` does not
+        # exist and the guard below answered for it. A path that happens not to be there is
+        # not the id rule working, and on a workspace where it IS there the rule is the only
+        # thing between a caller's string and an arbitrary file.
+        #
+        # Measured with `tools/unguarded.py` pointed at the guards it skips by design -- the
+        # ones with no comment above them -- over the two service modules.
+        _bad_id, _why_bad = intake.report(root, "../../../secrets")
+        check("...and so is one at the report route", _bad_id is None, str(_why_bad))
+        check("...refused by the id rule, not by the file happening not to be there",
+              _why_bad == "bad job id", str(_why_bad))
+        # AND THE OTHER ARM OF THE SAME SENTENCE: a well-formed id with no report behind it
+        # is the `no report yet` answer, which is what makes the line above a distinction
+        # rather than a spelling. That branch had no case either.
+        _absent, _why_absent = intake.report(root, "2026-01-01T0000-aaaaaa")
+        check("...while a well-formed id with no report is a different answer",
+              _absent is None and _why_absent and "no report" in _why_absent,
+              str(_why_absent))
 
         # --- A REPORT IS FOR A JOB THAT FINISHED --------------------------------------------
         #
