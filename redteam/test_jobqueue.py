@@ -162,6 +162,52 @@ def main():
         check("...and explains that killing a sweep mid-flight fakes a defence",
               "reads as a defence" in why6, why6)
 
+        # --- AND THE JOBS THAT ARE NOT THERE, OR ARE ALREADY OVER ------------------------
+        #
+        # Three decisions in this file that nothing drove. Found by pointing
+        # `tools/unguarded.py` at the guards it skips by design -- a branch with no comment
+        # above it -- and deleting them one at a time: all three could go with every suite
+        # green.
+        #
+        # `cancel` opens with `job = load(...)`, and without `if not job` the next line is
+        # `job.get("state")` on None: a 404 answered as a traceback out of the queue a
+        # service calls.
+        _gone, _why_gone = q.cancel(root, "2026-01-01T0000-nosuch")
+        check("cancelling a job that is not there is an answer, not a crash",
+              _gone is None and _why_gone == "no such job", str(_why_gone))
+        # AND ONE THAT IS OVER STAYS OVER. Without the state check a `done` record is
+        # rewritten as `cancelled`: a finished sweep's own history, edited by a caller who
+        # asked too late.
+        _fin = q.submit(root, "zeta", "targets_zeta.yaml", when=final)
+        q.release(root, q.load(root, _fin["job_id"]), "done")
+        _after, _why_after = q.cancel(root, _fin["job_id"])
+        check("a job that already finished is not cancelled after the fact",
+              q.load(root, _fin["job_id"])["state"] == "done", str(_why_after))
+        check("...and the refusal names the state it is already in",
+              _why_after == "already done", str(_why_after))
+        # AND A CLOSE OVER A RECORD THAT IS GONE. `release` reloads the job to check the
+        # lease; without `if current is None` the lease checks read an empty mapping, every
+        # refusal below them is skipped, and the close WRITES A NEW FILE -- recreating a job
+        # somebody removed, and telling the worker it ended cleanly.
+        # ITS OWN ROOT, because what is being asked is about one job and nothing else: in
+        # the shared one above, `claim` hands back whatever is queued and blocked by the
+        # same-origin rule, and the case would be about the fixture's history.
+        _rootv = tempfile.mkdtemp()
+        try:
+            q.submit(_rootv, "eta", "targets_eta.yaml", when=final)
+            _held, _why_claim = q.claim(_rootv, "w-vanish", now=final)
+            check("there is a running job to close", bool(_held), str(_why_claim))
+            if _held:
+                os.remove(q._path(_rootv, _held["job_id"]))
+                _closed_v, _why_v = q.release(_rootv, _held, "done")
+                check("closing a job whose record was removed says the job is gone",
+                      bool(_why_v) and "gone" in _why_v, str(_why_v))
+                check("...and does not write the record back",
+                      not os.path.exists(q._path(_rootv, _held["job_id"])),
+                      "the removed job was recreated by its own close")
+        finally:
+            shutil.rmtree(_rootv, ignore_errors=True)
+
         # --- what an operator sees --------------------------------------------------------
         q.release(root, running, "failed", note="target refused every connection")
         e = q.submit(root, "eps", "targets_eps.yaml", when=final)
