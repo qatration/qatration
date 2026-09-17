@@ -102,6 +102,36 @@ def main():
 
     ok, why = az.check(cfg("dns_txt"), SECRET)
     check("dns_txt with no records to check is refused rather than trusted", not ok, why)
+    # AND RECORDS THAT ARE THERE AND CARRY NOTHING. `well_known` has had this case since it
+    # was written -- a file fetched that does not hold the token -- and the DNS branch, which
+    # is the same question one transport over, had only "no records at all". Deleting
+    # `if not any(token in str(r) for r in records)` left every suite green, and with it gone
+    # ANY non-empty record set authorises a scan of somebody else's system: the operator who
+    # added the TXT record to the wrong zone, or added none and passed their SPF line, is told
+    # the proof holds.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design: 30 of them in this
+    # module, which carries no documented guard at all and is the one that decides whether a
+    # target may be attacked.
+    ok, why = az.check(cfg("dns_txt", records=["v=spf1 include:example.com ~all"]), SECRET)
+    check("a TXT record set that does not carry the token is refused", not ok, why)
+    check("...and the reason names the token rather than the records", "token" in (why or ""),
+          why)
+    # AN EMPTY LIST IS A MEASUREMENT AND `None` IS NOT, and the two refusals differ: one
+    # says the records were looked at and hold nothing, the other that none were supplied.
+    ok, why_empty = az.check(cfg("dns_txt", records=[]), SECRET)
+    check("...and an empty record set is refused too", not ok, why_empty)
+    check("...with a different sentence from `no records were supplied`",
+          why_empty != az.check(cfg("dns_txt"), SECRET)[1], why_empty)
+    # AND A TOKEN THAT IS NOT A TOKEN IS REFUSED FOR THAT, not for failing to match. The
+    # shape check in front of the comparison is a message rather than a wall -- a malformed
+    # token fails `compare_digest` too -- and a wall that reports the wrong reason sends the
+    # operator to re-issue a token when what they have is a truncated one.
+    for _bad in (None, "", "not a token", token[:-4]):
+        _ok_b, _why_b = az.check(cfg("header", token=_bad, echoed=_bad), SECRET)
+        check("a malformed token (%r) is refused" % (_bad,), not _ok_b, _why_b)
+        check("...for being malformed rather than for not matching",
+              "missing or malformed" in (_why_b or ""), _why_b)
     ok, why = az.check(cfg("smoke-signal"), SECRET)
     check("an unknown method is refused", not ok, why)
 
