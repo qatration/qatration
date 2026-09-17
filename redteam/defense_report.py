@@ -781,7 +781,7 @@ def load_all(known=None):
         # appeared in `2 systems tested` and in `1 with at least one exploitable finding`,
         # which reads as one tested and clean.
         from workspace import verdict_for as _verdict_for
-        if _verdict_for(d.get("meta") or {}) == "Not measured":
+        if _verdict_for(d.get("meta") or {}, d.get("results")) == "Not measured":
             unmeasured.add(tgt)
         # THE RUN'S DATE WHERE THE RUN RECORDED ONE. `os.path.getmtime` is a filesystem
         # event: git does not preserve mtimes, so a fresh clone stamps every artifact with

@@ -239,7 +239,7 @@ def target_of(stem, names):
     return max(hits, key=len) if hits else None
 
 
-def verdict_for(meta):
+def verdict_for(meta, rows=None):
     """-> "Vulnerable" | "Hardened" | "Not measured", from a results file's meta.
 
     ONE predicate because two pages were deciding this separately and reached opposite answers
@@ -265,9 +265,17 @@ def verdict_for(meta):
     # never called. The two disagreed the moment a run could stop part way: attacks the sweep
     # never reached leave no ERROR behind, so a run stopped on its CONTROLS -- which are
     # excluded from `errors` -- came back "Hardened".
-    if (meta.get("broke") or 0) > 0:
+    # BOTH COUNTERS, OR NEITHER. `build_index` recounts `broke` from the rows and says why
+    # -- a stored count outlives the run that wrote it -- and then hands the result to this
+    # function, which reads the OTHER half of the same decision out of the same stale meta.
+    # Rows here make the two symmetrical: an absent count is answered from the evidence
+    # rather than assumed to be zero, on the side that turns a silence into HARDENED.
+    _broke = meta.get("broke")
+    if _broke is None:
+        _broke = _rows_with(rows, BROKE) if rows is not None else 0
+    if _broke > 0:
         return "Vulnerable"
-    _n, _errs = measured(meta)
+    _n, _errs = measured(meta, rows)
     if _n <= 0 or _errs > 0 or (meta.get("unreached") or 0) > 0:
         return "Not measured"
     return "Hardened"
@@ -1572,7 +1580,19 @@ QUALIFIERS = {
 }
 
 
-def measured(meta):
+def _rows_with(rows, headlines):
+    """How many attack rows carry one of these headlines. Controls are not attacks.
+
+    A control is a false-alarm check and is out of `attacks_n`, out of `broke` and out of
+    `errors` -- the one place two writers of these counters could disagree without any row
+    changing, which is why the artifact gate names it too.
+    """
+    return sum(1 for r in (rows or [])
+               if str((r or {}).get("headline", "")) in headlines
+               and ((r or {}).get("attack") or {}).get("category") != "control")
+
+
+def measured(meta, rows=None):
     """-> (attacks measured, attacks that errored), from a results file's meta.
 
     AGAINST WHAT WAS MEASURED, NOT AGAINST WHAT WAS ATTEMPTED. An errored row is neither a
@@ -1594,9 +1614,18 @@ def measured(meta):
     the loop: a sweep stopped at eight of ten stores `attacks_n: 10`, `errors: 5` and eight
     rows, so this returned five measured when three were. The number moved in the one
     direction a coverage figure must never drift, which is the paragraph above.
+    AND WHERE THE FILE DOES NOT CARRY THE COUNT, THE ROWS DO. `errors` is absent from 34 of
+    the 45 artifacts stored here -- it was added late -- and an absent counter read as zero is
+    the sentence this function exists to refuse, one level in: every row ERROR, nothing
+    measured, and `verdict_for` says HARDENED off `errors: 0` that nobody ever wrote. Pass the
+    rows and they are counted. A counter that IS there is left alone, wrong or right, because
+    `build_index` keeps the stored one beside its recount on purpose -- where the two differ,
+    the difference is the finding, and replacing one with the other would hide it.
     """
     meta = meta or {}
-    errs = meta.get("errors") or 0
+    errs = meta.get("errors")
+    if errs is None:
+        errs = _rows_with(rows, ("ERROR",)) if rows is not None else 0
     unreached = meta.get("unreached") or 0
     return max(0, (meta.get("attacks_n") or 0) - errs - unreached), errs
 

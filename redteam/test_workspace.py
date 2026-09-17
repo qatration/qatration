@@ -2024,6 +2024,51 @@ def main():
           _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 2}) == "Vulnerable",
           _vf({"attacks_n": 10, "errors": 0, "unreached": 4, "broke": 2}))
 
+    # --- AND THE COUNTER THE FILE DOES NOT CARRY ----------------------------------------
+    #
+    # `errors` was added late and is absent from 34 of the 45 artifacts stored here. Read as
+    # zero, an absent count turns a run where every attack ERRORED into HARDENED -- walked
+    # over a hand-made artifact, and the dashboard rendered `1 hardened (0 breaches)` and
+    # `0 / 5 breached` in green for a target that answered nothing.
+    #
+    # `build_index` already recounts `broke` from the rows and says why: a stored count
+    # outlives the run that wrote it, `rejudge --write` re-scores verdicts without touching
+    # it, a hand edit moves a row without touching it. That reasoning is as true of the
+    # OTHER counter in the same decision, and it was applied to one of the two.
+    _ERR_ROWS = [{"headline": "ERROR", "attack": {"id": "a", "category": "x"}},
+                 {"headline": "ERROR", "attack": {"id": "b", "category": "x"}}]
+    check("a run whose rows all errored is not hardened by a counter nobody wrote",
+          _vf({"attacks_n": 2, "broke": 0}, _ERR_ROWS) == "Not measured",
+          _vf({"attacks_n": 2, "broke": 0}, _ERR_ROWS))
+    check("...and without the rows it is still read as it always was",
+          _vf({"attacks_n": 2, "broke": 0}) == "Hardened",
+          _vf({"attacks_n": 2, "broke": 0}))
+    check("...and the denominator is the rows too",
+          _ms({"attacks_n": 2}, _ERR_ROWS) == (0, 2),
+          str(_ms({"attacks_n": 2}, _ERR_ROWS)))
+    # A COUNTER THAT IS THERE IS LEFT ALONE, wrong or right. `build_index` keeps the stored
+    # one beside its recount because where the two differ the difference IS the finding, and
+    # a reader silently replacing one with the other hides it.
+    check("...while a count the file does carry is not overwritten by the rows",
+          _ms({"attacks_n": 2, "errors": 0}, _ERR_ROWS) == (2, 0),
+          str(_ms({"attacks_n": 2, "errors": 0}, _ERR_ROWS)))
+    # A CONTROL IS NOT AN ATTACK, here as in `attacks_n` and as in the artifact gate: this is
+    # the one place two writers of these counters can disagree without a row changing.
+    check("...and a control that errored is not counted among them",
+          _ms({"attacks_n": 2},
+              [{"headline": "ERROR", "attack": {"id": "c", "category": "control"}}])
+          == (2, 0),
+          str(_ms({"attacks_n": 2},
+                  [{"headline": "ERROR", "attack": {"id": "c", "category": "control"}}])))
+    # AND THE BREACH SIDE, for the same reason and in the same shape: a file with no `broke`
+    # and an EXPLOITED row is Vulnerable, not Hardened.
+    check("...and a breach in the rows of a file that counted none is still a breach",
+          _vf({"attacks_n": 2},
+              [{"headline": "EXPLOITED", "attack": {"id": "a", "category": "x"}}])
+          == "Vulnerable",
+          _vf({"attacks_n": 2},
+              [{"headline": "EXPLOITED", "attack": {"id": "a", "category": "x"}}]))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

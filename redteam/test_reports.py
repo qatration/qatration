@@ -1645,12 +1645,41 @@ def main():
         # The rows matter: `load()` RECOUNTS `broke` from the results rather than trusting
         # the stored meta, which is the documented behaviour and the reason a fixture with an
         # empty `results` list reports every target as unbreached.
-        breach = [{"headline": "EXPLOITED", "attack": {"category": "exfiltration"}}] * 5
+        # `fired` AND AN id ON EVERY ROW, because `read_artifact` refuses a results file
+        # whose first row carries no `fired` -- `compare` reads the detector list off it. The
+        # fixture that lacked them was dropped before `load` returned, so the `breached`
+        # target below never reached `classify` at all and the check under it passed over a
+        # set of two.
+        breach = [{"headline": "EXPLOITED", "fired": ["canary_in_output"],
+                   "attack": {"id": "b%d" % _i, "category": "exfiltration"}}
+                  for _i in range(5)]
+        # AND A RUN THAT SENT ITS ARSENAL AND MEASURED NOTHING. `errors` was added late and
+        # is absent from 34 of the 45 artifacts stored here; read as zero it makes every
+        # errored row a defence, and this page rendered `1 hardened (0 breaches)` with
+        # `0 / 5 breached` in green over a target that answered nothing. `broke` has been
+        # recounted from the rows here since httpbot; the other counter in the same decision
+        # was still the one the sweep declared.
+        errored = [{"headline": "ERROR", "fired": [],
+                    "attack": {"id": "e%d" % _i, "category": "exfiltration"}}
+                   for _i in range(5)]
         for name, n, rows_ in (("never-attacked", 0, []), ("really-held", 12, []),
+                               ("all-errored", 5, errored),
+                               # AND ONE THAT CARRIES A COUNT ITS ROWS CONTRADICT, which is
+                               # the shape `results_localrag-refusal.json` shipped in: seven
+                               # rows whose every trial says the target answered nothing,
+                               # under `errors: 0`. The recount and the declared number are
+                               # both on the row here, which is the only way to tell a page
+                               # that recounts from one that replaced the number in silence.
+                               ("stale-errors", 5, errored),
                                ("breached", 12, breach)):
             with open(os.path.join(tmp, f"results_{name}.json"), "w", encoding="utf-8") as f:
                 json.dump({"meta": {"target": name, "model": "", "trials": 1,
-                                    "attacks_n": n, "broke": len(rows_)},
+                                    "attacks_n": n,
+                                    # AS THE FILE WOULD CARRY IT: no `errors` key at all,
+                                    # except on the one target written to contradict itself.
+                                    "broke": sum(1 for _r in rows_
+                                                 if _r["headline"] == "EXPLOITED"),
+                                    **({"errors": 0} if name == "stale-errors" else {})},
                            "results": rows_}, f)
         import pathlib
         real_out = bi.OUT
@@ -1686,8 +1715,27 @@ def main():
     check("a target with zero attacks sent is NOT counted as hardened",
           [m["target"] for m in hardened] == ["really-held"],
           str(sorted(m["target"] for m in hardened)))
+    # AND NEITHER IS THE ONE WHOSE EVERY ROW ERRORED, which reaches the same green tile
+    # through the other counter: nothing in its meta says so, and its rows do.
+    check("...nor is a run whose rows all errored and whose meta counted none",
+          "all-errored" not in [m["target"] for m in hardened],
+          str(sorted(m["target"] for m in hardened)))
+    check("...and the count it is given is the rows', not the file's",
+          [m.get("errors") for m in rows if m["target"] == "all-errored"] == [5],
+          str([(m["target"], m.get("errors"), m.get("errors_at_run")) for m in rows]))
+    # THE STORED COUNTER IS KEPT BESIDE THE RECOUNT, as `broke_at_run` is: where the two
+    # differ, the difference is the finding, and a page replacing one with the other in
+    # silence is how a re-scored artifact stops being able to say it moved.
+    check("...with what the file said kept beside it",
+          [(m.get("errors"), m.get("errors_at_run"))
+           for m in rows if m["target"] == "stale-errors"] == [(5, 0)],
+          str([(m["target"], m.get("errors"), m.get("errors_at_run")) for m in rows]))
+    check("...and a file whose count contradicts its rows is not hardened either",
+          "stale-errors" not in [m["target"] for m in hardened],
+          str(sorted(m["target"] for m in hardened)))
     check("...it is reported as not measured instead",
-          [m["target"] for m in unmeasured] == ["never-attacked"],
+          sorted(m["target"] for m in unmeasured)
+          == ["all-errored", "never-attacked", "stale-errors"],
           str(sorted(m["target"] for m in unmeasured)))
 
     # --- AN ARTIFACT OF A TARGET THAT DOES NOT EXIST IS NOT A TARGET ------------------------

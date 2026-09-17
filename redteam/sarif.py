@@ -392,7 +392,7 @@ def build(results, target_config=None, out_dir=None):
     # `workspace.verdict_for` already owns this rule and says "Not measured" for it, in the
     # words of its own docstring: zero breaches out of zero attacks is not a defence. It was
     # never consulted here; `meta["attacks_n"]` was read only to fill in `properties`.
-    unmeasured = workspace.verdict_for(meta) == "Not measured"
+    unmeasured = workspace.verdict_for(meta, rows) == "Not measured"
     # THE SENTENCE IS A COUNT, SO THE CONDITION IS THE COUNT. `verdict_for` answers in three
     # words and `Not measured` is the conservative one: it covers a run that measured nothing
     # AND a run that measured most of the arsenal and did not reach the rest, because a clean
@@ -404,7 +404,7 @@ def build(results, target_config=None, out_dir=None):
     # `executionSuccessful` keeps the three-word verdict: a run that did not reach the end of
     # its arsenal did not complete the analysis, whatever it measured on the way. What that
     # run gets instead is `run/unfinished` below, which carries the record's own reason.
-    _n_measured, _ = workspace.measured(meta)
+    _n_measured, _ = workspace.measured(meta, rows)
     if not _n_measured and not (unrun or skipped):
         notifications.append({
             "level": "error",

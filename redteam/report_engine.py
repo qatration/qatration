@@ -323,7 +323,7 @@ def build_html(meta, results, recon=None, isolation=None):
     # stopped it after one probe rendered as "20 attacks fired · 0 breached · 0 not
     # applicable", with the nineteen failures visible only by opening nineteen collapsed
     # evidence panels one at a time. The rule and its reasoning live in `workspace.measured`.
-    _measured_n, _errored_n = measured(meta)
+    _measured_n, _errored_n = measured(meta, results)
     _errored_card = (f'<div class="stat"><div class="n">{_errored_n}</div>'
                      f'<div class="l">errored — nothing measured</div></div>'
                      if _errored_n else "")

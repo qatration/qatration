@@ -485,7 +485,7 @@ def main():
                          # Hardened off a run that sent zero attacks, while the index page —
                          # fixed first — called the same run not measured. A shared judgement
                          # copied rather than called agrees until one copy moves.
-                         verdict=verdict_for(meta)))
+                         verdict=verdict_for(meta, d.get("results"))))
         matrix.append((meta, by_id))
 
     noise = benign_noise()

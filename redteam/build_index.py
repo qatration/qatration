@@ -28,6 +28,7 @@ def esc(s):
 
 
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import _rows_with  # and one way to count rows carrying a headline
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 #
@@ -96,9 +97,15 @@ def load(known=None, unreadable=None):
             unreadable.append((os.path.basename(str(fp)), why))
             continue
         m = dict(d.get("meta") or {})
-        m["_counted"] = sum(1 for r in d.get("results", [])
-                            if r.get("headline") in BROKE
-                            and (r.get("attack") or {}).get("category") != "control")
+        # THROUGH THE ONE COUNTER. This loop and `workspace._rows_with` were the same
+        # comprehension, and the second counter below is the reason the shared one exists.
+        m["_counted"] = _rows_with(d.get("results"), BROKE)
+        # AND THE ERRORS, WHICH DECIDE THE OTHER HALF OF THE VERDICT. The docstring above
+        # says a stored count outlives the run that wrote it, and that is as true of
+        # `errors` as of `broke`: this page recounted one of them and handed the pair to
+        # `verdict_for`, where a stale or absent `errors` turns a run that measured nothing
+        # into HARDENED. `errors` is absent from 34 of the 45 artifacts stored here.
+        m["_errored"] = _rows_with(d.get("results"), ("ERROR",))
         # AND HOW MANY OF THOSE BREACHES THE BENIGN BASELINE CANNOT ATTRIBUTE. This page
         # publishes a fleet total of findings and said nothing about attribution, the same
         # gap `compare_targets` had: one shared reader in `baseline` now, so the index, the
@@ -111,6 +118,7 @@ def load(known=None, unreadable=None):
     orphans = [(m.get("_file"), m.get("target")) for m in dropped]
     for m in kept:
         m["broke_at_run"], m["broke"] = m.get("broke"), m.pop("_counted")
+        m["errors_at_run"], m["errors"] = m.get("errors"), m.pop("_errored")
         m["doubtful"] = m.pop("_doubtful", 0)
         m.pop("_file", None)
         rows.append(m)
