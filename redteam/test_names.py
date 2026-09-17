@@ -572,6 +572,69 @@ def main():
         if "TemporaryDirectory" in io.open(_sp, encoding="utf-8").read())
     check("...over the suites that use one at all", _tmp_users >= 5, str(_tmp_users))
 
+    # --- A KEY WRITTEN TWICE IN ONE DICT LITERAL ---------------------------------------
+    #
+    # Python takes the last one and says nothing. Both spellings look like a decision in the
+    # source and only one of them is; the other is a line somebody wrote, and reads, that has
+    # no effect. In `test_readme.facts` -- the table every published number in this repository
+    # is recounted against -- `probes` was in the dict twice, twelve lines apart, the second
+    # one bare and the first carrying the comment explaining why the key is there at all. The
+    # two happened to be the same expression, so nothing moved; a page's claim would have been
+    # checked against the later value either way, whatever the earlier line said.
+    #
+    # Suites included, not just the engine: the one instance was in a suite, and a fixture
+    # whose second `"headline"` silently wins is a case asserting something other than what
+    # it reads as.
+    def _dupe_keys(src, name):
+        """-> ["file:line key" ...] for every literal key repeated in one dict."""
+        _out = []
+        try:
+            _tree = ast.parse(src)
+        except SyntaxError:
+            return _out
+        for _node in ast.walk(_tree):
+            if not isinstance(_node, ast.Dict):
+                continue
+            _seen = {}
+            for _k in _node.keys:
+                # `**other` in a literal has no key node, and a computed key is not a
+                # spelling anybody can compare: only a constant can be written twice.
+                if isinstance(_k, ast.Constant) and isinstance(_k.value, (str, int, bool)):
+                    if _k.value in _seen:
+                        _out.append("%s:%d %r (first at line %d)"
+                                    % (name, _k.lineno, _k.value, _seen[_k.value]))
+                    _seen[_k.value] = _k.lineno
+        return _out
+
+    # ON A PLANTED ONE FIRST, in this process, every time. The tree is clean once the one
+    # instance is fixed, so a scan that stopped scanning would change no answer here.
+    _DUPE = ("D = {'a': 1, 'b': 2, 'a': 3}\n"
+             "E = {'a': 1, **D, 'b': 2}\n"
+             "F = {k: 1 for k in D}\n")
+    check("the scan finds a key written twice in one literal",
+          [h.split()[1] for h in _dupe_keys(_DUPE, "p.py")] == ["'a'"],
+          str(_dupe_keys(_DUPE, "p.py")))
+    check("...and says where the first one was",
+          "first at line 1" in (_dupe_keys(_DUPE, "p.py") or [""])[0],
+          str(_dupe_keys(_DUPE, "p.py")))
+    _NESTED = "D = {'a': {'x': 1}, 'b': {'x': 2}}\n"
+    check("...and the same key in two different dicts is not one",
+          not _dupe_keys(_NESTED, "p.py"), str(_dupe_keys(_NESTED, "p.py")))
+    _dupes = []
+    for _dn in SCANNED:
+        for _fp in sorted(glob.glob(os.path.join(ROOT, _dn, "*.py"))):
+            _dupes += _dupe_keys(io.open(_fp, encoding="utf-8").read(),
+                                 os.path.basename(_fp))
+    check("no dict literal in this package writes a key twice",
+          not _dupes, "; ".join(_dupes[:6]))
+    # AND OVER A REAL NUMBER OF LITERALS, or the line above is a claim about a scan that
+    # found nothing to look at.
+    _n_dicts = sum(1 for _dn in SCANNED
+                   for _fp in sorted(glob.glob(os.path.join(ROOT, _dn, "*.py")))
+                   for _nd in ast.walk(ast.parse(io.open(_fp, encoding="utf-8").read()))
+                   if isinstance(_nd, ast.Dict) and len(_nd.keys) > 1)
+    check("...over the literals this package actually has", _n_dicts >= 200, str(_n_dicts))
+
     # --- A CONSTANT `workspace` OWNS, WRITTEN OUT AGAIN SOMEWHERE ELSE -----------------
     #
     # `workspace.BROKE` carries the comment that predicted this: the tuple `("EXPLOITED",

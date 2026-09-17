@@ -214,7 +214,6 @@ def facts():
         "untried": len(untried),
         "unevidenced": len(unevidenced),
         "unconfigured": len(unconfigured),
-        "probes": probes,
         "attacks": count_ids("attacks.yaml"),
         "frames": n_frames,
         "test_files": len(glob.glob(os.path.join(HERE, "test_*.py"))),
