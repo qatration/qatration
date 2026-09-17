@@ -121,6 +121,44 @@ def main():
         guard.scan_files([path], lambda _p: text, refusals)
         return refusals
 
+    # --- A FILE WHOSE NAME ENDS IN .png IS NOT A FILE THAT IS CLEAN -------------------------
+    #
+    # `scan_files` began with `if path.lower().endswith(BINARY): continue` -- skipped before it
+    # was read at all, no refusal, no mention. Walked: `ASIA` + sixteen characters inside a PNG
+    # header came back `ok  guard: the tree`, and the identical bytes in a `.txt` were refused.
+    # Seven binaries are tracked in this repository and four are PDFs whose whole purpose is to
+    # carry planted instruction text.
+    #
+    # The two CYRILLIC rules stay off them: those read a decoded string, and compressed bytes
+    # decoded with `errors="replace"` land in every code range there is, so a refusal from one
+    # would be a statement about entropy rather than about a file.
+    _bin_tok = "ASIA" + "Q" * 16
+    for _ext in (".png", ".pdf", ".ico", ".woff2"):
+        check("a credential inside a %s is refused, not skipped" % _ext,
+              bool(scan("site/x" + _ext, "\x89PNG junk " + _bin_tok + " tail")),
+              "the tree was reported clean over it")
+    # AND THE LITERALS TOO, which are exact strings and cannot be produced by chance.
+    if guard._local_literals():
+        _lit0 = guard._local_literals()[0]
+        check("...and a string listed in .guard-local is found in one too",
+              any(".guard-local" in r for r in scan("site/x.png", "header " + _lit0 + " end")),
+              "not found")
+    # AND CYRILLIC IN ONE IS NOT A REFUSAL, or a compressed byte that decodes into that range
+    # fails a build over a PNG.
+    check("...while Cyrillic bytes in a binary are not read as a tracked file's text",
+          not scan("site/x.png", "\x89PNG " + chr(0x0434) + chr(0x0430) + " tail"),
+          str(scan("site/x.png", "\x89PNG " + chr(0x0434) + chr(0x0430) + " tail")))
+    check("...though the same characters in a source file still are",
+          bool(scan("redteam/x.py", chr(0x0434) + chr(0x0430))),
+          "a tracked source file's Cyrillic stopped being refused")
+    # AND THE READER IS TOLD, because a file scanned by a narrower set of rules under a line
+    # that says `no Cyrillic outside a recorded reply` is the same silence one level in.
+    _partial = []
+    guard.scan_files(["site/x.png", "redteam/x.py"], lambda _p: "nothing here", [],
+                     partial=_partial)
+    check("a binary read for exact strings only is named as one", _partial == ["site/x.png"],
+          str(_partial))
+
     # --- A FILE THAT COULD NOT BE READ IS NOT A FILE THAT IS CLEAN --------------------------
     #
     # `_read_tree` returned "" both for a file it read that was empty and for one it could

@@ -551,7 +551,7 @@ def _cyrillic_outside_model_output(text):
     return out[:3]
 
 
-def scan_files(items, reader, refusals, path_of=None):
+def scan_files(items, reader, refusals, path_of=None, partial=None):
     """Every rule, over every item. `items` are LABELS, not necessarily paths.
 
     A label is usually just the path. From `scan_history` it is `path@sha`, because one
@@ -571,6 +571,25 @@ def scan_files(items, reader, refusals, path_of=None):
 
     A planted `ghp_…` inside `out/results_x.json` returned exit 0 and the word `ok`; the
     same string in `redteam/x.py` was refused.
+
+    AND THE SAME SENTENCE ONE EXTENSION OVER. A file whose name ends in `BINARY` was
+    skipped before it was read at all -- `continue`, no refusal, no mention -- which is the
+    clean bill over unknown contents that `_read_tree` was rewritten to stop giving. Walked:
+    the identical bytes, `ASIA` + sixteen characters inside a PNG header, came back
+
+        ok  guard: the tree - no credential, ...
+
+    and the same file renamed `.txt` was refused. Seven binaries are tracked here, four of
+    them PDFs whose whole purpose is to carry planted instruction text.
+
+    Byte patterns are scanned now; the two CYRILLIC rules are not. Those read a decoded
+    string, and compressed bytes decoded with `errors="replace"` land in every code range
+    there is -- a refusal from one would be a statement about entropy, not about a file.
+    The credential patterns are prefix-anchored and the `.guard-local` literals are exact
+    strings, so neither can be produced by chance in any quantity that matters.
+
+    `partial` collects what was read this narrower way, because a scan that covers a file
+    differently and says nothing is the same silence one level in.
     """
     to_path = path_of or (lambda label: label)
     literals = _local_literals()
@@ -580,8 +599,9 @@ def scan_files(items, reader, refusals, path_of=None):
     for item in items:
         path = to_path(item)
         rel = path.replace("\\", "/").lstrip("./")
-        if path.lower().endswith(BINARY):
-            continue
+        binary = path.lower().endswith(BINARY)
+        if binary and partial is not None:
+            partial.append(rel)
         text = reader(item)
         if text is UNREADABLE:
             # A FILE THAT COULD NOT BE READ IS NOT A FILE THAT IS CLEAN. See `_read_tree`:
@@ -592,7 +612,11 @@ def scan_files(items, reader, refusals, path_of=None):
             continue
         if not text:
             continue
-        if ARTIFACT.search(path):
+        if binary:
+            # NEITHER CYRILLIC RULE, for the reason in the docstring: they read text, and
+            # this is not text. Everything below this block still runs over it.
+            pass
+        elif ARTIFACT.search(path):
             # SEE BANNED_TOKENS. A recorded reply may legitimately contain almost anything —
             # that is what makes these artifacts evidence — but not this, and not in a
             # repository that invites strangers to read every number out of `out/`.
@@ -933,6 +957,10 @@ def main(argv=None):
         return 0
 
     refusals = []
+    # WHAT WAS READ AS BYTES RATHER THAN AS TEXT. See `scan_files`: a binary file gets the
+    # credential and `.guard-local` rules and not the two Cyrillic ones, and a reader who is
+    # not told that reads the `ok` line as covering every rule over every file.
+    partial = []
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import licences
     refusals += licences.problems(os.path.join(ROOT, "pyproject.toml"))
@@ -986,7 +1014,7 @@ def main(argv=None):
         _pending_stamp(refusals)
         staged = _staged_files()
         blobs = _staged_contents(staged)
-        scan_files(staged, lambda p: blobs.get(p, ""), refusals)
+        scan_files(staged, lambda p: blobs.get(p, ""), refusals, partial=partial)
     elif args.tree:
         # THE BACKSTOP. CI is not making a commit, so here the question is what the history
         # already holds -- this is what catches a rewritten or force-pushed branch. On a
@@ -994,7 +1022,7 @@ def main(argv=None):
         # `fetch-depth: 0`. Guarded because an empty repository has no HEAD.
         if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
             _stamps("HEAD", refusals)
-        scan_files(_tree_files(), _read_tree, refusals)
+        scan_files(_tree_files(), _read_tree, refusals, partial=partial)
     else:
         # MESSAGES ONLY ON THE PUSH PATH, and the scope is the point. A message does not
         # exist yet at `--staged` time, and scanning all of HEAD on `--tree` would fail
@@ -1003,7 +1031,7 @@ def main(argv=None):
         # `git push` hands us exactly the commits the remote is about to receive.
         scan_messages(args.range, refusals)
         scan_history(args.range, refusals)
-        scan_files(_tree_files(), _read_tree, refusals)
+        scan_files(_tree_files(), _read_tree, refusals, partial=partial)
 
     if refusals:
         print("\n  REFUSED — nothing was committed or pushed:\n", file=sys.stderr)
@@ -1017,6 +1045,12 @@ def main(argv=None):
     note = "" if _local_literals() is not None else "  (no .guard-local on this machine)"
     print(f"  ok  guard: {where} — no credential, no copyleft dependency, "
           f"no Cyrillic outside a recorded reply{note}")
+    if partial:
+        _shown = ", ".join(sorted(partial)[:6])
+        _more = len(partial) - 6
+        print(f"      {len(partial)} binary file(s) were read for credentials and "
+              f"`.guard-local` strings only, not as text: {_shown}"
+              + (f" and {_more} more" if _more > 0 else ""))
     return 0
 
 
