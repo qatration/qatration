@@ -488,8 +488,17 @@ def main():
                     (_yaml.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
                                           encoding="utf-8")) or [])}
         _sent = sent & _arsenal
+        _never = sorted(_arsenal - _sent)
         print(f"{len(_arsenal)} attacks in the portable arsenal · {len(_sent)} with a stored "
-              f"trial · {len(_arsenal - _sent)} never sent against anything")
+              f"trial · {len(_never)} never sent against anything")
+        # AND WHICH ONES. Every other remainder in this file is named -- the detectors that
+        # have never fired get a section each with the reason, the targets with no config get
+        # a line -- and this one was a number over a set nobody could see. Which eight they
+        # are decides whether the line is benign (added since the last sweep) or a finding
+        # (an attack that CANNOT be sent: a delivery no adapter implements, an `applies_to`
+        # naming a target that is gone), and the reader had no way to tell those apart.
+        if _never:
+            print(f"  never sent: {named_or_more(_never, 8)}")
     except Exception as _e:
         # Said, not swallowed: a count that failed to compute must not read as a count of zero.
         print(f"(the arsenal count could not be computed: {type(_e).__name__}: {_e})")

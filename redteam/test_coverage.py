@@ -312,10 +312,10 @@ def main():
                                  encoding="utf-8"))}
     check("...and they are real ids from the arsenal, not strings from somewhere else",
           len(sent & arsenal) > 50, f"{len(sent & arsenal)} of {len(sent)} are in the arsenal")
-    src = open(os.path.join(HERE, "detector_coverage.py"), encoding="utf-8").read()
-    check("...and the tool prints how many were never sent",
-          "never sent against anything" in src,
-          "the arsenal-coverage line is gone, so the gap is unreported again")
+    # WHAT THE COMMAND PRINTS, NOT WHAT ITS SOURCE CONTAINS. This asked whether the string
+    # `never sent against anything` appears in `detector_coverage.py`, which a comment
+    # mentioning the line satisfies as well as the line does. Driven below, over a workspace
+    # with nothing in it, where every attack in the arsenal is in that set.
 
     # --- AND THE OTHER DIRECTION: A DETECTOR MISSING FROM THE TABLE -------------------------
     #
@@ -817,6 +817,21 @@ def main():
               "none yet" in _o10, _o10[:500])
         check("...with the code for a run that measured nothing",
               _p10.returncode == 3, "exit %d" % _p10.returncode)
+        # AND THE ARSENAL HALF OF THE SAME QUESTION. An attack never sent is a claim about
+        # coverage exactly as a detector that never fired is, and on this workspace every
+        # attack in the arsenal is one -- so the line has to be there and it has to name
+        # them. It was a count with no set: eight ids on the real workspace, printed nowhere
+        # in a hundred and forty lines of report.
+        check("...and the arsenal line is printed, not merely spelled in the source",
+              "never sent against anything" in _o10, _o10[:400])
+        check("...naming the attacks it counted, so the eight can be told apart",
+              "never sent:" in _o10, _o10[:600])
+        _line10 = [_l for _l in _o10.splitlines() if _l.strip().startswith("never sent:")]
+        check("...with real ids from the arsenal in it",
+              bool(_line10) and any(_a in _line10[0] for _a in sorted(arsenal)[:60]),
+              str(_line10)[:300])
+        check("...and how many it did not print",
+              bool(_line10) and "more" in _line10[0], str(_line10)[:300])
     finally:
         _sh9.rmtree(_w10, ignore_errors=True)
 
