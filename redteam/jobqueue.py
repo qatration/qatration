@@ -254,6 +254,18 @@ def listing(root, state=None):
 
 
 def _lease_expired(job, now=None):
+    """Whether this job's lease has run out. Two absences, two different answers.
+
+    NO `until` AT ALL IS NOT AN EXPIRY, and the branch below reads the opposite way for one
+    it cannot parse. That is deliberate. The reclaim path in `claim` DROPS THE CLAIM MARKER,
+    so answering True here over a missing field hands the job to a second worker while the
+    first may still be sweeping the same endpoint -- two runs against one operator's system,
+    which is what the marker exists to prevent. A running record with no expiry blocks the
+    queue visibly instead, as `busy: <id> is running`, and an operator can act on that.
+
+    An unparseable value is a corrupt record rather than an incomplete one, and there the
+    line below is right: pretending it is live hangs the queue forever with nothing to read.
+    """
     lease = job.get("lease") or {}
     until = lease.get("until")
     if not until:

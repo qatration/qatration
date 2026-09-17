@@ -162,6 +162,45 @@ def main():
         check("...and explains that killing a sweep mid-flight fakes a defence",
               "reads as a defence" in why6, why6)
 
+        # --- A RECORD THAT IS MISSING A FIELD ---------------------------------------------
+        #
+        # Two more survivors from the same sweep, and neither is closed by changing anything:
+        # both answers are the right ones and nothing was driving them.
+        #
+        # `load` raises the reason `read_artifact` gave before it asks whether what came back
+        # is a job. Delete that line and the next guard still produces an `unreadable` record
+        # -- the state is identical, and the NOTE, which is the whole of what an operator has
+        # to go on, drops from the parse error to "the file is nothing, not a job record".
+        _rootn = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(_rootn, "job_torn.json"), "w",
+                      encoding="utf-8") as _ftorn:
+                _ftorn.write("{ not json")
+            _torn_rec = q.load(_rootn, "torn")
+            check("a torn job file comes back as unreadable rather than absent",
+                  _torn_rec.get("state") == "unreadable", str(_torn_rec))
+            check("...and its note carries what actually stopped the read",
+                  "JSONDecode" in (_torn_rec.get("note") or ""), str(_torn_rec.get("note")))
+        finally:
+            shutil.rmtree(_rootn, ignore_errors=True)
+
+        # AND A LEASE WITH NO EXPIRY IN IT. `_lease_expired` answers False there and True for
+        # an expiry it cannot parse, which reads like an inconsistency and is not one: the
+        # reclaim path DROPS THE CLAIM MARKER, so treating a missing field as an expiry hands
+        # a job to a second worker while the first may still be sweeping the same endpoint --
+        # two runs against one operator's system, which is what the marker exists to prevent.
+        # A record with no expiry blocks the queue visibly instead, as `busy: <id> is
+        # running`, and an operator can act on that. An unparseable value is a corrupt record
+        # rather than an incomplete one, and the line above it says why that one is reclaimed.
+        check("a lease with no expiry is not read as an expired lease",
+              q._lease_expired({"lease": {"worker": "w", "since": "2026-01-01 00:00:00"}})
+              is False, "a running job would be handed to a second worker")
+        check("...nor is a running record with no lease at all",
+              q._lease_expired({"job_id": "x", "state": "running"}) is False, "")
+        check("...while an expiry that cannot be parsed is not a live lease",
+              q._lease_expired({"lease": {"until": "banana"}}) is True,
+              "an unparseable lease would hang the queue forever")
+
         # --- AND THE JOBS THAT ARE NOT THERE, OR ARE ALREADY OVER ------------------------
         #
         # Three decisions in this file that nothing drove. Found by pointing
