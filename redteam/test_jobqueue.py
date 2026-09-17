@@ -162,6 +162,22 @@ def main():
         check("...and explains that killing a sweep mid-flight fakes a defence",
               "reads as a defence" in why6, why6)
 
+        # --- AND THE WORKER OVER AN EMPTY QUEUE -------------------------------------------
+        #
+        # `worker.once` opens with `job, why = q.claim(...)` and `if job is None: return why`.
+        # Delete it and the next line is `job['job_id']` on None: a worker started against a
+        # queue with nothing in it dies with a TypeError instead of saying `empty:`. That is
+        # the normal state of a queue -- it is what every poll between jobs looks like -- and
+        # nothing was driving it.
+        import worker as _wk
+        _rootw = tempfile.mkdtemp()
+        try:
+            _why_w = _wk.once(_rootw, "w-empty")
+            check("a worker over an empty queue says so rather than crashing",
+                  isinstance(_why_w, str) and _why_w.startswith("empty"), repr(_why_w))
+        finally:
+            shutil.rmtree(_rootw, ignore_errors=True)
+
         # --- A RECORD THAT IS MISSING A FIELD ---------------------------------------------
         #
         # Two more survivors from the same sweep, and neither is closed by changing anything:

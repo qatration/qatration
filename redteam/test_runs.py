@@ -298,6 +298,13 @@ def main():
           _rc == 0 and "botA" in _out and "botB" not in _out.split("still open")[0],
           _out[:200])
 
+    # AND NO TORN RECORD IS NO LINE ABOUT TORN RECORDS. `_say_torn` opens with `if not
+    # torn: return`, and deleting it prints `0 record(s) could not be read: ` on every run
+    # of this command -- a sentence about damage over a workspace that has none, followed by
+    # the paragraph explaining what a filter cannot claim about them. Nothing drove it.
+    check("a workspace with nothing torn in it says nothing about torn records",
+          "could not be read" not in _out, _out[-300:])
+
     # AN UNREADABLE RECORD IS NOT AN ABSENT ONE, which `load` already decided; the command
     # has to carry that through rather than dropping the row.
     with open(os.path.join(_w, "run_torn.json"), "w", encoding="utf-8") as _f:
