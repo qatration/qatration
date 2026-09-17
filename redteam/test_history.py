@@ -1561,6 +1561,64 @@ def main():
     finally:
         shutil.rmtree(_w7, ignore_errors=True)
 
+    # --- A `rows` MAPPING WHOSE VALUES ARE NOT ROWS -------------------------------------
+    #
+    # `unusable_snapshot` stops at the mapping. `state` goes one level further and does
+    # `row.get("v")` on what is inside it, so a line that parses, carries a `rows` dict and
+    # holds `{"a1": "EXPLOITED"}` raises out of `diff` -- as exit 2, "This is a bug in
+    # qatration, not a finding about your target and not a problem with your config".
+    #
+    # `docs/ci.md` tells the reader to COMMIT `qatration-out/history/` so the diff shows up
+    # in the pull request, which makes this a file a stranger edits, merges and resolves
+    # conflicts in. `{"a1": "EXPLOITED"}` is also the obvious way to hand-write one.
+    #
+    # DRIVEN THROUGH THE COMMAND, because what is wrong is the whole shape of the answer: a
+    # traceback naming this tool, where a line naming the file and the row belongs.
+    for _val, _tname in (('"EXPLOITED"', "str"), ("true", "bool"), ("[1]", "list"),
+                         ("7", "int")):
+        _wr = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(_wr, "history"))
+            with open(os.path.join(_wr, "history", "rowbot.jsonl"), "w",
+                      encoding="utf-8") as _fr:
+                _fr.write('{"run": "2026-09-01 10:00", "target": "rowbot", "attacks": 1,'
+                          ' "broke": 1, "trials": 3, "rows": {"a1": %s}}' % _val + chr(10))
+                _fr.write(json.dumps(_run_line("2026-09-02 10:00", {"a1": _CLEAN}))
+                          + chr(10))
+            _coder, _outr = _hist([], _wr)
+            check("a row that is not a row does not crash the command (%s)" % _tname,
+                  "Traceback" not in _outr, _outr[-300:])
+            check("...and the line is named, with what was in it (%s)" % _tname,
+                  "line 1:" in _outr and "not rows" in _outr and _tname in _outr,
+                  _outr[-300:])
+            # AND THE RUN IT DAMAGED IS NOT COUNTED. One bad row costs the line, which is
+            # what `load` already does for a torn one -- a diff over half a row set is a
+            # confident answer over evidence that is missing.
+            check("...and the timeline is one run shorter, not one row shorter (%s)"
+                  % _tname, "(1 run(s))" in _outr, _outr[:200])
+        finally:
+            shutil.rmtree(_wr, ignore_errors=True)
+    # AND A NULL ROW IS NOT REFUSED. `state` reads it as nothing measured, which is an
+    # answer this module keeps apart from measured clean; refusing it would throw a whole
+    # run away over a value that is already handled.
+    _wn = tempfile.mkdtemp()
+    try:
+        os.makedirs(os.path.join(_wn, "history"))
+        with open(os.path.join(_wn, "history", "nullbot.jsonl"), "w",
+                  encoding="utf-8") as _fn2:
+            _fn2.write('{"run": "2026-09-01 10:00", "target": "nullbot", "attacks": 1,'
+                       ' "broke": 0, "trials": 3, "rows": {"a1": null}}' + chr(10))
+            _fn2.write(json.dumps(_run_line("2026-09-02 10:00", {"a1": _BROKEN})) + chr(10))
+        _coden, _outn = _hist([], _wn)
+        check("a null row is not refused, since it is already read as nothing measured",
+              "(2 run(s))" in _outn and "not rows" not in _outn, _outn[:300])
+        # AND IT IS NOT READ AS MEASURED CLEAN EITHER: broken now, never measured before,
+        # is `new` and not `REGRESSED`.
+        check("...and the attack it holds is new, not reopened",
+              "new" in _outn and "REGRESSED" not in _outn, _outn[:300])
+    finally:
+        shutil.rmtree(_wn, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

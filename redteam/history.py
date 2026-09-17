@@ -187,6 +187,24 @@ def unusable_snapshot(rec):
 
     Everything else is read with `.get`, and a snapshot written before a field existed has to
     keep loading: the rule this module already keeps for `h`, `inert` and `scoped`.
+
+    AND A `rows` MAPPING WHOSE VALUES ARE NOT ROWS. The check above stops at the mapping;
+    `state` goes one level further and does `row.get("v")` on what is in it. Walked the same
+    way, in a timeline whose other entry is real:
+
+        {"a1": "EXPLOITED"}   AttributeError: 'str' object has no attribute 'get'
+        {"a1": true}          AttributeError: 'bool' object has no attribute 'get'
+        {"a1": [1]}           AttributeError: 'list' object has no attribute 'get'
+        {"a1": 7}             AttributeError: 'int' object has no attribute 'get'
+
+    Four of four as exit 2, "This is a bug in qatration, not a finding about your target and
+    not a problem with your config", and `docs/ci.md` tells the reader to COMMIT
+    `qatration-out/history/` so the diff shows up in the pull request -- which makes this
+    file one a stranger edits, merges and resolves conflicts in. `{"a1": "EXPLOITED"}` is
+    also the obvious way to hand-write one.
+
+    `null` is not in the list and is not refused: `state` reads a null row as nothing
+    measured, which is an answer this module already keeps apart from measured clean.
     """
     if not isinstance(rec, dict):
         return ("the line is %s, not a snapshot: every entry is one run, read by key"
@@ -196,6 +214,16 @@ def unusable_snapshot(rec):
                 "it, so a line without one cannot be compared with anything"
                 % ("absent" if rec.get("rows") is None
                    else "it is a %s" % type(rec["rows"]).__name__))
+    # THE ROWS IN IT, not just the mapping around them. One line, not one row: a run whose
+    # row set is half readable cannot be compared without a diff over evidence that is
+    # missing, which is the thing `load`'s docstring refuses to do quietly.
+    bad = [(k, v) for k, v in rec["rows"].items()
+           if v is not None and not isinstance(v, dict)]
+    if bad:
+        return ("%d row(s) in it are not rows, first `%s` (a %s): `state` reads `v` out of "
+                "every row, so a line holding one raises out of `diff` as a crash in this "
+                "tool over a file you are told to commit"
+                % (len(bad), bad[0][0], type(bad[0][1]).__name__))
     return None
 
 
