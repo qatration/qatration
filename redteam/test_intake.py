@@ -286,6 +286,41 @@ def main():
                     _conn.close()
                 check("the door answers %s rather than dropping the connection"
                       % _shape.decode(), _status == 400, _why or "HTTP %s" % _status)
+            # AND THE ROUTE ITSELF. `do_POST` opens with `if self.path.rstrip("/") !=
+            # "/runs"` and nothing drove it: deleting the line left every suite green, and
+            # with it gone a POST to `/run`, `/submit` or `/` queues a sweep. This service
+            # spends money and sends an arsenal at somebody's endpoint, so a typo in the
+            # path is the last thing that should start one.
+            for _path_i in ("/run", "/submit", "/", "/runs/extra"):
+                _conn = _hc_i.HTTPConnection("127.0.0.1", _srv_i.server_address[1],
+                                             timeout=10)
+                _body_i = json.dumps({"target": "x"}).encode()
+                _status = None
+                try:
+                    _conn.request("POST", _path_i, body=_body_i,
+                                  headers={"Content-Type": "application/json",
+                                           "Content-Length": str(len(_body_i))})
+                    _status = _conn.getresponse().status
+                finally:
+                    _conn.close()
+                check("POST %s is a 404, not a submission" % _path_i, _status == 404,
+                      "HTTP %s" % _status)
+            # AND THE ONE PATH THAT IS THE DOOR still is, or the four above are satisfied by
+            # a service that refuses everything. A trailing slash is the same door.
+            for _path_i in ("/runs", "/runs/"):
+                _conn = _hc_i.HTTPConnection("127.0.0.1", _srv_i.server_address[1],
+                                             timeout=10)
+                _bad_i = b"{}"
+                _status = None
+                try:
+                    _conn.request("POST", _path_i, body=_bad_i,
+                                  headers={"Content-Type": "application/json",
+                                           "Content-Length": str(len(_bad_i))})
+                    _status = _conn.getresponse().status
+                finally:
+                    _conn.close()
+                check("POST %s reaches the submission and is judged there" % _path_i,
+                      _status == 400, "HTTP %s" % _status)
         finally:
             _srv_i.shutdown()
         check("a config that is not a mapping is a 400",
