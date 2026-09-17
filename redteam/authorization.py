@@ -594,8 +594,16 @@ def gate(cfg, where):
             raise NotAuthorised(_said)
     elif not url or is_local(url):
         return None
-    if not url:
-        return None
+    # THERE WAS A SECOND `if not url: return None` HERE and nothing could reach it. Off the
+    # hosted path the `elif` above has already returned; on it, `unreachable_by_policy("")`
+    # answers `scheme '' is not http(s)` and the branch above raises. Planted with a `raise`
+    # and all 51 suites stayed green, which is the weaker half of the argument; the stronger
+    # half is that there is no url for which both branches decline to act.
+    #
+    # It is removed rather than left as a belt: what it does is RETURN NONE, which is this
+    # gate's word for "no proof needed", so the day a policy change makes an empty url
+    # acceptable the line would quietly waive the secret instead of demanding it. A branch
+    # that cannot fire is a line telling the next reader the case is handled where it is not.
     secret = os.environ.get("QATRATION_AUTH_SECRET")
     if not secret:
         _said = (f"{where}: {cfg.get('name')} is a remote target and "

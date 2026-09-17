@@ -135,6 +135,46 @@ def main():
     ok, why = az.check(cfg("smoke-signal"), SECRET)
     check("an unknown method is refused", not ok, why)
 
+    # --- AN ANSWER FROM THE RESOLVER THAT IS NOT AN ADDRESS ----------------------------
+    #
+    # `unreachable_by_policy` walks every record `getaddrinfo` returns and skips the ones it
+    # cannot parse: `if addr is None or str(addr) in seen: continue`. Delete that line and
+    # `_address_refused(None)` is `AttributeError: 'NoneType' object has no attribute
+    # 'is_loopback'` -- a traceback out of the gate, which fails closed and is still the
+    # wrong answer to give an operator about their own config.
+    #
+    # A resolver is injectable here precisely so this can be asked without a network, and
+    # nothing was asking it. Found by mutating the guards `tools/unguarded.py` skips.
+    _junk = [(2, 1, 6, "", ("not-an-address", 443))]
+    _crash = ""
+    try:
+        _why_junk = az.unreachable_by_policy("https://api.acme.example/chat",
+                                             resolve=lambda h, p: _junk)
+    except Exception as _e_j:
+        _crash, _why_junk = "%s: %s" % (type(_e_j).__name__, _e_j), None
+    check("a resolver answer that is not an address does not crash the gate", not _crash,
+          _crash)
+    check("...and a name that resolved to nothing usable is refused, not waved through",
+          bool(_why_junk) and "no usable address" in _why_junk, str(_why_junk))
+    # AND A GOOD ANSWER BESIDE A JUNK ONE STILL DECIDES, or the skip above could swallow the
+    # whole answer set and call a public name unresolvable.
+    _mixed = [(2, 1, 6, "", ("not-an-address", 443)), (2, 1, 6, "", ("127.0.0.1", 443))]
+    _why_mixed = az.unreachable_by_policy("https://api.acme.example/chat",
+                                          resolve=lambda h, p: _mixed)
+    check("...while a usable address beside it is still judged",
+          bool(_why_mixed) and "loopback" in _why_mixed, str(_why_mixed))
+    # AND A RECORD RETURNED TWICE CHANGES NO ANSWER, which is a property worth asserting and
+    # is NOT a test of the `str(addr) in seen` half of that line: `_address_refused` is a pure
+    # function, so walking the same address twice gives the same verdict either way. Deleting
+    # the dedup is an equivalent mutation and is named here rather than counted. What `seen`
+    # is load-bearing for is the `no usable address` sentence above, which the junk case does
+    # drive.
+    _dupe = [(2, 1, 6, "", ("93.184.216.34", 443)), (2, 1, 6, "", ("93.184.216.34", 443))]
+    check("...and a record returned twice is not two answers",
+          az.unreachable_by_policy("https://api.acme.example/chat",
+                                   resolve=lambda h, p: _dupe) is None,
+          "a duplicate record changed the verdict")
+
     # A DIFFERENT SECRET must not validate: the token is ours to issue, not the caller's.
     ok, why = az.check(cfg("header", echoed=token), "some-other-secret")
     check("a token this deployment did not issue is refused", not ok, why)
