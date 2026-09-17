@@ -557,6 +557,69 @@ def main():
     # On the shipped localrag artifacts rather than a fixture: that app carries its poison
     # permanently, which is the only arrangement where ordinary traffic meets the same payload
     # and the two rates are comparable at all.
+    # --- `--target` ON A COMMAND THAT REWRITES ARTIFACTS --------------------------------
+    #
+    # `rejudge --write` is the one command here that edits stored evidence in place, and
+    # `--target` is what an operator types to say WHICH evidence. The filter that honours it
+    # -- `if args.target and base != args.target: continue` -- had no case: deleting it left
+    # every suite green while the command re-scored and rewrote every artifact in the
+    # workspace, including the ones the operator did not name.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    import shutil as _sh_t, subprocess as _sp_t, tempfile as _tf_t, json as _js_t
+    _dt = _tf_t.mkdtemp()
+    try:
+        def _art(target, headline):
+            return {"meta": {"target": target, "model": "m", "trials": 1, "attacks_n": 1,
+                             "broke": 1 if headline == "EXPLOITED" else 0, "errors": 0,
+                             "engine": "old000"},
+                    "results": [{"attack": {"id": "a1", "category": "x"},
+                                 "headline": headline, "rate": "1/1",
+                                 "fired": ["canary_in_output"],
+                                 "trials": [{"verdict": headline,
+                                             "fired": ["canary_in_output"],
+                                             "probe": {"prompt": "hello",
+                                                       "output": "nothing here"}}]},
+                                # A ROW WITH NO TRIAL UNDER IT. `rejudge` rebuilds a
+                                # headline from the records it re-scores, and `headline([])`
+                                # is `IndexError` -- a traceback over an artifact this tool
+                                # wrote, from the command that reads every artifact in a
+                                # workspace. A stopped sweep leaves rows like this one.
+                                {"attack": {"id": "a2", "category": "x"},
+                                 "headline": "SKIP", "rate": "0/0", "fired": [],
+                                 "trials": []}]}
+        # REAL FLEET NAMES, because `rejudge` resolves a results file to a target through
+        # the configs and skips one it cannot resolve -- `alpha` and `beta` are skipped as
+        # "no config: cannot know its canaries", and the run then examines nothing and the
+        # case passes over a command that did nothing.
+        for _tname in ("citebot", "draftbot"):
+            with open(os.path.join(_dt, "results_%s.json" % _tname), "w",
+                      encoding="utf-8") as _f:
+                _js_t.dump(_art(_tname, "EXPLOITED"), _f, indent=2)
+        _before = {n: io.open(os.path.join(_dt, "results_%s.json" % n),
+                              encoding="utf-8").read() for n in ("citebot", "draftbot")}
+        _rt = _sp_t.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge",
+                         "--target", "citebot", "--write"],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=_dt, PYTHONIOENCODING="utf-8",
+                                 PYTHONDONTWRITEBYTECODE="1"))
+        _out_t = (_rt.stdout or "") + (_rt.stderr or "")
+        _after = {n: io.open(os.path.join(_dt, "results_%s.json" % n),
+                             encoding="utf-8").read() for n in ("citebot", "draftbot")}
+        check("a rejudge naming one target does not rewrite another's artifact",
+              _after["draftbot"] == _before["draftbot"], _out_t[-300:])
+        # AND IT REACHED THE ONE IT WAS GIVEN, or the line above passes on a run that did
+        # nothing at all. The stored rows say EXPLOITED over a reply carrying no canary, so
+        # the current oracle disagrees and the file has to move.
+        check("...while the one it names is re-scored",
+              _after["citebot"] != _before["citebot"], _out_t[-300:])
+        check("...and the count it reports is of the target it was given",
+              "1 file(s)" in _out_t, _out_t[-300:])
+        check("...and a row with no trial under it is passed over, not crashed on",
+              "Traceback" not in _out_t and _rt.returncode in (0, 1), _out_t[-300:])
+    finally:
+        _sh_t.rmtree(_dt, ignore_errors=True)
+
     import shutil, subprocess
     _real = os.path.join(os.path.dirname(HERE), "out")
     _have = all(os.path.exists(os.path.join(_real, f))

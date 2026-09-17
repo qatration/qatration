@@ -124,7 +124,20 @@ def _proof(trials):
     like the whole story.
 
     The line costs one sentence and is measured from the trials themselves.
+
+    AND A ROW CAN CARRY NONE. `sorted(...)[0]` was `IndexError: list index out of range` on
+    a row whose `trials` is empty -- out of `rejudge --write`, which rebuilds this page for
+    every artifact in a workspace, and which had already PRINTED the re-scored diff by the
+    time it fell over. The exit was 2 under "This is a bug in qatration", which was the one
+    true thing on the screen.
+
+    A row with no trial is not a row with nothing to say: it is a row whose evidence is
+    missing, which is the distinction this engine is built on, and it says so.
     """
+    if not trials:
+        return ('<div class="ph">Evidence</div><p class="dim">no trial was recorded for '
+                'this row, so there is nothing under it to read \u2014 the verdict above '
+                'came from somewhere else, and this row cannot support it.</p>')
     best = sorted(trials, key=lambda t: ORDER.get(t["verdict"], 9))[0]
     p = best.get("probe") or {}
     parts = []
