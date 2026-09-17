@@ -82,6 +82,26 @@ def main():
         if not ok:
             fails.append(f"{label}: expected {want}, got {got}")
 
+    # --- THE ANSWER A COMMENT ONE MODULE OVER RELIES ON ---------------------------------
+    #
+    # The ladder filters errored trials itself, and the line that does it says why: "AN
+    # ERRORED TRIAL IS NOT A MISS. `_achieved` returns False for it, correctly". That
+    # sentence is a claim ABOUT `_achieved`, and nothing checked it: deleting
+    # `if probe is None or probe.error: return False` left every suite green, because the
+    # only caller filters first. A comment that rests on a branch no case drives is a
+    # comment that goes on being true until somebody tidies the branch away.
+    #
+    # A probe that errored is not a probe that achieved nothing. It measured nothing, and
+    # the rung that carries it counts an error rather than a miss.
+    import compose as _cmp_a
+    from target import Probe as _P_a
+    _obj_a = {"success": ["canary_in_output"], "properties": []}
+    check("a probe that never came back did not achieve the objective",
+          _cmp_a._achieved(None, _obj_a, {}), False)
+    check("...and neither did one that errored",
+          _cmp_a._achieved(_P_a(prompt="p", output="", error="connection refused"),
+                           _obj_a, {}), False)
+
     # the ladder itself: three distinct shapes, naive first
     cands = build_candidates(PARTS)
     check("ladder order", [c[0] for c in cands],

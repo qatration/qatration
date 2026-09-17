@@ -38,6 +38,26 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- WHAT `decode` SAYS WHEN IT CANNOT SAY ------------------------------------------
+    #
+    # `decode(text, name)` is documented to answer None for a one-way strategy and for a
+    # name this build does not have -- "the caller is told nothing rather than handed a
+    # guess". The branch that does it had no case: without `if fn is None: return None`,
+    # `DECODERS.get(name)` is None and the next line calls it, which is a TypeError out of
+    # a function whose whole contract is not to guess.
+    import encoders as _enc_d
+    check("decoding under a name this build does not have is None, not a crash",
+          _enc_d.decode("hello", "no-such-encoder") is None, "not None")
+    check("...and a one-way strategy answers None too",
+          all(_enc_d.decode("hello", _n) is None for _n in sorted(_enc_d.ONE_WAY)),
+          str([(_n, _enc_d.decode("hello", _n)) for _n in sorted(_enc_d.ONE_WAY)])[:200])
+    # AND A REVERSIBLE ONE STILL COMES BACK, or the two lines above pass on a `decode` that
+    # answers None to everything.
+    check("...while a reversible encoding round-trips",
+          _enc_d.decode(_enc_d.apply_encoding("hello there", "base64"), "base64")
+          == "hello there",
+          repr(_enc_d.decode(_enc_d.apply_encoding("hello there", "base64"), "base64")))
+
     # --- the silent no-op, which is the whole point of this file ----------------------
     try:
         apply_encoding(PLAIN, "fullwith")          # a plausible typo for 'fullwidth'

@@ -46,6 +46,40 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- THE FLOOR, OVER THE CONFIGS AS THEY ARE ----------------------------------------
+    #
+    # `_shipped_floor` walks every config in the package to find the shortest
+    # canary anybody ships, and that number is the floor a new one is measured against. Two
+    # of its guards had no case.
+    #
+    # `if not isinstance(cfg, dict): continue` is the one this repository has already been
+    # bitten by in five other readers: a config file holding a LIST parses fine and answers
+    # `.get` with an AttributeError. Here it would take down the floor, which is to say the
+    # check that tells an operator their canary is too short to be evidence.
+    #
+    # `if s: lens.append(...)` is the other end: a canary that squeezes to nothing -- all
+    # punctuation, or a quoted empty string -- would otherwise contribute a floor of ZERO,
+    # and a floor of zero passes every canary there is.
+    import honeytoken as _ht_f, tempfile as _tf_f, shutil as _sh_f, os as _os_f
+    _cd = _tf_f.mkdtemp()
+    try:
+        with open(_os_f.path.join(_cd, "targets_list.yaml"), "w", encoding="utf-8") as _f1:
+            _f1.write("- just\n- a list\n")
+        with open(_os_f.path.join(_cd, "targets_empty.yaml"), "w", encoding="utf-8") as _f2:
+            _f2.write('oracle_context:\n  canaries: ["   ", "!!!"]\n')
+        with open(_os_f.path.join(_cd, "targets_real.yaml"), "w", encoding="utf-8") as _f3:
+            _f3.write('oracle_context:\n  canaries: ["ACME-9931-QQ"]\n')
+        _floor = _ht_f._shipped_floor(_cd)
+        check("a config that is a list does not take the canary floor down with it",
+              isinstance(_floor, int), str(_floor))
+        check("...and a canary that squeezes to nothing is not a floor of zero",
+              _floor > 0, "floor %r, which passes every canary there is" % (_floor,))
+        check("...so the floor is the shortest canary that is actually one",
+              _floor == len(_ht_f.squeezed("ACME-9931-QQ")),
+              "floor %r vs %r" % (_floor, len(_ht_f.squeezed("ACME-9931-QQ"))))
+    finally:
+        _sh_f.rmtree(_cd, ignore_errors=True)
+
     # --- A CANARY THAT APPEARS IN ORDINARY TEXT ----------------------------------------
     #
     # THE MIRROR OF AN UNPLANTED TOKEN, which this file is otherwise about. That one is
