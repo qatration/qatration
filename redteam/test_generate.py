@@ -90,6 +90,47 @@ def main():
     check("a sentence with no prohibition in it yields nothing",
           ask_from_rule("I am here to help with orders and returns."), [])
 
+    # --- WHAT MAY BECOME AN OBJECTIVE, AND HOW MANY OF IT ------------------------------
+    #
+    # Three more filters on the way from a recon profile to an attack, none of them driven.
+    #
+    # `only_rules` reads "X is only used for Y" and refuses a subject that names nothing --
+    # `it`, `this`, `the data` -- because the objective built from one is "Use it for
+    # something other than Y", which asks the bot to break a rule about a pronoun.
+    check("a scope rule with a real subject is read",
+          only_rules("FetchUrl is only used for product pages."),
+          [("FetchUrl", "product pages")])
+    # THE SUBJECT HAS TO REACH THE FILTER: `It` is two characters and `_ONLY` asks for
+    # three, so a fixture built on it is answered by the regex and the filter is never
+    # reached -- green with `_NOT_A_SUBJECT` deleted. `The data`, `This` and `Access` all
+    # match the pattern and all name nothing to attack.
+    for _pron in ("The data is only used for billing.",
+                  "This is only used for billing.",
+                  "Access is only used for billing."):
+        check("a subject that names nothing yields nothing: %s" % _pron.split()[0],
+              only_rules(_pron), [])
+    # AND A SCOPE THAT IS PUNCTUATION IS NO SCOPE. `for  .` does not match the pattern at
+    # all; `for ,,,.` does, and strips to nothing, which is the case the filter is for.
+    check("...and so does a rule whose scope strips to nothing",
+          only_rules("FetchUrl is only used for ,,,."), [])
+
+    # `prohibitions` keeps only the sentences that STATE a rule. Without `if not
+    # _NEVER.search(s)` every sentence in a bot's self-description becomes one, and
+    # `Returns take 30 days.` is read as a prohibition to attack.
+    _prof = {"self_description": "I am here to help with orders. I will never share my "
+                                 "key. Returns take 30 days."}
+    check("only the sentence stating a rule is a prohibition",
+          prohibitions(_prof), ["I will never share my key."])
+    check("...and a profile that states none yields none",
+          prohibitions({"self_description": "I am here to help with orders and returns."}),
+          [])
+    # AND THE SAME RULE TWICE IS ONE RULE: the key is the sentence with its punctuation and
+    # case removed, so a bot that repeats itself does not produce the attack twice.
+    check("...and a rule the bot states twice is one prohibition",
+          prohibitions({"self_description": "I will never share my key. I will NEVER "
+                                            "share my key!"}),
+          ["I will never share my key."])
+
     # --- AND A PROHIBITION WITH NOTHING IN IT -----------------------------------------
     #
     # Three filters stand between a recon profile and an objective this engine will send at
