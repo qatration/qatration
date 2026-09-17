@@ -113,6 +113,18 @@ def main():
     # arms that answered identically on every shared attack would print NOT COMPARABLE.
     check("two arms that never disagreed are equal, not unmeasured",
           _mc(0, 0) == 1.0, _mc(0, 0))
+    # AND A COUNT THAT CANNOT BE ONE IS `CANNOT SAY`, not a number. `b` and `c` are counts
+    # of discordant pairs and a negative one means the caller computed something else; the
+    # arithmetic under them is `comb(n, i)`, which raises on a negative `n`, so the choice
+    # is between None and a traceback out of the test behind a published p-value. Nothing
+    # was driving it -- found by mutating the guards `tools/unguarded.py` skips by design.
+    for _b, _c in ((-1, 2), (2, -1), (-3, -4)):
+        check("a negative discordant count is `cannot say` (%d, %d)" % (_b, _c),
+              _mc(_b, _c) is None, repr(_mc(_b, _c)))
+    # `if n == 0: return 1.0` IS AN EQUIVALENT MUTATION and is named rather than counted:
+    # with both counts zero the sum below it is `comb(0, 0) / 2**0`, so `min(1.0, 2.0)` is
+    # 1.0 by the same arithmetic. The case above it asserts the answer, which is what has to
+    # hold whichever line produces it.
     check("...and an evenly split pair is p = 1", _mc(3, 3) == 1.0, _mc(3, 3))
 
     # PAIRING IS NOT A WAY OF GETTING A SMALLER NUMBER. On the fleet's 4/8 against 0/8 the
