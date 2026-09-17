@@ -665,6 +665,27 @@ def main():
         check("...while a config with no problem in it still passes",
               _fine_ok2, str(_fine_rep2["problems"])[:200])
 
+        # --- ANSWERED, DID NOT ANSWER, AND NOBODY ASKED ------------------------------------
+        #
+        # `answered_state` is three states in the one line a reader looks at first: `answered
+        # in 4.1s`, `no answer after 4.1s`, or nothing at all. The branch that holds the third
+        # -- `if rep.get("seconds") is None: return None` -- had no case, and without it
+        # `bool(rep.get("answered", True))` reads as ANSWERED for an endpoint nobody has
+        # spoken to. The placeholder note under it says the same thing in words.
+        check("a report with a time and an answer is `answered`",
+              onboard.answered_state({"seconds": 4.1, "answered": True}) is True, "")
+        check("...one with a time and no answer is `did not answer`",
+              onboard.answered_state({"seconds": 4.1, "answered": False}) is False, "")
+        # THE DEFAULT IS ONLY SAFE ONCE SOMETHING CAME BACK: a report carrying a time and no
+        # `answered` key at all is from a probe that returned, so True is right there.
+        check("...and one with a time and no verdict on it defaults to answered",
+              onboard.answered_state({"seconds": 4.1}) is True, "")
+        check("a report from a probe that was never sent is neither",
+              onboard.answered_state({}) is None, "")
+        check("...and `answered: True` in it does not make it one",
+              onboard.answered_state({"answered": True}) is None,
+              "an endpoint nobody spoke to was reported as having answered")
+
         # --- THE WALK OVER A TARGET'S REPLY IS BOUNDED, IN BOTH DIRECTIONS ---------------
         #
         # `_strings` exists to turn `reply was empty` into `your text is probably at
