@@ -724,6 +724,38 @@ def main():
               _rm.returncode == 0, "exit %s: %s" % (_rm.returncode, _saidm[-300:]))
         check("...and it says which half of the command found nothing to do",
               "NO SWEEP RESULT WAS RE-SCORED" in _saidm, _saidm[-300:])
+    # AND `--target` REACHES THE MAPS TOO. The results loop and the lock-map loop each carry
+    # their own copy of the filter, and only one of them had a case: deleting `if args.target
+    # and tgt != args.target: continue` from the map loop left every suite green while
+    # `rejudge --target a --write` rewrote target b's lock map -- the artifact behind the
+    # isolation page, which is the one that says which of a target's defences are separable.
+    #
+    # THE MAP'S OWN RECORD OF WHICH TARGET IT IS, not the filename: three of the maps stored
+    # here resolve to two other targets, which is why that line reads `_map_target` first.
+    with tempfile.TemporaryDirectory() as _dm2:
+        for _who in ("citebot", "draftbot"):
+            io.open(os.path.join(_dm2, "isolation_%s.json" % _who), "w",
+                    encoding="utf-8", newline="\n").write(json.dumps(
+                        {"maps": _stale,
+                         "meta": {"when": "2026-01-01T00:00:00Z", "engine": "older",
+                                  "target": _who}}, indent=1))
+        _before_m = {_who: io.open(os.path.join(_dm2, "isolation_%s.json" % _who),
+                                   encoding="utf-8").read()
+                     for _who in ("citebot", "draftbot")}
+        _rm2 = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge",
+                               "--target", "citebot", "--write"],
+                              capture_output=True, text=True, timeout=180,
+                              env=dict(os.environ, QATRATION_OUT=_dm2,
+                                       PYTHONIOENCODING="utf-8"))
+        _said_m2 = _rm2.stdout + _rm2.stderr
+        _after_m = {_who: io.open(os.path.join(_dm2, "isolation_%s.json" % _who),
+                                  encoding="utf-8").read()
+                    for _who in ("citebot", "draftbot")}
+        check("a rejudge naming one target leaves another's lock map alone",
+              _after_m["draftbot"] == _before_m["draftbot"], _said_m2[-300:])
+        check("...while the map of the target it names is re-scored",
+              _after_m["citebot"] != _before_m["citebot"], _said_m2[-300:])
+
     # AND THE CONTROL, so 0 is not simply what this command always returns: with nothing
     # on disk at all, nothing was measured and the number says so.
     with tempfile.TemporaryDirectory() as _de:
