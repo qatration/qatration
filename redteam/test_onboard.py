@@ -96,6 +96,14 @@ def _sub_env():
                 PYTHONDONTWRITEBYTECODE="1")
 
 
+def _deep(n):
+    """A reply nested `n` levels, with a usable string at every level."""
+    node = {"leaf": "a sentence long enough to be picked up by the walk"}
+    for i in range(n):
+        node = {"k%d" % i: node, "s%d" % i: "another sentence long enough to be picked up"}
+    return node
+
+
 def main():
     fails, checks = [], 0
 
@@ -656,6 +664,37 @@ def main():
             write("cleanbot", "choices.0.message.content"))
         check("...while a config with no problem in it still passes",
               _fine_ok2, str(_fine_rep2["problems"])[:200])
+
+        # --- THE WALK OVER A TARGET'S REPLY IS BOUNDED, IN BOTH DIRECTIONS ---------------
+        #
+        # `_strings` exists to turn `reply was empty` into `your text is probably at
+        # choices.0.message.content`, which means it walks a decoded response FROM THE
+        # TARGET -- the one input in this command that nobody here controls. Its bound,
+        # `if depth > 6 or len(out) > 40`, had no case: deleting it walks whatever arrives.
+        #
+        # A reply nested fifty levels with a string at each one is a hundred paths and fifty
+        # frames; the operator's terminal gets the lot, printed under `probably at`, and the
+        # nesting Python will accept goes as deep as its recursion limit.
+        _found = onboard._strings(_deep(50))
+        check("the walk over a reply stops at the size it says it does",
+              len(_found) <= 41, "%d paths collected" % len(_found))
+        check("...and no path is deeper than the depth it says",
+              all(p.count(".") <= 6 for p, _v in _found),
+              str(max((p.count(".") for p, _v in _found), default=0)))
+        # AND WIDE AS WELL AS DEEP, because the two halves of that bound answer different
+        # replies: a nested one never reaches the size limit, and a flat one with two hundred
+        # sibling strings never reaches the depth limit. Keeping only `depth > 6` passed the
+        # check above.
+        _wide = onboard._strings({"f%03d" % i: "a sentence long enough to be collected here"
+                                  for i in range(200)})
+        check("...and a wide reply is stopped by the size half of the same bound",
+              len(_wide) <= 41, "%d paths collected" % len(_wide))
+
+        # AND IT STILL FINDS THE SHALLOW ONES, or a bound of zero would satisfy both lines.
+        _shallow = onboard._strings({"choices": [{"message": {
+            "content": "Of course, I can help with your recent order."}}]})
+        check("...while the path an ordinary reply carries is still found",
+              any(p == "choices.0.message.content" for p, _v in _shallow), str(_shallow))
 
         # AND THE QUEUE IS WHAT THIS COSTS. `--submit` is guarded by that verdict, so the
         # door queued a job for a config the engine refuses at the next command.
