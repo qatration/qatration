@@ -83,6 +83,35 @@ check("a finding carries a rule, a level, a message and a location",
       one["ruleId"] == "canary_in_output" and one["level"]
       and one["message"]["text"] and one["locations"][0]["physicalLocation"]
       ["artifactLocation"]["uri"] == "cfg.yaml")
+# --- AND THE URI IS A URI, FOR THE INVOCATION THAT PRODUCED IT ---------------------------
+#
+# `_uri` turns the config path into the `artifactLocation.uri` a code-scanning UI uses to take
+# a reviewer to the thing that failed. Its two branches -- a Windows drive letter and a POSIX
+# absolute path -- had no case: the only assertion over this field used `cfg.yaml`, a relative
+# path, which both branches walk straight past. Deleting either left every suite green.
+#
+# The module's own docstring is about this: `--target-config C:\Users\me\mybot.yaml` was
+# emitted verbatim, and a backslash is not a separator in a URI reference (SARIF 2.1.0 3.4.3),
+# so the field pointed nowhere. That is the natural Windows invocation, which is to say the
+# one a POSIX-only helper misses.
+_URIS = [
+    (r"C:\Users\me\mybot.yaml", "file:///C:/Users/me/mybot.yaml", "a Windows path"),
+    ("C:/Users/me/mybot.yaml", "file:///C:/Users/me/mybot.yaml", "a Windows path, forward"),
+    ("/home/me/mybot.yaml", "file:///home/me/mybot.yaml", "a POSIX absolute path"),
+    ("mybot.yaml", "mybot.yaml", "a relative path, which stays relative"),
+    (r"configs\mybot.yaml", "configs/mybot.yaml", "a relative Windows path"),
+]
+for _p, _want, _what in _URIS:
+    check("%s becomes a URI a reviewer can follow" % _what, sarif._uri(_p) == _want,
+          "%r -> %r, wanted %r" % (_p, sarif._uri(_p), _want))
+# AND THROUGH THE BUILDER, not only through the helper: the field is what ships.
+_abs = build([row("a1", "EXPLOITED", ["canary_in_output"])], {"canary_in_output": 0.0},
+             config=r"C:\Users\me\mybot.yaml")
+check("...and the exported finding carries that URI, not the path as typed",
+      _abs["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+      ["artifactLocation"]["uri"] == "file:///C:/Users/me/mybot.yaml",
+      str(_abs["runs"][0]["results"][0]["locations"][0]))
+
 # --- AND NEVER AT A FILE THAT DOES NOT EXIST ---------------------------------------------
 #
 # This module's comment says a made-up source location would be "a fabricated fact in the one
