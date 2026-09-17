@@ -586,12 +586,12 @@ def main():
         # --- backfill seeds from what is already on disk, and says that it did --------
         with open(os.path.join(tmp, "results_bf.json"), "w", encoding="utf-8") as f:
             json.dump({"meta": {"target": "bf"}, "results": R(x1="EXPLOITED")}, f)
-        check("backfill seeds a timeline from a stored run", H.backfill() == 1)
+        check("backfill seeds a timeline from a stored run", H.backfill()[0] == 1)
         seeded = H.load("bf")
         check("a backfilled entry is labelled, since its time is a file's mtime",
               seeded and seeded[0].get("note"), str(seeded))
         check("backfilling twice does not duplicate the entry",
-              H.backfill() == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
+              H.backfill()[0] == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
 
         # AND THE DATE COMES FROM THE RUN WHERE THE RUN SAID IT. This read the mtime
         # unconditionally, which is a filesystem event: git does not preserve mtimes, so on
@@ -602,7 +602,7 @@ def main():
         with open(os.path.join(tmp, "results_bfw.json"), "w", encoding="utf-8") as f:
             json.dump({"meta": {"target": "bfw", "when": "2026-07-04 09:30"},
                        "results": R(x1="EXPLOITED")}, f)
-        check("backfill seeds a run that recorded its own date", H.backfill() == 1)
+        check("backfill seeds a run that recorded its own date", H.backfill()[0] == 1)
         _dated = H.load("bfw")
         check("...using that date rather than the file's timestamp",
               _dated and _dated[0]["run"].startswith("2026-07-04"), str(_dated))
@@ -660,20 +660,20 @@ def main():
         # later by anything that rewrote it.
         os.utime(_bf2, (time.time() - 3600, time.time() - 3600))
         check("a run already recorded live is not seeded again from its own file",
-              H.backfill() == 0 and len(H.load("bf2")) == 1, str(H.load("bf2")))
+              H.backfill()[0] == 0 and len(H.load("bf2")) == 1, str(H.load("bf2")))
         # ...and the key must still let a run through that the timeline does not hold, or
         # backfill stops being able to seed anything.
         with open(os.path.join(tmp, "results_bf3.json"), "w", encoding="utf-8") as f:
             json.dump({"meta": {"target": "bf3"}, "results": R(x1="DEFENDED")}, f)
         check("...while a run the timeline has never seen is still seeded",
-              H.backfill() == 1 and len(H.load("bf3")) == 1, str(H.load("bf3")))
+              H.backfill()[0] == 1 and len(H.load("bf3")) == 1, str(H.load("bf3")))
         # ...and a re-scored copy of a run the timeline holds is a DIFFERENT run: same target,
         # same model, same trials, different verdicts. Seeding it is right; deduping it would
         # hide a rejudge.
         with open(os.path.join(tmp, "results_bf3.json"), "w", encoding="utf-8") as f:
             json.dump({"meta": {"target": "bf3"}, "results": R(x1="EXPLOITED")}, f)
         check("...and a re-scored run is seeded rather than folded into the old one",
-              H.backfill() == 1 and len(H.load("bf3")) == 2, str(H.load("bf3")))
+              H.backfill()[0] == 1 and len(H.load("bf3")) == 2, str(H.load("bf3")))
     finally:
         H.OUT, H.HIST = real_out, real_hist
         shutil.rmtree(tmp, ignore_errors=True)
@@ -1457,6 +1457,109 @@ def main():
     finally:
         H.HIST = _real_h
         shutil.rmtree(_d2, ignore_errors=True)
+
+    # --- WHAT THE COMMAND HANDS A BUILD WHEN IT COMPARED NOTHING ----------------------
+    #
+    # Every check above reads a function. `docs/ci.md` publishes the exit table, and names
+    # this command in it: exit 3 is "the question could not be answered ... `history` before
+    # a second sweep", and the page adds "**Not a pass**". The command returned 3 for one
+    # door only -- a workspace with no timeline at all -- and 0 for the two a build actually
+    # meets:
+    #
+    #     qatration history                    ->  `need two runs to compare`, exit 0
+    #     qatration history --target mybot     ->  `no runs recorded for this target`, exit 0
+    #
+    # The second is a typo, and it is also the cache restore that came back empty, which the
+    # same page spends a section on: "a quiet week means a cache miss, which means no
+    # baseline, which means the gate correctly reports that it cannot answer". The gate does.
+    # This command told the build the check ran.
+    #
+    # Driven as a subprocess, because the return value of `main` is the whole of what is
+    # wrong here and no import can see it -- `history.py` computes a code and the entry
+    # point translates it.
+    import subprocess as _sp_h
+    _cli_h = os.path.join(HERE, "cli.py")
+
+    def _hist(args, out_dir):
+        _p = _sp_h.run([sys.executable, _cli_h, "history"] + args, capture_output=True,
+                       text=True, timeout=600, cwd=os.path.dirname(HERE),
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                PYTHONIOENCODING="utf-8", QATRATION_OUT=out_dir))
+        return _p.returncode, (_p.stdout or "") + (_p.stderr or "")
+
+    def _timeline(dirname, target, runs):
+        os.makedirs(os.path.join(dirname, "history"), exist_ok=True)
+        with open(os.path.join(dirname, "history", target + ".jsonl"), "w",
+                  encoding="utf-8") as _f:
+            for _r in runs:
+                _f.write(json.dumps(_r) + chr(10))
+
+    def _run_line(when, rows):
+        return {"run": when, "target": "x", "model": "m", "trials": 3, "arsenal": 2,
+                "attacks": len(rows), "engine": "e1",
+                "broke": sum(1 for v in rows.values() if v["v"] in H.BROKE),
+                "rows": rows}
+
+    _BROKEN = {"v": "EXPLOITED", "rate": "1/1", "fired": ["canary_in_output"], "h": "h1"}
+    _CLEAN = {"v": "DEFENDED", "rate": "0/1", "fired": [], "h": "h1"}
+
+    _w6 = tempfile.mkdtemp()
+    try:
+        _timeline(_w6, "onebot", [_run_line("2026-09-01 10:00", {"a1": _BROKEN})])
+        _code6, _out6 = _hist([], _w6)
+        check("a timeline with one run does not tell a build the check ran",
+              _code6 == 3, "exit %s" % _code6)
+        check("...and says nothing was compared, rather than only why one target could not",
+              "nothing was compared" in _out6, _out6[-200:])
+        # A NAME THAT MATCHES NO TIMELINE. Same code, and the reader is shown the names
+        # that do exist: without them a typo and an empty cache read identically.
+        _code7, _out7 = _hist(["--target", "onbot"], _w6)
+        check("a target with no timeline is not a pass either", _code7 == 3,
+              "exit %s" % _code7)
+        check("...and the timelines that do exist are named, so a typo is visible",
+              "onebot" in _out7.split("no runs recorded")[0], _out7[:300])
+        # AND A COMPARISON IT CAN MAKE IS STILL 0, or the three above are satisfied by a
+        # command that refuses everything.
+        _timeline(_w6, "twobot", [_run_line("2026-09-01 10:00", {"a1": _BROKEN}),
+                                  _run_line("2026-09-02 10:00", {"a1": _CLEAN})])
+        _code8, _out8 = _hist(["--target", "twobot"], _w6)
+        check("...while a timeline with two runs the same instrument made answers, and passes",
+              _code8 == 0 and "fixed" in _out8, "exit %s  %s" % (_code8, _out8[-200:]))
+        # AND ONE ANSWER AMONG SEVERAL TARGETS IS AN ANSWER. The rule is `nothing was
+        # compared`, not `something could not be`: the targets that could not are printed
+        # with their reason, the way the comparison page keeps them rather than dropping them.
+        _code9, _out9 = _hist([], _w6)
+        check("...and a run that could compare one target of two is not a refusal",
+              _code9 == 0, "exit %s" % _code9)
+        check("...with the one it could not still named, and why",
+              "onebot" in _out9 and "need two runs" in _out9, _out9[-300:])
+    finally:
+        shutil.rmtree(_w6, ignore_errors=True)
+
+    # AND `--backfill` OVER A WORKSPACE WITH NOTHING IN IT. `seeded 0 timeline(s)` is two
+    # different runs in one sentence: everything already seeded, which is an answer, and no
+    # stored result to seed from, which is not. Both exited 0.
+    _w7 = tempfile.mkdtemp()
+    try:
+        _code10, _out10 = _hist(["--backfill"], _w7)
+        check("a backfill with nothing to seed from does not report success",
+              _code10 == 3, "exit %s" % _code10)
+        check("...and says what it looked at, rather than only what it wrote",
+              "0 stored result(s)" in _out10, _out10[:200])
+        with open(os.path.join(_w7, "results_bfx.json"), "w", encoding="utf-8") as _f7:
+            json.dump({"meta": {"target": "bfx"}, "results": R(x1="EXPLOITED")}, _f7)
+        _code11, _out11 = _hist(["--backfill"], _w7)
+        check("...while a backfill that had something to read passes",
+              _code11 == 0 and "seeded 1 timeline(s)" in _out11,
+              "exit %s  %s" % (_code11, _out11[:200]))
+        # AND A SECOND ONE, which seeds nothing and is still an answer: the count alone
+        # cannot tell this from the empty workspace above, which is why `seen` exists.
+        _code12, _out12 = _hist(["--backfill"], _w7)
+        check("...and a backfill with nothing NEW to seed is not the same as nothing to read",
+              _code12 == 0 and "seeded 0 timeline(s) from 1 stored result(s)" in _out12,
+              "exit %s  %s" % (_code12, _out12[:200]))
+    finally:
+        shutil.rmtree(_w7, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

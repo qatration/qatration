@@ -578,9 +578,16 @@ def backfill():
 
     A backfilled entry is still marked as backfilled either way, and the ones whose
     date came off the filesystem say so separately, because those are two facts.
+
+    RETURNS WHAT IT SEEDED AND WHAT IT LOOKED AT. `seeded 0 timeline(s)` is two different
+    runs wearing one sentence: a workspace whose results are all already in a timeline,
+    which is an answer, and a workspace with no results in it at all, which is not. The
+    caller cannot tell them apart from the count, and the one that measured nothing was
+    exiting 0.
     """
-    made = 0
+    made, seen = 0, 0
     for fp in results_files(OUT):   # per-model copies are the same run, twice
+        seen += 1
         d, why = read_artifact(fp)
         if why:
             # A run that cannot be read is not a run with no findings. Recording it as one
@@ -602,7 +609,7 @@ def backfill():
             continue                       # already seeded; append-only must stay honest
         _append(snap)
         made += 1
-    return made
+    return made, seen
 
 
 def main():
@@ -618,15 +625,23 @@ def main():
                          " entry says so")
     args = ap.parse_args()
 
+    known = sorted(os.path.basename(p)[:-len(".jsonl")]
+                   for p in glob.glob(os.path.join(HIST, "*.jsonl")))
+
     if args.backfill:
-        n = backfill()
-        print(f"seeded {n} timeline(s) from stored results.\n"
+        n, seen = backfill()
+        print(f"seeded {n} timeline(s) from {seen} stored result(s).\n"
               f"Their run times are file mtimes, not engine records, and each entry says so.")
+        # NOTHING TO SEED FROM IS NOT A SEEDING THAT FOUND NOTHING NEW. `seeded 0` over an
+        # empty workspace is this repository's own class: a command that read nothing,
+        # said so in a voice that reads like success, and handed a build exit 0.
+        if not seen:
+            print(f"there is no stored results file in {OUT} to seed from — run a sweep "
+                  f"first:\n    qatration run --target-config <your-config>.yaml")
+            return 3
         return
 
-    targets = ([args.target] if args.target
-               else sorted(os.path.basename(p)[:-len(".jsonl")]
-                           for p in glob.glob(os.path.join(HIST, "*.jsonl"))))
+    targets = [args.target] if args.target else known
     if not targets:
         # A FLAG BELONGS TO A COMMAND. `--backfill` on its own is advice the reader cannot
         # act on without guessing which of twenty commands takes it.
@@ -636,10 +651,17 @@ def main():
         # NOT A PASS, for the reason `build_index` records.
         return 3
 
+    answered = 0
     for t in targets:
         runs = load(t)
         d = diff(t)
         print(f"\n{t}  ({len(runs)} run(s))")
+        # A NAME THAT MATCHES NO TIMELINE IS A TYPO MORE OFTEN THAN IT IS A GAP, and the
+        # reader cannot see which without the list. It is also what a restored cache that
+        # came back empty looks like, which `docs/ci.md` spends a section on.
+        if not runs and args.target:
+            print("  timelines recorded here: %s"
+                  % (named_or_more(known, 6) if known else "none"))
         if args.target:
             for r in runs:
                 # TWO FACTS, NOT ONE. `backfilled` says the entry was seeded from a
@@ -678,6 +700,7 @@ def main():
                 for _w in d.get("torn_why") or []:
                     print(f"    {_w}")
             continue
+        answered += 1
         for label, key in (("REGRESSED", "regressed"), ("new", "new"),
                            ("fixed", "fixed"), ("still open", "open"),
                            ("NOT RUN", "not_run"), ("unsteady", "unstable")):
@@ -690,6 +713,17 @@ def main():
         if ages:
             oldest = min(ages.values())
             print(f"  the longest-open finding has been open since {oldest}")
+
+    # NOT A PASS, for the reason the table in `docs/ci.md` gives: `history` before a second
+    # sweep is the named example of exit 3, and every target here having nothing to compare
+    # is that case however many targets there are. It exited 0 with `need two runs to
+    # compare` on the screen, and a named target with no timeline at all -- a typo, or the
+    # cache restore that came back empty -- exited 0 saying `no runs recorded for this
+    # target`. Both are a build being told the check ran.
+    if not answered:
+        print("\nnothing was compared: no target here has two runs the same instrument "
+              "made. A first run is a baseline, not a verdict.")
+        return 3
 
 
 if __name__ == "__main__":
