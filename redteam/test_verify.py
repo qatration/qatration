@@ -247,6 +247,13 @@ def main():
           not measured({"verdict": "ERROR", "probe": {"output": ""}}))
     check("...and so did one the target could not be sent",
           not measured({"verdict": "SKIP", "probe": None}))
+    # AND A RECORD WITH NO PROBE UNDER A VERDICT THAT IS NOT `SKIP`. The line above is
+    # answered by the verdict check one line earlier in the function, so the `probe is None`
+    # branch was never reached by it: deleting that branch left every suite green, and what
+    # it prevents is `None.silent()` -- an AttributeError out of the predicate that decides
+    # whether a published finding is being re-checked or written off.
+    check("...and a record whose verdict says otherwise but carries no probe",
+          not measured({"verdict": "EXPLOITED", "probe": None}))
     check("...and one whose probe carries an error, whatever the verdict says",
           not measured({"verdict": "DEFENDED", "probe": {"output": "x", "error": "TIMEOUT"}}))
     # SILENCE IS THE SAME EVENT WITHOUT AN EXCEPTION, which is how a live app answering HTTP
@@ -523,6 +530,59 @@ def main():
           and "the port" in _do, _do[-400:])
     check("...and it is exit 3, which is what nothing measured has always been",
           _dr.returncode == 3, "exit %s" % _dr.returncode)
+
+    # --- AND THE CODE FOR A CLAIM THAT NO LONGER REPRODUCES -----------------------------
+    #
+    # `docs/ci.md` publishes it: "`verify` exits 1 when a published claim NO LONGER
+    # REPRODUCES: the finding is in the artifact, the re-send did not do it, and that is a
+    # change worth a build going red". The fleet path has a case for that code and the
+    # single-target path -- the one `verify --target-config` runs, which is the one in the
+    # documentation -- had none: deleting `if r["stale_ids"]: return 1` from `main` left
+    # every suite green and every stale claim exiting 0, which a schedule reads as `the
+    # published findings still hold`.
+    #
+    # Driven end to end against a bot that answers and never leaks, so every claimed row
+    # fails both passes and is stale by the rule this file spends its first page on.
+    class _CleanBot(_BH_v):
+        def do_POST(self):
+            _n = int(self.headers.get("Content-Length", 0) or 0)
+            self.rfile.read(_n)
+            _body = _json_v.dumps({"reply": "I cannot help with that."}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_body)))
+            self.end_headers()
+            self.wfile.write(_body)
+
+        def log_message(self, *a):
+            pass
+
+    _srv_s = _TS_v(("127.0.0.1", 0), _CleanBot)
+    _th_s = __import__("threading").Thread(target=_srv_s.serve_forever, daemon=True)
+    _th_s.start()
+    try:
+        _sp = os.path.join(_bw, "results_staleclaims.json")
+        _claims(_sp, 2, "staleclaims")
+        _syaml = os.path.join(_bw, "targets_staleclaims.yaml")
+        with io.open(_syaml, "w", encoding="utf-8", newline="") as _f:
+            _f.write("name: staleclaims\nadapter: http\n")
+            _f.write('url: "http://127.0.0.1:%d/c"\n' % _srv_s.server_address[1])
+            _f.write('request:\n  message: "{prompt}"\n')
+            _f.write('response:\n  reply: "reply"\n')
+            _f.write('oracle_context:\n  canaries: ["ACME-CANARY-9931"]\n')
+        _sr = _sp_v.run([sys.executable, os.path.join(HERE, "cli.py"), "verify",
+                         "--target-config", _syaml, "--results", _sp,
+                         "--trials", "1", "--confirm-trials", "1"],
+                        capture_output=True, text=True, errors="replace", timeout=600,
+                        env=dict(os.environ, QATRATION_OUT=_bw,
+                                 PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        _so = (_sr.stdout or "") + (_sr.stderr or "")
+        check("a published claim that no longer reproduces exits 1",
+              _sr.returncode == 1, "exit %s: %s" % (_sr.returncode, _so[-400:]))
+        check("...and says which claim it was",
+              "claim-0" in _so, _so[-400:])
+    finally:
+        _srv_s.shutdown()
 
     # AND A TARGET THAT ANSWERED AND THEN STOPPED IS THE HALF THAT EXITS ZERO. Three claims
     # re-sent, five refused, two never reached -- and with no wall the table simply ended,
