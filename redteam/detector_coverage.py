@@ -497,7 +497,13 @@ def main():
         # are decides whether the line is benign (added since the last sweep) or a finding
         # (an attack that CANNOT be sent: a delivery no adapter implements, an `applies_to`
         # naming a target that is gone), and the reader had no way to tell those apart.
-        if _never:
+        # ONLY WHERE THERE IS A REMAINDER TO NAME. On a workspace with nothing in it every
+        # attack in the arsenal is in this set, and eight ids out of three hundred and
+        # seventy-nine is a sample of the corpus rather than a gap in coverage. It is also a
+        # line naming this package's own practice bots -- `adv-dvla-debug-dump` sorts first
+        # -- in a report a stranger ran against their own bot, which `test_workspace` refuses
+        # of every command typed bare, and rightly.
+        if _never and len(_never) < len(_arsenal):
             print(f"  never sent: {named_or_more(_never, 8)}")
     except Exception as _e:
         # Said, not swallowed: a count that failed to compute must not read as a count of zero.

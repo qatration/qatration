@@ -817,23 +817,50 @@ def main():
               "none yet" in _o10, _o10[:500])
         check("...with the code for a run that measured nothing",
               _p10.returncode == 3, "exit %d" % _p10.returncode)
-        # AND THE ARSENAL HALF OF THE SAME QUESTION. An attack never sent is a claim about
-        # coverage exactly as a detector that never fired is, and on this workspace every
-        # attack in the arsenal is one -- so the line has to be there and it has to name
-        # them. It was a count with no set: eight ids on the real workspace, printed nowhere
-        # in a hundred and forty lines of report.
+        # AND THE ARSENAL HALF OF THE SAME QUESTION, which on THIS workspace is the other
+        # side of it: nothing has been sent, so every attack in the arsenal is in that set
+        # and there is no remainder to name. Eight ids out of three hundred and seventy-nine
+        # would be a sample of the corpus, and the first of them alphabetically is
+        # `adv-dvla-debug-dump` -- a practice bot of this package, named in a report a
+        # stranger ran against their own. The count is still owed.
         check("...and the arsenal line is printed, not merely spelled in the source",
               "never sent against anything" in _o10, _o10[:400])
-        check("...naming the attacks it counted, so the eight can be told apart",
-              "never sent:" in _o10, _o10[:600])
-        _line10 = [_l for _l in _o10.splitlines() if _l.strip().startswith("never sent:")]
+        check("...without naming ids, where the set is the whole arsenal",
+              "never sent:" not in _o10, _o10[:600])
+    finally:
+        _sh9.rmtree(_w10, ignore_errors=True)
+
+    # AND WHERE THERE IS A REMAINDER, IT IS NAMED. One stored row carrying one real
+    # arsenal id makes the other 378 a gap in coverage rather than the corpus itself, and
+    # that set was a number with nothing under it: eight ids on the shipped workspace,
+    # printed in none of the hundred and forty lines this command writes, while every other
+    # remainder in the same report is named with the act that would close it.
+    _w10b = _tf9.mkdtemp()
+    try:
+        _one = sorted(arsenal)[0]
+        with open(os.path.join(_w10b, "results_probe.json"), "w", encoding="utf-8") as _f10:
+            _js9.dump({"meta": {"target": "probe", "model": "m", "trials": 1,
+                                  "attacks_n": 1, "broke": 0, "errors": 0},
+                         "results": [{"headline": "DEFENDED", "fired": [], "rate": "0/1",
+                                      "attack": {"id": _one, "category": "x"}}]}, _f10)
+        _p10b = _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
+                         capture_output=True, text=True, timeout=300,
+                         env=dict(os.environ, QATRATION_OUT=_w10b,
+                                  PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"),
+                         cwd=os.path.dirname(HERE))
+        _o10b = (_p10b.stdout or "") + (_p10b.stderr or "")
+        _line10 = [_l for _l in _o10b.splitlines() if _l.strip().startswith("never sent:")]
+        check("an attack never sent is named once something else has been",
+              bool(_line10), _o10b[:600])
         check("...with real ids from the arsenal in it",
-              bool(_line10) and any(_a in _line10[0] for _a in sorted(arsenal)[:60]),
+              bool(_line10) and any(_a in _line10[0] for _a in sorted(arsenal)[:40]),
               str(_line10)[:300])
         check("...and how many it did not print",
               bool(_line10) and "more" in _line10[0], str(_line10)[:300])
+        check("...while the one with a stored trial is not among them",
+              bool(_line10) and _one not in _line10[0], str(_line10)[:300])
     finally:
-        _sh9.rmtree(_w10, ignore_errors=True)
+        _sh9.rmtree(_w10b, ignore_errors=True)
 
     # --- AND THE FILE SAYS WHAT THE PAGE SAYS ----------------------------------------
     #
