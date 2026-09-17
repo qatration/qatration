@@ -74,6 +74,28 @@ def _shipped_configs():
     return sorted(p for p in _tc(HERE)
                   if os.path.dirname(os.path.abspath(p)) == HERE)
 
+# A WORKSPACE OF ITS OWN FOR EVERY SUBPROCESS THIS SUITE STARTS. `onboard.py` takes
+# `--root` for the queue and falls back to `workspace.OUT` -- the checkout's own `out/` --
+# for every run that does not pass one. A suite that starts it without `QATRATION_OUT` is
+# one guard away from writing into the directory every published number in this repository
+# is recounted from, and it happened: deleting `if not args.submit: return` under
+# `tools/unguarded.py` left two `job_*.json` files in `out/`.
+#
+# The guard is the resource, not the call site: pointing the environment at a temporary
+# directory means no write path in that command can reach the real one, including the ones
+# nobody has added yet.
+_ISOLATED = None
+
+
+def _sub_env():
+    """The environment for an onboard subprocess: this suite's own workspace, never `out/`."""
+    global _ISOLATED
+    if _ISOLATED is None:
+        _ISOLATED = tempfile.mkdtemp()
+    return dict(os.environ, QATRATION_OUT=_ISOLATED, PYTHONIOENCODING="utf-8",
+                PYTHONDONTWRITEBYTECODE="1")
+
+
 def main():
     fails, checks = [], 0
 
@@ -479,9 +501,7 @@ def main():
                       extra='oracle_context:\n  canarys: ["ZZ-CANARY"]\n')
         _tp = subprocess.run(
             [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _typo],
-            capture_output=True, text=True, timeout=120,
-            env=dict(os.environ, PYTHONIOENCODING="utf-8",
-                     PYTHONDONTWRITEBYTECODE="1"))
+            capture_output=True, text=True, timeout=120, env=_sub_env())
         _tout = (_tp.stdout or "") + (_tp.stderr or "")
         check("the pre-flight prints the keys nothing in the engine reads",
               "nothing in this engine reads" in _tout, _tout[-400:])
@@ -495,9 +515,7 @@ def main():
                       extra='oracle_context:\n  canaries: ["ZZ-CANARY"]\n')
         _fp = subprocess.run(
             [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _fine],
-            capture_output=True, text=True, timeout=120,
-            env=dict(os.environ, PYTHONIOENCODING="utf-8",
-                     PYTHONDONTWRITEBYTECODE="1"))
+            capture_output=True, text=True, timeout=120, env=_sub_env())
         check("...and says nothing of the kind when every key is one the engine reads",
               "nothing in this engine reads" not in ((_fp.stdout or "") + (_fp.stderr or "")),
               (_fp.stdout or "")[-300:])
@@ -644,7 +662,7 @@ def main():
         _sq = subprocess.run(
             [sys.executable, os.path.join(HERE, "onboard.py"), "--target-config", _scalar,
              "--submit", "--root", os.path.join(work, "queue_scalar")],
-            capture_output=True, text=True, timeout=120)
+            capture_output=True, text=True, timeout=120, env=_sub_env())
         check("a config the check refused is not queued",
               _sq.returncode == 2, "exit %s: %s" % (_sq.returncode,
                                                     (_sq.stdout + _sq.stderr)[-200:]))
@@ -665,7 +683,7 @@ def main():
             return subprocess.run(
                 [sys.executable, os.path.join(HERE, "onboard.py"),
                  "--target-config", cfg_path, "--verify-honeytoken", token],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, timeout=120, env=_sub_env())
 
         _r_dead = _verify(dead)
         check("a verify against an endpoint that does not answer is `nothing measured`",
@@ -701,12 +719,30 @@ def main():
             # step rather than as the whole suite.
             return subprocess.run(
                 [sys.executable, os.path.join(HERE, "onboard.py"), "--config", cfg,
-                 "--submit", "--root", qroot], capture_output=True, text=True, timeout=120)
+                 "--submit", "--root", qroot], capture_output=True, text=True,
+                timeout=120, env=_sub_env())
 
         r = submit(dead)
         check("--submit on a failed check exits non-zero", r.returncode != 0,
               (r.stdout + r.stderr)[-200:])
         check("...and queues nothing", not q.listing(qroot), str(q.listing(qroot)))
+
+        # WITHOUT `--submit`, NOTHING IS QUEUED, and that is the whole difference between
+        # this command and `run`. `if not args.submit: return` had no case: deleting it
+        # turned every pre-flight check into a submission, and because the runs that do not
+        # pass `--root` take the DEFAULT root, the jobs landed in the checkout's own `out/`.
+        # Two of them are how this was noticed -- `job_2026-09-17T1916-*.json`, target
+        # `typo`, written by a mutation run into the directory every published number in this
+        # repository is recounted from.
+        _pre = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", multi,
+             "--root", qroot], capture_output=True, text=True, timeout=120,
+            env=_sub_env())
+        check("a pre-flight check with no --submit passes", _pre.returncode == 0,
+              (_pre.stdout + _pre.stderr)[-300:])
+        check("...and queues nothing at all", not q.listing(qroot), str(q.listing(qroot)))
+        check("...and says nothing about a queue position",
+              "queued" not in (_pre.stdout or ""), (_pre.stdout or "")[-300:])
 
         r = submit(multi)
         rc = r.returncode
