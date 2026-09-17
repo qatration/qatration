@@ -272,39 +272,108 @@ def main():
             return True                      # `x == x`
         return None
 
-    _by_label, _n_checks, _unparsed = {}, 0, []
-    _suites = sorted(glob.glob(os.path.join(HERE, "test_*.py")))
-    for _sp in _suites:
-        try:
-            _tree = ast.parse(io.open(_sp, encoding="utf-8").read())
-        except SyntaxError as e:
-            _unparsed.append(f"{os.path.basename(_sp)}: {e}")
-            continue
-        for _n in ast.walk(_tree):
-            # A BARE ASSERT COUNTS TOO. The suites carry 42 of them, and a gate that reads
-            # one assertion form and not the other is the defect it exists to catch. There
-            # is no two-armed exemption here: that idiom pairs on a label and an assert has
-            # none, so it is keyed by its own line and stands alone.
-            if isinstance(_n, ast.Assert):
-                _n_checks += 1
-                _by_label[(os.path.basename(_sp), f"<assert line {_n.lineno}>")] = [
-                    (_n.lineno, _fixed_truth(_n.test))]
-                continue
-            if not (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
-                    and _n.func.id == "check" and len(_n.args) >= 2):
-                continue
-            _n_checks += 1
-            _lab = _n.args[0]
-            _key = (os.path.basename(_sp),
-                    _lab.value if isinstance(_lab, ast.Constant) else ast.dump(_lab))
-            _by_label.setdefault(_key, []).append((_n.lineno, _fixed_truth(_n.args[1])))
+    def _assert_truth(node):
+        """`_fixed_truth`, plus the one shape only a bare `assert` can be wrong about.
 
-    _tauto = []
-    for (_f, _label), _calls in sorted(_by_label.items()):
-        _vals = {v for _, v in _calls}
-        if True in _vals and False in _vals:
-            continue                          # the two-armed idiom
-        _tauto += [f"{_f}:{ln}  {str(_label)[:70]}" for ln, v in _calls if v is True]
+        `assert (x == y, "it did not")` is an assert on a TUPLE, and a non-empty tuple is
+        true. It is one character away from the assertion somebody meant, it passes forever,
+        and it is counted among the assertions this repository publishes a number for --
+        `nothing in the suite is allowed to be one that cannot fail`, says the README, over a
+        count that would include it. Planted in `test_guard.py` and this gate stayed green.
+
+        NOT APPLIED TO `check(...)`, and that is a scope rather than an oversight: ten calls
+        in these suites pass a list literal as the second argument, all of them in the
+        `check(label, got, want)` dialect where that slot is a VALUE and a literal there is
+        the expected shape, not a claim. A scan that cries wolf is a scan somebody switches
+        off. An `assert` has no second dialect and no `want` slot, so a collection literal in
+        it is always the typo.
+        """
+        if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            return bool(node.elts)
+        if isinstance(node, ast.Dict):
+            return bool(node.keys)
+        return _fixed_truth(node)
+
+    # ON PLANTED ONES, in this process, every time: there is no such assert in the tree, so a
+    # scan that stopped seeing them would change no answer below.
+    check("an assert on a tuple is true no matter what the code does",
+          _assert_truth(ast.parse("assert (1 == 2, 'never')").body[0].test) is True,
+          "the commonest tautology in Python is invisible to the tautology gate")
+    check("...while the assertion it is one character away from is not",
+          _assert_truth(ast.parse("assert 1 == 2, 'msg'").body[0].test) is None,
+          "a real comparison was called fixed")
+    check("...and an empty one is the constant-false arm, not the true one",
+          _assert_truth(ast.parse("assert ()").body[0].test) is False,
+          "an empty tuple was not read as false")
+    check("...and a dict literal is the same trap",
+          _assert_truth(ast.parse("assert {'a': 1}").body[0].test) is True,
+          "a non-empty dict literal was not read as true")
+
+    def _sweep(sources):
+        """(name, source) pairs -> (tautologies, assertions counted, files that would not parse).
+
+        A FUNCTION SO A PLANTED FILE CAN GO THROUGH IT. The loop read the directory, so the
+        only way to show it working was to put a bad assert in a real suite by hand. Putting
+        `_fixed_truth` back in the one line below -- the narrow rule that cannot see a tuple
+        -- left every check above it green, because the checks above it call the RULE and
+        nothing called the sweep with anything that would move.
+        """
+        _by_label, _n_checks, _unparsed = {}, 0, []
+        for _name, _src in sources:
+            try:
+                _tree = ast.parse(_src)
+            except SyntaxError as e:
+                _unparsed.append(f"{_name}: {e}")
+                continue
+            for _n in ast.walk(_tree):
+                # A BARE ASSERT COUNTS TOO. The suites carry 42 of them, and a gate that
+                # reads one assertion form and not the other is the defect it exists to
+                # catch. There is no two-armed exemption here: that idiom pairs on a label
+                # and an assert has none, so it is keyed by its own line and stands alone.
+                if isinstance(_n, ast.Assert):
+                    _n_checks += 1
+                    _by_label[(_name, f"<assert line {_n.lineno}>")] = [
+                        (_n.lineno, _assert_truth(_n.test))]
+                    continue
+                if not (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+                        and _n.func.id == "check" and len(_n.args) >= 2):
+                    continue
+                _n_checks += 1
+                _lab = _n.args[0]
+                _key = (_name, _lab.value if isinstance(_lab, ast.Constant)
+                        else ast.dump(_lab))
+                _by_label.setdefault(_key, []).append(
+                    (_n.lineno, _fixed_truth(_n.args[1])))
+        _out = []
+        for (_f, _label), _calls in sorted(_by_label.items()):
+            _vals = {v for _, v in _calls}
+            if True in _vals and False in _vals:
+                continue                          # the two-armed idiom
+            _out += [f"{_f}:{ln}  {str(_label)[:70]}" for ln, v in _calls if v is True]
+        return _out, _n_checks, _unparsed
+
+    # THROUGH THE SWEEP, on a file that is not in this directory. Every check above asks the
+    # rule; this asks the thing that runs over the suites.
+    _planted_tauto, _, _ = _sweep([("planted.py", "def f():\n    assert (1 == 2, 'never')\n")])
+    check("the sweep over a suite finds an assert on a tuple in it",
+          len(_planted_tauto) == 1 and "planted.py" in _planted_tauto[0],
+          str(_planted_tauto))
+    _clean_tauto, _clean_n, _ = _sweep([("ok.py", "def f():\n    assert 1 == 2, 'msg'\n")])
+    check("...and says nothing about the assertion it is one character from",
+          not _clean_tauto and _clean_n == 1, "%s %s" % (_clean_tauto, _clean_n))
+    # AND THE TWO-ARMED IDIOM SURVIVES THE SWEEP, or the exemption is a line nothing drives.
+    _armed = ('def f():\n'
+              '    try:\n'
+              '        go()\n'
+              '        check("X is refused", False, "it was accepted")\n'
+              '    except ValueError:\n'
+              '        check("X is refused", True)\n')
+    check("...and a label with both arms is still exempt", not _sweep([("armed.py", _armed)])[0],
+          str(_sweep([("armed.py", _armed)])[0]))
+
+    _suites = sorted(glob.glob(os.path.join(HERE, "test_*.py")))
+    _tauto, _n_checks, _unparsed = _sweep(
+        (os.path.basename(_sp), io.open(_sp, encoding="utf-8").read()) for _sp in _suites)
 
     check("every suite in this directory parses", not _unparsed, "; ".join(_unparsed))
     check(f"none of the {_n_checks} assertions across {len(_suites)} suites is true no matter "
