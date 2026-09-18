@@ -122,6 +122,32 @@ def main():
         check("...and a run that never sent the attack does not restart its age",
               ages.get("a4") == "2026-08-04 10:00", str(ages))
 
+        # --- A RATE OF `0/0` IS NOT `BROKE ON EVERY ATTEMPT` ------------------------------
+        #
+        # `broke_every_trial` is what stops 0/3 -> 1/3 failing somebody's build: a counted
+        # move has to break on EVERY attempt on the side making the claim. It reads the
+        # stored `rate`, and `if trials <= 0: return None` is what keeps a row that was never
+        # sent out of that arithmetic -- without it `hits >= trials` is `0 >= 0`, which is
+        # True, and a row measuring nothing becomes the steadiest evidence there is.
+        #
+        # Nothing was driving it. Found by mutating the guards `tools/unguarded.py` skips by
+        # design.
+        check("a rate of 0/0 cannot say whether the row broke every time",
+              H.broke_every_trial({"rate": "0/0"}) is None,
+              str(H.broke_every_trial({"rate": "0/0"})))
+        check("...and neither can a row with no rate at all",
+              H.broke_every_trial({"v": "EXPLOITED"}) is None,
+              str(H.broke_every_trial({"v": "EXPLOITED"})))
+        check("...nor one whose rate is not a rate",
+              H.broke_every_trial({"rate": "most of them"}) is None,
+              str(H.broke_every_trial({"rate": "most of them"})))
+        # AND THE TWO ANSWERS IT CAN GIVE, or the three above are satisfied by a function
+        # that says `cannot say` to everything.
+        check("...while 3/3 is every attempt", H.broke_every_trial({"rate": "3/3"}) is True,
+              str(H.broke_every_trial({"rate": "3/3"})))
+        check("...and 1/3 is not", H.broke_every_trial({"rate": "1/3"}) is False,
+              str(H.broke_every_trial({"rate": "1/3"})))
+
         # THE FIRST SIGHTING IS NOT THROWN AWAY, it is answered separately -- a page that
         # shows the spell and never mentions the fix has dropped the more interesting half.
         again = H.reopened("t")
