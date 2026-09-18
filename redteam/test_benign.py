@@ -487,6 +487,45 @@ def main():
         check("...while a corpus whose servers record no command is nothing measured",
               _rc_ok == 3 and "record no command" in _out_ok,
               "exit %s: %s" % (_rc_ok, _out_ok.strip()[-160:]))
+        # AND A CORPUS WHERE ONLY SOME OF THEM DO. That is the shape the guard inside the
+        # loop is for -- `if not cmd: continue` -- and it had no case: the check above stops
+        # at the line that reports them, because when EVERY server lacks a command the run
+        # returns 3 before the loop starts. With one of each, the loop runs, and without
+        # that line `list_tools(list(None))` is a TypeError out of a command whose subject is
+        # somebody else's servers.
+        _srv_ok = os.path.join(_mw, "one_tool.py")
+        with open(_srv_ok, "w", encoding="utf-8") as _f_ok:
+            _f_ok.write(
+                "import json, sys" + chr(10)
+                + "for line in sys.stdin:" + chr(10)
+                + "    line = line.strip()" + chr(10)
+                + "    if not line:" + chr(10)
+                + "        continue" + chr(10)
+                + "    m = json.loads(line)" + chr(10)
+                + "    if m.get('method') == 'initialize':" + chr(10)
+                + "        r = {'capabilities': {'tools': {}}}" + chr(10)
+                + "    elif m.get('method') == 'tools/list':" + chr(10)
+                + "        r = {'tools': [{'name': 't', 'description': 'clean'}]}" + chr(10)
+                + "    elif m.get('id') is None:" + chr(10)
+                + "        continue" + chr(10)
+                + "    else:" + chr(10)
+                + "        continue" + chr(10)
+                + "    print(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result': r}))"
+                + chr(10) + "    sys.stdout.flush()" + chr(10))
+        _mixed = _js_m.dumps({"servers": {
+            "readable": {"package": "p", "version": "1.0",
+                         "command": [sys.executable, _srv_ok],
+                         "tools": [{"name": "t", "description": "clean"}]},
+            "nameless": {"package": "q", "version": "1.0", "tools": []}}})
+        _rc_mx, _out_mx = _mcompare(_mixed)
+        check("a corpus with one re-readable server and one without does not crash",
+              "Traceback (most recent call last)" not in _out_mx,
+              _out_mx.strip()[-200:])
+        check("...and names the server it could not re-read",
+              "nameless" in _out_mx and "record no command" in _out_mx,
+              _out_mx.strip()[-200:])
+        check("...while the one it could is compared, and nothing moved",
+              _rc_mx == 0, "exit %s: %s" % (_rc_mx, _out_mx.strip()[-200:]))
 
         # A TOOL THAT APPEARED UNDER A PINNED VERSION IS THE SAME EVENT. The poison does
         # not have to arrive inside a description somebody already approved.
