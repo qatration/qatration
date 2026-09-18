@@ -132,6 +132,44 @@ def main():
         check("...while a finding in its first spell is not called a return",
               "a4" not in again, str(again))
 
+        # AND NEITHER IS ONE THAT IS CLOSED NOW. `reopened` answers `it came back` and the
+        # only thing that makes that true is the LATEST run: `if state(runs[-1], aid) is not
+        # True: continue`. Deleting it left every suite green while a finding that closed and
+        # STAYED closed was reported as reopened -- on the defence report, which promises in
+        # its own words to say "and we already closed it once", to a team deciding what to
+        # fix. Found by mutating the guards `tools/unguarded.py` skips by design.
+        #
+        # `is not True` and not `is False`, because the third state has to fall the same way:
+        # a finding nobody measured in the latest run is not a finding that came back either.
+        _rt = tempfile.mkdtemp()
+        _real_h2, _real_o2 = H.HIST, H.OUT
+        try:
+            H.OUT, H.HIST = _rt, os.path.join(_rt, "history")
+            _m2 = {"target": "back", "model": "m", "trials": 1}
+            H.record(_m2, R(b1="EXPLOITED"), when="2026-08-01 10:00")
+            H.record(_m2, R(b1="DEFENDED"), when="2026-08-02 10:00")
+            H.record(_m2, R(b1="EXPLOITED"), when="2026-08-03 10:00")
+            check("a finding broken now, after a spell that closed, is a return",
+                  "b1" in H.reopened("back"), str(H.reopened("back")))
+            # ...AND THE SAME TIMELINE WITH ONE MORE RUN THAT MEASURED IT CLEAN.
+            H.record(_m2, R(b1="DEFENDED"), when="2026-08-04 10:00")
+            check("...and it stops being one the moment a run measures it clean",
+                  "b1" not in H.reopened("back"), str(H.reopened("back")))
+            # ...AND A RUN THAT DID NOT MEASURE IT AT ALL IS NOT A RETURN EITHER.
+            H.record(_m2, R(b1="EXPLOITED"), when="2026-08-05 10:00")
+            H.record(_m2, R(b1="SKIP"), when="2026-08-06 10:00")
+            check("...nor is one the latest run never measured",
+                  "b1" not in H.reopened("back"), str(H.reopened("back")))
+            # AND AN EMPTY TIMELINE ANSWERS NOTHING. `if not runs: return out` in front of
+            # it is an equivalent mutation and is named rather than counted: with no runs
+            # there are no spells either, so the loop that would reach `runs[-1]` never
+            # starts. The case asserts the answer, which is what has to hold either way.
+            check("...and a target with no runs at all answers nothing",
+                  H.reopened("never-swept") == {}, str(H.reopened("never-swept")))
+        finally:
+            H.HIST, H.OUT = _real_h2, _real_o2
+            shutil.rmtree(_rt, ignore_errors=True)
+
         # A VERDICT THAT MEASURED NOTHING IS NOT A CLEAN ONE. `diff` learned this through
         # SKIP -- `"SKIP" in BROKE` is False, the same value that means measured clean -- and
         # the age walks the same rows, so it has to draw the line in the same place. It does,
