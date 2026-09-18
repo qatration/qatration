@@ -965,6 +965,28 @@ def main():
             os.environ.pop("QAT_TEST_TOKEN", None)
             os.environ.pop("QAT_TEST_OTHER", None)
 
+        # --- AND A VALUE THAT IS NOT A STRING GOES THROUGH UNTOUCHED ------------------
+        #
+        # Every value in a config is handed to this function, and most of them are not
+        # strings: a port is an int, `trials` is an int, `messages` is a list, a request
+        # body is a dict. `_ENV.finditer` takes a string, so without
+        # `if not isinstance(value, str): return value` the first numeric field in anybody's
+        # config is a TypeError out of the adapter. Nothing was driving it.
+        for _v in (8080, 3.5, True, None, ["a", "b"], {"k": "v"}):
+            _got = expand_env(_v, "request.port", ["QAT_TEST_TOKEN"])
+            check("a %s config value is returned as it is" % type(_v).__name__,
+                  _got == _v and type(_got) is type(_v), repr(_got))
+        # AND A STRING WITH NO `${...}` IN IT NEEDS NO DECLARATION: the `env:` list is about
+        # what a config READS, and a value that reads nothing is not reading something it
+        # failed to declare. Without that second exit, an empty `allowed` would be compared
+        # against an empty `wanted` -- which happens to pass -- and the value would still go
+        # through `_ENV.sub`, which is a substitution over a string with nothing to
+        # substitute: the same answer by a longer route, and one more thing to get wrong.
+        check("a plain string with nothing to expand needs no declaration",
+              expand_env("Bearer hard-coded", "headers.Authorization", [])
+              == "Bearer hard-coded",
+              repr(expand_env("Bearer hard-coded", "headers.Authorization", [])))
+
         # --- THE FAILURE MUST NOT NAME THE ENVIRONMENT. This check used to assert the
         # opposite — that the message contains the variable name — and that assertion was the
         # oracle: `intake` returns this text to whoever submitted the config, so set means
@@ -1062,6 +1084,45 @@ def main():
 
     # --- A TARGET MAY NOT STEER THE TOOL SOMEWHERE ELSE ---------------------------------
     #
+    # --- AND A STREAM THAT ENDS IS NOT DRAINED UNTIL THE CLOCK RUNS OUT -----------------
+    #
+    # The drain loop stops on three things: the byte budget, the wall clock, and an empty
+    # read -- which is the ORDINARY case, a reply that simply ended. That third one had no
+    # case of its own: with `if not chunk: break` deleted, an over-long reply that has
+    # finished arriving is read until the deadline, so every oversized reply costs the
+    # target's whole timeout again and `reply_bytes` is right for a reason nobody measured.
+    #
+    # A fake response rather than a socket, because what is being asked is arithmetic: how
+    # many bytes the drain says arrived, and how many reads it took to say it.
+    import targets_http as _th_end
+
+    class _EndsAfter:
+        """A response that hands over `n` bytes and then ends, counting its own reads."""
+
+        def __init__(self, first, rest):
+            self._first, self._rest, self.reads = first, list(rest), 0
+
+        def read(self, n=None):
+            return self._first
+
+        def read1(self, n=None):
+            self.reads += 1
+            return self._rest.pop(0) if self._rest else b""
+
+    _r_end = _EndsAfter(b"a" * 11, [b"bbb", b"cc"])
+    _body_e, _len_e = _th_end.read_capped(_r_end, limit=10, seconds=30)
+    check("a reply that ends is drained to its end and no further",
+          _body_e == b"a" * 10 and _len_e == 11 + 5,
+          "%r %r after %d read(s)" % (_body_e, _len_e, _r_end.reads))
+    check("...and the drain stops reading once the stream is empty",
+          _r_end.reads == 3, "%d read(s), so it kept asking after the end" % _r_end.reads)
+    # AND A REPLY UNDER THE CAP IS NOT DRAINED AT ALL, which is what says the drain is the
+    # exception rather than the path every reply takes.
+    _r_small = _EndsAfter(b"short", [])
+    check("...while a reply inside the cap is never drained",
+          _th_end.read_capped(_r_small, limit=10, seconds=30) == (b"short", None)
+          and _r_small.reads == 0, "%d read(s)" % _r_small.reads)
+
     # --- A TARGET THAT DRIBBLES DOES NOT HOLD THE PROBE ---------------------------------
     #
     # `read_capped` drains past the cap to learn how long the reply really was, and that
