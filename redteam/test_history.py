@@ -644,6 +644,23 @@ def main():
             f.write("{ this line is not json\n")
         check("one corrupt line does not lose the timeline",
               len(H.load("t")) == n_before, str(len(H.load("t"))))
+        # AND A BLANK LINE IS NOT A CORRUPT ONE. `load` skips it before the parse, and
+        # nothing was driving that: without `if not line: continue`, `json.loads("")` raises
+        # and the empty line is reported in the same channel as a torn record -- so a
+        # timeline somebody opened in an editor, or two of them merged by hand, prints "1
+        # line(s) could not be read, so this is not a statement about how often this target
+        # has been swept" over a file with nothing wrong in it.
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(chr(10) + "   " + chr(10))
+        _unread_b = []
+        _loaded_b = H.load("t", _unread_b)
+        check("...and a blank line in the file is not one of them",
+              len(_loaded_b) == n_before, str(len(_loaded_b)))
+        # ONE entry, and it is the corrupt line planted above -- not the two blank ones
+        # after it. Counted rather than matched on the message, because the message for a
+        # blank line and for a truncated one is the same `JSONDecodeError`.
+        check("...and is not reported as a line that could not be read",
+              len(_unread_b) == 1, str(_unread_b))
         check("a target with no history reads as empty rather than failing",
               H.load("never-run") == [])
 
