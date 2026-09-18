@@ -291,20 +291,62 @@ def main():
             # with it gone a POST to `/run`, `/submit` or `/` queues a sweep. This service
             # spends money and sends an arsenal at somebody's endpoint, so a typo in the
             # path is the last thing that should start one.
+            # WITH A BODY BIG ENOUGH TO STILL BE IN FLIGHT. A refusal that answers and
+            # closes while the submitter is still sending leaves them a reset rather than
+            # the 404 -- `ConnectionAbortedError [WinError 10053]` out of `getresponse()`,
+            # which is how this was found: green on loopback here, red on a CI runner.
             for _path_i in ("/run", "/submit", "/", "/runs/extra"):
                 _conn = _hc_i.HTTPConnection("127.0.0.1", _srv_i.server_address[1],
                                              timeout=10)
-                _body_i = json.dumps({"target": "x"}).encode()
-                _status = None
+                # JUST UNDER `MAX_BODY`: big enough that the send is still in flight when
+                # the refusal is written, small enough to be a body this door would accept
+                # on the right path -- so what the case is about is the ROUTE and not the
+                # size limit, which answers 413 and closes on purpose.
+                _body_i = json.dumps({"target": "x",
+                                      "pad": "y" * (60 * 1024)}).encode()
+                _status, _why_i = None, ""
                 try:
                     _conn.request("POST", _path_i, body=_body_i,
                                   headers={"Content-Type": "application/json",
                                            "Content-Length": str(len(_body_i))})
                     _status = _conn.getresponse().status
+                except Exception as _e_i:
+                    _why_i = "%s: %s" % (type(_e_i).__name__, _e_i)
                 finally:
                     _conn.close()
                 check("POST %s is a 404, not a submission" % _path_i, _status == 404,
-                      "HTTP %s" % _status)
+                      "HTTP %s: %s" % (_status, _why_i))
+            # AND THE PROPERTY UNDER THOSE FOUR, ASSERTED WITHOUT THE RACE. Whether a
+            # reset reaches the client depends on the platform and on how much of the body
+            # is still in the socket: the four checks above went red on a CI runner with a
+            # thirty-byte body and stayed green here with sixty kilobytes. What decides it
+            # is not the timing but the ORDER -- the refusal must consume the request before
+            # it answers -- and that can be asked of the handler directly.
+            #
+            # `handle_one_request` off a BytesIO: no socket, no timing, and `tell()` at the
+            # end says whether the body was read.
+            _raw_i = (b"POST /nope HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n"
+                      b"Content-Type: application/json\r\n\r\nhello")
+
+            class _Offline(intake.make_handler(root)):
+                def __init__(self, raw):
+                    self.rfile = io.BytesIO(raw)
+                    self.wfile = io.BytesIO()
+                    self.client_address = ("127.0.0.1", 0)
+                    self.server = type("S", (), {"server_name": "x", "server_port": 0})()
+                    self.handle_one_request()
+
+                def log_message(self, *a):
+                    pass
+
+            _off = _Offline(_raw_i)
+            check("a refused route answers 404 without a socket in the way",
+                  b" 404 " in _off.wfile.getvalue().split(b"\r\n")[0] + b" ",
+                  _off.wfile.getvalue().split(b"\r\n")[0].decode("latin-1"))
+            check("...and the request body is consumed before that answer is written",
+                  _off.rfile.tell() == len(_raw_i),
+                  "%d of %d byte(s) read" % (_off.rfile.tell(), len(_raw_i)))
+
             # AND THE ONE PATH THAT IS THE DOOR still is, or the four above are satisfied by
             # a service that refuses everything. A trailing slash is the same door.
             for _path_i in ("/runs", "/runs/"):

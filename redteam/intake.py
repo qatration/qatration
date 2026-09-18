@@ -314,6 +314,15 @@ def make_handler(root):
 
         def do_POST(self):
             if self.path.rstrip("/") != "/runs":
+                # THE BODY IS READ BEFORE THE REFUSAL, and that is not politeness. A server
+                # that answers and closes while the client is still sending leaves the
+                # client with a reset rather than the 404: on Windows that is
+                # `ConnectionAbortedError [WinError 10053]`, raised inside `getresponse()`,
+                # so a submitter who typed the wrong path gets no status code at all -- the
+                # same dropped-connection failure this door already has cases for on
+                # `/runs`, one route over. Measured on a CI runner; the loopback here is
+                # fast enough to hide it.
+                self._drain()
                 return self._send(*_problem(404, "POST /runs"))
             # THE LENGTH IS THE SUBMITTER'S, SO IT IS CHECKED BEFORE IT IS USED. `int(...)`
             # raised on `Content-Length: abc` and answered a traceback and a 500; and a
@@ -333,6 +342,24 @@ def make_handler(root):
             # problem to see as a parse error, not this loop's to wait out.
             code, obj = submit(root, self.rfile.read(n))
             self._send(code, obj)
+
+        def _drain(self):
+            """Read whatever the submitter sent, so the refusal reaches them.
+
+            Bounded by `MAX_BODY` for the reason every other read here is: the length is the
+            submitter's number, and a refusal that reads an unbounded body to be polite is
+            the door holding itself open.
+            """
+            raw = self.headers.get("Content-Length")
+            try:
+                n = int(raw) if raw not in (None, "") else 0
+            except ValueError:
+                n = 0
+            if 0 < n <= MAX_BODY:
+                try:
+                    self.rfile.read(n)
+                except OSError:
+                    pass
 
         def do_GET(self):
             parts = [p for p in self.path.split("?")[0].strip("/").split("/") if p]
