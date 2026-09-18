@@ -702,6 +702,64 @@ def main():
         check("...so the absence is by design rather than a listing that refused",
               "refused" not in (_why_m.get("prompts") or ""), str(_why_m))
 
+        # --- AND A HANDSHAKE THAT DOES NOT HAPPEN ---------------------------------------
+        #
+        # `list_surface` opens with `initialize`, and three of its answers had no case: no
+        # answer at all, an `error` object instead of a result, and a server whose tools
+        # listing never arrives. Each returns a fatal SENTENCE, and what the sentence is for
+        # is that `qatration mcp` is pointed at a command somebody typed: "no answer to
+        # initialize" and "initialize refused" send a reader to different places, and
+        # without those branches both are an empty surface, which reads as a server that
+        # publishes nothing.
+        #
+        # Found by mutating the guards `tools/unguarded.py` skips by design.
+        def _server(body, name):
+            _p = os.path.join(_w_srv, name)
+            with open(_p, "w", encoding="utf-8") as _f_s:
+                _f_s.write(body)
+            return [sys.executable, _p]
+
+        _mute = _server("import sys" + chr(10)
+                        + "for line in sys.stdin:" + chr(10)
+                        + "    pass" + chr(10), "mute.py")
+        _f_mute = _ls_m(_mute, timeout=3)
+        check("a server that never answers initialize is fatal, with the reason",
+              bool(_f_mute[3]) and "initialize" in _f_mute[3], str(_f_mute[3]))
+        _refuse = _server(
+            "import json, sys" + chr(10)
+            + "for line in sys.stdin:" + chr(10)
+            + "    line = line.strip()" + chr(10)
+            + "    if not line:" + chr(10)
+            + "        continue" + chr(10)
+            + "    m = json.loads(line)" + chr(10)
+            + "    if m.get('method') == 'initialize':" + chr(10)
+            + "        print(json.dumps({'jsonrpc': '2.0', 'id': m['id'],"
+              " 'error': {'code': -32600, 'message': 'go away'}}))" + chr(10)
+            + "        sys.stdout.flush()" + chr(10), "refuse.py")
+        _f_ref = _ls_m(_refuse, timeout=10)
+        check("...and a server that refuses it says refused, not silence",
+              bool(_f_ref[3]) and "refused" in _f_ref[3], str(_f_ref[3]))
+        check("...carrying what the server actually said",
+              "go away" in (_f_ref[3] or ""), str(_f_ref[3]))
+        # AND THE TOOLS DOOR ON ITS OWN. `tools_of` is what the corpus comparison reads, and
+        # a server that declares the capability and then never answers the listing must not
+        # come back as a server with no tools.
+        from mcp_probe import list_tools as _to_m
+        _dumb = _server(
+            "import json, sys" + chr(10)
+            + "for line in sys.stdin:" + chr(10)
+            + "    line = line.strip()" + chr(10)
+            + "    if not line:" + chr(10)
+            + "        continue" + chr(10)
+            + "    m = json.loads(line)" + chr(10)
+            + "    if m.get('method') == 'initialize':" + chr(10)
+            + "        print(json.dumps({'jsonrpc': '2.0', 'id': m['id'],"
+              " 'result': {'capabilities': {'tools': {}}}}))" + chr(10)
+            + "        sys.stdout.flush()" + chr(10), "dumb.py")
+        _tools, _why_t = _to_m(_dumb, timeout=3)
+        check("a server that declares tools and never lists them is not a server with none",
+              _tools is None and bool(_why_t), "%r %r" % (_tools, _why_t))
+
         # AND A SERVER THAT LOGS TO STDOUT. `_await`'s own docstring says lines that are
         # not JSON, and JSON that is not this id, are skipped -- and it kept half of that:
         # `json.loads` raising was caught, and a line parsing to a LIST, a string, a number

@@ -45,7 +45,39 @@ def _send(proc, obj):
     proc.stdin.flush()
 
 
-def _await(proc, want_id, deadline):
+def _lines(proc):
+    """A queue of the server's stdout lines, filled by a thread, ended by None.
+
+    THE DEADLINE HAS TO BOUND THE READ, NOT THE LOOP AROUND IT. `_await` used to call
+    `proc.stdout.readline()` and check the clock between calls, and a server that answers
+    NOTHING never returns from that call: stdout stays open for as long as the child lives,
+    the child lives for as long as its stdin is open, and its stdin is this process. So
+    `qatration mcp --timeout 3` against a server that says nothing waited forever, and the
+    timeout it documents bounded nothing at all. Measured with a two-line server whose whole
+    body is `for line in sys.stdin: pass`.
+
+    A thread and a queue rather than a select: on Windows a pipe is not selectable, and this
+    command exists to be pointed at a command somebody typed on their own machine.
+    """
+    import queue as _queue
+    import threading as _threading
+    q = _queue.Queue()
+
+    def _pump():
+        try:
+            for line in proc.stdout:
+                q.put(line)
+        except Exception:
+            pass
+        finally:
+            q.put(None)
+
+    th = _threading.Thread(target=_pump, daemon=True)
+    th.start()
+    return q
+
+
+def _await(lines, want_id, deadline):
     """The answer to one request id, skipping whatever else the server writes to stdout.
 
     Servers log to stdout. A reader that treats the first line as its answer gets a banner,
@@ -59,12 +91,13 @@ def _await(proc, want_id, deadline):
     and each of them ended `qatration mcp` with a traceback and the sentence "this is a bug
     in qatration", about a server that was answering correctly on the next line.
 
-    WHAT IS STILL NOT BOUNDED, said rather than left to be found: `readline()` reads until
-    a newline, so a server that writes without one holds this loop past the deadline and
-    takes the memory with it. Not capped here because the honest cap is generous -- a
-    `tools/list` reply carrying fifty descriptions is legitimately large -- and a truncated
-    line would parse as nothing and be reported as "no answer to tools/list", which is a
-    worse answer than a slow one: it names the server as the thing that failed.
+    WHAT IS STILL NOT BOUNDED, said rather than left to be found: a line is read to its
+    newline, so a server that writes without one takes the memory with it. Not capped here
+    because the honest cap is generous -- a `tools/list` reply carrying fifty descriptions
+    is legitimately large -- and a truncated line would parse as nothing and be reported as
+    "no answer to tools/list", which is a worse answer than a slow one: it names the server
+    as the thing that failed. It no longer holds the DEADLINE, which is the half that
+    mattered: the reading happens on a thread and this loop waits on a queue.
 
     TWO CORRECT GREENS AND A SLOW SWEEP, recorded so the next one does not re-derive them.
     Deleting either blank-line guard is an EQUIVALENT mutation: an empty string reaches
@@ -72,10 +105,17 @@ def _await(proc, want_id, deadline):
     match makes every listing block until its deadline rather than fail, so a guard sweep
     over this module pays a full timeout per case instead of a run.
     """
-    while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
+    import queue as _queue
+    while True:
+        _left = deadline - time.time()
+        if _left <= 0:
             return None
+        try:
+            line = lines.get(timeout=min(_left, 1.0))
+        except _queue.Empty:
+            continue
+        if line is None:
+            return None                  # the server closed its stdout
         line = line.strip()
         if not line:
             continue
@@ -127,7 +167,8 @@ def list_surface(argv, timeout=180, cwd=None):
         _send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                      "params": {"protocolVersion": PROTOCOL, "capabilities": {},
                                 "clientInfo": {"name": "qatration", "version": "0"}}})
-        init = _await(proc, 1, deadline)
+        _lines_q = _lines(proc)
+        init = _await(_lines_q, 1, deadline)
         if init is None:
             return {}, {}, {}, "no answer to initialize within %ds" % timeout
         if "error" in init:
@@ -142,7 +183,7 @@ def list_surface(argv, timeout=180, cwd=None):
                 why[chan] = "not declared in the server's capabilities"
                 continue
             _send(proc, {"jsonrpc": "2.0", "id": i, "method": method, "params": {}})
-            got = _await(proc, i, deadline)
+            got = _await(_lines_q, i, deadline)
             if got is None:
                 found[chan] = None
                 why[chan] = "declared, and no answer to %s" % method
