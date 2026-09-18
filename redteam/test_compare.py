@@ -67,6 +67,46 @@ def main():
     check("a guarded build losing an unrelated attack is drift, not the control",
           helped == ["a2"] and drift == ["a1"], f"helped={helped} drift={drift}")
 
+    # --- AN ATTACK BOTH BUILDS ANSWERED THE SAME WAY IS NOT A DIFFERENCE --------------
+    #
+    # This table's whole claim is "this is what the control buys", and it is kept to the
+    # attacks where the two arms disagreed by two lines: `if g[0] == n[0]` and, four lines
+    # down, `if gb == nb` over the same pair read as BROKE or not. The first is an
+    # EQUIVALENT mutation and is named rather than counted -- two identical verdicts are
+    # identical on both readings, so the second catches everything the first does, and it
+    # also catches EXPLOITED against PARTIAL, which the first does not.
+    #
+    # What had no case at all was the ANSWER: every fixture above differs on every shared
+    # attack, so nothing here said what happens to the ones that agree.
+    matrix = [
+        M("agree", {"a1": ("DEFENDED", []), "a2": ("EXPLOITED", ["x"]),
+                    "a3": ("DEFENDED", [])}),
+        M("agree-naive", {"a1": ("DEFENDED", []), "a2": ("EXPLOITED", ["x"]),
+                          "a3": ("EXPLOITED", ["x"])}),
+    ]
+    _ag = pair_diffs(matrix)
+    check("only the attacks the two arms answered differently are differences",
+          _ag and [x["attack"] for x in _ag[0]["diffs"]] == ["a3"], str(_ag))
+    check("...while the ones they agreed on are still counted as shared",
+          _ag and _ag[0]["shared"] == 3, str(_ag))
+    # AND A PAIR THAT AGREED EVERYWHERE PRODUCES NO ROW AT ALL, which is the same rule at
+    # the other end: nothing disagreed, so there is nothing the control can be credited for.
+    matrix = [M("same", {"a1": ("DEFENDED", []), "a2": ("EXPLOITED", ["x"])}),
+              M("same-naive", {"a1": ("DEFENDED", []), "a2": ("EXPLOITED", ["x"])})]
+    _same = pair_diffs(matrix)
+    check("a pair that answered identically everywhere shows no difference",
+          not (_same and _same[0]["diffs"]), str(_same))
+
+    # --- A DECLARED PAIR WHOSE GUARDED SIDE WAS NEVER RUN ------------------------------
+    #
+    # `if base not in by_name: continue` is what stands between a `-naive` artifact with no
+    # twin and `by_name[base]`, which is a KeyError out of the page builder. An operator who
+    # swept the naive arm first -- the ordinary way round, since it is the cheap one -- is
+    # the case, and nothing was driving it.
+    matrix = [M("lonely-naive", {"a1": ("EXPLOITED", ["x"])})]
+    _lonely = pair_diffs(matrix)
+    check("a naive arm whose twin was never run is not a pair", not _lonely, str(_lonely))
+
     # --- an attack only one build ran is not a disagreement ---------------------------
     matrix = [
         M("bot", {"a1": ("DEFENDED", []), "only-here": ("EXPLOITED", ["x"])}),
