@@ -184,6 +184,49 @@ def main():
     # target whose timeline could not be read, for one with no timeline at all, and —
     # when the `history` import failed — for every target on the page at once. It keeps
     # them now, reason and all, and the renderer decides what to say.
+    # --- AN ARTIFACT OF SOMETHING THAT IS NOT IN THE FLEET --------------------------
+    #
+    # `out/` keeps whatever ever ran: the deliberately-unreachable fixture the end-to-end
+    # suites sweep, and whatever somebody pointed the engine at while debugging. `build_index`
+    # learned this once -- it published "32 targets" for a fleet of 30 -- and this page runs
+    # the same filter, `if meta.get("target") not in _keep_names`, with no case behind it.
+    #
+    # Deleting it left every suite green while the comparison page grew a row for a target
+    # that has no config: a name in the table a reader cannot look up, carrying a verdict.
+    import compare_targets as _ct_o, tempfile as _tf_o, shutil as _sh_o, json as _js_o
+    import pathlib as _pl_o, io as _io_o, contextlib as _ctx_o
+    _wo = _tf_o.mkdtemp()
+
+    def _art_o(name, headline):
+        return {"meta": {"target": name, "model": "m", "trials": 1, "attacks_n": 1,
+                         "broke": 1 if headline == "EXPLOITED" else 0, "errors": 0},
+                "results": [{"attack": {"id": "a1", "category": "x"},
+                             "headline": headline, "rate": "1/1",
+                             "fired": ["canary_in_output"] if headline == "EXPLOITED"
+                             else [], "trials": []}]}
+
+    try:
+        for _n, _h in (("citebot", "EXPLOITED"), ("ghostbot", "EXPLOITED")):
+            with open(os.path.join(_wo, "results_%s.json" % _n), "w",
+                      encoding="utf-8") as _f_o:
+                _js_o.dump(_art_o(_n, _h), _f_o)
+        _real_o = _ct_o.OUT_DIR
+        _ct_o.OUT_DIR = _pl_o.Path(_wo)
+        _buf_o = _io_o.StringIO()
+        try:
+            with _ctx_o.redirect_stdout(_buf_o):
+                _ct_o.main()
+            _page_o = _io_o.open(os.path.join(_wo, "compare_targets.html"),
+                              encoding="utf-8").read()
+        finally:
+            _ct_o.OUT_DIR = _real_o
+        check("a target the fleet has a config for is on the comparison page",
+              "citebot" in _page_o, _buf_o.getvalue()[-300:])
+        check("...and one it has no config for is not",
+              "ghostbot" not in _page_o, _buf_o.getvalue()[-300:])
+    finally:
+        _sh_o.rmtree(_wo, ignore_errors=True)
+
     import compare_targets as _ct2, tempfile as _tf2, shutil as _sh2, json as _js2
     import pathlib as _pl2
     _w2 = _tf2.mkdtemp()
