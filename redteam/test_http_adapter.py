@@ -993,6 +993,36 @@ def main():
         check("a list index digs", dig({"a": [{"b": 1}]}, "a.0.b") == 1)
         check("a missing step is None, not a crash", dig({"a": 1}, "a.b.c") is None)
         check("an out-of-range index is None", dig({"a": []}, "a.0") is None)
+        # A NAME WHERE A LIST INDEX BELONGS. `choices.message.content` against an endpoint
+        # whose `choices` is a list is the commonest way an operator writes this path wrong,
+        # and the branch that answers it had no case: the two above walk into a dict and a
+        # scalar, both of which the `else` at the bottom catches. Without it, `int("message")`
+        # is a ValueError out of the adapter -- a traceback about this tool, over a config.
+        check("a name where a list index belongs is None, not a crash",
+              dig({"choices": [{"message": {"content": "hi"}}]}, "choices.message.content")
+              is None)
+        check("...and a negative index still digs, since a config may end with -1",
+              dig({"choices": [{"message": {"content": "hi"}}]},
+                  "choices.-1.message.content") == "hi")
+        # `if cur is None: return None` mid-walk IS AN EQUIVALENT MUTATION and is named
+        # rather than counted: a step that answers None either ends the path -- and `return
+        # cur` is None -- or meets the `else` on the next turn, which returns None too.
+        check("...and a step that is there but empty is still None",
+              dig({"a": {"b": None}}, "a.b.c") is None)
+
+        # --- AN ENDPOINT THAT REPORTS NO OBSERVATIONS AT ALL --------------------------
+        #
+        # `_observations` normalises whatever a deployment calls a tool observation, and its
+        # last line is `return [str(raw)]` -- deliberately, so a bare string is never
+        # ITERATED. That makes the `if raw is None: return []` in front of it load-bearing:
+        # without it a target with no observations comes back with ONE observation reading
+        # `None`, which is then joined into the context the boundary detectors read.
+        from targets_http import _observations as _obs_n
+        check("a reply with no observations has none, not one reading `None`",
+              _obs_n(None) == [], str(_obs_n(None)))
+        check("...while a string is one observation and is never iterated",
+              _obs_n("ACME-CANARY-9931") == ["ACME-CANARY-9931"],
+              str(_obs_n("ACME-CANARY-9931")))
         check("a bare list of pairs normalises", _pairs([["T", "x"]]) == [("T", "x")])
         check("a dict of tool -> args normalises", _pairs({"T": "x"}) == [("T", "x")])
         check("an unusable shape yields nothing rather than a guess",
