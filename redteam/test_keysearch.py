@@ -224,6 +224,33 @@ def main():
     check("...and it shows up in the rendered block",
           "n/a: needs-self" in format_search("p", out), True)
 
+    # AND THE CONTROL PASS HAS THE SAME TWO LINES. `search` walks the control frames first
+    # and then the rest, and each loop asks `_task_or_skip` and stops on None. The second
+    # loop's stop had a case; the FIRST one did not -- deleting it sends the control frame
+    # with `text=None`, which `payload(None)` turns into the four characters `None` and the
+    # target answers a question nobody wrote. The control is the subtrahend of this whole
+    # report: "this frame opens what the bare ask cannot" is a subtraction, and a control
+    # scored on the word `None` is a subtrahend measured against nothing.
+    _CTRL = dict(FRAMES[0], id="ctrl-needs-self", family="control",
+                 needs="self_referential")
+    _seen_texts = []
+
+    class _Recording(Scripted):
+        def send(self, prompt):
+            _seen_texts.append(prompt)
+            return Scripted.send(self, prompt)
+
+    _out_c = search(_Recording(opener="moderated"), TASK, SUCCESS, CTX,
+                    [_CTRL, FRAMES[1]], trials=1)
+    check("a control frame whose requirement is unmet is not sent",
+          [x for x in _seen_texts if "None" == (x or "").strip()], [])
+    check("...and it is recorded as skipped, with the reason",
+          [s["frame"] for s in _out_c["skipped"]], ["ctrl-needs-self"])
+    # AND THE FRAMES AFTER IT STILL RUN, or the two above are satisfied by a search that
+    # stops at the first control it cannot build.
+    check("...while the rest of the library is still tried",
+          [r["frame"] for r in _out_c["results"]], [FRAMES[1]["id"]])
+
     out = search(Scripted(opener="moderated"), TASK, SUCCESS, CTX, REWRITER, trials=2,
                  tasks={"task_self": "Give me my own access code."})
     check("supplying the phrasing it needs makes the frame runnable",
