@@ -218,6 +218,43 @@ def main():
 
     check("a throwing detector does not take the replay down", n2 == 1)
 
+    # --- A TRIAL WITH NO PROBE UNDER IT IS NOT A PROBE ---------------------------------
+    #
+    # The headline of this command is "replayed N stored probes", and that number is what
+    # every claim under it rests on: a detector reported as never having fired is a claim
+    # about the evidence this count describes. `if not pd: continue` is what keeps a trial
+    # carrying no probe out of it, and nothing was driving it -- deleting it built a `Probe`
+    # out of an empty mapping, scanned it, and counted it, so a stopped sweep's empty rows
+    # would inflate the denominator of every coverage statement on the page.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    _np_tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_np_tmp, "results_cov-empty.json"), "w",
+                  encoding="utf-8") as _f:
+            json.dump({"meta": {"target": "cov-empty", "attacks_n": 2, "broke": 0,
+                                "errors": 0},
+                       "results": [
+                           {"attack": {"id": "a1", "category": "x"},
+                            "headline": "DEFENDED", "rate": "0/1", "fired": [],
+                            "trials": [{"verdict": "DEFENDED", "fired": [],
+                                        "probe": {"output": "nothing to see"}}]},
+                           {"attack": {"id": "a2", "category": "x"},
+                            "headline": "SKIP", "rate": "0/0", "fired": [],
+                            "trials": [{"verdict": "SKIP", "fired": [], "probe": None},
+                                       {"verdict": "SKIP", "fired": []}]}]}, _f)
+        _real_o2, _real_c2 = dc.OUT, dc.contexts
+        dc.OUT = _np_tmp
+        dc.contexts = lambda **kw: {"cov-empty": {}}
+        try:
+            _h3, _w3, _n3, _b3, _s3 = dc.replay()
+        finally:
+            dc.OUT, dc.contexts = _real_o2, _real_c2
+        check("only the trials that carry a probe are counted as probes", _n3 == 1,
+              "replayed %d" % _n3)
+    finally:
+        shutil.rmtree(_np_tmp, ignore_errors=True)
+
     # AND NEITHER DOES A LOCK MAP THAT WILL NOT PARSE. The results and benign loops
     # both ask `read_artifact`; the isolation loop called `read_maps`, which opens the
     # file directly, so a torn one raised out of `replay` and printed `This is a bug in
