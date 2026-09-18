@@ -256,6 +256,31 @@ def main():
     # 9. the stored proof must contain the thing it proves. memorybot's poisoned persona
     #    signs off at the END of a 681-char reply; a head-only excerpt cut at 600 stored a
     #    breach whose evidence was past the cut.
+    # --- A PROOF WITH NO PROBE BEHIND IT --------------------------------------------
+    #
+    # `_sample` exists so `open` is a claim a reader can check: the map otherwise asserts a
+    # boundary was crossed and offers nothing to verify it against. When every trial errored
+    # there is no probe to keep, and `if pick is None: return None` is what says so --
+    # without it the next line asks a None for its text, which is a traceback about this
+    # tool over a target that was simply down.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    from isolation import _sample as _smp_i
+    _prop_i = {"name": "p1", "success": ["canary_in_output"]}
+    check("a property whose every trial errored keeps no proof",
+          _smp_i([None, None], 0, _prop_i, {"canaries": ["ACME-9931"]}) is None, True)
+    # AND A PROBE THAT CAME BACK IS KEPT, or the line above is satisfied by a `_sample` that
+    # never keeps anything.
+    from target import Probe as _P_i
+    _got_i = _smp_i([_P_i(prompt="p", output="the code is ACME-9931")], 1, _prop_i,
+                    {"canaries": ["ACME-9931"]})
+    check("...while a trial that answered is kept as the proof",
+          bool(_got_i) and _got_i.get("achieved") is True, True)
+
+    # `_excerpt`'s `if at < 0` IS AN EQUIVALENT MUTATION and is named rather than counted:
+    # with no needle in the text, `at` is -1, so `start` is 0 and `end` is the cap -- which
+    # is what the early branch returns by hand. Both halves print the same sentence and the
+    # same remainder. The cases below assert the ANSWER.
     from isolation import _excerpt
     long_tail = ("x" * 900) + " signed: MEMPWN-7788"
     ex = _excerpt(long_tail, {"canaries": ["MEMPWN-7788"]})
