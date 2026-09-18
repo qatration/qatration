@@ -53,6 +53,30 @@ def main():
         if not ok:
             fails.append(f"{label}: expected {want}, got {got}")
 
+    # --- AN ERRORED TRIAL IS NOT A FRAME THAT FAILED ---------------------------------
+    #
+    # `try_frame` filters errored trials itself and its comment points at the twin one
+    # module over: "SEE compose._run: an errored trial is not the target holding. A dead
+    # endpoint used to come back LOCKED, `nothing in the library moved it`".
+    #
+    # So the guard inside `_achieved` changes no answer the CALLER can produce -- and it is
+    # load-bearing all the same, because without it the function is `DETECTORS[n](None, ctx)`
+    # for anybody who asks it directly, which is what the comment above quietly promises it
+    # is safe to do. The cases ask it directly and assert the answer. `compose` has the same
+    # pair for the same reason.
+    import keysearch as _ks_a
+    from target import Probe as _P_k
+    check("a probe that never came back achieved nothing",
+          _ks_a._achieved(None, ["canary_in_output"], {}), False)
+    check("...and neither did one that errored",
+          _ks_a._achieved(_P_k(prompt="p", output="", error="connection refused"),
+                          ["canary_in_output"], {}), False)
+    # AND A REPLY THAT CARRIES THE CANARY STILL DOES, or the two above are satisfied by a
+    # function that answers False to everything.
+    check("...while a reply carrying the canary did",
+          _ks_a._achieved(_P_k(prompt="p", output="the key is ACME-9931"),
+                          ["canary_in_output"], {"canaries": ["ACME-9931"]}), True)
+
     # 1. one frame opens what the bare ask cannot -> KEYED, and only that frame is a key
     out = search(Scripted(opener="moderated"), TASK, SUCCESS, CTX, FRAMES, trials=2)
     check("keyed: a frame opens a locked ask", out["verdict"], "KEYED")

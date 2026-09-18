@@ -654,6 +654,27 @@ def main():
         seeded = H.load("bf")
         check("a backfilled entry is labelled, since its time is a file's mtime",
               seeded and seeded[0].get("note"), str(seeded))
+        # AND AN ARTIFACT THAT NAMES NO TARGET SEEDS NOTHING. Everything downstream is
+        # keyed on `meta["target"]` -- the timeline's filename is `history/<target>.jsonl` --
+        # so a results file without one would write `history/None.jsonl`, a timeline for a
+        # target that does not exist, which the next `history` run lists and compares like
+        # any other.
+        #
+        # `backfill`'s own `if not target: continue` turns out to be unreachable and is named
+        # rather than counted: `read_artifact` refuses a results file with no `meta.target`
+        # before the loop ever looks, and the line above it reports that refusal. What the
+        # case asserts is the ANSWER -- no timeline, and the file still counted among those
+        # read -- which is what has to hold whichever of the two says so.
+        with open(os.path.join(tmp, "results_nameless.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"model": "m"}, "results": R(y1="EXPLOITED")}, f)
+        _made_n, _seen_n = H.backfill()
+        check("an artifact naming no target seeds no timeline",
+              _made_n == 0 and not os.path.exists(os.path.join(H.HIST, "None.jsonl")),
+              "%d seeded" % _made_n)
+        check("...and it is still counted among the files that were read",
+              _seen_n >= 2, "%d seen" % _seen_n)
+        os.remove(os.path.join(tmp, "results_nameless.json"))
+
         check("backfilling twice does not duplicate the entry",
               H.backfill()[0] == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
 
