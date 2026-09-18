@@ -73,11 +73,12 @@ def _workspace(runs, mtimes=None, texts=None, verdicts=None, unreached=None):
     return w
 
 
-def _matrix(w):
-    """-> (exit code, everything the command printed)."""
+def _matrix(w, *extra):
+    """-> (exit code, everything the command printed). `extra` is flags a case adds."""
     p = subprocess.run(
         [sys.executable, os.path.join(HERE, "cli.py"), "matrix",
-         "--target-config", os.path.join(w, "targets_matbot.yaml"), "--from-disk"],
+         "--target-config", os.path.join(w, "targets_matbot.yaml"), "--from-disk"]
+        + list(extra),
         capture_output=True, text=True, timeout=300, cwd=ROOT,
         env=dict(os.environ, QATRATION_OUT=w, PYTHONDONTWRITEBYTECODE="1",
                  PYTHONIOENCODING="utf-8"))
@@ -102,10 +103,10 @@ def main():
 
     made = []
 
-    def ws(runs, mtimes=None, texts=None, verdicts=None):
+    def ws(runs, mtimes=None, texts=None, verdicts=None, flags=()):
         w = _workspace(runs, mtimes, texts, verdicts)
         made.append(w)
-        return _matrix(w)
+        return _matrix(w, *flags)
 
     try:
         # --- AN ID IS A NAME, NOT A QUESTION ---------------------------------------
@@ -211,6 +212,39 @@ def main():
               DIFFERENT_DAYS not in out, out[-500:])
         check("...and the dates shown are still marked as the filesystem's",
               FROM_FILE in out, out[-500:])
+
+        # --- `--models` NAMES WHICH ARMS ARE COMPARED ----------------------------------
+        #
+        # The filter that honours it -- `if models and m not in [tag(x) for x in models]` --
+        # had no case: every driven run here passes no `--models` at all, so the flag was
+        # only ever the empty set. Deleting the line left every suite green while a table
+        # asked for two models compared every per-model artifact in the workspace, which on
+        # a real out/ is every model that target has ever been run against.
+        #
+        # THAT IS NOT A COSMETIC DIFFERENCE. This command's own help calls the dates and the
+        # build stamps "the whole risk": the arms it prints are the arms a reader compares,
+        # and an arm nobody asked for arrives with its own date, its own oracle build and no
+        # reason to be in the table.
+        # THE ARTIFACT IS NAMED BY THE TAG AND THE FLAG CARRIES THE MODEL, which is why
+        # the comparison goes through `tag()`: `qwen2.5:14b` is stored as
+        # `results_matbot_qwen2.5-14b.json`, because a colon is not a filename on Windows.
+        # A fixture whose names are already tags cannot tell the two apart.
+        _rc, out = ws({"qwen2.5-14b": ("aaa111", "2026-09-01 10:00"),
+                       "mistral-nemo": ("aaa111", "2026-09-01 10:00"),
+                       "llama3.1-8b": ("aaa111", "2026-09-01 10:00")},
+                      flags=("--models", "qwen2.5:14b,mistral-nemo"))
+        check("a table asked for two models compares two",
+              "qwen2.5-14b" in out and "mistral-nemo" in out, out[-400:])
+        check("...and leaves out the arm nobody asked for",
+              "llama3.1-8b" not in out, out[-400:])
+        # AND WITHOUT THE FLAG EVERY STORED ARM IS STILL COMPARED, or the check above is
+        # satisfied by a filter that drops everything.
+        _rc_all, out_all = ws({"qwen2.5-14b": ("aaa111", "2026-09-01 10:00"),
+                               "mistral-nemo": ("aaa111", "2026-09-01 10:00"),
+                               "llama3.1-8b": ("aaa111", "2026-09-01 10:00")})
+        check("...while a table asked for nothing compares all three",
+              all(m in out_all for m in ("qwen2.5-14b", "mistral-nemo", "llama3.1-8b")),
+              out_all[-400:])
 
         # --- AND NOTHING TO COMPARE IS NOT A CLEAN COMPARISON ---------------------------
         _rc, out = ws({"qwen": ("aaa111", "2026-09-01 10:00")})
