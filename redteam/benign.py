@@ -686,9 +686,11 @@ def roll_up():
             print(f"  ! {os.path.basename(fp)} could not be read ({why}); its age is unknown.",
                   file=sys.stderr)
             continue
+        # THE BLANK NAME IS THE READER'S RULE, NOT THIS LOOP'S. `if not t: continue` stood
+        # here and skipped such a file without a word -- the one answer `read_artifact`'s
+        # own docstring forbids, in the roll-up that publishes this project's false-alarm
+        # rates. `_unusable_benign` refuses it now and the `why` branch above names the file.
         t = (d.get("meta") or {}).get("target")
-        if not t:
-            continue
         targets.append(t)
         # A roll-up with no age reads as "this is how things are", and it is not: these
         # files are written hours apart and an oracle fix lands between them. dvla's run

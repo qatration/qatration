@@ -1608,6 +1608,55 @@ def main():
     check("...while one settled as a FINDING stays out of the false-alarm pool",
           not not_counted, str(not_counted))
 
+    # --- A BASELINE WITH NO TARGET NAME WAS DROPPED WITHOUT A WORD -------------------------
+    #
+    # `if not t: continue` stood at the top of this loop. A benign artifact whose
+    # `meta.target` is blank went past it in silence: its probes never reached the
+    # denominator of any published false-alarm rate, its name never reached the list of
+    # targets, and the roll-up went on reading as the whole fleet -- the failure this
+    # project is named after, in the command an operator is TOLD to run to measure their
+    # own false-positive rate.
+    #
+    # The rule belongs to the reader, not to this loop. `_unusable_benign` refuses a blank
+    # name now and the `why` branch above prints the file. What is asserted here is what a
+    # reader gets: the file NAMED, and the numbers standing on the run that was usable.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    import tempfile as _tf_b, shutil as _sh_b, json as _js_b, io as _io_b
+    import contextlib as _ctx_b
+    _wb = _tf_b.mkdtemp()
+
+    def _benign_art(target, probes):
+        return {"meta": {"target": target, "probes": probes,
+                         "when": "2026-09-01T00:00:00Z"},
+                "rows": [{"probe": {"prompt": "p", "output": "o"}, "fired": [],
+                          "provokes": "sql_injection"}] * probes}
+
+    try:
+        for _n_b, _t_b, _p_b in (("benign_citebot.json", "citebot", 2),
+                                 ("benign_nameless.json", "  ", 5)):
+            with _io_b.open(_os.path.join(_wb, _n_b), "w", encoding="utf-8") as _f_b:
+                _js_b.dump(_benign_art(_t_b, _p_b), _f_b)
+        _real_b = _bn.OUT_DIR
+        _err_b = _io_b.StringIO()
+        try:
+            _bn.OUT_DIR = _wb
+            with _ctx_b.redirect_stderr(_err_b):
+                _roll_b = _bn.roll_up()
+        finally:
+            _bn.OUT_DIR = _real_b
+        _said_b = _err_b.getvalue()
+        check("a baseline whose target name is blank is named, not dropped in silence",
+              "benign_nameless.json" in _said_b, _said_b.strip()[-200:] or "(nothing said)")
+        check("...and the reason says the name is blank",
+              "blank" in _said_b, _said_b.strip()[-200:] or "(nothing said)")
+        check("...and its probes are not in the denominator of the published rate",
+              _roll_b["probes"] == 2, "%r probes" % (_roll_b["probes"],))
+        check("...nor its absent name in the list of targets",
+              _roll_b["targets"] == ["citebot"], str(_roll_b["targets"]))
+    finally:
+        _sh_b.rmtree(_wb, ignore_errors=True)
+
     # --- WHAT THE CORPUS AIMED AT IS A RESULT, NOT A GAP -----------------------------------
     # Every clean prompt carries `provokes`: the detector it was written to tempt. The suite
     # has always checked those names are real; nothing read them at judgement time. So

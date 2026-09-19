@@ -1805,6 +1805,24 @@ def shape_fault(where, value, present, table=None, what="results file"):
     if not present or value is None:
         return ("a %s with no %s: %s" % (what, where, why)) if required else None
     if isinstance(value, kind) and not (kind is int and isinstance(value, bool)):
+        # AND A NAME MADE OF NOTHING IS NOT A NAME. `""` is a str, so the kind check above
+        # hands it on as usable, and every string in these two tables is something a reader
+        # keys BY: a page per target, a rate filed under one, a finding grouped by an attack
+        # id, a detector counted by its name. There is no consumer for which the empty one
+        # is a value -- it is the absence, written down.
+        #
+        # What it costs is the failure this project is named after rather than a crash.
+        # `benign.roll_up` carried `if not t: continue` for exactly this file and dropped it
+        # in silence: its probes vanished from the denominator of every published
+        # false-alarm rate and its target from the list of targets, and the roll-up went on
+        # reading as the whole fleet. `build_index` drops it the same way, through the
+        # config filter. A gap reported as a measurement, in the reader whose own docstring
+        # says skipping silently is the one answer it must not give.
+        #
+        # Measured over the 137 artifacts stored here: not one of the tabled fields holds a
+        # blank or whitespace-only string, so this refuses nothing the engine writes.
+        if kind is str and not value.strip():
+            return ("a %s whose %s is blank: %s" % (what, where, why))
         return None
     return ("a %s whose %s is %s, not %s: %s"
             % (what, where, type(value).__name__, kind.__name__, why))

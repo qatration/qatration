@@ -290,6 +290,60 @@ def main():
         # reads the same from outside unless the reason is read.
         check("...and what it should have been",
               _want in (_why7 or ""), str(_why7))
+    # --- AND A NAME MADE OF NOTHING PASSED EVERY ONE OF THEM ------------------------------
+    #
+    # `""` is a str, so the kind rule above hands it on as usable. Every string in these two
+    # tables is something a reader keys BY, and there is no consumer for which the empty one
+    # is a value: it is the absence, written down.
+    #
+    # What it cost was not a crash. `benign.roll_up` carried its own `if not t: continue`
+    # for exactly this file and dropped it in silence -- its probes out of the denominator
+    # of every published false-alarm rate, its target out of the list of targets -- and the
+    # roll-up went on reading as the whole fleet. The case for that is in `test_benign`.
+    _BLANK = [
+        ({"meta": {"target": ""}, "results": []}, "meta.target", "results_x.json"),
+        ({"meta": {"target": "   "}, "results": []}, "meta.target", "results_x.json"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "", "attack": {"id": "a"}, "fired": []}]},
+         "headline", "results_x.json"),
+        ({"meta": {"target": "t"},
+          "results": [{"headline": "X", "attack": {"id": ""}, "fired": []}]},
+         "attack.id", "results_x.json"),
+        ({"meta": {"target": ""}, "rows": [], "probes": 0}, "meta.target",
+         "benign_x.json"),
+    ]
+    for _body, _key, _name in _BLANK:
+        if _name.startswith("benign_"):
+            _body = {"meta": {"target": _body["meta"]["target"], "probes": 3}, "rows": []}
+        _d8, _why8 = _artifact(_name, _body)
+        check("%s whose %s is blank is refused" % (_name, _key),
+              _d8 is None and _why8 is not None, str(_why8))
+        check("...and the reason says it is blank, naming the key",
+              _key in (_why8 or "") and "blank" in (_why8 or ""), str(_why8))
+    # AND A NAME THAT IS ONE STILL IS, or the rule above is a reader that refuses every
+    # artifact in the workspace. The whitespace bound matters both ways: a target called
+    # ` citebot ` is a name with room around it, not an absence.
+    check("a target with a name is not refused for having one",
+          _artifact("results_x.json",
+                    {"meta": {"target": "citebot"}, "results": []})[1] is None,
+          str(_artifact("results_x.json",
+                        {"meta": {"target": "citebot"}, "results": []})[1]))
+    check("...and neither is one padded with spaces",
+          _artifact("results_x.json",
+                    {"meta": {"target": " citebot "}, "results": []})[1] is None,
+          str(_artifact("results_x.json",
+                        {"meta": {"target": " citebot "}, "results": []})[1]))
+    # AND THE 137 ARTIFACTS THIS REPOSITORY SHIPS GO THROUGH, which is the measurement the
+    # rule rests on and the one a bound this tight can break. Not a fixture: the workspace.
+    import glob as _glob_s
+    from workspace import OUT as _OUT_s
+    _ship_bad = []
+    for _fp_s in sorted(_glob_s.glob(os.path.join(str(_OUT_s), "*.json"))):
+        if read_artifact(_fp_s)[1]:
+            _ship_bad.append(os.path.basename(_fp_s))
+    check("no artifact in this workspace is refused by the blank rule",
+          not _ship_bad, ", ".join(_ship_bad[:6]))
+
     # AND THE KEY THAT MAY BE ABSENT STILL MAY BE. `attacks_n` is missing from artifacts
     # written before the field existed and `measured` reads that as zero on purpose: absent
     # is "this file predates the question", a string is a denominator nothing can divide by.
