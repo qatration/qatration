@@ -409,6 +409,62 @@ def main():
     check("every target carries the date it was measured",
           set(dates) == {"rep-fake"} and len(dates["rep-fake"]) == 10, str(dates))
 
+    # --- A TARGET THE FLEET HAS NO CONFIG FOR IS NOT A SYSTEM THAT WAS TESTED ---------
+    #
+    # `out/` keeps whatever ever ran: the deliberately-unreachable end-to-end fixture, and
+    # whatever somebody pointed the engine at while debugging. The comment over this loop
+    # records what that cost -- "this page published 32 for a fleet of 30, from two
+    # artifacts of the end-to-end fixture" -- and the line that fixes it,
+    # `if tgt not in _keep_names: continue`, had no case: every caller in this suite passes
+    # `known=None`, which means no filtering, so deleting the line changed nothing here.
+    #
+    # `build_index` learned this once and `compare_targets` a second time. This is the
+    # third reader of the same rule and the one a client is handed.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    import tempfile as _tf_k, shutil as _sh_k, json as _js_k, pathlib as _pl_k
+    _wk = _tf_k.mkdtemp()
+
+    def _art_k(name):
+        return {"meta": {"target": name, "model": "m", "trials": 1, "attacks_n": 1,
+                         "broke": 1, "errors": 0, "when": "2026-09-01T00:00:00Z"},
+                "results": [{"attack": {"id": "a1", "category": "x"},
+                             "headline": "EXPLOITED", "rate": "1/1",
+                             "fired": ["canary_in_output"],
+                             "trials": [{"verdict": "EXPLOITED",
+                                         "probe": {"output": "the code is ACME-1"}}]}]}
+
+    try:
+        for _n_k in ("citebot", "ghostbot"):
+            with io.open(os.path.join(_wk, "results_%s.json" % _n_k), "w",
+                         encoding="utf-8") as _f_k:
+                _js_k.dump(_art_k(_n_k), _f_k)
+        _real_k = dr.OUT_DIR
+        try:
+            dr.OUT_DIR = _pl_k.Path(_wk)
+            _f_all, _t_all, _d_all, _u_all, _m_all = dr.load_all(known={"citebot"})
+        finally:
+            dr.OUT_DIR = _real_k
+        check("a finding from a target the fleet has a config for is kept",
+              sorted({f[0] for f in _f_all}) == ["citebot"],
+              str(sorted({f[0] for f in _f_all})))
+        check("...and one from a target it has no config for is not",
+              "ghostbot" not in _t_all, str(sorted(_t_all)))
+        check("...so it is not counted in `N systems tested` either",
+              len(_t_all) == 1, "%d targets: %s" % (len(_t_all), sorted(_t_all)))
+        # AND AN EMPTY FLEET FILTERS NOTHING, which is the other half of the rule and what
+        # every temp-directory fixture in this suite relies on: `fleet_filter` degrades by
+        # over-reporting, which somebody notices, rather than by emptying the page.
+        try:
+            dr.OUT_DIR = _pl_k.Path(_wk)
+            _f_none, _t_none = dr.load_all(known=None)[:2]
+        finally:
+            dr.OUT_DIR = _real_k
+        check("...while no fleet at all filters nothing",
+              sorted(_t_none) == ["citebot", "ghostbot"], str(sorted(_t_none)))
+    finally:
+        _sh_k.rmtree(_wk, ignore_errors=True)
+
     # --- defense_report: no finding may be deleted by a gap in the fix table ----------
     # This dropped any row whose fired detectors were all absent from REMEDIATION — sixteen
     # entries against an oracle of fifty-six — and then computed every number on the page from
