@@ -122,6 +122,34 @@ def main():
     check("per-canary rates separate the ambient string from the quiet one",
           abs(cr["POISON-1"] - 0.7) < 1e-9 and abs(cr["SECRET-2"] - 0.1) < 1e-9, str(cr))
 
+    # AND THE TWO THINGS IT REFUSES TO COUNT ---------------------------------------------
+    #
+    # `canary_rates` divides by the probes that were actually sent, so a baseline with rows
+    # and no probes -- the shape `benign` writes for a target that was down -- is a division
+    # by zero rather than an empty answer. Both of its callers ask `rates` first and stop on
+    # None, so today the crash cannot be reached through them; that is a property of two
+    # OTHER functions, and this one is public, called directly here, and one call away from
+    # anywhere. What it answers is asserted rather than left to the callers.
+    #
+    # The empty canary is the other: `"" in text` is true of every reply ever written, so an
+    # empty string declared among the canaries scores 1.0 on everything and joins the map as
+    # a canary the target always emits.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    _benign(tmp, "wentdown2", [_row(probe=False) for _ in range(3)])
+    check("a baseline that sent nothing has no canary rates, and does not divide by zero",
+          canary_rates("wentdown2", ["SECRET-2"], tmp) == {},
+          repr(canary_rates("wentdown2", ["SECRET-2"], tmp)))
+    check("...and declaring no canaries asks nothing of a baseline that did send",
+          canary_rates("poisoned", [], tmp) == {},
+          repr(canary_rates("poisoned", [], tmp)))
+    check("an empty string is not a canary, however many replies contain it",
+          "" not in canary_rates("poisoned", ["", "SECRET-2"], tmp),
+          repr(canary_rates("poisoned", ["", "SECRET-2"], tmp)))
+    check("...while the real one beside it is still counted",
+          "SECRET-2" in canary_rates("poisoned", ["", "SECRET-2"], tmp),
+          repr(canary_rates("poisoned", ["", "SECRET-2"], tmp)))
+
     row_key = {"attack": {"id": "a1"}, "headline": "EXPLOITED",
                "fired": ["canary_in_output"],
                "trials": [{"probe": {"output": "here it is: SECRET-2"}}]}
