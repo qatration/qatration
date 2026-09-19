@@ -568,6 +568,43 @@ def main():
     # So the mutant is written down before it is written out. The note is exercised here
     # rather than by killing a real sweep, because a suite cannot kill itself, and the
     # property that matters is what `recover` does with the note it finds.
+    # --- A SUITE THAT REACHES A MODULE THROUGH ANOTHER ONE STILL REACHES IT ------------
+    #
+    # `_suites_touching` matches a direct import and nothing else, and its docstring claims
+    # to return "every suite that reaches this module". It does not. `test_verify` reaches
+    # `workspace` through `verify` and `test_matrix` through `model_matrix`; neither imports
+    # `workspace` itself, so a guard either of them drives is deleted, the direct importers
+    # stay green, and the sweep prints SURVIVED about a decision something would have
+    # missed. A gap reported as a measurement, by the tool named after that failure.
+    #
+    # Measured over this package: 44 of the 63 modules have an incomplete set.
+    # `authorization.py` was swept against 3 suites where 49 reach it.
+    #
+    # The closure is not what the bulk sweep runs -- it is nearly every suite for nearly
+    # every module. It is what a SURVIVOR is checked against, and survivors are few.
+    _direct_w = set(unguarded._suites_touching("workspace.py"))
+    _reach_w = set(unguarded._suites_reaching("workspace.py"))
+    check("the reaching set contains everything the direct set does",
+          _direct_w <= _reach_w, str(sorted(_direct_w - _reach_w)))
+    check("...and a suite that reaches workspace through verify is in it",
+          "test_verify.py" in _reach_w, "test_verify.py drives workspace.clipped")
+    check("...and one that reaches it through model_matrix is too",
+          "test_matrix.py" in _reach_w, "test_matrix.py drives workspace.say_unreadable")
+    check("...neither of which the direct set names",
+          not ({"test_verify.py", "test_matrix.py"} & _direct_w), str(sorted(_direct_w)))
+    # AND IT IS NOT SIMPLY EVERY SUITE THERE IS, or the two above are satisfied by a
+    # function that returns the directory listing. A module nothing reaches has no suites.
+    _all_suites = {f for f in os.listdir(unguarded.RT)
+                   if f.startswith("test_") and f.endswith(".py")}
+    check("...while the reaching set is still derived, not the whole directory",
+          _reach_w < _all_suites or len(_reach_w) < len(_all_suites),
+          "%d of %d" % (len(_reach_w), len(_all_suites)))
+    # AND THE GRAPH IS THE PACKAGE'S OWN IMPORTS, asserted on a pair this repository has:
+    # `verify` imports `workspace`, so anything reaching `verify` reaches `workspace`.
+    _graph = unguarded._package_imports()
+    check("the import graph sees that verify imports workspace",
+          "workspace" in _graph.get("verify", set()), str(sorted(_graph.get("verify", []))[:6]))
+
     # --- AND THE MUTANT WRITES SOMEWHERE TOO -------------------------------------------
     #
     # This tool is careful with the source it breaks and said nothing about the directory

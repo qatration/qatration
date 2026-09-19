@@ -351,6 +351,78 @@ def _suites_touching(mod):
             and pat.search(io.open(os.path.join(RT, t), encoding="utf-8").read())]
 
 
+def _package_imports():
+    """-> {module stem: the stems it imports}, over this package's own modules."""
+    mods = [f[:-3] for f in os.listdir(RT)
+            if f.endswith(".py") and not f.startswith("test_")]
+    graph = {}
+    for m in mods:
+        try:
+            src = io.open(os.path.join(RT, m + ".py"), encoding="utf-8").read()
+        except OSError:
+            src = ""
+        graph[m] = {o for o in mods if o != m and re.search(
+            r"^\s*(?:import\s+%s\b|from\s+%s\s+import)" % (o, o), src, re.M)}
+    return graph
+
+
+def _suites_reaching(mod):
+    """Every suite that reaches this module DIRECTLY OR THROUGH ANOTHER, sorted.
+
+    `_suites_touching` matches a direct import and nothing else, while claiming in its own
+    docstring to return "every suite that reaches this module". It does not. `test_verify`
+    reaches `workspace` through `verify`, `test_matrix` through `model_matrix`, and neither
+    is in that list -- so a guard those suites drive is deleted, 18 other suites stay green,
+    and the sweep prints SURVIVED about a decision something would have missed.
+
+    Measured over this package: 44 of the 63 modules have an incomplete set, and the gap is
+    not small. `authorization.py` is swept against 3 suites where 49 reach it; `rejudge`
+    against 1 of 49. A survivor list built that way is a gap reported as a measurement,
+    which is the failure this whole tool is named after.
+
+    The closure is NOT what the bulk sweep should run -- it is nearly every suite for nearly
+    every module, which is hours per file and the reason the direct set exists. It is what a
+    SURVIVOR is checked against, and survivors are few: three of twenty-nine for
+    `authorization`. The expensive question is asked only where the answer changes a verdict.
+    """
+    graph = _package_imports()
+    stem = mod[:-3] if mod.endswith(".py") else mod
+    reaching, stack = {stem}, [stem]
+    while stack:
+        cur = stack.pop()
+        for m, deps in graph.items():
+            if cur in deps and m not in reaching:
+                reaching.add(m)
+                stack.append(m)
+    pat = re.compile("|".join(
+        r"^\s*(?:import\s+%s\b|from\s+%s\s+import)" % (s, s)
+        for s in sorted(reaching)), re.M)
+    return [t for t in sorted(os.listdir(RT))
+            if t.startswith("test_") and t.endswith(".py")
+            and pat.search(io.open(os.path.join(RT, t), encoding="utf-8").read())]
+
+
+def _who_drives(path, mutant, orig, mod, already):
+    """-> the first suite outside `already` that the mutant fails, or None.
+
+    THE SECOND HALF OF A SURVIVOR. The bulk sweep runs the direct importers because the
+    closure is every suite; this asks the rest, once, about the handful that came back
+    green. A survivor that one of them catches was never a survivor -- it was a suite the
+    set did not name.
+    """
+    rest = [s for s in _suites_reaching(mod) if s not in set(already)]
+    if not rest:
+        return None
+    write_mutant(path, mutant, orig)
+    try:
+        for s in rest:
+            if _run(s):
+                return s
+    finally:
+        clear_mutant(path, orig)
+    return None
+
+
 def sweep_guards(only=()):
     """Delete each documented single-statement guard; report the ones nothing missed.
 
@@ -430,7 +502,18 @@ def sweep_guards(only=()):
                 if red:
                     caught += 1
                 else:
-                    survivors.append((mod, i + 1, lines[i].strip(), ",".join(suites)))
+                    # NOT A SURVIVOR UNTIL THE SUITES THE SET DID NOT NAME HAVE BEEN ASKED.
+                    # `_suites_touching` matches direct imports only, and 44 of the 63
+                    # modules here are reached by a suite that goes through another module.
+                    _by = _who_drives(path, "\n".join(lines[:i] + lines[i + 2:]),
+                                      orig, mod, suites)
+                    if _by:
+                        caught += 1
+                        print("  %-20s line %-5d driven by %s, which does not import this "
+                              "module" % (mod, i + 1, _by))
+                    else:
+                        survivors.append((mod, i + 1, lines[i].strip(),
+                                          ",".join(_suites_reaching(mod))))
         assert not any(_run(s) for s in suites), "%s was not restored" % mod
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
     return tested, survivors, undocumented, held, empty
