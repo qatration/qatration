@@ -219,14 +219,82 @@ GUARD = re.compile(r"^(\s+)if\s+.+:\s*$")
 BODY = re.compile(r"^\s+(return\b.*|raise\b.*|sys\.exit\(.*\)|break|continue)\s*$")
 
 
+def _workspace_snapshot():
+    """-> (root, {paths}) for the artifact directory, or None if it cannot be read.
+
+    THE MUTANT WRITES SOMEWHERE TOO, and this tool had nothing to say about that. It is
+    careful with the source it breaks -- the mutant is written down before it is written
+    out, so a killed run can be undone -- and it runs a DELIBERATELY BROKEN ENGINE against
+    the directory holding the committed evidence.
+
+    `workspace.refuse_overwrite` stops a run REPLACING a tracked artifact and says why: "a
+    tracked artifact is evidence something else recounts: in this project the README, the
+    site and `qatration coverage` all read these files". It says nothing about ADDING one,
+    and adding is what a sweep does: `results_files()` globs the directory, so a file a
+    broken engine writes joins the fleet and is counted by every page and every recount.
+
+    Measured: a sweep of `workspace.py` left two `run_*.json` records in `out/` beside the
+    twenty-five real ones -- aborted runs of an engine with a line deleted, filed as runs of
+    this engine.
+
+    THE ROOT TRAVELS WITH THE SNAPSHOT, and that is not caution, it is the defect this
+    nearly became. `workspace.OUT` is a module global resolved at import, and a suite that
+    reloads `workspace` under its own `QATRATION_OUT` changes what a second reading means.
+    A first version of this diffed two sets taken against DIFFERENT roots and called the
+    difference "what the mutant added" -- which was the entire workspace. The same shape
+    `list_attack_fields` is documented for, one file over: a cache that remembered the
+    answer and not the question.
+    """
+    try:
+        if RT not in sys.path:
+            sys.path.insert(0, RT)
+        from workspace import OUT as _OUT
+        root = os.path.abspath(str(_OUT))
+    except Exception:
+        return None
+    try:
+        return (root, {os.path.join(dp, fn)
+                       for dp, _dn, fns in os.walk(root) for fn in fns})
+    except OSError:
+        return None
+
+
+def _say_what_was_left(before):
+    """Name the artifacts a mutant wrote. -> [paths], and NOTHING is removed.
+
+    A cleanup that deletes is the most dangerous shape this fix could take, against the one
+    directory in this repository whose contents are evidence. So it reports, and the person
+    running the sweep decides -- the same answer `read_artifact` gives for a file it cannot
+    parse, and for the same reason.
+
+    Silent when the two readings resolve to different roots: that is not "the mutant wrote
+    the whole workspace", it is "this snapshot is not comparable", and the difference
+    between those two sentences is 237 files.
+    """
+    after = _workspace_snapshot()
+    if before is None or after is None or before[0] != after[0]:
+        return []
+    return sorted(after[1] - before[1])
+
+
 def _run(suite, timeout=420):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+    _before = _workspace_snapshot()
     try:
         p = subprocess.run([sys.executable, suite], cwd=RT, env=env, capture_output=True,
                            text=True, errors="replace", timeout=timeout)
         return p.returncode
     except subprocess.TimeoutExpired:
         return 99
+    finally:
+        # IN A `finally`, for the same reason the mutant is restored in one: the run this is
+        # reporting on is the one most likely to have been killed.
+        _left = _say_what_was_left(_before)
+        if _left:
+            print("  ! a mutant wrote %d artifact(s) into the workspace, and they are still "
+                  "there: %s" % (len(_left),
+                                 ", ".join(os.path.basename(x) for x in _left[:4])),
+                  file=sys.stderr)
 
 
 def _dynamic_routes():

@@ -568,6 +568,85 @@ def main():
     # So the mutant is written down before it is written out. The note is exercised here
     # rather than by killing a real sweep, because a suite cannot kill itself, and the
     # property that matters is what `recover` does with the note it finds.
+    # --- AND THE MUTANT WRITES SOMEWHERE TOO -------------------------------------------
+    #
+    # This tool is careful with the source it breaks and said nothing about the directory
+    # the broken engine writes into. `workspace.refuse_overwrite` stops a run REPLACING a
+    # tracked artifact -- "a tracked artifact is evidence something else recounts: in this
+    # project the README, the site and `qatration coverage` all read these files" -- and
+    # nothing stops one ADDING one. `results_files()` globs the directory, so a file a
+    # mutant writes joins the fleet and is counted by every page and every recount.
+    #
+    # Measured: a sweep of `workspace.py` left two `run_*.json` records in `out/` beside the
+    # twenty-five real ones.
+    #
+    # IT REPORTS AND REMOVES NOTHING, and that is the whole design. A cleanup that deletes
+    # is the most dangerous shape this fix could take against the one directory here whose
+    # contents are evidence -- and the first version of it deleted all 237 tracked files,
+    # because it diffed two snapshots taken against DIFFERENT roots. Hence the root travels
+    # with the snapshot, and a mismatch says nothing rather than saying everything.
+    import shutil as _sh_a2
+    _aw = tempfile.mkdtemp()
+    try:
+        _kept = os.path.join(_aw, "results_kept.json")
+        io.open(_kept, "w", encoding="utf-8").write("{}")
+        _before_a = (_aw, {os.path.join(dp, fn)
+                           for dp, _d, fns in os.walk(_aw) for fn in fns})
+        _added_a = os.path.join(_aw, "run_mutant.json")
+        io.open(_added_a, "w", encoding="utf-8").write("{}")
+        os.makedirs(os.path.join(_aw, "history"), exist_ok=True)
+        _added_n = os.path.join(_aw, "history", "ghost.jsonl")
+        io.open(_added_n, "w", encoding="utf-8").write("{}")
+
+        # THROUGH THE REAL `_workspace_snapshot`, not a lambda standing in for it. A stub
+        # that returns the root by hand cannot fail when the root stops being captured,
+        # which is precisely the line that turned this fix into a workspace delete. So
+        # `workspace.OUT` is moved instead, which is what a suite reloading it does.
+        import workspace as _ws_q
+        _real_out_q = _ws_q.OUT
+        try:
+            _ws_q.OUT = _aw
+            _left = unguarded._say_what_was_left(_before_a)
+            # AND THE SAME CALL AGAIN WITH THE WORKSPACE MOVED. Two readings of two
+            # different directories are not a list of new files.
+            _elsewhere = tempfile.mkdtemp()
+            try:
+                # WITH EVIDENCE IN IT, or this case cannot fail: an empty directory has
+                # nothing to name whether the roots are compared or not, and the version of
+                # this fix that deleted 237 tracked files is exactly the one that names
+                # every file in a workspace it never snapshotted.
+                io.open(os.path.join(_elsewhere, "results_other.json"), "w",
+                        encoding="utf-8").write("{}")
+                _ws_q.OUT = _elsewhere
+                _mismatch = unguarded._say_what_was_left(_before_a)
+            finally:
+                _sh_a2.rmtree(_elsewhere, ignore_errors=True)
+        finally:
+            _ws_q.OUT = _real_out_q
+
+        check("what a mutant wrote into the workspace is named",
+              _added_a in _left, str(_left))
+        check("...including one it wrote in a subdirectory",
+              _added_n in _left, str(_left))
+        check("...and NOTHING is removed, because this directory holds the evidence",
+              os.path.exists(_added_a) and os.path.exists(_added_n)
+              and os.path.exists(_kept), _aw)
+        # AND THE ARTIFACT THAT WAS ALREADY THERE IS NOT NAMED. Without this the report may
+        # name the whole workspace and still pass the two checks above -- which is exactly
+        # what the version of this fix that deleted 237 tracked files did.
+        check("...while the artifact that was already there is not named",
+              _kept not in _left, str(_left))
+        # AND A SNAPSHOT OF A DIFFERENT ROOT SAYS NOTHING. `workspace.OUT` is resolved at
+        # import and a suite can reload it under its own `QATRATION_OUT`, so two readings
+        # are not always two readings of the same directory. Calling that difference "what
+        # the mutant added" names every file in the real workspace.
+        check("a snapshot taken against a different root is not a list of new files",
+              _mismatch == [], str(_mismatch))
+        check("a snapshot that could not be taken names nothing",
+              unguarded._say_what_was_left(None) == [], "it named something")
+    finally:
+        _sh_a2.rmtree(_aw, ignore_errors=True)
+
     _kw = tempfile.mkdtemp()
     try:
         _kf = os.path.join(_kw, "victim.py")
