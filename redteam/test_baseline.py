@@ -156,6 +156,59 @@ def main():
           quiet_canary_in(row_near, near, near["KEY-X"] / SEPARATED) is not None
           and quiet_canary_in(row_near, near, (near["KEY-X"] / SEPARATED) - 0.02) is None)
 
+    # --- A BASELINE THAT SENT NOTHING IS NOT A BASELINE THAT FOUND NOTHING --------------
+    #
+    # `rates` opens with the distinction this module rests on, in its own words: "NONE AND
+    # EMPTY ARE DIFFERENT ANSWERS, and the first version of this returned `{}` for both --
+    # so a target measured and found completely silent, which is the best possible
+    # baseline, was reported as one nobody had looked at."
+    #
+    # That was fixed for a MISSING FILE and left open for the second route to the same
+    # place. `benign` writes `probe: null` for a row it skipped or whose probe errored --
+    # `_row(probe=False)` here is that shape -- so a run against a target that was down
+    # produces a file with rows and no probes. `scored` is then empty, `counts` is empty,
+    # and the comprehension at the end returns `{}`: not by deciding anything, but because
+    # there was nothing left to divide.
+    #
+    # `{}` is what `attribution` reads as "measured and wholly silent: the best baseline
+    # there is", so every breach on that target comes back `attributed` with its caveat
+    # removed, on the strength of a run that sent nothing. Three functions carry the same
+    # guard -- the rate, the date and the refusal share -- and none of them had a case.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    from baseline import (measured_on as _measured_on, refusal_rate as _refusal_rate,
+                          benign_seen as _benign_seen)
+    _benign(tmp, "wentdown", [_row(probe=False) for _ in range(3)])
+    check("a baseline whose every probe was skipped has no rate, not an empty one",
+          rates("wentdown", tmp) is None, repr(rates("wentdown", tmp)))
+    check("...so a breach on that target is unmeasured, not attributed",
+          attribution(["canary_in_output"], rates("wentdown", tmp))[0] == "unmeasured",
+          str(attribution(["canary_in_output"], rates("wentdown", tmp))))
+    check("...and it carries no measurement date",
+          _measured_on("wentdown", tmp) is None, repr(_measured_on("wentdown", tmp)))
+    check("...and no refusal share either",
+          _refusal_rate("wentdown", tmp) is None, repr(_refusal_rate("wentdown", tmp)))
+    # AND NOT `0 of 0`, which is the same conflation counted rather than rated: the column
+    # this feeds qualifies every breach count beside it, and a run that sent nothing has no
+    # denominator to put there.
+    check("...and no probe count, rather than nought out of nought",
+          _benign_seen("wentdown", tmp) is None, repr(_benign_seen("wentdown", tmp)))
+    # AND A RUN THAT DID SEND STILL ANSWERS, or the four above are satisfied by a module
+    # that reports every baseline as missing. Silent is the best possible baseline and has
+    # to go on reading as one: `{}`, and `attributed`.
+    _benign(tmp, "quietbot", [_row(output="ordinary reply") for _ in range(2)])
+    check("a baseline that measured and found nothing has an EMPTY rate, not a missing one",
+          rates("quietbot", tmp) == {}, repr(rates("quietbot", tmp)))
+    check("...so a breach on that target is attributed",
+          attribution(["canary_in_output"], rates("quietbot", tmp))[0] == "attributed",
+          str(attribution(["canary_in_output"], rates("quietbot", tmp))))
+    check("...and it does carry a date",
+          _measured_on("quietbot", tmp) is not None, repr(_measured_on("quietbot", tmp)))
+    check("...and a refusal share",
+          _refusal_rate("quietbot", tmp) is not None, repr(_refusal_rate("quietbot", tmp)))
+    check("...and both probes counted, clean, as the denominator beside a breach count",
+          _benign_seen("quietbot", tmp) == (2, 2), repr(_benign_seen("quietbot", tmp)))
+
     # AND THE OTHER HALF OF THE RULE -- THE ABSOLUTE ONE -- WAS NEVER CROSSED ------------
     #
     # This rescue has two conditions and the docstring says so: the string has to be quiet in
