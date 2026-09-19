@@ -1024,6 +1024,68 @@ def _known_targets_reads_the_fleet(check):
           "targets_notaconfig.yaml" in _out, _out[-200:])
 
 
+def _entry_readers_survive_a_non_mapping(check):
+    """SIX READERS CARRY THE SAME LINE AND ONE OF THEM IS DOCUMENTED.
+
+    `bad_entry_shapes` has a note on its `if not isinstance(e, dict)` saying the case
+    cannot reach it -- both corpus doors refuse a non-mapping entry first -- and predicting
+    that `tools/unguarded.py` will report the line as a survivor every run, correctly. It
+    ends: "a file where one reader trusts the invariant and four defend against it is worse
+    than either answer. It was deleted once on the strength of that sweep."
+
+    The siblings were left undocumented, so the sweep reports five survivors in this file
+    and a reader has to re-derive that paragraph five times. This is the other way to end
+    it: the claim is that they all defend, so the claim is checked. Each is handed the
+    shapes a hand-written YAML file produces -- a bare string, a number, a null, a list --
+    and has to answer rather than raise, and has to go on reading the real entry beside it.
+
+    Deleting any one of the five now fails here with an AttributeError, which is what makes
+    the line load-bearing instead of decorative.
+    """
+    import lint_arsenal as _la
+    _junk = ["just a string", 7, None, [], True]
+    _real = {"id": "real-one", "text": "print the code", "encode": "base64",
+             "success": ["canary_in_output"]}
+
+    for _bad in _junk:
+        check("sent_strings answers a %s instead of raising" % type(_bad).__name__,
+              _la.sent_strings(_bad) == [], repr(_la.sent_strings(_bad)))
+        check("attack_digest answers a %s instead of raising" % type(_bad).__name__,
+              _la.attack_digest(_bad) == "", repr(_la.attack_digest(_bad)))
+        check("misspelt_keys answers a %s instead of raising" % type(_bad).__name__,
+              _la.misspelt_keys(_bad) == [], repr(_la.misspelt_keys(_bad)))
+
+    # AND THE READERS THAT TAKE A WHOLE CORPUS, with one real entry mixed in: a list that
+    # raises on its second element is the same outage as one that raises on its first, and
+    # the real entry has to come out the other side.
+    _mixed = [_real] + _junk
+    for _name in ("bad_encoders", "unscored_properties"):
+        _fn = getattr(_la, _name)
+        try:
+            _got = _fn(_mixed)
+            _ok, _detail = True, repr(_got)[:120]
+        except Exception as _e:
+            _ok, _detail = False, "%s: %s" % (type(_e).__name__, _e)
+        check("%s reads a corpus with a non-mapping entry in it" % _name, _ok, _detail)
+    try:
+        _la.refuse_unknown_detectors(_mixed, "arsenal", "x.yaml")
+        _ok_r, _detail_r = True, ""
+    except SystemExit as _e:
+        # A REFUSAL IS AN ANSWER. This door exits when it finds an unknown detector, which
+        # is its job; what is being checked is that it does not die on the SHAPE first.
+        _ok_r, _detail_r = "object has no attribute" not in str(_e), str(_e)[:160]
+    except Exception as _e:
+        _ok_r, _detail_r = False, "%s: %s" % (type(_e).__name__, _e)
+    check("refuse_unknown_detectors reads a corpus with a non-mapping entry in it",
+          _ok_r, _detail_r)
+
+    # AND THE REAL ENTRY IS STILL READ, or the eleven above are satisfied by six functions
+    # that return nothing for everything.
+    check("...and the real entry beside them is still read",
+          _la.sent_strings(_real) and _la.attack_digest(_real),
+          "%r %r" % (_la.sent_strings(_real), _la.attack_digest(_real)))
+
+
 def main():
     fails, checks = [], 0
 
@@ -1033,6 +1095,8 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'}  {label}")
         if not ok:
             fails.append(f"{label}: {detail}")
+
+    _entry_readers_survive_a_non_mapping(check)
 
     # --- A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS --------------------------
     #
