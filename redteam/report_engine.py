@@ -103,15 +103,10 @@ def _locks_cell(locks):
     return f'<span class="{cls}">{esc(LOCK_LABEL.get(top, top))} ×{n}</span>{extra}'
 
 
-def _payload_text(attack):
-    d = attack.get("delivery")
-    if d == "indirect":
-        seed = attack.get("seed", {})
-        return (f"[user prompt] {attack.get('user_prompt','')}\n"
-                f"[planted in '{seed.get('field','?')}'] {seed.get('text','')}")
-    if d == "chain":
-        return "\n".join(f"[turn {i+1}] {s}" for i, s in enumerate(attack.get("steps", [])))
-    return attack.get("text", "")
+# ONE RENDERER, in `workspace`. This module and `defense_report` each had a copy of
+# these lines and the copies had drifted: only one of them named the field an indirect
+# attack was planted in, and neither covered all five of `runner.DELIVERIES`.
+from workspace import payload_text as _payload_text
 
 
 def _proof(trials):

@@ -722,14 +722,10 @@ def _rate_frac(rate):
         return 0.0
 
 
-def payload_text(a):
-    d = a.get("delivery")
-    if d == "indirect":
-        s = a.get("seed", {})
-        return f"[user] {a.get('user_prompt','')}\n[planted] {s.get('text','')}"
-    if d == "chain":
-        return "\n".join(f"[turn {i+1}] {s}" for i, s in enumerate(a.get("steps", [])))
-    return a.get("text", "")
+# ONE RENDERER, in `workspace`. This page carried its own copy of these lines and
+# printed `[planted]` where the assessment report named the field -- which is the one
+# thing a remediation page is for.
+from workspace import payload_text
 
 
 def load_all(known=None):
