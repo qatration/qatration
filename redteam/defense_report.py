@@ -1198,8 +1198,27 @@ def common_thread(ordered, unmapped=()):
     keys = [k for k, _ in ordered]
     if not keys and not unmapped:
         return ""
+    # AND WITH FINDINGS BUT NOTHING MAPPED, IT ENUMERATED THE EMPTY LIST. Every row whose
+    # detector has no entry in the fix table lands in `unmapped`, so `ordered` can be empty
+    # on a page that found plenty. The tail below then rendered `What was found: .` -- an
+    # empty enumeration under a promise to describe what was found -- and followed it with
+    # "Each fix below moves a control out of somewhere the attacker can talk to", pointing
+    # at a list of fixes that is not there.
+    #
+    # The remainder is the fact: the findings are confirmed, and what caught them has no
+    # remediation text yet. Saying that is the difference between a gap and a gap reported
+    # as a measurement, which is what an empty sentence with a full stop after it reads as.
+    if not keys:
+        return ("What was found: %d finding%s whose root cause this tool has no remediation "
+                "text for yet. They are listed at the end with the detector that caught each "
+                "one, and the evidence is in the per-target scorecards; there is no fix below "
+                "to point at." % (len(unmapped), "" if len(unmapped) == 1 else "s"))
     prompt_side = [k for k in keys if k in PROMPT_ENFORCED]
-    if keys and len(prompt_side) == len(keys):
+    # `keys` IS NON-EMPTY BY THE BRANCH ABOVE, so the `keys and` this line used to carry is
+    # gone rather than kept as a second answer to the same question. What it guarded -- a
+    # page with nothing mapped diagnosing the cause this tool most often finds, over zero
+    # findings -- is now answered once, up there, with a sentence instead of a silence.
+    if len(prompt_side) == len(keys):
         return ("The common thread: <b>security was delegated to the model's judgment</b> — "
                 "prompt rules like “never reveal” or “only fetch the docs site.” That "
                 "judgment is manipulable. Each fix below moves the control out of the prompt "

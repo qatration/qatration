@@ -354,6 +354,43 @@ def main():
     # "24 of 28 showed at least one exploitable finding". It also got worse as the oracle got
     # better: a detector added after the table was written fires, is stored, and is deleted at
     # render time.
+    # --- A PAGE THAT FOUND SOMETHING AND MAPPED NONE OF IT ENUMERATED THE EMPTY LIST ------
+    #
+    # Every row whose detector has no entry in the fix table lands in `unmapped`, so
+    # `ordered` can be empty on a report full of confirmed findings -- which is precisely
+    # the case the block above exists for, a detector added after the table was written.
+    #
+    # The executive summary then read `What was found: .` -- a promise to describe what was
+    # found, an empty list, a full stop -- and followed it with "Each fix below moves a
+    # control out of somewhere the attacker can talk to", pointing at a list of fixes that
+    # is not there. Nothing was driving it: the guard beside it returns "" only when there
+    # are NO findings at all, and every fixture in this file maps at least one.
+    _un = [("rep-fake", {"id": "a1"}, "EXPLOITED", {}, "1/1", ["brand_new_detector"])]
+    _ct = dr.common_thread([], _un)
+    check("a page with findings and no mapped fix does not enumerate an empty list",
+          "found: ." not in _ct and _ct.strip().endswith("."), _ct)
+    check("...and says how many findings it is talking about", "1 finding" in _ct, _ct)
+    check("...and that what caught them has no remediation text yet",
+          "no remediation text" in _ct, _ct)
+    check("...and does not promise a fix below, because there is none",
+          "Each fix below" not in _ct, _ct)
+    # AND THE PLURAL, because a sentence that says `1 findings` is the other half of the
+    # same carelessness and this one is read by a client.
+    check("...and counts two of them in the plural",
+          "2 findings" in dr.common_thread([], _un * 2), dr.common_thread([], _un * 2))
+    # AND THE THREE SENTENCES AROUND IT ARE UNCHANGED, or the branch above is a rewrite
+    # that swallowed the cases this function already had.
+    check("a page with nothing at all still says nothing",
+          dr.common_thread([], []) == "", repr(dr.common_thread([], [])))
+    _mapped = [(k, 1) for k in list(dr.REMEDIATION)[:1]]
+    check("...and a page with a mapped finding still describes it",
+          "What was found" in dr.common_thread(_mapped, []),
+          dr.common_thread(_mapped, []))
+    check("...and still promises the fix that is below it",
+          "Each fix below" in dr.common_thread(_mapped, [])
+          or "the control out of the prompt" in dr.common_thread(_mapped, []),
+          dr.common_thread(_mapped, []))
+
     # --- the OWASP mapping is a claim, and it was wrong in a way that hid a real hole -----
     #
     # It covered seven of the ten classes, which looks like an incomplete label until you ask
