@@ -277,6 +277,55 @@ def _say_what_was_left(before):
     return sorted(after[1] - before[1])
 
 
+TIMED_OUT = 99          # `_run`'s code for "this suite never finished"
+
+
+def _caught(code):
+    """Did this exit code mean the mutant was CAUGHT? -> True | False | None.
+
+    A SUITE THAT RAN OUT OF TIME DID NOT CATCH ANYTHING, and every reader here treated its
+    exit code as if it had. `_run` returns 99 for a timeout, and `red = any(_run(s) for s
+    in suites)` is true for 99 as surely as for 1 -- so a guard whose suite was slow that
+    minute is reported as defended, by a run that measured nothing. The absence of a
+    verdict, published as a verdict, inside the tool written to find exactly that.
+
+    It is not hypothetical and it cost a wrong sentence in this repository: re-checking a
+    survivor against the suites that reach it, `test_benign` hit the 420-second ceiling
+    under load and was reported as the suite driving `authorization`'s no-host guard. Run
+    on its own afterwards it passes with the guard deleted. The guard really was undriven;
+    the instrument said otherwise because it could not tell "failed" from "never finished".
+
+    None is the third state, and the callers have to say it rather than fold it into
+    either answer.
+    """
+    if code == TIMED_OUT:
+        return None
+    return bool(code)
+
+
+def _any_caught(suites):
+    """-> (True | False, [suites that never finished]) over a mutant already on disk.
+
+    THE THREE SWEEP LOOPS ASKED `any(_run(s) for s in suites)` AND 99 IS TRUTHY. A suite
+    that hit the ceiling therefore counted as one that caught the mutant, so a guard nobody
+    measured came back defended and the summary closed over it. The tool already draws this
+    distinction for a module whose suites are red to begin with -- SKIPPED, and carried into
+    the summary -- and did not draw it one level down, per guard.
+
+    The names come back so a caller can say which suite it could not ask. A count of
+    defended guards that quietly includes the ones nothing finished measuring is the shape
+    this repository is named after.
+    """
+    slow = []
+    for s in suites:
+        verdict = _caught(_run(s))
+        if verdict is True:
+            return True, slow
+        if verdict is None:
+            slow.append(s)
+    return False, slow
+
+
 def _run(suite, timeout=420):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
     _before = _workspace_snapshot()
@@ -416,7 +465,10 @@ def _who_drives(path, mutant, orig, mod, already):
     write_mutant(path, mutant, orig)
     try:
         for s in rest:
-            if _run(s):
+            # A TIMEOUT IS NOT A CATCH. `_caught` returns None for a suite that never
+            # finished, and naming it here would report a guard as driven by a run that
+            # measured nothing -- which is what this function did on its first day.
+            if _caught(_run(s)) is True:
                 return s
     finally:
         clear_mutant(path, orig)
@@ -497,8 +549,13 @@ def sweep_guards(only=()):
             for i in hits:
                 tested += 1
                 write_mutant(path, "\n".join(lines[:i] + lines[i + 2:]), orig)
-                red = any(_run(s) for s in suites)
+                red, _slow = _any_caught(suites)
                 clear_mutant(path, orig)
+                if _slow and not red:
+                    # NAMED, NOT FOLDED INTO EITHER ANSWER. A suite that ran out of time
+                    # did not catch this and did not clear it either.
+                    print("  %-20s line %-5d %s never finished; this guard was not fully "
+                          "asked" % (mod, i + 1, ",".join(_slow)))
                 if red:
                     caught += 1
                 else:
@@ -647,7 +704,12 @@ def sweep_rules(modules=SWEPT_MODULES):
                         lines[ln:node.end_lineno] = [
                             head + lines[node.end_lineno - 1][node.end_col_offset:]]
                 write_mutant(path, "\n".join(lines), orig)
-                red = any(_run(s) for s in suites)
+                red, _slow = _any_caught(suites)
+                if _slow and not red:
+                    # NAMED, NOT FOLDED INTO EITHER ANSWER: a suite that ran out of time
+                    # neither caught this mutant nor cleared it.
+                    print("  %-14s NOT FULLY ASKED (%s never finished)"
+                          % (mod, ",".join(_slow)))
                 clear_mutant(path, orig)
                 shown = " ".join((ast.get_source_segment(orig, node) or "").split())
                 print("  %-14s %-20s line %-5d %-18s %s"
@@ -1084,7 +1146,12 @@ def _sweep_patterns_in(mod):
                 lines[ln:node.end_lineno] = [
                     head + lines[node.end_lineno - 1][node.end_col_offset:]]
             write_mutant(path, "\n".join(lines), orig)
-            red = any(_run(s) for s in suites)
+            red, _slow = _any_caught(suites)
+            if _slow and not red:
+                # NAMED, NOT FOLDED INTO EITHER ANSWER: a suite that ran out of time
+                # neither caught this mutant nor cleared it.
+                print("  %-14s NOT FULLY ASKED (%s never finished)"
+                      % (mod, ",".join(_slow)))
             clear_mutant(path, orig)
             # WHICH RULE, not which entry: an entry can hold two, and `danger` with a
             # case beside `safe` without one is the difference between a detector that
@@ -1191,7 +1258,12 @@ def sweep_refusals(modules=SWEPT_MODULES):
                 mutant = list(lines)
                 mutant[idx] = " " * (len(stmt) - len(stmt.lstrip())) + "pass"
                 write_mutant(path, "\n".join(mutant), orig)
-                red = any(_run(s) for s in suites)
+                red, _slow = _any_caught(suites)
+                if _slow and not red:
+                    # NAMED, NOT FOLDED INTO EITHER ANSWER: a suite that ran out of time
+                    # neither caught this mutant nor cleared it.
+                    print("  %-14s NOT FULLY ASKED (%s never finished)"
+                          % (mod, ",".join(_slow)))
                 got = None if (red or mod != "oracle.py") else _replay()
                 clear_mutant(path, orig)
                 if red:

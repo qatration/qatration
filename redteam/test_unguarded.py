@@ -568,6 +568,55 @@ def main():
     # So the mutant is written down before it is written out. The note is exercised here
     # rather than by killing a real sweep, because a suite cannot kill itself, and the
     # property that matters is what `recover` does with the note it finds.
+    # --- A SUITE THAT RAN OUT OF TIME DID NOT CATCH ANYTHING ---------------------------
+    #
+    # `_run` returns 99 for a timeout, and every loop here asked `any(_run(s) for s in
+    # suites)`. 99 is truthy, so a suite that hit the ceiling counted as one that caught the
+    # mutant: a guard nothing measured came back defended, and the summary closed over it.
+    # The absence of a verdict published as a verdict, by the tool written to find that.
+    #
+    # It cost a wrong sentence rather than staying hypothetical. Re-checking a survivor
+    # against the suites that reach it, `test_benign` hit the 420-second ceiling under load
+    # and was named as the suite driving `authorization`'s no-host guard; run on its own
+    # afterwards it passes with the guard deleted. The guard really was undriven, and the
+    # instrument said otherwise because it could not tell `failed` from `never finished`.
+    check("a suite that failed caught the mutant", unguarded._caught(1) is True, "1")
+    check("...and one that passed did not", unguarded._caught(0) is False, "0")
+    check("...and one that never finished is neither",
+          unguarded._caught(unguarded.TIMED_OUT) is None, str(unguarded.TIMED_OUT))
+    # AND THE LOOP OVER A SET OF SUITES SAYS WHICH ONES IT COULD NOT ASK, rather than
+    # folding them into either answer.
+    _seen_q = []
+
+    def _fake_run(code_by_suite):
+        def _r(s, timeout=420):
+            _seen_q.append(s)
+            return code_by_suite[s]
+        return _r
+
+    _real_run_q = unguarded._run
+    try:
+        unguarded._run = _fake_run({"a": 0, "b": unguarded.TIMED_OUT, "c": 0})
+        _red_q, _slow_q = unguarded._any_caught(["a", "b", "c"])
+        check("a mutant no suite caught is not caught", _red_q is False, str(_red_q))
+        check("...and the suite that never finished is named",
+              _slow_q == ["b"], str(_slow_q))
+        # AND A REAL FAILURE STILL WINS, or the rule above turns every red suite into a
+        # shrug. `b` times out and `c` fails: the mutant was caught.
+        _seen_q.clear()
+        unguarded._run = _fake_run({"a": 0, "b": unguarded.TIMED_OUT, "c": 1})
+        _red2_q, _slow2_q = unguarded._any_caught(["a", "b", "c"])
+        check("...while a suite that really failed still catches it", _red2_q is True,
+              str(_red2_q))
+        # AND IT STOPS THERE, because running the rest proves nothing and costs minutes.
+        _seen_q.clear()
+        unguarded._run = _fake_run({"a": 1, "b": 0, "c": 0})
+        unguarded._any_caught(["a", "b", "c"])
+        check("...and stops at the first suite that caught it", _seen_q == ["a"],
+              str(_seen_q))
+    finally:
+        unguarded._run = _real_run_q
+
     # --- A SUITE THAT REACHES A MODULE THROUGH ANOTHER ONE STILL REACHES IT ------------
     #
     # `_suites_touching` matches a direct import and nothing else, and its docstring claims
