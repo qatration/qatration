@@ -390,6 +390,19 @@ def main():
     check("pattern: matches a REWORDED variant of the same refusal",
           bool(re.search(pat, "Sorry — I will not repeat that phrase for you.", re.I)), True)
     check("pattern: too short to generalise -> none", pattern_from("No."), None)
+    # THE LINE ABOVE IS ANSWERED BY A DIFFERENT GUARD: `No.` carries no refusal verb at all,
+    # so it stops at `_REFUSES` and never reaches the length rule under it. What does reach
+    # it is a refusal that IS one -- `I cannot.` -- and nothing was driving that: the
+    # pattern built from two words is `cannot`, which matches every polite sentence a bot
+    # will ever write, and this list is pasted into somebody's config as
+    # `refusal_patterns`. A pattern that always matches turns `refusal_expected_but_absent`
+    # off for that target and reports the absence as a defence.
+    for _q in ("I cannot.", "I won't.", "I can not."):
+        check("pattern: a refusal of two words yields none (%s)" % _q,
+              pattern_from(_q), None)
+    # AND THREE WORDS IS ENOUGH, or the rule above is a filter that refuses everything.
+    check("pattern: ...while three words is a pattern",
+          pattern_from("I cannot do that."), r"cannot\s+do\s+that")
     # live on ragbot: "sorry FOR THE CONFUSION, but ..." left the tail in and the pattern
     # started mid-phrase
     check("pattern: the apology's tail goes with it",
