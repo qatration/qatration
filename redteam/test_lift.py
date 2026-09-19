@@ -284,6 +284,38 @@ def main():
             check("...and on %s it carries what it is not a measurement of" % _what,
                   "not about the attack" in _note, _note)
 
+        # --- SILENT ONLY WHEN NOTHING WAS PLANTED --------------------------------------
+        #
+        # `two_factor_note` says so in its own docstring, and gives the reason: "no line"
+        # and "no lift" look identical on a console, and this repository has already
+        # shipped that mistake once. So exactly one of the three refusals is allowed to
+        # print nothing -- a target with no `payload_carrier`, where nothing was planted
+        # and there is nothing to separate -- and the other two have to say out loud that
+        # a measurement did not happen.
+        #
+        # `if r["why"] == "no payload_carrier declared"` is that whole rule and nothing was
+        # driving the equality. Deleting it left every suite green, and so would widening
+        # it to `if r["why"]:` -- which turns every "could not measure" back into silence,
+        # the mistake the docstring exists to record.
+        #
+        # Found by mutating the guards `tools/unguarded.py` skips by design.
+        _rows_q = results(*[acting] * 4)
+        _silent_q = baseline.two_factor_note("fixture", _rows_q, {"canaries": [CANARY]}, d)
+        check("a target with nothing planted says nothing", _silent_q == "", repr(_silent_q))
+        # AND THE OTHER TWO REFUSALS SPEAK. Each is a different reason the separation could
+        # not be made, and each has to reach the console as one.
+        for _label, _ctx_q, _because in (
+                ("no canary to look for",
+                 {"payload_carrier": ["refunds.pdf"]}, "no canaries declared"),
+                ("the carrier is also the canary",
+                 {"payload_carrier": [CANARY], "canaries": [CANARY]},
+                 "the carrier is also the canary")):
+            _n_q = baseline.two_factor_note("fixture", _rows_q, _ctx_q, d)
+            check("...while %s is said out loud" % _label,
+                  "delivery and effect were not separated" in _n_q, repr(_n_q))
+            check("...and the line says which reason it was (%s)" % _label,
+                  _because in _n_q, repr(_n_q))
+
         # AND THE DIGITS, not only the shape of the line. Every fixture above is lopsided
         # enough to print p = 0.000, and a page printing HALF the number prints the same
         # three digits — so the three checks above passed a mutation that published a
