@@ -103,6 +103,47 @@ def main():
 
     made = []
 
+    # --- AN ARM MISSING FROM THE TABLE HAS TO SAY WHY -----------------------------------
+    #
+    # This table's arms are separate files, and one of them not parsing is the ordinary
+    # case: a sweep stopped by hand leaves a truncated artifact, which is the sentence
+    # `read_artifact` was written for -- "parse it, or say what stopped you, and let the
+    # caller decide out loud".
+    #
+    # This caller raised that sentence into a `ValueError` and printed `type(e).__name__`,
+    # so an operator whose comparison was one arm short read
+    #
+    #     (gpt-4o-mini: unreadable, ValueError) - not the same as absent
+    #
+    # and could not tell a truncated file from a missing key from a blank target name. The
+    # reason was computed, wrapped, and thrown away. Every other reader here prints it;
+    # `say_unreadable` is the shared wording and says why in its own docstring -- a count
+    # tells nobody which run to re-do.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    # Three arms, so that removing one still leaves a comparison: with a single arm left
+    # the command has nothing to compare and the last check below would be satisfied by a
+    # run that refused outright.
+    _wu = _workspace({"m1": ("aaa111", "2026-09-01 10:00"),
+                      "m2": ("aaa111", "2026-09-01 10:00"),
+                      "m3": ("aaa111", "2026-09-01 10:00")})
+    made.append(_wu)
+    with open(os.path.join(_wu, "results_matbot_m3.json"), "w", encoding="utf-8") as _fu:
+        _fu.write('{"meta": {"target": "matbot"}, "results": [')   # truncated, as a kill
+    _rcu, _outu = _matrix(_wu)
+    check("an arm that did not parse is named, not dropped in silence",
+          "m3" in _outu and "unreadable" in _outu, _outu.strip()[-300:])
+    check("...and the line says WHAT stopped it, not that something did",
+          "JSONDecodeError" in _outu or "Expecting" in _outu,
+          _outu.strip()[-300:])
+    check("...and the word ValueError is not the whole explanation",
+          "unreadable, ValueError" not in _outu, _outu.strip()[-300:])
+    # AND THE ARM THAT DID PARSE IS STILL IN THE TABLE, or the three above are satisfied by
+    # a command that refuses the whole comparison over one bad file -- which is the other
+    # wrong answer `read_artifact` was written to avoid.
+    check("...while the arms that parsed are still compared",
+          "m1" in _outu and "m2" in _outu, _outu.strip()[-300:])
+
     def ws(runs, mtimes=None, texts=None, verdicts=None, flags=()):
         w = _workspace(runs, mtimes, texts, verdicts)
         made.append(w)

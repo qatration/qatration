@@ -117,12 +117,21 @@ def main():
             m = os.path.basename(fp)[len(f"results_{tname}_"):-len(".json")]
             if models and m not in [tag(x) for x in models]:
                 continue
+            # THE REASON, NOT THE NAME OF THE EXCEPTION IT WAS WRAPPED IN.
+            # `read_artifact` exists to say what stopped it -- "parse it, or say what
+            # stopped you, and let the caller decide out loud" -- and this caller raised
+            # that sentence into a ValueError and then printed the word `ValueError`.
+            # Every other reader here prints the reason; `say_unreadable` is the shared
+            # wording and its own docstring says why: a count tells nobody which run to
+            # re-do. Here it is worse than a count, because the arm is MISSING FROM A
+            # COMPARISON TABLE and the line explaining its absence said only that an
+            # exception had happened.
             try:
                 d, _why = read_artifact(fp)
-                if _why:
-                    raise ValueError(_why)
-            except Exception as e:
-                print(f"  ({m}: unreadable, {type(e).__name__}) — not the same as absent")
+            except Exception as e:      # `read_artifact` is not supposed to raise; if it
+                d, _why = None, f"{type(e).__name__}: {e}"   # ever does, say what it was
+            if _why:
+                print(f"  ({m}: unreadable — {_why}) — not the same as absent")
                 continue
             per_model[m] = {r["attack"]["id"]: r for r in d.get("results") or []}
             meta = d.get("meta") or {}
