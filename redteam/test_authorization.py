@@ -38,6 +38,35 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- A URL WITH NO HOST IS REFUSED FOR HAVING NO HOST ------------------------------
+    #
+    # `http:///path`, `http://` and `https://:8080/x` all parse, and all have an empty
+    # hostname. `if not host: return "no host"` is what answers them, and nothing was
+    # driving it: deleting the line left every suite green, because the empty name then
+    # goes to the RESOLVER and the machine this ran on resolved it to its own link-local
+    # address. Still refused -- by accident, in a sentence that begins with a blank where
+    # the host should be:
+    #
+    #     " resolves to fe80::..., and link-local, and 169.254.169.254 is the cloud
+    #      metadata service"
+    #
+    # Two things wrong with earning the right answer that way. The sentence names no host,
+    # so an operator cannot see that their URL was malformed rather than internal. And the
+    # gate performs a DNS lookup for a URL it could refuse by reading it -- on a resolver
+    # that answers the empty name with something public, the refusal disappears entirely.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    for _u_h in ("http:///path", "http://", "https://:8080/x", "http://@/x"):
+        _why_h = az.unreachable_by_policy(_u_h)
+        check("a URL with no host is refused (%s)" % _u_h, bool(_why_h), repr(_why_h))
+        check("...for having no host, rather than for where the empty name resolved",
+              _why_h == "no host", repr(_why_h))
+    # AND A URL THAT HAS ONE IS STILL JUDGED ON IT, or the rule above is a gate that
+    # refuses every address there is.
+    check("a public host is not refused for having no host",
+          az.unreachable_by_policy("https://example.com/x") != "no host",
+          repr(az.unreachable_by_policy("https://example.com/x")))
+
     today = datetime.date.today()
     token, day = az.issue(URL, SECRET)
 

@@ -446,6 +446,16 @@ def _address_refused(ip):
     # An IPv4 address wearing an IPv6 coat: `::ffff:127.0.0.1` and `64:ff9b::7f00:1` are
     # loopback with two extra colons, and neither is loopback to `ipaddress`.
     mapped = getattr(ip, "ipv4_mapped", None) or getattr(ip, "sixtofour", None)
+    # AND `tools/unguarded.py` WILL REPORT THIS AS A SURVIVOR ON A MODERN INTERPRETER,
+    # correctly, and it must not be deleted on that report. Python 3.13 changed
+    # `IPv6Address.is_loopback` and `.is_private` to delegate to the mapped address, so on
+    # 3.13+ the properties above already catch `::ffff:127.0.0.1` and this line changes no
+    # answer. On 3.9 they do not, and this line is the only thing between a scanner and
+    # loopback wearing two extra colons. CI runs both: 3.9 and 3.14.
+    #
+    # The cases for it are asserted by ANSWER -- the URL is refused -- so they hold whichever
+    # of the two lines does the refusing, which is what makes them portable across the four
+    # interpreters this ships to.
     if mapped is not None:
         return _address_refused(mapped)
     return None
