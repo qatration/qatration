@@ -229,7 +229,11 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         if _why:
             unreadable.append((os.path.basename(fp), _why))
             continue
-        tgt = (d.get("meta") or {}).get("target") or os.path.basename(fp)[7:-5]
+        # THE NAME THE RUN RECORDED, full stop. The `or` here INVENTED one from the
+        # filename when the artifact had none -- a target name in a coverage table that no
+        # run ever wrote. `read_artifact` refuses a blank `meta.target` now, so the
+        # fallback answered a question that cannot be asked.
+        tgt = (d.get("meta") or {}).get("target")
         ctx = ctx_for(tgt, os.path.basename(fp))
         before = n
         for r in d.get("rows") or []:

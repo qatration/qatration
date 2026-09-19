@@ -932,9 +932,10 @@ def _unobservable():
         d, _why = read_artifact(fp)
         if _why:
             continue
+        # ANSWERED BY `read_artifact`: an artifact whose `meta.target` is blank is
+        # refused there and reaches the `why` branch above. This line used to drop it in
+        # silence, three lines under one that carries on for a named reason.
         tgt = (d.get("meta") or {}).get("target")
-        if not tgt:
-            continue
         cfg = CTXS.get(tgt, {})
         for r in d["results"]:
             for tr in r.get("trials", []):

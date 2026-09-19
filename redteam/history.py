@@ -623,9 +623,10 @@ def backfill():
             print(f"  ! {os.path.basename(str(fp))} could not be read ({why}); no timeline "
                   f"entry was written for it.", file=sys.stderr)
             continue
+        # ANSWERED BY `read_artifact`: a blank `meta.target` is refused there and named
+        # by the branch above. This dropped the same file in silence, three lines under a
+        # comment saying a run that cannot be read is not a run with no findings.
         target = (d.get("meta") or {}).get("target")
-        if not target:
-            continue
         # ON THE RUN, NOT ON THE CLOCK. See `same_run`: this compared the file's mtime
         # against a stamp `record` took from `datetime.now()`, so it never matched and
         # re-seeded 28 of the 35 targets that already had a timeline.

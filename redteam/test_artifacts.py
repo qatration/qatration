@@ -344,6 +344,56 @@ def main():
     check("no artifact in this workspace is refused by the blank rule",
           not _ship_bad, ", ".join(_ship_bad[:6]))
 
+    # --- AND FIVE READERS EACH HELD THEIR OWN ANSWER TO IT --------------------------------
+    #
+    # `benign.roll_up`, `defense_report.response_paths`, `history.backfill`,
+    # `discrimination.load` and `detector_coverage` each carried a line of their own for an
+    # artifact with no target name, and the five did not agree: three dropped it in silence,
+    # one filed it as unreadable, and one INVENTED a name out of the filename -- a target in
+    # a coverage table that no run ever wrote. In three of them the silent line sits two or
+    # three lines under one that names an unreadable artifact out loud, in the same loop.
+    #
+    # One rule, one implementation: `read_artifact` refuses it and every one of those loops
+    # already has a branch that says which file and why. The copies are deleted, and what is
+    # asserted here is that each reader SAYS SO -- the behaviour the copies were hiding.
+    import shutil as _sh_n, subprocess as _sp_n
+    _wn = tempfile.mkdtemp()
+
+    def _blank_art(name, body):
+        with io.open(os.path.join(_wn, name), "w", encoding="utf-8") as _f_n:
+            _f_n.write(json.dumps(body))
+
+    _good = {"meta": {"target": "citebot", "model": "m", "trials": 1, "attacks_n": 1,
+                      "broke": 0, "errors": 0, "when": "2026-09-01T00:00:00Z"},
+             "results": [{"attack": {"id": "a1", "category": "x"}, "headline": "DEFENDED",
+                          "rate": "0/1", "fired": [], "trials": []}]}
+    _blank_art("results_citebot.json", _good)
+    _blank_art("results_nameless.json", dict(_good, meta=dict(_good["meta"], target="  ")))
+    _blank_art("benign_citebot.json",
+               {"meta": {"target": "citebot", "probes": 1, "when": "2026-09-01T00:00:00Z"},
+                "rows": [{"probe": {"prompt": "p", "output": "o"}, "fired": []}]})
+    _blank_art("benign_nameless.json",
+               {"meta": {"target": "", "probes": 1, "when": "2026-09-01T00:00:00Z"},
+                "rows": [{"probe": {"prompt": "p", "output": "o"}, "fired": []}]})
+    try:
+        for _mod_n, _args_n in (("discrimination", []),
+                                ("detector_coverage", []),
+                                ("history", ["--backfill"])):
+            _p_n = _sp_n.run([sys.executable, _mod_n + ".py"] + _args_n,
+                             cwd=os.path.dirname(os.path.abspath(__file__)),
+                             capture_output=True, text=True, timeout=300,
+                             env=dict(os.environ, QATRATION_OUT=_wn,
+                                      PYTHONDONTWRITEBYTECODE="1",
+                                      PYTHONIOENCODING="utf-8"))
+            _said_n = (_p_n.stdout or "") + (_p_n.stderr or "")
+            check("%s names the artifact it could not use" % _mod_n,
+                  "nameless" in _said_n, _said_n.strip()[-300:] or "(nothing said)")
+            check("...and does not crash over it" ,
+                  "Traceback (most recent call last)" not in _said_n,
+                  _said_n.strip()[-300:])
+    finally:
+        _sh_n.rmtree(_wn, ignore_errors=True)
+
     # AND THE KEY THAT MAY BE ABSENT STILL MAY BE. `attacks_n` is missing from artifacts
     # written before the field existed and `measured` reads that as zero on purpose: absent
     # is "this file predates the question", a string is a denominator nothing can divide by.

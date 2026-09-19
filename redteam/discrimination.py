@@ -42,9 +42,9 @@ def load():
             print(f"  ! {os.path.basename(str(fp))} could not be read ({why}); this target is "
                   f"not in the comparison below.", file=sys.stderr)
             continue
-        tgt = (d.get("meta") or {}).get("target")
-        if tgt:
-            data[tgt] = d.get("results") or []
+        # ANSWERED BY `read_artifact`: a blank `meta.target` is refused there and named
+        # by the branch above. `if tgt:` dropped the same file without a word.
+        data[(d.get("meta") or {}).get("target")] = d.get("results") or []
     return data
 
 
