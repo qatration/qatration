@@ -756,6 +756,57 @@ def main():
         check("...while the map of the target it names is re-scored",
               _after_m["citebot"] != _before_m["citebot"], _said_m2[-300:])
 
+    # --- A MAP THAT DID NOT MOVE IS NOT A MAP THIS COMMAND TOUCHED ---------------------
+    #
+    # The results loop and the lock-map loop each carry their own "nothing changed here"
+    # line, and only the first had a case. Deleting `if not changed: continue` from the map
+    # loop left every suite green while `maps_touched` counted every map it looked at, so
+    # the closing sentence became
+    #
+    #     re-scored 0 lock-map objective(s) across 34 map file(s).
+    #
+    # which reads as work done over thirty-four files, and the `--write` offer under it
+    # appeared for a rewrite that would change nothing. A filename header printed above an
+    # empty diff for each of them.
+    #
+    # The fixture is a map that is ALREADY CURRENT: re-scoring it produces the verdict it
+    # already carries, so `changed` is empty and the counters are the whole question.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    _fresh = [{
+        "objective": "demo",
+        "properties": [{"name": "p1", "status": "open", "hits": "3/3"}],
+        "combined": {"status": "open", "hits": "3/3"},
+        "coupling": [], "verdict": "EXPLOITED", "keyed": [],
+    }]
+    with tempfile.TemporaryDirectory() as _dm3:
+        io.open(os.path.join(_dm3, "isolation_steadybot.json"), "w",
+                encoding="utf-8", newline="\n").write(json.dumps(
+                    {"maps": _fresh,
+                     "meta": {"when": "2026-01-01T00:00:00Z", "engine": "older",
+                              "target": "steadybot"}}, indent=1))
+        _before3 = io.open(os.path.join(_dm3, "isolation_steadybot.json"),
+                           encoding="utf-8").read()
+        _rm3 = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                              capture_output=True, text=True, timeout=180,
+                              env=dict(os.environ, QATRATION_OUT=_dm3,
+                                       PYTHONIOENCODING="utf-8"))
+        _said3 = _rm3.stdout + _rm3.stderr
+        check("a lock map that is already current is not counted as one that moved",
+              "map file(s)" not in _said3, _said3[-300:])
+        check("...and the file is not named as though it had a diff",
+              "isolation_steadybot.json" not in _said3, _said3[-300:])
+        check("...and no --write is offered for a rewrite that would change nothing",
+              "--write" not in _said3, _said3[-300:])
+        # AND THE MAP IS STILL EXAMINED, or the three above are satisfied by a loop that
+        # skipped the directory: this is a re-score that found nothing to correct, not a
+        # run that looked at nothing, and the exit code is the one that says so.
+        check("...while the map was still read, so this is not `nothing was measured`",
+              _rm3.returncode == 0, "exit %s: %s" % (_rm3.returncode, _said3[-300:]))
+        check("...and the file on disk is untouched",
+              io.open(os.path.join(_dm3, "isolation_steadybot.json"),
+                      encoding="utf-8").read() == _before3, "the file moved")
+
     # AND THE CONTROL, so 0 is not simply what this command always returns: with nothing
     # on disk at all, nothing was measured and the number says so.
     with tempfile.TemporaryDirectory() as _de:
