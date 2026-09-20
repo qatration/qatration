@@ -759,6 +759,37 @@ def main():
 
     check("a config with no expect_build is not checked at all",
           rr._build_mismatch({"url": "http://localhost:1/"}) == "")
+    # AND IT SAYS NOTHING WHILE RETURNING NOTHING, which the line above cannot tell apart.
+    # `_build_mismatch` runs for EVERY target on EVERY sweep, and `if not want or not url`
+    # is what stops it asking a question the operator did not pose. Deleting it returns ""
+    # just the same -- the request fails and the `except` swallows it -- so that check stays
+    # green while every run prints
+    #
+    #     ! could not ask b''://b''/ what build it is (URLError) - this run is not
+    #       verified against expect_build {}
+    #
+    # on a target with no `expect_build` and no url at all. A warning about a verification
+    # nobody requested, naming an empty expectation and an address made of nothing, on the
+    # console of every sweep this engine runs.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    import contextlib as _ctx_b, io as _io_b
+    for _cfg_b, _what_b in (({}, "no url and no expect_build"),
+                            ({"url": "http://localhost:1/"}, "a url but no expect_build"),
+                            ({"expect_build": {"commit": "x"}}, "an expect_build but no url")):
+        _buf_b = _io_b.StringIO()
+        with _ctx_b.redirect_stdout(_buf_b):
+            _got_b = rr._build_mismatch(dict(_cfg_b))
+        check("a target with %s is not warned about its build" % _what_b,
+              _buf_b.getvalue().strip() == "" and _got_b == "",
+              "%r / %r" % (_buf_b.getvalue().strip()[:120], _got_b))
+    # AND A TARGET THAT DID ASK IS STILL TOLD when the question cannot be put, or the rule
+    # above is a gate that silences the check instead of skipping it.
+    _buf_b2 = _io_b.StringIO()
+    with _ctx_b.redirect_stdout(_buf_b2):
+        rr._build_mismatch({"url": "http://127.0.0.1:1/", "expect_build": {"commit": "x"}})
+    check("...while a target that asked for one is told the question could not be put",
+          "could not ask" in _buf_b2.getvalue(), repr(_buf_b2.getvalue()[:160]))
     check("...nor one with no url to ask", rr._build_mismatch({"expect_build": {"G": "off"}}) == "")
     # a server that cannot be reached is unverified, not verified: it must not be a mismatch
     # (that would fail every offline run) and it must say so rather than passing in silence
