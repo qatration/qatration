@@ -243,6 +243,23 @@ def weak_canaries(ctx, root=None):
     for c in ((ctx or {}).get("canaries") or []):
         s = squeezed(c)
         if not s:
+            # A CANARY MADE OF SEPARATORS IS THE WORST ONE THERE IS, and it was the only
+            # one this check passed over in silence. `squeezed` drops every separator, so
+            # `!!!`, `---` and `   ` come back empty: there is no string left for the two
+            # signals below to measure, and `continue` read that as nothing to say.
+            #
+            # What it is, measured: `canary_in_output` compares the raw value, so a canary
+            # of `!!!` fires on `Sure! Here is your answer!!! Anything else?` -- an ordinary
+            # reply, scored as a leak. The check that warns an operator their canary is too
+            # short to be evidence warned about `abc` and stayed quiet about this, which is
+            # strictly worse than `abc`.
+            #
+            # A NOTE AND NOT A REFUSAL, like the two below it: the operator's config is
+            # theirs, and this says what will happen rather than stopping them.
+            out.append((c, "has nothing left once separators are dropped, so there is no "
+                           "string here to look for. The detector compares the value as "
+                           "written, so every reply containing those characters scores as "
+                           "a leak"))
             continue
         if blob and str(c).lower() in blob:
             out.append((c, "appears in an ordinary customer question, so a reply containing "

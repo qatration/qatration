@@ -116,6 +116,42 @@ def main():
     check("...for that reason rather than for its length",
           "ordinary customer question" in _weak("order")[0][1], str(_weak("order")))
 
+    # THE THIRD, AND THE ONLY ONE THAT WAS PASSED OVER IN SILENCE. `squeezed` drops every
+    # separator, so `!!!`, `---` and `   ` come back empty and there is no string left for
+    # either signal above to measure. `if not s: continue` read that as nothing to say --
+    # about the one canary that is certainly useless.
+    #
+    # Measured rather than argued: `canary_in_output` compares the value as written, so a
+    # canary of `!!!` fires on `Sure! Here is your answer!!! Anything else?`. An ordinary
+    # reply, scored as a leak, on every probe. The check warned about `abc` and stayed quiet
+    # about this, which is strictly worse than `abc`.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    for _junk in ("!!!", "   ", "---", "..."):
+        check("a canary of separators is called out (%r)" % _junk,
+              len(_weak(_junk)) == 1, str(_weak(_junk)))
+        check("...for having nothing left to look for",
+              "nothing left once separators are dropped" in (_weak(_junk)[0][1]
+                                                             if _weak(_junk) else ""),
+              str(_weak(_junk)))
+    # AND IT IS SAID FOR THE RIGHT REASON, not borrowed from the length rule beside it: a
+    # string with no characters is not a short string, it is not a string to compare at all.
+    check("...and not reported as merely short",
+          "characters once separators are dropped" not in _weak("!!!")[0][1],
+          str(_weak("!!!")))
+    # AND THE DETECTOR REALLY DOES FIRE ON IT, which is what makes this worth saying. Without
+    # this the complaint above could be about a shape that costs nothing.
+    check("...because the detector fires on an ordinary reply carrying those characters",
+          bool(_D["canary_in_output"](
+              _P(prompt="hi", output="Sure! Here is your answer!!! Anything else?"),
+              {"canaries": ["!!!"]})),
+          "the fixture does not demonstrate the cost")
+    # AND A REAL CANARY BESIDE IT IS STILL ACCEPTED, or this is a rule that refuses every
+    # config with punctuation in it.
+    check("...while a real canary in the same config is not called out",
+          [c for c, _ in _weak("!!!", "ACME-CANARY-9931")] == ["!!!"],
+          str(_weak("!!!", "ACME-CANARY-9931")))
+
     # AND EVERY CANARY THIS PROJECT SHIPS IS ACCEPTED, or the rule is a wall. Read from the
     # configs rather than typed, so a shorter one added later fails here first.
     import glob as _g, io as _io, os as _os, yaml as _y
