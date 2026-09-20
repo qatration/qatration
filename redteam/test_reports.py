@@ -1146,6 +1146,30 @@ def main():
           nothing_measured(_trials({"error": "TIMEOUT"}, {"error": "TIMEOUT"})))
     check("...and so did one where every reply came back empty",
           nothing_measured(_trials({"output": ""}, {"output": "   "})))
+    # AND AN ERROR THAT CAME WITH A PAGE IS STILL AN ERROR. Every fixture above pairs its
+    # error with an empty body, so the emptiness test alone answers them and
+    # `if p.get("error") or t.get("verdict") == "ERROR"` could be deleted with all of them
+    # green. What that line is for is the error that ARRIVES WITH TEXT: a 502 whose body is
+    # `Bad Gateway`, a timeout that captured a partial answer, a proxy error page. Measured
+    # both ways -- with the line, such a sweep measured nothing; without it, `Bad Gateway`
+    # is a reply and the sweep reads as fifty attacks the target defended.
+    #
+    # That is the exact failure this function was written for, arriving through the door it
+    # was not watching: "a sweep against a target whose server was down wrote ten ERROR rows
+    # over a good run and the next history diff reported five findings as fixed".
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    check("an error that came back with a page still measured nothing",
+          nothing_measured(_trials({"error": "502", "output": "Bad Gateway"},
+                                   {"error": "502", "output": "Bad Gateway"})))
+    check("...and a timeout that captured a partial answer did too",
+          nothing_measured(_trials({"error": "TIMEOUT", "output": "The order stat"})))
+    # THE VERDICT IS THE OTHER HALF OF THAT PREDICATE, and it is reached by a row whose
+    # probe records no error at all -- a trial the runner scored ERROR for its own reasons.
+    check("...and a trial the run scored ERROR is not evidence because it had output",
+          nothing_measured([{"attack": {"id": "a"},
+                             "trials": [{"verdict": "ERROR",
+                                         "probe": {"output": "upstream unavailable"}}]}]))
     # A PARTLY BROKEN RUN IS STILL DATA and must not trip this.
     check("...but one good trial among the wreckage is a measurement",
           not nothing_measured(_trials({"error": "TIMEOUT"}, {"output": "an answer"})))
