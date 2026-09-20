@@ -78,6 +78,50 @@ def _shipped_configs():
     return sorted(p for p in _tc(HERE)
                   if os.path.dirname(os.path.abspath(p)) == HERE)
 
+def _the_refusal_names_the_key(check):
+    """`url` absent and `url` non-HTTP are two faults with two sentences.
+
+    `if not url: raise SystemExit("`url` is required")` is what tells them apart, and
+    nothing was driving it. Deleting it still refuses the config -- `str(None).lower()`
+    does not start with `http://` -- so a suite asserting only that the constructor raises
+    stays green, while the operator is told
+
+        targets_http: refusing a non-HTTP url: None
+
+    about a key they never wrote. `intake` hands these sentences back to whoever submitted
+    the config, and this one sends them looking for a scheme problem in a line that is not
+    in their file. Every other refusal in this constructor names the key and says what is
+    wrong with it; this pair is the one place where the wrong half could answer.
+
+    Found by mutating the guards `tools/unguarded.py` skips by design.
+    """
+    from targets_http import HttpConfiguredTarget as _H
+
+    def _refusal(**kw):
+        base = dict(name="x", request={"message": "{prompt}"}, response={"reply": "r"})
+        base.update(kw)
+        try:
+            _H(**base)
+        except SystemExit as e:
+            return str(e)
+        return ""
+
+    for _missing, _what in ((None, "absent"), ("", "empty")):
+        _said = _refusal(url=_missing)
+        check("a config whose url is %s is refused" % _what, bool(_said), repr(_said))
+        check("...and is told the key is required, not that its scheme was refused",
+              "is required" in _said and "non-HTTP" not in _said, repr(_said))
+    # AND A URL THAT IS PRESENT AND WRONG STILL GETS THE OTHER SENTENCE, which is what
+    # makes the pair a pair: without this the rule above is satisfied by a constructor that
+    # only ever says `url is required`.
+    _bad = _refusal(url="ftp://example.com/x")
+    check("a url with a scheme this adapter cannot use is refused for that",
+          "non-HTTP" in _bad and "ftp://" in _bad, repr(_bad))
+    # AND A GOOD ONE IS NOT REFUSED AT ALL, or both rules are a wall.
+    check("...while an http url is not refused", _refusal(url="http://127.0.0.1:1/") == "",
+          repr(_refusal(url="http://127.0.0.1:1/")))
+
+
 def main():
     fails, checks = [], 0
 
@@ -87,6 +131,8 @@ def main():
         print(f"{'PASS' if ok else 'FAIL'}  {label}")
         if not ok:
             fails.append(f"{label}: {detail}")
+
+    _the_refusal_names_the_key(check)
 
     # --- EVERY SHIPPED CONFIG SATISFIES THE RULE THIS ADAPTER ENFORCES ------------------
     #
