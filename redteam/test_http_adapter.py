@@ -356,6 +356,41 @@ def main():
         check("...and the counters say which of them the run actually reached",
               t.resolutions["tool_calls"] >= 1 and t.resolutions["resolved"] >= 1,
               str(t.resolutions))
+        # AND A TARGET THAT KEEPS NO SUCH COUNTER AT ALL IS NOT ONE WHOSE PATHS FOUND
+        # NOTHING. `resolutions` is set in this adapter's constructor and nowhere else:
+        # every other adapter in the package -- 34 of the 50 shipped configs, from
+        # `mcpagent` to `localrag` -- has no such attribute, so `getattr(target,
+        # "resolutions", None)` is None for them and `if not counts` is the whole of what
+        # stands between that and `None.get(...)`.
+        #
+        # `_unresolved` is read at the END of a sweep, building the artifact, so without
+        # that line `run` sends every attack, prints every row, and then dies writing the
+        # file -- the same shape this repository already records for `benign`: "sent fifty
+        # probes to a live model, printed all fifty rows and a tally, and then died writing
+        # the file", with the traceback scrolling past above the results.
+        #
+        # Found by mutating the guards `tools/unguarded.py` skips by design.
+        class _NoCounter:
+            calls_path = "trace.tools"
+            resolved_path = "trace.resolved"
+            observations_path = None
+        try:
+            _got_nc = _unres_h(_NoCounter())
+            _ok_nc, _why_nc = _got_nc == [], str(_got_nc)
+        except Exception as _e_nc:
+            _ok_nc, _why_nc = False, "%s: %s" % (type(_e_nc).__name__, _e_nc)
+        check("an adapter that keeps no resolution counter reports no wrong paths",
+              _ok_nc, _why_nc)
+        # AND ONE THAT KEEPS THE COUNTER AND RESOLVED NOTHING STILL SAYS SO, or the line
+        # above is a guard that silences the check for every target instead of skipping the
+        # ones it cannot ask. This is the case the whole function exists for: a declared
+        # path that found nothing across an entire sweep is an operator's typo.
+        class _Zero(_NoCounter):
+            resolutions = {"tool_calls": 0, "resolved": 0, "observations": 0}
+        check("...while one that counted and found nothing names the paths",
+              sorted(_unres_h(_Zero())) == ["response.resolved = 'trace.resolved'",
+                                            "response.tool_calls = 'trace.tools'"],
+              str(_unres_h(_Zero())))
 
         # A PATH THAT FINDS AN UNUSABLE VALUE STILL FOUND SOMETHING. `trace.resolved` is
         # replaced with a string here: `_pairs` cannot make pairs of it and returns [],
