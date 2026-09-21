@@ -798,6 +798,28 @@ def main():
         _tools, _why_t = _to_m(_dumb, timeout=3)
         check("a server that declares tools and never lists them is not a server with none",
               _tools is None and bool(_why_t), "%r %r" % (_tools, _why_t))
+        # AND A SERVER THAT NEVER CAME UP AT ALL IS A DIFFERENT SENTENCE. `list_tools`
+        # returns `(None, why)` and that `why` is what the command prints, so the two
+        # failures have to be told apart: the handshake never happened, or it happened and
+        # the listing did not answer. `if fatal: return None, fatal` is the whole
+        # distinction, and nothing drove it -- delete it and a server that exited on
+        # startup is reported as
+        #
+        #     the tools channel could not be read
+        #
+        # which sends an operator to the tools endpoint of a process that never started.
+        # Measured both ways on a server that exits immediately.
+        _dead_srv, _why_dead = _to_m([sys.executable, "-c", "raise SystemExit(3)"],
+                                     timeout=3)
+        check("a server that exits before the handshake is not a tools problem",
+              _dead_srv is None and "tools channel" not in (_why_dead or ""),
+              repr(_why_dead))
+        check("...and the reason names what actually happened",
+              "initialize" in (_why_dead or ""), repr(_why_dead))
+        # AND THE TOOLS SENTENCE IS STILL THERE FOR THE SERVER IT IS ABOUT, or the rule
+        # above is satisfied by a function that never says it at all.
+        check("...while the server that handshook and went quiet still gets the tools one",
+              "tools" in (_why_t or ""), repr(_why_t))
 
         # AND A SERVER THAT CLOSES ITS STDOUT. The reader thread puts `None` on the queue
         # when the pipe ends, and `if line is None: return None` is what turns that into an
