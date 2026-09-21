@@ -124,6 +124,58 @@ def main():
         if not ok:
             fails.append("%s: %s" % (label, detail))
 
+    # --- THE WATCHDOG'S TWO EXITS WERE THE TWO THINGS NOTHING DROVE --------------------
+    #
+    # `_invoke_with_timeout` runs a send on a daemon thread so a target that hangs cannot
+    # sink a sweep. It has exactly three ways out: the thread is still running, the thread
+    # left an exception in the box, or the probe is there. Neither of the first two had a
+    # case, and each of them is the ONLY thing standing between its event and a KeyError --
+    # `box["probe"]` is never set when the worker is still going or when it raised.
+    #
+    # So a target that hangs, or an adapter that throws where `send` did not catch it,
+    # produced `KeyError: 'probe'` out of the send path, mid-sweep, after the attacks before
+    # it had already gone out. A traceback about this tool, for a fact about their target.
+    #
+    # Measured both ways rather than read: with the guards, a five-second hang against a
+    # one-second budget comes back `TIMEOUT after 1s` and a raising adapter comes back with
+    # its own message. With either line deleted, both come back `KeyError`.
+    #
+    # This is the failure this engine has already paid for once: a probe that never returned
+    # held a run for eight hours and twenty minutes, which is what put the deadline here.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    from runner import _invoke_with_timeout as _iwt
+    import time as _time_w
+
+    def _hangs():
+        _time_w.sleep(5)
+
+    def _throws():
+        raise RuntimeError("the adapter blew up")
+
+    def _answers():
+        from target import Probe as _P_w
+        return _P_w(prompt="p", output="an answer")
+
+    _p_hang = _iwt(_hangs, 1)
+    check("a send that never returns comes back as a timeout, not a crash",
+          (_p_hang.error or "").startswith("TIMEOUT"), repr(_p_hang.error))
+    check("...and the deadline it missed is in the sentence",
+          "1s" in (_p_hang.error or ""), repr(_p_hang.error))
+    check("...and it is a probe, so the row it becomes carries the reason",
+          getattr(_p_hang, "seconds", None) == 1.0, repr(getattr(_p_hang, "seconds", None)))
+    _p_raise = _iwt(_throws, 5)
+    check("an adapter that raised comes back as an errored probe, not a crash",
+          "the adapter blew up" in (_p_raise.error or ""), repr(_p_raise.error))
+    check("...naming the exception type, because the operator has to recognise it",
+          "RuntimeError" in (_p_raise.error or ""), repr(_p_raise.error))
+    # AND A SEND THAT WORKED IS STILL ITS OWN PROBE, or the two above are satisfied by a
+    # watchdog that reports every call as failed.
+    _p_ok = _iwt(_answers, 5)
+    check("...while a send that answered is returned unchanged",
+          _p_ok.output == "an answer" and not _p_ok.error,
+          "%r / %r" % (_p_ok.output, _p_ok.error))
+
     work = tempfile.mkdtemp(prefix="qatration-runner-")
     leaked = None
     try:
