@@ -208,6 +208,45 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    # --- AN EMPTY ENTRY IN THE TOOL-CALL LIST ------------------------------------------
+    #
+    # `Probe.__post_init__` narrows `tool_calls` and `resolved` through `_pair`, and that
+    # function's docstring says what it is for: "this is the floor underneath it, so an
+    # adapter that builds the list by hand cannot hand a detector something it cannot
+    # unpack". Sixteen detectors unpack these as `(name, arg)`, and the comment beside the
+    # call records the cost of getting it wrong -- "an unpacking error is a detector
+    # reporting nothing, which reads as clean".
+    #
+    # The floor has a hole in it. `if not entry: return None` is what answers an empty list
+    # or tuple, and nothing drove it: without that line `_pair([])` is an IndexError, raised
+    # while a Probe is being CONSTRUCTED -- before any detector runs, out of the adapter's
+    # own return path.
+    #
+    # A JSON response whose `tool_calls` holds an empty array is all it takes, and `_pair`
+    # exists precisely because adapters build that list from their own source.
+    #
+    # Found by mutating the guards `tools/unguarded.py` skips by design.
+    from target import Probe as _P_e
+    _messy = _P_e(prompt="p", output="o",
+                  tool_calls=[("GetOrder", "id=1"), [], (), None, "bare_name"],
+                  resolved=[[], ("GetOrder", "id=1")])
+    check("a probe survives an empty entry in its tool-call list",
+          isinstance(_messy.tool_calls, list), repr(_messy.tool_calls))
+    check("...and every entry that survives is a pair a detector can unpack",
+          all(isinstance(x, tuple) and len(x) == 2 for x in _messy.tool_calls),
+          repr(_messy.tool_calls))
+    check("...with the empty ones dropped rather than kept as blanks",
+          ("", "") not in _messy.tool_calls and len(_messy.tool_calls) == 2,
+          repr(_messy.tool_calls))
+    check("...and the real call is still there, which is the point of not raising",
+          ("GetOrder", "id=1") in _messy.tool_calls, repr(_messy.tool_calls))
+    check("...and `resolved` is narrowed by the same floor",
+          _messy.resolved == [("GetOrder", "id=1")], repr(_messy.resolved))
+    # AND A BARE NAME IS STILL A CALL, because an adapter that knows the tool but not its
+    # argument has told us something and must not be dropped with the junk.
+    check("...while a bare tool name becomes a pair with an empty argument",
+          ("bare_name", "") in _messy.tool_calls, repr(_messy.tool_calls))
+
     ctx = {"canaries": [CANARY], "tool_names": ["send_email"],
            "pii_tools": ["send_email"], "exfil_tools": ["send_email"]}
 
