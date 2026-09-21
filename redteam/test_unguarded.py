@@ -96,6 +96,19 @@ def sweep_in(source, only=(), suite=None):
 
 
 def main():
+    # THE WHOLE SUITE GETS ITS OWN NOTE, first thing, because the whole suite exercises the
+    # mechanism: `sweep_in` below runs the tool's own sweep functions in this process, and
+    # each of them ends in `clear_mutant` -> `_drop_note`. With no override that is the
+    # CHECKOUT's note, and `unguarded._run` runs this file as a suite for every module it
+    # sweeps -- so a sweep would write a note, launch this suite, and have its own record
+    # torn up by the child, leaving a mutant nothing could recover from.
+    #
+    # Measured, and it is how this was found: a mutant left by a killed sweep of
+    # `targets_memorybot.py` could not be recovered, and the note was gone. Setting this at
+    # the top rather than around each block is the version that cannot be outflanked by the
+    # next arm somebody adds.
+    _note_here = tempfile.mkdtemp(prefix="unguarded-suite-note-")
+    os.environ["QATRATION_UNGUARDED_NOTE"] = os.path.join(_note_here, "note.json")
     # --- the counter that keeps the denominator honest ------------------------------------
     tested, survivors, undocumented, held, _empty = sweep_in(DOCUMENTED)
     check("a guard with no comment above it is counted, not dropped",
@@ -384,7 +397,19 @@ def main():
     # Driven as a command, because the verdict is printed there and nowhere else.
     import subprocess as _sp_u
     _tool = os.path.join(ROOT, "tools", "unguarded.py")
-    _env_u = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+    # AND ITS OWN NOTE, because RUNNING this tool is touching the note: `main` opens with
+    # `recover()`, which reads the record of a killed sweep and tears it up when the file no
+    # longer holds that mutant. A child launched from here inherits the parent's
+    # environment, so without this every invocation below destroys the recovery note of
+    # whatever sweep is running in the checkout -- and `unguarded._run` runs THIS FILE as a
+    # suite for every module it sweeps.
+    #
+    # Measured: with this line absent, writing a note and running this suite as a subprocess
+    # leaves no note behind. That is a mutant nothing can recover from, caused by the suite
+    # that tests the recovery.
+    _env_u = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1",
+                  QATRATION_UNGUARDED_NOTE=os.path.join(
+                      tempfile.mkdtemp(prefix="unguarded-suite-note-"), "note.json"))
 
     def _run_tool(*a):
         _r = _sp_u.run([sys.executable, _tool] + list(a), capture_output=True, text=True,
@@ -1236,8 +1261,16 @@ def main():
     _kw = tempfile.mkdtemp()
     # ITS OWN NOTE, NOT THE CHECKOUT'S. Writing the real one would mean `tools/check.py`
     # destroying the recovery record of a sweep somebody killed an hour earlier.
+    # THE CHECKOUT'S NOTE IS THE ONE THIS SUITE MUST NEVER RESOLVE TO, and it is computed
+    # by asking what `_note_path` would answer with the override taken away -- because
+    # `main` now sets that override once, for the whole file, rather than each block
+    # setting and popping its own. A block that popped it left every later arm writing the
+    # real note again, which is how this suite went on destroying the record of a live
+    # sweep after four narrower fixes.
+    _saved_note = os.environ.pop("QATRATION_UNGUARDED_NOTE", None)
     _real_note = unguarded._note_path()
-    os.environ["QATRATION_UNGUARDED_NOTE"] = os.path.join(_kw, "note.json")
+    if _saved_note is not None:
+        os.environ["QATRATION_UNGUARDED_NOTE"] = _saved_note
     _note = unguarded._note_path()
     _gate = [sys.executable, os.path.join(ROOT, "tools", "guard.py"), "--tree"]
 
@@ -1249,7 +1282,10 @@ def main():
 
     try:
         check("a suite gets a note of its own, away from this checkout's",
-              _note != _real_note and _note.startswith(_kw), "%s == %s" % (_note, _real_note))
+              _note != _real_note, "%s == %s" % (_note, _real_note))
+        check("...and the checkout's own note is what it would answer without the override",
+              _real_note.startswith(tempfile.gettempdir())
+              and "unguarded-recovery-" in _real_note, _real_note)
         _victim = os.path.join(_kw, "subject.py")
         _orig_v = "def f():" + chr(10) + "    return 1" + chr(10)
         io.open(_victim, "w", encoding="utf-8", newline="").write(_orig_v)
@@ -1327,28 +1363,155 @@ def main():
         check("...which the gate agrees with",
               _rc3 == 0, "rc=%s %s" % (_rc3, _out3[-90:]))
     finally:
-        os.environ.pop("QATRATION_UNGUARDED_NOTE", None)
         _sh_k.rmtree(_kw, ignore_errors=True)
 
     # AND EVERY OTHER SUITE THAT TOUCHES THE MECHANISM, asked of the tree rather than
     # remembered. The rule is not "test_unguarded is careful"; it is that no suite may
     # write the note of the checkout it runs in, and the next suite to reach for
     # `write_mutant` will not have read this comment.
-    _touchers, _careless = [], []
-    for _f in sorted(os.listdir(HERE)):
-        if not _f.startswith("test_") or not _f.endswith(".py"):
-            continue
-        _src_n = io.open(os.path.join(HERE, _f), encoding="utf-8").read()
-        if not any(_w in _src_n for _w in
-                   ("write_mutant", "clear_mutant", "_drop_note", "source_restored")):
-            continue
-        _touchers.append(_f)
-        if "QATRATION_UNGUARDED_NOTE" not in _src_n:
-            _careless.append(_f)
+    # EVERY WAY A SUITE CAN REACH THE NOTE, in one place: a direct call, a sweep entry
+    # point that ends in one, or a launch of the tool whose `main` opens with `recover()`.
+    _CALLS = ("write_mutant(", "clear_mutant(", "_drop_note(", "source_restored(",
+              "_run_tool(", "sweep_in(", "sweep_guards(", "sweep_rules(")
+
+    def _scan_for_careless(_where):
+        """-> (suites that touch the note, the ones that touch it unprotected).
+
+        A FUNCTION SO THE GATE CAN BE MADE TO FAIL. Written inline, it scanned the real
+        directory and nothing else -- and with the tree clean there is nothing for it to
+        catch, so disarming it entirely changed no answer. A gate nobody has watched fail
+        is a gate nobody has tested, and this one guards a mechanism whose failure costs a
+        mutant that cannot be recovered.
+        """
+        _touchers, _careless = [], []
+        for _f in sorted(os.listdir(_where)):
+            if not _f.startswith("test_") or not _f.endswith(".py"):
+                continue
+            _src_n = io.open(os.path.join(_where, _f), encoding="utf-8").read()
+            # RUNNING THE TOOL COUNTS. A suite that never names one of those functions can
+            # still destroy the note by launching `tools/unguarded.py`, whose `main` opens with
+            # `recover()`. That is how this file went on tearing up the checkout's note after
+            # every direct call had been put inside an override.
+            # A PATH TO THE TOOL, not a mention of its name. Twenty-seven files here name
+            # `unguarded.py` in prose or in a directory scan and touch nothing; two BUILD a
+            # path to it and run it, and those two are the ones whose children call `recover`.
+            _launches = [_l for _l in _src_n.split(chr(10))
+                         if "unguarded.py" in _l and ("join(" in _l or "sys.executable" in _l)]
+            # ONE SET FOR BOTH QUESTIONS. "does this file touch the note" and "where does
+            # it first touch it" were asked of two different lists, so a suite whose only
+            # contact is `sweep_in` was not a toucher at all and skipped the rule entirely.
+            # Found by the planted fixtures below, which is what they are for.
+            if not (_launches or any(_w in _src_n for _w in _CALLS)):
+                continue
+            _touchers.append(_f)
+            # BY LINE ORDER, NOT BY PRESENCE. This asked whether the file MENTIONS the override
+            # anywhere, which is a file-level answer to a block-level question -- and this very
+            # file passed it while calling `_drop_note` six hundred lines above the line that
+            # sets the override. The gate could not see the block it was written for.
+            #
+            # What has to hold is that the override is set BEFORE the first call that can reach
+            # the note, so every such call runs inside it.
+            # THE FIRST CALL THAT CAN REACH THE NOTE, by LINE, and a definition is not a call.
+            # Four narrower versions of this rule were wrong in four different ways and each is
+            # worth naming, because the next reader will reach for the same shortcuts:
+            #
+            #   * "does the file mention the override" -- a file-level answer to a block-level
+            #     question, which this very file passed while dropping the note six hundred
+            #     lines above the line that set one.
+            #   * "does the file name unguarded.py" -- twenty-seven files do, in prose and in
+            #     directory scans, and touch nothing.
+            #   * "where does the path to the tool get built" -- building a path does nothing;
+            #     what matters is the call.
+            #   * substring search for `sweep_in(` -- which matches `def sweep_in(`, so a file
+            #     was careless for DEFINING the function it also guards.
+            #
+            # So: the first LINE that is not a definition and not a comment and calls one of
+            # the entry points, against the first line that puts the override anywhere -- in
+            # this process or in a child's environment, both of which count.
+
+            # FROM `main` ONWARD, because a call inside a helper DEFINED above `main` runs when
+            # `main` calls it, not where it is written. Line order is a statement about time
+            # only inside the body that executes top to bottom, and that body is `main`.
+            _body_n = _src_n[_src_n.index("def main():"):] if "def main():" in _src_n else _src_n
+            _lines_n = _body_n.split(chr(10))
+            _first_touch = next(
+                (_i for _i, _l in enumerate(_lines_n)
+                 if not _l.lstrip().startswith(("#", "def ", "from ", "import "))
+                 and any(_w in _l for _w in _CALLS)), None)
+            _set_at = next((_i for _i, _l in enumerate(_lines_n)
+                            if "QATRATION_UNGUARDED_NOTE" in _l
+                            and not _l.lstrip().startswith("#")), None)
+            if _set_at is None or (_first_touch is not None and _set_at > _first_touch):
+                _careless.append(_f)
+        return _touchers, _careless
+
+    _touchers, _careless = _scan_for_careless(HERE)
     check("the suites that write a mutation note were found at all",
           len(_touchers) >= 2, str(_touchers))
     check("...and not one of them writes the note belonging to this checkout",
           _careless == [], str(_careless))
+    # AND THE GATE HAS BEEN WATCHED FAILING, over suites written to fail it. With the tree
+    # clean there is nothing here for it to catch, so `if False` in its place changed no
+    # answer -- a gate nobody has seen fail is a gate nobody has tested, and this one
+    # guards the mechanism whose failure costs a mutant that cannot be recovered.
+    _fake = tempfile.mkdtemp(prefix="careless-suites-")
+    try:
+        _CARELESS_SRC = (
+            "def main():" + chr(10)
+            + "    unguarded.sweep_in(X)" + chr(10)
+            + '    os.environ["QATRATION_UNGUARDED_NOTE"] = "too late"' + chr(10))
+        _CAREFUL_SRC = (
+            "def main():" + chr(10)
+            + '    os.environ["QATRATION_UNGUARDED_NOTE"] = "first"' + chr(10)
+            + "    unguarded.sweep_in(X)" + chr(10))
+        # A BARE SUBPROCESS, not the helper: a suite that spells the launch out itself
+        # names none of the functions in `_CALLS`, so the path scan is the only thing that
+        # can see it. Written with `_run_tool(` this fixture proved nothing about that.
+        _LAUNCHER_SRC = (
+            "def main():" + chr(10)
+            + '    _tool = os.path.join(ROOT, "tools", "unguarded.py")' + chr(10)
+            + "    subprocess.run([sys.executable, _tool])" + chr(10))
+        _INNOCENT_SRC = (
+            "# this one only mentions unguarded.py in a sentence" + chr(10)
+            + "def main():" + chr(10)
+            + "    return 0" + chr(10))
+        for _name, _src_f in (("test_careless.py", _CARELESS_SRC),
+                              ("test_careful.py", _CAREFUL_SRC),
+                              ("test_launcher.py", _LAUNCHER_SRC),
+                              ("test_innocent.py", _INNOCENT_SRC)):
+            io.open(os.path.join(_fake, _name), "w", encoding="utf-8",
+                    newline="").write(_src_f)
+        _t_f, _c_f = _scan_for_careless(_fake)
+        check("a suite that sweeps before taking its own note is named",
+              "test_careless.py" in _c_f, str(_c_f))
+        check("...and one that takes it first is not",
+              "test_careful.py" not in _c_f, str(_c_f))
+        check("...and one that launches the tool with no note at all is named",
+              "test_launcher.py" in _c_f, str(_c_f))
+        check("...while a suite that only mentions the tool is not even a toucher",
+              "test_innocent.py" not in _t_f, str(_t_f))
+        check("...and the three that do touch it were all found",
+              sorted(_t_f) == ["test_careful.py", "test_careless.py",
+                               "test_launcher.py"], str(_t_f))
+    finally:
+        _sh_k.rmtree(_fake, ignore_errors=True)
+    # AND THE GATE CAN SEE A BLOCK THAT RUNS OUTSIDE THE OVERRIDE, which the version that
+    # asked only whether the file mentions it could not. Planted, because a gate nobody has
+    # watched fail is a gate nobody has tested.
+    _planted = ("import os\n"
+                "unguarded.write_mutant(f, 'm', 'o')\n"
+                'os.environ["QATRATION_UNGUARDED_NOTE"] = "later"\n')
+    _first_p = min((_planted.index(_w) for _w in
+                    ("write_mutant(", "clear_mutant(", "_drop_note(", "source_restored(")
+                    if _w in _planted), default=None)
+    _set_p = _planted.index('os.environ["QATRATION_UNGUARDED_NOTE"]')
+    check("a suite that sets the override AFTER its first note call is careless",
+          _set_p > _first_p, "%r vs %r" % (_set_p, _first_p))
+    _ordered = ('os.environ["QATRATION_UNGUARDED_NOTE"] = "first"\n'
+                "unguarded.write_mutant(f, 'm', 'o')\n")
+    check("...while one that sets it first is not",
+          _ordered.index('os.environ["QATRATION_UNGUARDED_NOTE"]')
+          < _ordered.index("write_mutant("), _ordered)
     if FAIL:
         return 1
     print("\nOK — the instrument that names untested guards is not one of them.")
