@@ -799,6 +799,51 @@ def main():
         check("a server that declares tools and never lists them is not a server with none",
               _tools is None and bool(_why_t), "%r %r" % (_tools, _why_t))
 
+        # AND A SERVER THAT CLOSES ITS STDOUT. The reader thread puts `None` on the queue
+        # when the pipe ends, and `if line is None: return None` is what turns that into an
+        # answer. Without it the next statement calls `.strip()` on None.
+        #
+        # THIS IS THE GUARD THAT ENDED AN EIGHT-HOUR RUN. `_await` used to call `readline()`
+        # with no deadline and no sentinel, so a server that accepted the connection and
+        # then said nothing held a sweep for eight hours and twenty minutes. The deadline
+        # and the queue were written that evening; the sentinel came with them and nothing
+        # was driving it.
+        #
+        # Asked of the function directly, because a fixture server that closes its stdout
+        # and a fixture server that is merely slow look the same from outside and only one
+        # of them is this case.
+        import queue as _q_c, time as _t_c
+        from mcp_probe import _await as _await_c
+
+        def _queue_of(*items):
+            _x = _q_c.Queue()
+            for _it in items:
+                _x.put(_it)
+            return _x
+
+        _t0_c = _t_c.time()
+        _closed = _await_c(_queue_of(None), 1, _t_c.time() + 30)
+        check("a server that closes its stdout is an answer, not a crash",
+              _closed is None, repr(_closed))
+        check("...and it is answered at once rather than waited out",
+              _t_c.time() - _t0_c < 5, "%.1fs of a 30s deadline" % (_t_c.time() - _t0_c))
+        # AND THE DEADLINE IS STILL THE DEADLINE for a server that simply says nothing,
+        # which is the other half and the one the eight hours were spent in.
+        _t1_c = _t_c.time()
+        _silent = _await_c(_q_c.Queue(), 1, _t_c.time() + 1)
+        check("...while a server that says nothing at all is cut off by the deadline",
+              _silent is None and 0.5 < _t_c.time() - _t1_c < 5,
+              "%r after %.1fs" % (_silent, _t_c.time() - _t1_c))
+        # AND A REPLY AFTER THE NOISE IS STILL FOUND, or the three above are satisfied by an
+        # `_await` that answers None to everything.
+        import json as _j_c
+        _found_c = _await_c(
+            _queue_of("", "   ", "not json",
+                      _j_c.dumps({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}})),
+            1, _t_c.time() + 5)
+        check("...and a reply that arrives after blank and unparsable lines is still read",
+              (_found_c or {}).get("result") == {"ok": True}, repr(_found_c))
+
         # AND A SERVER THAT LOGS TO STDOUT. `_await`'s own docstring says lines that are
         # not JSON, and JSON that is not this id, are skipped -- and it kept half of that:
         # `json.loads` raising was caught, and a line parsing to a LIST, a string, a number
