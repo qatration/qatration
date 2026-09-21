@@ -1024,6 +1024,73 @@ def _known_targets_reads_the_fleet(check):
           "targets_notaconfig.yaml" in _out, _out[-200:])
 
 
+def _a_field_the_delivery_never_reads(check):
+    """`runner.attacker_side` dispatches on `delivery`, and each branch reads its own fields.
+
+    An `indirect` attack sends its `user_prompt`; a `chain` sends its `steps`. A `text:`
+    written beside either is never sent, and the operator who wrote it believes it was.
+
+    That is the failure `bad_delivery`'s own docstring records for a MISTYPED delivery --
+    "a multi-turn attack is delivered as a single prompt, DEFENDED describes an attack that
+    was never delivered the way it was written, and nothing anywhere says so" -- arriving
+    through a spelling that is correct.
+
+    And it is one line from the louder version. `attacker_side`'s `if delivery ==
+    "indirect"` survived a sweep of this package: delete it and the fall-through returns
+    `attack["text"]`, so that stray field IS what gets sent, the planted payload goes
+    straight to the model, and an indirect attack becomes a direct one carrying a finding
+    about the wrong thing. Measured both ways on that shape.
+    """
+    import lint_arsenal as _la_u
+
+    def _said(entry):
+        got = _la_u.bad_delivery(dict(entry, id=entry.get("id", "x")))
+        return got[0] if got else ""
+
+    for _lbl, _entry, _field in (
+            ("an indirect attack carrying a text",
+             {"delivery": "indirect", "user_prompt": "u", "seed": {"text": "s"},
+              "text": "never sent"}, "text"),
+            ("a chain carrying a text",
+             {"delivery": "chain", "steps": ["a", "b"], "text": "never sent"}, "text"),
+            ("a direct attack carrying steps",
+             {"delivery": "direct", "text": "t", "steps": ["never sent"]}, "steps"),
+            ("a sessions attack carrying a user_prompt",
+             {"delivery": "sessions", "steps": ["a"], "user_prompt": "never sent"},
+             "user_prompt")):
+        _msg = _said(_entry)
+        check("%s is refused" % _lbl, bool(_msg), repr(_msg))
+        check("...naming the field that is not sent (%s)" % _field,
+              "'%s'" % _field in _msg and "never reads" in _msg, repr(_msg))
+        check("...and what this delivery does send instead",
+              "attacker_side" in _msg, repr(_msg))
+    # AND EVERY WELL-FORMED SHAPE IS STILL ACCEPTED, or the rule is a wall. `direct` reads
+    # `user_prompt` as its fallback, so that pair is not an unread field.
+    for _lbl, _ok in (("a clean indirect",
+                       {"delivery": "indirect", "user_prompt": "u", "seed": {"text": "s"}}),
+                      ("a clean chain", {"delivery": "chain", "steps": ["a", "b"]}),
+                      ("a clean direct", {"delivery": "direct", "text": "t"}),
+                      ("a forged history, which reads both of its fields",
+                       {"delivery": "forged_history",
+                        "history": [{"role": "assistant", "content": "c"}], "text": "t"})):
+        check("%s is not refused for an unread field" % _lbl,
+              "never reads" not in _said(_ok), repr(_said(_ok)))
+    # AND THE CORPUS THIS SHIPS IS CLEAN, which is what makes the rule safe to add rather
+    # than a refusal of work already done. Counted from the arsenals, not asserted.
+    import yaml as _y_u, io as _io_u, os as _os_u
+    from workspace import arsenal_files as _af_u
+    _here_u = _os_u.path.dirname(_os_u.path.abspath(_la_u.__file__))
+    _dirty = []
+    for _fp_u in _af_u(_here_u):
+        _doc = _y_u.safe_load(_io_u.open(_fp_u, encoding="utf-8").read()) or []
+        _rows = _doc if isinstance(_doc, list) else list(_doc.values())
+        for _a_u in _rows:
+            if isinstance(_a_u, dict) and "never reads" in _said(_a_u):
+                _dirty.append("%s: %s" % (_os_u.path.basename(_fp_u), _a_u.get("id")))
+    check("no attack this project ships carries a field its delivery does not read",
+          not _dirty, ", ".join(_dirty[:6]))
+
+
 def _entry_readers_survive_a_non_mapping(check):
     """SIX READERS CARRY THE SAME LINE AND ONE OF THEM IS DOCUMENTED.
 
@@ -1096,6 +1163,7 @@ def main():
         if not ok:
             fails.append(f"{label}: {detail}")
 
+    _a_field_the_delivery_never_reads(check)
     _entry_readers_survive_a_non_mapping(check)
 
     # --- A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS --------------------------

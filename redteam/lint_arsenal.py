@@ -839,6 +839,32 @@ def bad_delivery(a, fname="arsenal"):
     # EMPTY IS NOT ABSENT. `text: ""` is falsy, and the one probe whose payload IS the
     # empty string has to be writable: a deployment that answers nothing with its whole
     # system prompt has a bug nobody had to attack it to find.
+    # AND A PAYLOAD FIELD THIS DELIVERY NEVER READS IS AN INSTRUCTION NOTHING FOLLOWS.
+    # `runner.attacker_side` dispatches on `delivery` and each branch reads its own fields:
+    # an `indirect` attack sends its `user_prompt`, a `chain` sends its `steps`. A `text:`
+    # written beside them is never sent, and the operator who wrote it believes it was.
+    #
+    # It is the same failure the paragraph above records for a mistyped delivery -- "a
+    # multi-turn attack is delivered as a single prompt, DEFENDED describes an attack that
+    # was never delivered the way it was written, and nothing anywhere says so" -- arriving
+    # through a spelling that is correct. And it is one line from becoming the louder
+    # version: with the `indirect` branch gone, that stray `text` IS what gets sent, so the
+    # planted payload goes straight to the model and the indirect attack becomes a direct
+    # one carrying a finding about the wrong thing.
+    #
+    # Measured over every arsenal here: not one shipped attack carries a field its own
+    # delivery does not read, so this refuses nothing that exists today.
+    _reads = {"direct": {"text", "user_prompt"}, "indirect": {"user_prompt", "seed"},
+              "chain": {"steps"}, "sessions": {"steps"},
+              "forged_history": {"history", "text"}}
+    _unread = sorted(k for k in ("text", "user_prompt", "steps", "history", "seed")
+                     if k in a and a.get(k) and k not in _reads[d])
+    if _unread:
+        return ["%s: %s: %s delivery never reads %s, so what is written there is not sent. "
+                "`runner.attacker_side` sends %s for this delivery; remove the field or "
+                "change the delivery."
+                % (fname, aid, d, " + ".join("'%s'" % k for k in _unread),
+                   " + ".join("'%s'" % k for k in sorted(_reads[d])))]
     need = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
             "chain": ("steps",), "sessions": ("steps",),
             "forged_history": ("history", "text")}[d]
