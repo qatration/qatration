@@ -1473,6 +1473,17 @@ NOT_MEASURED = ("SKIP", "ERROR")
 # finding is.
 BROKE = ("EXPLOITED", "PARTIAL")
 
+# HOW MUCH OF THE ARSENAL A RUN SENDS, in the module both doors already import. It was
+# written three times: `intake.SCOPES`, whose comment says it exists so the API cannot
+# answer 202 for a job argparse will reject later, and a `choices=("full", "quick")` literal
+# in each of `run_redteam` and `onboard` -- the two parsers that would do the rejecting.
+#
+# Three copies agree until a third scope is added to one of them. Then the API accepts a job
+# the runner refuses, which is the exact failure the comment on the intake copy was written
+# to prevent, arriving through the copy itself. `runs.py` already takes its `--state` choices
+# from `STATES` this way; this is the same move for the other enumeration.
+SCOPES = ("full", "quick")
+
 
 def arsenal_files(directory):
     """Every real arsenal file in a directory, sorted, scratch and slices excluded.

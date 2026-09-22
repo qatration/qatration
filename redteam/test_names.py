@@ -823,6 +823,102 @@ def main():
     check("no module writes out a constant workspace already owns", not _copies,
           "; ".join(_copies))
 
+    # --- AND A COPY THAT IS NOT A NAMED CONSTANT ----------------------------------------
+    #
+    # The scan above reads module-level ASSIGNMENTS, so it can only see a copy that was given
+    # a name. `SCOPES` was written three times and only one of them had one: `intake.SCOPES`,
+    # plus `choices=("full", "quick")` inline in each of the two parsers that would do the
+    # rejecting -- and the comment on the named copy says it exists so the API cannot answer
+    # 202 for a job argparse will refuse later. Which is a claim about two literals in other
+    # files that nothing compared it to.
+    #
+    # ORDER-INSENSITIVE, because a reordered copy is still a copy, and over the VALUE rather
+    # than the name: an inline literal has no name to match on.
+    def _values_of(path):
+        """{name: value} for every module-level collection literal in one file."""
+        try:
+            _tree = _ast_w.parse(io.open(path, encoding="utf-8").read())
+        except (SyntaxError, OSError):
+            return {}
+        out = {}
+        for _n in _tree.body:
+            if (isinstance(_n, _ast_w.Assign) and len(_n.targets) == 1
+                    and isinstance(_n.targets[0], _ast_w.Name)
+                    and isinstance(_n.value, (_ast_w.Tuple, _ast_w.List, _ast_w.Set))):
+                try:
+                    _v = _ast_w.literal_eval(_n.value)
+                except Exception:
+                    continue
+                if _v:
+                    out[_n.targets[0].id] = _v
+        return out
+
+    def _key(v):
+        try:
+            return tuple(sorted(repr(_x) for _x in v))
+        except Exception:
+            return None
+
+    def _inline_copies(sources, owned):
+        """-> (["file:line  [...] == workspace.NAME"], modules read).
+
+        A SUITE MAY WRITE THE VALUE OUT and must: a check that reads `workspace.BROKE` to say
+        what `BROKE` is asserts nothing. Eleven of them do, which is why `test_*` is skipped
+        here exactly as it is in the scan above.
+        """
+        _by = {}
+        for _n_, _v_ in owned.items():
+            _k_ = _key(_v_)
+            if _k_:
+                _by.setdefault(_k_, []).append(_n_)
+        _out, _read = [], 0
+        for _name, _src in sources:
+            if _name.startswith("test_") or _name == "workspace.py":
+                continue
+            try:
+                _tree = _ast_w.parse(_src)
+            except SyntaxError:
+                continue
+            _read += 1
+            for _n in _ast_w.walk(_tree):
+                if not isinstance(_n, (_ast_w.Tuple, _ast_w.List, _ast_w.Set)):
+                    continue
+                try:
+                    _v = _ast_w.literal_eval(_n)
+                except Exception:
+                    continue
+                _k = _key(_v)
+                if _k and _k in _by:
+                    _out.append("%s:%d  %s == workspace.%s"
+                                % (_name, _n.lineno, list(_v)[:4], _by[_k][0]))
+        return _out, _read
+
+    _owned_vals = _values_of(os.path.join(HERE, "workspace.py"))
+    check("workspace owns the scope set, so the doors can share one",
+          _owned_vals.get("SCOPES") and len(_owned_vals["SCOPES"]) >= 2,
+          str(_owned_vals.get("SCOPES")))
+    # ON PLANTED SOURCES FIRST. A scan over a tree that is already clean cannot fail, which
+    # is what let the inline copies sit there while the named-constant check beside it passed.
+    _p_bad, _ = _inline_copies(
+        [("parser.py", 'def f(ap):\n    ap.add_argument("--scope", choices=("quick", "full"))\n')],
+        _owned_vals)
+    check("an inline copy of a workspace constant is named, whatever order it is in",
+          len(_p_bad) == 1 and "SCOPES" in _p_bad[0], str(_p_bad))
+    _p_ok, _ = _inline_copies(
+        [("parser.py", 'def f(ap):\n    ap.add_argument("--mode", choices=("fast", "slow"))\n')],
+        _owned_vals)
+    check("...and an unrelated literal is not", not _p_ok, str(_p_ok))
+    _p_skip, _ = _inline_copies(
+        [("test_thing.py", 'def f():\n    assert BROKE == ("quick", "full")\n')], _owned_vals)
+    check("...and a suite writing the value out is not, because it must",
+          not _p_skip, str(_p_skip))
+    _inline, _read_n = _inline_copies(_suite_src + [
+        (os.path.basename(_p), io.open(_p, encoding="utf-8").read())
+        for _p in sorted(glob.glob(os.path.join(HERE, "*.py"))
+                         + glob.glob(os.path.join(ROOT, "tools", "*.py")))], _owned_vals)
+    check("no module writes one out inline either, across %d module(s)" % _read_n,
+          not _inline and _read_n > 20, "; ".join(_inline[:4]) or "%d read" % _read_n)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

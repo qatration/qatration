@@ -14,6 +14,7 @@ except Exception:
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
+from workspace import SCOPES
 from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -687,7 +688,7 @@ def main():
     # recorded on the run either way, because a narrow run and a wide one are different
     # measurements and a report that does not say which it was is not readable.
     ap.add_argument("--overwrite-evidence", action="store_true", help=OVERWRITE_HELP)
-    ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="full",
+    ap.add_argument("--scope", dest="scope", choices=SCOPES, default="full",
                     help="how much traffic to send: `quick` is one attack per category, "
                          "`full` is the whole arsenal. Recorded on the run either way."),
     ap.add_argument("--isolation", default=None,

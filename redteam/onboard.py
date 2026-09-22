@@ -40,6 +40,7 @@ import authorization
 import jobqueue as q
 from targets_http import HttpConfiguredTarget, CONFIG_ONLY_KEYS, dig
 from workspace import OUT, safe_target_name
+from workspace import SCOPES
 from workspace import wrong_shape as _wrong_shape
 from workspace import load_yaml_or_refuse as _load_yaml_or_refuse
 
@@ -565,7 +566,7 @@ def main():
     ap.add_argument("--root", default=str(OUT),
                     help="the workspace to queue the job in (default: this run's artifact"
                          " directory)")
-    ap.add_argument("--scope", dest="scope", choices=("full", "quick"), default="quick",
+    ap.add_argument("--scope", dest="scope", choices=SCOPES, default="quick",
                     help="how much traffic a queued sweep may send: `quick` is one attack per "
                          "category, `full` is the whole arsenal")
     # THE TARGET-AGNOSTIC ARSENAL BY DEFAULT. The engine's default is attacks.yaml, in which

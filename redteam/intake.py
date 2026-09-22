@@ -86,7 +86,11 @@ ID_RE = re.compile(r"\A[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}\Z")
 # The scopes `run_redteam.py` accepts. Checked HERE, at submission, because argparse rejecting
 # it later means the API answered 202 for a job that cannot run — an acceptance is not a
 # delivery, and the submitter is long gone by the time the worker finds out.
-SCOPES = ("full", "quick")
+#
+# AND IMPORTED RATHER THAN RETYPED, which is what makes that sentence true. The set was
+# written out here and again as `choices=` in each of the two parsers, so "the scopes
+# run_redteam accepts" was a claim about a literal in another file.
+from workspace import SCOPES
 
 
 def _problem(status, detail):
