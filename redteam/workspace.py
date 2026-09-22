@@ -1995,6 +1995,54 @@ def _unusable_results(data, name=""):
     return None
 
 
+def _text_of(value):
+    """Whatever is stored, as something a page can print. Never None, never a dict."""
+    if value is None:
+        return ""
+    # AN EMPTY CONTAINER IS NOTHING TO SHOW, not the two characters Python prints for it.
+    # `text: []` rendered as `[]`, which a reader takes for a label.
+    if isinstance(value, (list, tuple, dict, set)) and not value:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
+def _part(label, value):
+    """One labelled line, or None when there is nothing under the label.
+
+    A LABEL WITH NOTHING UNDER IT IS THE SHAPE THIS RENDERER KEEPS PRODUCING. It was fixed
+    once, for `forged_history`'s `[ask]`, and the fix went into that branch alone -- so a
+    stored `indirect` row with an empty `user_prompt` still opened the evidence block with
+    `[user prompt] ` and nothing after it, and a `chain` with a blank step still printed
+    `[turn 2] `. Same shape, same page, three branches along. One helper now, so the next
+    delivery gets it by construction.
+    """
+    _s = _text_of(value)
+    return "[%s] %s" % (label, _s) if _s.strip() else None
+
+
+def _listed(attack, field):
+    """-> (rows, None) or ([], the line to print instead).
+
+    A STRING IS ITERABLE AND THAT IS THE QUIET FAILURE. `steps: hello` -- one missing pair
+    of brackets in somebody's YAML, or an artifact written before a rule -- rendered as
+    `[turn 1] h`, `[turn 2] e`, five turns of one character each, presented to a client as
+    the conversation that breached their bot. A non-list `history` was louder and still
+    wrong: `(h or {}).get` raised `AttributeError` and took the whole report build with it.
+    Neither is a thing to guess at, so the record says what it holds.
+    """
+    v = attack.get(field)
+    if v is None or v == []:
+        return [], None
+    if not isinstance(v, list):
+        return [], ("[%s] the stored record holds %s here, not a list: %s"
+                    % (field, type(v).__name__, _text_of(v)[:120]))
+    return v, None
+
+
+def _joined(parts):
+    return "\n".join(p for p in parts if p)
+
+
 def payload_text(attack):
     """What this tool SENT for one attack, as the evidence block under a finding prints it.
 
@@ -2026,25 +2074,29 @@ def payload_text(attack):
     """
     d = attack.get("delivery")
     if d == "indirect":
-        seed = attack.get("seed", {}) or {}
-        return (f"[user prompt] {attack.get('user_prompt','')}\n"
-                f"[planted in '{seed.get('field','?')}'] {seed.get('text','')}")
+        seed = attack.get("seed") or {}
+        if not isinstance(seed, dict):
+            seed = {}
+        return _joined([_part("user prompt", attack.get("user_prompt")),
+                        _part("planted in '%s'" % (seed.get("field") or "?"),
+                              seed.get("text"))])
     if d in ("chain", "sessions"):
         label = "turn" if d == "chain" else "session"
-        return "\n".join(f"[{label} {i+1}] {s}"
-                           for i, s in enumerate(attack.get("steps", []) or []))
+        steps, wrong = _listed(attack, "steps")
+        if wrong:
+            return wrong
+        return _joined([_part("%s %d" % (label, i + 1), s)
+                        for i, s in enumerate(steps)])
     if d == "forged_history":
-        # AND THE ASK ONLY WHEN THERE IS ONE. Written unconditionally, an attack with a
-        # fabricated transcript and no `text` ended its evidence block with a bare `[ask] `
-        # -- a label with nothing under it, which is the shape `common_thread` was fixed
-        # for two commits earlier. `lint_arsenal` requires `text` of this delivery, but
-        # this reads STORED artifacts, which may predate that rule or come from a file the
-        # linter never saw.
-        _turns = [f"[forged {(h or {}).get('role','turn')}] {(h or {}).get('content','')}"
-                  for h in (attack.get("history") or [])]
-        _ask = attack.get("text", "") or ""
-        return "\n".join(_turns + ([f"[ask] {_ask}"] if _ask.strip() else []))
-    return attack.get("text", "") or ""
+        history, wrong = _listed(attack, "history")
+        if wrong:
+            return wrong
+        _turns = [_part("forged %s" % ((h.get("role") or "turn") if isinstance(h, dict)
+                                       else "turn"),
+                        h.get("content") if isinstance(h, dict) else h)
+                  for h in history]
+        return _joined(_turns + [_part("ask", attack.get("text"))])
+    return _text_of(attack.get("text"))
 
 
 def read_artifacts(paths):

@@ -150,6 +150,50 @@ def main():
           dr.payload_text({"delivery": "indirect", "user_prompt": "x",
                            "seed": {"text": "y"}}))
 
+    # --- AND THE OTHER FOUR DELIVERIES, WHICH THE BLANK-LABEL FIX MISSED -----------------
+    #
+    # `[ask] ` with nothing after it was fixed in the `forged_history` branch and the fix
+    # went no further, so the same shape was still shipping from three branches along. This
+    # renderer reads STORED artifacts -- rows written before a linter rule existed, files an
+    # operator's own linter never saw -- so "the corpus does not hold that" is not an answer.
+    _blank_ind = dr.payload_text({"delivery": "indirect", "user_prompt": "",
+                                  "seed": {"field": "doc", "text": "PLANT"}})
+    check("an indirect row with no user prompt does not open with an empty label",
+          not _blank_ind.startswith("[user prompt] \n")
+          and "PLANT" in _blank_ind, repr(_blank_ind))
+    _blank_ch = dr.payload_text({"delivery": "chain", "steps": ["a", "   ", "c"]})
+    check("...and a blank step is dropped rather than printed as a bare turn",
+          _blank_ch == "[turn 1] a\n[turn 3] c", repr(_blank_ch))
+    # AND THE NUMBER STILL NAMES THE STEP IT CAME FROM, which is why the third turn is `3`
+    # and not `2`: a reader counting turns in the evidence has to be able to find them in
+    # the arsenal.
+    check("...with the turn numbers still those of the attack, not of what survived",
+          "[turn 3] c" in _blank_ch, repr(_blank_ch))
+    # A STRING IS ITERABLE, and that one is the quiet failure rather than the loud one.
+    # `steps: hello` -- one missing pair of brackets in somebody's YAML -- rendered five
+    # turns of one character each, handed to a client as the conversation that breached
+    # their bot.
+    _str_steps = dr.payload_text({"delivery": "chain", "steps": "hello"})
+    check("a chain whose steps are a string says so instead of rendering five turns",
+          "not a list" in _str_steps and "[turn 2]" not in _str_steps, repr(_str_steps))
+    # THE SAME SHAPE UNDER `history` WAS LOUDER AND STILL WRONG: `(h or {}).get` raised
+    # AttributeError and took the report build with it.
+    _str_hist = dr.payload_text({"delivery": "forged_history", "history": "x", "text": "q"})
+    check("...and a forged history that is a string does not raise",
+          "not a list" in _str_hist, repr(_str_hist))
+    check("...while a forged turn stored as a bare string still renders",
+          dr.payload_text({"delivery": "forged_history", "history": ["a turn"],
+                           "text": ""}) == "[forged turn] a turn",
+          repr(dr.payload_text({"delivery": "forged_history", "history": ["a turn"],
+                                "text": ""})))
+    # AND WHAT A PAGE IS HANDED IS ALWAYS A STRING. `text` stored as a mapping came back as
+    # a dict, and the page does `esc(payload_text(a))` -- so a malformed row took the build
+    # down at the point it was being written up.
+    check("a stored text that is not a string still comes back as one",
+          isinstance(dr.payload_text({"text": {"a": "b"}}), str)
+          and dr.payload_text({"text": []}) == "",
+          repr(dr.payload_text({"text": {"a": "b"}})))
+
     check("esc escapes markup, so a target's own reply cannot inject into the page",
           dr.esc("<script>&") == "&lt;script&gt;&amp;")
 
