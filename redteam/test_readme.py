@@ -1550,6 +1550,7 @@ def main():
     # now, and `test_onboard` pins it to a fixture so one shared answer cannot be quietly
     # wrong for both callers at once.
     from runner import turns as _turns
+    import workspace as _ws_p
 
     def _minutes(requests, seconds_each):
         return int(requests * seconds_each / 60.0 + 0.5)
@@ -1618,6 +1619,120 @@ def main():
                   (_got[2], _got[3]) == (_minutes(_req, 2), _minutes(_req, 4)),
                   "table ~%d/~%d min, derived ~%d/~%d"
                   % (_got[2], _got[3], _minutes(_req, 2), _minutes(_req, 4)))
+
+    # --- AND THE MONEY TABLE, WHICH SAID IT WAS MEASURED AND WAS NEVER RECOUNTED ----------
+    #
+    # That section opens `measured rather than estimated: attack payloads from the corpus
+    # itself, and reply lengths from N stored replies in out/` -- and nothing in this
+    # repository reproduced it. The requests rows one screen up have been recounted since the
+    # day they drifted. This was the same fact published in dollars, gated by nobody: the
+    # sample it names had grown, and the replies in it are shorter than the ones the table
+    # was built from, so every cell overstated the bill.
+    #
+    # THE METHOD IS THE PAGE'S OWN: four characters to a token -- the rule its gated `1.5M
+    # input tokens` sentence already uses -- payloads through `payload_text`, replies from
+    # every `probe.output` stored in `out/`. Fed the 43 payload tokens and 91.5 reply tokens
+    # the published table was built from, it returns the first column to the cent: $0.89,
+    # $2.66, $4.43 at three trials and $0.05, $0.14, $0.23 for `quick` at one.
+    #
+    # THE SECOND COLUMN IT DOES NOT REPRODUCE, and that is not this method being wrong. Solve
+    # each published cell for the prompt size it implies and the four rows disagree: 954
+    # tokens, 954, 996, 1,011, for one column that names a single 4,000-character prompt. No
+    # formula produces all four, so there was nothing coherent to preserve -- which is why
+    # this one recounts both columns rather than leaving half a price table to an arithmetic
+    # nobody can state.
+    _CPT = 4.0
+    _PRICES = (("haiku", 1.0, 5.0), ("sonnet", 3.0, 15.0), ("opus", 5.0, 25.0))
+    _replies = []
+    for _p in sorted(glob.glob(os.path.join(ROOT, "out", "*.json"))):
+        try:
+            _d = json.load(io.open(_p, encoding="utf-8"))
+        except Exception:
+            continue
+        for _r in (_d.get("rows") if isinstance(_d, dict) else None) or []:
+            _pr = _r.get("probe") if isinstance(_r, dict) else None
+            if isinstance(_pr, dict) and isinstance(_pr.get("output"), str) and _pr["output"]:
+                _replies.append(len(_pr["output"]))
+    # A DENOMINATOR THAT CAN GO TO ZERO takes the mean with it, and a table computed from no
+    # replies at all would be arithmetic over an empty set, published as a price.
+    check("there are stored replies to price a run from",
+          len(_replies) > 100, "%d reply(ies) under out/" % len(_replies))
+    if _replies:
+        _reply_tok = (sum(_replies) / float(len(_replies))) / _CPT
+
+        def _payload_tok(_rows):
+            return (sum(len(_ws_p.payload_text(_a)) for _a in _rows)
+                    / float(len(_rows))) / _CPT
+
+        def _cell(_req, _ptok, _chars, _pin, _pout):
+            return (_req * (_chars / _CPT + _ptok) * _pin / 1e6
+                    + _req * _reply_tok * _pout / 1e6)
+
+        # THE SAMPLE SIZE IS PUBLISHED, so it is recounted with everything derived from it. A
+        # table can be right while the sentence introducing it is wrong, and a reader deciding
+        # whether to believe the numbers reads that sentence first.
+        _said_n = re.search(r"reply lengths from \*\*([\d,]+) stored replies\*\*", _ci)
+        check("the page says how many replies it priced a run from", bool(_said_n),
+              "the sentence is not there to be checked")
+        if _said_n:
+            check("...and it is how many are stored",
+                  int(_said_n.group(1).replace(",", "")) == len(_replies),
+                  "page says %s, out/ holds %d" % (_said_n.group(1), len(_replies)))
+        _said_p = re.search(r"An attack payload averages (\d+)\s*tokens", _ci)
+        check("the page says what an attack payload costs", bool(_said_p),
+              "the sentence is not there to be checked")
+        if _said_p:
+            check("...and it is what the corpus holds",
+                  int(_said_p.group(1)) == int(round(_payload_tok(_arsenal))),
+                  "page says %s, corpus averages %.1f"
+                  % (_said_p and _said_p.group(1), _payload_tok(_arsenal)))
+        for _scope, _rows in (("full", _arsenal), ("quick", _quick)):
+            _ptok = _payload_tok(_rows)
+            _per = sum(_turns(_a) for _a in _rows)
+            for _trials in (3, 1):
+                _req = _per * _trials
+                _row = re.search(r"`%s` x%d(?: \(the default\))? \| ([^|]+) \| ([^|]+) \|"
+                                 % (_scope, _trials), _ci)
+                check("docs/ci.md prices `%s` x%d in money" % (_scope, _trials), bool(_row),
+                      "the row is not there to be checked")
+                if not _row:
+                    continue
+                for _col, _chars in ((0, 422), (1, 4000)):
+                    _want = ["$%.2f" % _cell(_req, _ptok, _chars, _pin, _pout)
+                             for _m, _pin, _pout in _PRICES]
+                    _got = [_x.strip() for _x in _row.group(_col + 1).split("/")]
+                    check("...at %d characters of system prompt, on every model" % _chars,
+                          _got == _want,
+                          "page %s, derived %s" % (" / ".join(_got), " / ".join(_want)))
+        # AND THE CACHING SENTENCE, which quotes one of those cells and one derived from it.
+        # It reproduced $6.40 and $2.64 from the old measurements, so it is the same table
+        # and moves with it rather than being left to describe a bill nobody pays.
+        _ptok_f = _payload_tok(_arsenal)
+        _req_f = sum(_turns(_a) for _a in _arsenal) * 3
+        _sonnet = [(_pin, _pout) for _m, _pin, _pout in _PRICES if _m == "sonnet"][0]
+        _plain = _cell(_req_f, _ptok_f, 4000, *_sonnet)
+        _cached = (_req_f * (4000 / _CPT / 10.0 + _ptok_f) * _sonnet[0] / 1e6
+                   + _req_f * _reply_tok * _sonnet[1] / 1e6)
+        # `[\d.]+` TAKES THE SENTENCE'S FULL STOP WITH IT and `float` raises on it; the
+        # only reason that did not surface is that the first half already disagreed and `and`
+        # short-circuited before the second was parsed.
+        _cache_s = re.search(r"a full Sonnet sweep goes from about \$(\d+\.\d+) to\s+"
+                             r"around \$(\d+\.\d+)", _ci)
+        check("the caching paragraph quotes a sweep it can still price", bool(_cache_s),
+              "the sentence is not there to be checked")
+        if _cache_s:
+            check("...and both halves are the table's own arithmetic",
+                  (abs(float(_cache_s.group(1)) - _plain) < 0.05
+                   and abs(float(_cache_s.group(2)) - _cached) < 0.05),
+                  "page $%s -> $%s, derived $%.2f -> $%.2f"
+                  % (_cache_s.group(1), _cache_s.group(2), _plain, _cached))
+    # WHAT THIS DOES NOT COVER, in the same section, said because a block of checks reads as
+    # covering the screen it sits on. The paragraph under the table calls the system prompt
+    # `about 85% of the input bill`, and no reading of these numbers gives 85: at 4,000
+    # characters the prompt is 96% of the input tokens, 89% of all tokens and 70% of the
+    # money. It was 96, 88 and 70 under the measurements the table was built from as well, so
+    # this is not drift -- the basis could not be reconstructed, and a figure whose method is
+    # unknown is left alone rather than replaced with a guess.
 
     # AND A THIRD PLACE SAYS THE SAME SIZE, which is where the block above stopped looking.
     # The comment on it opens "THE SAME FACT, PUBLISHED TWICE, GATED ONCE" and fixed the

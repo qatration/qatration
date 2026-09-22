@@ -219,18 +219,18 @@ Time is the visible cost. The token bill is the one that decides whether a check
 running after the first month, so it is measured here rather than waved at.
 
 The token volumes below are measured rather than estimated: attack payloads from the corpus
-itself, and reply lengths from **1,259 stored replies** in `out/`. Prices are Anthropic's, per
+itself, and reply lengths from **1,738 stored replies** in `out/`. Prices are Anthropic's, per
 million tokens, as of August 2026.
 
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.89 / $2.66 / $4.43 | $2.13 / $6.39 / $10.65 |
-| `full` x1 | $0.30 / $0.89 / $1.48 | $0.71 / $2.13 / $3.55 |
-| `quick` x3 | $0.14 / $0.42 / $0.70 | $0.34 / $1.01 / $1.68 |
-| `quick` x1 | $0.05 / $0.14 / $0.23 | $0.11 / $0.34 / $0.56 |
+| `full` x3 (the default) | $0.77 / $2.30 / $3.83 | $2.08 / $6.23 / $10.38 |
+| `full` x1 | $0.26 / $0.77 / $1.28 | $0.69 / $2.08 / $3.46 |
+| `quick` x3 | $0.12 / $0.35 / $0.58 | $0.31 / $0.93 / $1.56 |
+| `quick` x1 | $0.04 / $0.12 / $0.19 | $0.10 / $0.31 / $0.52 |
 
-**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 43
+**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 47
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
 single request. At 1,464 requests that is 1.5M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
@@ -238,8 +238,8 @@ single request. At 1,464 requests that is 1.5M input tokens of your own instruct
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.40 to
-  around $2.60. If you were looking for a reason to turn caching on, a security sweep is one.
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.23 to
+  around $2.28. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on
   every relevant pull request.
