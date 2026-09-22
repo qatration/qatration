@@ -639,10 +639,9 @@ def adjudication_gaps(rows_by_target=None, path=None):
     if rows_by_target is None:
         rows_by_target = {}
         for fp in glob.glob(os.path.join(OUT_DIR, "benign_*.json")):
-            try:
-                with open(fp, encoding="utf-8") as f:
-                    d = json.load(f)
-            except Exception:
+            # THROUGH `read_artifact`, the one reader for this directory.
+            d, _why_b = read_artifact(fp)
+            if _why_b is not None:
                 # An unreadable baseline is `roll_up`'s business to report; skipping it here
                 # understates both gaps, which keeps this quiet rather than wrong.
                 continue

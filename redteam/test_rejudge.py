@@ -1014,6 +1014,58 @@ def main():
           _probe({"id": "x"}, dict(_mal, seconds=26.5)).seconds == 26.5,
           str(_probe({"id": "x"}, dict(_mal, seconds=26.5)).seconds))
 
+    # --- ONE TORN RECORD COSTS ONE RECORD --------------------------------------------------
+    #
+    # `rescore` read with `with open(...): json.load(f)`, a shape the gate against raw reads
+    # could not see, so it was the last reader in the engine not going through
+    # `read_artifact`. Measured: one truncated `results_*.json` in a workspace of three
+    # ended `qatration rejudge` with a traceback, and the two good files were not re-scored
+    # either. A torn lock map did the same through `read_maps`.
+    _real_t = os.path.join(os.path.dirname(HERE), "out")
+    if not all(os.path.exists(os.path.join(_real_t, _f))
+               for _f in ("results_localrag.json", "results_httpbot.json")):
+        print("SKIP  the torn-record replay: the artifacts are not in this checkout, so it "
+              "was NOT exercised")
+    else:
+        with tempfile.TemporaryDirectory() as _dt:
+            shutil.copy(os.path.join(_real_t, "results_localrag.json"), _dt)
+            _torn = io.open(os.path.join(_real_t, "results_httpbot.json"),
+                            encoding="utf-8").read()[:400]
+            io.open(os.path.join(_dt, "results_httpbot.json"), "w", encoding="utf-8",
+                    newline="").write(_torn)
+            io.open(os.path.join(_dt, "isolation_httpbot.json"), "w", encoding="utf-8",
+                    newline="").write('{"maps": [')
+            _rt = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                                 capture_output=True, text=True, timeout=300,
+                                 env=dict(os.environ, QATRATION_OUT=_dt,
+                                          PYTHONIOENCODING="utf-8",
+                                          PYTHONDONTWRITEBYTECODE="1"))
+            _st = _rt.stdout + _rt.stderr
+            check("a torn results file does not end the replay of the others",
+                  _rt.returncode == 0 and "Traceback" not in _st,
+                  "exit %d: %s" % (_rt.returncode, _st[-300:]))
+            check("...the torn one is named, with what stopped it",
+                  "results_httpbot.json could not be read" in _st, _st[-300:])
+            check("...and so is a torn lock map, rather than raising out of `read_maps`",
+                  "isolation_httpbot.json could not be read" in _st, _st[-300:])
+            check("...while the good one is still re-scored, and the closing line says which "
+                  "were not", "across 1 file(s)" in _st and "NOT RE-SCORED" in _st,
+                  _st[-300:])
+        # AND A WORKSPACE WHOSE ONLY RECORD IS TORN IS NOT AN EMPTY ONE: "run a sweep first"
+        # would be the wrong advice, and exit 3 is still right -- nothing was re-scored.
+        with tempfile.TemporaryDirectory() as _do:
+            io.open(os.path.join(_do, "results_httpbot.json"), "w", encoding="utf-8",
+                    newline="").write('{"meta": {')
+            _ro = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                                 capture_output=True, text=True, timeout=300,
+                                 env=dict(os.environ, QATRATION_OUT=_do,
+                                          PYTHONIOENCODING="utf-8",
+                                          PYTHONDONTWRITEBYTECODE="1"))
+            check("a workspace holding only a torn record exits 3 and says it is unreadable",
+                  _ro.returncode == 3 and "unreadable" in _ro.stdout
+                  and "run a sweep first" not in _ro.stdout,
+                  "exit %d: %s" % (_ro.returncode, _ro.stdout[-300:]))
+
     # --- REBUILDING A PAGE MUST NOT COST THE PROVENANCE OF THE RUN ----------------------
     #
     # `--write` stamps every record it rewrites with the build doing the stamping, which is

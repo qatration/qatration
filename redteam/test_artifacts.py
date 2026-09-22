@@ -644,20 +644,56 @@ def main():
     # Derived, not listed. The five tools were fixed one at a time and the fifth was found by
     # running the fourth; a list of files to check would have covered the four somebody
     # remembered.
+    #
+    # AND READ AS THE CALL, NOT AS ONE WAY OF TYPING IT. This was a one-line regex for
+    # `json.load(open(`, so the shape the engine actually used -- `with open(p) as f:` and
+    # `json.load(f)` a line later -- passed it in eight places, `json.load(io.open(...))` in a
+    # ninth. One of them was `rejudge.rescore`, the command that reads the most records:
+    # measured, one truncated `results_*.json` in a workspace of three ended it with a
+    # traceback and the two good files were not re-scored either.
+    #
+    # `json.load` takes a FILE, so every call to it is a read of one. The rule is that the
+    # only such read is the one inside `workspace`, which is the reader.
     import glob
-    import re
-    strays = []
-    for fp in sorted(glob.glob(os.path.join(HERE, "*.py"))):
-        base = os.path.basename(fp)
-        if base.startswith("test_"):
-            continue
-        src = io.open(fp, encoding="utf-8").read()
-        for i, line in enumerate(src.splitlines(), 1):
-            code_only = line.split("#")[0]
-            if re.search(r"json\.load\(\s*open\(", code_only):
-                strays.append(f"{base}:{i}")
-    check("no module opens a stored artifact without going through workspace.read_artifact",
-          not strays, f"raw json.load(open(...)) at: {strays}")
+    import ast as _ast_j
+
+    def _raw_reads(sources):
+        """(name, source) pairs -> ["file:line"] for every `json.load` outside workspace."""
+        _out = []
+        for _nm, _src in sources:
+            if _nm.startswith("test_") or _nm == "workspace.py":
+                continue
+            try:
+                _tree = _ast_j.parse(_src)
+            except SyntaxError:
+                continue
+            for _n in _ast_j.walk(_tree):
+                if (isinstance(_n, _ast_j.Call) and isinstance(_n.func, _ast_j.Attribute)
+                        and _n.func.attr == "load"
+                        and isinstance(_n.func.value, _ast_j.Name)
+                        and _n.func.value.id.lstrip("_").startswith("json")):
+                    _out.append(f"{_nm}:{_n.lineno}")
+        return _out
+
+    # ON PLANTED MODULES FIRST, one per shape the engine has used, and one that parses a
+    # string in memory and must NOT be named -- `json.loads` of an HTTP body is not a file.
+    _pl = _raw_reads([
+        ("a.py", "import json\ndef f(p):\n    return json.load(open(p))\n"),
+        ("b.py", "import json\ndef f(p):\n    with open(p) as fh:\n"
+                 "        return json.load(fh)\n"),
+        ("c.py", "import io, json as _json\ndef f(p):\n"
+                 "    return _json.load(io.open(p, encoding='utf-8'))\n"),
+        ("d.py", "import json\ndef f(body):\n    return json.loads(body)\n"),
+        ("workspace.py", "import json\ndef read(p):\n    return json.load(open(p))\n")])
+    check("the scan names a raw read in each shape the engine has used",
+          sorted({_x.split(":")[0] for _x in _pl}) == ["a.py", "b.py", "c.py"], str(_pl))
+    _mods_j = [(os.path.basename(_fp), io.open(_fp, encoding="utf-8").read())
+               for _fp in sorted(glob.glob(os.path.join(HERE, "*.py")))]
+    strays = _raw_reads(_mods_j)
+    # THE DENOMINATOR, carried into the verdict: a scan over no modules finds no strays.
+    check("no module opens a stored artifact without going through workspace.read_artifact"
+          " (%d modules read)" % sum(1 for _m, _s in _mods_j if not _m.startswith("test_")),
+          not strays and len(_mods_j) > 40, f"raw json.load at: {strays}")
 
     # --- WHAT THIS REPOSITORY SHIPS AT ITS ROOT -----------------------------------------
     #

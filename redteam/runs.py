@@ -64,11 +64,10 @@ def record_for(meta, root):
     rid = (meta or {}).get("run_id")
     if not rid:
         return None
-    try:
-        with open(_path(root, rid), encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+    # THROUGH `read_artifact`, the one reader for this directory.
+    from workspace import read_artifact as _read_art
+    _rec, _why_r = _read_art(_path(root, rid))
+    return _rec if _why_r is None else None
 
 
 def unfinished_note(meta, root):

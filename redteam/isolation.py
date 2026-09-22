@@ -393,8 +393,15 @@ def read_maps(path):
     Both shapes are read, because the artifacts already on disk are the record of expensive
     runs and re-running a fleet to change a container is not a reason to lose one.
     """
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+    # THROUGH `read_artifact`, the one reader for this directory. `with open(...):
+    # json.load(f)` was a shape the gate against raw reads could not see.
+    # RAISES, as the raw read did -- `ValueError`, which `JSONDecodeError` already was, so a
+    # caller that caught one catches the other. Both callers catch it now: `detector_coverage`
+    # named the file and moved on already; `rejudge` did not, and a torn lock map ended it.
+    from workspace import read_artifact as _read_art
+    data, _why = _read_art(path)
+    if _why is not None:
+        raise ValueError(_why)
     if isinstance(data, dict):
         return list(data.get("maps") or []), dict(data.get("meta") or {})
     return list(data or []), {}

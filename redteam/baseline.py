@@ -253,11 +253,12 @@ def canary_rates(target, canaries, out_dir=None):
     Suppressing a real finding is not the safe direction of error. It just fails quietly
     instead of loudly.
     """
-    try:
-        with open(_path(target, out_dir), encoding="utf-8") as f:
-            rows = (json.load(f).get("rows") or [])
-    except Exception:
+    # THROUGH `read_artifact`, the one reader for this directory.
+    from workspace import read_artifact
+    _d, _why = read_artifact(_path(target, out_dir))
+    if _why is not None or not isinstance(_d, dict):
         return {}
+    rows = _d.get("rows") or []
     scored = [r for r in rows if r.get("probe")]
     if not scored or not canaries:
         return {}
@@ -554,11 +555,11 @@ def _attack_probes(results, controls=False):
 
 
 def _benign_probes(target, out_dir=None):
-    try:
-        with open(_path(target, out_dir), encoding="utf-8") as f:
-            rows = (json.load(f) or {}).get("rows") or []
-    except Exception:
+    from workspace import read_artifact
+    _d, _why = read_artifact(_path(target, out_dir))
+    if _why is not None or not isinstance(_d, dict):
         return None
+    rows = _d.get("rows") or []
     out = []
     for r in rows:
         p = r.get("probe") or {}

@@ -141,10 +141,25 @@ def _probe(attack, d):
                               if d.get("reply_bytes") is not None else None))
 
 
-def rescore(path, ctx):
-    """Returns (data, [changed rows]) — never writes."""
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
+def rescore(path, ctx, why=None):
+    """Returns (data, [changed rows]) — never writes. (None, []) for a record it cannot read.
+
+    THROUGH `read_artifact`, which is the one reader for this directory and exists because
+    of what the other way costs: "a single truncated artifact took every one of them down
+    with a raw JSONDecodeError". This read was `with open(...): json.load(f)`, a shape the
+    gate against raw reads could not see, so it was the one left -- and it is the command
+    that reads the most records. Measured: one truncated `results_*.json` in a workspace of
+    three ended `qatration rejudge` with a traceback, and the two good files were not
+    re-scored either.
+
+    `why` is an out-parameter, the idiom this package uses where a caller has to say what
+    went wrong: the reason is appended, and the caller names the file.
+    """
+    data, _err = workspace.read_artifact(path)
+    if _err is not None:
+        if why is not None:
+            why.append(_err)
+        return None, []
     changed = []
     for r in data.get("results", []):
         attack = r["attack"]
@@ -357,7 +372,7 @@ def main():
     # was already correct and when there was nothing on disk to score at all -- and returned 0
     # either way. A CI step reads that as "scoring is up to date".
     examined = 0
-    total_changed, files_touched, skipped = 0, 0, []
+    total_changed, files_touched, skipped, unreadable = 0, 0, [], []
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
         name = os.path.basename(path)[len("results_"):-len(".json")]
         # Longest known target name, not `name.split("_")[0]`. The split assumes a target
@@ -370,8 +385,17 @@ def main():
         if base is None:
             skipped.append(name)                        # no config: cannot know its canaries
             continue
+        _why_r = []
+        data, changed = rescore(path, ctxs[base], why=_why_r)
+        if data is None:
+            # NAMED AND PASSED OVER, not raised and not skipped in silence. Counted apart
+            # from `examined`, because a file this could not read was not examined, and the
+            # closing line says so rather than folding it into a count of files it did.
+            print(f"\n  ! {os.path.basename(path)} could not be read ({_why_r[0]}); it is "
+                  f"NOT re-scored and its page is left as it stands")
+            unreadable.append(os.path.basename(path))
+            continue
         examined += 1
-        data, changed = rescore(path, ctxs[base])
 
         # A STALE CAVEAT IS A CHANGE. `meta["attribution"]` is computed at sweep time against
         # the target's benign run, because "this attack caused this detector to fire" is only
@@ -442,7 +466,15 @@ def main():
     maps_examined = 0
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "isolation_*.json"))):
         stem = os.path.basename(path)[len("isolation_"):-len(".json")]
-        maps, changed = rescore_map(path)
+        # A TORN LOCK MAP IS NAMED AND PASSED OVER, like a torn results file above. `read_maps`
+        # raises through the one reader now, and this was the caller that did not catch it.
+        try:
+            maps, changed = rescore_map(path)
+        except ValueError as _e_m:
+            print(f"\n  ! {os.path.basename(path)} could not be read ({_e_m}); it is NOT "
+                  f"re-scored and its page is left as it stands")
+            unreadable.append(os.path.basename(path))
+            continue
         # THE MAP'S OWN RECORD OF WHICH TARGET IT IS ABOUT, which means reading it before
         # deciding whether `--target` wants it. Resolved from the filename alone, three of
         # the maps stored here read as two other targets, and this is the command that
@@ -478,8 +510,13 @@ def main():
             # the published page for a target whose own record held the key that opened it.
             results = os.path.join(OUT_DIR, f"results_{tgt}.json") if tgt else None
             if results and os.path.exists(results):
-                with open(results, encoding="utf-8") as f:
-                    rd = json.load(f)
+                # THE SAME READER, for the same reason: this rebuilds the page from the
+                # results file, and a truncated one ended the command here too.
+                rd, _rd_why = workspace.read_artifact(results)
+                if _rd_why is not None:
+                    print(f"  ! {os.path.basename(results)} could not be read ({_rd_why}); "
+                          f"the lock map is corrected but its page is left as it stands")
+                    continue
                 # THE SAME RULE AS `run`'s panel: the artifact's own date where it has
                 # one, and marked as the filesystem's where it does not.
                 from workspace import dated as _dated_fn
@@ -502,6 +539,10 @@ def main():
               f"  Point at it, and every other command with it:\n"
               f'      export QATRATION_CONFIGS="/path/to/your.yaml"')
     verb = "rescored" if args.write else "would change"
+    # A COUNT OVER THE FILES IT COULD READ, printed as one over the directory, is the gap
+    # this whole engine is named after. The files it could not read are named beside it.
+    if unreadable:
+        print(f"\nNOT RE-SCORED — could not be read: {', '.join(unreadable)}.")
     print(f"\n{verb} {total_changed} attack row(s) across {files_touched} file(s)"
           f"{' (some of them only their attribution caveat)' if files_touched and not total_changed else ''}.")
     if maps_touched:
@@ -521,9 +562,14 @@ def main():
     # saying nothing happened. That docstring calls the verdict the most expensive kind of
     # wrong this tool can be, and the correction for it was published as an absence.
     if not examined and not maps_examined:
-        print(no_results_note(OUT_DIR) if not skipped else
-              "no artifact could be re-scored: every results file found is for a target with "
-              "no config, and re-scoring reads the canaries from the config.")
+        # AND NOT "RUN A SWEEP FIRST" OVER A DIRECTORY THAT HOLDS ONE. A workspace whose only
+        # results file is unreadable is not an empty one, and the advice for it is different.
+        print(no_results_note(OUT_DIR) if not (skipped or unreadable) else
+              "no artifact could be re-scored: every results file found is unreadable or "
+              "for a target with no config, and re-scoring reads the canaries from the config."
+              if skipped else
+              "no artifact could be re-scored: every results file found is unreadable, and "
+              "is named above.")
         return 3
     # AND SAY WHICH HALF DID NOT HAPPEN, rather than letting one 0 stand for both. A lock
     # map carries no attack rows and no attribution caveat, so a directory with maps alone

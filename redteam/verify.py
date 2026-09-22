@@ -335,8 +335,15 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     out["target"] = target.name
     ctx = tcfg.get("oracle_context", {})
 
-    with io.open(path, encoding="utf-8") as f:
-        stored = json.load(f)
+    # THROUGH `read_artifact`, the one reader for this directory. `with open(...):
+    # json.load(f)` was a shape the gate against raw reads could not see.
+    # A RECORD THAT CANNOT BE READ IS A NOTE ON THIS TARGET, the way a config that cannot be
+    # loaded already is three lines up -- not a traceback over the whole fleet.
+    from workspace import read_artifact as _read_art
+    stored, _why_v = _read_art(path)
+    if _why_v is not None:
+        out["note"] = "not read: %s" % _clipped(_why_v, 60)
+        return out
     rows = claimed(stored.get("results") or [])
     out["claims"] = len(rows)
     if not quiet:

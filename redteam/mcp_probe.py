@@ -424,10 +424,12 @@ def _compare_command(path, timeout):
     is a comparison that silently stops covering a server the day the two drift, and the
     recorded file is the only thing an operator has after the run that made it.
     """
-    try:
-        before = json.load(io.open(path, encoding="utf-8"))
-    except Exception as e:
-        print("could not read %s: %s: %s" % (path, type(e).__name__, e))
+    # THROUGH `read_artifact`, the one reader for this directory. `with open(...):
+    # json.load(f)` was a shape the gate against raw reads could not see.
+    from workspace import read_artifact as _read_art
+    before, _why_m = _read_art(path)
+    if _why_m is not None:
+        print("could not read %s: %s" % (path, _why_m))
         return 2
     # AND WHAT PARSED HAS TO BE A CORPUS. `(before or {}).get` is a `.get` on whatever the
     # file held, so `[1, 2]` came back as `AttributeError: 'list' object has no attribute

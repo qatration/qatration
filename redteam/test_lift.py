@@ -203,8 +203,13 @@ def main():
             rows = ([{"full": "*refunds.pdf* %s" % CANARY, "probe": {"prompt": "q"}}] * delivered_acting
                     + [{"full": "*refunds.pdf* nothing here", "probe": {"prompt": "q"}}] * delivered_quiet
                     + [{"full": "*shipping.pdf* nothing here", "probe": {"prompt": "q"}}] * undelivered)
+            # WITH THE META A REAL BASELINE CARRIES. `baseline` reads through `read_artifact`
+            # now, which refuses a benign file with no `meta.target` or `meta.probes` -- as
+            # every other consumer of these files already did, and as all 35 stored here
+            # satisfy. A fixture holding `rows` alone was a shape no run produces.
             io.open(os.path.join(d, "benign_fixture.json"), "w", encoding="utf-8").write(
-                json.dumps({"rows": rows}))
+                json.dumps({"meta": {"target": "fixture", "probes": len(rows)},
+                            "rows": rows}))
 
         acting = probe("*refunds.pdf* %s" % CANARY)
         quiet = probe("*refunds.pdf* nothing here")
