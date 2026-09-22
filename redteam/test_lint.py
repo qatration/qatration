@@ -1075,6 +1075,26 @@ def _a_field_the_delivery_never_reads(check):
                         "history": [{"role": "assistant", "content": "c"}], "text": "t"})):
         check("%s is not refused for an unread field" % _lbl,
               "never reads" not in _said(_ok), repr(_said(_ok)))
+    # AND THE FAULT THAT BREAKS A RUN COMES FIRST. An entry can hold both: a `chain` with a
+    # stray `text` AND no `steps`. The unread-field rule was written above the required-field
+    # one, so it answered first and the operator read "chain delivery never reads 'text'"
+    # with nothing about the missing `steps` -- which is the KeyError mid-sweep, after the
+    # attacks before it have already been sent. They remove the field, lint again, and only
+    # then learn the entry cannot run.
+    #
+    # A linter that reports the smaller fault first is one that has to be run twice, so the
+    # order is pinned here rather than left to which rule was added last.
+    _both = _said({"delivery": "chain", "text": "never sent"})
+    check("an entry missing a required field AND carrying an unread one names the fatal one",
+          "needs 'steps'" in _both, repr(_both))
+    check("...rather than the field that is merely ignored",
+          "never reads" not in _both, repr(_both))
+    # AND ONCE THE FATAL ONE IS FIXED, the other is still reported, or moving the rule down
+    # would have buried it instead of ordering it.
+    _after = _said({"delivery": "chain", "steps": ["a"], "text": "never sent"})
+    check("...and once that is fixed the unread field is reported",
+          "never reads 'text'" in _after, repr(_after))
+
     # AND THE CORPUS THIS SHIPS IS CLEAN, which is what makes the rule safe to add rather
     # than a refusal of work already done. Counted from the arsenals, not asserted.
     import yaml as _y_u, io as _io_u, os as _os_u

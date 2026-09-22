@@ -854,6 +854,22 @@ def bad_delivery(a, fname="arsenal"):
     #
     # Measured over every arsenal here: not one shipped attack carries a field its own
     # delivery does not read, so this refuses nothing that exists today.
+    need = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
+            "chain": ("steps",), "sessions": ("steps",),
+            "forged_history": ("history", "text")}[d]
+    missing = [k for k in need
+               if (a.get(k) is None if k == "text" else not a.get(k))]
+    if missing:
+        return ["%s: %s: %s delivery needs %s, and the run reads it without checking -- a missing one is a KeyError mid-sweep, after the attacks before it have been sent%s" % (fname, aid, d, " + ".join("'%s'" % k for k in need),
+                   " (use `text: \"\"` if the empty prompt is the point)"
+                   if d == "direct" else "")]
+    # AND AFTER THE FAULT THAT BREAKS A RUN, not before it. Written first, this returned
+    # on a chain carrying a stray `text` and no `steps` -- so the operator read "chain
+    # delivery never reads 'text'" and nothing about the missing `steps`, which is the
+    # KeyError mid-sweep the paragraph above is about. They remove the field, lint again,
+    # and only then learn the entry cannot run: two passes for one file, with the serious
+    # fault hidden behind the cosmetic one. A linter that reports the smaller fault first
+    # is one that has to be run twice.
     _reads = {"direct": {"text", "user_prompt"}, "indirect": {"user_prompt", "seed"},
               "chain": {"steps"}, "sessions": {"steps"},
               "forged_history": {"history", "text"}}
@@ -865,15 +881,6 @@ def bad_delivery(a, fname="arsenal"):
                 "change the delivery."
                 % (fname, aid, d, " + ".join("'%s'" % k for k in _unread),
                    " + ".join("'%s'" % k for k in sorted(_reads[d])))]
-    need = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
-            "chain": ("steps",), "sessions": ("steps",),
-            "forged_history": ("history", "text")}[d]
-    missing = [k for k in need
-               if (a.get(k) is None if k == "text" else not a.get(k))]
-    if missing:
-        return ["%s: %s: %s delivery needs %s, and the run reads it without checking -- a missing one is a KeyError mid-sweep, after the attacks before it have been sent%s" % (fname, aid, d, " + ".join("'%s'" % k for k in need),
-                   " (use `text: \"\"` if the empty prompt is the point)"
-                   if d == "direct" else "")]
     return []
 
 
