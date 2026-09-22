@@ -974,6 +974,55 @@ def main():
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 
+    # --- REBUILDING A PAGE MUST NOT COST THE PROVENANCE OF THE RUN ----------------------
+    #
+    # `--write` stamps every record it rewrites with the build doing the stamping, which is
+    # right for a re-score and wrong as the price of re-rendering. Until `--pages` existed
+    # there was no other way to bring a committed page up to date with the renderer, so the
+    # forty-five pages under `out/` went on showing what `report_engine` printed before it
+    # grew a `Which trial` block.
+    _real_p = os.path.join(os.path.dirname(HERE), "out")
+    _src_p = os.path.join(_real_p, "results_localrag.json")
+    if not os.path.exists(_src_p):
+        print("SKIP  the pages-only rebuild: the localrag artifacts are not in this "
+              "checkout, so it was NOT exercised")
+    else:
+        with tempfile.TemporaryDirectory() as _dp:
+            shutil.copy(_src_p, os.path.join(_dp, "results_localrag.json"))
+            # AND A RECORD THAT CANNOT BE READ, beside a good one: a command that stops on
+            # the first unreadable file leaves every page after it stale and says nothing.
+            io.open(os.path.join(_dp, "results_broken.json"), "w",
+                    encoding="utf-8", newline="").write("{not json")
+            _before_p = io.open(os.path.join(_dp, "results_localrag.json"),
+                                encoding="utf-8").read()
+            _envp = dict(os.environ, QATRATION_OUT=_dp, PYTHONIOENCODING="utf-8",
+                         PYTHONDONTWRITEBYTECODE="1")
+            _rp = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                  "rejudge", "--pages"],
+                                 capture_output=True, text=True, env=_envp, timeout=300)
+            _saidp = _rp.stdout + _rp.stderr
+            check("a pages-only rebuild writes the page",
+                  os.path.exists(os.path.join(_dp, "report_localrag.html")), _saidp[-300:])
+            check("...and leaves the record exactly as it found it",
+                  io.open(os.path.join(_dp, "results_localrag.json"),
+                          encoding="utf-8").read() == _before_p,
+                  "the stored record was rewritten by a command that renders")
+            check("...and says so rather than reporting a re-score it did not do",
+                  "no record was changed" in _saidp, _saidp[-300:])
+            check("...and names the record it could not read instead of stopping at it",
+                  "results_broken.json" in _saidp and _rp.returncode == 0, _saidp[-300:])
+        # AND NOTHING REBUILT IS NOT A SUCCESS, which is the same rule `tools/check.py`
+        # applies to finding no suites: an empty directory and a directory whose pages are
+        # all current would otherwise print the same sentence and exit the same way.
+        with tempfile.TemporaryDirectory() as _de:
+            _re_ = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                   "rejudge", "--pages"], capture_output=True, text=True,
+                                  env=dict(os.environ, QATRATION_OUT=_de,
+                                           PYTHONIOENCODING="utf-8",
+                                           PYTHONDONTWRITEBYTECODE="1"), timeout=300)
+            check("...and an empty workspace is 'nothing was measured', not a clean exit",
+                  _re_.returncode == 3, "exit %d: %s" % (_re_.returncode, _re_.stdout[-200:]))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

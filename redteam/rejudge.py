@@ -13,6 +13,7 @@ stored run made before that fix is scored the same wrong way.
 
     qatration rejudge              # preview, writes nothing
     qatration rejudge --write      # apply + rebuild the HTML
+    qatration rejudge --pages      # rebuild the HTML only, touching no record
 
 Read-only by default on purpose: these files are the record of expensive runs, and a
 scoring tool has no business overwriting them until someone has looked at what changes.
@@ -216,6 +217,65 @@ def rescore_map(path):
     return maps, changed
 
 
+def write_page(name, data):
+    """Rebuild `report_<name>.html` from one stored record. Writes nothing else.
+
+    WITH THE PANELS THE RUN PUT THERE. An earlier version built the page from the results
+    alone, so re-scoring a stored run silently deleted the recon fingerprint and the
+    isolation lock map from it -- ten targets here ship one or both, and the command that
+    removed them exists to keep the scores current. Same reader as `run`, so the two cannot
+    render one page from different inputs.
+
+    A FUNCTION BECAUSE TWO COMMANDS NEED IT. `--write` rebuilds the page as a consequence of
+    re-scoring; `--pages` rebuilds it and nothing else.
+    """
+    html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)
+    _recon = workspace.side_artifact(None, f"recon_{name}.json", "profile", root=OUT_DIR)
+    _iso = workspace.side_artifact(None, f"isolation_{name}.json", "maps", root=OUT_DIR)
+    with workspace.atomic_write(html) as f:
+        f.write(build_html(data["meta"], data["results"], recon=_recon, isolation=_iso))
+
+
+def rebuild_pages(only=None):
+    """Every committed report page, rebuilt from the record exactly as it is stored.
+
+    THE RECORD IS NOT TOUCHED, and that is the whole reason this exists beside `--write`.
+    Rebuilding a page used to cost the provenance of the run it describes: the write branch
+    stamps `judged_by` with the build running now and recomputes the attribution caveat, so
+    the only way to bring a page up to date with the renderer was to rewrite forty-five
+    stored records into saying they were judged today.
+
+    They needed it. `report_engine` grew a `Which trial` block -- which of the trials the
+    reply on the page came from, and how many of them broke -- and the committed pages
+    predate it, so every one of them shows a reply with no way to tell whether it was the
+    run that broke or the two that held. Nothing rebuilt them, because the gate that keeps a
+    committed page honest drives the four commands that have no side effects.
+
+    -> the names rebuilt, so a caller can say how many rather than that it went well.
+    """
+    done = []
+    for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
+        name = os.path.basename(path)[len("results_"):-len(".json")]
+        if only and name != only:
+            continue
+        # THROUGH `read_artifact`, which is the one reader for this directory: five modules
+        # opened it themselves once and a single truncated file took all five down with a
+        # raw JSONDecodeError, naming nothing. A command that rewrites every page must not
+        # be the one that stops at the first bad file and leaves the rest stale.
+        data, why = workspace.read_artifact(path)
+        if why is not None:
+            print(f"  ! {os.path.basename(path)} could not be read ({why}); its page is "
+                  f"left as it stands")
+            continue
+        if not isinstance(data, dict) or "results" not in data:
+            print(f"  ! {os.path.basename(path)} holds no results; its page is left as it "
+                  f"stands")
+            continue
+        write_page(name, data)
+        done.append(name)
+    return done
+
+
 def main():
     # THE ONE SPELLING, from the table this command is listed in. A bare parser
     # here printed the flags and left `--help` silent about the job.
@@ -225,7 +285,22 @@ def main():
                     help="apply the re-scoring and rebuild each HTML report "
                          "(default: preview only)")
     ap.add_argument("--target", default=None, help="restrict to one target name")
+    # REBUILDING A PAGE SHOULD NOT COST THE PROVENANCE OF THE RUN. `--write` stamps every
+    # record it rewrites with the build doing the stamping, which is right for a re-score
+    # and wrong as the price of re-rendering.
+    ap.add_argument("--pages", action="store_true",
+                    help="rebuild each HTML report from the stored record and write "
+                         "nothing else")
     args = ap.parse_args()
+
+    if args.pages:
+        _built = rebuild_pages(args.target)
+        print("rebuilt %d page(s) from stored records; no record was changed"
+              % len(_built))
+        # NOTHING REBUILT IS NOT A SUCCESS. An empty `out/` and a directory whose every page
+        # is current print the same sentence otherwise, and this command exists to be run
+        # after a change to the renderer.
+        return 0 if _built else 3
 
     # NO FLAG HERE, and that is a decision the build made rather than a preference. It had one
     # briefly, implemented by writing QATRATION_CONFIGS from inside this module, and `test_llm`
@@ -323,19 +398,7 @@ def main():
             data["meta"] = _judged_now(data["meta"])
             with workspace.atomic_write(path) as f:
                 json.dump(data, f, indent=2, default=str)
-            html = workspace.artifact(f"report_{name}.html", root=OUT_DIR)
-            # WITH THE PANELS THE RUN PUT THERE. This rebuilt the page from the results
-            # alone, so re-scoring a stored run silently deleted the recon fingerprint and
-            # the isolation lock map from it -- ten targets here ship one or both, and the
-            # command that removed them exists to keep the scores current. Same reader as
-            # `run`, so the two cannot render the same page from different inputs.
-            _recon = workspace.side_artifact(
-                None, f"recon_{name}.json", "profile", root=OUT_DIR)
-            _iso = workspace.side_artifact(
-                None, f"isolation_{name}.json", "maps", root=OUT_DIR)
-            with workspace.atomic_write(html) as f:
-                f.write(build_html(data["meta"], data["results"],
-                                   recon=_recon, isolation=_iso))
+            write_page(name, data)
 
     # Lock maps, which had no replay at all until one of them published HARDENED over a key
     # its own record held.

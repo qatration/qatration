@@ -1582,6 +1582,20 @@ def main():
         for _cmd in sorted(_pagey):
             _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd],
                       capture_output=True, text=True, timeout=300, env=_env)
+        # AND THE FORTY-FIVE PAGES THE SCAN ABOVE CANNOT SEE. `_pagey` reads page names out
+        # of the source as literals, and `rejudge` builds `f"report_{name}.html"` -- a name
+        # computed per target, so the scan matched none of them and this gate covered 4 of
+        # the 55 pages under `out/`. They had drifted the furthest of all of them:
+        # `report_engine` grew a `Which trial` block, naming which of the trials the reply
+        # shown came from and how many of them broke, and every committed report page
+        # predates it.
+        #
+        # `--pages` and not `--write`: the write branch stamps each record it rewrites with
+        # the build doing the stamping, so a gate driving it would rewrite forty-five stored
+        # records on every run -- inside a check whose whole subject is that a page matches
+        # the code that built it.
+        _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge", "--pages"],
+                  capture_output=True, text=True, timeout=600, env=_env)
 
         def _body(path):
             """The page without the lines a rebuild legitimately moves: its dates."""
