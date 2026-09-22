@@ -1349,6 +1349,39 @@ def main():
           silent[0] == 0 and loud[0] == 0, f"{silent[0]}, {loud[0]}")
     check_refusal(check)
 
+    # --- AND THE VOCABULARY IS READ ONCE PER FILE, NOT ONCE PER ATTACK ------------------
+    #
+    # `misspelt_keys(a, fname)` with no `known` derives the key set from the package source:
+    # a walk over every .py file here, parsed. `unusable_entries` called it that way inside
+    # its loop, so the scan ran once per entry -- 1,078 times over the shipped corpus, and
+    # `qatration lint` took 77 seconds where it now takes 4.
+    #
+    # Asserted by COUNTING THE CALLS rather than by timing, because a clock makes a gate that
+    # goes red on a slow machine and green on a fast one, and the property is not "it is
+    # quick", it is "the derived set is derived once".
+    _reads = [0]
+    _real_keys = lint.attack_keys_read
+    _vocab_once = _real_keys()
+
+    def _counting():
+        _reads[0] += 1
+        return _vocab_once
+
+    lint.attack_keys_read = _counting
+    try:
+        _many = [{"id": "a%d" % i, "category": "c", "text": "x"} for i in range(40)]
+        lint.unusable_entries(_many, "many.yaml")
+    finally:
+        lint.attack_keys_read = _real_keys
+    check("the key vocabulary is derived once for a file, not once per attack",
+          _reads[0] == 1, "%d read(s) for %d attacks" % (_reads[0], len(_many)))
+    # AND IT IS STILL THE SAME ANSWER. A hoist that passed the wrong set would be quick and
+    # wrong: a typo nothing catches is this linter's whole subject.
+    _typo = [{"id": "t1", "category": "c", "text": "x", "encoding": "base64"}]
+    check("...and a misspelt key is still named with the hoisted vocabulary",
+          any("encoding" in e for e in lint.unusable_entries(_typo, "typo.yaml")),
+          str(lint.unusable_entries(_typo, "typo.yaml")))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

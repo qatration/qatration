@@ -696,6 +696,13 @@ def unusable_entries(attacks, fname="arsenal"):
     misbehave rather than make an arsenal worse, which is why they are the ones the run
     needs before it sends anything.
     """
+    # THE VOCABULARY IS READ ONCE, not once per attack. `misspelt_keys(a, fname)` with no
+    # `known` derives it from the package source -- a walk over every .py file here -- and
+    # this loop called it that way for every entry. On the shipped corpus that is the same
+    # scan run 1,078 times: `qatration lint` took 77 seconds, and 74 of them were this.
+    # `refuse_unknown_detectors` one screen up already hoists its own vocabulary the same
+    # way, so the pattern was in the file, one function along.
+    known = attack_keys_read()
     out, seen = [], {}
     for i, a in enumerate(attacks or []):
         if not isinstance(a, dict):
@@ -730,7 +737,7 @@ def unusable_entries(attacks, fname="arsenal"):
         if not a.get("category"):
             out.append("%s: %s: missing 'category'" % (fname, aid))
         out += bad_delivery(a, fname)
-        out += misspelt_keys(a, fname)
+        out += misspelt_keys(a, fname, known)
     # NOT `bad_entry_shapes` HERE, and the absence is the point. It is already raised by
     # `refuse_unknown_detectors`, which both `run_redteam` and `run_isolation` call before
     # anything is sent -- shape before spelling, with the reason written there. Adding it
