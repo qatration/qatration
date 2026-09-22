@@ -783,7 +783,13 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
     # The directory may not exist on a first run, and it is the caller's own workspace rather
     # than something to be precious about.
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(doc, encoding="utf-8")
+    # THROUGH `atomic_write`, whose own docstring lists "every HTML page" among the
+    # artifacts an interrupted write must not leave half of. This was `Path.write_text`,
+    # which truncates first -- and the gate that converted the other writers looked for
+    # `open(path, "w")`, so a different spelling of the same write walked past it.
+    from workspace import atomic_write as _atomic
+    with _atomic(out) as _f:
+        _f.write(doc)
     print(f"wrote {out} — {len(rows)} systems, {n_vuln} vulnerable")
 
 

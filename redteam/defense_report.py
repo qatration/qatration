@@ -2114,7 +2114,13 @@ Models are helpful, not secure. Put the boundary in the tool, the query, and the
 everything the model reads (prompts, retrieved documents, tool output) as untrusted input.</p>
 </div></body></html>"""
     out = OUT_DIR / "defense_report.html"
-    out.write_text(doc, encoding="utf-8")
+    # THROUGH `atomic_write`, whose own docstring lists "every HTML page" among the
+    # artifacts an interrupted write must not leave half of. This was `Path.write_text`,
+    # which truncates first -- and the gate that converted the other writers looked for
+    # `open(path, "w")`, so a different spelling of the same write walked past it.
+    from workspace import atomic_write as _atomic
+    with _atomic(out) as _f:
+        _f.write(doc)
     # The console line leads the same way the page does, or the two disagree about what was
     # found and the terminal is the one somebody pastes into a ticket.
     print(f"wrote {out} — {n_roots} root cause(s) ({ {k: v for k, v in root_sev.items() if v} }) "

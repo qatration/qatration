@@ -267,7 +267,13 @@ def main():
 
     out = OUT_DIR / "recon_fleet.html"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(render(rows, _unreadable), encoding="utf-8")
+    # THROUGH `atomic_write`, whose own docstring lists "every HTML page" among the
+    # artifacts an interrupted write must not leave half of. This was `Path.write_text`,
+    # which truncates first -- and the gate that converted the other writers looked for
+    # `open(path, "w")`, so a different spelling of the same write walked past it.
+    from workspace import atomic_write as _atomic
+    with _atomic(out) as _f:
+        _f.write(render(rows, _unreadable))
     print(f"\nreport → {out}")
 
 

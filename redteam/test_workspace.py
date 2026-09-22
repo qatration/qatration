@@ -689,33 +689,68 @@ def check_every_command_refuses():
     # gates that used to ask this of `jobqueue` and `runs` grepped their own source for
     # `os.replace(`, and both went red the moment the rule moved into one place -- over a
     # property that had not changed.
-    _writers, _in_place = [], []
+    # EVERY SPELLING OF A TRUNCATING WRITE, not one. This scan read a bare `open(path, "w")`
+    # with the mode as the second positional argument, and nothing else -- so the four
+    # summary pages, written with `Path.write_text`, walked past it while `atomic_write`'s
+    # own docstring listed "every HTML page" among the files an interrupted write must not
+    # leave half of. `io.open(...)` and `open(path, mode="w")` would have walked past it the
+    # same way. The rule is about the WRITE; the gate read one way of typing it.
+    # THE NAMES THE ONE ATOMIC WRITER IS IMPORTED UNDER, read by the count of callers below.
     _ATOMIC = {"atomic_write", "_atomic", "_atomic2", "_atomic_r", "workspace_atomic"}
+
+    def _truncating_writes(sources):
+        """(name, source) pairs -> ["file:line  what"] for every write that truncates."""
+        _out = []
+        for _nm_w, _src_w in sources:
+            try:
+                _tw = _ast_s.parse(_src_w)
+            except SyntaxError:
+                continue
+            for _n in _ast_s.walk(_tw):
+                if not isinstance(_n, _ast_s.Call):
+                    continue
+                _f = _n.func
+                _fname = (_f.id if isinstance(_f, _ast_s.Name)
+                          else _f.attr if isinstance(_f, _ast_s.Attribute) else "")
+                if _fname in ("write_text", "write_bytes"):
+                    _out.append("%s:%d %s" % (_nm_w, _n.lineno, _ast_s.unparse(_f)[:40]))
+                    continue
+                if _fname != "open":
+                    continue
+                _mode = _n.args[1] if len(_n.args) > 1 else next(
+                    (_k.value for _k in _n.keywords if _k.arg == "mode"), None)
+                if isinstance(_mode, _ast_s.Constant) and "w" in str(_mode.value):
+                    _out.append("%s:%d %s" % (_nm_w, _n.lineno,
+                                              _ast_s.unparse(_n.args[0])[:40]
+                                              if _n.args else "?"))
+        return _out
+
+    # ON PLANTED MODULES FIRST, one per spelling, and a read that must NOT be named. The
+    # old reach proof was "the scan still sees the rule's own write", which is one spelling
+    # and so could not have noticed the other three were invisible.
+    _planted_w = _truncating_writes([
+        ("a.py", "def f(p):\n    open(p, 'w').write('x')\n"),
+        ("b.py", "import io\ndef f(p):\n    io.open(p, 'w', encoding='utf-8').write('x')\n"),
+        ("c.py", "def f(p):\n    open(p, mode='w').write('x')\n"),
+        ("d.py", "def f(p):\n    p.write_text('x', encoding='utf-8')\n"),
+        ("e.py", "def f(p):\n    return open(p).read() + open(p, 'r').read()\n")])
+    check("the scan names a truncating write in each of its spellings",
+          sorted({_x.split(":")[0] for _x in _planted_w}),
+          ["a.py", "b.py", "c.py", "d.py"])
+
+    _real_src = []
     for _fp in sorted(_g.glob(_os.path.join(_here, "*.py"))):
         _nm = _os.path.basename(_fp)
-        if _nm.startswith("test_"):
-            continue
-        try:
-            _tw = _ast_s.parse(_io.open(_fp, encoding="utf-8").read())
-        except SyntaxError:
-            continue
-        for _n in _ast_s.walk(_tw):
-            if not (isinstance(_n, _ast_s.Call) and isinstance(_n.func, _ast_s.Name)
-                    and _n.func.id == "open" and len(_n.args) > 1):
-                continue
-            _mode = _n.args[1]
-            if not (isinstance(_mode, _ast_s.Constant) and "w" in str(_mode.value)):
-                continue
-            _writers.append("%s:%d" % (_nm, _n.lineno))
-            _in_place.append("%s:%d %s" % (_nm, _n.lineno,
-                                           _ast_s.unparse(_n.args[0])[:40]))
+        if not _nm.startswith("test_"):
+            _real_src.append((_nm, _io.open(_fp, encoding="utf-8").read()))
+    _writers = _truncating_writes(_real_src)
     # THE ONE THAT IS ALLOWED TO TRUNCATE is the rule itself, which is what makes the
     # temporary file it replaces from.
-    _in_place = [w for w in _in_place if not w.startswith("workspace.py")]
+    _in_place = [w for w in _writers if not w.startswith("workspace.py")]
     check("no module writes a file in place", sorted(_in_place), [])
     # `check(label, got, want)` in this file. The only truncating write left is the one
     # inside the rule, which is what it makes the temporary file from, so the scan finding
-    # exactly it is the proof that the scan still works.
+    # exactly it is the proof that the scan still works on the real tree.
     check("...and the scan can still see a truncating write, the rule's own",
           [w for w in _writers if w.startswith("workspace.py")] != [], True)
     # AND THE CALLS THAT REPLACED THEM ARE REAL. A scan that found nothing because every

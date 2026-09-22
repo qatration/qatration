@@ -362,7 +362,13 @@ that does not separate those is counting its own homework{third_said}.</div>
 <div class="grid">{cards}</div>
 </div></body></html>"""
     out = OUT / "index.html"
-    out.write_text(doc, encoding="utf-8")
+    # THROUGH `atomic_write`, whose own docstring lists "every HTML page" among the
+    # artifacts an interrupted write must not leave half of. This was `Path.write_text`,
+    # which truncates first -- and the gate that converted the other writers looked for
+    # `open(path, "w")`, so a different spelling of the same write walked past it.
+    from workspace import atomic_write as _atomic
+    with _atomic(out) as _f:
+        _f.write(doc)
     if unmeasured:
         print("  ! %d target(s) have a results file that sent NO attacks, so they are shown as "
               "not measured\n    rather than as hardened: %s"
