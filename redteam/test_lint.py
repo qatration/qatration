@@ -545,10 +545,59 @@ def check_refusal(check):
     for _mod in ("run_redteam.py", "run_isolation.py"):
         _src = io.open(os.path.join(HERE, _mod), encoding="utf-8").read()
         check("%s scopes through workspace.scoped_to" % _mod,
-              "scoped_to" in _src, "")
-        check("...and has no second copy of the expression" % (),
-              'in a["applies_to"]' not in _src
-              and 'in o["applies_to"]' not in _src, _mod)
+              any(getattr(_n.func, "id", getattr(_n.func, "attr", "")) in
+                  ("scoped_to", "_scoped") for _n in _ast_s.walk(_ast_s.parse(_src))
+                  if isinstance(_n, _ast_s.Call)), "no call to scoped_to")
+    # AND NOTHING ELSE READS `applies_to`, found rather than listed and read as the access.
+    # The copy check was two exact spellings -- `in a["applies_to"]` and `in o["applies_to"]`
+    # -- in the two files above, so `attack.get("applies_to")` in either, or any read in a
+    # third module, was a second scoping rule it could not see. That is how the substring
+    # trap got in the first time: `name in "guardbot"` from a scope written without brackets.
+    # Two readers are not scoping and are named: `generate.to_yaml` WRITES the field into a
+    # corpus, and `lint_arsenal.main` checks that each name it holds is a real target.
+    _READS_NOT_SCOPING = {("generate.py", "to_yaml"), ("lint_arsenal.py", "main"),
+                          ("workspace.py", "scoped_to")}
+
+    def _applies_readers(sources):
+        """(name, source) pairs -> ["file:line in fn()"] for each read of `applies_to`."""
+        _out = []
+        for _nm_s, _sr_s in sources:
+            if _nm_s.startswith("test_"):
+                continue
+            try:
+                _tr_s = _ast_s.parse(_sr_s)
+            except SyntaxError:
+                continue
+            _own = {}
+            for _fn_s in _ast_s.walk(_tr_s):
+                if isinstance(_fn_s, (_ast_s.FunctionDef, _ast_s.AsyncFunctionDef)):
+                    for _c_s in _ast_s.walk(_fn_s):
+                        _own.setdefault(id(_c_s), _fn_s.name)
+            for _x in _ast_s.walk(_tr_s):
+                _is = ((isinstance(_x, _ast_s.Subscript)
+                        and isinstance(_x.slice, _ast_s.Constant)
+                        and _x.slice.value == "applies_to")
+                       or (isinstance(_x, _ast_s.Call)
+                           and getattr(_x.func, "attr", None) == "get" and _x.args
+                           and isinstance(_x.args[0], _ast_s.Constant)
+                           and _x.args[0].value == "applies_to"))
+                if _is and (_nm_s, _own.get(id(_x))) not in _READS_NOT_SCOPING:
+                    _out.append("%s:%d in %s()" % (_nm_s, _x.lineno, _own.get(id(_x))))
+        return _out
+
+    _pl_s = _applies_readers([
+        ("a.py", "def run(a, t):\n    return t in a.get('applies_to', [])\n"),
+        ("b.py", "def run(attack, t):\n    return t in attack['applies_to']\n"),
+        ("c.py", "def run(a, t):\n    return scoped_to(a, t)\n")])
+    check("a second reading of applies_to is named in either spelling, and a call is not",
+          sorted(_x.split(":")[0] for _x in _pl_s) == ["a.py", "b.py"], str(_pl_s))
+    import glob as _g_s
+    _mods_s = [(os.path.basename(_p), io.open(_p, encoding="utf-8").read())
+               for _p in sorted(_g_s.glob(os.path.join(HERE, "*.py")))]
+    _real_s = _applies_readers(_mods_s)
+    check("nothing but workspace.scoped_to decides scope (%d modules read)"
+          % sum(1 for _m, _s in _mods_s if not _m.startswith("test_")),
+          not _real_s, "; ".join(_real_s))
 
     # --- AN ENCODING THAT ENCODES NOTHING ------------------------------------------------
     #
