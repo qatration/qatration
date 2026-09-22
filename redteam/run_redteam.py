@@ -20,7 +20,11 @@ from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_na
 OUT_DIR = WORKSPACE_OUT
 
 import yaml
-from runner import run_attack, headline
+from runner import run_attack, headline, turns, DELIVERIES
+
+# CHEAPEST FIRST, AND THE ORDER IS DERIVED. `breadth_slice` ranked deliveries from a
+# literal that named four of the five; the fifth fell to a default and sorted last.
+DELIVERY_RANK = {_d: _i for _i, _d in enumerate(DELIVERIES)}
 from refusal import classify, summarize
 from report_engine import build_html
 from target import engine_version
@@ -526,7 +530,22 @@ def breadth_slice(attacks):
     category exists only as multi-turn, the multi-turn one is taken rather than the category
     being dropped — a gap in coverage is worse than a request.
     """
-    order = {"direct": 0, "forged_history": 1, "sessions": 2, "chain": 3}
+    # THE PRICE IS COUNTED, NOT LISTED. This was `{"direct": 0, "forged_history": 1,
+    # "sessions": 2, "chain": 3}` -- four of the five deliveries `runner.DELIVERIES`
+    # declares. `indirect` was missing, so it took the `.get` default of 9 and sorted BEHIND
+    # `chain`: one request ranked below three, in the function whose whole purpose is to
+    # prefer the cheap one. No category in the shipped corpus carries both, so it has cost
+    # nothing here -- and an operator's own arsenal is not the shipped corpus.
+    #
+    # AND EVERY CHAIN WAS PRICED ALIKE, which did cost something. A two-step chain and a
+    # five-step chain both scored 3 and the id broke the tie, so `memory-poison` took a
+    # three-step attack over a two-step one. `runner.turns` is where a delivery's price
+    # lives -- the same rule `docs/ci.md`, `onboard` and `requests_for` read -- and it
+    # counts the steps.
+    #
+    # The delivery is now only the tie-break between two attacks of equal cost, and its
+    # order comes from `DELIVERIES`, so a sixth delivery joins by being declared rather
+    # than by being remembered here.
     by_cat = {}
     for a in attacks:
         cat = a.get("category") or "uncategorised"
@@ -539,7 +558,10 @@ def breadth_slice(attacks):
             kept.extend(by_cat[cat])
             continue
         pick = sorted(by_cat[cat],
-                      key=lambda a: (order.get(a.get("delivery", "direct"), 9), str(a.get("id"))))
+                      key=lambda a: (turns(a),
+                                     DELIVERY_RANK.get(a.get("delivery", "direct"),
+                                                       len(DELIVERY_RANK)),
+                                     str(a.get("id"))))
         kept.append(pick[0])
     ids = {id(a) for a in kept}
     return kept, [a for a in attacks if id(a) not in ids]

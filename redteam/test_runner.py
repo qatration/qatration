@@ -464,6 +464,39 @@ def main():
           _why not in _cl_c(2, 45, 0, why_errored=_why),
           _cl_c(2, 45, 0, why_errored=_why))
 
+    # --- AND THE SHORT RUN TAKES THE CHEAP ATTACK, WITH CHEAP COUNTED ----------------
+    #
+    # `breadth_slice` ranked deliveries from a literal naming four of the five, and a
+    # missing one took the `.get` default of 9 -- so `indirect`, which is one request,
+    # sorted behind `chain`, which is three. Both properties are asked because they are
+    # not equally live: nothing in the shipped corpus carries both deliveries in one
+    # category, while the chain-length one moved the pick in five of them.
+    from run_redteam import breadth_slice as _bs_c, DELIVERY_RANK as _rank_c
+    from runner import DELIVERIES as _deliv_c
+
+    def _atk(_i, _d, **_kw):
+        return dict({"id": _i, "category": "c", "delivery": _d, "text": "x"}, **_kw)
+
+    _k1, _d1 = _bs_c([_atk("z-indirect", "indirect", seed={"doc": "x"}, user_prompt="q"),
+                      _atk("a-chain", "chain", steps=["a", "b", "c"])])
+    check("the short run prefers a one-request indirect attack to a three-step chain",
+          [_a["id"] for _a in _k1] == ["z-indirect"], str([_a["id"] for _a in _k1]))
+    check("...and drops the one it did not take rather than losing it",
+          [_a["id"] for _a in _d1] == ["a-chain"], str([_a["id"] for _a in _d1]))
+    # AND THE SHORTER OF TWO CHAINS. Priced by delivery alone these scored the same and
+    # the id decided, which is how a three-step attack was taken over a two-step one.
+    _k2, _ = _bs_c([_atk("a-long", "chain", steps=["a", "b", "c", "d"]),
+                    _atk("z-short", "chain", steps=["a", "b"])])
+    check("...and the shorter of two chains, whichever id sorts first",
+          [_a["id"] for _a in _k2] == ["z-short"], str([_a["id"] for _a in _k2]))
+    # AND EVERY DECLARED DELIVERY HAS A RANK. True by construction today, and that is the
+    # point: it is what stops the literal coming back. With the old map in place this is
+    # the check that names which delivery was left out, rather than the reader finding out
+    # from a run that cost three times what it needed to.
+    check("every delivery the runner declares has a rank of its own",
+          set(_rank_c) == set(_deliv_c) and len(set(_rank_c.values())) == len(_deliv_c),
+          "%s vs %s" % (sorted(_rank_c), sorted(_deliv_c)))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:
