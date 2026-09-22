@@ -107,7 +107,13 @@ def main():
     # `targets_memorybot.py` could not be recovered, and the note was gone. Setting this at
     # the top rather than around each block is the version that cannot be outflanked by the
     # next arm somebody adds.
+    # AND IT IS CLEANED UP. Created and never removed, this leaked one directory per run --
+    # and `tools/check.py` runs this suite on every pass while `unguarded._run` runs it once
+    # per module swept, so a day of sweeping left dozens of them. A suite that checks the
+    # tool does not litter should not.
     _note_here = tempfile.mkdtemp(prefix="unguarded-suite-note-")
+    import atexit as _atexit_n, shutil as _sh_n
+    _atexit_n.register(_sh_n.rmtree, _note_here, True)
     os.environ["QATRATION_UNGUARDED_NOTE"] = os.path.join(_note_here, "note.json")
     # --- the counter that keeps the denominator honest ------------------------------------
     tested, survivors, undocumented, held, _empty = sweep_in(DOCUMENTED)
@@ -407,9 +413,12 @@ def main():
     # Measured: with this line absent, writing a note and running this suite as a subprocess
     # leaves no note behind. That is a mutant nothing can recover from, caused by the suite
     # that tests the recovery.
+    # THE SECOND ONE, and it is why the first cleanup did not empty the temp folder: this
+    # prefix is created twice, once for this process and once for the children below.
+    _child_note = tempfile.mkdtemp(prefix="unguarded-suite-note-")
+    _atexit_n.register(_sh_n.rmtree, _child_note, True)
     _env_u = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1",
-                  QATRATION_UNGUARDED_NOTE=os.path.join(
-                      tempfile.mkdtemp(prefix="unguarded-suite-note-"), "note.json"))
+                  QATRATION_UNGUARDED_NOTE=os.path.join(_child_note, "note.json"))
 
     def _run_tool(*a):
         _r = _sp_u.run([sys.executable, _tool] + list(a), capture_output=True, text=True,
@@ -1510,6 +1519,36 @@ def main():
             if _set_at is None or (_first_touch is not None and _set_at > _first_touch):
                 _careless.append(_f)
         return _touchers, _careless
+
+    # AND THIS SUITE LEAVES NOTHING BEHIND EITHER. Both note directories are created with
+    # the same prefix -- one for this process, one for the children -- and neither was
+    # removed, so `tools/check.py` and every module swept left one each. A suite that
+    # checks the tool does not litter the workspace should not litter the temp folder.
+    #
+    # Asked of the registry rather than by running this file inside itself: what has to
+    # hold is that every directory this suite makes has a cleanup attached to it.
+    _made = [_note_here, _child_note]
+    check("this suite makes two note directories and both still exist to be removed",
+          all(os.path.isdir(_d) for _d in _made) and len(set(_made)) == 2, str(_made))
+    # AND NO THIRD ONE IS CREATED WITHOUT A CLEANUP. The needle is assembled from pieces,
+    # because a scan written with the literal in it MATCHES ITS OWN LINE -- narrowing the
+    # pattern does not help, the scanner always contains what it looks for. Same trick and
+    # same reason as `_pat8 = "attacks" + "*.yaml"` in `test_workspace`.
+    _needle = "= tempfile.mkdtemp(prefix=" + chr(34) + "unguarded-suite-note-"
+    _src_self = io.open(os.path.abspath(__file__), encoding="utf-8").read().split(chr(10))
+    _creations = [_l for _l in _src_self if _needle in _l]
+    check("...and nothing creates a third one, which would have no cleanup attached",
+          len(_creations) == 2, str(len(_creations)))
+    # AND EACH ONE IS REGISTERED BY NAME, which counting them does not check. Both cases
+    # above hold with the `atexit` lines deleted: two directories still exist at this point
+    # and there are still only two creations. The property is that nothing is made without
+    # a cleanup attached to it, so the pairing is what has to be read.
+    _reg = "_atexit_n.register(_sh_n.rmtree, "
+    _unregistered = [_l.split("=")[0].strip() for _l in _creations
+                     if not any(_r.strip().startswith(_reg + _l.split("=")[0].strip())
+                                for _r in _src_self)]
+    check("...and each one has a cleanup registered against its own name",
+          not _unregistered, str(_unregistered))
 
     _touchers, _careless = _scan_for_careless(HERE)
     check("the suites that write a mutation note were found at all",
