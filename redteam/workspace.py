@@ -2034,10 +2034,16 @@ def payload_text(attack):
         return "\n".join(f"[{label} {i+1}] {s}"
                            for i, s in enumerate(attack.get("steps", []) or []))
     if d == "forged_history":
-        return "\n".join(
-            [f"[forged {(h or {}).get('role','turn')}] {(h or {}).get('content','')}"
-             for h in (attack.get("history") or [])]
-            + [f"[ask] {attack.get('text','') or ''}"])
+        # AND THE ASK ONLY WHEN THERE IS ONE. Written unconditionally, an attack with a
+        # fabricated transcript and no `text` ended its evidence block with a bare `[ask] `
+        # -- a label with nothing under it, which is the shape `common_thread` was fixed
+        # for two commits earlier. `lint_arsenal` requires `text` of this delivery, but
+        # this reads STORED artifacts, which may predate that rule or come from a file the
+        # linter never saw.
+        _turns = [f"[forged {(h or {}).get('role','turn')}] {(h or {}).get('content','')}"
+                  for h in (attack.get("history") or [])]
+        _ask = attack.get("text", "") or ""
+        return "\n".join(_turns + ([f"[ask] {_ask}"] if _ask.strip() else []))
     return attack.get("text", "") or ""
 
 
