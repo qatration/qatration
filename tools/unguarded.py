@@ -303,6 +303,28 @@ def _caught(code):
     return bool(code)
 
 
+def _still_green(suite):
+    """-> "" when this suite passed, else the sentence saying what happened.
+
+    THE SEVEN ASSERTS READ A TIMEOUT AS A FAILURE. `_run` answers 99 when a suite never
+    finished, and `assert _run(s) == 0` is false for 99 exactly as it is for 1 -- so a
+    slow minute at the end of a module sweep aborts the run with "workspace.py was not
+    restored", accusing this tool of damaging a working tree it restored correctly. The
+    operator is handed the one sentence that would make them stop and check their git
+    status, by a run that measured nothing.
+
+    Same distinction `_caught` draws one screen up, and the same reason: could-not-measure
+    is a third answer, and an assertion that folds it into `failed` is a gap reported as a
+    measurement.
+    """
+    verdict = _caught(_run(suite))
+    if verdict is True:
+        return "%s is red" % suite
+    if verdict is None:
+        return "%s never finished, so this could not be checked" % suite
+    return ""
+
+
 def _any_caught(suites):
     """-> (True | False, [suites that never finished]) over a mutant already on disk.
 
@@ -571,7 +593,9 @@ def sweep_guards(only=()):
                     else:
                         survivors.append((mod, i + 1, lines[i].strip(),
                                           ",".join(_suites_reaching(mod))))
-        assert not any(_run(s) for s in suites), "%s was not restored" % mod
+        for _s_r in suites:
+            _why_r = _still_green(_s_r)
+            assert not _why_r, "%s: after the sweep, %s" % (mod, _why_r)
         print("%-24s %d/%-2d defended   (%s)" % (mod, caught, len(hits), ",".join(suites)))
     return tested, survivors, undocumented, held, empty
 
@@ -687,7 +711,8 @@ def sweep_rules(modules=SWEPT_MODULES):
             print("  ! nothing imports %s, so its silence here is not a result" % mod)
             continue
         for s in suites:
-            assert _run(s) == 0, "%s is not green to begin with" % s
+            _why_g = _still_green(s)
+            assert not _why_g, "before any mutation: %s" % _why_g
         with source_restored(path):
             for name, lineno, kind, node in sites:
                 lines = orig.split("\n")
@@ -718,7 +743,8 @@ def sweep_rules(modules=SWEPT_MODULES):
                 if not red:
                     free.append((mod, name, lineno, shown))
         for s in suites:
-            assert _run(s) == 0, "%s was not restored" % mod
+            _why_r = _still_green(s)
+            assert not _why_r, "%s: after the sweep, %s" % (mod, _why_r)
     return total, free, untouched
 
 
@@ -1131,7 +1157,8 @@ def _sweep_patterns_in(mod):
         print("  ! nothing imports %s, so its silence here is not a result" % mod)
         return 0, [], []
     for s in suites:
-        assert _run(s) == 0, "%s is not green to begin with" % s
+        _why_g = _still_green(s)
+        assert not _why_g, "before any mutation: %s" % _why_g
     free = []
     with source_restored(path):
         for name, det, i, node in sites:
@@ -1162,7 +1189,8 @@ def _sweep_patterns_in(mod):
             if not red:
                 free.append((mod, name, det, shown))
     for s in suites:
-        assert _run(s) == 0, "%s was not restored" % mod
+        _why_r = _still_green(s)
+        assert not _why_r, "%s: after the sweep, %s" % (mod, _why_r)
     return len(sites), free, skipped
 
 
@@ -1246,7 +1274,8 @@ def sweep_refusals(modules=SWEPT_MODULES):
             print("  ! nothing imports %s, so its silence here is not a result" % mod)
             continue
         for s in suites:
-            assert _run(s) == 0, "%s is not green to begin with" % s
+            _why_g = _still_green(s)
+            assert not _why_g, "before any mutation: %s" % _why_g
         base = _replay() if mod == "oracle.py" else None
         if mod == "oracle.py" and (base is None or not base.get("n")):
             print("  ! no stored evidence in out/, so every survivor below is unfiltered")
@@ -1290,7 +1319,8 @@ def sweep_refusals(modules=SWEPT_MODULES):
                     # difference between this arm's number and its meaning.
                     excused.append((mod, name, lineno))
         for s in suites:
-            assert _run(s) == 0, "%s was not restored" % mod
+            _why_r = _still_green(s)
+            assert not _why_r, "%s: after the sweep, %s" % (mod, _why_r)
     return total, moved, excused
 
 

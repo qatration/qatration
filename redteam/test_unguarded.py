@@ -642,6 +642,46 @@ def main():
     finally:
         unguarded._run = _real_run_q
 
+    # --- AND THE ASSERTIONS READ THAT THIRD STATE TOO ----------------------------------
+    #
+    # `_caught` was added for the sweep loops and seven ASSERTS kept the old reading:
+    # `assert _run(s) == 0` is false for a timeout exactly as it is for a failure. So a
+    # suite that ran long at the end of a module sweep aborted the run with
+    #
+    #     workspace.py was not restored
+    #
+    # which accuses this tool of damaging a working tree it restored correctly, and is the
+    # one sentence that would make an operator stop and check their git status. A run that
+    # measured nothing, published as a verdict about their files.
+    #
+    # `_still_green` answers the three states in words, and every assert now carries the
+    # reason rather than an equality.
+    _real_run_g = unguarded._run
+    try:
+        unguarded._run = lambda s, timeout=420: {"green.py": 0, "red.py": 1,
+                                                 "slow.py": unguarded.TIMED_OUT}[s]
+        check("a suite that passed is green and says nothing",
+              unguarded._still_green("green.py") == "", unguarded._still_green("green.py"))
+        check("...one that failed is named as red",
+              "is red" in unguarded._still_green("red.py"),
+              unguarded._still_green("red.py"))
+        check("...and one that never finished says THAT, not that it failed",
+              "never finished" in unguarded._still_green("slow.py")
+              and "red" not in unguarded._still_green("slow.py"),
+              unguarded._still_green("slow.py"))
+    finally:
+        unguarded._run = _real_run_g
+    # AND NO ARM STILL COMPARES AN EXIT CODE TO ZERO, which is the form that cannot tell
+    # the third state from the second. Asked of the source, because the arms that do it are
+    # in sweeps too slow to drive here.
+    _tool_g = io.open(os.path.join(ROOT, "tools", "unguarded.py"),
+                      encoding="utf-8").read()
+    _old_form = [_l.strip() for _l in _tool_g.split(chr(10))
+                 if _l.lstrip().startswith("assert ")
+                 and ("_run(s)" in _l or "_run(suite)" in _l)]
+    check("no assertion in the tool reads an exit code directly",
+          _old_form == [], str(_old_form[:2]))
+
     # --- A SUITE THAT REACHES A MODULE THROUGH ANOTHER ONE STILL REACHES IT ------------
     #
     # `_suites_touching` matches a direct import and nothing else, and its docstring claims
