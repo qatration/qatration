@@ -1180,9 +1180,51 @@ def main():
         for k in ("adapter", "oracle_context", "authorization", "provenance", "skip_in_fleet"):
             check(f"{k} is declared a harness key rather than an adapter one",
                   k in _th.CONFIG_ONLY_KEYS)
-        for entry in ("run_redteam.py", "onboard.py"):
-            src = open(os.path.join(HERE, entry), encoding="utf-8").read()
-            check(f"{entry} strips harness keys from that one list", "CONFIG_ONLY_KEYS" in src)
+        # EVERY CONSTRUCTION, FOUND RATHER THAN LISTED, AND READ AS THE CALL. This named two
+        # files and asked whether `CONFIG_ONLY_KEYS` appeared anywhere in each -- so `onboard`,
+        # which constructs the adapter TWICE, passed on the strength of one, and a third
+        # module constructing it would not have been asked at all. The failure is not quiet
+        # either: the adapter refuses a key it does not know, so a construction that forgets
+        # to strip crashes for every operator whose config carries an `authorization:` block.
+        import ast as _ast_h, glob as _glob_h
+
+        def _unstripped(sources):
+            """(name, source) pairs -> ["file:line"] for each construction fed unstripped."""
+            _out = []
+            for _nm_h, _src_h in sources:
+                if _nm_h.startswith("test_") or _nm_h == "targets_http.py":
+                    continue
+                try:
+                    _tr_h = _ast_h.parse(_src_h)
+                except SyntaxError:
+                    continue
+                for _n_h in _ast_h.walk(_tr_h):
+                    if (isinstance(_n_h, _ast_h.Call)
+                            and getattr(_n_h.func, "id", getattr(_n_h.func, "attr", None))
+                            == "HttpConfiguredTarget"
+                            and "CONFIG_ONLY_KEYS" not in _ast_h.unparse(_n_h)):
+                        _out.append("%s:%d" % (_nm_h, _n_h.lineno))
+            return _out
+
+        _pl_h = _unstripped([
+            ("bare.py", "def f(cfg):\n    return HttpConfiguredTarget(**cfg)\n"),
+            ("ok.py", "def f(cfg):\n    return HttpConfiguredTarget(**{k: v for k, v in "
+                      "cfg.items() if k not in CONFIG_ONLY_KEYS})\n"),
+            ("two.py", "def f(cfg):\n    a = HttpConfiguredTarget(**{k: v for k, v in "
+                       "cfg.items() if k not in CONFIG_ONLY_KEYS})\n"
+                       "    b = HttpConfiguredTarget(**cfg)\n")])
+        check("a construction fed the raw config is named, even beside one that strips",
+              sorted(_x.split(":")[0] for _x in _pl_h) == ["bare.py", "two.py"], str(_pl_h))
+        _mods_h = [(os.path.basename(_p), open(_p, encoding="utf-8").read())
+                   for _p in sorted(_glob_h.glob(os.path.join(HERE, "*.py")))]
+        _real_h = _unstripped(_mods_h)
+        _n_ctor = sum(_ast_h.unparse(_n).count("HttpConfiguredTarget(")
+                      for _m, _s in _mods_h
+                      if not _m.startswith("test_") and _m != "targets_http.py"
+                      for _n in [_ast_h.parse(_s)])
+        check("every construction of the adapter strips the harness keys first "
+              "(%d construction(s) found)" % _n_ctor,
+              not _real_h and _n_ctor >= 3, "; ".join(_real_h) or str(_n_ctor))
     finally:
         srv.shutdown()
 
