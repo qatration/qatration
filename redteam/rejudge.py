@@ -84,6 +84,19 @@ def _prompt_of(attack, stored):
     return attacker_side(attack)
 
 
+def _number(value, default):
+    """A stored number, or the default. Never an exception.
+
+    `float(d.get("seconds") or 0)` reads the field the timing detectors judge, and a record
+    holding a string there ended the command rather than the probe. The same rule as the
+    tool-call normaliser beside it: a stored artifact is evidence, not a promise.
+    """
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _probe(attack, d):
     """Rebuild a Probe from stored JSON, losing nothing the detectors read.
 
@@ -105,15 +118,26 @@ def _probe(attack, d):
     """
     if not d:
         return None
+    # THROUGH THE SAME NORMALISER THE RUN USED. `[tuple(t) for t in ...]` trusts the stored
+    # shape, and a stored record is not a trusted input: `tool_calls: 7` is not iterable,
+    # `[None]` is not a pair, and either one came out of here as a TypeError that cost the
+    # WHOLE command -- no scores, no pages, for one field of one probe. Measured on a planted
+    # artifact: three shapes out of six killed `qatration rejudge` outright.
+    #
+    # `_pairs` is where this engine already decides what a tool call is, with a docstring
+    # saying an unusable shape is reported rather than guessed at. It is idempotent over the
+    # pairs a run stores, so a replay reads what the run read -- which is the property this
+    # whole function exists for.
+    from targets_http import _pairs as _pairs_r
     return Probe(prompt=_prompt_of(attack, d.get("prompt")),
                  output=d.get("output") or "",
-                 tool_calls=[tuple(t) for t in (d.get("tool_calls") or [])],
+                 tool_calls=_pairs_r(d.get("tool_calls")),
                  observations=d.get("observations") or [],
-                 resolved=[tuple(t) for t in (d.get("resolved") or [])],
-                 error=d.get("error"), seconds=float(d.get("seconds") or 0),
+                 resolved=_pairs_r(d.get("resolved")),
+                 error=d.get("error"), seconds=_number(d.get("seconds"), 0.0),
                  turns=d.get("turns") or [],
-                 retries=int(d.get("retries") or 0),
-                 reply_bytes=(int(d["reply_bytes"])
+                 retries=int(_number(d.get("retries"), 0)),
+                 reply_bytes=(int(_number(d["reply_bytes"], 0))
                               if d.get("reply_bytes") is not None else None))
 
 

@@ -974,6 +974,46 @@ def main():
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 
+    # --- A MALFORMED STORED PROBE COSTS THE PROBE, NOT THE COMMAND ----------------------
+    #
+    # `_probe` rebuilt the tool calls with `[tuple(t) for t in ...]`, which trusts whatever
+    # the file holds. A record is not a trusted input -- it can predate a normaliser, come
+    # from an adapter that never had one, or be half-written by an interrupted sweep. Three
+    # of six planted shapes ended `qatration rejudge` outright: no scores and no pages for
+    # any of the forty-five targets, because one probe of one of them held a number where a
+    # list belongs.
+    #
+    # `targets_http._pairs` is where this engine already decides what a tool call is, and it
+    # is idempotent over the pairs a run stores -- so a replay still reads what the run read,
+    # which is what the rest of this function exists for. Measured over the whole committed
+    # corpus after the change: `rejudge` still says it would change 0 attack rows.
+    _mal = {"prompt": "p", "output": "o"}
+    # BOTH FIELDS, because they are two channels and the fix went into one line each. With
+    # only `tool_calls` driven, putting `resolved` back to the trusting version survived
+    # mutation -- the well-formed case below passes either way.
+    for _shape in (7, [None], [0], "SendTelemetry", None):
+        for _fld in ("tool_calls", "resolved"):
+            _pr = _probe({"id": "x"}, dict(_mal, **{_fld: _shape}))
+            check("a stored %s of %r costs the field, not the run" % (_fld, _shape),
+                  _pr is not None and list(getattr(_pr, _fld)) == [],
+                  str(_pr and getattr(_pr, _fld)))
+    # AND A REAL ONE IS STILL READ, which is the half a `return []` would also satisfy.
+    _good = _probe({"id": "x"}, dict(_mal, tool_calls=[["SendTelemetry", "{\"to\": 1}"]],
+                                     resolved=[["Lookup", "2"]]))
+    check("...while a well-formed call is still read, with its arguments",
+          list(_good.tool_calls) == [("SendTelemetry", "{\"to\": 1}")]
+          and list(_good.resolved) == [("Lookup", "2")],
+          "%s %s" % (_good.tool_calls, _good.resolved))
+    # THE SAME RULE FOR THE NUMBERS THE TIMING DETECTORS READ. `float("x")` ended the command
+    # for the same reason, in the field whose docstring two screens up records what dropping
+    # it cost: rb-slow fell from PARTIAL to DEFENDED on a probe whose evidence said 26.5s.
+    check("a stored seconds that is not a number is 0, not an exception",
+          _probe({"id": "x"}, dict(_mal, seconds="not a number")).seconds == 0.0,
+          str(_probe({"id": "x"}, dict(_mal, seconds="not a number")).seconds))
+    check("...and one that is a number is still what the timing detectors judge",
+          _probe({"id": "x"}, dict(_mal, seconds=26.5)).seconds == 26.5,
+          str(_probe({"id": "x"}, dict(_mal, seconds=26.5)).seconds))
+
     # --- REBUILDING A PAGE MUST NOT COST THE PROVENANCE OF THE RUN ----------------------
     #
     # `--write` stamps every record it rewrites with the build doing the stamping, which is
