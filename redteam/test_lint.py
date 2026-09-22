@@ -870,6 +870,79 @@ def check_refusal(check):
     check("...and every name the linter accepts is a branch, or the default",
           sorted(set(_DELIV) - _branch - {"direct"}) == [],
           str(sorted(set(_DELIV) - _branch - {"direct"})))
+    # AND EVERY MAP KEYED BY DELIVERY, which the three checks above do not reach. They
+    # quantify over the NAMES; a map keyed by name holds something else, and a bare
+    # subscript into one is a KeyError the day a sixth delivery is declared. `lint_arsenal`
+    # had two of them inside the rule whose own message is "a missing one is a KeyError
+    # mid-sweep, after the attacks before it have been sent", and `defense_report` a third,
+    # whose keys decide which families the remediation page calls ABSENT -- a family missing
+    # from its keys would never be named as missing.
+    #
+    # FOUND BY SCANNING, NOT LISTED, because the third was found only by grepping for the
+    # first two: a list of the maps to check is the list that misses the next one. Any
+    # module-level dict with two or more delivery names among its keys is taken to be keyed
+    # by delivery and must hold all of them.
+    #
+    # ONE EXEMPTION, NAMED WITH ITS REASON: `runner.DELIVERY_CAPABILITY` maps a delivery to
+    # the target capability it needs, and `direct` and `sessions` need none -- partial by
+    # construction, and read with `.get`.
+    _PARTIAL_BY_DESIGN = {("runner.py", "DELIVERY_CAPABILITY")}
+
+    def _delivery_maps(sources):
+        """(name, source) pairs -> [(file, constant, keys)] for every map keyed by delivery."""
+        _found = []
+        for _fn, _src in sources:
+            try:
+                _tree = _ast_d.parse(_src)
+            except SyntaxError:
+                continue
+            for _n in _tree.body:
+                if not (isinstance(_n, _ast_d.Assign) and len(_n.targets) == 1
+                        and isinstance(_n.targets[0], _ast_d.Name)
+                        and isinstance(_n.value, _ast_d.Dict)):
+                    continue
+                _keys = {_k.value for _k in _n.value.keys
+                         if isinstance(_k, _ast_d.Constant) and isinstance(_k.value, str)}
+                if len(_keys & set(_DELIV)) >= 2:
+                    _found.append((_fn, _n.targets[0].id, _keys))
+        return _found
+
+    def _short(found):
+        return ["%s:%s lacks %s" % (_f, _c, sorted(set(_DELIV) - _k))
+                for _f, _c, _k in found
+                if (_f, _c) not in _PARTIAL_BY_DESIGN and not set(_DELIV) <= _k]
+
+    # ON PLANTED MODULES FIRST, because a scan over a tree that is already complete cannot
+    # fail -- which is exactly how all three maps sat there unchecked.
+    _planted = _delivery_maps([
+        ("short.py", 'M = {"direct": 1, "chain": 2, "sessions": 3}\n'),
+        ("other.py", 'M = {"direct": 1, "red": 2}\n'),
+        ("runner.py", 'DELIVERY_CAPABILITY = {"indirect": 1, "chain": 2}\n')])
+    check("a map keyed by delivery that lacks some of them is named",
+          any(_x.startswith("short.py:M") for _x in _short(_planted)), str(_short(_planted)))
+    check("...while a dict that shares one key with them is not taken for one",
+          not any(_f == "other.py" for _f, _c, _k in _planted), str(_planted))
+    check("...and the one map partial by design is not named for it",
+          not any(_x.startswith("runner.py:") for _x in _short(_planted)),
+          str(_short(_planted)))
+    _here_d = _os_d.path.dirname(_os_d.path.abspath(__file__))
+    _mods_d = []
+    for _p in sorted(_os_d.listdir(_here_d)):
+        if _p.endswith(".py") and not _p.startswith("test_"):
+            _mods_d.append((_p, _io_d.open(_os_d.path.join(_here_d, _p),
+                                           encoding="utf-8").read()))
+    _real_maps = _delivery_maps(_mods_d)
+    # THE DENOMINATOR, carried into the verdict: a scan that found no maps at all would say
+    # "none is short" in the same words.
+    check("every map keyed by delivery holds every delivery (%d map(s) found)"
+          % len(_real_maps),
+          not _short(_real_maps) and len(_real_maps) >= 3,
+          "; ".join(_short(_real_maps)) or str([(_f, _c) for _f, _c, _k in _real_maps]))
+    # AND EVERY ENTRY OF THE LINTER'S TWO NAMES A FIELD, or the map is complete and empty
+    # where it matters -- `need = ()` refuses nothing and reports it as a pass.
+    check("...and every entry of the linter's two names at least one field",
+          all(lint.DELIVERY_FIELDS.values()) and all(lint.DELIVERY_READS.values()),
+          str({_k: _v for _k, _v in lint.DELIVERY_FIELDS.items() if not _v}))
 
     # --- AND A MARKER THE ENCODING DESTROYS ----------------------------------------------
     #

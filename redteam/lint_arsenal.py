@@ -814,6 +814,29 @@ def unusable_objectives(objectives, fname="objectives"):
     return out
 
 
+# THE TWO MAPS KEYED BY DELIVERY, at module level so something can count their keys.
+#
+# NOT `DELIVERY_NEEDS`, which `defense_report` already uses for a different thing -- what
+# each delivery needs from the TARGET, in prose. Same key set, different values, and a grep
+# for the name would have found the wrong one half the time.
+#
+# They were locals inside `bad_delivery`, spelled out one beside the other, and `need[d]`
+# is a bare subscript: a sixth delivery declared in `runner.DELIVERIES` and given a branch
+# in `run_attack` would satisfy every check `test_lint` makes about this vocabulary and
+# then raise KeyError HERE -- inside the rule whose own message is "a missing one is a
+# KeyError mid-sweep, after the attacks before it have been sent".
+#
+# The gate one screen along reads the runner's BRANCH CHAIN back out of the source and
+# requires the accepted names to match it. It quantifies over the names, and these are the
+# fields each name needs; a set can be complete in one sense and short in the other.
+DELIVERY_FIELDS = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
+                  "chain": ("steps",), "sessions": ("steps",),
+                  "forged_history": ("history", "text")}
+DELIVERY_READS = {"direct": {"text", "user_prompt"}, "indirect": {"user_prompt", "seed"},
+                  "chain": {"steps"}, "sessions": {"steps"},
+                  "forged_history": {"history", "text"}}
+
+
 def bad_delivery(a, fname="arsenal"):
     """The delivery faults a RUN cannot survive, for one entry, as sentences.
 
@@ -861,9 +884,7 @@ def bad_delivery(a, fname="arsenal"):
     #
     # Measured over every arsenal here: not one shipped attack carries a field its own
     # delivery does not read, so this refuses nothing that exists today.
-    need = {"direct": ("text",), "indirect": ("seed", "user_prompt"),
-            "chain": ("steps",), "sessions": ("steps",),
-            "forged_history": ("history", "text")}[d]
+    need = DELIVERY_FIELDS[d]
     missing = [k for k in need
                if (a.get(k) is None if k == "text" else not a.get(k))]
     if missing:
@@ -877,9 +898,7 @@ def bad_delivery(a, fname="arsenal"):
     # and only then learn the entry cannot run: two passes for one file, with the serious
     # fault hidden behind the cosmetic one. A linter that reports the smaller fault first
     # is one that has to be run twice.
-    _reads = {"direct": {"text", "user_prompt"}, "indirect": {"user_prompt", "seed"},
-              "chain": {"steps"}, "sessions": {"steps"},
-              "forged_history": {"history", "text"}}
+    _reads = DELIVERY_READS
     _unread = sorted(k for k in ("text", "user_prompt", "steps", "history", "seed")
                      if k in a and a.get(k) and k not in _reads[d])
     if _unread:
