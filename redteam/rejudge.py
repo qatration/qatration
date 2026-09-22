@@ -319,12 +319,20 @@ def main():
 
     if args.pages:
         _built = rebuild_pages(args.target)
-        print("rebuilt %d page(s) from stored records; no record was changed"
-              % len(_built))
         # NOTHING REBUILT IS NOT A SUCCESS. An empty `out/` and a directory whose every page
         # is current print the same sentence otherwise, and this command exists to be run
         # after a change to the renderer.
-        return 0 if _built else 3
+        #
+        # AND IT SAYS WHAT TO DO, through the sentence every other command that reads this
+        # directory already uses. Walked on an empty workspace, all twelve of them ended on a
+        # command to type -- and this one, added last, ended on "rebuilt 0 page(s)", which
+        # reads like a report on work done rather than on a directory with nothing in it.
+        if not _built:
+            print(no_results_note(OUT_DIR))
+            return 3
+        print("rebuilt %d page(s) from stored records; no record was changed"
+              % len(_built))
+        return 0
 
     # NO FLAG HERE, and that is a decision the build made rather than a preference. It had one
     # briefly, implemented by writing QATRATION_CONFIGS from inside this module, and `test_llm`

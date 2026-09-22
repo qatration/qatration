@@ -1062,6 +1062,12 @@ def main():
                                            PYTHONDONTWRITEBYTECODE="1"), timeout=300)
             check("...and an empty workspace is 'nothing was measured', not a clean exit",
                   _re_.returncode == 3, "exit %d: %s" % (_re_.returncode, _re_.stdout[-200:]))
+            # AND SAYS WHAT TO DO, like every other command that reads this directory. It
+            # ended on "rebuilt 0 page(s)" -- a report on work done, from a directory with
+            # nothing in it -- and was the only one of twelve that did not name a next step.
+            check("...and names the command that would put something there",
+                  "qatration run" in _re_.stdout and "rebuilt 0" not in _re_.stdout,
+                  _re_.stdout[-300:])
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
