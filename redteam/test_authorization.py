@@ -352,78 +352,123 @@ def main():
     # a target config and send real traffic, one of which the documentation tells a reader to
     # run first. A list covers the doors somebody remembered; this covers the ones that exist.
     import glob as _glob
-    doors = []
-    for _p in sorted(_glob.glob(os.path.join(HERE, "*.py"))):
-        _name = os.path.basename(_p)
-        if _name.startswith("test_"):
-            continue
-        _src = open(_p, encoding="utf-8").read()
-        # A DOOR IS A MODULE THAT CAN SEND, not one that can be handed a config. Taking
-        # `--target-config` alone caught `sarif.py`, which reads a stored result and quotes the
-        # oracle context into a notification without ever opening a socket. What makes a door
-        # is BUILDING a target — that is the object with `.send()` on it — or spawning a sweep.
-        _takes_cfg = '"--target-config"' in _src or "'--target-config'" in _src
-        _builds = "_build_target(" in _src or "load_target(" in _src
-        _spawns = "run_redteam.py" in _src and "subprocess" in _src
-        if _takes_cfg and (_builds or _spawns):
-            doors.append((_name, _src))
-    check("more than one entry point was found to check", len(doors) > 1, str(len(doors)))
-    # A door is gated if it asks, OR if it hands the target to something that asks.
-    # `run_all.py` and `model_matrix.py` take a target config and send nothing themselves:
-    # they spawn `run_redteam.py`, which gates per target. Requiring a second gate in the
-    # parent would be a check nobody can satisfy honestly, and a check that cannot be
-    # satisfied is one somebody deletes.
-    for entry, src in doors:
-        asks = "_auth_gate(" in src or "authorization.gate(" in src
-        delegates = "run_redteam.py" in src and "subprocess" in src
-        check(f"{entry} gates the target, or hands it to something that does",
-              asks or delegates,
-              "neither calls authorization.gate nor spawns run_redteam.py")
-    # --- AND IT ASKS BEFORE IT BUILDS -------------------------------------------------------
-    #
-    # "Calls the gate" is not the property; "calls the gate before doing anything the gate is
-    # meant to prevent" is. In `run_redteam.py` the call sat twenty lines below the
-    # construction, and construction is not inert: the HTTP adapter expands `${VAR}` in its
-    # headers there, so an unauthorised config could already tell which of the operator's
-    # environment variables were set from the difference between "expanded" and "not set in this
-    # shell", and other adapters here open connections and start processes in their constructors.
-    #
-    # By line number from the parse tree, not by string position, so a paragraph like this one
-    # naming `_build_target(` cannot move the answer.
     import ast as _ast
+    # WHAT BUILDS A TARGET: the two builders, and constructing an adapter class outright --
+    # any call to a name ending in `Target`. `onboard` does the second: it takes
+    # `--target-config`, constructs `HttpConfiguredTarget` itself and sends a probe, and it
+    # was not a door to this gate at all, because doors were found by the SUBSTRINGS of the
+    # two builder names. It gates correctly today. Nothing here would have said so the day it
+    # stopped.
     GATES = ("_auth_gate", "gate")
     BUILDERS = ("_build_target", "load_target", "load_target_or_explain")
 
-    def _calls(node, names):
-        out = []
-        for n in _ast.walk(node):
-            if not isinstance(n, _ast.Call):
-                continue
-            f = n.func
-            nm = f.id if isinstance(f, _ast.Name) else getattr(f, "attr", None)
-            if nm in names:
-                out.append(n.lineno)
-        return sorted(out)
+    def _fn_name(call):
+        f = call.func
+        return f.id if isinstance(f, _ast.Name) else getattr(f, "attr", None)
 
-    for entry, src in doors:
-        try:
-            tree = _ast.parse(src)
-        except SyntaxError:
-            continue
-        # SCOPED TO THE FUNCTION THAT GATES, because a module-wide minimum answers the wrong
-        # question: `load_target_or_explain` is itself defined in `run_redteam.py` and calls
-        # `load_target` inside its own body, at a line number far above `main`. That is the
-        # definition of the builder, not a use of it before the gate, and reporting it would
-        # be a false positive — which in a gate is not a small cost. It is the reason people
-        # stop reading one.
-        for fn in [n for n in _ast.walk(tree)
-                   if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]:
-            gates = _calls(fn, GATES)
-            if not gates:
+    def _is_builder(call):
+        _n = _fn_name(call) or ""
+        return _n in BUILDERS or (_n.endswith("Target") and _n[:1].isupper())
+
+    def _calls(node, pick):
+        return sorted(n.lineno for n in _ast.walk(node)
+                      if isinstance(n, _ast.Call) and pick(n))
+
+    def _doors_and_faults(sources):
+        """(name, source) pairs -> (doors, [fault]) under the rule below."""
+        _doors, _faults = [], []
+        for _name, _src in sources:
+            if _name.startswith("test_"):
                 continue
-            builds = [b for b in _calls(fn, BUILDERS) if b < gates[0]]
-            check(f"{entry}: {fn.name}() asks before it builds a target",
-                  not builds, f"builds at line(s) {builds}, gate at {gates[0]}")
+            try:
+                _tree = _ast.parse(_src)
+            except SyntaxError:
+                continue
+            # A DOOR IS A MODULE THAT CAN SEND, not one that can be handed a config. Taking
+            # `--target-config` alone caught `sarif.py`, which reads a stored result and never
+            # opens a socket. What makes a door is BUILDING a target -- the object with
+            # `.send()` on it -- or spawning a sweep.
+            _takes = '"--target-config"' in _src or "'--target-config'" in _src
+            _builds = bool(_calls(_tree, _is_builder))
+            _spawn_calls = _calls(_tree, lambda c: _fn_name(c) in (
+                "run", "Popen", "call", "check_call", "check_output"))
+            _spawns = bool(_spawn_calls) and "run_redteam.py" in _src
+            if not (_takes and (_builds or _spawns)):
+                continue
+            _doors.append(_name)
+            # ASKS MEANS A CALL. "_auth_gate(" as a substring was satisfied by a comment, and
+            # the ordering check below skips any function with no gate call in it -- so a door
+            # whose only mention of the gate was prose passed both.
+            _asks = bool(_calls(_tree, lambda c: _fn_name(c) in GATES))
+            if not (_asks or _spawns):
+                _faults.append("%s neither calls the gate nor spawns run_redteam.py" % _name)
+            # AND EVERY FUNCTION THAT BUILDS ASKS FIRST -- ITSELF. Scoped per function, so the
+            # builder's own definition (`load_target` calling `_build_target` in its body) is
+            # not read as a use before the gate. This used to skip any function with no gate
+            # call in it, so a module that asked in `main` passed while a second function in
+            # it built and sent without asking at all. Two things are not that: a builder's
+            # own definition, and a call to a function in the same module that itself asks
+            # before it builds -- `run_isolation.main` builds through its own gated
+            # `load_target`, which is exactly the shape this has to allow.
+            _fns = [n for n in _ast.walk(_tree)
+                    if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
+            _gated = set()
+            for _fn in _fns:
+                _g = _calls(_fn, lambda c: _fn_name(c) in GATES)
+                if _g and not [x for x in _calls(_fn, _is_builder) if x < _g[0]]:
+                    _gated.add(_fn.name)
+            for _fn in _fns:
+                if _fn.name in BUILDERS:
+                    continue
+                _g = _calls(_fn, lambda c: _fn_name(c) in GATES)
+                _raw = _calls(_fn, lambda c: _is_builder(c) and _fn_name(c) not in _gated)
+                if _raw and not _g:
+                    _faults.append("%s: %s() builds at line(s) %s and never asks"
+                                   % (_name, _fn.name, _raw))
+                elif _g and [x for x in _raw if x < _g[0]]:
+                    _faults.append("%s: %s() builds at line(s) %s, gate at %d"
+                                   % (_name, _fn.name, [x for x in _raw if x < _g[0]],
+                                      _g[0]))
+        return _doors, _faults
+
+    # ON PLANTED MODULES FIRST: a door whose gate is only prose, a door that constructs an
+    # adapter directly before asking, and one that asks first -- which must pass.
+    _cfg = "ap.add_argument(\"--target-config\")\n"
+    _pd, _pf = _doors_and_faults([
+        ("prose.py", "# calls _auth_gate( before anything\ndef main(ap, cfg):\n    "
+                     + _cfg + "    t = load_target(cfg)\n    t.send('x')\n"),
+        ("late.py", "def main(ap, cfg):\n    " + _cfg
+                    + "    t = HttpConfiguredTarget(**cfg)\n    authorization.gate(cfg, 'p')\n"),
+        ("early.py", "def main(ap, cfg):\n    " + _cfg
+                     + "    authorization.gate(cfg, 'p')\n    t = HttpConfiguredTarget(**cfg)\n"),
+        ("second.py", "def main(ap, cfg):\n    " + _cfg
+                      + "    authorization.gate(cfg, 'p')\n\n"
+                      + "def probe(cfg):\n    HttpConfiguredTarget(**cfg).send('x')\n"),
+        ("wrapped.py", "def load_target(cfg):\n    authorization.gate(cfg, 'p')\n"
+                       + "    return _build_target(cfg)\n\n"
+                       + "def main(ap, cfg):\n    " + _cfg + "    load_target(cfg)\n")])
+    check("a door whose only gate is a comment is named, not passed",
+          any(_f.startswith("prose.py neither") for _f in _pf), str(_pf))
+    check("...a door that constructs an adapter itself is a door, and building first is named",
+          "late.py" in _pd and any(_f.startswith("late.py: main()") for _f in _pf), str(_pf))
+    check("...and one that asks before it constructs is not named",
+          "early.py" in _pd and not any(_f.startswith("early.py") for _f in _pf), str(_pf))
+    check("...while a SECOND function that builds without asking is, though main asks",
+          any(_f.startswith("second.py: probe()") for _f in _pf), str(_pf))
+    check("...and one that builds through its own module's gated loader is not",
+          "wrapped.py" in _pd and not any(_f.startswith("wrapped.py") for _f in _pf),
+          str(_pf))
+
+    _srcs_a = [(os.path.basename(_p), open(_p, encoding="utf-8").read())
+               for _p in sorted(_glob.glob(os.path.join(HERE, "*.py")))]
+    doors, _faults_a = _doors_and_faults(_srcs_a)
+    check("more than one entry point was found to check", len(doors) > 1, str(doors))
+    # `onboard` BY NAME, because it is the door the substring scan could not see, and a
+    # scan that stops seeing it again would otherwise pass in silence.
+    check("...and the one that constructs its adapter directly is among them",
+          "onboard.py" in doors, str(doors))
+    check("every door gates the target before it builds one, or hands it to something "
+          "that does (%d doors)" % len(doors), not _faults_a, "; ".join(_faults_a))
 
     rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
     check("the sweep stores the authorization record beside the findings",
