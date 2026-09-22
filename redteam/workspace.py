@@ -2015,9 +2015,16 @@ def _part(label, value):
     `[user prompt] ` and nothing after it, and a `chain` with a blank step still printed
     `[turn 2] `. Same shape, same page, three branches along. One helper now, so the next
     delivery gets it by construction.
+
+    AND THE VALUE IS STRIPPED, which is the same defect one level down. A stored step
+    beginning with a newline -- a YAML block scalar written `text: |` and then indented,
+    which 110 payloads in this repository are -- put the label on a line of its own and the
+    text on the next, so the block still opened with `[ask] ` and nothing after it. The
+    helper existed and the shape came back anyway, through the value rather than through the
+    branch. Found by a random walk, not by reading it.
     """
-    _s = _text_of(value)
-    return "[%s] %s" % (label, _s) if _s.strip() else None
+    _s = _text_of(value).strip()
+    return "[%s] %s" % (label, _s) if _s else None
 
 
 def _listed(attack, field):
