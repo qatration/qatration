@@ -306,9 +306,6 @@ def main():
         ({"meta": {"target": "t"},
           "results": [{"headline": "", "attack": {"id": "a"}, "fired": []}]},
          "headline", "results_x.json"),
-        ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": {"id": ""}, "fired": []}]},
-         "attack.id", "results_x.json"),
         ({"meta": {"target": ""}, "rows": [], "probes": 0}, "meta.target",
          "benign_x.json"),
     ]
@@ -320,6 +317,30 @@ def main():
               _d8 is None and _why8 is not None, str(_why8))
         check("...and the reason says it is blank, naming the key",
               _key in (_why8 or "") and "blank" in (_why8 or ""), str(_why8))
+    # AND ONLY THE REQUIRED ROWS, which is the same line the paragraph over
+    # `shape_fault` draws for an ABSENT value and the first version of the blank rule
+    # broke. `trials`, the `verdict` inside one and the `id` inside an attack are each
+    # subscripted by one consumer, and refusing the whole artifact for them "would make one
+    # page's need cost every page".
+    #
+    # Measured before this was fixed: a two-finding artifact with one blank `attack.id` was
+    # refused ENTIRELY, so the real finding beside it left the index, the comparison, the
+    # coverage number and the remediation page, replaced by `could not be read`. Losing a
+    # measured finding to protect a page that can say what it could not quote is the wrong
+    # direction for this engine.
+    _thin_blank = {"meta": {"target": "t"},
+                   "results": [{"headline": "EXPLOITED", "attack": {"id": ""},
+                                "fired": ["canary_in_output"],
+                                "trials": [{"verdict": ""}]},
+                               {"headline": "EXPLOITED", "attack": {"id": "real-one"},
+                                "fired": ["pii_in_output"], "trials": []}]}
+    _d_tb, _why_tb = _artifact("results_x.json", _thin_blank)
+    check("a blank attack id does not cost the whole artifact",
+          _why_tb is None, str(_why_tb))
+    check("...nor does a blank verdict inside a trial", _d_tb is not None, str(_why_tb))
+    check("...and the finding beside it is still there to be read",
+          _d_tb and len(_d_tb["results"]) == 2, str(_d_tb)[:120])
+
     # AND A NAME THAT IS ONE STILL IS, or the rule above is a reader that refuses every
     # artifact in the workspace. The whitespace bound matters both ways: a target called
     # ` citebot ` is a name with room around it, not an absence.

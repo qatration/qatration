@@ -1820,8 +1820,20 @@ def shape_fault(where, value, present, table=None, what="results file"):
         # says skipping silently is the one answer it must not give.
         #
         # Measured over the 137 artifacts stored here: not one of the tabled fields holds a
-        # blank or whitespace-only string, so this refuses nothing the engine writes.
-        if kind is str and not value.strip():
+        # blank or whitespace-left string, so this refuses nothing the engine writes.
+        #
+        # AND ONLY FOR THE REQUIRED ROWS, which is the rule the paragraph above this
+        # function already sets and which the first version of this line broke. `trials`,
+        # the `verdict` inside one and the `id` inside an attack are each subscripted by ONE
+        # consumer, and "refusing the whole artifact for them would make one page's need
+        # cost every page". A blank `attack.id` used to take a two-finding file down
+        # entirely -- the real finding beside it gone from the index, the comparison, the
+        # coverage number and the remediation page, replaced by `could not be read`.
+        #
+        # That is the wrong direction for this engine: losing a measured finding to protect
+        # a page that can say what it could not quote. The optional rows are answered where
+        # they are read, exactly as the absence test one line above already answers them.
+        if required and kind is str and not value.strip():
             return ("a %s whose %s is blank: %s" % (what, where, why))
         return None
     return ("a %s whose %s is %s, not %s: %s"
