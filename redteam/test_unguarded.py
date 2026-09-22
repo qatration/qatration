@@ -1474,10 +1474,36 @@ def main():
             # only inside the body that executes top to bottom, and that body is `main`.
             _body_n = _src_n[_src_n.index("def main():"):] if "def main():" in _src_n else _src_n
             _lines_n = _body_n.split(chr(10))
-            _first_touch = next(
-                (_i for _i, _l in enumerate(_lines_n)
-                 if not _l.lstrip().startswith(("#", "def ", "from ", "import "))
-                 and any(_w in _l for _w in _CALLS)), None)
+            # A LAUNCH IS A CALL AND HAS A POSITION. The fifth way this gate read the
+            # wrong set: `_launches` decided whether a file touches the note at all and was
+            # then dropped, so a suite whose ONLY contact is running the tool had
+            # `_first_touch = None` -- and the ordering test below is skipped entirely when
+            # that is None. Setting the override anywhere, even four hundred lines later,
+            # passed such a file.
+            #
+            # Measured on exactly that shape: a suite that builds the path, runs the tool at
+            # line 3 and sets the override at line 4 came back NOT careless, while its child
+            # opens with `recover()` and tears up the checkout's note.
+            _touch_lines = [
+                _i for _i, _l in enumerate(_lines_n)
+                if not _l.lstrip().startswith(("#", "def ", "from ", "import "))
+                and (any(_w in _l for _w in _CALLS)
+                     or ("unguarded.py" in _l
+                         and ("join(" in _l or "sys.executable" in _l)
+                         # AN IMPORT IS NOT A LAUNCH. `spec_from_file_location` loads the
+                         # module and runs its top level, which never reaches `recover()`
+                         # -- that lives in `main`. `test_packaging` builds the path that
+                         # way and was flagged for it, while its real contact is a
+                         # `source_restored` call that IS inside its override.
+                         #
+                         # OVER THE STATEMENT, NOT THE LINE: that call is wrapped, and the
+                         # path sits on its second line while the name that identifies it
+                         # sits on the first. A one-line window read the continuation as a
+                         # launch, which is the same off-by-one-line the `def sweep_in(`
+                         # match made in the other direction.
+                         and "spec_from_file_location" not in chr(10).join(
+                             _lines_n[max(0, _i - 2):_i + 1])))]
+            _first_touch = _touch_lines[0] if _touch_lines else None
             _set_at = next((_i for _i, _l in enumerate(_lines_n)
                             if "QATRATION_UNGUARDED_NOTE" in _l
                             and not _l.lstrip().startswith("#")), None)
@@ -1528,6 +1554,37 @@ def main():
               "test_careful.py" not in _c_f, str(_c_f))
         check("...and one that launches the tool with no note at all is named",
               "test_launcher.py" in _c_f, str(_c_f))
+        # AND ONE THAT LAUNCHES IT BEFORE TAKING ITS OWN NOTE, which the rule could not see
+        # until the launch was given a POSITION. `_launches` decided whether a file touches
+        # the note and was then dropped, so a suite whose only contact is running the tool
+        # had no first-touch line at all -- and the ordering test is skipped when there is
+        # none. Setting the override four hundred lines later passed such a file, while its
+        # child opens with `recover()` and tears up the checkout's note.
+        io.open(os.path.join(_fake, "test_late.py"), "w", encoding="utf-8",
+                newline="").write(
+                    "def main():" + chr(10)
+                    + '    _tool = os.path.join(ROOT, "tools", "unguarded.py")' + chr(10)
+                    + "    subprocess.run([sys.executable, _tool])" + chr(10)
+                    + '    os.environ["QATRATION_UNGUARDED_NOTE"] = "far too late"'
+                    + chr(10))
+        # AND AN IMPORT OF THE TOOL IS NOT A LAUNCH: `spec_from_file_location` runs its top
+        # level, which never reaches `recover()`. `test_packaging` builds the path that way,
+        # across two lines, and was flagged for it by a rule that read one line at a time.
+        io.open(os.path.join(_fake, "test_importer.py"), "w", encoding="utf-8",
+                newline="").write(
+                    "def main():" + chr(10)
+                    + "    spec = importlib.util.spec_from_file_location(" + chr(10)
+                    + '        "under_test", os.path.join(ROOT, "tools", "unguarded.py"))'
+                    + chr(10)
+                    + '    os.environ["QATRATION_UNGUARDED_NOTE"] = "in time"' + chr(10)
+                    + "    ung.source_restored(victim)" + chr(10))
+        _t_l, _c_l = _scan_for_careless(_fake)
+        check("a suite that launches the tool before taking its note is named",
+              "test_late.py" in _c_l, str(_c_l))
+        check("...while one that only IMPORTS it, across two lines, is not",
+              "test_importer.py" not in _c_l, str(_c_l))
+        check("...and the importer is still counted as touching the mechanism",
+              "test_importer.py" in _t_l, str(_t_l))
         check("...while a suite that only mentions the tool is not even a toucher",
               "test_innocent.py" not in _t_f, str(_t_f))
         check("...and the three that do touch it were all found",
