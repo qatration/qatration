@@ -436,8 +436,56 @@ def main():
         check("...and serves the file the report writer actually writes",
               written and ('"%s"' % written.group(1)) in src,
               written.group(1) if written else "no match")
-        check("responses carry a content-type-options header, since one of them is HTML",
-              "X-Content-Type-Options" in src)
+        # ASKED OF THE RUNNING SERVER, NOT OF THE SOURCE. This was `"X-Content-Type-Options"
+        # in src` -- satisfied by the header's name appearing once in `_send` -- while every
+        # method the handler does not define was answered by `BaseHTTPRequestHandler`'s own
+        # `send_error`: a `text/html` page with neither header, four methods out of four.
+        # So every kind of response is fetched and read, the refusals included.
+        import http.client as _hc_i
+        _isrv = ThreadingHTTPServer(("127.0.0.1", 0), intake.make_handler(root))
+        threading.Thread(target=_isrv.serve_forever, daemon=True).start()
+        _iport = _isrv.server_address[1]
+        _no_hdr = []
+        for _m, _pth in (("GET", "/runs/nope"), ("POST", "/elsewhere"), ("PUT", "/runs"),
+                         ("DELETE", "/runs/x"), ("OPTIONS", "/"), ("PATCH", "/runs"),
+                         ("HEAD", "/runs")):
+            _cn = _hc_i.HTTPConnection("127.0.0.1", _iport, timeout=10)
+            try:
+                _cn.request(_m, _pth, body=b"" if _m in ("POST", "PUT", "PATCH") else None)
+                _rs = _cn.getresponse()
+                _bd = _rs.read()
+                if not (_rs.getheader("X-Content-Type-Options") == "nosniff"
+                        and _rs.getheader("Content-Security-Policy")):
+                    _no_hdr.append("%s %s -> %s, no security headers"
+                                   % (_m, _pth, _rs.getheader("Content-Type")))
+                elif "json" not in (_rs.getheader("Content-Type") or ""):
+                    _no_hdr.append("%s %s -> %s, not the JSON problem shape"
+                                   % (_m, _pth, _rs.getheader("Content-Type")))
+            finally:
+                _cn.close()
+        # HEAD OVER A RAW SOCKET, because `http.client` never reads a body for a HEAD
+        # response whatever the server sends -- so "HEAD carried no body" asked of it holds
+        # of every server. Mutation said so: a HEAD answered with the full body passed.
+        import socket as _sk_i
+        _raw = b""
+        _so = _sk_i.create_connection(("127.0.0.1", _iport), timeout=10)
+        try:
+            _so.sendall(b"HEAD /runs HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n")
+            while True:
+                _chunk = _so.recv(4096)
+                if not _chunk:
+                    break
+                _raw += _chunk
+        finally:
+            _so.close()
+        if _raw.partition(b"\r\n\r\n")[2]:
+            _no_hdr.append("HEAD carried a body of %d byte(s)"
+                           % len(_raw.partition(b"\r\n\r\n")[2]))
+        _isrv.shutdown()
+        _isrv.server_close()
+        check("every response carries nosniff and a content policy, the base class's "
+              "refusals included, as JSON and with no body for HEAD",
+              not _no_hdr, "; ".join(_no_hdr))
         # Nothing in the service asks the queue on a timer. A resource property rather than
         # a style one: a poll runs whether or not there is anything to do, so it spends on
         # every idle interval, and idle is what a queue mostly is.

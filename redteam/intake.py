@@ -299,7 +299,7 @@ def make_handler(root):
     class Handler(BaseHTTPRequestHandler):
         server_version = "qatration-intake"
 
-        def _send(self, status_code, obj, ctype="application/json"):
+        def _send(self, status_code, obj, ctype="application/json", send_body=True):
             body = (obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False,
                                                                 indent=2)).encode("utf-8")
             self.send_response(status_code)
@@ -311,10 +311,33 @@ def make_handler(root):
             self.send_header("Content-Security-Policy", "default-src 'none'; style-src "
                                                         "'unsafe-inline'; img-src data:")
             self.end_headers()
+            if not send_body:
+                return
             try:
                 self.wfile.write(body)
             except (ConnectionError, OSError):
                 pass
+
+        def send_error(self, code, message=None, explain=None):
+            """Every response through the one path that sets the headers above.
+
+            THE BASE CLASS ANSWERS SOME REQUESTS ITSELF, and it answers them in HTML. Any
+            method this handler does not define -- PUT, DELETE, PATCH, OPTIONS -- and any
+            request line it cannot parse reached `BaseHTTPRequestHandler.send_error`, which
+            writes its own `text/html` page with neither `nosniff` nor a content policy.
+            Measured over the running server: four methods, four HTML pages without either
+            header, on the service whose own check said every response carried them because
+            the header's NAME appeared in this file.
+
+            So the base class's errors become this door's errors: the same JSON problem
+            shape a submitter already parses, the same two headers, the connection closed as
+            the base class would have closed it -- and no body for HEAD, which must not have
+            one.
+            """
+            self.close_connection = True
+            _reason = message or self.responses.get(code, ("error",))[0]
+            self._send(*_problem(code, _reason),
+                       send_body=getattr(self, "command", None) != "HEAD")
 
         def do_POST(self):
             if self.path.rstrip("/") != "/runs":
