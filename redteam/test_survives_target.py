@@ -171,17 +171,139 @@ def main():
     # DERIVED, NOT LISTED. The point is not that this one function stopped calling `eval`; it is
     # that nothing in the engine calls it. A named exemption would be visible here; silence is
     # the answer that means something.
-    import glob, re
-    dynamic = []
-    for p in sorted(glob.glob(os.path.join(HERE, "*.py"))
-                    + glob.glob(os.path.join(os.path.dirname(HERE), "tools", "*.py"))):
-        if os.path.basename(p).startswith("test_"):
-            continue
-        for i, line in enumerate(open(p, encoding="utf-8").read().splitlines(), 1):
-            code = line.split("#")[0]
-            if re.search(r"(?<![\w.])(eval|exec)\s*\(", code) or "shell=True" in code:
-                dynamic.append(f"{os.path.basename(p)}:{i}")
-    check("nothing in the engine evaluates a string as code", not dynamic, "; ".join(dynamic))
+    #
+    # READ AS THE CALL, NOT AS ONE WAY OF TYPING IT. This was a line regex for `eval(` and
+    # `exec(` plus the substring `shell=True`, and it passed `mcp_probe.list_surface`, which
+    # starts a subprocess with `shell=(os.name == "nt")` -- a shell on every Windows machine,
+    # spelled so that the literal never appears. It also had no answer at all for the other
+    # ways a string becomes execution: `os.system`, `os.popen`, `pickle.loads`, `compile`,
+    # `__import__` of a computed name.
+    import glob
+    import ast as _ast_e
+
+    # THE ONE SHELL THE ENGINE STARTS, NAMED WITH ITS REASON AND WHAT IT COSTS. `npx` on
+    # Windows is `npx.cmd`, which only a shell will find by that name, and MCP servers are
+    # overwhelmingly launched through npx. What it costs: `qatration mcp` re-reads a recorded
+    # corpus by running the `command` each server entry names, and on Windows that list is
+    # joined and handed to cmd.exe -- so `&` or `|` inside an argument of a corpus somebody
+    # else wrote WAS a second command. `list_surface` now refuses any argument carrying
+    # cmd.exe syntax before it starts anything, which keeps the shell for finding npx.cmd
+    # and nothing else; the cases after this scan hold it to that. Keyed to the FUNCTION,
+    # so a second shell anywhere else in that module is not covered by this.
+    _SHELL_ALLOWED = {("mcp_probe.py", "list_surface")}
+
+    def _executes_strings(sources):
+        """(name, source) pairs -> ["file:line  what"] for every call that runs a string."""
+        _out = []
+        for _nm, _src in sources:
+            if _nm.startswith("test_"):
+                continue
+            try:
+                _tree = _ast_e.parse(_src)
+            except SyntaxError:
+                continue
+            _owner = {}
+            for _fn in _ast_e.walk(_tree):
+                if isinstance(_fn, (_ast_e.FunctionDef, _ast_e.AsyncFunctionDef)):
+                    for _c in _ast_e.walk(_fn):
+                        _owner.setdefault(id(_c), _fn.name)
+            for _n in _ast_e.walk(_tree):
+                if not isinstance(_n, _ast_e.Call):
+                    continue
+                _f = _n.func
+                _name = (_f.id if isinstance(_f, _ast_e.Name)
+                         else _f.attr if isinstance(_f, _ast_e.Attribute) else "")
+                _mod = (_f.value.id if isinstance(_f, _ast_e.Attribute)
+                        and isinstance(_f.value, _ast_e.Name) else "")
+                _why = None
+                if isinstance(_f, _ast_e.Name) and _name in ("eval", "exec", "compile"):
+                    _why = _name
+                elif (isinstance(_f, _ast_e.Name) and _name == "__import__"
+                      and not (_n.args and isinstance(_n.args[0], _ast_e.Constant))):
+                    _why = "__import__ of a computed name"
+                elif _mod == "os" and _name in ("system", "popen"):
+                    _why = "os." + _name
+                elif _mod in ("pickle", "marshal") and _name in ("load", "loads"):
+                    _why = _mod + "." + _name
+                for _k in _n.keywords:
+                    if _k.arg == "shell" and not (isinstance(_k.value, _ast_e.Constant)
+                                                  and not _k.value.value):
+                        if (_nm, _owner.get(id(_n))) not in _SHELL_ALLOWED:
+                            _why = "shell=" + _ast_e.unparse(_k.value)
+                if _why:
+                    _out.append(f"{_nm}:{_n.lineno}  {_why}")
+        return _out
+
+    # ON PLANTED MODULES FIRST: each spelling named, and a method called `.eval()` -- a
+    # model's `eval()` mode is not a string being run -- plus a constant `__import__` and an
+    # explicit `shell=False` left alone.
+    _pl_e = _executes_strings([
+        ("a.py", "def f(s):\n    return eval(s)\n"),
+        ("b.py", "import subprocess\ndef f(c):\n"
+                 "    subprocess.run(c, shell = True)\n"),
+        ("c.py", "import os, subprocess\ndef f(c):\n"
+                 "    subprocess.Popen(c, shell=(os.name == 'nt'))\n"),
+        ("d.py", "import os\ndef f(c):\n    os.system(c)\n"),
+        ("e.py", "import pickle\ndef f(b):\n    return pickle.loads(b)\n"),
+        ("f.py", "def f(n):\n    return __import__(n)\n"),
+        ("ok.py", "import subprocess\ndef f(m, c):\n    m.eval()\n"
+                  "    __import__('sys')\n    subprocess.run(c, shell=False)\n"),
+        ("mcp_probe.py", "import subprocess\ndef other(c):\n"
+                         "    subprocess.Popen(c, shell=True)\n")])
+    check("the scan names a string run as code in each spelling, and nothing else",
+          sorted({_x.split(":")[0] for _x in _pl_e})
+          == ["a.py", "b.py", "c.py", "d.py", "e.py", "f.py", "mcp_probe.py"], str(_pl_e))
+    _srcs_e = [(os.path.basename(_p), open(_p, encoding="utf-8").read())
+               for _p in sorted(glob.glob(os.path.join(HERE, "*.py"))
+                                + glob.glob(os.path.join(os.path.dirname(HERE), "tools",
+                                                         "*.py")))]
+    dynamic = _executes_strings(_srcs_e)
+    check("nothing in the engine runs a string as code, or through a shell, but the one "
+          "launcher named with its reason (%d modules read)"
+          % sum(1 for _m, _s in _srcs_e if not _m.startswith("test_")),
+          not dynamic, "; ".join(dynamic))
+    # AND THE EXEMPTION IS STILL NEEDED, or it is a hole with a comment on it. If the shell
+    # in `list_surface` is ever removed, this names the line that no longer earns its place.
+    check("...and the one exempt launcher does still start a shell",
+          any("shell=" in _ast_e.unparse(_k) for _n in _ast_e.walk(_ast_e.parse(
+              dict(_srcs_e)["mcp_probe.py"])) if isinstance(_n, _ast_e.Call)
+              for _k in _n.keywords if _k.arg == "shell"),
+          "mcp_probe.py starts no shell any more: drop it from _SHELL_ALLOWED")
+
+    # --- AND THE SHELL IT KEEPS CANNOT BE HANDED A SECOND COMMAND ------------------------
+    #
+    # `mcp --compare` runs the `command` a recorded corpus names, and on Windows the list goes to
+    # cmd.exe. An argument carrying cmd.exe syntax is refused before anything starts. Asked
+    # with `_USE_SHELL` forced on, so it is measured on every machine and not only on the
+    # one it protects, and with `Popen` replaced by a recorder so that "refused" is proved
+    # to mean "nothing was started" rather than "something started and failed".
+    import mcp_probe as _mp
+    check("an ordinary npx launch carries no shell syntax",
+          _mp._shell_unsafe(["npx", "-y", "@modelcontextprotocol/server-filesystem", "."])
+          is None, "a real launch line would be refused")
+    _each = [c for c in "&|<>^%\"" if _mp._shell_unsafe(["npx", "pkg%sx" % c]) is None]
+    check("...while every cmd.exe metacharacter in an argument is named",
+          not _each and _mp._shell_unsafe(["npx", "a" + chr(10) + "calc"]) is not None,
+          "not named: %r" % _each)
+    _started = []
+
+    class _NoPopen(object):
+        PIPE = DEVNULL = None
+
+        @staticmethod
+        def Popen(*_a, **_k):
+            _started.append(_a)
+            raise RuntimeError("the refusal should have come first")
+
+    _real_sp, _real_shell = _mp.subprocess, _mp._USE_SHELL
+    _mp.subprocess, _mp._USE_SHELL = _NoPopen, True
+    try:
+        _got = _mp.list_surface(["npx", "-y", "pkg&calc"], timeout=1)
+    finally:
+        _mp.subprocess, _mp._USE_SHELL = _real_sp, _real_shell
+    check("...and a corpus argument carrying one is refused before anything is started",
+          not _started and "refusing" in str(_got[3]) and "pkg&calc" in str(_got[3]),
+          "started=%r got=%r" % (_started, _got[3]))
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

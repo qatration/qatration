@@ -141,6 +141,22 @@ CAPABILITY = {"tools": "tools", "prompts": "prompts", "resources": "resources",
               "resource_templates": "resources"}
 
 
+# THE SHELL IS WINDOWS' AND ONLY WINDOWS', named once so a test can ask the refusal below
+# without starting anything and without touching `os.name` for the whole process.
+_USE_SHELL = os.name == "nt"
+# CMD.EXE SYNTAX: what an argument must not carry when the list is handed to a shell. `%`
+# expands a variable even inside quotes, `^` escapes, `"` ends the quoting list2cmdline adds.
+_SHELL_META = frozenset('&|<>^%"' + chr(13) + chr(10))
+
+
+def _shell_unsafe(argv):
+    """-> the first argument cmd.exe would read as syntax rather than as text, or None."""
+    for _a in argv or []:
+        if any(_c in _SHELL_META for _c in str(_a)):
+            return str(_a)
+    return None
+
+
 def list_surface(argv, timeout=180, cwd=None):
     """-> ({channel: [items] or None}, {channel: why}, capabilities, why_fatal).
 
@@ -156,11 +172,24 @@ def list_surface(argv, timeout=180, cwd=None):
     after, one listing over.
     """
     deadline = time.time() + timeout
+    # A SHELL ON WINDOWS, and only to FIND the program. `npx` there is `npx.cmd`, which only a
+    # shell resolves by that name, and MCP servers are overwhelmingly launched through npx.
+    # But `--compare` runs the `command` a recorded corpus names, and on Windows the list is
+    # joined and handed to cmd.exe -- so an `&` or `|` inside an argument of a corpus somebody
+    # else wrote was a second command. Re-reading a corpus already means running the program
+    # it names; the shell widened that to a command line. An argument carrying cmd.exe syntax
+    # is refused before anything starts, which keeps the shell for what it is needed for.
+    if _USE_SHELL:
+        _bad = _shell_unsafe(argv)
+        if _bad is not None:
+            return {}, {}, {}, ("refusing to start %r: on Windows this runs through cmd.exe, "
+                                "and the argument %r carries shell syntax that would run as "
+                                "a second command" % ((argv or [""])[0], _bad))
     try:
         proc = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
-            errors="replace", bufsize=1, cwd=cwd, shell=(os.name == "nt"))
+            errors="replace", bufsize=1, cwd=cwd, shell=_USE_SHELL)
     except Exception as e:
         return {}, {}, {}, "%s: %s" % (type(e).__name__, e)
     try:
