@@ -371,9 +371,64 @@ def main():
     check("...and a label with both arms is still exempt", not _sweep([("armed.py", _armed)])[0],
           str(_sweep([("armed.py", _armed)])[0]))
 
+    def _twice(sources):
+        """(name, source) pairs -> ["file:lines  <the call>"] for an assertion written twice.
+
+        NOT A LABEL COLLISION, which is a different thing and a legitimate one: the two-armed
+        idiom above needs two checks to share a label, and a loop writes one label many
+        times. What cannot be right is the SAME CALL -- label and arguments alike -- standing
+        twice in one file. The second asserts nothing the first did not, it inflates the
+        count this suite publishes, and an edit to one copy leaves the other still saying the
+        old thing.
+
+        Found by trying to insert a case after a block and being told the anchor matched
+        twice: `test_reports` carried thirty-one lines pasted verbatim, three `check` calls
+        among them, under a comment that opens `One rule, one implementation`.
+        """
+        _out, _seen_calls = [], 0
+        for _name, _src in sources:
+            try:
+                _tree = ast.parse(_src)
+            except SyntaxError:
+                continue
+            _seen = {}
+            for _n in ast.walk(_tree):
+                if not (isinstance(_n, ast.Call) and isinstance(_n.func, ast.Name)
+                        and _n.func.id == "check"):
+                    continue
+                _seen_calls += 1
+                # THE WHOLE CALL, whitespace folded: the same assertion re-wrapped by an
+                # editor is the same assertion, and a key built from the label alone would
+                # fail the two-armed idiom this suite deliberately allows.
+                _seg = ast.get_source_segment(_src, _n)
+                if not _seg:
+                    continue
+                _seen.setdefault(" ".join(_seg.split()), []).append(_n.lineno)
+            for _key, _at in sorted(_seen.items()):
+                if len(_at) > 1:
+                    _out.append("%s:%s  %s"
+                                % (_name, ",".join(str(_x) for _x in _at), _key[:70]))
+        # THE DENOMINATOR TRAVELS WITH THE ANSWER. `_twice([])` returns no duplicates and
+        # reads as a clean tree, which is the failure this whole file is about.
+        return _out, _seen_calls
+
+    # ON PLANTED FILES FIRST, because a gate over a clean tree cannot fail and so is not
+    # tested. Both halves: the pair that is the same call, and the pair that shares a label
+    # and asks different things, which must NOT be named.
+    _dup_planted, _ = _twice([("planted.py", 'def f():\n    check("a", x == 1)\n'
+                                          '    check("a", x == 1)\n')])
+    check("the sweep finds one assertion written twice in a file",
+          len(_dup_planted) == 1 and "planted.py:2,3" in _dup_planted[0],
+          str(_dup_planted))
+    _dup_clean, _ = _twice([("ok.py", 'def f():\n    check("a", x == 1)\n'
+                                   '    check("a", y == 2)\n')])
+    check("...and says nothing about two that share a label and ask different things",
+          not _dup_clean, str(_dup_clean))
+
     _suites = sorted(glob.glob(os.path.join(HERE, "test_*.py")))
-    _tauto, _n_checks, _unparsed = _sweep(
-        (os.path.basename(_sp), io.open(_sp, encoding="utf-8").read()) for _sp in _suites)
+    _suite_src = [(os.path.basename(_sp), io.open(_sp, encoding="utf-8").read())
+                  for _sp in _suites]
+    _tauto, _n_checks, _unparsed = _sweep(_suite_src)
 
     check("every suite in this directory parses", not _unparsed, "; ".join(_unparsed))
     check(f"none of the {_n_checks} assertions across {len(_suites)} suites is true no matter "
@@ -384,6 +439,11 @@ def main():
     # having source to scan at all.
     check("...and there were assertions to scan", _n_checks > 500 and len(_suites) > 20,
           f"{_n_checks} check() calls in {len(_suites)} suites")
+    # AND NONE OF THEM IS THE SAME ASSERTION TWICE, over the real suites this time.
+    _dup_real, _dup_seen = _twice(_suite_src)
+    check("...and no suite asserts the same thing twice over, across %d calls"
+          % _dup_seen, not _dup_real and _dup_seen > 500,
+          "; ".join(_dup_real[:4]) or "%d calls scanned" % _dup_seen)
 
     # --- AND ONE WRITTEN IN THE OTHER SUITE'S DIALECT -----------------------------------
     #
