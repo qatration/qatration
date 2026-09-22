@@ -22,7 +22,14 @@ VERDICT = {
     "ERROR":     ("#555",    "#eee"),
     "SKIP":      ("#777",    "#f0f0f0"),
 }
-ORDER = {"EXPLOITED": 0, "PARTIAL": 1, "DEFENDED": 2, "ERROR": 3, "SKIP": 4}
+# THE VERDICT ORDER, IMPORTED. This was `oracle.ORDER` retyped byte for byte, and the two do
+# different jobs that must agree: `runner.headline` sorts a row's trials by oracle's copy to
+# decide what the row IS, and `_evidence` below sorts them by this one to decide which
+# trial's reply the page SHOWS under that headline. Move ERROR above DEFENDED in one of them
+# and a row headlined DEFENDED is illustrated by the trial that errored -- a page whose
+# evidence does not support its own verdict, which is the one thing a report must not do.
+# `report_engine` already reaches oracle through `recon`, so this adds no dependency.
+from oracle import ORDER   # noqa: E402
 
 
 # CONTROL CHARACTERS THE PAYLOADS USE AS THE ATTACK. Escaping `<`, `>` and `&` stops a browser

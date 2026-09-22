@@ -136,6 +136,39 @@ def main():
           dr.payload_text is _ws_p.payload_text
           and _re_p._payload_text is _ws_p.payload_text,
           "%r %r %r" % (dr.payload_text, _re_p._payload_text, _ws_p.payload_text))
+
+    # --- AND THE TRIAL SHOWN IS THE TRIAL THAT SET THE VERDICT ---------------------------
+    #
+    # `runner.headline` decides what a row IS by sorting its trials on `oracle.ORDER`;
+    # `report_engine._proof` decides which trial's reply to print under it by sorting on its
+    # own `ORDER`, which was the same dict typed out a second time. Byte for byte today --
+    # which is why the scan in `test_names` that finds twin constants caught it, and why that
+    # scan is blind to the version that matters: a copy that has DRIFTED is no longer a
+    # twin. Swap two values in it and the scan passes, while a row headlined DEFENDED is
+    # illustrated by the trial that errored.
+    #
+    # So two checks, one for each way it can come back. IDENTITY, as with the renderer above
+    # and for the same reason: two dicts that agree today is the state this started from.
+    import oracle as _or_p, runner as _rn_p
+    check("the page orders trials by the runner's verdict order, not a copy of it",
+          _re_p.ORDER is _or_p.ORDER, "report_engine.ORDER is a separate object")
+    # AND THE PROPERTY ITSELF, over every pair of verdicts a row can hold: the reply printed
+    # is from a trial whose verdict is the row's headline. This is the one that fails for a
+    # drifted copy AND for any other way of picking the wrong trial.
+    _wrong_pick = []
+    for _va in _or_p.ORDER:
+        for _vb in _or_p.ORDER:
+            if _va == _vb:
+                continue
+            _tr = [{"verdict": _va, "probe": {"output": "REPLY-OF-" + _va}},
+                   {"verdict": _vb, "probe": {"output": "REPLY-OF-" + _vb}}]
+            _head = _rn_p.headline(_tr)[0]
+            _shown = _re_p._proof(_tr)
+            if ("REPLY-OF-" + _head) not in _shown:
+                _wrong_pick.append("%s+%s: headline %s" % (_va, _vb, _head))
+    check("every row shows the reply of the trial that set its headline (%d pairs)"
+          % (len(_or_p.ORDER) * (len(_or_p.ORDER) - 1)),
+          not _wrong_pick, "; ".join(_wrong_pick[:4]))
     check("...and the remediation page now names the field the text was planted in",
           "[planted in 'system_prompt']" in dr.payload_text(
               {"delivery": "indirect", "user_prompt": "what are my orders?",

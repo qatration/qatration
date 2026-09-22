@@ -919,6 +919,61 @@ def main():
     check("no module writes one out inline either, across %d module(s)" % _read_n,
           not _inline and _read_n > 20, "; ".join(_inline[:4]) or "%d read" % _read_n)
 
+    # --- AND TWO MODULES THAT DEFINE THE SAME CONSTANT, WHOEVER OWNS IT -----------------
+    #
+    # Both scans above are about `workspace`: a copy of something it owns, named or inline.
+    # A rule written twice between two OTHER modules passed them both, and there was one:
+    # `report_engine.ORDER` was `oracle.ORDER` retyped byte for byte. The runner decides a
+    # row's headline with one and the page decides which trial to show under it with the
+    # other, so the two copies disagreeing is a page whose evidence contradicts its verdict.
+    #
+    # Collections of three or more only: two modules that each say `("a", "b")` are more
+    # often a coincidence than a rule, and a gate that names coincidences is one that gets an
+    # exemption list, which is where gates go to stop working.
+    def _twin_constants(sources):
+        """-> (["a.py:NAME == b.py:NAME"], constants read)."""
+        _where, _n_read = {}, 0
+        for _name, _src in sources:
+            if _name.startswith("test_"):
+                continue
+            try:
+                _tree = _ast_w.parse(_src)
+            except SyntaxError:
+                continue
+            for _n in _tree.body:
+                if not (isinstance(_n, _ast_w.Assign) and len(_n.targets) == 1
+                        and isinstance(_n.targets[0], _ast_w.Name)
+                        and isinstance(_n.value, (_ast_w.Dict, _ast_w.Tuple, _ast_w.List,
+                                                  _ast_w.Set))):
+                    continue
+                try:
+                    _v = _ast_w.literal_eval(_n.value)
+                except Exception:
+                    continue
+                if len(_v) < 3:
+                    continue
+                _n_read += 1
+                _where.setdefault(_ast_w.dump(_n.value), []).append(
+                    "%s:%s" % (_name, _n.targets[0].id))
+        return [" == ".join(_w) for _w in _where.values() if len(_w) > 1], _n_read
+
+    _tw_bad, _ = _twin_constants([("a.py", 'X = {"p": 0, "q": 1, "r": 2}\n'),
+                                  ("b.py", 'Y = {"p": 0, "q": 1, "r": 2}\n')])
+    check("a constant defined identically in two modules is named, whatever each calls it",
+          len(_tw_bad) == 1 and "a.py:X" in _tw_bad[0] and "b.py:Y" in _tw_bad[0],
+          str(_tw_bad))
+    _tw_ok, _ = _twin_constants([("a.py", 'X = {"p": 0, "q": 1, "r": 2}\n'),
+                                 ("b.py", 'X = {"p": 0, "q": 1, "r": 3}\n'),
+                                 ("test_c.py", 'X = {"p": 0, "q": 1, "r": 2}\n')])
+    check("...while one that differs by a value is not, nor a suite writing it out",
+          not _tw_ok, str(_tw_ok))
+    _tw_real, _tw_n = _twin_constants(_suite_src + [
+        (os.path.basename(_p), io.open(_p, encoding="utf-8").read())
+        for _p in sorted(glob.glob(os.path.join(HERE, "*.py"))
+                         + glob.glob(os.path.join(ROOT, "tools", "*.py")))])
+    check("no two modules define the same constant, across %d of them" % _tw_n,
+          not _tw_real and _tw_n > 30, "; ".join(_tw_real[:4]) or "%d read" % _tw_n)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
