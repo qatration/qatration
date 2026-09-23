@@ -864,6 +864,11 @@ def writable_path(path, what="file", where=""):
     """
     import errno
     lead = (where + ": ") if where else ""
+    # AN EMPTY PATH NAMES NOTHING. `init --out ''` reached the atomic write with it and ended
+    # in `FileNotFoundError: '.tmp' -> ''` under "this is a bug in qatration".
+    if not str(path or "").strip():
+        raise SystemExit(lead + "ABORT — an empty path names no file to write the %s to. "
+                         "Nothing was written." % what)
     if os.path.isdir(path):
         raise SystemExit(lead + "ABORT — %s is a directory, not a file to write the %s to. "
                          "Name the file itself. Nothing was written." % (path, what))

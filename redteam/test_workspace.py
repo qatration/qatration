@@ -758,6 +758,39 @@ def check_every_command_refuses():
     check("...and no module joins the default arsenal's filename onto a path itself",
           _spelled, [])
 
+    # AND EVERY COMMAND THAT TAKES ONE, found rather than listed. `init --out` was a seventh
+    # writer the list of six did not name, and `init --out ''` crashed into the atomic write.
+    # Any command in the CLI table taking `--out` or `--json` must call the rule, unless its
+    # flag names something other than a file, said here with the reason.
+    import ast as _ast_wp, cli as _cli_wp
+    _NOT_A_FILE = {"compare": "--out names a directory the pages are written into"}
+    _wp_takes, _wp_skips = [], []
+    for _cmd_wp, (_mod_wp, _) in sorted(_cli_wp.COMMANDS.items()):
+        _tree_wp = _ast_wp.parse(_io.open(_os.path.join(_here, _mod_wp + ".py"),
+                                          encoding="utf-8").read())
+        _flags_wp = [n.args[0].value for n in _ast_wp.walk(_tree_wp)
+                     if isinstance(n, _ast_wp.Call) and getattr(n.func, "attr", "") == "add_argument"
+                     and n.args and isinstance(n.args[0], _ast_wp.Constant)
+                     and n.args[0].value in ("--out", "--json")]
+        if not _flags_wp or _cmd_wp in _NOT_A_FILE:
+            continue
+        _wp_takes.append(_cmd_wp)
+        _calls_wp = any(isinstance(n, _ast_wp.ImportFrom) and n.module == "workspace"
+                        and any(a.name == "writable_path" for a in n.names)
+                        for n in _ast_wp.walk(_tree_wp))
+        if not _calls_wp:
+            _wp_skips.append(_cmd_wp)
+    check("every command writing a file it was given a path to goes through writable_path",
+          _wp_skips, [])
+    check("...over the commands that take one, init and sarif among them",
+          sorted({"init", "sarif"} - set(_wp_takes)), [])
+    check("...and every exemption names a command that still takes the flag",
+          sorted(c for c in _NOT_A_FILE if c not in _cli_wp.COMMANDS), [])
+    _rc_e, _out_e = _cmd_out(["init", "--out", ""])
+    check("init --out '' is refused, not crashed into",
+          ("Traceback (most recent call last)" in _out_e, _rc_e, "empty path" in _out_e),
+          (False, 2, True))
+
     # --- AND NOTHING THIS TOOL WRITES IS WRITTEN IN PLACE --------------------------------
     #
     # `jobqueue._write` and `runs._write` each built a `.tmp` and replaced it, and `runs`

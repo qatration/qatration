@@ -263,6 +263,12 @@ def main():
     ap.add_argument("--out", default=DEFAULT_OUT, help="where to write (default: %s)" % DEFAULT_OUT)
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
     args = ap.parse_args()
+    # THE SEVENTH WRITER. `writable_path` was written for the six commands that take a path to
+    # be written, and this one -- the first command anybody runs -- was not among them:
+    # `init --out ''` crashed into the atomic write, and a directory or a missing parent went
+    # the same way. Through the one rule, before the overwrite check reads the path.
+    from workspace import writable_path as _writable
+    args.out = _writable(args.out, "target config", "init")
 
     # NEVER OVERWRITE WITHOUT BEING TOLD TO. The file this would replace is the one holding a
     # canary the user has already planted in a live system, and the endpoint mapping they got
