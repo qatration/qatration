@@ -531,8 +531,18 @@ oracle_context:
             shutil.rmtree(_rr_w, ignore_errors=True)
         # KEPT FOR THE BENIGN RUN BELOW, under a second name so each block owns the file it
         # removes.
-        _dead_cfg2 = _dead_cfg + ".benign.yaml"
+        #
+        # STILL ENDING IN `_tmp.yaml`, which is the one suffix `target.target_configs` excludes.
+        # This was `_dead_cfg + ".benign.yaml"`, so for the length of the benign run below the
+        # repository had a forty-fourth target: `qatration lint` run beside the suite counted
+        # 44 targets, and a suite killed in that window left `deadrecon` behind as a real
+        # config for every command that enumerates them.
+        _dead_cfg2 = _dead_cfg[:-len("_tmp.yaml")] + "_benign_tmp.yaml"
         os.replace(_dead_cfg, _dead_cfg2)
+        from target import target_configs as _tc_e2e
+        check("a temporary config this suite writes is invisible to the enumeration",
+              os.path.abspath(_dead_cfg2) not in {os.path.abspath(p) for p in _tc_e2e(HERE)},
+              _dead_cfg2)
         check("recon against a target that is down exits 3, not 0", _rr_p.returncode == 3,
               "exit %s: %s" % (_rr_p.returncode, _rr_out[-200:]))
         check("...and says nothing was measured",
