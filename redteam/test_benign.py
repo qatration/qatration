@@ -764,6 +764,40 @@ def main():
         _f_mute = _ls_m(_mute, timeout=3)
         check("a server that never answers initialize is fatal, with the reason",
               bool(_f_mute[3]) and "initialize" in _f_mute[3], str(_f_mute[3]))
+        check("...and one that is still running is said not to have answered in time",
+              "no answer to initialize within 3s" in (_f_mute[3] or ""), str(_f_mute[3]))
+        # A SERVER THAT EXITED IS NOT A SERVER THAT DID NOT ANSWER. Walked: one that exits at
+        # once with `fatal: missing API_KEY` on stderr was reported as "no answer to initialize
+        # within 20s", after no time at all, and the line saying what to fix went to DEVNULL.
+        _gone = _server("import sys" + chr(10)
+                        + "sys.stderr.write('fatal: missing API_KEY' + chr(10))" + chr(10)
+                        + "sys.exit(7)" + chr(10), "gone.py")
+        import time
+        _t_gone = time.time()
+        _f_gone = _ls_m(_gone, timeout=60)
+        check("a server that exits before answering is said to have exited, with its code",
+              "exited (code 7)" in (_f_gone[3] or ""), str(_f_gone[3]))
+        check("...carrying what it wrote to stderr",
+              "missing API_KEY" in (_f_gone[3] or ""), str(_f_gone[3]))
+        check("...and not after waiting out the timeout it never needed",
+              time.time() - _t_gone < 30 and "within" not in (_f_gone[3] or ""),
+              "%.1fs %s" % (time.time() - _t_gone, _f_gone[3]))
+        # AND ONE THAT DIES BETWEEN LISTINGS: the channel says it exited, not that it was slow.
+        _dies = _server(
+            "import json, sys" + chr(10)
+            + "for line in sys.stdin:" + chr(10)
+            + "    m = json.loads(line) if line.strip() else {}" + chr(10)
+            + "    if m.get('method') == 'initialize':" + chr(10)
+            + "        print(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result':"
+              " {'protocolVersion': '2024-11-05', 'capabilities': {'tools': {}}}}))" + chr(10)
+            + "        sys.stdout.flush()" + chr(10)
+            + "    elif m.get('method') == 'tools/list':" + chr(10)
+            + "        sys.stderr.write('segfault in tool loader' + chr(10))" + chr(10)
+            + "        sys.exit(3)" + chr(10), "dies.py")
+        _dd, _dd_why, _, _dd_fatal = _ls_m(_dies, timeout=60)
+        check("a server that exits during a listing leaves the channel unmeasured, saying so",
+              _dd.get("tools") is None and "exited (code 3)" in (_dd_why.get("tools") or "")
+              and "segfault" in (_dd_why.get("tools") or ""), "%s %s" % (_dd_fatal, _dd_why))
         _refuse = _server(
             "import json, sys" + chr(10)
             + "for line in sys.stdin:" + chr(10)

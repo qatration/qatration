@@ -77,6 +77,46 @@ def _lines(proc):
     return q
 
 
+def _stderr_tail(proc, keep=20):
+    """A list that holds the last `keep` lines the server wrote to stderr, filled by a thread.
+
+    WHY A SERVER STOPPED IS USUALLY ON ITS STDERR. It went to DEVNULL, so a server that exited
+    at once with `fatal: missing API_KEY` was reported as "no answer to initialize within
+    180s" -- after no time at all, with the one line that said what to fix thrown away.
+    Bounded, because the stream is the server's and a chatty one must not take the memory.
+    """
+    import collections as _collections
+    import threading as _threading
+    tail = _collections.deque(maxlen=keep)
+
+    def _pump():
+        try:
+            for line in proc.stderr:
+                tail.append(line.rstrip()[:300])
+        except Exception:
+            pass
+
+    _threading.Thread(target=_pump, daemon=True).start()
+    return tail
+
+
+def _silence(proc, tail, what, timeout):
+    """-> the sentence for a request that got no answer: the server EXITED, or it did not answer.
+
+    Two different facts, and the first sends the reader somewhere specific. A short wait,
+    because a server that closed its output is usually a moment away from exiting.
+    """
+    try:
+        code = proc.wait(timeout=2)
+    except Exception:
+        code = None
+    if code is None:
+        return "no answer to %s within %ds" % (what, timeout)
+    said = " | ".join(l for l in list(tail)[-3:] if l)
+    return ("the server exited (code %s) before answering %s%s"
+            % (code, what, (": " + said) if said else ", and wrote nothing to stderr"))
+
+
 def _await(lines, want_id, deadline):
     """The answer to one request id, skipping whatever else the server writes to stdout.
 
@@ -188,18 +228,22 @@ def list_surface(argv, timeout=180, cwd=None):
     try:
         proc = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+            stderr=subprocess.PIPE, text=True, encoding="utf-8",
             errors="replace", bufsize=1, cwd=cwd, shell=_USE_SHELL)
     except Exception as e:
         return {}, {}, {}, "%s: %s" % (type(e).__name__, e)
     try:
-        _send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                     "params": {"protocolVersion": PROTOCOL, "capabilities": {},
-                                "clientInfo": {"name": "qatration", "version": "0"}}})
+        _tail = _stderr_tail(proc)
         _lines_q = _lines(proc)
-        init = _await(_lines_q, 1, deadline)
+        try:
+            _send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                         "params": {"protocolVersion": PROTOCOL, "capabilities": {},
+                                    "clientInfo": {"name": "qatration", "version": "0"}}})
+            init = _await(_lines_q, 1, deadline)
+        except OSError:
+            init = None          # it was gone before the request could be written
         if init is None:
-            return {}, {}, {}, "no answer to initialize within %ds" % timeout
+            return {}, {}, {}, _silence(proc, _tail, "initialize", timeout)
         if "error" in init:
             return {}, {}, {}, "initialize refused: %s" % json.dumps(init["error"])[:120]
         caps = ((init.get("result") or {}).get("capabilities") or {})
@@ -211,7 +255,8 @@ def list_surface(argv, timeout=180, cwd=None):
                 found[chan] = None
                 why[chan] = "not declared in the server's capabilities"
                 continue
-            found[chan], why_c = _list_all(proc, _lines_q, method, key, i * PAGE_IDS, deadline)
+            found[chan], why_c = _list_all(proc, _lines_q, method, key, i * PAGE_IDS, deadline,
+                                           _tail, timeout)
             if why_c:
                 why[chan] = why_c
         return found, why, caps, ""
@@ -237,17 +282,20 @@ PAGE_IDS = 1000          # request ids per channel, so a page's answer cannot be
 MAX_PAGES = PAGE_IDS - 1
 
 
-def _list_all(proc, lines_q, method, key, first_id, deadline):
+def _list_all(proc, lines_q, method, key, first_id, deadline, tail=(), timeout=0):
     """-> (items or None, why). Follows `nextCursor` to the end of one listing."""
     items, cursor, seen = [], None, set()
     for page in range(MAX_PAGES):
         _id = first_id + page
-        _send(proc, {"jsonrpc": "2.0", "id": _id, "method": method,
-                     "params": {"cursor": cursor} if cursor is not None else {}})
-        got = _await(lines_q, _id, deadline)
+        try:
+            _send(proc, {"jsonrpc": "2.0", "id": _id, "method": method,
+                         "params": {"cursor": cursor} if cursor is not None else {}})
+            got = _await(lines_q, _id, deadline)
+        except OSError:
+            got = None
         _where = "" if page == 0 else " (page %d, after %d item(s))" % (page + 1, len(items))
         if got is None:
-            return None, "declared, and no answer to %s%s" % (method, _where)
+            return None, "declared, and %s" % _silence(proc, tail, method + _where, timeout)
         if "error" in got:
             return None, "declared, and %s refused%s: %s" % (
                 method, _where, json.dumps(got["error"])[:100])
