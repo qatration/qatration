@@ -1303,7 +1303,7 @@ def delivered():
     return sorted(seen), sorted(set(DELIVERY_NEEDS) - seen)
 
 
-def coverage(why=None):
+def coverage(why=None, split=None):
     """-> (measured, skipped, errored) across every run on the page, from what each recorded.
 
     `why` is an out-parameter, the idiom this package already uses for `unresolved`, `engines`
@@ -1328,6 +1328,10 @@ def coverage(why=None):
     at different scopes and the flag only knows about this invocation.
     """
     sent = skipped = errored = 0
+    # AND WHICH KIND OF SKIPPED, for a caller that asks: `{"not_applicable": n, "not_sent": n}`,
+    # or `None` in a value once any run on the page predates the two counts.
+    if split is not None:
+        split.update({"not_applicable": 0, "not_sent": 0})
     for fp in results_files(OUT_DIR):
         try:
             meta = (read_artifact(fp)[0] or {})["meta"]
@@ -1350,6 +1354,11 @@ def coverage(why=None):
         sent += _m
         errored += _e
         skipped += sk
+        if split is not None:
+            for _k in ("not_applicable", "not_sent"):
+                _v = meta.get(_k)
+                split[_k] = (split[_k] + _v if isinstance(_v, int) and split[_k] is not None
+                             else None)
     return (sent, skipped, errored) if sent or skipped or errored else None
 
 
@@ -1782,7 +1791,8 @@ def main():
                      f'in what was measured, not a finding about the deployment:'
                      f'<ul class="trig">{_rows}</ul></div>')
     _cov_why = []
-    _cov = coverage(_cov_why)
+    _cov_split = {}
+    _cov = coverage(_cov_why, _cov_split)
     # EITHER REASON IS ENOUGH. This section used to render only when attacks were skipped, so a
     # run that sent everything it had but never exercised a whole delivery family said nothing
     # about the family — the statement was hostage to an unrelated count. Absence has two
@@ -1819,6 +1829,26 @@ def main():
                      f"failed, or the budget refused it before it was sent — so they are "
                      f"neither a breach nor a defence and are counted as neither"
                      if _errored else "")
+        # WHICH OF THE TWO REASONS, where the runs recorded it. This said "either because they
+        # do not apply to the target or because the run was scoped to one attack per category"
+        # and then "Re-run at --scope full" -- over a full-scope run whose 107 absent attacks
+        # were every one of them not applicable, the split printed in the table above it. The
+        # remedy is for the second reason only.
+        _na, _ns = _cov_split.get("not_applicable"), _cov_split.get("not_sent")
+        if _na is None or _ns is None:
+            _why_skipped = (f"{_skipped} attack(s) in the arsenal were not sent, either because "
+                            f"they do not apply to the target or because the run was scoped to "
+                            f"send one attack from each category rather than all of them")
+        else:
+            _why_skipped = "; ".join(
+                ([f"{_na} attack(s) in the arsenal do not apply to these targets"] if _na else [])
+                + ([f"{_ns} were not sent because the run was scoped to send one attack from "
+                    f"each category rather than all of them"] if _ns else []))
+        _rerun = ("A category that was covered once was covered once. Re-run at "
+                  "<span class=\"mono\">--scope full</span> before reading a quiet category as "
+                  "a closed one." if (_ns is None or _ns) else
+                  "Every attack that applies was sent; what is absent was written for other "
+                  "systems.")
         held_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
@@ -1829,12 +1859,8 @@ def main():
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about
-            these systems: {_cov_gap if _skipped is None else
-            f"{_skipped} attack(s) in the arsenal were not sent, either because "
-            "they do not apply to the target or because the run was scoped to send one attack "
-            "from each category rather than all of them"}{_err_note}. A category that was covered once was
-            covered once. Re-run at <span class="mono">--scope full</span> before reading a
-            quiet category as a closed one.</div>{_families}
+            these systems: {_cov_gap if _skipped is None else _why_skipped}{_err_note}.
+            {_rerun}</div>{_families}
         </section>"""
 
     # What the run could NOT see, said beside what it did. A report that only lists

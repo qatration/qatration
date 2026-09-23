@@ -2953,7 +2953,7 @@ def main():
                 with contextlib.redirect_stdout(io.StringIO()):
                     _drd.main()
                 _h = io.open(os.path.join(_cw, "defense_report.html"), encoding="utf-8").read()
-                _m = re.search(r"exhaustive statement about\s+these systems:(.{0,200})",
+                _m = re.search(r"exhaustive statement about\s+these systems:(.{0,400})",
                                re.sub(r"<[^>]+>", " ", _h), re.S)
                 return re.sub(r"\s+", " ", _m.group(1)).strip() if _m else ""
             finally:
@@ -2972,6 +2972,22 @@ def main():
         _said2 = _cov_sentence({"skipped": 1}, corrupt=True)
         check("...and still says corrupt when it is",
               "could not be read" in _said2, _said2[:110])
+
+        # AND WHICH OF THE TWO REASONS A SKIP WAS, where the run recorded it. The page said
+        # "either ... do not apply ... or ... scoped to one per category" and "Re-run at
+        # --scope full" over a full run whose every absent attack was not applicable.
+        _said3 = _cov_sentence({"skipped": 5, "not_applicable": 5, "not_sent": 0})
+        check("a full run's absent attacks are said to be not applicable, and no re-run is asked",
+              "5 attack(s) in the arsenal do not apply" in _said3
+              and "either because" not in _said3 and "--scope full" not in _said3,
+              _said3[:160])
+        _said4 = _cov_sentence({"skipped": 8, "not_applicable": 5, "not_sent": 3})
+        check("...while a scoped run names the ones its scope left out, and asks for a full one",
+              "3 were not sent because the run was scoped" in _said4
+              and "--scope full" in _said4, _said4[:200])
+        _said5 = _cov_sentence({"skipped": 5})
+        check("...and a run that recorded no split keeps saying it could be either",
+              "either because" in _said5, _said5[:160])
     finally:
         _sh7.rmtree(_cw, ignore_errors=True)
 
