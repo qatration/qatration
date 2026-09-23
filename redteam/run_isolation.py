@@ -110,10 +110,15 @@ def main():
     ap.add_argument("--keys", action="store_true",
                     help="for every locked property, search frames.yaml for a framing "
                          "that opens it (costs trials x frames per locked property)")
+    # COUNTED FROM THE LIBRARY, not written here. This said "all 16" over a library of
+    # thirteen families and the control: a number in a help text is a claim nothing keeps
+    # true, and this one had stopped being true without anything noticing.
+    _families = sorted({str(f.get("family")) for f in load_frames()} - {"control"})
     ap.add_argument("--frame-families", default=None,
-                    help="comma-separated families to search (default: all 16). The whole "
-                         "library runs per LOCKED property per trial, so this is the knob "
-                         "for when that budget matters; the bare control always runs")
+                    help="comma-separated families to search (default: all %d in the "
+                         "library: %s). The whole library runs per LOCKED property per "
+                         "trial, so this is the knob for when that budget matters; the bare "
+                         "control always runs" % (len(_families), ", ".join(_families)))
     ap.add_argument("--stop-on-hit", action="store_true",
                     help="stop a property's search at the first frame that opens it — "
                          "cheaper, but you lose which OTHER families also work, which is "

@@ -504,6 +504,8 @@ def main():
     # IN PAIRS, both here and below. A `_status` that returned "unmeasured" for everything
     # would satisfy the first line of each pair perfectly, and that is exactly the mutation
     # this file exists to refuse.
+    import os as _os_h
+    _here_h = _os_h.path.dirname(_os_h.path.abspath(__file__))
     check("a detector that cannot speak here is unmeasured, not locked",
           _status(0, 3, 0, inert=True), "unmeasured")
     check("...and the same run with the detector armed is locked",
@@ -521,6 +523,20 @@ def main():
     check("...and the same property, on a config that planted one, is locked",
           probe_property(_quiet, _blind_prop, {"canaries": ["K-1"]}, trials=2)["status"],
           "locked")
+
+    # --- THE HELP'S COUNT IS THE LIBRARY'S ----------------------------------------------
+    #
+    # `--frame-families` said "default: all 16" over thirteen families and the control.
+    import subprocess as _sp_h, re as _re_h
+    from keysearch import load_frames as _lf_h
+    _fams_h = {str(f.get("family")) for f in _lf_h()} - {"control"}
+    _help_h = _sp_h.run([sys.executable, _os_h.path.join(_here_h, "cli.py"), "isolation",
+                         "--help"], capture_output=True, text=True, timeout=120,
+                        env=dict(_os_h.environ, PYTHONIOENCODING="utf-8",
+                                 PYTHONDONTWRITEBYTECODE="1")).stdout
+    _said_h = _re_h.search(r"all\s+(\d+)\s+in\s+the", " ".join(_help_h.split()))
+    check("the --frame-families help states how many families the library has",
+          (_said_h and int(_said_h.group(1)), len(_fams_h) > 0), (len(_fams_h), True))
 
     # --- THE CORPUS NOBODY LINTED --------------------------------------------------------
     #
