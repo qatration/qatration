@@ -765,6 +765,12 @@ def check_every_command_refuses():
     check("verify --results holding another target's run is refused, naming both",
           (_rc_vt, "belongs to target 'citebot'" in _out_vt, "'rfbot'" in _out_vt),
           (2, True, True))
+    # AND `sarif` ANCHORED ANOTHER TARGET'S FINDINGS to the config it was handed, exit 0.
+    _rc_st, _out_st = _cmd_out(["sarif", "--results", _res_path, "--target-config", _rf_cfg,
+                                "--out", _os.path.join(_cw, "mismatch.sarif")])
+    check("sarif --target-config of another target is refused, and nothing is exported",
+          (_rc_st, "target 'citebot'" in _out_st,
+           _os.path.exists(_os.path.join(_cw, "mismatch.sarif"))), (2, True, False))
     _rc_ok, _out_ok = _cmd_out(["sarif", "--results", _res_path,
                                 "--out", _os.path.join(_cw, "ok.sarif")])
     check("...while a real results file still exports", _rc_ok, 0)

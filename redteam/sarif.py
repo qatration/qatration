@@ -517,6 +517,20 @@ def main():
               "as a clean scan, so this fails rather than producing one." % (args.results, why))
         return 2
 
+    # THE CONFIG HAS TO BE THIS RUN'S. `--target-config` is where every finding is anchored,
+    # and handed another target's config it anchored mybot's findings to `rulebot.yaml` and
+    # exited 0: a code-scanning tab pointing a reviewer at the wrong deployment, with nothing
+    # saying so. `verify` and `generate` refuse the same mismatch.
+    if args.target_config:
+        from workspace import load_yaml_or_refuse as _load_cfg, config_name as _config_name
+        _cfg = _load_cfg(args.target_config, "target config", "sarif")
+        _cfg_target = _config_name(args.target_config, _cfg)
+        _res_target = (results.get("meta") or {}).get("target")
+        if _res_target and str(_res_target) != str(_cfg_target):
+            print("sarif: %s holds the findings of target %r, and %s describes %r. Anchoring "
+                  "them there would point a reviewer at the wrong deployment. Nothing was "
+                  "exported." % (args.results, _res_target, args.target_config, _cfg_target))
+            return 2
     log = build(results, target_config=args.target_config,
                 out_dir=os.path.dirname(os.path.abspath(args.results)))
     # THROUGH THE ONE RULE. This opened `dest` directly, so a `--out` naming a directory
