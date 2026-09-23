@@ -385,6 +385,30 @@ def main():
               for _f in _fills), str([_ast_x.get_source_segment(_msrc, _f)
                                       for _f in _fills])[:200])
 
+    # NOTHING BROKE ANYWHERE IS NOT "NO DIFFERENCE". Walked against a stranger's bot: two
+    # models, five attacks each, none landed, and the verdict was that model strength made no
+    # difference and "this class doesn't care how big the model is" -- a finding about model
+    # size drawn from a comparison in which neither arm moved.
+    _w_none = _workspace({"aaa": (None, "2026-09-01 10:00"),
+                          "bbb": (None, "2026-09-01 10:00")})
+    _rc_none, _said_none = _matrix(_w_none)
+    check("two arms that both held say the comparison found nothing to compare",
+          "no attack broke any of the 2 models" in _said_none, _said_none[-400:])
+    check("...and do not conclude that model strength made no difference",
+          "made NO difference" not in _said_none
+          and "doesn't care how big" not in _said_none, _said_none[-400:])
+    # IN A PAIR: the same sentence is still the right one when both arms broke on the same
+    # attack, which is a real result and the one it was written for.
+    _w_both = _workspace({"aaa": (None, "2026-09-01 10:00"),
+                          "bbb": (None, "2026-09-01 10:00")},
+                         verdicts={"aaa": "EXPLOITED", "bbb": "EXPLOITED"})
+    _rc_both, _said_both = _matrix(_w_both)
+    check("...while two arms broken by the same attack still say model strength made none",
+          "made NO difference (1 breaches" in _said_both
+          and "no attack broke" not in _said_both, _said_both[-400:])
+    for _w_x in (_w_none, _w_both):
+        shutil.rmtree(_w_x, ignore_errors=True)
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:
