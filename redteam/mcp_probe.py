@@ -211,17 +211,9 @@ def list_surface(argv, timeout=180, cwd=None):
                 found[chan] = None
                 why[chan] = "not declared in the server's capabilities"
                 continue
-            _send(proc, {"jsonrpc": "2.0", "id": i, "method": method, "params": {}})
-            got = _await(_lines_q, i, deadline)
-            if got is None:
-                found[chan] = None
-                why[chan] = "declared, and no answer to %s" % method
-            elif "error" in got:
-                found[chan] = None
-                why[chan] = "declared, and %s refused: %s" % (
-                    method, json.dumps(got["error"])[:100])
-            else:
-                found[chan] = list((got.get("result") or {}).get(key) or [])
+            found[chan], why_c = _list_all(proc, _lines_q, method, key, i * PAGE_IDS, deadline)
+            if why_c:
+                why[chan] = why_c
         return found, why, caps, ""
     finally:
         try:
@@ -229,6 +221,48 @@ def list_surface(argv, timeout=180, cwd=None):
             proc.wait(timeout=10)
         except Exception:
             pass
+
+
+# EVERY PAGE, OR NOT A LISTING. Each of the four listings is paginated in the protocol: a
+# result may carry `nextCursor`, and the rest of the list is behind it. This read the first
+# page and reported it as the server's surface. Walked against a scripted server whose second
+# page held the poisoned tool: "1 item(s) across 1 channel(s)", exit 0, and the one
+# description that asked the model to read ~/.ssh/id_rsa was not in the count, the table or
+# a `--compare` record made from it.
+#
+# A page that does not arrive makes the channel unmeasured rather than the pages before it a
+# complete answer. Bounded, because the cursor is the server's: a server handing back the same
+# cursor, or an endless one, is a server that has not finished, and saying so is the answer.
+PAGE_IDS = 1000          # request ids per channel, so a page's answer cannot be another's
+MAX_PAGES = PAGE_IDS - 1
+
+
+def _list_all(proc, lines_q, method, key, first_id, deadline):
+    """-> (items or None, why). Follows `nextCursor` to the end of one listing."""
+    items, cursor, seen = [], None, set()
+    for page in range(MAX_PAGES):
+        _id = first_id + page
+        _send(proc, {"jsonrpc": "2.0", "id": _id, "method": method,
+                     "params": {"cursor": cursor} if cursor is not None else {}})
+        got = _await(lines_q, _id, deadline)
+        _where = "" if page == 0 else " (page %d, after %d item(s))" % (page + 1, len(items))
+        if got is None:
+            return None, "declared, and no answer to %s%s" % (method, _where)
+        if "error" in got:
+            return None, "declared, and %s refused%s: %s" % (
+                method, _where, json.dumps(got["error"])[:100])
+        result = got.get("result") or {}
+        items += list(result.get(key) or [])
+        cursor = result.get("nextCursor")
+        if cursor is None or cursor == "":
+            return items, ""
+        if not isinstance(cursor, str) or cursor in seen:
+            return None, ("declared, and %s handed back a cursor it had already given (%r) "
+                          "after %d item(s): a listing that does not end is not a listing"
+                          % (method, cursor, len(items)))
+        seen.add(cursor)
+    return None, ("declared, and %s was still paging after %d pages and %d item(s)"
+                  % (method, MAX_PAGES, len(items)))
 
 
 def list_tools(argv, timeout=180, cwd=None):
