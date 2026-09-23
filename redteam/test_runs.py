@@ -264,6 +264,32 @@ def main():
                                  PYTHONIOENCODING="utf-8"))
         _recs_f = runs.listing(_wf)
         # `regression` on a first run answers 3 through `sys.exit`, after `finish`.
+        # AND THE TOOL-CALL DETECTORS SAY WHICH KEY ARMS THEM. The page says every inert
+        # detector "names the config key that would arm it", and on an http config mapping no
+        # `response.tool_calls` thirteen said only "this run recorded none".
+        import json as _js_tc
+        _res_tc = _js_tc.load(open(os.path.join(_wf, "results_openbot.json"), encoding="utf-8"))
+        _inert_tc = (_res_tc.get("meta") or {}).get("inert") or {}
+        check("an http config mapping no tool calls names the key the tool detectors need",
+              _inert_tc.get("sql_injection") == ["a tool call, and this config maps none: "
+                                                 "response.tool_calls"],
+              str(_inert_tc.get("sql_injection")))
+        _cfg_tc = os.path.join(_wo, "toolbot.yaml")
+        open(_cfg_tc, "w", encoding="utf-8").write(
+            open(_cfg_o, encoding="utf-8").read().replace("name: openbot", "name: toolbot")
+            + "  tool_calls: calls\n")
+        _wt = _tf_d.mkdtemp()
+        _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "run", "--target-config",
+                   _cfg_tc, "--scope", "quick", "--trials", "1"], capture_output=True,
+                  text=True, timeout=300,
+                  env=dict(os.environ, QATRATION_OUT=_wt, PYTHONDONTWRITEBYTECODE="1",
+                           PYTHONIOENCODING="utf-8"))
+        _inert_t2 = ((_js_tc.load(open(os.path.join(_wt, "results_toolbot.json"),
+                                       encoding="utf-8")).get("meta") or {}).get("inert") or {})
+        check("...while one that maps them and saw none says the run recorded none",
+              _inert_t2.get("sql_injection") == ["a tool call, and this run recorded none"],
+              str(_inert_t2.get("sql_injection")))
+        shutil.rmtree(_wt, ignore_errors=True)
         check("a run whose gate exits after it finished keeps its record finished",
               _pf.returncode == 3 and [r.get("state") for r in _recs_f] == ["finished"],
               "exit %s: %s" % (_pf.returncode, str(_recs_f)[:300]))

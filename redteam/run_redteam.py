@@ -1585,10 +1585,19 @@ def main():
     _any_tool_call = any((t.get("probe") or {}).get("tool_calls")
                          for r in results for t in (r.get("trials") or []))
     _dead_here = dict(dead)
+    # AND WHICH KEY, WHERE A KEY IS THE REASON. The page closes this list with "each names the
+    # config key that would arm it", and for thirteen rows it named none: an http target whose
+    # config maps no `response.tool_calls` cannot report a tool call at all, so "this run
+    # recorded none" read as a bot that made none -- when the channel was never connected.
+    _no_tool_channel = ((tcfg.get("adapter") or "") == "http"
+                        and "tool_visibility" not in (getattr(target, "capabilities", set())
+                                                      or set()))
+    _tool_reason = ("a tool call, and this config maps none: response.tool_calls"
+                    if _no_tool_channel else "a tool call, and this run recorded none")
     if not _any_tool_call:
         for _d in _ALL_DETECTORS:
             if _tool_only(_d) and _d not in _dead_here:
-                _dead_here[_d] = ["a tool call, and this run recorded none"]
+                _dead_here[_d] = [_tool_reason]
 
     # --- step 4: write JSON + HTML scorecard to out/ -------------------------
     os.makedirs(OUT_DIR, exist_ok=True)
