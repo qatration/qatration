@@ -104,7 +104,16 @@ def kill_tree(proc):
     """
     if os.name == "nt":
         # The only tree-kill Windows offers without a dependency.
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+        #
+        # BOUNDED LIKE EVERY OTHER WAIT HERE. This was the one call in the kill path with no
+        # ceiling: a `taskkill` that stalls -- walking a tree on a loaded runner, waiting on a
+        # process that will not die -- held the runner exactly as the pipe it exists to free
+        # would have. On a timeout the suite itself is still killed below.
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=DRAIN)
+        except subprocess.TimeoutExpired:
+            pass
     else:
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)

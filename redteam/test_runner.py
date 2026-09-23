@@ -284,6 +284,22 @@ def main():
                 pass
         shutil.rmtree(work, ignore_errors=True)
 
+    # --- EVERY WAIT IN THE RUNNER HAS A CEILING -------------------------------------------
+    #
+    # The deadline is only as good as the slowest thing the runner waits on after it. The
+    # `taskkill` in `kill_tree` had none, and it runs on the one path that exists because a
+    # wait did not end. Read off the source, so a wait added later is held to it too.
+    import ast as _ast_w
+    _unbounded = []
+    for _node in _ast_w.walk(_ast_w.parse(io.open(CHECK, encoding="utf-8").read())):
+        if (isinstance(_node, _ast_w.Call) and isinstance(_node.func, _ast_w.Attribute)
+                and _node.func.attr in ("run", "call", "check_call", "check_output",
+                                        "communicate", "wait")
+                and not any(k.arg == "timeout" for k in _node.keywords)):
+            _unbounded.append("line %d: .%s(...)" % (_node.lineno, _node.func.attr))
+    check("every wait in tools/check.py has a timeout", not _unbounded,
+          "; ".join(_unbounded))
+
     # --- A RUNNER KILLED FROM OUTSIDE LEAVES WHAT IT HAD PRINTED ---------------------------
     #
     # Block-buffered into a file, the runner's lines died with it: a copy stopped at its
