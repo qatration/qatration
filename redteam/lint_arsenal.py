@@ -22,7 +22,7 @@ from oracle import DETECTORS
 from encoders import ENCODERS
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-from workspace import arsenal_files as _arsenal_files
+from workspace import arsenal_files as _arsenal_files, point_at_configs as _point_at_configs
 
 
 def known_targets():
@@ -945,6 +945,7 @@ def main():
                           "instead of the corpus this package ships")
     _args = _ap.parse_args()
     targets = known_targets()
+    _unseen = []
     # lint EVERY arsenal file (attacks.yaml + every attacks_*.yaml focus file), not just
     # the baseline — an unlinted focus file with a typo'd detector is the same silent
     # no-fire trap, it just hid in a file the linter never opened.
@@ -1097,6 +1098,7 @@ def main():
             for t in a.get("applies_to", []) or []:
                 if t not in targets:
                     warns.append(f"{fname}: {aid}: applies_to names '{t}' — no such target config")
+                    _unseen.append(t)
 
     # A LINTER THAT PASSES ON NOTHING IS THE DEFECT IT EXISTS TO CATCH. With no files, or
     # files holding no attacks, this printed "linted 0 attacks across 0 file(s)" and then
@@ -1123,6 +1125,20 @@ def main():
         _theirs = [os.path.basename(p) for p in _arsenal_files(os.getcwd())]
     for w in warns:
         print(f"  WARN  {w}")
+    # WHERE IT LOOKED, AND HOW TO MAKE IT LOOK FURTHER. Walked: `init` wrote `mybot.yaml`, an
+    # arsenal of the reader's own said `applies_to: [mybot]`, and this answered "no such target
+    # config" about a file sitting beside the arsenal it had just read. Configs are found in
+    # the package directory and through $QATRATION_CONFIGS -- the one enumeration every command
+    # shares -- and a config of the reader's own is in neither until they say so. The warning
+    # was true and read as "your target does not exist".
+    if _unseen:
+        _names = sorted(set(_unseen))
+        print(f"  ! {', '.join(_names)}: no config answers to "
+              f"{'this name' if len(_names) == 1 else 'these names'} in {ROOT}"
+              f"{' or $QATRATION_CONFIGS' if os.environ.get('QATRATION_CONFIGS') else ''}"
+              f". A config of your own outside it is read once $QATRATION_CONFIGS names it:")
+        for _line in _point_at_configs():
+            print(_line)
     for e in errors:
         print(f"  ERROR {e}")
     if errors:
