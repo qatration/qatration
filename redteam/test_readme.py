@@ -555,6 +555,18 @@ def main():
 
     check("every command and flag in the design record exists", not bad, "; ".join(bad))
 
+    # AND A DOCUMENTED SARIF STEP NAMES THE CONFIG. Walked from an install, the README's own CI
+    # block, typed as written: `qatration sarif --results qatration-out/results_mybot.json`
+    # answered "every finding above is anchored to no file. Pass --target-config", and the
+    # uploaded findings pointed at nothing. `docs/ci.md` passes it; the README, which is the
+    # copy people paste, did not. A step the tool itself warns about is not a step to document.
+    _sarif_docs = [f for (c, f) in found if c == "sarif"]
+    check("the design record documents sarif steps to check", len(_sarif_docs) >= 2,
+          str(_sarif_docs))
+    _bare = [f for f in _sarif_docs if "--results" in f and "--target-config" not in f]
+    check("...and every one that exports results names the config its findings anchor to",
+          not _bare, str(_bare))
+
     # --- and every exit code a run can produce is in the contract -------------------------
     #
     # The table calls itself "a contract, not an accident" and left out 4, which is the one a

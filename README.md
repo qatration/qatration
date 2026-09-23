@@ -114,7 +114,7 @@ The full walkthrough, including every way a first run can quietly lie to you, is
 - run: qatration run --target-config mybot.yaml --fail-on exploited
   env:
     LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-- run: qatration sarif --results qatration-out/results_mybot.json --out qatration.sarif
+- run: qatration sarif --results qatration-out/results_mybot.json --target-config mybot.yaml --out qatration.sarif
   if: always()
 - uses: github/codeql-action/upload-sarif@v3
   with: { sarif_file: qatration.sarif }
@@ -178,7 +178,7 @@ chasing and the calls about what counts as evidence are mine.
 
 None of that needs taking on trust. Every number in this README and on the site is recounted
 from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
-in the suite is allowed to be one that cannot fail — 4,609 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 4,611 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push, on four platforms.
 
