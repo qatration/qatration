@@ -1022,6 +1022,23 @@ def main():
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 
+    # --- AN EMPTY --json IS REFUSED, NOT IGNORED ------------------------------------------
+    #
+    # `--json "$COVERAGE_JSON"` with the variable unset wrote no file and exited 0 in silence.
+    import subprocess as _sp_ej, tempfile as _tf_ej
+    _env_ej = dict(os.environ, QATRATION_OUT=_tf_ej.mkdtemp(), PYTHONDONTWRITEBYTECODE="1",
+                   PYTHONIOENCODING="utf-8")
+    for _arg_ej, _says_ej in (("", "an empty path names no file"),
+                              (_tf_ej.mkdtemp(), "is a directory")):
+        _p_ej = _sp_ej.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage",
+                            "--json", _arg_ej], capture_output=True, text=True, timeout=300,
+                           env=_env_ej, cwd=os.path.dirname(HERE))
+        check("coverage --json %r is refused, exit 2" % ("" if not _arg_ej else "<a dir>"),
+              _p_ej.returncode == 2 and _says_ej in (_p_ej.stderr or ""),
+              "exit %s: %s" % (_p_ej.returncode, (_p_ej.stderr or "")[-200:]))
+        check("...before the replay, so the refusal is not buried under the report",
+              "DECLARED ONLY" not in (_p_ej.stdout or ""), (_p_ej.stdout or "")[-200:])
+
     # --- AND AN UNRESOLVED TARGET COMES WITH ITS REMEDY -----------------------------------
     #
     # Walked as a stranger: `init`, `run`, `benign`, then `coverage`, without exporting the

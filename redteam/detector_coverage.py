@@ -393,7 +393,7 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
     Written even when nothing was measured, because a step that produces no file at all
     cannot be told from a step that never ran. `probes: 0` and `measured: false` can.
     """
-    if not where_to:
+    if where_to is None:
         return
     # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
     # the directory this module is installed in, so `--json x.json` from a workspace landed
@@ -435,6 +435,15 @@ def main():
                     help="also write the buckets here, in the form a CI step can read:"
                          " demonstrated, and each of the four causes of never fired")
     args = ap.parse_args()
+    # AN EMPTY --json IS NOT AN ABSENT ONE. `--json "$COVERAGE_JSON"` with the variable unset
+    # printed the whole report, wrote no file, said nothing about it and exited 0, and the CI
+    # step after it found no buckets to read. Every other door refuses an empty path or writes
+    # its default and says where; this one has no default, so it refuses -- and BEFORE the
+    # replay, like a directory, so the refusal is the last thing on screen and not a line
+    # under three screens of report.
+    if args.json is not None:
+        from workspace import writable_path as _writable
+        _writable(args.json, "coverage buckets", "coverage")
 
     unresolved, collisions, engines = [], [], []
     contexts(collisions=collisions)
