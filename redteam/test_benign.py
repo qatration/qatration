@@ -891,7 +891,7 @@ def main():
         # (nothing moved, exit 0), then re-read a server serving a rewritten description under
         # the same recorded version (RUG PULL, exit 1). The item carries a title and a parameter
         # description, which is what the tools-only, description-only re-read dropped.
-        def _mcp_srv(desc, name):
+        def _mcp_srv(desc, name, version="1.0"):
             return _server(
                 "import json, sys" + chr(10)
                 + "for line in sys.stdin:" + chr(10)
@@ -899,7 +899,8 @@ def main():
                 + "    if 'id' not in m:" + chr(10)
                 + "        continue" + chr(10)
                 + "    if m.get('method') == 'initialize':" + chr(10)
-                + "        r = {'protocolVersion': '2024-11-05', 'capabilities': {'tools': {}, 'prompts': {}}}" + chr(10)
+                + "        r = {'protocolVersion': '2024-11-05', 'capabilities': {'tools': {}, 'prompts': {}}," + chr(10)
+                + "             'serverInfo': {'name': 'fetcher', 'version': %r}}" % version + chr(10)
                 + "    elif m.get('method') == 'tools/list':" + chr(10)
                 + "        r = {'tools': [{'name': 'fetch', 'title': 'Fetch a page', 'description': %r," % desc + chr(10)
                 + "              'inputSchema': {'type': 'object', 'properties': {'url': {'type': 'string', 'description': 'the page'}}}}]}" + chr(10)
@@ -911,12 +912,13 @@ def main():
                 + "    sys.stdout.flush()" + chr(10), name)
 
         _clean_cmd = _mcp_srv("Fetch a URL.", "cmp_clean.py")
-        _f_c, _w_c, _, _fat_c = _ls_m(_clean_cmd, timeout=30)
+        _info_c = {}
+        _f_c, _w_c, _, _fat_c = _ls_m(_clean_cmd, timeout=30, info=_info_c)
         _corpus_path = os.path.join(_w_srv, "corpus.json")
 
         def _write_corpus(cmd):
             _js_m.dump({"when": "2026-09-23", "servers": {"fetcher": dict(
-                _sr_m(_f_c, _w_c), package="fetcher", version="1.0", command=cmd)}},
+                _sr_m(_f_c, _w_c, _info_c), package="fetcher", version="1.0", command=cmd)}},
                 _io_m.open(_corpus_path, "w", encoding="utf-8"))
 
         def _mcp_compare():
@@ -938,6 +940,20 @@ def main():
         check("...while one serving a rewritten description under the same version is a "
               "RUG PULL, exit 1", _rc_pull == 1 and "RUG PULL" in _said_pull
               and "tools/fetch" in _said_pull, "exit %s: %s" % (_rc_pull, _said_pull[-300:]))
+        # A TAG IS NOT A PIN. The shipped corpus runs `npx -y <pkg>` and `@playwright/mcp@latest`.
+        from mcp_probe import pinned_version as _pv_m
+        check("a command pinning its package gives that version, and a tag or none gives none",
+              [_pv_m(c) for c in (["npx", "-y", "pkg@1.2.3"], ["npx", "-y", "@s/p@2.0.0-rc.1"],
+                                  ["npx", "-y", "@playwright/mcp@latest"],
+                                  ["npx", "-y", "@upstash/context7-mcp"])]
+              == ["1.2.3", "2.0.0-rc.1", None, None], "")
+        # THE VERSION IS MEASURED ON THE RE-READ, not copied from the corpus. It was copied, so
+        # every change was "under the same version" and a real upgrade read as a rug pull.
+        _write_corpus(_mcp_srv("Fetch a URL, following redirects.", "cmp_upgraded.py", "1.1"))
+        _rc_up, _said_up = _mcp_compare()
+        check("...and one that reports a newer version is an upgrade, exit 0",
+              _rc_up == 0 and "upgraded" in _said_up and "1.0 -> v1.1" in _said_up,
+              "exit %s: %s" % (_rc_up, _said_up[-300:]))
 
         # AND THE TOOLS DOOR ON ITS OWN. `tools_of` is what the corpus comparison reads, and
         # a server that declares the capability and then never answers the listing must not
@@ -1110,10 +1126,15 @@ def main():
             # RECORDING is wrong about it, which is the same difference a rug pull is.
             _corpus("this is not what the server says")
             _rc, _out = _run_compare()
-            check("...and exits 1 when a description moved under an unchanged version",
-                  _rc == 1, "exit %s: %s" % (_rc, _out[-300:]))
-            check("...naming the server and what moved",
-                  "fake" in _out and "RUG PULL" in _out, _out[-300:])
+            # WITHOUT A MEASURED VERSION IT IS NOT "UNCHANGED". This fake reports no
+            # `serverInfo.version` and its command pins none, and the re-read used to copy the
+            # corpus's `1.0` across -- so this case asserted a RUG PULL on a version nobody
+            # measured. What it can say is that the text changed.
+            check("...and a description that moved with no measured version is 'changed'",
+                  _rc == 0 and "changed" in _out and "RUG PULL" not in _out,
+                  "exit %s: %s" % (_rc, _out[-300:]))
+            check("...naming the server and saying an upgrade cannot be told from a rug pull",
+                  "fake" in _out and "cannot be told from a rug pull" in _out, _out[-300:])
 
             # A CORPUS THAT CANNOT BE REPLAYED IS NOT A CORPUS THAT MOVED. Without a
             # command there is nothing to start, and `nothing moved` over that would be

@@ -197,7 +197,7 @@ def _shell_unsafe(argv):
     return None
 
 
-def list_surface(argv, timeout=180, cwd=None):
+def list_surface(argv, timeout=180, cwd=None, info=None):
     """-> ({channel: [items] or None}, {channel: why}, capabilities, why_fatal).
 
     TOOLS ARE ONE CHANNEL OF FOUR, and reading only them is how a measurement of `the
@@ -247,6 +247,12 @@ def list_surface(argv, timeout=180, cwd=None):
         if "error" in init:
             return {}, {}, {}, "initialize refused: %s" % json.dumps(init["error"])[:120]
         caps = ((init.get("result") or {}).get("capabilities") or {})
+        # WHAT THE SERVER SAYS IT IS, for a caller that asks: `--compare` needs the version
+        # the re-read actually ran, and this is the only place the server states it.
+        if isinstance(info, dict):
+            _si = (init.get("result") or {}).get("serverInfo")
+            if isinstance(_si, dict):
+                info.update(_si)
         _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized",
                      "params": {}})
         found, why = {}, {}
@@ -501,7 +507,14 @@ def compare(before, after):
                if dropped else [])
             + ([("%d channel(s) no longer readable: " % len(blind))
                 + ", ".join(blind)] if blind else []))
-        same_version = (b.get("version") or "?") == (a.get("version") or "??")
+        # WHICH VERSION PAIR, and whether there is one. The server's own report where both
+        # readings carry it; the package version otherwise; and where either side has
+        # neither, nothing -- an unmeasured version is not an unchanged one.
+        if b.get("server_version") and a.get("server_version"):
+            _bv, _av = b["server_version"], a["server_version"]
+        else:
+            _bv, _av = b.get("version"), a.get("version")
+        same_version = bool(_bv and _av) and _bv == _av
         # A CHANNEL THAT WENT BLIND IS NOT A CHANGE THAT WAS SEEN. Under an unchanged
         # version it has the same shape as a rug pull and none of the evidence: nothing
         # was demonstrated to have moved, the place it would have moved stopped being
@@ -512,9 +525,15 @@ def compare(before, after):
                         "v%s, %d channel(s) no longer readable: %s"
                         % (a.get("version") or "?", len(blind), ", ".join(blind))))
             continue
+        if not (_bv and _av):
+            out.append((name, "changed",
+                        "the version this reading ran is not known -- the command pins none "
+                        "and the server reported none on both readings -- so an upgrade "
+                        "cannot be told from a rug pull: " + what))
+            continue
         out.append((name, "RUG PULL" if same_version else "upgraded",
-                    ("v%s unchanged, and " % (a.get("version") or "?") if same_version
-                     else "v%s -> v%s, " % (b.get("version"), a.get("version"))) + what))
+                    ("v%s unchanged, and " % _av if same_version
+                     else "v%s -> v%s, " % (_bv, _av)) + what))
     return out
 
 
@@ -523,7 +542,7 @@ def compare(before, after):
 # under "This is a bug in qatration, not a finding about your target and not a problem with
 # your config" -- about a file the tool itself produced. Walked: six of seven wrong shapes,
 # including the three a `.get` on a list gives.
-def server_record(found, why):
+def server_record(found, why, info=None):
     """-> one server's reading in the shape `out/mcp_tools.json` carries, from `list_surface`.
 
     ONE SHAPE ON BOTH SIDES OF A COMPARISON. `--compare` re-read each server through
@@ -549,7 +568,24 @@ def server_record(found, why):
         rec["channels_absent"] = absent
     rec["chars"] = len(instruction_text(rec.get("tools") or []))
     rec["surface_chars"] = len(surface_text(found))
+    _v = (info or {}).get("version")
+    if isinstance(_v, str) and _v.strip():
+        rec["server_version"] = _v.strip()
     return rec
+
+
+def pinned_version(cmd):
+    """-> the version a command pins its package to (`pkg@1.2.3`), or None.
+
+    A tag is not a pin: `@latest` runs whatever was published last, which is the case that
+    needs a measured version most.
+    """
+    import re as _re
+    for arg in (cmd or []):
+        m = _re.search(r"[^/@\s]@(\d[\w.+-]*)$", str(arg))
+        if m:
+            return m.group(1)
+    return None
 
 
 _CORPUS_REQUIRE = {
@@ -611,13 +647,21 @@ def _compare_command(path, timeout):
         cmd = rec.get("command")
         if not cmd:
             continue
-        found, why, _caps, fatal = list_surface(list(cmd), timeout=timeout)
-        fresh = {"package": rec.get("package"), "version": rec.get("version"),
+        _info = {}
+        found, why, _caps, fatal = list_surface(list(cmd), timeout=timeout, info=_info)
+        # THE VERSION THIS READING RAN, measured -- not the recorded one copied forward. It
+        # was `rec.get("version")`, so the two readings always agreed on the version and any
+        # change at all was a RUG PULL. The recorded commands are `npx -y <pkg>` and
+        # `@latest`: they run whatever was published last, and a real upgrade read as a
+        # rug pull by construction. Known only where the command pins it; the server's own
+        # `serverInfo.version` is kept beside it, and `compare` uses that pair when both
+        # readings carry one.
+        fresh = {"package": rec.get("package"), "version": pinned_version(cmd),
                  "command": cmd}
         if fatal:
             fresh["unreadable"] = fatal
         else:
-            fresh.update(server_record(found, why))
+            fresh.update(server_record(found, why, _info))
         after["servers"][name] = fresh
     moved = compare(before, after)
     pulls = [r for r in moved if r[1] == "RUG PULL"]
