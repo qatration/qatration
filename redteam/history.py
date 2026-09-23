@@ -622,7 +622,7 @@ def reopened(target):
     return out
 
 
-def backfill():
+def backfill(dated=None):
     """Seed the timeline from the results already on disk.
 
     Without this the feature is useless until someone re-runs everything, which is the
@@ -647,6 +647,11 @@ def backfill():
     exiting 0.
     """
     made, seen = 0, 0
+    # THE CALLER MAY ASK HOW EACH WAS DATED, the way `configs_by_name` hands back its
+    # collisions: `{"run": n, "mtime": n}` over the entries this call seeded.
+    dated = dated if dated is not None else {}
+    dated.setdefault("run", 0)
+    dated.setdefault("mtime", 0)
     for fp in results_files(OUT):   # per-model copies are the same run, twice
         seen += 1
         d, why = read_artifact(fp)
@@ -671,6 +676,7 @@ def backfill():
             continue                       # already seeded; append-only must stay honest
         _append(snap)
         made += 1
+        dated["run" if dated_by_run else "mtime"] += 1
     return made, seen
 
 
@@ -683,17 +689,25 @@ def main():
                     help="one target's timeline (default: every target with a record)")
     ap.add_argument("--backfill", action="store_true",
                     help="seed timelines from stored results for targets that have none."
-                         " Their run times are file mtimes, not engine records, and each"
-                         " entry says so")
+                         " Each entry is dated by the run's own record where the results"
+                         " carry one and by the file's mtime where they do not, and says"
+                         " which")
     args = ap.parse_args()
 
     known = sorted(os.path.basename(p)[:-len(".jsonl")]
                    for p in glob.glob(os.path.join(HIST, "*.jsonl")))
 
     if args.backfill:
-        n, seen = backfill()
-        print(f"seeded {n} timeline(s) from {seen} stored result(s).\n"
-              f"Their run times are file mtimes, not engine records, and each entry says so.")
+        # SAID PER ENTRY, NOT FOR ALL OF THEM. This printed "their run times are file
+        # mtimes, not engine records" after `backfill` had learned to date by the run's own
+        # `meta.when` -- so over results a current build wrote, every entry dated by the
+        # record was announced as dated by the filesystem.
+        _dated = {}
+        n, seen = backfill(dated=_dated)
+        print(f"seeded {n} timeline(s) from {seen} stored result(s)"
+              + (f": {_dated['run']} dated by the run's own record, {_dated['mtime']} by the "
+                 f"file's modification time (results older than that record), and each entry "
+                 f"says which." if n else "."))
         # NOTHING TO SEED FROM IS NOT A SEEDING THAT FOUND NOTHING NEW. `seeded 0` over an
         # empty workspace is this repository's own class: a command that read nothing,
         # said so in a voice that reads like success, and handed a build exit 0.

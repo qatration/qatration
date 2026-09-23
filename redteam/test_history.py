@@ -758,6 +758,20 @@ def main():
               _dated and _dated[0]["run"].startswith("2026-07-04"), str(_dated))
         check("...and says the date is the run's, not the filesystem's",
               _dated and _dated[0].get("dated_by_run") is True, str(_dated))
+        # AND THE COMMAND SAYS SO TOO. It printed "their run times are file mtimes, not engine
+        # records" over every backfill, including this one, dated by the record.
+        with open(os.path.join(tmp, "results_bfw2.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "bfw2", "when": "2026-07-05 09:30"},
+                       "results": R(x1="EXPLOITED")}, f)
+        import subprocess as _sp_bf
+        _pbf = _sp_bf.run([sys.executable, os.path.join(HERE, "cli.py"), "history", "--backfill"],
+                          capture_output=True, text=True, timeout=300,
+                          env=dict(os.environ, QATRATION_OUT=tmp, PYTHONIOENCODING="utf-8",
+                                   PYTHONDONTWRITEBYTECODE="1"))
+        _sbf = _pbf.stdout or ""
+        check("backfill says how many entries it dated by the run's own record",
+              bool(__import__("re").search(r"[1-9]\d* dated by the run's own record", _sbf))
+              and "Their run times are file mtimes" not in _sbf, _sbf[-300:])
         # AND THE OTHER ONE STILL SAYS IT IS NOT, or the distinction is decorative.
         check("a run that recorded no date is marked as dated by the file",
               H.load("bf")[0].get("dated_by_run") is False, str(H.load("bf")))
