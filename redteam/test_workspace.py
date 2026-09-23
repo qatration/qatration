@@ -778,6 +778,43 @@ def check_every_command_refuses():
     check("...and every exemption is a file that exists",
           sorted(f for f in _CHECKOUT_ONLY if not _os.path.exists(_os.path.join(_here, f))), [])
 
+    # --- A TYPED OUTPUT PATH DOES NOT LAND ON A SWEEP'S EVIDENCE ------------------------
+    #
+    # Found by a seeded random walk: `coverage --json out/results_mybot.json` overwrote the
+    # sweep's record with coverage buckets and exited 0. No writer behind `writable_path`
+    # produces results or a baseline, so a path naming one is refused, by content.
+    import shutil as _sh_ev
+    _ev_res = _os.path.join(_cw, "results_evbot.json")
+    _sh_ev.copy(_res_path, _ev_res)
+    _ev_before = _io.open(_ev_res, encoding="utf-8").read()
+    _ev_base = _os.path.join(_cw, "baseline_named_oddly.json")
+    _io.open(_ev_base, "w", encoding="utf-8").write('{"meta": {"target": "x"}, "rows": []}')
+    for _lbl_ev, _args_ev, _victim in (
+            ("coverage --json onto a results file", ["coverage", "--json", _ev_res], _ev_res),
+            ("sarif --out onto a benign baseline",
+             ["sarif", "--results", _res_path, "--out", _ev_base], _ev_base)):
+        _was_ev = _io.open(_victim, encoding="utf-8").read()
+        _rc_ev, _out_ev = _cmd_out(_args_ev)
+        check("%s is refused and leaves it as it was" % _lbl_ev,
+              (_rc_ev, _io.open(_victim, encoding="utf-8").read() == _was_ev,
+               "Nothing was written" in _out_ev), (2, True, True))
+    check("...the results file still holds the sweep",
+          _io.open(_ev_res, encoding="utf-8").read() == _ev_before, True)
+    # AND AN ORDINARY OVERWRITE IS STILL ALLOWED: a writer replacing its own kind.
+    _ev_cov = _os.path.join(_cw, "cov_again.json")
+    _io.open(_ev_cov, "w", encoding="utf-8").write('{"probes": 1}')
+    _rc_cov, _ = _cmd_out(["coverage", "--json", _ev_cov])
+    check("...while a file that is not evidence is overwritten as before",
+          (_rc_cov != 2, '"probes": 1}' != _io.open(_ev_cov, encoding="utf-8").read()),
+          (True, True))
+    # A FILE HOLDING A LIST is one of this workspace's shapes too -- every coupling map is --
+    # and asking it for keys must not become the crash this rule exists to avoid.
+    _ev_list = _os.path.join(_cw, "a_list.json")
+    _io.open(_ev_list, "w", encoding="utf-8").write("[1, 2]")
+    _rc_l, _out_l = _cmd_out(["coverage", "--json", _ev_list])
+    check("...and a file holding a list is overwritten, not crashed into",
+          (_rc_l != 2, "Traceback (most recent call last)" in _out_l), (True, False))
+
     # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
     #
     # Four counts took a bare `type=int`: `recon --max-tokens -3` sliced its token list to all

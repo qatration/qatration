@@ -872,6 +872,16 @@ def writable_path(path, what="file", where=""):
     if os.path.isdir(path):
         raise SystemExit(lead + "ABORT — %s is a directory, not a file to write the %s to. "
                          "Name the file itself. Nothing was written." % (path, what))
+    # NOT OVER A SWEEP'S EVIDENCE. None of the commands that come through here writes a
+    # sweep's results or a benign baseline, so a path naming one is a typo that would delete
+    # a measurement. Found by a seeded random walk: `coverage --json out/results_mybot.json`
+    # replaced the sweep's record with coverage buckets and exited 0. `refuse_to_overwrite_
+    # evidence` protects a COMMITTED results file; this was an uncommitted one, which is
+    # every results file a user has.
+    _held = _evidence_kind(path)
+    if _held:
+        raise SystemExit(lead + "ABORT — %s holds %s, and writing the %s there would replace "
+                         "it. Name another file. Nothing was written." % (path, _held, what))
     parent = os.path.dirname(os.path.abspath(path))
     try:
         os.makedirs(parent, exist_ok=True)
@@ -882,6 +892,28 @@ def writable_path(path, what="file", where=""):
                          "Nothing was written."
                          % (parent, what, errno.errorcode.get(e.errno, type(e).__name__), e))
     return path
+
+
+def _evidence_kind(path):
+    """-> "a sweep's results" / "a benign baseline" for a file holding one, else "".
+
+    By CONTENT, not by name: the file a typo lands on is whatever it is called.
+    """
+    if not os.path.isfile(path):
+        return ""
+    import json as _json
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = _json.load(fh)
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict) or not isinstance(data.get("meta"), dict):
+        return ""
+    if isinstance(data.get("results"), list):
+        return "a sweep's results"
+    if isinstance(data.get("rows"), list):
+        return "a benign baseline"
+    return ""
 
 
 def load_yaml_or_refuse(path, what="target config", where=""):
