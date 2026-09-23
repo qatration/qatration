@@ -415,16 +415,29 @@ def check(cfg_path, probe_text=PROBE):
         # 1,464 and its gate recounts it; only the check an operator reads before spending
         # money had its own arithmetic, and it understated -- which in a warning whose whole
         # sentence is `it will STOP part way` means silence exactly where it should speak.
-        from runner import requests_for as _requests_for
-        _atk = _arsenal()
+        from runner import requests_for as _requests_for, undeliverable as _undeliverable
+        _all_atk = _arsenal()
+        # ONLY WHAT THIS TARGET CAN BE SENT, which is what `run` counts. The sweep removes
+        # every attack whose delivery the target cannot take before it sizes its budget; this
+        # counted the whole arsenal, so the two commands disagreed about the same run. Walked
+        # as a stranger on the config `qatration init` writes: no `history` block, so 74 of
+        # 379 attacks are skipped and the run sends 924 requests against a budget of 1,200 --
+        # and this said 1,464 and "It will STOP part way", two notes below its own "chain,
+        # forged_history will be SKIPPED". A warning that fires when the run will finish
+        # teaches the reader to stop reading warnings.
+        _caps = getattr(target, "capabilities", None) or set()
+        _atk = [a for a in _all_atk if not _undeliverable(a, _caps)]
+        _unsent = len(_all_atk) - len(_atk)
         need_att = len(_atk)
         need_req = _requests_for(_atk, 3)
         if rate.max_requests and rate.max_requests < need_req:
             rep["notes"].append(
                 f"a default run sends about {need_req} requests ({need_att} attacks x 3 trials, "
-                f"counting a chain by its steps) and "
-                f"the budget allows {rate.max_requests}. It will STOP part way, and the "
-                f"attacks it never sent are a gap rather than rows that held.")
+                f"counting a chain by its steps"
+                + (f"; {_unsent} more need a delivery this target cannot take and are not "
+                   f"sent" if _unsent else "")
+                + f") and the budget allows {rate.max_requests}. It will STOP part way, and "
+                f"the attacks it never sent are a gap rather than rows that held.")
         if rep["seconds"] and rate.max_seconds:
             # An estimate, said as one. The arsenal size x 3 trials is the default shape.
             #

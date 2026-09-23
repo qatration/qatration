@@ -366,13 +366,19 @@ def main():
         #
         # Driven at the boundary rather than asserted about the source, because the old
         # number is a budget that must now warn and the new one is a budget that must not.
-        from runner import requests_for as _rf
-        _atk = onboard._arsenal()
+        # WITH A `history` BLOCK, so the chains are deliverable and their steps are what a
+        # budget buys. On a config without one, `run` never sends them -- and the estimate
+        # counts only what `run` sends, which the block after this one holds it to.
+        from runner import requests_for as _rf, undeliverable as _und
+        _HIST = "history:\n  field: messages\n  mode: splice\n"
+        _CHAIN_CAPS = {"chain", "forged_history"}
+        _atk = [a for a in onboard._arsenal() if not _und(a, _CHAIN_CAPS)]
         _need, _old_sum = _rf(_atk, 3), len(_atk) * 3
         check("a chain makes a sweep cost more requests than it has attacks",
               _need > _old_sum, "%d requests for %d attacks" % (_need, _old_sum))
         _budget = write("oldsum", "choices.0.message.content",
-                        extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n" % _old_sum)
+                        extra=_HIST + "rate:\n  max_requests: %d\n  max_seconds: 999999\n"
+                        % _old_sum)
         _ok2, _rep2 = onboard.check(_budget)
         _n2 = " ".join(_rep2["notes"])
         check("a budget the size of attacks x trials is too small, and is told so",
@@ -382,11 +388,40 @@ def main():
         check("...and it names the request count, not the attack count",
               str(_need) in _n2, _n2[:220])
         _budget = write("enough", "choices.0.message.content",
-                        extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n" % _need)
+                        extra=_HIST + "rate:\n  max_requests: %d\n  max_seconds: 999999\n"
+                        % _need)
         _ok3, _rep3 = onboard.check(_budget)
         check("...while a budget that covers every step is not warned about",
               "STOP part way" not in " ".join(_rep3["notes"]),
               " ".join(_rep3["notes"])[:200])
+
+        # --- AND ONLY WHAT THE TARGET CAN BE SENT ---------------------------------------
+        #
+        # `run` removes every attack whose delivery the target cannot take before it sizes
+        # its budget; this counted the whole arsenal, so the two disagreed about one run.
+        # Walked on the config `qatration init` writes -- no `history` -- it warned "It will
+        # STOP part way" at 1,464 requests while the run would send 924 of a 1,200 budget,
+        # two notes below its own "multi-turn deliveries will be SKIPPED". Driven at the
+        # boundary: a budget between what is sent and what the arsenal holds.
+        _plain = [a for a in onboard._arsenal() if not _und(a, set())]
+        _sent_req, _all_req = _rf(_plain, 3), _rf(onboard._arsenal(), 3)
+        check("a config with no history sends fewer requests than the arsenal holds",
+              _sent_req < _all_req, "%d vs %d" % (_sent_req, _all_req))
+        _between = write("nohist", "choices.0.message.content",
+                         extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n"
+                         % ((_sent_req + _all_req) // 2))
+        _ok4, _rep4 = onboard.check(_between)
+        check("...so a budget that covers what it sends is not warned about",
+              "STOP part way" not in " ".join(_rep4["notes"]),
+              " ".join(_rep4["notes"])[:260])
+        _short = write("nohist2", "choices.0.message.content",
+                       extra="rate:\n  max_requests: %d\n  max_seconds: 999999\n"
+                       % (_sent_req - 1))
+        _ok5, _rep5 = onboard.check(_short)
+        _n5 = " ".join(_rep5["notes"])
+        check("...while one a request short of it is, naming what it sends and what it skips",
+              "STOP part way" in _n5 and str(_sent_req) in _n5
+              and "are not sent" in _n5, _n5[:300])
 
         # AND ONE ARITHMETIC, NOT TWO. `docs/ci.md`'s cost table is recounted in
         # `test_readme` with the same rule; if that gate keeps its own copy of it the two
