@@ -1266,6 +1266,31 @@ def main():
               os.path.exists(os.path.join(_bw, "benign_rlbot.json")),
               str(sorted(os.listdir(_bw))))
 
+        # --- AND A RUN THAT ASKED FOR THIS IS TOLD HOW TO SEE IT ---------------------
+        #
+        # Walked in the order the engine prints it: `run` ends with "no benign run for X --
+        # every verdict below is unattributed" and names this command. Its page is a
+        # snapshot of the run, so after this finishes it goes on saying the same thing, to
+        # the person who just did what it asked. `rejudge --write` is what attaches a
+        # baseline to results that already exist, and nothing said so.
+        check("with no earlier run in the workspace, nothing about rejudge is said",
+              "rejudge --write" not in _bo2, _bo2[-300:])
+        import json as _json_rb
+        with open(os.path.join(_bw, "results_rlbot.json"), "w", encoding="utf-8") as _f:
+            _json_rb.dump({"meta": {"target": "rlbot",
+                                "attribution": "  ! no benign run for 'rlbot' -- every "
+                                               "verdict below is unattributed"},
+                       "results": [{"attack": {"id": "a"}, "headline": "DEFENDED",
+                                    "fired": [], "trials": []}]}, _f)
+        _bc4, _bo4, _bn4 = _bench(False)
+        check("...but with one, it is named, with what its page still says",
+              "results_rlbot.json: judged before this baseline" in _bo4
+              and "still says every verdict is unattributed" in _bo4, _bo4[-500:])
+        check("...and the command that attaches the baseline, with the config it reads",
+              "qatration rejudge --write" in _bo4 and "export QATRATION_CONFIGS=" in _bo4
+              and "$env:QATRATION_CONFIGS=" in _bo4, _bo4[-500:])
+        os.remove(os.path.join(_bw, "results_rlbot.json"))
+
         # --- A CORPUS CUT SHORT IS NOT A SMALLER CORPUS ------------------------------
         #
         # The wall prints `a baseline measured against a wall is not a baseline` and the

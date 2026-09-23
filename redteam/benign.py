@@ -1284,6 +1284,40 @@ def main():
                                         "trials": args.trials, **s}), "rows": rows},
                   f, indent=2)
     print(f"\nwrote {path}")
+    # AND THE RUN THAT ASKED FOR THIS STILL SAYS IT IS MISSING. Walked in the order the
+    # engine prints it: `run` ends with "no benign run for 'mybot' -- every verdict below is
+    # unattributed" and the command to fix that, which is this one. Its page is a snapshot of
+    # the run, so after this finishes it goes on saying the same thing -- to the person who
+    # just did what it asked. `rejudge --write` is what attaches a baseline to results that
+    # exist already; this names it, and the config it will need, only when there are some.
+    import glob as _glob_b
+    _earlier = sorted(os.path.basename(_p) for _p in _glob_b.glob(
+        os.path.join(str(OUT_DIR), "results_%s*.json" % args.target))
+        if os.path.basename(_p) == "results_%s.json" % args.target
+        or os.path.basename(_p).startswith("results_%s_" % args.target))
+    if _earlier:
+        # WHAT THOSE PAGES SAY NOW, read off their own attribution note rather than
+        # assumed: a run judged against an earlier baseline is not "unattributed", it is
+        # attributed against one this file has just replaced.
+        _unattributed = []
+        for _e in _earlier:
+            _d_e, _w_e = workspace.read_artifact(os.path.join(str(OUT_DIR), _e))
+            _att = str(((_d_e or {}).get("meta") or {}).get("attribution") or "")
+            if _w_e is None and "no benign run" in _att:
+                _unattributed.append(_e)
+        _said = ("still says every verdict is unattributed" if len(_unattributed) == len(_earlier)
+                 else "was attributed against the baseline as it stood then, which this one "
+                      "replaces" if not _unattributed
+                 else "is attributed against no baseline or an older one")
+        print("\n%s: judged before this baseline, so %s page %s.\n  `qatration rejudge "
+              "--write` attaches it and rebuilds the page%s"
+              % (", ".join(_earlier), "its" if len(_earlier) == 1 else "each", _said,
+                 "; it reads the canaries from the config, so point it there first:"
+                 if args.target_config else "."))
+        if args.target_config:
+            from workspace import point_at_configs as _point
+            for _line in _point(os.path.abspath(args.target_config)):
+                print(_line)
 
 
 if __name__ == "__main__":
