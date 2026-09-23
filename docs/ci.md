@@ -353,8 +353,9 @@ run that failed, and a step that only runs on success publishes exactly the resu
 needed.
 
 `--target-config` on the `sarif` command is what anchors each finding to a file the reviewer can
-open. Without it the location defaults to a path inside this tool's own repository, which does
-not exist in yours.
+open. Without it, and with no `QATRATION_CONFIGS` naming the config, every finding is exported
+with no location at all -- SARIF allows that, and the export carries a notification saying so --
+so the security tab lists findings that point at nothing.
 
 ## Reading the exit code
 

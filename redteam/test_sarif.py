@@ -126,6 +126,15 @@ check("with no config to point at, a finding carries no location rather than a f
 check("...and the finding is still emitted, not dropped",
       len(_no_cfg["runs"][0]["results"]) == 1,
       "losing the finding is not the fix; losing the false anchor is")
+# AND THE CI GUIDE SAYS WHAT HAPPENS NOW. The invented path was removed here and `docs/ci.md`
+# went on telling readers that without `--target-config` "the location defaults to a path
+# inside this tool's own repository" -- the behaviour this file records deleting.
+_ci_doc = " ".join(io.open(os.path.join(os.path.dirname(HERE), "docs", "ci.md"),
+                           encoding="utf-8").read().split())
+_ci_par = _ci_doc[_ci_doc.find("`--target-config` on the `sarif` command"):][:500]
+check("the CI guide describes an unanchored export as one with no location",
+      bool(_ci_par) and "no location" in _ci_par
+      and "path inside this tool's own repository" not in _ci_par, _ci_par[:200])
 
 _src = io.open(os.path.join(HERE, "sarif.py"), encoding="utf-8").read()
 check("no path is assembled from the target's name",
