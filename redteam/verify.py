@@ -347,6 +347,15 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     if _why_v is not None:
         out["note"] = "not read: %s" % _clipped(_why_v, 60)
         return out
+    # ANOTHER TARGET'S CLAIMS ARE NOT THIS TARGET'S. `--results` takes any path, and handed
+    # mybot's artifact with rulebot's config this re-sent mybot's claimed breaches to rulebot
+    # and printed "every claimed breach still reproduces" -- a verdict about one bot, reached
+    # by measuring another.
+    _art_target = (stored.get("meta") or {}).get("target")
+    if _art_target and str(_art_target) != str(target.name):
+        out["note"] = ("the artifact belongs to target %r, and this config is %r"
+                       % (_art_target, target.name))
+        return out
     rows = claimed(stored.get("results") or [])
     out["claims"] = len(rows)
     if not quiet:

@@ -757,6 +757,14 @@ def check_every_command_refuses():
                                   "--trials", "1"])
         check("verify --results on %s is refused, naming what it is" % _kind_rf,
               (_rc_v, _kind_rf in _out_v), (2, True))
+    # AND ANOTHER TARGET'S RESULTS: `verify` re-sent citebot's claims to whatever config it was
+    # given and reported whether they "still reproduce" -- a verdict about one bot, measured
+    # on another.
+    _rc_vt, _out_vt = _cmd_out(["verify", "--target-config", _rf_cfg, "--results", _res_path,
+                                "--trials", "1"])
+    check("verify --results holding another target's run is refused, naming both",
+          (_rc_vt, "belongs to target 'citebot'" in _out_vt, "'rfbot'" in _out_vt),
+          (2, True, True))
     _rc_ok, _out_ok = _cmd_out(["sarif", "--results", _res_path,
                                 "--out", _os.path.join(_cw, "ok.sarif")])
     check("...while a real results file still exports", _rc_ok, 0)
