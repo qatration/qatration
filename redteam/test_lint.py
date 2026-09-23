@@ -357,6 +357,14 @@ def check_refusal(check):
           "exit %s: %s" % (_rc_no, _said_no.strip()[-200:]))
     check("...and is not sent to look at this package's packaging",
           "package-data" not in _said_no, _said_no[-200:])
+    # A DIRECTORY THAT IS THERE, holding an arsenal under another name, is not "not there".
+    _lother = _tf_l.mkdtemp()
+    io.open(os.path.join(_lother, "mine.yaml"), "w", encoding="utf-8").write("- id: m\n")
+    _rc_od, _said_od = _lint("--attacks", _lother)
+    check("a directory with no attacks*.yaml is refused as what it is", _rc_od == 5
+          and "is a directory with no attacks*.yaml" in _said_od
+          and "not there" not in _said_od, "exit %s: %s" % (_rc_od, _said_od[-300:]))
+    check("...and names the file it does hold", "mine.yaml" in _said_od, _said_od[-300:])
 
     # A CUSTOMER'S ANNOTATIONS PASS THIS DOOR TOO. `unusable_entries` was written not to refuse
     # `owner:` or `ticket:`, and `lint --attacks mine.yaml` -- the check offered before a run --

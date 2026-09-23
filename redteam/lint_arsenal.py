@@ -990,6 +990,21 @@ def main():
     # YAML stripped: "linted 0 attacks across 0 file(s) · OK — arsenal clean".
     if not files:
         if _args.attacks:
+            # A DIRECTORY THAT IS THERE IS NOT "a file that is not there". Pointed at the
+            # directory holding `mine.yaml`, this said the path did not exist -- the reader
+            # checks the spelling of a path that is right, when the answer is that only
+            # `attacks*.yaml` is read from a directory and a file is taken by name.
+            if os.path.isdir(corpus):
+                _yamls = sorted(f for f in os.listdir(corpus)
+                                if f.endswith((".yaml", ".yml")))
+                print(f"REFUSED: {corpus} is a directory with no attacks*.yaml in it, and\n"
+                      f"that is the only name read from a directory."
+                      + (f" Name a file itself: `qatration lint --attacks "
+                         f"{_shell_arg(os.path.join(corpus, _yamls[0]))}`"
+                         + (f" ({len(_yamls) - 1} more YAML file(s) there)."
+                            if len(_yamls) > 1 else ".") if _yamls else
+                         " It holds no YAML at all."))
+                return 5
             print(f"REFUSED: no arsenal at {corpus} — a file that is not there cannot be\n"
                   f"linted. Point --attacks at an arsenal file, or at a directory holding\n"
                   f"attacks*.yaml files.")
