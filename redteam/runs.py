@@ -350,7 +350,12 @@ def main(argv=None):
         # last one left. Same shape as the open-runs section below.
         _why = ending(rec)
         if _why:
-            print("    %s" % _why)
+            # EVERY LINE OF IT UNDER THE ROW. A reason can carry its own line breaks -- the
+            # honeytoken one does, with a `where it goes:` paragraph -- and only the first line
+            # got the indent, so the second sat at two spaces, less than the reason above it,
+            # and read as a new entry in the list. Found by walking `runs` after two aborts.
+            for _l in _why.splitlines():
+                print("    %s" % _l.strip())
     if len(shown) < len(picked):
         print(f"  ... and {len(picked) - len(shown)} more (--limit 0 for all)")
 

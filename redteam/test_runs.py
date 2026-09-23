@@ -505,6 +505,29 @@ def main():
                               for _c in _ast_r.walk(_main)),
           "main does not call ending")
 
+    # --- A REASON WITH LINE BREAKS STAYS UNDER ITS ROW ------------------------------------
+    #
+    # Walked: two aborted runs, then `qatration runs`. The honeytoken reason carries its own
+    # `where it goes:` paragraph, and only the first line was indented -- the second sat at
+    # two spaces, shallower than the reason above it, and read as a new entry in the list.
+    # Driven through the command, because the listing is where the layout lives.
+    import subprocess as _sp_l
+    _rl = tempfile.mkdtemp()
+    try:
+        _rec_l = runs.start(_rl, "2026-01-01T0000-aaaaaa", "acme", scope="quick")
+        runs.finish(_rl, _rec_l, "aborted",
+                    note="first line of the reason\n  where it goes: the second line")
+        _ol = _sp_l.run([sys.executable, os.path.join(HERE, "cli.py"), "runs"],
+                        capture_output=True, text=True, timeout=120,
+                        env=dict(os.environ, QATRATION_OUT=_rl, PYTHONIOENCODING="utf-8",
+                                 PYTHONDONTWRITEBYTECODE="1")).stdout.splitlines()
+        _after = _ol[1:] if _ol and "aborted" in _ol[0] else []
+        check("every line of a multi-line reason sits under its row, indented alike",
+              len(_after) >= 2 and all(_l.startswith("    ") for _l in _after[:2])
+              and "where it goes" in _after[1], str(_ol[:4]))
+    finally:
+        shutil.rmtree(_rl, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
