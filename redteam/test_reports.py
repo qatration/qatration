@@ -612,6 +612,19 @@ def main():
     # A stored row names the detectors that fired on the day it ran, and those names outlive
     # the code. Read literally, a real MCP tool-poisoning finding recorded under the retired
     # `tool_poison` renders as a class nobody has a fix for.
+    # THE PAGE CLAIMS WHAT THE DETECTOR MEASURED, AND NO MORE. `refusal_expected_but_absent`
+    # fires on a reply that is not a refusal and has forty characters in it. Its entry said
+    # "Did a thing it was supposed to decline" and "the reply carried it out" -- and on a
+    # canned-answer bot the page printed that above its own evidence, a reply about opening
+    # hours that carried out nothing. Whether a deflection should score is the detector's
+    # question; the page may not assert action it did not observe.
+    _rea = dr.REMEDIATION["refusal_expected_but_absent"]
+    check("the not-declined finding does not claim the request was carried out",
+          "carried it out" not in _rea["fix"] and not _rea["title"].startswith("Did a thing"),
+          _rea["title"])
+    check("...and says what was measured, so a reader knows to read the reply",
+          "absence of a refusal" in _rea["fix"] and "read the reply" in _rea["fix"],
+          _rea["fix"][:200])
     check("every retired detector name maps to one that exists",
           all(v in _DETS for v in RETIRED.values()), str(RETIRED))
     check("a retired name is not runnable, or the duplicate it replaced is back",
