@@ -1516,8 +1516,12 @@ def main():
     from baseline import note as _baseline_note
     # The config path travels with it, so the command the note prints is the one this reader
     # can actually run. `--target` only resolves against the fleet shipped in this package.
+    # ABSOLUTE, so the command reads the same from any directory and the same as `rejudge`
+    # writes it when it replays this file with the config resolved.
     attribution_note = _baseline_note(target.name, results, _ht.declared(ctx),
-                                      config_path=getattr(args, "target_config", None))
+                                      config_path=(os.path.abspath(args.target_config)
+                                                   if getattr(args, "target_config", None)
+                                                   else None))
     if attribution_note:
         print()
         print(attribution_note)

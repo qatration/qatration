@@ -1121,6 +1121,56 @@ def main():
                   "qatration run" in _re_.stdout and "rebuilt 0" not in _re_.stdout,
                   _re_.stdout[-300:])
 
+    # --- A FRESH RUN HAS NOTHING TO RE-SCORE ----------------------------------------------
+    #
+    # `rejudge` rebuilt the attribution note with no config path, so its remedy became
+    # `--target-config <the config you swept>` while the sweep's note carried the real one.
+    # Walked: `run` then `rejudge`, with QATRATION_CONFIGS naming the config, and rejudge
+    # offered to change a file nothing had moved in. Driven against a loopback bot.
+    import http.server as _hs_f, threading as _th_f, subprocess as _sp_f, tempfile as _tf_f
+    import shutil as _sh_f
+
+    class _Bot_f(_hs_f.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _b = b'{"reply": "Our store is open 9 to 5."}'
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+
+    _srv_f = _hs_f.ThreadingHTTPServer(("127.0.0.1", 0), _Bot_f)
+    _th_f.Thread(target=_srv_f.serve_forever, daemon=True).start()
+    _wf = _tf_f.mkdtemp()
+    try:
+        _cfg_f = os.path.join(_wf, "freshbot.yaml")
+        open(_cfg_f, "w", encoding="utf-8").write(
+            'name: freshbot\nadapter: http\nurl: "http://127.0.0.1:%d/chat"\n'
+            'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
+            % _srv_f.server_address[1])
+        _env_f = dict(os.environ, QATRATION_OUT=os.path.join(_wf, "out"),
+                      QATRATION_CONFIGS=_cfg_f, PYTHONDONTWRITEBYTECODE="1",
+                      PYTHONIOENCODING="utf-8")
+        # RELATIVE, the way a reader types it from the config's own directory, while
+        # QATRATION_CONFIGS carries the absolute path: the two must still agree.
+        _sp_f.run([sys.executable, os.path.join(HERE, "cli.py"), "run", "--target-config",
+                   "freshbot.yaml", "--scope", "quick", "--trials", "1"], capture_output=True,
+                  text=True, timeout=300, env=_env_f, cwd=_wf)
+        _rj = _sp_f.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                        capture_output=True, text=True, timeout=300, env=_env_f)
+        _said_f = _rj.stdout or ""
+        check("a fresh run, re-judged with its config found, has nothing to change",
+              "would change 0 attack row(s) across 0 file(s)" in _said_f, _said_f[-400:])
+        check("...and the note's remedy is not rewritten to a placeholder",
+              "<the config you swept>" not in _said_f, _said_f[-400:])
+    finally:
+        _srv_f.shutdown()
+        _sh_f.rmtree(_wf, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

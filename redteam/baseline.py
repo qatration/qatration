@@ -434,10 +434,10 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
         # fails with "no config named 'mybot'" for anybody who arrived via --target-config —
         # which is everybody who ever sees this line, since a shipped target already has a
         # baseline and never reaches this branch. The path the run was given is echoed back.
-        # Where the caller knows the config, the command is exact. Where it does not —
-        # `rejudge` replays stored results and never sees one — say both forms rather than
-        # the in-repo shorthand alone, because the shorthand is the one that fails for the
-        # reader who needs this line.
+        # Where the caller knows the config, the command is exact -- `run` from its flag,
+        # `rejudge` from the config it resolved. Where neither does, say both forms rather
+        # than the in-repo shorthand alone, because the shorthand is the one that fails for
+        # the reader who needs this line.
         how = (f"--target-config {config_path}" if config_path else
                f"--target-config <the config you swept>   "
                f"(or `--target {target}` for a bot shipped with this repository)")

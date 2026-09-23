@@ -358,6 +358,8 @@ def main():
     # line that sets it, and the message below names it.
     _collisions = []
     ctxs = contexts(collisions=_collisions)
+    from workspace import configs_by_name as _configs_by_name
+    _config_paths = {n: os.path.abspath(fp) for n, (fp, _c) in _configs_by_name().items()}
     # SAID BEFORE ANYTHING IS REWRITTEN, rather than found afterwards in a diff. `coverage`
     # printed this and this did not, and of the two commands it is this one that overwrites
     # the stored verdict and the page built from it.
@@ -413,7 +415,13 @@ def main():
         # page said nothing — the exact failure baseline.py exists to prevent, reached through
         # the replay door instead of the sweep door.
         import honeytoken as _ht
-        note = _baseline_note(base, data["results"], _ht.declared(ctxs[base] or {}))
+        # WITH THE CONFIG IT RESOLVED, when it resolved one. This passed none, so the note's
+        # remedy became `--target-config <the config you swept>` even with QATRATION_CONFIGS
+        # naming the config -- and a sweep's note, which carries the real path, read as
+        # changed: walked, a fresh `run` then `rejudge` offered to replace the exact command
+        # with the placeholder, on a run that had nothing to re-score.
+        note = _baseline_note(base, data["results"], _ht.declared(ctxs[base] or {}),
+                              config_path=_config_paths.get(base))
         # AND THE SHARPER CAVEAT, THROUGH THE SAME DOOR. Splitting a breach into "the payload
         # reached the model" and "the model acted on it" needs nothing but the stored replies,
         # so every run already on disk can answer it — including the ones that predate the
