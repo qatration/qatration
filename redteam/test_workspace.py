@@ -716,6 +716,38 @@ def check_every_command_refuses():
     _sh_q.rmtree(_qr, ignore_errors=True)
     _sh_q.rmtree(_qempty, ignore_errors=True)
 
+    # --- A SIDE ARTIFACT FOLDED INTO A REPORT IS THAT TARGET'S -------------------------
+    #
+    # `run --recon <another bot's profile>` put that bot's recon panel -- "it printed the
+    # protected secret" -- on this bot's scorecard.
+    import json as _js_sd
+    _sd = _tfp.mkdtemp()
+    _prof = _os.path.join(_sd, "recon_other.json")
+    _js_sd.dump({"target": "other", "self_description": "x", "when": "2026-09-01 10:00"},
+                _io.open(_prof, "w", encoding="utf-8"))
+    _maps = _os.path.join(_sd, "isolation_other.json")
+    _js_sd.dump({"meta": {"target": "other", "when": "2026-09-01 10:00"}, "maps": []},
+                _io.open(_maps, "w", encoding="utf-8"))
+    _said_sd = []
+    _got_p = _ws.side_artifact(_prof, "recon_mine.json", "profile", root=_sd,
+                               warn=lambda p, why=None: _said_sd.append(why), target="mine")
+    _got_m = _ws.side_artifact(_maps, "isolation_mine.json", "maps", root=_sd,
+                               warn=lambda p, why=None: _said_sd.append(why), target="mine")
+    check("another target's recon profile or lock map is not folded into this one's report",
+          (_got_p, _got_m), (None, None))
+    check("...and says whose it is",
+          sum(1 for w in _said_sd if w and "belongs to target 'other'" in w), 2)
+    check("...while this target's own profile still is",
+          bool(_ws.side_artifact(_prof, "x.json", "profile", root=_sd, target="other")), True)
+    import ast as _ast_sd
+    _rr_sd = _ast_sd.parse(_io.open(_os.path.join(_here, "run_redteam.py"),
+                                     encoding="utf-8").read())
+    _sd_calls = [n for n in _ast_sd.walk(_rr_sd) if isinstance(n, _ast_sd.Call)
+                 and getattr(n.func, "id", "") == "_side_artifact"]
+    check("...and run passes its target to both side-artifact reads",
+          (len(_sd_calls), all(any(k.arg == "target" for k in c.keywords) for c in _sd_calls)),
+          (2, True))
+
     # --- compare --out MOVES THE PAGE, NOT THE EVIDENCE ----------------------------------
     #
     # `--out` rebound the directory the evidence is read from, so `compare --out pages/`

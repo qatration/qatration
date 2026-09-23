@@ -1243,7 +1243,7 @@ def ctx_keys_in(src):
     return keys
 
 
-def side_artifact(explicit, default_name, key, root=None, warn=None):
+def side_artifact(explicit, default_name, key, root=None, warn=None, target=None):
     """A recon profile or an isolation map, folded into the report if one exists.
 
     Dated by ITSELF rather than by the run: a fingerprint from last week silently presented
@@ -1288,6 +1288,16 @@ def side_artifact(explicit, default_name, key, root=None, warn=None):
             warn(path, _why)
         return {key: None, "when": "", "unreadable": _why, "path": path}
     _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
+    # AND IT HAS TO BE THIS TARGET'S. `run --recon` takes any path, and handed rulebot's
+    # profile it put rulebot's recon panel on mybot's scorecard -- including "asked plainly to
+    # describe its rules, it printed the protected secret", a finding about another bot, on
+    # the page a customer is handed about this one. A profile says its target at the top
+    # level and a lock map in `meta`; one naming another target is not folded in.
+    _whose = (_said_by.get("target") if isinstance(_said_by, dict) else None)
+    if target and _whose and str(_whose) != str(target):
+        if warn:
+            warn(path, "belongs to target %r, not %r" % (_whose, target))
+        return None
     _when, _said = dated(_said_by, path)
     out = {key: data, "when": _when}
     # A LOCK MAP WRITTEN WITH PROVENANCE IS `{"meta": ..., "maps": [...]}`, and the page wants

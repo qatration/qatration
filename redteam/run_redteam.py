@@ -507,6 +507,9 @@ def _missing_side(path, why=None):
     and printed neither. Passed to `workspace.side_artifact` rather than lived inside it,
     because `rejudge` reads the same artifacts with nobody having typed a path.
     """
+    if why and why.startswith("belongs to target"):
+        print(f"  ! {path} {why}, so it was not folded into this report", file=sys.stderr)
+        return
     if why:
         # NOT THE SAME EVENT. Absent by default is ordinary; a file that exists and will
         # not parse is evidence this run cannot read, and the panel it feeds is the one
@@ -1740,9 +1743,9 @@ def main():
     # and was building it without either panel. The unwrapping of a provenance-wrapped lock
     # map travelled with the reader, so exactly one place still knows the container.
     recon = _side_artifact(args.recon, f"recon_{target.name}.json", "profile",
-                           root=OUT_DIR, warn=_missing_side)
+                           root=OUT_DIR, warn=_missing_side, target=target.name)
     isolation = _side_artifact(args.isolation, f"isolation_{target.name}.json", "maps",
-                               root=OUT_DIR, warn=_missing_side)
+                               root=OUT_DIR, warn=_missing_side, target=target.name)
     with _atomic(html_path) as f:
         f.write(build_html(meta, results, recon=recon, isolation=isolation))
     print(f"report → {html_path}")
