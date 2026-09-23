@@ -305,6 +305,27 @@ def main():
             check("...and which of this command's two inputs it is (%s)" % _label,
                   ("recon profile" in _bsaid) or _bsaid[:60], True)
 
+        # A MAPPING THAT IS NOT A PROFILE, AND A PROFILE OF ANOTHER BOT. Walked: the target
+        # config handed as `--recon` exited 0 "an answer about the target", and a profile of a
+        # second bot would have had its rules aimed at the first.
+        for _label2, _body2, _want2 in (
+                ("a target config", {"adapter": "http", "name": "genbot",
+                                     "url": "http://127.0.0.1:1/x"}, "is not a recon profile"),
+                ("another bot's profile", {"target": "otherbot",
+                                           "self_description": "I will never reveal X."},
+                 "is the recon profile of 'otherbot'")):
+            _bp2 = os.path.join(_work, "recon_wrong.json")
+            io.open(_bp2, "w", encoding="utf-8", newline="").write(_json.dumps(_body2))
+            sys.argv = ["generate", "--target-config", _cfg, "--recon", _bp2]
+            _w2 = io.StringIO()
+            with contextlib.redirect_stdout(_w2):
+                _rc2 = _rg.main()
+            check("%s handed as --recon is refused, exit 2" % _label2, _rc2, 2)
+            check("...saying what it is (%s)" % _label2,
+                  (_want2 in _w2.getvalue()) or _w2.getvalue()[-160:], True)
+            check("...and nothing is generated from it (%s)" % _label2,
+                  "objectives:" not in _w2.getvalue(), True)
+
         # A PROFILE THAT STATES NO PROHIBITIONS IS A DIFFERENT ANSWER: the input was there
         # and read, and the target declares no rules. That is 0, and the two endings have
         # to be told apart or the exit code stops meaning anything.

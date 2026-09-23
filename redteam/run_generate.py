@@ -91,6 +91,28 @@ def main():
     # `load_yaml_or_refuse` reads JSON too: YAML is a superset of it, which is why the
     # target config and the recon profile can share one door.
     profile = _load_yaml(prof_path, "recon profile", "generate")
+    # A MAPPING IS NOT A RECON PROFILE. Walked: `generate --recon mybot.yaml`, the TARGET
+    # CONFIG handed where the profile goes, parsed as a mapping, carried no rules because it
+    # carries no bot's words, and the command exited 0 with "this profile states no
+    # prohibitions ... an answer about the target" -- a conclusion about the bot from a file
+    # the bot never wrote a word of. The rules are read from two keys; a file with neither is
+    # not a profile.
+    if "self_description" not in profile and "refusal_vocab" not in profile:
+        print(f"generate: {prof_path} is not a recon profile: it has neither "
+              f"`self_description` nor `refusal_vocab`, the two places a profile keeps the "
+              f"bot's own words, so there are no rules in it to read. It has: "
+              f"{', '.join(sorted(map(str, profile))[:8]) or 'nothing'}. Nothing was "
+              f"generated.")
+        return 2
+    # AND A PROFILE OF ANOTHER BOT IS NOT THIS BOT'S. `--recon` takes any path, and the
+    # objectives are written `applies_to` the config's target: one bot's stated rules turned
+    # into attacks on another, filed as if the second had stated them.
+    _prof_target = profile.get("target")
+    if _prof_target and str(_prof_target) != str(name):
+        print(f"generate: {prof_path} is the recon profile of {_prof_target!r}, and this "
+              f"config is {name!r}. Objectives drawn from one bot's stated rules would be "
+              f"aimed at another. Nothing was generated.")
+        return 2
 
     rules = prohibitions(profile)
     objs, skipped = objectives_from_profile(profile, ctx, name)
