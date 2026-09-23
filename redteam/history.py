@@ -707,9 +707,10 @@ def main():
     if not targets:
         # A FLAG BELONGS TO A COMMAND. `--backfill` on its own is advice the reader cannot
         # act on without guessing which of twenty commands takes it.
+        from workspace import queued_elsewhere as _queued_elsewhere
         print("no history yet — run a sweep, or read what is already stored:\n"
               "    qatration run --target-config <your-config>.yaml\n"
-              "    qatration history --backfill")
+              "    qatration history --backfill" + _queued_elsewhere(OUT))
         # NOT A PASS, for the reason `build_index` records.
         return 3
 

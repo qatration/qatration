@@ -328,7 +328,32 @@ def no_results_note(out_dir=None):
     third might be pointed somewhere else.
     """
     return ("no results in %s — run a sweep first:\n"
-            "    qatration run --target-config <your-config>.yaml" % (out_dir or OUT))
+            "    qatration run --target-config <your-config>.yaml" % (out_dir or OUT)
+            + queued_elsewhere(out_dir))
+
+
+def queued_elsewhere(out_dir=None):
+    """-> the lines naming queued jobs whose results sit one level down, or "".
+
+    "RUN A SWEEP FIRST" OVER A WORKSPACE WHERE ONE RAN. A job the queue runs keeps its
+    artifacts in `runs/<job_id>/` under the root, so every reader pointed at the root --
+    `index`, `fixes`, `coverage`, `history`, `discrimination` -- found nothing there and
+    told the reader to go and measure something, one directory above the measurement. Walked
+    straight after `onboard --submit`: four commands, four "run a sweep first", exit 3.
+    Appended to each of those sentences rather than replacing them, because the root really
+    does hold nothing of its own.
+    """
+    import glob as _glob
+    root = str(out_dir or OUT)
+    dirs = sorted({os.path.dirname(p) for p in
+                   _glob.glob(os.path.join(root, "runs", "*", "results_*.json"))})
+    if not dirs:
+        return ""
+    return ("\n  but %d queued job(s) ran here and keep their results in their own "
+            "director%s -- point QATRATION_OUT at one:\n%s%s"
+            % (len(dirs), "y" if len(dirs) == 1 else "ies",
+               "\n".join("      " + d for d in dirs[-3:]),
+               "\n      ... and %d older" % (len(dirs) - 3) if len(dirs) > 3 else ""))
 
 
 # THE SPELLINGS A CONFIG READ TAKES IN THIS PACKAGE, and the reason there are two sets.

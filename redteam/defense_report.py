@@ -1411,8 +1411,10 @@ def main():
     # ON `all_targets`, NOT ON `findings`. Zero findings across four measured targets is a
     # result and the page should say so. Zero targets is the absence of the measurement.
     if not all_targets:
+        from workspace import queued_elsewhere as _queued_elsewhere
         print("no results in %s — nothing has been measured, so there is nothing to fix:\n"
-              "    qatration run --target-config <your-config>.yaml" % OUT_DIR)
+              "    qatration run --target-config <your-config>.yaml" % OUT_DIR
+              + _queued_elsewhere(OUT_DIR))
         return 3
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())

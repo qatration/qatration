@@ -683,6 +683,39 @@ def check_every_command_refuses():
             _joins.append(_mf)
     check("no module resolves a typed path against the install directory", _joins, [])
 
+    # --- "RUN A SWEEP FIRST" ONE DIRECTORY ABOVE A SWEEP ---------------------------------
+    #
+    # A queued job keeps its artifacts in `runs/<job_id>/` under the root, and every reader
+    # pointed at the root said "no results ... run a sweep first" -- walked straight after
+    # `onboard --submit`, four commands, four of them. Driven over a root holding one job's
+    # results and nothing of its own, and over a root holding nothing, across every command
+    # that prints an empty-workspace sentence.
+    import shutil as _sh_q
+    _qr = _tfp.mkdtemp()
+    _qjob = _os.path.join(_qr, "runs", "2026-09-01T1200-q00001")
+    _os.makedirs(_qjob)
+    _sh_q.copy(_os.path.join(_here, "..", "out", "results_citebot.json"), _qjob)
+    _qempty = _tfp.mkdtemp()
+    _q_cmds = ["index", "fixes", "coverage", "history", "discrimination", "compare"]
+    _q_silent, _q_noisy = [], []
+    for _qc in _q_cmds:
+        for _root_q, _want in ((_qr, True), (_qempty, False)):
+            _pq = _sp.run([_sys.executable, _os.path.join(_here, "cli.py"), _qc],
+                          capture_output=True, text=True, timeout=300,
+                          env=dict(_os.environ, QATRATION_OUT=_root_q, PYTHONIOENCODING="utf-8",
+                                   PYTHONDONTWRITEBYTECODE="1"))
+            _said_q = (_pq.stdout or "") + (_pq.stderr or "")
+            _named_q = _qjob in _said_q and "queued job" in _said_q
+            if _want and not _named_q:
+                _q_silent.append("%s: %s" % (_qc, _said_q.strip()[-120:]))
+            if not _want and "queued job" in _said_q:
+                _q_noisy.append(_qc)
+    check("every empty-workspace sentence names the queued job whose results sit below it",
+          _q_silent, [])
+    check("...and says nothing of the kind over a workspace with no jobs", _q_noisy, [])
+    _sh_q.rmtree(_qr, ignore_errors=True)
+    _sh_q.rmtree(_qempty, ignore_errors=True)
+
     # --- THE ARSENAL NOBODY NAMED IS ONE ARSENAL -----------------------------------------
     #
     # Spelled out in six places and five agreed. `matrix` defaulted to `attacks.yaml`, where

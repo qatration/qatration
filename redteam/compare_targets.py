@@ -415,8 +415,10 @@ def main():
     from workspace import unreadable_html as _unread_html
     unread_bar = _unread_html(_unreadable, "this fleet overview")
     if not _all_metas:
+        from workspace import queued_elsewhere as _queued_elsewhere
         print("no results in %s — run a sweep first, then this page has something to "
-              "compare:\n    qatration run --target-config <your-config>.yaml" % OUT_DIR)
+              "compare:\n    qatration run --target-config <your-config>.yaml" % OUT_DIR
+              + _queued_elsewhere(OUT_DIR))
         # NOT A PASS, the same as its four neighbours over the same empty directory. This
         # returned 0 outright, which is the code a CI step reads as "asked and answered".
         return 3
