@@ -885,30 +885,22 @@ def main():
         print(_refusal, file=sys.stderr)
         _refuse(2, "refused to replace committed evidence; nothing was sent and nothing was written")
 
+    # THROUGH `honeytoken.precondition`, the one statement of what a sweep is refused for
+    # before its first attack -- `onboard.check` asks the same function, so a config it calls
+    # ready is one this will start.
     _verify = (ctx.get("honeytoken_verify") or "").strip()
-    _ours = [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)]
-    if _ours and not _verify:
-        print(f"ABORT — {target.name} declares a honeytoken ({_ours[0]}) but no "
-              f"`honeytoken_verify`, so nothing can confirm it was ever pasted in. Mint a pair "
-              f"with `qatration mint` and declare both.", file=sys.stderr)
-        _refuse(5, f"{target.name} declares a honeytoken with no `honeytoken_verify`; nothing was sent and nothing was written")
-    if _ours and _verify:
-        target.reset()
-        _p = target.send(_ht.VERIFY_PROMPT)
-        _why = _ht.verify_refusal(_p, _verify)
-        if _why:
-            # The reply is quoted only when there WAS one. On a refused connection the
-            # old line printed `it said instead: ''`, which reads as a bot that answered
-            # with nothing rather than as an endpoint that was never reached.
-            _said = (f"  it said instead: {(_p.output or '')[:160]!r}\n"
-                     if _why[0] == "NOT PLANTED" else "")
-            print(f"ABORT — {_why[1]}\n{_said}"
-                  f"  nothing was sent and nothing was written.", file=sys.stderr)
-            # THE CODE THE LABEL EARNS, through the one table that owns it. See
-            # `honeytoken.VERIFY_EXIT`: a refused connection is not a canary that was never
-            # planted, and 5 is documented as the second of those.
-            _refuse(_ht.VERIFY_EXIT.get(_why[0], 5),
-                    f"{_why[1]}; nothing was sent and nothing was written")
+    _pre = _ht.precondition(target, ctx)
+    if _pre is not None:
+        _code, _label, _sentence, _p = _pre
+        # The reply is quoted only when there WAS one. On a refused connection the old line
+        # printed `it said instead: ''`, which reads as a bot that answered with nothing
+        # rather than as an endpoint that was never reached.
+        _said = (f"  it said instead: {((_p.output if _p else '') or '')[:160]!r}\n"
+                 if _label == "NOT PLANTED" else "")
+        print(f"ABORT — {_sentence}\n{_said}"
+              f"  nothing was sent and nothing was written.", file=sys.stderr)
+        _refuse(_code, f"{_sentence}; nothing was sent and nothing was written")
+    if [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)] and _verify:
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
 
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,

@@ -394,22 +394,38 @@ def main():
     # the failure mode is a clean report rather than an error.
     rr = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
     ob = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
+    # THROUGH `honeytoken.precondition` now, which `onboard.check` asks too -- the rule
+    # moved out of this file so the door that says "ready" and the run that refuses cannot
+    # disagree. Read as the call.
+    import ast as _ast_pre
+    _rr_tree = _ast_pre.parse(rr)
     check("the sweep verifies the honeytoken before spending anything",
-          "honeytoken as _ht" in rr and "_ht.verify_refusal(" in rr)
+          "honeytoken as _ht" in rr
+          and any(isinstance(_n, _ast_pre.Call)
+                  and getattr(_n.func, "attr", None) == "precondition"
+                  for _n in _ast_pre.walk(_rr_tree)), "run_redteam does not ask it")
     # ASKED OF THE AST, and for the CODE rather than for one spelling of it. This read
     # `"sys.exit(5)" in rr`, and the five refusals in that file now go through `_refuse`,
     # which closes the open run record before exiting -- so the literal moved and the
     # property did not. What matters is that a run reaching this branch exits 5, which the
     # exit-code table documents as the canary precondition, and names the reason.
+    # AND THE CODE IS THE ONE THE PRECONDITION RETURNS -- 5 for a snippet that is not there,
+    # held by the cases on `precondition` above -- passed to `_refuse` rather than retyped.
+    # The number moved into the function with the rule; what this asks of the sweep is that
+    # it refuses with it, not with a literal of its own.
     import ast as _ast_h
-    _fives = [n for n in _ast_h.walk(_ast_h.parse(rr))
-              if isinstance(n, _ast_h.Call)
-              and ((isinstance(n.func, _ast_h.Attribute) and n.func.attr == "exit")
-                   or (isinstance(n.func, _ast_h.Name) and n.func.id == "_refuse"))
-              and n.args and isinstance(n.args[0], _ast_h.Constant)
-              and n.args[0].value == 5]
-    check("...and refuses the run rather than reporting a clean one",
-          bool(_fives) and "_why[1]" in rr)
+    _refuse_first = [n.args[0] for n in _ast_h.walk(_ast_h.parse(rr))
+                     if isinstance(n, _ast_h.Call) and isinstance(n.func, _ast_h.Name)
+                     and n.func.id == "_refuse" and n.args]
+    _unpack = [n for n in _ast_h.walk(_ast_h.parse(rr))
+               if isinstance(n, _ast_h.Assign) and isinstance(n.value, _ast_h.Name)
+               and n.value.id == "_pre" and isinstance(n.targets[0], _ast_h.Tuple)]
+    _code_name = (_unpack[0].targets[0].elts[0].id
+                  if _unpack and isinstance(_unpack[0].targets[0].elts[0], _ast_h.Name) else None)
+    check("...and refuses the run, with the code the precondition returned",
+          bool(_code_name) and any(isinstance(a, _ast_h.Name) and a.id == _code_name
+                                   for a in _refuse_first),
+          "no `_refuse(<the precondition's code>, ...)` in run_redteam")
     # THROUGH THE SHARED DECISION, not its own `planted()` call. That call is what let
     # two causes share one sentence: an errored probe has an empty output, an empty
     # output is what an unplanted token looks like, and a stranger with a dead port was
@@ -561,6 +577,58 @@ def main():
           _cmd and _v_h in _cmd[0] and _s_h not in _cmd[0], str(_cmd))
     check("...and onboarding prints that same text rather than a second copy of it",
           "_mint.instructions(" in ob)
+
+    # --- THE PRECONDITION IS ONE FUNCTION, ASKED BY EVERY DOOR ------------------------------
+    #
+    # `run` refused a sweep before its first attack for a honeytoken with no verifier, or one
+    # the deployment did not return. `onboard.check` -- which the hosted intake answers 202
+    # through -- asked neither, so a job was accepted, queued, and died on its first line with
+    # exit 5. Walked with the config `qatration init` writes: `onboard` said "ready to queue",
+    # `run` said ABORT. Both ask `precondition` now; these cases hold what it answers.
+    import honeytoken as _hp
+    from target import Probe as _Pp
+
+    class _Fake(object):
+        name = "fake"
+
+        def __init__(self, reply):
+            self.reply, self.sent, self.resets = reply, [], 0
+
+        def reset(self):
+            self.resets += 1
+
+        def send(self, text):
+            self.sent.append(text)
+            return _Pp(prompt=text, output=self.reply)
+
+    _sec, _ver = _hp.mint()
+    _t0 = _Fake("anything")
+    check("a config with no honeytoken is ready, and nothing is sent to find out",
+          _hp.precondition(_t0, {"canaries": ["plain-secret-value"]}) is None and not _t0.sent,
+          "sent %r" % _t0.sent)
+    _t1 = _Fake("anything")
+    _p1 = _hp.precondition(_t1, {"canaries": [_sec]})
+    check("...a minted honeytoken with no verifier is refused with 5, and nothing is sent",
+          _p1 is not None and _p1[0] == 5 and _p1[1] == "NO VERIFIER" and not _t1.sent,
+          str(_p1)[:160])
+    _t2 = _Fake("Our store is open 9 to 5.")
+    _p2 = _hp.precondition(_t2, {"canaries": [_sec], "honeytoken_verify": _ver})
+    check("...one the deployment does not return is refused with 5, after one question",
+          _p2 is not None and _p2[0] == 5 and _p2[1] == "NOT PLANTED"
+          and _t2.sent == [_hp.VERIFY_PROMPT] and _t2.resets == 1, str(_p2)[:160])
+    _t3 = _Fake("Our deployment reference is %s." % _ver)
+    check("...and one it does return lets the run start",
+          _hp.precondition(_t3, {"canaries": [_sec], "honeytoken_verify": _ver}) is None,
+          "refused a planted honeytoken")
+    # AND EVERY DOOR ASKS IT, read as the call: a door that inlines the rule again is the
+    # shape this was a fix for.
+    import ast as _ast_hp, io as _io_hp
+    for _door in ("run_redteam.py", "onboard.py"):
+        _tr_hp = _ast_hp.parse(_io_hp.open(os.path.join(HERE, _door), encoding="utf-8").read())
+        check("%s asks honeytoken.precondition" % _door,
+              any(isinstance(_n, _ast_hp.Call)
+                  and getattr(_n.func, "attr", None) == "precondition"
+                  for _n in _ast_hp.walk(_tr_hp)), "no call")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

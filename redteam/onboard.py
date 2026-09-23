@@ -7,8 +7,9 @@ as a bot that said nothing, which reads as a bot that held. The most expensive s
 in this whole system is a misconfiguration that reports as a defence, and the place to catch it
 is before the run rather than in the results.
 
-So this sends ONE probe, an ordinary question, and answers five things you should learn
-in ten seconds rather than in an hour:
+So this sends ONE probe, an ordinary question -- and a second, the deployment-reference
+question, when the config declares a honeytoken verifier -- and answers six things you
+should learn in ten seconds rather than in an hour:
 
   * does the endpoint answer at all, and what did it cost in seconds;
   * does `response.reply` resolve to text, and if not, WHAT the response actually contained —
@@ -17,7 +18,9 @@ in ten seconds rather than in an hour:
     `history` and their absence silently removes whole classes of attack from the run;
   * whether the target is authorised, which for anything but localhost has to be proved;
   * what the budget allows, because a run that cannot finish inside it is a partial run and the
-    operator should hear that word before the wait, not after.
+    operator should hear that word before the wait, not after;
+  * whether a declared honeytoken is really in the deployment, because `run` refuses to start
+    without it and a job queued past that refusal is accepted and then dies on its first line.
 
 Nothing is queued if the probe fails. A job submitted against a config that cannot be reached
 is an hour of queue time spent to produce the sentence this command prints immediately.
@@ -132,7 +135,8 @@ def unread_context_keys(cfg):
 
 
 def check(cfg_path, probe_text=PROBE):
-    """Returns (ok, report dict). Sends exactly one request."""
+    """Returns (ok, report dict). Sends one request, and a second when the config declares
+    a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
     try:
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8"))
@@ -393,6 +397,18 @@ def check(cfg_path, probe_text=PROBE):
             "On an agent that is the blind spot: the prose can be impeccable while the call "
             "carries the secret.")
     import honeytoken as _ht
+    # AND WHAT `run` WILL REFUSE, asked here through the same function. This check said
+    # "ready to queue" for a config declaring a honeytoken it never probed for, and the
+    # hosted intake answers 202 through it: the job was accepted, queued, and died on its
+    # first line with exit 5. Walked with the config `qatration init` writes, against a bot
+    # without the snippet -- `onboard` said ready, `run` said ABORT.
+    _pre = _ht.precondition(target, cfg.get("oracle_context") or {})
+    if _pre is not None:
+        rep["problems"].append("honeytoken %s: %s" % (_pre[1].lower(), _pre[2]))
+        # THE CODE THE CAUSE EARNS, the one `run` and `--verify-honeytoken` exit with for it:
+        # 5 for a snippet that is not there, not the 2 this report gives a config it refused.
+        # One cause, one number, whichever command a pipeline happened to call.
+        rep.setdefault("exit", _pre[0])
     if not _ht.declared(cfg.get("oracle_context") or {}):
         rep["notes"].append(
             "no `oracle_context.canaries`, so leak detection has no planted value to look for. "

@@ -423,6 +423,39 @@ def main():
               "STOP part way" in _n5 and str(_sent_req) in _n5
               and "are not sent" in _n5, _n5[:300])
 
+        # --- AND WHAT `run` WILL REFUSE, THIS REFUSES TOO --------------------------------
+        #
+        # Walked with the config `qatration init` writes, against a bot without the snippet:
+        # `onboard` said "ready to queue" and `run` said ABORT, exit 5. `onboard.check` is
+        # also the gate the hosted intake answers 202 through, so the job was accepted,
+        # queued, and died on its first line. Both doors are driven here on one config: the
+        # check, and the real `run` in a subprocess against the same scripted bot.
+        import honeytoken as _ht_o
+        _sec_o, _ver_o = _ht_o.mint()
+        _ht_cfg = write("htok", "choices.0.message.content",
+                        extra='oracle_context:\n  canaries: ["%s"]\n  honeytoken_verify: "%s"\n'
+                              % (_sec_o, _ver_o))
+        _ok6, _rep6 = onboard.check(_ht_cfg)
+        check("a declared honeytoken the deployment does not return is not 'ready'",
+              not _ok6 and any("honeytoken" in _p for _p in _rep6["problems"]),
+              str(_rep6["problems"])[:240])
+        check("...and it exits with the code `run` refuses it with, not the config's 2",
+              _rep6.get("exit") == 5, "exit %r" % _rep6.get("exit"))
+        _wo = tempfile.mkdtemp()
+        try:
+            _rr6 = subprocess.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "run", "--target-config",
+                 _ht_cfg, "--scope", "quick", "--trials", "1"],
+                capture_output=True, text=True, timeout=300,
+                env=dict(os.environ, QATRATION_OUT=_wo, PYTHONIOENCODING="utf-8",
+                         PYTHONDONTWRITEBYTECODE="1"))
+            check("...which is the code `run` does refuse the same config with, writing nothing",
+                  _rr6.returncode == 5 and not any(_f.startswith("results_")
+                                                   for _f in os.listdir(_wo)),
+                  "exit %d, wrote %s" % (_rr6.returncode, os.listdir(_wo)))
+        finally:
+            shutil.rmtree(_wo, ignore_errors=True)
+
         # AND ONE ARITHMETIC, NOT TWO. `docs/ci.md`'s cost table is recounted in
         # `test_readme` with the same rule; if that gate keeps its own copy of it the two
         # can drift apart again in the direction nobody watches.

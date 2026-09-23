@@ -337,6 +337,44 @@ def mapping_note(error):
 VERIFY_EXIT = {"NOT PLANTED": 5, "BAD MAPPING": 2, "NO ANSWER": 3}
 
 
+def precondition(target, ctx):
+    """-> None when a sweep may start, else (exit code, label, sentence, probe or None).
+
+    THE TWO THINGS `run` REFUSES A SWEEP FOR BEFORE ITS FIRST ATTACK, in one place, because
+    a second door asked "is this config ready" without asking either. `onboard.check` --
+    which is also the gate the hosted intake answers 202 through -- called a config with a
+    declared honeytoken READY while never probing for it, so the job was accepted, queued,
+    and died on its first line with exit 5. An acceptance is not a delivery; that sentence
+    is in `intake` already, written about the scope list.
+
+      * a honeytoken this tool minted, declared with no `honeytoken_verify`: nothing can
+        confirm it was ever pasted in, so every canary detector would be silent for a
+        reason the report cannot state;
+      * a verifier declared, and the deployment asked for its reference does not return
+        it: the snippet never landed, and a run now reports a clean bill for a check that
+        never ran.
+
+    Sends at most one request, the same one `run` sends, after a reset.
+    """
+    verify = (ctx.get("honeytoken_verify") or "").strip()
+    ours = [c for c in declared(ctx) if looks_like_ours(c)]
+    if ours and not verify:
+        return (5, "NO VERIFIER",
+                "%s declares a honeytoken (%s) but no `honeytoken_verify`, so nothing can "
+                "confirm it was ever pasted in. Mint a pair with `qatration mint` and declare "
+                "both." % (getattr(target, "name", "this target"), ours[0]), None)
+    if ours and verify:
+        try:
+            target.reset()
+        except Exception:
+            pass
+        probe = target.send(VERIFY_PROMPT)
+        why = verify_refusal(probe, verify)
+        if why:
+            return (VERIFY_EXIT.get(why[0], 5), why[0], why[1], probe)
+    return None
+
+
 def verify_refusal(probe, verify):
     """-> None when the honeytoken is planted, else (label, sentence) saying why not.
 

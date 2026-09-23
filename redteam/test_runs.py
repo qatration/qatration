@@ -392,7 +392,13 @@ def main():
             check("...as `aborted`, which is what nothing-was-sent means",
                   any(isinstance(x, _ast_r.Constant) and x.value == "aborted"
                       for x in _ast_r.walk(_body)), "")
-            check("...and is used by every refusal that used to leak", len(_refuse) >= 5,
+            # CALL SITES, NOT CAUSES, and the two stopped being the same number when the
+            # honeytoken's two refusals -- no verifier, and a verifier the deployment does not
+            # return -- moved into `honeytoken.precondition` and came back through ONE
+            # `_refuse(_code, ...)`. Five causes, four call sites. That every one of them
+            # closes the record is the leak check above; this only asks that the helper is
+            # what they go through, which four sites still say.
+            check("...and is used by every refusal that used to leak", len(_refuse) >= 4,
                   "%d call(s)" % len(_refuse))
 
     # --- A FILTER CANNOT SAY AN UNREADABLE RECORD IS NOT ONE OF YOURS ---------------
