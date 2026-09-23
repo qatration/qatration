@@ -1022,6 +1022,48 @@ def main():
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 
+    # --- AND AN UNRESOLVED TARGET COMES WITH ITS REMEDY -----------------------------------
+    #
+    # Walked as a stranger: `init`, `run`, `benign`, then `coverage`, without exporting the
+    # config `init` said to export. The only target "did not resolve" and every detector
+    # needing a context "was inert on them" -- and there it stopped, the diagnosis without the
+    # one line that fixes it, on the command whose numbers it changes most. `rejudge` said
+    # the same thing for bash alone; `init` said it for both shells. One function now.
+    import workspace as _ws_cv, subprocess as _sp_cv, tempfile as _tf_cv, shutil as _sh_cv
+    _pl_cv = _ws_cv.point_at_configs("C:\\Users\\a b\\my.yaml")
+    check("the remedy is given for both shells, the path quoted in each",
+          len(_pl_cv) == 2 and _pl_cv[0].strip().startswith('export QATRATION_CONFIGS="')
+          and "$env:QATRATION_CONFIGS=" in _pl_cv[1]
+          and all('"C:\\Users\\a b\\my.yaml"' in _l for _l in _pl_cv), str(_pl_cv))
+    _wcv = _tf_cv.mkdtemp()
+    try:
+        io.open(os.path.join(_wcv, "results_nobody.json"), "w", encoding="utf-8").write(
+            json.dumps({"meta": {"target": "nobody"},
+                        "results": [{"attack": {"id": "a"}, "headline": "DEFENDED",
+                                     "fired": [],
+                                     "trials": [{"verdict": "DEFENDED",
+                                                 "probe": {"output": "hello there"}}]}]}))
+        _rcv = _sp_cv.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
+                          capture_output=True, text=True, timeout=300,
+                          env=dict(os.environ, QATRATION_OUT=_wcv, PYTHONIOENCODING="utf-8",
+                                   PYTHONDONTWRITEBYTECODE="1", QATRATION_CONFIGS=""))
+        _ocv = _rcv.stdout
+        check("an unresolved target is followed by the line that resolves it, in both shells",
+              "DID NOT RESOLVE" in _ocv and "export QATRATION_CONFIGS=" in _ocv
+              and "$env:QATRATION_CONFIGS=" in _ocv, _ocv[-400:])
+    finally:
+        _sh_cv.rmtree(_wcv, ignore_errors=True)
+    # AND IT IS WRITTEN ONCE. A module that types the export line itself is the copy that
+    # said it for one shell. The line is an assignment -- `QATRATION_CONFIGS="` -- which no
+    # prose mention of the variable has. The first version of this exempted any module that
+    # mentioned `point_at_configs`, so `rejudge`, which imports it, could type its own bash
+    # line again and pass: mutation said so.
+    _typed = [_m for _m in sorted(os.listdir(HERE))
+              if _m.endswith(".py") and not _m.startswith("test_") and _m != "workspace.py"
+              and 'QATRATION_CONFIGS="' in io.open(os.path.join(HERE, _m),
+                                                   encoding="utf-8").read()]
+    check("no command types the export line itself", not _typed, str(_typed))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

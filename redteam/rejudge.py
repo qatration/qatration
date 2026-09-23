@@ -24,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import workspace
 from workspace import OUT as WORKSPACE_OUT, no_results_note, target_of, BROKE
+from workspace import point_at_configs
 from runner import judged_ctx   # one definition of "what did this attack declare"
 ROOT = os.path.dirname(HERE)
 OUT_DIR = WORKSPACE_OUT
@@ -537,7 +538,7 @@ def main():
               f"  Re-scoring reads the canaries and markers from the config, and results "
               f"files do not carry them.\n"
               f"  Point at it, and every other command with it:\n"
-              f'      export QATRATION_CONFIGS="/path/to/your.yaml"')
+              + "\n".join(point_at_configs(indent="      ")))
     verb = "rescored" if args.write else "would change"
     # A COUNT OVER THE FILES IT COULD READ, printed as one over the directory, is the gap
     # this whole engine is named after. The files it could not read are named beside it.

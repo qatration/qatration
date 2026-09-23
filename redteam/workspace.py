@@ -285,6 +285,27 @@ _CTX_KEYS = None
 _CFG_KEYS = None
 
 
+def point_at_configs(path=None, indent="    "):
+    """The lines that point every command at a config, for both shells. -> [line, line].
+
+    THREE COMMANDS NEED TO SAY THIS AND ONE SAID NOTHING. `init` prints it with the path it
+    just wrote, in both shells; `rejudge` printed it for bash alone -- on the platform this
+    repository is developed on, where the bash line is not what a PowerShell user types; and
+    `coverage` told a stranger that their only target "did not resolve" and that every
+    detector needing a context "was inert on them", then stopped, with no line saying what
+    would resolve it. Walked: `init`, `run`, `benign`, then `coverage` -- the diagnosis and
+    no remedy.
+
+    QUOTED, because a real path has backslashes and spaces: unquoted, bash reads the
+    backslash before `Users` in a Windows home directory as an escape. `path` defaults to
+    a placeholder for the commands that do
+    not know which file the reader meant.
+    """
+    p = path or "/path/to/your.yaml"
+    return ['%sexport QATRATION_CONFIGS="%s"' % (indent, p),
+            '%s$env:QATRATION_CONFIGS="%s"      # PowerShell' % (indent, p)]
+
+
 def no_results_note(out_dir=None):
     """What a page says when the workspace it was pointed at holds no run.
 

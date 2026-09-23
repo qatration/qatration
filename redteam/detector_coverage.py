@@ -627,6 +627,15 @@ def main():
               "every detector needing one was inert on them:")
         for fp, stem in unresolved:
             print(f"    {fp}  (looked for a target named {stem!r})")
+        # AND WHAT RESOLVES THEM. This stopped at the diagnosis, on the one command whose
+        # numbers are the ones most changed by it: every detector needing a context was
+        # counted as silent on these files, and nothing said the config was one line away.
+        from workspace import point_at_configs as _point
+        print("  a results file carries no canaries or markers; they are read from the "
+              "config.")
+        print("  Point every command at it:")
+        for _line in _point():
+            print(_line)
 
     if not n:
         # NOT A PASS. "66 detectors, 0 demonstrated, 66 declared only" over an empty

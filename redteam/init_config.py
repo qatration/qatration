@@ -320,8 +320,9 @@ def main():
     # `C:\Users\...` as an escape and hands over `C:UsersAppData...`, and any path
     # with a space in it breaks everywhere. The PowerShell line was already quoted, so
     # the two lines disagreed about the same value.
-    print('    export QATRATION_CONFIGS="%s"' % here)
-    print("    $env:QATRATION_CONFIGS=\"%s\"      # PowerShell" % here)
+    from workspace import point_at_configs as _point
+    for _line in _point(here):
+        print(_line)
     return 0
 
 
