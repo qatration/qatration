@@ -394,6 +394,30 @@ def main():
     check("...and filled in with the token for its origin, the example passes the gate",
           _ok_au, _why_au)
 
+    # A NAME EVERY LATER COMMAND WOULD REFUSE IS REFUSED HERE. `init --name "my bot"` wrote a
+    # config and the next command it named refused it as "not usable as a filename".
+    import subprocess as _sp_nm, tempfile as _tf_nm
+    _wn = _tf_nm.mkdtemp()
+    _bad_nm = []
+    for _i_nm, _nm in enumerate(("my bot", "../evil", "bot/x", "", "a" * 80)):
+        _cfg_nm = os.path.join(_wn, "n%d.yaml" % _i_nm)
+        _pn = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--name", _nm,
+                          "--out", _cfg_nm], capture_output=True, text=True, timeout=120,
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        if _pn.returncode != 2 or os.path.exists(_cfg_nm):
+            _bad_nm.append("%r: exit %s, file written %s" % (_nm, _pn.returncode,
+                                                              os.path.exists(_cfg_nm)))
+    check("init refuses a name later commands cannot use, and writes nothing",
+          not _bad_nm, "; ".join(_bad_nm))
+    _ok_nm = os.path.join(_wn, "ok.yaml")
+    _po = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--name",
+                      "ok_name-1.2", "--out", _ok_nm], capture_output=True, text=True,
+                     timeout=120, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                           PYTHONIOENCODING="utf-8"))
+    check("...while an ordinary one is written", _po.returncode == 0 and os.path.exists(_ok_nm),
+          (_po.stdout or "")[-200:])
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:
         print("  ! " + f)

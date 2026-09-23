@@ -270,6 +270,13 @@ def main():
     # the same way. Through the one rule, before the overwrite check reads the path.
     from workspace import writable_path as _writable
     args.out = _writable(args.out, "target config", "init", replaces=("a target config",))
+    # THE NAME THROUGH THE RULE EVERY LATER COMMAND APPLIES. `init --name "my bot"` wrote a
+    # config, printed "Wrote ..., with a canary nobody else has", and the very next command
+    # it told the reader to run refused that config: `name='my bot' is not usable as a
+    # filename`. So did `../evil`, `bot/x`, an empty name and one past 64 characters. The
+    # rule is `safe_target_name`; asked here, the reader hears it before the file exists.
+    from workspace import safe_target_name as _safe_name
+    args.name = _safe_name(args.name, "init --name")
 
     # NEVER OVERWRITE WITHOUT BEING TOLD TO. The file this would replace is the one holding a
     # canary the user has already planted in a live system, and the endpoint mapping they got
