@@ -1539,10 +1539,19 @@ def main():
     check("a --model copy cannot answer the question, and says so rather than passing",
           code == 3 and "CANNOT ANSWER" in lines[0], "exit %s" % code)
 
-    code, lines = verdict({"reason": "need two runs to compare"})
+    # IN THE DIRECTORY THE RUN USES. This asserted the literal `out/history/`, which is the
+    # checkout's folder: an install writes `qatration-out/`, and a CI job sets QATRATION_OUT.
+    import run_redteam as _rr_h
+    _saved_od = _rr_h.OUT_DIR
+    _rr_h.OUT_DIR = os.path.join("somewhere", "tier-pr")
+    try:
+        code, lines = verdict({"reason": "need two runs to compare"})
+    finally:
+        _rr_h.OUT_DIR = _saved_od
     check("a first run is a baseline, not a verdict", code == 3, "exit %s" % code)
-    check("...and it says how to make the next one answerable",
-          "out/history/" in lines[0], lines[0][:80])
+    check("...and it says how to make the next one answerable, in the run's own directory",
+          os.path.join("somewhere", "tier-pr", "history") in lines[0]
+          and "store out/history/" not in lines[0], lines[0][:160])
 
     code, lines = verdict({"prev": "r1", "confounds": ["arsenal 285 -> 357 attacks"],
                            "new": [], "regressed": []})

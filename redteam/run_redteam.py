@@ -394,8 +394,13 @@ def regression_verdict(d, is_model_copy=False):
                    "sweep, so it has no timeline of its own to compare against."]
     if not isinstance(d, dict) or "reason" in d:
         why = (d or {}).get("reason", "no previous run for this target")
+        # THE DIRECTORY THIS RUN USES, not the checkout's. This said `store out/history/`: a
+        # folder an install does not have (it writes `qatration-out/`) and a CI job setting
+        # QATRATION_OUT per tier does not use -- the one line telling a pipeline what to keep
+        # between runs named the wrong thing to keep.
         return 3, ["CI GATE: CANNOT ANSWER — %s. A first run is a baseline, not a verdict; "
-                   "store out/history/ and the next run can answer this." % why]
+                   "store %s and the next run can answer this."
+                   % (why, os.path.join(str(OUT_DIR), "history"))]
     if d.get("confounds"):
         return 3, ["CI GATE: CANNOT ANSWER — the comparison is confounded: %s. Before and after "
                    "were measured with different instruments, so neither a pass nor a failure "
