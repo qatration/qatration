@@ -687,7 +687,7 @@ def main():
     ap.add_argument("--model", default=None, help="override the target's model")
     ap.add_argument("--recon", default=None,
                     help="recon profile to fold into the report "
-                         "(default out/recon_<target>.json if present)")
+                         "(default $QATRATION_OUT/recon_<target>.json if present)")
     # HOW MUCH TRAFFIC TO SEND, and nothing else. Every probe is a request to an endpoint
     # somebody is paying for, so the size of a run is a decision the operator makes. It is
     # recorded on the run either way, because a narrow run and a wide one are different
@@ -698,7 +698,7 @@ def main():
                          "`full` is the whole arsenal. Recorded on the run either way."),
     ap.add_argument("--isolation", default=None,
                     help="isolation maps to fold into the report "
-                         "(default out/isolation_<target>.json if present)")
+                         "(default $QATRATION_OUT/isolation_<target>.json if present)")
     args = ap.parse_args()
 
     # READ AS A REFUSAL, NOT AS A CRASH. A path that does not exist, or YAML that does not
@@ -1036,7 +1036,8 @@ def main():
                      note=f"no attack in this arsenal applies to {target.name}; "
                           f"nothing was sent and nothing was written")
         print(f"engine → target='{target.name}'  NO applicable attacks in this arsenal "
-              f"({len(all_attacks)} not applicable) — leaving out/results_{target.name}.json "
+              f"({len(all_attacks)} not applicable) — leaving "
+              f"{os.path.join(str(OUT_DIR), 'results_' + target.name + '.json')} "
               f"untouched.", file=sys.stderr)
         sys.exit(3)
     skipped = not_applicable + not_sent
@@ -1496,7 +1497,8 @@ def main():
                           "and nothing was written")
         print(f"\nNOTHING MEASURED — every trial errored or came back empty "
               f"(is {target.name} up, and is it answering?). "
-              f"Leaving out/results_{target.name}.json as it was: a file of ERROR rows would "
+              f"Leaving {os.path.join(str(OUT_DIR), 'results_' + target.name + '.json')} as it "
+              f"was: a file of ERROR rows would "
               f"overwrite the record of a run that did measure something, and the next "
               f"history diff would read it as five findings fixed.", file=sys.stderr)
         sys.exit(3)

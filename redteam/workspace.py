@@ -1459,7 +1459,7 @@ def safe_target_name(name, where="target config"):
     if not _re.fullmatch(r"[A-Za-z0-9._-]{1,64}", name) or name.strip(".") == "":
         raise SystemExit(
             f"{where}: name={name!r} is not usable as a filename. It is interpolated into "
-            f"out/results_<name>.json and out/history/<name>.jsonl, so letters, digits, dot, "
+            f"results_<name>.json and history/<name>.jsonl, so letters, digits, dot, "
             f"dash and underscore only, up to 64 characters.")
     return name
 

@@ -596,7 +596,7 @@ def main():
                     help="extra attempts given ONLY to the rows that failed the first pass, "
                          "before any of them is called stale (default 5)")
     ap.add_argument("--results", default=None,
-                    help="the artifact to verify (default out/results_<target>.json)")
+                    help="the artifact to verify (default $QATRATION_OUT/results_<target>.json)")
     args = ap.parse_args()
 
     if args.all:

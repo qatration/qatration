@@ -39,7 +39,7 @@ def main():
     ap.add_argument("--target-config", required=True,
                     help="the target config to generate objectives for")
     ap.add_argument("--recon", default=None,
-                    help="profile to read (default out/recon_<target>.json)")
+                    help="profile to read (default $QATRATION_OUT/recon_<target>.json)")
     ap.add_argument("--out", default=None,
                     help="where to write (default "
                          "$QATRATION_OUT/isolation_generated_<target>.yaml)")

@@ -51,8 +51,8 @@ def main():
     ap.add_argument("--max-tokens", type=_at_least(0, "--max-tokens"), default=4,
                     help="how many forbidden_tokens to bare-echo test")
     ap.add_argument("--json", default=None,
-                    help="write the raw profile here (default out/recon_<target>.json, "
-                         "which run_redteam.py picks up into the report)")
+                    help="write the raw profile here (default $QATRATION_OUT/recon_<target>.json, "
+                         "which `qatration run` picks up into the report)")
     args = ap.parse_args()
 
     from workspace import load_yaml_or_refuse as _load_yaml

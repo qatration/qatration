@@ -746,6 +746,38 @@ def check_every_command_refuses():
                                 "--out", _os.path.join(_cw, "ok.sarif")])
     check("...while a real results file still exports", _rc_ok, 0)
 
+    # --- THE WORKSPACE A READER HAS, NOT THE CHECKOUT'S --------------------------------
+    #
+    # Help texts and messages named `out/...` -- the checkout's workspace, which an install
+    # does not have -- and `run_redteam.py`, a file that exists in a checkout and nowhere in
+    # an installed package. Any string a user can be shown, in any module but the three
+    # checkout-only scripts, is asked: no `out/<name>` outside `qatration-out`, no script
+    # name where a command belongs. Docstrings are the design record and are exempt.
+    import ast as _ast_o, re as _re_o, glob as _glob_o
+    _CHECKOUT_ONLY = {"run_all.py": "the fleet runner, run from a checkout",
+                      "run_adaptive.py": "a research loop, run from a checkout",
+                      "build_generic.py": "the arsenal builder, run from a checkout"}
+    _out_named = []
+    for _mf in sorted(_glob_o.glob(_os.path.join(_here, "*.py"))):
+        _bn = _os.path.basename(_mf)
+        if _bn.startswith("test_") or _bn in _CHECKOUT_ONLY:
+            continue
+        _tree_o = _ast_o.parse(_io.open(_mf, encoding="utf-8").read())
+        _docs_o = {_ast_o.get_docstring(n, clean=False) for n in _ast_o.walk(_tree_o)
+                   if isinstance(n, (_ast_o.Module, _ast_o.FunctionDef, _ast_o.ClassDef,
+                                     _ast_o.AsyncFunctionDef))}
+        for _n in _ast_o.walk(_tree_o):
+            if (isinstance(_n, _ast_o.Constant) and isinstance(_n.value, str)
+                    and _n.value not in _docs_o):
+                _s = _n.value
+                if (_re_o.search(r"(?<![\w-])out/[\w<]", _s) and "qatration-out" not in _s) \
+                        or "run_redteam.py picks" in _s:
+                    _out_named.append("%s:%d %s" % (_bn, _n.lineno, _s[:60]))
+    check("no string a user is shown names the checkout's out/ or a checkout script",
+          _out_named, [])
+    check("...and every exemption is a file that exists",
+          sorted(f for f in _CHECKOUT_ONLY if not _os.path.exists(_os.path.join(_here, f))), [])
+
     # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
     #
     # Four counts took a bare `type=int`: `recon --max-tokens -3` sliced its token list to all

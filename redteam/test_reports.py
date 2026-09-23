@@ -1189,8 +1189,11 @@ def main():
     # the empty-arsenal case already is, one screen up: a well-formed results file full of
     # ERROR rows is not a smaller finding, it is the deletion of a real one.
     rr_src = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
-    check("...and says which file it left alone",
-          "Leaving out/results_" in rr_src)
+    # BY ITS REAL PATH: this asserted the literal `Leaving out/results_`, the checkout's
+    # folder, which an install does not have.
+    check("...and says which file it left alone, by the path this run uses",
+          "Leaving {os.path.join(str(OUT_DIR), 'results_'" in rr_src
+          and "Leaving out/results_" not in rr_src)
 
     # EXERCISED, NOT GREPPED. This used to check that the string `all_errored` appeared in
     # run_redteam.py and that `sys.exit(3)` appeared somewhere after it, which is a spellcheck:

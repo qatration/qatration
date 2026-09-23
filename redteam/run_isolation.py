@@ -128,8 +128,8 @@ def main():
                     help="after the key search, reassemble the keys into one payload and "
                          "test the whole objective (implies --keys)")
     ap.add_argument("--json", default=None,
-                    help="write the raw maps here (default out/isolation_<target>.json, "
-                         "which run_redteam.py picks up into the report)")
+                    help="write the raw maps here (default $QATRATION_OUT/isolation_<target>.json, "
+                         "which `qatration run` picks up into the report)")
     args = ap.parse_args()
     if args.compose:
         args.keys = True          # composition needs the keys the search finds
