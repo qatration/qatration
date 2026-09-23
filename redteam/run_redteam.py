@@ -650,6 +650,66 @@ def is_unmeasurable(attack, dead):
 
 
 
+# THE RECORD THIS PROCESS OPENED, so the one door out can close it. See `_closes_open_run`.
+_OPEN_RUN = None
+
+
+def _close_open_run(exc):
+    """Close the record `main` opened if it is still `started`, saying what ended it."""
+    rec = _OPEN_RUN
+    if not rec:
+        return
+    import runs as _runs
+    try:
+        now = _runs.load(OUT_DIR, rec.get("run_id")) or {}
+    except Exception:
+        now = {}
+    if now.get("state") != "started":
+        return
+    if isinstance(exc, KeyboardInterrupt):
+        note = "interrupted before the run finished"
+    elif isinstance(exc, SystemExit):
+        code = exc.code
+        note = (str(code).strip() if isinstance(code, str) and code.strip()
+                else "exited with code %s before the run finished" % code)
+    else:
+        note = "crashed: %s: %s" % (type(exc).__name__, str(exc)[:200])
+    try:
+        _runs.finish(OUT_DIR, rec, "aborted", note=note)
+    except Exception:
+        pass
+
+
+def _closes_open_run(fn):
+    """The one guarantee around the sweep: a record it opened is closed.
+
+    GUARD THE RECORD, NOT THE EXITS. `main` opens `run_<id>.json` before the first probe and
+    its own `_refuse` says every exit after that owes the record an ending -- and closes the
+    ones it can see. An exit raised INSIDE something it calls cannot be seen from there:
+    walked, `QATRATION_CONFIGS` naming a missing file stops the run from inside
+    `target_configs`, exit 2, and the record stayed `started`, which `runs` then reports as
+    "open ..., so it may still be running" for a run that never sent a request. Ctrl-C mid-
+    sweep and a crash leave the same thing. Whatever ends the call, a record still open is
+    closed as `aborted` with what ended it, and the exit goes on as it was.
+
+    A decorator rather than a wrapper function, so `main` stays the function that holds the
+    sweep -- which is what the structural checks in five suites read it as.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def _guarded(*a, **kw):
+        global _OPEN_RUN
+        _OPEN_RUN = None
+        try:
+            return fn(*a, **kw)
+        except BaseException as e:
+            _close_open_run(e)
+            raise
+    return _guarded
+
+
+@_closes_open_run
 def main():
     # THE ONE SPELLING, from the table this command is listed in. A bare parser
     # here printed the flags and left `--help` silent about the job.
@@ -817,6 +877,8 @@ def main():
                        authorization=_auth, budgets=_budgets,
                        engine=engine_version(), arsenal=os.path.basename(args.attacks),
                        trials=trials)
+    global _OPEN_RUN
+    _OPEN_RUN = _rec
 
     def _refuse(code, note):
         """Close the record, then exit. THE RECORD IS OPEN FROM HERE ON.

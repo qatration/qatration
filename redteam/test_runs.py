@@ -213,6 +213,65 @@ def main():
     _rc, _out = _runs_cmd(_w)
     check("a workspace with records lists them and exits 0", _rc == 0, "exit %s" % _rc)
 
+    # A RUN STOPPED FROM INSIDE SOMETHING IT CALLS STILL CLOSES ITS RECORD. `QATRATION_CONFIGS`
+    # naming a missing file stops the run inside `target_configs`, after the record is open;
+    # it stayed `started` and `runs` said the run "may still be running".
+    import http.server as _hs_o, threading as _th_o
+    class _Bot_o(_hs_o.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _b = b'{"reply": "ok"}'
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+    _srv_o = _hs_o.ThreadingHTTPServer(("127.0.0.1", 0), _Bot_o)
+    _th_o.Thread(target=_srv_o.serve_forever, daemon=True).start()
+    _wo = _tf_d.mkdtemp()
+    try:
+        _cfg_o = os.path.join(_wo, "openbot.yaml")
+        open(_cfg_o, "w", encoding="utf-8").write(
+            'name: openbot\nadapter: http\nurl: "http://127.0.0.1:%d/chat"\n'
+            'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
+            % _srv_o.server_address[1])
+        _po = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
+                         "--target-config", _cfg_o, "--scope", "quick", "--trials", "1"],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=_wo, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8",
+                                 QATRATION_CONFIGS=os.path.join(_wo, "missing.yaml")))
+        _recs_o = runs.listing(_wo)
+        check("a run stopped from inside a call it made is refused, exit 2",
+              _po.returncode == 2, "exit %s: %s" % (_po.returncode, (_po.stderr or "")[-200:]))
+        check("...and its record is closed as aborted, not left open",
+              [r.get("state") for r in _recs_o] == ["aborted"], str(_recs_o)[:300])
+        check("...saying what stopped it",
+              bool(_recs_o) and "QATRATION_CONFIGS" in (_recs_o[0].get("note") or ""),
+              str(_recs_o[:1])[:300])
+        # AND A RUN THAT FINISHED STAYS FINISHED. With a gate the sweep ends in `sys.exit`
+        # AFTER closing its record, and the guard sees that exit too: it must leave a record
+        # that is no longer open exactly as it is.
+        _wf = _tf_d.mkdtemp()
+        _pf = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
+                         "--target-config", _cfg_o, "--scope", "quick", "--trials", "1",
+                         "--fail-on", "regression"],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=_wf, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8"))
+        _recs_f = runs.listing(_wf)
+        # `regression` on a first run answers 3 through `sys.exit`, after `finish`.
+        check("a run whose gate exits after it finished keeps its record finished",
+              _pf.returncode == 3 and [r.get("state") for r in _recs_f] == ["finished"],
+              "exit %s: %s" % (_pf.returncode, str(_recs_f)[:300]))
+        shutil.rmtree(_wf, ignore_errors=True)
+    finally:
+        _srv_o.shutdown()
+        shutil.rmtree(_wo, ignore_errors=True)
+
     # AND THE RUNS THE QUEUE RAN. A queued job runs in `runs/<job_id>/` under the root, so
     # `runs` on a workspace where the queue had finished its jobs said nothing had been run.
     _wq = _tf_d.mkdtemp()
@@ -360,6 +419,11 @@ def main():
     _fn = [n for n in _ast_r.walk(_ast_r.parse(_src))
            if isinstance(n, _ast_r.FunctionDef) and n.name == "main"]
     check("run_redteam has a main to walk", bool(_fn), "no main")
+    # AND MAIN IS WRAPPED IN THE GUARD that closes a record left open on any way out -- an
+    # exit raised inside a call `main` makes is one the counting below cannot see.
+    check("...and main is wrapped in the guard that closes a record it leaves open",
+          bool(_fn) and any(getattr(d, "id", "") == "_closes_open_run"
+                            for d in _fn[0].decorator_list), "no guard")
     if _fn:
         _fn = _fn[0]
 
