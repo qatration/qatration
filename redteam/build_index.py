@@ -219,7 +219,11 @@ def main():
     prov = provenance()
     kinds = {}
     for m in rows:
-        k = prov.get(m["target"], ("unstated", ""))[0]
+        # NO CONFIG FOUND IS NOT A CONFIG THAT DECLARES NOTHING. Walked from an install:
+        # `init` wrote `provenance: first-party`, $QATRATION_CONFIGS was not set, and the page
+        # said the target "states no provenance" -- about a file that states one, which this
+        # page never opened. Kept apart so the sentence can say which it is.
+        k = prov.get(m["target"], ("no config", ""))[0]
         kinds.setdefault(k, []).append(m["target"])
     n_third = sum(len(v) for k, v in kinds.items() if k.startswith("third-party"))
     n_third_find = sum(m.get("broke", 0) for m in rows
@@ -234,7 +238,8 @@ def main():
     # that declares nothing is said to declare nothing.
     n_practice = len(kinds.get("practice", []))
     n_own = len(kinds.get("first-party", []))
-    n_unstated = n_targets - n_third - n_practice - n_own
+    n_noconfig = len(kinds.get("no config", []))
+    n_unstated = n_targets - n_third - n_practice - n_own - n_noconfig
     # esc(): a target name reaches this page from a config file, and every page this tool
     # produces is a rendering of attacker-influenced input by construction.
     _third_names = sorted(t for k, v in kinds.items()
@@ -270,6 +275,14 @@ def main():
         _parts.append("%d state%s no provenance, so whose software %s is not on this page"
                       % (n_unstated, "s" if n_unstated == 1 else "",
                          "it is" if n_unstated == 1 else "they are"))
+    if n_noconfig:
+        _parts.append("%d %s no config this page could read ($QATRATION_CONFIGS does not "
+                      "name %s), so what %s declares, whose software %s included, is not "
+                      "on this page"
+                      % (n_noconfig, "has" if n_noconfig == 1 else "have",
+                         "it" if n_noconfig == 1 else "them",
+                         "it" if n_noconfig == 1 else "they",
+                         "it is" if n_noconfig == 1 else "they are"))
     fleet_said = "Of these, " + "; ".join(_parts) + "." if _parts else ""
     # Where the recount disagrees with what the sweep stored, the difference is a fact about
     # the evidence: the stored verdicts have moved since the run that wrote them, usually
@@ -403,6 +416,16 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
               % (len(unmeasured), ", ".join(m["target"] for m in unmeasured)))
     print(f"wrote {out} — {n_targets} targets, {n_find} breaches, {len(hardened)} hardened, "
           f"{n_third} third-party ({n_third_find} of the findings)")
+    if n_noconfig:
+        from workspace import point_at_configs as _point_at_configs
+        print("  ! no config found for %s, so the page cannot say whose software %s. "
+              "Point at yours and build it again:"
+              # repr: a target name is read from a results file, and a name carrying
+              # terminal escapes would otherwise be printed as escapes.
+              % (", ".join(repr(t) for t in sorted(kinds.get("no config", []))),
+                 "it is" if n_noconfig == 1 else "they are"))
+        for _line in _point_at_configs():
+            print(_line)
     if moved:
         print(f"  ! {len(moved)} target(s) whose stored breach count predates a re-score: "
               + named_or_more([f"{m['target']} {m['broke_at_run']}->{m['broke']}"

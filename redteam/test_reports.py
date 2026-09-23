@@ -1980,6 +1980,34 @@ def main():
         check("...and not a practice bot whose findings are about this engine",
               "counting its own homework" not in _pix
               and "fact about this engine" not in _pix, "the homework sentence was said")
+        # AND THE SAME WORKSPACE WITH THE CONFIG NOT NAMED, which is the installed default:
+        # `init` prints the export line and nothing makes anybody run it. The page said the
+        # target "states no provenance" about a file stating `first-party` that it never
+        # opened. A config not found is not a config that declares nothing.
+        _env_nc = dict(os.environ, QATRATION_OUT=_wix, PYTHONIOENCODING="utf-8",
+                       PYTHONDONTWRITEBYTECODE="1")
+        _env_nc.pop("QATRATION_CONFIGS", None)
+        _snc = _sp_ix.run([sys.executable, os.path.join(HERE, "cli.py"), "index"],
+                          capture_output=True, text=True, timeout=300, env=_env_nc)
+        _pnc = io.open(os.path.join(_wix, "index.html"), encoding="utf-8").read()
+        check("a target whose config was not found is said to have no config the page read",
+              "1 has no config this page could read" in _pnc, _snc.stdout[-300:])
+        check("...and not to state no provenance, which is a claim about a file it never opened",
+              "states no provenance" not in _pnc, "the page said it")
+        check("...and the command gives the line that points at it, in both shells",
+              'export QATRATION_CONFIGS="' in _snc.stdout
+              and '$env:QATRATION_CONFIGS="' in _snc.stdout, _snc.stdout[-300:])
+        # IN A PAIR: a config that IS found and declares nothing still states no provenance.
+        io.open(_cix, "w", encoding="utf-8").write(
+            "name: ownbot\nadapter: http\nurl: http://127.0.0.1:9/x\n"
+            "request:\n  message: \"{prompt}\"\nresponse:\n  reply: reply\n")
+        _sun = _sp_ix.run([sys.executable, os.path.join(HERE, "cli.py"), "index"],
+                          capture_output=True, text=True, timeout=300,
+                          env=dict(_env_nc, QATRATION_CONFIGS=_cix))
+        _pun = io.open(os.path.join(_wix, "index.html"), encoding="utf-8").read()
+        check("...while a config that is found and declares nothing still states no provenance",
+              "1 states no provenance" in _pun and "no config this page" not in _pun,
+              _sun.stdout[-300:])
     finally:
         shutil.rmtree(_wix, ignore_errors=True)
     # AND THE SHIPPED FLEET STILL SAYS IT, because there it is true: the practice bots are
