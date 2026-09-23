@@ -284,6 +284,54 @@ def main():
                 pass
         shutil.rmtree(work, ignore_errors=True)
 
+    # --- A RUNNER KILLED FROM OUTSIDE LEAVES WHAT IT HAD PRINTED ---------------------------
+    #
+    # Block-buffered into a file, the runner's lines died with it: a copy stopped at its
+    # ceiling on a Windows CI runner and left an empty log, so nothing said which suite it was
+    # waiting on. Here the ceiling is ours: a healthy suite, then one that wedges well inside
+    # the deadline, and the runner killed after the first has certainly finished.
+    work2 = tempfile.mkdtemp(prefix="qatration-runner-")
+    wedge_pid = os.path.join(work2, "wedge.pid")
+    try:
+        os.makedirs(os.path.join(work2, "tools"))
+        os.makedirs(os.path.join(work2, "redteam"))
+        shutil.copy(CHECK, os.path.join(work2, "tools", "check.py"))
+        io.open(os.path.join(work2, "redteam", "test_aaa_healthy.py"), "w", encoding="utf-8",
+                newline="\n").write(textwrap.dedent(HEALTHY))
+        io.open(os.path.join(work2, "redteam", "test_bbb_wedges.py"), "w", encoding="utf-8",
+                newline="\n").write(
+            "import os, time\n"
+            "open(os.environ['WEDGE_PID_FILE'], 'w').write(str(os.getpid()))\n"
+            "time.sleep(600)\n")
+        log2 = os.path.join(work2, "runner.log")
+        with io.open(log2, "w", encoding="utf-8") as _lg:
+            _runner = subprocess.Popen([sys.executable, os.path.join(work2, "tools", "check.py")],
+                                       stdout=_lg, stderr=subprocess.STDOUT, cwd=work2,
+                                       env=dict(os.environ, PYTHONIOENCODING="utf-8",
+                                                WEDGE_PID_FILE=wedge_pid,
+                                                QATRATION_SUITE_TIMEOUT="300"))
+            # THE WEDGE HAS STARTED, so the healthy suite before it has been run and reported.
+            _t_w = time.time()
+            while not os.path.exists(wedge_pid) and time.time() - _t_w < 60:
+                time.sleep(0.2)
+            time.sleep(1)
+            _runner.kill()
+            _runner.wait(timeout=30)
+        said2 = io.open(log2, encoding="utf-8", errors="replace").read()
+        check("a runner killed from outside has already written the suites it finished",
+              os.path.exists(wedge_pid) and any(ln.strip().startswith("ok")
+                                                and "aaa_healthy" in ln
+                                                for ln in said2.splitlines()),
+              "wedge started: %s; log: %r" % (os.path.exists(wedge_pid), said2[-300:]))
+    finally:
+        _wp = io.open(wedge_pid).read().strip() if os.path.exists(wedge_pid) else ""
+        if _wp.isdigit() and alive(int(_wp)):
+            try:
+                os.kill(int(_wp), 9)
+            except OSError:
+                pass
+        shutil.rmtree(work2, ignore_errors=True)
+
     # --- A LATER FAILURE DOES NOT UNDO AN EARLIER OBSERVATION -------------------------------
     #
     # `_run_sessions` returned the error probe alone on a failed step, throwing away every

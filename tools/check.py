@@ -225,6 +225,17 @@ def refuse_if_empty(names):
 
 
 def main(argv):
+    # EVERY LINE AS IT IS WRITTEN. Into a pipe or a file -- the Actions log, `> check.txt` --
+    # stdout is block-buffered, and this prints a few kilobytes over ten minutes, so a runner
+    # killed from outside took every line it had printed with it. The job's own ceiling is
+    # such a kill, and it is the case the per-suite deadline was written for: "cancelled,
+    # naming no suite". It happened to `test_runner`'s own copy of this file on a Windows CI
+    # runner (93a0065): stopped at 90 s against a 15 s norm, and its log was empty, so which
+    # suite it was waiting on could not be read off anything.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
     if "--list" in argv:
         for n in refuse_if_empty(suites([])):
             print("  " + n[5:-3])
