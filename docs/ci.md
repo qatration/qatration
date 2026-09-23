@@ -415,9 +415,11 @@ in the tool and every YAML typo that reached a `KeyError` instead of a refusal a
 a security finding. The traceback is still printed in full; only the code changes.
 
 The distinction that matters in `3` is between a question answered with "nothing" and a
-question that could not be asked. `rejudge` prints the same sentence either way — *would change
+question that could not be asked. `rejudge` printed the same sentence either way — *would change
 0 attack row(s) across 0 file(s)* — when every stored score is already correct and when there
-was nothing on disk to score, and it used to return `0` for both. A command that reads the
+was nothing on disk to score, and it used to return `0` for both. It now also says how much it
+re-scored to find that (*having re-scored 45 across 1 results file(s)*), and the exit code
+carries the difference for a pipeline. A command that reads the
 workspace, finds it empty and exits `0` tells a pipeline the check ran.
 
 The same number was wrong in the other direction for a second artifact family. `rejudge`

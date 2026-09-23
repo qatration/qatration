@@ -1222,6 +1222,14 @@ def main():
         check("...and with the spellings swapped between run and config, still nothing",
               "would change 0 attack row(s) across 0 file(s)" in (_rjm.stdout or ""),
               (_rjm.stdout or "")[-400:])
+        # AND IT SAYS IT LOOKED. "0 across 0 file(s)" alone is also what a filter matching
+        # nothing prints; the count of what was re-scored is what tells the two apart.
+        import re as _re_f
+        _looked = _re_f.search(r"having re-scored (\d+) across (\d+) results file",
+                               _rjm.stdout or "")
+        check("...and says how many rows and files it re-scored to find that",
+              bool(_looked) and int(_looked.group(1)) > 0 and int(_looked.group(2)) == 1,
+              (_rjm.stdout or "")[-300:])
     finally:
         _srv_f.shutdown()
         _sh_f.rmtree(_wf, ignore_errors=True)

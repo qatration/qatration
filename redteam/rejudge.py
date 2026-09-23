@@ -403,7 +403,7 @@ def main():
     # "would change 0 attack row(s) across 0 file(s)" was printed both when every stored score
     # was already correct and when there was nothing on disk to score at all -- and returned 0
     # either way. A CI step reads that as "scoring is up to date".
-    examined = 0
+    examined, rows_examined = 0, 0
     total_changed, files_touched, skipped, unreadable = 0, 0, [], []
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
         name = os.path.basename(path)[len("results_"):-len(".json")]
@@ -428,6 +428,7 @@ def main():
             unreadable.append(os.path.basename(path))
             continue
         examined += 1
+        rows_examined += len(data.get("results") or [])
 
         # A STALE CAVEAT IS A CHANGE. `meta["attribution"]` is computed at sweep time against
         # the target's benign run, because "this attack caused this detector to fire" is only
@@ -581,8 +582,14 @@ def main():
     # this whole engine is named after. The files it could not read are named beside it.
     if unreadable:
         print(f"\nNOT RE-SCORED — could not be read: {', '.join(unreadable)}.")
+    # AND SAY HOW MUCH WAS LOOKED AT, in the sentence and not only in the exit code. "would
+    # change 0 attack row(s) across 0 file(s)" was printed over three results files that had
+    # all been read and were all current, and over a filter that matched none of them: a
+    # reader at a terminal saw the same line for both. `benign --rejudge` wrote this rule
+    # down ("0 rows would change reads as a clean bill") and applied it to its own sentence.
     print(f"\n{verb} {total_changed} attack row(s) across {files_touched} file(s)"
-          f"{' (some of them only their attribution caveat)' if files_touched and not total_changed else ''}.")
+          f"{' (some of them only their attribution caveat)' if files_touched and not total_changed else ''}"
+          f", having re-scored {rows_examined} across {examined} results file(s).")
     if maps_touched:
         print(f"{verb} {maps_changed} lock-map objective(s) across {maps_touched} map file(s).")
     if (total_changed or files_touched or maps_touched) and not args.write:
