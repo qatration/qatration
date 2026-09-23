@@ -294,9 +294,17 @@ def rebuild_pages(only=None):
     -> the names rebuilt, so a caller can say how many rather than that it went well.
     """
     done = []
+    # `--target` MEANT TWO THINGS IN ONE COMMAND. The re-score below resolves each file to the
+    # target that wrote it, so `--target mybot` takes `results_mybot.json` and its per-model
+    # copies `results_mybot_alpha.json`, `..._beta.json`; this compared the file's own stem,
+    # so `--pages --target mybot` rebuilt one page of the three, and `--pages --target
+    # mybot_alpha` rebuilt a page the re-score answered with "no results -- run a sweep
+    # first". One rule, the re-score's. A file whose target has no config is its own name,
+    # because a page needs no oracle to be drawn.
+    _names = contexts() if only else {}
     for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
         name = os.path.basename(path)[len("results_"):-len(".json")]
-        if only and name != only:
+        if only and (target_of(name, _names) or name) != only:
             continue
         # THROUGH `read_artifact`, which is the one reader for this directory: five modules
         # opened it themselves once and a single truncated file took all five down with a

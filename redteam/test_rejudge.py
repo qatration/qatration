@@ -1103,6 +1103,22 @@ def main():
                   "no record was changed" in _saidp, _saidp[-300:])
             check("...and names the record it could not read instead of stopping at it",
                   "results_broken.json" in _saidp and _rp.returncode == 0, _saidp[-300:])
+        # AND `--target` MEANS THE TARGET, in this mode as in the re-score: its per-model
+        # copies with it. `--pages --target localrag` rebuilt `report_localrag.html` and left
+        # `report_localrag_alpha.html` stale, where the re-score takes both.
+        with tempfile.TemporaryDirectory() as _dpt:
+            for _stem in ("localrag", "localrag_alpha"):
+                shutil.copy(_src_p, os.path.join(_dpt, "results_%s.json" % _stem))
+            _rpt = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                   "rejudge", "--pages", "--target", "localrag"],
+                                  capture_output=True, text=True, timeout=300,
+                                  env=dict(os.environ, QATRATION_OUT=_dpt,
+                                           PYTHONIOENCODING="utf-8",
+                                           PYTHONDONTWRITEBYTECODE="1"))
+            check("--pages --target rebuilds the target's per-model copies with it",
+                  all(os.path.exists(os.path.join(_dpt, "report_%s.html" % _s))
+                      for _s in ("localrag", "localrag_alpha")),
+                  (_rpt.stdout + _rpt.stderr)[-300:])
         # AND NOTHING REBUILT IS NOT A SUCCESS, which is the same rule `tools/check.py`
         # applies to finding no suites: an empty directory and a directory whose pages are
         # all current would otherwise print the same sentence and exit the same way.
