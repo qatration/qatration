@@ -224,7 +224,17 @@ def main():
     n_third = sum(len(v) for k, v in kinds.items() if k.startswith("third-party"))
     n_third_find = sum(m.get("broke", 0) for m in rows
                        if prov.get(m["target"], ("", ""))[0].startswith("third-party"))
-    n_practice = n_targets - n_third
+    # BY WHAT EACH TARGET SAYS IT IS, not by subtraction. This was `n_targets - n_third`,
+    # which filed every target that is not third-party under "bots written here to exercise
+    # the engine" -- including `first-party`, the provenance `qatration init` writes, with
+    # the note "our own deployment". Walked as a stranger: one target, their own bot, and the
+    # page told them every finding on it was "a fact about this engine rather than about
+    # software in the world". Their own production bot is the most real software there is
+    # on that page. `practice` is the kind the repository's own fleet declares; a target
+    # that declares nothing is said to declare nothing.
+    n_practice = len(kinds.get("practice", []))
+    n_own = len(kinds.get("first-party", []))
+    n_unstated = n_targets - n_third - n_practice - n_own
     # esc(): a target name reaches this page from a config file, and every page this tool
     # produces is a rendering of attacker-influenced input by construction.
     _third_names = sorted(t for k, v in kinds.items()
@@ -238,9 +248,29 @@ def main():
     # applies hardest: a fleet of nothing but our own bots is exactly the fleet whose count
     # is its own homework. So the naming is the part that becomes conditional, not the point.
     third_list = ", ".join(esc(t) for t in _third_names)
-    third_said = (" — %s" % third_list if third_list
-                  else " — and none of these is, so every finding below is a fact about this "
-                       "engine rather than about software in the world")
+    # THE SENTENCE IS BUILT FROM WHAT IS THERE. The homework warning belongs to practice bots
+    # and to nothing else: said over a stranger's own deployment it tells them their findings
+    # are not about their software, which is the opposite of true.
+    _parts = []
+    if n_third:
+        _parts.append("%d %s somebody else's software and carr%s %d of the findings — %s"
+                      % (n_third, "is" if n_third == 1 else "are",
+                         "ies" if n_third == 1 else "y", n_third_find, third_list))
+    if n_own:
+        _parts.append("%d %s your own deployment%s (provenance: first-party), so what is "
+                      "found there is about your software"
+                      % (n_own, "is" if n_own == 1 else "are", "" if n_own == 1 else "s"))
+    if n_practice:
+        _parts.append("%d %s practice bot%s written here to exercise the engine — a finding "
+                      "on one is evidence the engine works, and a fleet count that does not "
+                      "separate those is counting its own homework"
+                      % (n_practice, "is a" if n_practice == 1 else "are",
+                         "" if n_practice == 1 else "s"))
+    if n_unstated:
+        _parts.append("%d state%s no provenance, so whose software %s is not on this page"
+                      % (n_unstated, "s" if n_unstated == 1 else "",
+                         "it is" if n_unstated == 1 else "they are"))
+    fleet_said = "Of these, " + "; ".join(_parts) + "." if _parts else ""
     # Where the recount disagrees with what the sweep stored, the difference is a fact about
     # the evidence: the stored verdicts have moved since the run that wrote them, usually
     # because an oracle fix was replayed over them. Said on the page rather than resolved
@@ -343,9 +373,7 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
 </style></head><body><div class="wrap">
 <h1><span class="q">QA</span>tration — Dashboard</h1>
 <div class="sub">Adversarial test of AI features · {today} · {n_targets} targets</div>
-<div class="sub">{n_third} of them are somebody else's software and carry {n_third_find} of the
-findings; the other {n_practice} are bots written here to exercise the engine. A fleet count
-that does not separate those is counting its own homework{third_said}.</div>
+<div class="sub">{fleet_said}</div>
 {unread_bar}
 <div class="tiles">
   <div class="tile"><div class="n">{n_targets}</div><div class="l">targets tested</div></div>

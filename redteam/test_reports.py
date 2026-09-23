@@ -1949,6 +1949,47 @@ def main():
           isinstance(bi.load(), (list, dict)))
     check("build_index escapes markup too", bi.esc("<i>") == "&lt;i&gt;")
 
+    # --- A STRANGER'S OWN DEPLOYMENT IS NOT A PRACTICE BOT OF OURS ----------------------
+    #
+    # The dashboard filed every target that is not third-party under "bots written here to
+    # exercise the engine", by subtraction -- including `first-party`, which `qatration
+    # init` writes with the note "our own deployment". Walked: one target, the stranger's
+    # own bot, and the page said every finding on it was "a fact about this engine rather
+    # than about software in the world". Driven through the command, with the config found
+    # the way a user points at theirs.
+    import subprocess as _sp_ix
+    _wix = tempfile.mkdtemp()
+    try:
+        _cix = os.path.join(_wix, "own.yaml")
+        io.open(_cix, "w", encoding="utf-8").write(
+            "name: ownbot\nadapter: http\nurl: http://127.0.0.1:9/x\n"
+            "request:\n  message: \"{prompt}\"\nresponse:\n  reply: reply\n"
+            "provenance: first-party\nprovenance_note: our own deployment\n")
+        io.open(os.path.join(_wix, "results_ownbot.json"), "w", encoding="utf-8").write(
+            json.dumps({"meta": {"target": "ownbot", "trials": 1, "attacks_n": 1, "broke": 0},
+                        "results": [{"attack": {"id": "a"}, "headline": "DEFENDED",
+                                     "rate": "0/1", "fired": [], "trials": []}]}))
+        _six = _sp_ix.run([sys.executable, os.path.join(HERE, "cli.py"), "index"],
+                          capture_output=True, text=True, timeout=300,
+                          env=dict(os.environ, QATRATION_OUT=_wix, QATRATION_CONFIGS=_cix,
+                                   PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1"))
+        _pix = io.open(os.path.join(_wix, "index.html"), encoding="utf-8").read() \
+            if os.path.exists(os.path.join(_wix, "index.html")) else ""
+        check("a first-party target is called the reader's own deployment on the dashboard",
+              "your own deployment" in _pix, _six.stdout[-200:] + _six.stderr[-200:])
+        check("...and not a practice bot whose findings are about this engine",
+              "counting its own homework" not in _pix
+              and "fact about this engine" not in _pix, "the homework sentence was said")
+    finally:
+        shutil.rmtree(_wix, ignore_errors=True)
+    # AND THE SHIPPED FLEET STILL SAYS IT, because there it is true: the practice bots are
+    # declared `practice`, and the warning about counting them is the point of the line.
+    _shipped_ix = io.open(os.path.join(os.path.dirname(HERE), "out", "index.html"),
+                          encoding="utf-8").read()
+    check("...while the shipped fleet's practice bots are still named as homework",
+          "practice bots written here" in _shipped_ix
+          and "counting its own homework" in _shipped_ix, "the sentence is gone")
+
     # AND THE ADAPTIVE FAMILY IS NAMED TOO. That loop skipped a torn artifact under a
     # comment saying it was `reported by the results loop above` -- which walks
     # `results_*.json` and never sees an `adaptive_*.json`. So the section lost an
@@ -2958,11 +2999,16 @@ def main():
         check("the dashboard does not end that sentence with a bare colon",
               "own homework: ." not in _own_only and "homework: <" not in _own_only,
               "the empty list still renders as a colon and a full stop")
-        check("...and says what an all-our-own fleet means instead",
-              "none of these is" in _own_only, "the sentence trailed off")
+        # A `first-party` TARGET IS THE READER'S OWN DEPLOYMENT, which this case used to
+        # expect to be called one of this engine's practice bots -- "none of these is, so
+        # every finding below is a fact about this engine". That was the defect, asserted:
+        # `first-party` is what `qatration init` writes, with the note "our own deployment".
+        check("...and says what the fleet is instead: here, the reader's own deployment",
+              "your own deployment" in _own_only and "fact about this engine" not in _own_only,
+              "the sentence trailed off, or called it a practice bot")
         _has_third = _dash(True)
         check("...and names the third-party targets when there are some",
-              "homework — ownbot" in _has_third,
+              "of the findings — ownbot" in _has_third,
               "the names went missing when there were some")
     finally:
         _sh6.rmtree(_dw, ignore_errors=True)
