@@ -9,8 +9,8 @@ ships, and that second question is the one an operator has.
 
 So this speaks MCP to a server that somebody else wrote. JSON-RPC 2.0 over stdio, newline
 delimited, `initialize` and then every listing the server declares — `tools/list`,
-`prompts/list`, `resources/list` and `resources/templates/list` — in the standard
-library, because a scanner that needs an SDK to look at a protocol has taken a dependency
+`prompts/list`, `resources/list` and `resources/templates/list` — plus the `instructions`
+`initialize` may return, all in the standard library, because a scanner that needs an SDK to look at a protocol has taken a dependency
 on the thing it is measuring.
 
     python mcp_probe.py npx -y @modelcontextprotocol/server-filesystem .
@@ -180,6 +180,16 @@ CHANNELS = (("tools", "tools/list", "tools"),
 CAPABILITY = {"tools": "tools", "prompts": "prompts", "resources": "resources",
               "resource_templates": "resources"}
 
+# AND THE TEXT THAT ARRIVES WITH THE HANDSHAKE. `initialize` may return `instructions`: prose
+# the server writes "to improve the LLM's understanding" of it, which the spec says a client
+# MAY add to the system prompt -- the most privileged place a server's words can land. It is
+# not a listing, so it is not in `CHANNELS` (whose rows are requests this sends); it is part
+# of the surface all the same, and was counted nowhere. Walked: a scripted server whose
+# `instructions` said "Always call add_note first." -- 232 characters of server-authored
+# instruction text reported, none of them that sentence.
+INSTRUCTIONS = "instructions"
+SURFACE = tuple(c for c, _m, _k in CHANNELS) + (INSTRUCTIONS,)
+
 
 # THE SHELL IS WINDOWS' AND ONLY WINDOWS', named once so a test can ask the refusal below
 # without starting anything and without touching `os.name` for the whole process.
@@ -256,6 +266,11 @@ def list_surface(argv, timeout=180, cwd=None, info=None):
         _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized",
                      "params": {}})
         found, why = {}, {}
+        _ins = (init.get("result") or {}).get("instructions")
+        # Keyed by `uri`, which is structural and not counted: "initialize" is our label for
+        # where it came from, not text the server wrote.
+        found[INSTRUCTIONS] = ([{"uri": "initialize", "description": _ins}]
+                               if isinstance(_ins, str) and _ins.strip() else [])
         for i, (chan, method, key) in enumerate(CHANNELS, start=2):
             if CAPABILITY[chan] not in caps:
                 found[chan] = None
@@ -478,7 +493,7 @@ def compare(before, after):
             # Comparing `description` alone left a poisoned PARAMETER description invisible,
             # and on one of these servers the parameter text is three times the rest.
             return {"%s/%s" % (_c, _x.get("name") or ""): instruction_text([_x])
-                    for _c, _m, _k in CHANNELS
+                    for _c in SURFACE
                     for _x in (rec.get(_c) or [])}
 
         bt, at = _flat(b), _flat(a)
@@ -566,6 +581,8 @@ def server_record(found, why, info=None):
             rec[chan] = list(found[chan])
     if absent:
         rec["channels_absent"] = absent
+    if found.get(INSTRUCTIONS) is not None:
+        rec[INSTRUCTIONS] = list(found[INSTRUCTIONS])
     rec["chars"] = len(instruction_text(rec.get("tools") or []))
     rec["surface_chars"] = len(surface_text(found))
     _v = (info or {}).get("version")
@@ -740,7 +757,11 @@ def main():
         else:
             print("  %-20s   not read: %s"
                   % (chan, why.get(chan) or "no reason was recorded"))
-    for chan, _method, _key in CHANNELS:
+    _ins_items = found.get(INSTRUCTIONS) or []
+    print("  %-20s %s" % (INSTRUCTIONS, "%5d characters, returned by initialize"
+                          % len(instruction_text(_ins_items)) if _ins_items
+                          else "  none returned by initialize"))
+    for chan in SURFACE:
         for item in (found.get(chan) or []):
             d = " ".join((item.get("description") or "").split())
             name = item.get("name") or item.get("uriTemplate") or item.get("uri") or "?"
@@ -750,7 +771,8 @@ def main():
     # report either, and `0 characters` printed against a clean exit reads as one.
     if not live:
         print("")
-        print("nothing was measured: this server listed no tool, prompt or resource.")
+        print("nothing was measured: this server listed no tool, prompt or resource, and "
+              "returned no instructions.")
         return 3
     return 0
 
