@@ -716,6 +716,21 @@ def check_every_command_refuses():
     _sh_q.rmtree(_qr, ignore_errors=True)
     _sh_q.rmtree(_qempty, ignore_errors=True)
 
+    # --- compare --out MOVES THE PAGE, NOT THE EVIDENCE ----------------------------------
+    #
+    # `--out` rebound the directory the evidence is read from, so `compare --out pages/`
+    # looked for a sweep in `pages/`, found none and said "run a sweep first", exit 3.
+    _pages = _os.path.join(_tfp.mkdtemp(), "pages")
+    _rc_cp, _out_cp = _cmd_out(["compare", "--out", _pages])
+    check("compare --out <dir> writes the page there, from the workspace's evidence",
+          (_rc_cp, _os.path.exists(_os.path.join(_pages, "compare_targets.html")),
+           "no results in" in _out_cp), (0, True, False))
+    check("...and not into the workspace",
+          _os.path.exists(_os.path.join(_cout, "compare_targets.html")), False)
+    _rc_cf, _out_cf = _cmd_out(["compare", "--out", _res_path])
+    check("...and --out naming a file is refused, not crashed into",
+          (_rc_cf, "Traceback (most recent call last)" in _out_cf), (2, False))
+
     # --- A PATH TYPED AFTER --results IS A RESULTS FILE OR IS REFUSED ---------------------
     #
     # `read_artifact` checks a results file's shape by its NAME, so `--results` handed a recon

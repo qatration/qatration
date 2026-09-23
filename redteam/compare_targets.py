@@ -17,6 +17,7 @@ from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, verdict_for,
                        named_or_more)
 
 OUT_DIR = Path(WORKSPACE_OUT)
+PAGE_DIR = OUT_DIR          # where the page is written; `--out` moves it, and only it
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -385,9 +386,16 @@ def main():
                     help="where to write the page (default: the workspace artifact directory)")
     args = ap.parse_args()
 
-    global OUT_DIR
-    if args.out:
-        OUT_DIR = Path(args.out)
+    # WHERE THE PAGE GOES, NOT WHERE THE EVIDENCE IS. This rebound `OUT_DIR`, which is also
+    # where every results file, baseline and history is read from -- so `compare --out pages/`
+    # looked for a sweep in `pages/`, found none, and said "run a sweep first", exit 3. The
+    # flag its help calls "where to write the page" could not write one.
+    global PAGE_DIR
+    PAGE_DIR = Path(args.out) if args.out else OUT_DIR
+    if PAGE_DIR.exists() and not PAGE_DIR.is_dir():
+        print("compare: %s is a file, and --out names the directory the page is written "
+              "into. Nothing was written." % PAGE_DIR, file=sys.stderr)
+        return 2
 
     rows, all_attacks_order, seen = [], [], set()
     matrix = []   # (meta, {attack_id: (headline, fired)})
@@ -781,7 +789,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 </table></div>
 <div class="legend">● exploited · ◐ partial · ○ defended · · not applicable · <sup class="vtag">a</sup>/<sup class="vtag">b</sup> different versions of the same attack id — only cells sharing a letter were sent the same text</div>
 </div></body></html>"""
-    out = OUT_DIR / "compare_targets.html"
+    out = PAGE_DIR / "compare_targets.html"
     # The directory may not exist on a first run, and it is the caller's own workspace rather
     # than something to be precious about.
     out.parent.mkdir(parents=True, exist_ok=True)
