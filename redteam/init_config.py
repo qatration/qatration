@@ -268,7 +268,7 @@ def main():
     # `init --out ''` crashed into the atomic write, and a directory or a missing parent went
     # the same way. Through the one rule, before the overwrite check reads the path.
     from workspace import writable_path as _writable
-    args.out = _writable(args.out, "target config", "init")
+    args.out = _writable(args.out, "target config", "init", replaces=("a target config",))
 
     # NEVER OVERWRITE WITHOUT BEING TOLD TO. The file this would replace is the one holding a
     # canary the user has already planted in a live system, and the endpoint mapping they got

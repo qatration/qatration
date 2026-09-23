@@ -837,7 +837,7 @@ def atomic_write(path, encoding="utf-8"):
     os.replace(tmp, path)
 
 
-def writable_path(path, what="file", where=""):
+def writable_path(path, what="file", where="", replaces=()):
     """Make a path a reader typed ready to be written to, or refuse it. -> the path.
 
     THE MIRROR OF `load_yaml_or_refuse`, AND IT DID NOT EXIST. That reader answers a path
@@ -878,8 +878,13 @@ def writable_path(path, what="file", where=""):
     # replaced the sweep's record with coverage buckets and exited 0. `refuse_to_overwrite_
     # evidence` protects a COMMITTED results file; this was an uncommitted one, which is
     # every results file a user has.
+    #
+    # AND NOT OVER A TARGET CONFIG, which the same random walk found next: `isolation --json
+    # mybot.yaml` wrote the lock map over the config holding the canary the user had already
+    # planted, and exited 0. `init` refuses exactly that without `--force`, and says why; it
+    # is the one writer that may replace a config, and says so through `replaces`.
     _held = _evidence_kind(path)
-    if _held:
+    if _held and _held not in replaces:
         raise SystemExit(lead + "ABORT — %s holds %s, and writing the %s there would replace "
                          "it. Name another file. Nothing was written." % (path, _held, what))
     parent = os.path.dirname(os.path.abspath(path))
@@ -906,7 +911,17 @@ def _evidence_kind(path):
         with open(path, encoding="utf-8") as fh:
             data = _json.load(fh)
     except (OSError, ValueError):
-        return ""
+        # NOT JSON: perhaps the YAML a target config is. Only a mapping naming how the target
+        # is reached counts; a page, a SARIF or a list is none of these.
+        try:
+            import yaml as _yaml
+            with open(path, encoding="utf-8") as fh:
+                data = _yaml.safe_load(fh)
+        except Exception:
+            return ""
+    if isinstance(data, dict) and ("adapter" in data or "module" in data) \
+            and not isinstance(data.get("results"), list):
+        return "a target config"
     if not isinstance(data, dict) or not isinstance(data.get("meta"), dict):
         return ""
     if isinstance(data.get("results"), list):

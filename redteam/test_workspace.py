@@ -807,6 +807,21 @@ def check_every_command_refuses():
     check("...while a file that is not evidence is overwritten as before",
           (_rc_cov != 2, '"probes": 1}' != _io.open(_ev_cov, encoding="utf-8").read()),
           (True, True))
+    # AND A TARGET CONFIG, found by the next walk: `isolation --json mybot.yaml` wrote a lock
+    # map over the config holding the planted canary. Refused for every writer but `init`,
+    # whose own `--force` rule already governs replacing one.
+    _ev_cfg = _os.path.join(_cw, "planted.yaml")
+    _cfg_text = ('name: planted\nadapter: http\nurl: "http://127.0.0.1:9/x"\n'
+                 'oracle_context:\n  canaries: ["QAT-CANARY-PLANTED01"]\n')
+    _io.open(_ev_cfg, "w", encoding="utf-8").write(_cfg_text)
+    _rc_c2, _out_c2 = _cmd_out(["coverage", "--json", _ev_cfg])
+    check("coverage --json onto a target config is refused and leaves it as it was",
+          (_rc_c2, _io.open(_ev_cfg, encoding="utf-8").read() == _cfg_text,
+           "a target config" in _out_c2), (2, True, True))
+    _rc_i2, _out_i2 = _cmd_out(["init", "--out", _ev_cfg, "--force"])
+    check("...while init --force may still replace one, which is its own rule",
+          (_rc_i2, _io.open(_ev_cfg, encoding="utf-8").read() != _cfg_text), (0, True))
+
     # A FILE HOLDING A LIST is one of this workspace's shapes too -- every coupling map is --
     # and asking it for keys must not become the crash this rule exists to avoid.
     _ev_list = _os.path.join(_cw, "a_list.json")
