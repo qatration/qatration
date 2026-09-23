@@ -282,7 +282,10 @@ def main():
     tag = "" if tag in ("", target.name, "example", "more") else "_" + tag
     out = args.json or os.path.join(WORKSPACE_OUT, f"isolation_{target.name}{tag}.json")
     if out:
-        out = out if os.path.isabs(out) else os.path.join(ROOT, out)
+        # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
+        # the directory this module is installed in, so `--json x.json` from a workspace landed
+        # beside site-packages -- and the next CI step, reading `x.json`, found nothing.
+        out = os.path.abspath(out)
         # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
         # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
         # with eight rows and `coverage` reported 958 fewer probes. It was then wired into

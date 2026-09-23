@@ -301,6 +301,33 @@ def main():
                   bool(_prof.get("when")), True)
             check("...in a shape `measured_when` reads as the run's own",
                   __import__("workspace").measured_when(_prof, None)[1], True)
+
+            # A RELATIVE --json IS RELATIVE TO WHERE IT WAS TYPED. This joined it onto the
+            # directory the module is installed in: walked from a workspace, `--json
+            # myprofile.json` was written into the checkout, and from an install that is
+            # site-packages. Typed from a directory that is NOT the config's, so a rule that
+            # resolved against the config would fail here too.
+            _typed = os.path.join(_w, "typed_here")
+            os.makedirs(_typed)
+            _rel = "prof_rel_%d.json" % os.getpid()
+            _installed = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(recon.__file__))), _rel)
+            try:
+                _p4 = _sp2.run([sys.executable,
+                                os.path.join(os.path.dirname(os.path.abspath(recon.__file__)),
+                                             "cli.py"),
+                                "recon", "--target-config", _cfg2, "--json", _rel],
+                               capture_output=True, text=True, timeout=900, cwd=_typed,
+                               env=dict(os.environ, QATRATION_OUT=_out2,
+                                        PYTHONIOENCODING="utf-8"))
+                check("recon --json <relative> exits 0", _p4.returncode, 0)
+                check("...and writes beside the reader who typed it",
+                      os.path.exists(os.path.join(_typed, _rel)), True)
+                check("...and not beside the installed package",
+                      os.path.exists(_installed), False)
+            finally:
+                if os.path.exists(_installed):
+                    os.remove(_installed)
         finally:
             _srv3.shutdown()
 

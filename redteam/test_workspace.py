@@ -652,6 +652,37 @@ def check_every_command_refuses():
               "Traceback (most recent call last)" not in _out_w, True)
         check("...with the code that says which happened (%s)" % _label, _rc_w, _want_rc)
 
+    # A RELATIVE PATH IS RELATIVE TO WHERE IT WAS TYPED. `recon`, `isolation` and `coverage`
+    # joined it onto the directory the module is installed in: walked, `recon --json
+    # myprofile.json` from a workspace wrote `E:\...\qatration-oss\myprofile.json`, and from
+    # an install that directory is site-packages. A CI step that runs `coverage --json
+    # cov.json` and then reads `cov.json` found nothing where it looked.
+    _rel = "cov_rel_%d.json" % _os.getpid()
+    _installed = _os.path.join(_os.path.dirname(_here), _rel)
+    try:
+        _rc_rel, _out_rel = _cmd_out(["coverage", "--json", _rel])
+        check("coverage --json <relative> writes beside the reader",
+              _os.path.exists(_os.path.join(_cw, _rel)), True)
+        check("...and not beside the installed package", _os.path.exists(_installed), False)
+    finally:
+        if _os.path.exists(_installed):
+            _os.remove(_installed)
+    # AND NO MODULE DOES IT AGAIN: the shape was written three times, which is how the one
+    # fixed first would have left the other two. Any module, not a list of three.
+    import re as _re_rel
+    # Both spellings: behind an `isabs` test, and straight onto a parsed argument.
+    _join_root = _re_rel.compile(
+        r"isabs\(\s*\w+\s*\)\s*else\s*os\.path\.join\(\s*ROOT\s*,"
+        r"|os\.path\.join\(\s*ROOT\s*,\s*args\.")
+    _joins = []
+    for _mf in sorted(_os.listdir(_here)):
+        if not _mf.endswith(".py") or _mf.startswith("test_"):
+            continue
+        _msrc = _io.open(_os.path.join(_here, _mf), encoding="utf-8").read()
+        if _join_root.search(_msrc):
+            _joins.append(_mf)
+    check("no module resolves a typed path against the install directory", _joins, [])
+
     # --- AND NOTHING THIS TOOL WRITES IS WRITTEN IN PLACE --------------------------------
     #
     # `jobqueue._write` and `runs._write` each built a `.tmp` and replaced it, and `runs`

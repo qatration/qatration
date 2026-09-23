@@ -395,7 +395,10 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
     """
     if not where_to:
         return
-    path = where_to if os.path.isabs(where_to) else os.path.join(ROOT, where_to)
+    # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
+    # the directory this module is installed in, so `--json x.json` from a workspace landed
+    # beside site-packages -- and the next CI step, reading `x.json`, found nothing.
+    path = os.path.abspath(where_to)
     _dir = os.path.dirname(path)
     if _dir:
         from workspace import writable_path as _writable
