@@ -144,10 +144,18 @@ def check(cfg, secret, fetch=None):
     auth = cfg.get("authorization") or {}
     url = cfg.get("url") or ""
     method = auth.get("method")
-    if not method:
+    if not method and not auth:
         return False, ("no `authorization` block in the target config — a scan of somebody "
                        "else's system needs proof they asked for it, and a checkbox is a "
                        "record of a claim rather than a proof")
+    # A BLOCK WITH NO METHOD IS NOT NO BLOCK. Walked: `init`'s template carries an
+    # `authorization:` example, uncommented it was a block with two keys this function never
+    # reads, and the refusal said there was no block -- about the block the reader had just
+    # written. Name what it has and what it needs.
+    if not method:
+        _has = ", ".join(sorted(map(str, auth))) if isinstance(auth, dict) else type(auth).__name__
+        return False, ("the `authorization` block names no `method`: it needs `method` (header, "
+                       "well_known or dns_txt), `token` and `issued`, and it has: %s" % _has)
     token, day = auth.get("token"), auth.get("issued")
     if not token or not TOKEN_RE.match(str(token)):
         return False, f"authorization.token is missing or malformed: {token!r}"
@@ -191,6 +199,34 @@ def check(cfg, secret, fetch=None):
                       f"{day}; this build does not resolve DNS, so what is proved here is "
                       f"possession of the signing secret")
     return False, f"unknown authorization.method: {method!r}"
+
+
+def how_to_prove(url, secret, issued=None):
+    """-> the lines that complete a proof for this origin, token included.
+
+    THE GATE SAID WHAT WAS MISSING AND NOT HOW TO GET IT. A proof is "the endpoint echoing a
+    token we issued", and nothing a reader can type issued one: `issue` was reachable only by
+    importing this module. Walked from an install with the README's own remote URL, the reader
+    got "not authorised" three times in a row, each accurate, none of them a step forward.
+
+    The token is derived from the secret the reader already holds, so printing it gives away
+    nothing they could not compute; what it cannot do is put the token on an origin they do not
+    control, which is the whole of what the proof checks.
+    """
+    token, day = issue(url, secret, issued)
+    origin = origin_of(url)
+    return [
+        "  The token for %s issued today is %s." % (origin, token),
+        "  Put it where one of the three methods looks, then describe that in the config:",
+        "      authorization:",
+        "        method: well_known       # or header, or dns_txt",
+        "        token: %s" % token,
+        '        issued: "%s"' % day,
+        "    well_known  serve the token at %s%s" % (origin, WELL_KNOWN),
+        "    header      your endpoint echoes it; add `echoed:` with what it returned",
+        "    dns_txt     a TXT record carries it; add `records:` with the record's text",
+        "  A token is good for %d days, and for this origin only." % MAX_AGE_DAYS,
+    ]
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -620,11 +656,24 @@ def gate(cfg, where):
                  f"QATRATION_AUTH_SECRET is not set, so no proof of authorization can be "
                  f"verified. Nothing was sent.")
         print(f"ABORT — {_said}", file=sys.stderr)
+        # AND WHAT IT IS FOR, which the sentence above does not say: it is the key tokens are
+        # issued with, a value the operator picks and keeps, and the next refusal prints the
+        # token this origin needs.
+        print("  QATRATION_AUTH_SECRET is the key proof tokens are issued with: set it to a "
+              "value you keep,\n  and the next attempt prints the token this origin needs.",
+              file=sys.stderr)
         raise NotAuthorised(_said)
     ok, why = check(cfg, secret)
     if not ok:
         _said = (f"{where}: not authorised to probe {cfg.get('name')} "
                  f"({origin_of(url)}): {why}. Nothing was sent.")
         print(f"ABORT — {_said}", file=sys.stderr)
+        # NOT ON A SERVER. Hosted, the secret is the service's and the person on the other end
+        # of the request is a stranger: a token printed for them is one they could hand back
+        # as `echoed` under `method: header`, which checks possession of the secret and nothing
+        # else. On a workstation the reader holds the secret and could compute it anyway.
+        if not hosted():
+            for _line in how_to_prove(url, secret):
+                print(_line, file=sys.stderr)
         raise NotAuthorised(_said)
     return record(cfg, why)

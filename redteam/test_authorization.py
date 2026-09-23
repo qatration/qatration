@@ -90,6 +90,105 @@ def main():
     check("...and the refusal says why a checkbox is not enough",
           "checkbox" in why or "claim" in why, why)
 
+    # A BLOCK WITH NO METHOD IS NOT NO BLOCK. `init`'s template carried `scope` and
+    # `authorised_by`; uncommented, the reader was told there was no block at all.
+    ok, why = az.check({"name": "acme", "url": URL,
+                        "authorization": {"scope": URL, "authorised_by": "me"}}, SECRET)
+    check("a block without a method is refused", not ok, why)
+    check("...as a block that names no method, not as a missing block",
+          "names no `method`" in why and "no `authorization` block" not in why, why)
+    check("...naming what it has, so the reader can see which keys were not read",
+          "authorised_by" in why and "scope" in why, why)
+
+    # AND THE GATE SAYS HOW TO COMPLETE IT, with the token this origin needs. Nothing a
+    # reader could type issued one: `issue` was reachable only by importing this module.
+    # Driven through `gate`, and the printed block is then pasted back and must PASS: a
+    # remedy that does not satisfy the check it is printed by is the defect in a new place.
+    import contextlib as _cl, io as _io_a, yaml as _yaml_a
+    _prev = os.environ.get("QATRATION_AUTH_SECRET")
+    os.environ["QATRATION_AUTH_SECRET"] = SECRET
+    _err = _io_a.StringIO()
+    try:
+        with _cl.redirect_stderr(_err):
+            try:
+                az.gate({"name": "acme", "url": URL,
+                         "authorization": {"scope": URL}}, "test")
+                _raised = False
+            except az.NotAuthorised:
+                _raised = True
+    finally:
+        if _prev is None:
+            os.environ.pop("QATRATION_AUTH_SECRET", None)
+        else:
+            os.environ["QATRATION_AUTH_SECRET"] = _prev
+    _said = _err.getvalue()
+    check("the gate still refuses a block without a method", _raised, _said[-300:])
+    check("...and prints the token issued for this origin today",
+          az.issue(URL, SECRET)[0] in _said, _said[-400:])
+    _lines = _said.splitlines()
+    _start = [i for i, l in enumerate(_lines) if l.strip() == "authorization:"]
+    _block = {}
+    if _start:
+        _txt = "\n".join(_lines[_start[0]:_start[0] + 4])
+        _block = (_yaml_a.safe_load(_txt) or {}).get("authorization") or {}
+    _tok = _block.get("token")
+    ok, why = az.check({"name": "acme", "url": URL, "authorization": _block}, SECRET,
+                       fetch=lambda u: str(_tok))
+    check("...and the block it prints, pasted back with the token served, passes the gate",
+          ok, "%s | %s" % (why, _block))
+    check("...and names where the well-known proof is served",
+          (az.origin_of(URL) + az.WELL_KNOWN) in _said, _said[-300:])
+    # THE REMEDY IS FOR THE ORIGIN IN THE CONFIG, not a fixed example: the same printed block
+    # against another origin must fail, or the check above would pass for a hard-coded token.
+    ok, why = az.check({"name": "acme", "url": OTHER, "authorization": _block}, SECRET,
+                       fetch=lambda u: str(_tok))
+    check("...and it does not authorise a different origin", not ok, why)
+    # NOT ON A SERVER. Hosted, the secret is the service's and the requester is a stranger,
+    # who could hand a printed token back as `echoed` under `method: header`. The address
+    # policy is stubbed open so the call reaches `check` -- otherwise this would pass by being
+    # refused one step earlier, which is a check that cannot fail.
+    _saved_pol, _saved_h = az.unreachable_by_policy, os.environ.get("QATRATION_HOSTED")
+    az.unreachable_by_policy = lambda u: ""
+    os.environ["QATRATION_HOSTED"] = "1"
+    os.environ["QATRATION_AUTH_SECRET"] = SECRET
+    _errh = _io_a.StringIO()
+    try:
+        with _cl.redirect_stderr(_errh):
+            try:
+                az.gate({"name": "acme", "url": URL, "authorization": {"scope": URL}}, "test")
+            except az.NotAuthorised:
+                pass
+    finally:
+        az.unreachable_by_policy = _saved_pol
+        if _saved_h is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _saved_h
+        if _prev is None:
+            os.environ.pop("QATRATION_AUTH_SECRET", None)
+        else:
+            os.environ["QATRATION_AUTH_SECRET"] = _prev
+    check("hosted, the refusal reaches the proof check",
+          "names no `method`" in _errh.getvalue(), _errh.getvalue()[-300:])
+    check("...and prints no token for a stranger to hand back",
+          az.issue(URL, SECRET)[0] not in _errh.getvalue(), "the token was printed")
+
+    # AND ONE STEP EARLIER: with no secret there is no token to print, and the refusal said
+    # the variable was unset without saying what it is.
+    _prev = os.environ.pop("QATRATION_AUTH_SECRET", None)
+    _err0 = _io_a.StringIO()
+    try:
+        with _cl.redirect_stderr(_err0):
+            try:
+                az.gate({"name": "acme", "url": URL}, "test")
+            except az.NotAuthorised:
+                pass
+    finally:
+        if _prev is not None:
+            os.environ["QATRATION_AUTH_SECRET"] = _prev
+    check("with no secret set, the refusal says what the secret is for",
+          "the key proof tokens are issued with" in _err0.getvalue(), _err0.getvalue()[-300:])
+
     ok, why = az.check(cfg("header", echoed="qat-" + "0" * 32), SECRET)
     check("an echoed value that is not the issued token is refused", not ok, why)
 
