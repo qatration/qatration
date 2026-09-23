@@ -14,7 +14,7 @@ except Exception:
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
-from workspace import SCOPES
+from workspace import SCOPES, DEFAULT_ARSENAL
 from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -670,7 +670,7 @@ def main():
     #
     # `run_all.py` passes --attacks explicitly for the fleet, so this changes nothing
     # there; it changes the path that had no choice made on it.
-    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks_generic.yaml"),
+    ap.add_argument("--attacks", default=DEFAULT_ARSENAL,
                     help="the arsenal to send (default: the target-agnostic set)")
     ap.add_argument("--fail-on", choices=["none", "exploited", "any", "regression"],
                     default="none",

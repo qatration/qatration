@@ -51,7 +51,7 @@ from rejudge import _prompt_of
 # to catch, so the import binds the name the four call sites below already use.
 from workspace import oracle_contexts as contexts
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
-from workspace import named_or_more
+from workspace import named_or_more, DEFAULT_ARSENAL
 
 
 def provenance(engines, engine_now):
@@ -492,7 +492,7 @@ def main():
     try:
         import yaml as _yaml
         _arsenal = {a["id"] for a in
-                    (_yaml.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
+                    (_yaml.safe_load(open(DEFAULT_ARSENAL,
                                           encoding="utf-8")) or [])}
         _sent = sent & _arsenal
         _never = sorted(_arsenal - _sent)

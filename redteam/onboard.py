@@ -43,7 +43,7 @@ import authorization
 import jobqueue as q
 from targets_http import HttpConfiguredTarget, CONFIG_ONLY_KEYS, dig
 from workspace import OUT, safe_target_name
-from workspace import SCOPES
+from workspace import SCOPES, DEFAULT_ARSENAL
 from workspace import wrong_shape as _wrong_shape
 from workspace import load_yaml_or_refuse as _load_yaml_or_refuse
 
@@ -107,7 +107,7 @@ def _arsenal(path=None):
     `runner.requests_for` is the arithmetic `docs/ci.md` is priced with.
     """
     import yaml as _yaml
-    p = path or os.path.join(HERE, "attacks_generic.yaml")
+    p = path or DEFAULT_ARSENAL
     try:
         return list(_yaml.safe_load(open(p, encoding="utf-8")) or [])
     except (OSError, ValueError):
@@ -602,7 +602,7 @@ def main():
     # almost every attack is scoped `applies_to` a specific practice bot, so a customer coming
     # through this door got 5 of 137 attacks sent and 132 skipped — a 3% assessment presented
     # as an assessment. attacks_generic.yaml is the set written to run against anything.
-    ap.add_argument("--attacks", default=os.path.join(HERE, "attacks_generic.yaml"),
+    ap.add_argument("--attacks", default=DEFAULT_ARSENAL,
                     help="arsenal to queue; defaults to the target-agnostic set")
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=3,

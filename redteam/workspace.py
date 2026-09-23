@@ -39,6 +39,15 @@ ENV_VAR = "QATRATION_OUT"
 # first thing they will do with an anonymous directory they did not create is delete it.
 DEFAULT_DIR = "qatration-out"
 
+# THE ARSENAL A COMMAND SENDS WHEN NOBODY NAMED ONE, written once. It was spelled out in six
+# places, and five of them agreed: `run`, `onboard` (twice), the intake queue and `coverage`
+# said `attacks_generic.yaml`, the target-agnostic set. `matrix` said `attacks.yaml`, the
+# repository's own arsenal, where 137 of 143 attacks carry `applies_to` one of the bots shipped
+# here. Walked against a stranger's bot, `matrix --models alpha,beta` sent five attacks to each
+# model -- a sweep sends 379 -- and drew a conclusion about model size from them. Nothing said
+# the arsenal was a different one from the sweep this command's own help promises to repeat.
+DEFAULT_ARSENAL = os.path.join(HERE, "attacks_generic.yaml")
+
 
 def in_checkout():
     """Are we running from the repository, or from an installed package?

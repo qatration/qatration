@@ -47,7 +47,7 @@ import yaml
 import authorization
 import jobqueue as q
 import runs as _runs
-from workspace import OUT
+from workspace import OUT, DEFAULT_ARSENAL
 
 # NO CLI DOOR, ON PURPOSE, and said here rather than in the gate: a list of exempt
 # modules living in the check is a second copy of this judgement, and the next module
@@ -204,7 +204,7 @@ def submit(root, body, policy=None, wake=None):
                    scope=scope,
                    authorization=rep.get("authorization"),
                    budgets=dict(cfg.get("rate") or {}),
-                   attacks=os.path.join(HERE, "attacks_generic.yaml"))
+                   attacks=DEFAULT_ARSENAL)
     woken = wake(root)
     return 202, {"job_id": job.get("job_id"), "state": job.get("state"), "target": name,
                  "deliveries": rep.get("capabilities"),

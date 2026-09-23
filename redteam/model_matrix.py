@@ -15,7 +15,7 @@ except Exception:
     pass
 import yaml
 from workspace import OUT as WORKSPACE_OUT, read_artifact, NOT_MEASURED
-from workspace import dated, named_build
+from workspace import dated, named_build, DEFAULT_ARSENAL
 # THE FIFTH COPY, and `workspace` has the comment that predicted it: this tuple was written
 # out in `history`, `discrimination` and `build_index`, a fourth was caught arriving, and
 # the grep that found those three did not reach here. Three copies of a rule agree until
@@ -76,9 +76,10 @@ def main():
     from cli import parser as _cli_parser
     ap = _cli_parser("matrix")
     ap.add_argument("--target-config", required=True, help="the YAML describing the target")
-    ap.add_argument("--attacks", default=os.path.join(ROOT, "attacks.yaml"),
+    ap.add_argument("--attacks", default=DEFAULT_ARSENAL,
                     help="the arsenal every model receives — the same one for each, or"
-                         " the comparison is between two things at once")
+                         " the comparison is between two things at once (default: the one"
+                         " `run` sends)")
     ap.add_argument("--models", default=None, help="comma list, e.g. mistral-nemo,qwen2.5:14b")
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=3,

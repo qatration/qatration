@@ -683,6 +683,48 @@ def check_every_command_refuses():
             _joins.append(_mf)
     check("no module resolves a typed path against the install directory", _joins, [])
 
+    # --- THE ARSENAL NOBODY NAMED IS ONE ARSENAL -----------------------------------------
+    #
+    # Spelled out in six places and five agreed. `matrix` defaulted to `attacks.yaml`, where
+    # 137 of 143 attacks are scoped to a bot shipped here, while `run` -- the sweep it repeats
+    # once per model -- sends the target-agnostic set. Walked against a stranger's bot: five
+    # attacks per model where a sweep sends 379, and a verdict about model size drawn from them.
+    # `onboard` had been fixed for the same thing and says so; the matrix was the door left.
+    #
+    # Over every command that takes `--attacks`, not a list of the three known today.
+    import ast as _ast_da
+    import cli as _cli_da
+    _takes, _own_default = [], []
+    for _cmd_da, (_mod_da, _) in sorted(_cli_da.COMMANDS.items()):
+        _src_da = _io.open(_os.path.join(_here, _mod_da + ".py"), encoding="utf-8").read()
+        for _n in _ast_da.walk(_ast_da.parse(_src_da)):
+            if not (isinstance(_n, _ast_da.Call) and getattr(_n.func, "attr", "") == "add_argument"
+                    and _n.args and isinstance(_n.args[0], _ast_da.Constant)
+                    and _n.args[0].value == "--attacks"):
+                continue
+            _takes.append(_cmd_da)
+            _dflt = [k.value for k in _n.keywords if k.arg == "default"]
+            _named = (_dflt and (getattr(_dflt[0], "id", "") == "DEFAULT_ARSENAL"
+                                 or getattr(_dflt[0], "attr", "") == "DEFAULT_ARSENAL"))
+            # `lint --attacks` has no default on purpose: without it, the shipped corpus.
+            if _dflt and not (_named or (isinstance(_dflt[0], _ast_da.Constant)
+                                         and _dflt[0].value is None)):
+                _own_default.append("%s: %s" % (_cmd_da, _ast_da.unparse(_dflt[0])))
+    check("every command's default arsenal is the one constant", _own_default, [])
+    check("...over the commands that take --attacks, run, onboard and matrix among them",
+          sorted({"run", "onboard", "matrix"} - set(_takes)), [])
+    # AND THE FILENAME IS WRITTEN ONCE: a module joining it onto a path of its own is the
+    # seventh copy, whatever it then does with it.
+    _spelled = []
+    for _mf in sorted(_os.listdir(_here)):
+        if (_mf.endswith(".py") and not _mf.startswith("test_")
+                and _mf not in ("workspace.py", "build_generic.py")):
+            if '"attacks_generic.yaml")' in _io.open(_os.path.join(_here, _mf),
+                                                      encoding="utf-8").read():
+                _spelled.append(_mf)
+    check("...and no module joins the default arsenal's filename onto a path itself",
+          _spelled, [])
+
     # --- AND NOTHING THIS TOOL WRITES IS WRITTEN IN PLACE --------------------------------
     #
     # `jobqueue._write` and `runs._write` each built a `.tmp` and replaced it, and `runs`
