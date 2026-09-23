@@ -1524,6 +1524,39 @@ def main():
                        "t", "2026-08-17 10:00")
     check("...while one the rules cannot read falls back to the text it carries",
           _row_old["warnings"] == ["stored at recon time"], str(_row_old["warnings"]))
+
+    # --- AND THE SAME ON EACH TARGET'S OWN REPORT -----------------------------------------
+    #
+    # The report's recon panel read the stored prose as well, so the corrected sentence did
+    # not reach it either; both surfaces go through `recon.current_hints` now. And two more
+    # hints interpolated a list -- the tokens under a hard content lock, and the ones whose
+    # probe never landed -- which the recomputation brought onto the page as `['...']`.
+    import report_engine as _re_rp, recon as _rc_rp
+    _panel = _re_rp._recon_panel({"profile": {
+        "selfdesc_leaked_canary": ["X-CANARY-1"],
+        "token_lock": {"tok-a": "blocked", "tok-b": "unmeasured"},
+        "hints": [{"level": "warn", "text": "stored at recon time"}]}})
+    check("the report's recon panel names a leaked canary as itself",
+          "X-CANARY-1" in _panel and "[&#x27;X-CANARY-1" not in _panel, _panel[:300])
+    check("...and the locked and unmeasured tokens as a list a person reads",
+          "hard content lock on tok-a" in _panel and "never landed for tok-b" in _panel
+          and "[&#x27;tok" not in _panel, _panel[:400])
+    check("...as the code words it now, not the prose stored at recon time",
+          "stored at recon time" not in _panel, "the stored hint was shown")
+    check("both surfaces read hints through one function",
+          all(any(isinstance(_n, __import__("ast").Call)
+                  and getattr(_n.func, "id", getattr(_n.func, "attr", None))
+                  in ("current_hints", "_current_hints")
+                  for _n in __import__("ast").walk(__import__("ast").parse(
+                      io.open(os.path.join(HERE, _m), encoding="utf-8").read())))
+              for _m in ("compare_recon.py", "report_engine.py")), "a surface reads its own")
+    # AND THE BASELINE TOOL INPUTS, which printed as `['1001']` on thirty-one committed report
+    # pages, and as `['']` where the clean call's argument was empty.
+    _bpage = _re_rp.build_html({"target": "t", "baseline": ["1001", ""]}, [])
+    check("baseline tool inputs are listed as themselves, an empty one said to be empty",
+          "1001, (empty)" in _bpage and "[&#x27;1001" not in _bpage,
+          (_bpage[_bpage.find("baseline clean"):][:160] if "baseline clean" in _bpage
+           else "no baseline row"))
     for state, want in ((True, "leaks"), (False, "held")):
         r = cr._row({"disclosure_open": state}, "t", "w")
         check(f"disclosure_open={state} renders as {want}", r["disclosure"] == want)

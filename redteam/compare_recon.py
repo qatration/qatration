@@ -74,11 +74,8 @@ def _row(profile, name, when):
     # and the corrected sentence could only arrive by re-running recon against the target.
     # The measurements are what was stored; the sentence is the code's. A profile too old
     # for the current `hints` falls back to the text it carries, rather than to nothing.
-    from recon import hints as _hints
-    try:
-        _h = _hints(profile)
-    except Exception:
-        _h = profile.get("hints", [])
+    from recon import current_hints as _current_hints
+    _h = _current_hints(profile)
     warns = [h["text"] for h in _h
              if isinstance(h, dict) and h.get("level") == "warn"]
     lock = profile.get("token_lock") or {}

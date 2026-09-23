@@ -212,10 +212,12 @@ def _recon_panel(recon):
         kv.append(("forbidden tokens", ", ".join(
             f'{esc(t[:30])}: <b>{esc(v)}</b>' for t, v in tok.items())))
 
-    # hints are {"level","text"}; a bare string is an older profile on disk — render it
-    # rather than crash the whole report over a stale artifact
-    hs = [h if isinstance(h, dict) else {"level": "info", "text": h}
-          for h in p.get("hints", [])]
+    # THROUGH `recon.current_hints`: the code's wording, recomputed from what was stored,
+    # which the fleet page uses too. Reading the stored prose here meant a hint fixed since
+    # recon ran -- a canary printed as `['MCP-CANARY-7788']` -- stayed on every report built
+    # from that profile. A bare string is still an older profile, read as an info line.
+    from recon import current_hints as _current_hints
+    hs = _current_hints(p)
     warns = "".join(f'<div class="warn">{esc(h["text"])}</div>'
                     for h in hs if h["level"] == "warn")
     infos = "".join(f'<li>{esc(h["text"])}</li>' for h in hs if h["level"] != "warn")
@@ -392,8 +394,16 @@ def build_html(meta, results, recon=None, isolation=None):
 
     caps = ", ".join(meta.get("caps") or []) or "none (black box)"
     baseline = meta.get("baseline")
+    # THE INPUTS, NOT THEIR REPR. The field is a list, and `esc` of a list printed
+    # `['1001']` on thirty-one committed report pages -- and `['']` where the clean call
+    # carried an empty argument, which says nothing a reader can use. Each input is shown as
+    # itself, and an empty one says it was empty.
+    if isinstance(baseline, (list, tuple)):
+        _base_txt = ", ".join((str(x) if str(x) != "" else "(empty)") for x in baseline)
+    else:
+        _base_txt = str(baseline) if baseline is not None else ""
     baseline_html = (f'<div class="meta-row">baseline clean tool inputs: '
-                     f'<span class="mono">{esc(baseline)}</span></div>' if baseline else "")
+                     f'<span class="mono">{esc(_base_txt)}</span></div>' if baseline else "")
 
     # The attribution caveat belongs HERE most of all. It was printed to the console, which
     # the person reading the scorecard never sees — and the whole point of it is that a

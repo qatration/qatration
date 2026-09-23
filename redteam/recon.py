@@ -302,11 +302,11 @@ def hints(profile):
     if tok:
         unmeasured = [t for t, v in tok.items() if v == "unmeasured"]
         if unmeasured:
-            warn(f"the content-lock probe never landed for {unmeasured} — that is an "
+            warn(f"the content-lock probe never landed for {', '.join(map(str, unmeasured))} — that is an "
                  "outage, not a lock, and nothing here says whether those tokens echo")
         blocked = [t for t, v in tok.items() if v == "blocked"]
         if blocked:
-            info(f"hard content lock on {blocked} — bare echo is refused, so those need a "
+            info(f"hard content lock on {', '.join(map(str, blocked))} — bare echo is refused, so those need a "
                  "key, not a rephrase")
         elif not unmeasured:
             info("no hard content lock: every forbidden token echoes on a bare ask, so a "
@@ -318,6 +318,28 @@ def hints(profile):
         warn(f"{n} refusal phrasing(s) went unlabelled — add the proposed patterns or "
              "every wall on this target reports as 'compliance'")
     return h
+
+
+def current_hints(profile):
+    """A stored profile's hints as the code words them NOW, from its stored measurements.
+
+    THE PAGES READ STORED PROSE. `hints` was written into the artifact at recon time, and
+    both surfaces that show it -- the fleet page and each target's report -- read that text
+    back, so a sentence fixed since could only reach either page by running recon against
+    the target again. Three hints printed a Python list's repr (`['MCP-CANARY-7788']`), and
+    fixing them here fixed nothing on the shipped pages.
+
+    The measurements are what was stored; the sentence is the code's. A profile too old for
+    the current rules -- a field holding a shape `hints` cannot read -- falls back to the
+    text it carries, and a bare string in that list is an older profile still: it is read
+    as an info line rather than taking the report down.
+    """
+    try:
+        _h = hints(profile)
+    except Exception:
+        _h = profile.get("hints", []) if isinstance(profile, dict) else []
+    return [h if isinstance(h, dict) else {"level": "info", "text": str(h)}
+            for h in (_h or [])]
 
 
 def suggest_config(profile):
