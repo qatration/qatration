@@ -683,6 +683,20 @@ def misspelt_keys(a, fname="arsenal", known=None, where=""):
     return out
 
 
+def shipped(files):
+    """-> True when every file is inside this package's own directory: the curated corpus,
+    where a key nothing reads is a mistake, rather than somebody's file, where it may be theirs.
+    """
+    root = os.path.normcase(os.path.realpath(ROOT))
+
+    def inside(f):
+        try:        # two drives on Windows have no common path at all
+            return os.path.commonpath([root, os.path.normcase(os.path.realpath(f))]) == root
+        except ValueError:
+            return False
+    return all(inside(f) for f in files)
+
+
 def unusable_entries(attacks, fname="arsenal"):
     """The entry faults a RUN cannot survive, as a list of sentences.
 
@@ -965,6 +979,8 @@ def main():
         files = _arsenal_files(ROOT)
     errors, warns = [], []
     total = 0
+    # THE CORPUS THIS PACKAGE SHIPS, or a file of somebody's own. See the unknown-key rule.
+    _shipped = shipped(files)
 
     # AN EMPTY CORPUS IS THE FAILURE THIS IS RUN TO CATCH, and it used to be the surest
     # way to pass: no files means no errors means "OK — arsenal clean", exit 0. The CI
@@ -1076,9 +1092,25 @@ def main():
             # repository ships, where a key nothing reads is a mistake rather than an
             # annotation; `unusable_entries` refuses only the NEAR MISSES, because a
             # customer's own file may carry `owner:` or `ticket:` and that is theirs.
-            for k in sorted(set(a) - _ATTACK_KEYS):
-                errors.append(f"{fname}: {aid}: unknown key {k!r} — nothing in this engine "
-                              f"reads it, so whatever it was meant to do does not happen")
+            #
+            # AND ONLY THERE. `lint --attacks mine.yaml` is the check this command offers a
+            # customer before a run, and it walked their file through this same line: an
+            # arsenal carrying `owner:` and `ticket:` -- the annotations `unusable_entries`
+            # was written NOT to refuse -- ended "FAIL -- 2 error(s)", exit 1, about a file
+            # `run --attacks` accepts. Outside the shipped corpus it is a warning. A near miss
+            # (`prompt:` for `user_prompt:`) is `unusable_entries`' sentence already, and was
+            # said twice, once there and once here; here says the rest.
+            from workspace import near_miss_keys as _near_miss_keys
+            _near = {k for k, _n in _near_miss_keys(a, _ATTACK_KEYS)}
+            for k in sorted(set(a) - _ATTACK_KEYS - _near):
+                if _shipped:
+                    errors.append(f"{fname}: {aid}: unknown key {k!r} — nothing in this "
+                                  f"engine reads it, so whatever it was meant to do does "
+                                  f"not happen")
+                else:
+                    warns.append(f"{fname}: {aid}: key {k!r} is not one this engine reads "
+                                 f"-- kept as your annotation, it changes nothing about "
+                                 f"how the attack is sent or scored")
 
             for d in unknown_detectors(succ + a.get("partial", [])):
                 errors.append(f"{fname}: {aid}: unknown detector {d!r} in success/partial "

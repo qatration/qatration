@@ -358,6 +358,43 @@ def check_refusal(check):
     check("...and is not sent to look at this package's packaging",
           "package-data" not in _said_no, _said_no[-200:])
 
+    # A CUSTOMER'S ANNOTATIONS PASS THIS DOOR TOO. `unusable_entries` was written not to refuse
+    # `owner:` or `ticket:`, and `lint --attacks mine.yaml` -- the check offered before a run --
+    # failed the file on them anyway, exit 1, "unknown key". A near miss is said once, not twice.
+    _clean_atk = ("  category: fz\n  delivery: direct\n  text: hi\n"
+                  "  success: [canary_in_output]\n")
+    io.open(os.path.join(_lwork, "annotated.yaml"), "w", encoding="utf-8").write(
+        "- id: ann-1\n" + _clean_atk + "  owner: sec\n  ticket: SEC-12\n")
+    _rc_ann, _said_ann = _lint("--attacks", "annotated.yaml")
+    check("an arsenal of somebody's own carrying owner:/ticket: passes lint",
+          _rc_ann == 0, "exit %s: %s" % (_rc_ann, _said_ann.strip()[-300:]))
+    check("...and the annotation is named, as a warning",
+          "'owner' is not one this engine reads" in _said_ann
+          and "'ticket' is not one this engine reads" in _said_ann, _said_ann[-400:])
+    io.open(os.path.join(_lwork, "typo.yaml"), "w", encoding="utf-8").write(
+        "- id: typo-1\n" + _clean_atk + "  encoding: base64\n")
+    _rc_ty, _said_ty = _lint("--attacks", "typo.yaml")
+    check("...while a near miss still fails it", _rc_ty == 1,
+          "exit %s: %s" % (_rc_ty, _said_ty.strip()[-300:]))
+    check("...said once, not twice", _said_ty.count("'encoding'") == 1,
+          _said_ty[-500:])
+    # THE SHIPPED CORPUS STAYS STRICT: only a file outside this package is somebody's own.
+    check("the corpus this package ships is told apart from a file of somebody's own",
+          (lint.shipped(lint._arsenal_files(lint.ROOT)),
+           lint.shipped([os.path.join(_lwork, "annotated.yaml")]),
+           lint.shipped([os.path.join(lint.ROOT, "attacks.yaml"),
+                         os.path.join(_lwork, "annotated.yaml")])) == (True, False, False),
+          "")
+    # ...under ANOTHER SPELLING of this package's directory too: a symlink on POSIX (macOS
+    # puts /tmp behind one), a different case on Windows.
+    if os.name == "nt":
+        _alt_root = lint.ROOT.upper()
+    else:
+        _alt_root = os.path.join(_tf_l.mkdtemp(), "pkg")
+        os.symlink(lint.ROOT, _alt_root)
+    check("...and one reached by another spelling of its directory is still the shipped one",
+          lint.shipped([os.path.join(_alt_root, "attacks.yaml")]), _alt_root)
+
     # A TARGET OF THE READER'S OWN IS NOT A TARGET THAT DOES NOT EXIST. Walked: `init` wrote
     # `mybot.yaml`, an arsenal beside it said `applies_to: [mybot]`, and this answered "no such
     # target config" and stopped -- true of the package directory, and read as "your target is
