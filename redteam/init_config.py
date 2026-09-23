@@ -123,8 +123,9 @@ name: {name}
 
 # WHERE THE BOT IS. A localhost url runs with no further ceremony. A remote one is somebody's
 # real deployment, so it additionally needs QATRATION_AUTH_SECRET set in the environment and an
-# `authorization:` block below -- see AUTHORISED-USE.md. That gate is not paperwork: this tool
-# sends real prompt-injection, exfiltration and tool-abuse attempts at whatever url it is given.
+# `authorization:` block -- the one at the end of this file says what it takes. That gate is not
+# paperwork: this tool sends real prompt-injection, exfiltration and tool-abuse attempts at
+# whatever url it is given.
 url: "{url}"
 
 # HOW YOUR ENDPOINT WANTS THE REQUEST. This is sent as the JSON body, with `{{prompt}}`
@@ -220,9 +221,20 @@ oracle_context:
   allowed_domains: []
 
 # Remote targets only. Delete this block for a localhost url.
+#
+# PROOF THAT YOU CONTROL THE ENDPOINT, not a declaration that you may test it. Set
+# QATRATION_AUTH_SECRET to a key you keep and run `qatration onboard`: the refusal prints the
+# token for this url's origin and these three lines filled in. Put the token where the method
+# looks -- `well_known` fetches it from /.well-known/qatration-authorization on that origin --
+# and uncomment. A token is issued for one origin and expires, so a new one is printed when
+# this one stops working.
+#
+# This example used to read `scope:` and `authorised_by:`, which nothing reads: uncommented, it
+# was refused as "no authorization block", about the block the reader had just written.
 # authorization:
-#   scope: "https://your-bot.example.com"
-#   authorised_by: "who signed off, and where that is written down"
+#   method: well_known          # or header, or dns_txt
+#   token: "qat-..."            # printed by `qatration onboard`
+#   issued: "YYYY-MM-DD"        # printed beside it
 '''
 
 

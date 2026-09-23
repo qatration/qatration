@@ -355,6 +355,45 @@ def main():
           "qatration init" in qs,
           "the quickstart still asks for mybot.yaml without saying where it comes from")
 
+    # THE TEMPLATE'S AUTHORIZATION EXAMPLE IS A BLOCK THE GATE READS. It said `scope:` and
+    # `authorised_by:`, two keys nothing reads; uncommented it was refused as "no authorization
+    # block". Rendered by the command, uncommented the way a reader would, and asked of the
+    # gate itself: every key it names is one `authorization` reads, and with the placeholders
+    # replaced by what `onboard` prints for this origin it PASSES.
+    import ast as _ast_au, subprocess as _sp_au, tempfile as _tf_au, yaml as _yaml_au
+    import authorization as _az
+    _wau = _tf_au.mkdtemp()
+    _url_au = "https://api.acmeshop.example/v1/chat"
+    _cfg_au = os.path.join(_wau, "remote.yaml")
+    _sp_au.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--url", _url_au,
+                "--out", _cfg_au], capture_output=True, text=True, timeout=120,
+               env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+    _lines_au = open(_cfg_au, encoding="utf-8").read().splitlines()
+    _at = [i for i, l in enumerate(_lines_au) if l.strip() == "# authorization:"]
+    check("the template carries a commented authorization example", len(_at) == 1, str(_at))
+    _blk_lines = []
+    for _l in _lines_au[(_at or [len(_lines_au)])[0]:]:
+        if not _l.startswith("#"):
+            break
+        _blk_lines.append(_l[2:] if _l.startswith("# ") else _l[1:])
+    _blk = (_yaml_au.safe_load("\n".join(_blk_lines)) or {}).get("authorization") or {}
+    _read = set()
+    for _n in _ast_au.walk(_ast_au.parse(open(_az.__file__, encoding="utf-8").read())):
+        if (isinstance(_n, _ast_au.Call) and getattr(_n.func, "attr", "") == "get"
+                and getattr(_n.func.value, "id", "") == "auth" and _n.args
+                and isinstance(_n.args[0], _ast_au.Constant)):
+            _read.add(_n.args[0].value)
+    check("the gate reads keys from the block (the scan can see them)",
+          {"method", "token", "issued"} <= _read, str(sorted(_read)))
+    check("...and every key the template's example names is one of them",
+          bool(_blk) and not (set(_blk) - _read), str(sorted(set(_blk) - _read)))
+    _tok_au, _day_au = _az.issue(_url_au, "k")
+    _filled = dict(_blk, token=_tok_au, issued=_day_au)
+    _ok_au, _why_au = _az.check({"name": "x", "url": _url_au, "authorization": _filled}, "k",
+                                fetch=lambda u: _tok_au)
+    check("...and filled in with the token for its origin, the example passes the gate",
+          _ok_au, _why_au)
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:
         print("  ! " + f)
