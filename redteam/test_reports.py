@@ -1505,7 +1505,25 @@ def main():
     check("a partial content lock reports the fraction", row["content_lock"] == "1/2")
     check("unlabelled refusal phrasings are counted, since each one hides a lock",
           row["unlabelled"] == 2)
-    check("warnings ride with the row", row["warnings"] == ["recon may be invalid"])
+    # THE WARNINGS ARE THE CODE'S, recomputed from the stored measurements. They used to be
+    # read as the prose stored at recon time, so a sentence fixed since never reached the
+    # page: the leaked canary printed as `['MCP-CANARY-7788']` on the shipped fleet page.
+    # A stored `hints` entry the code would not produce is therefore NOT what the row shows.
+    check("warnings ride with the row, as the code words them now",
+          "recon may be invalid" not in row["warnings"]
+          and all(isinstance(w, str) for w in row["warnings"]), str(row["warnings"]))
+    _row_leak = cr._row({"selfdesc_leaked_canary": ["X-CANARY-1"], "tool_channel": "real"},
+                        "t", "2026-08-17 10:00")
+    check("...so a leaked canary is named as itself, not as a list's repr",
+          any("X-CANARY-1" in w and "['" not in w for w in _row_leak["warnings"]),
+          str(_row_leak["warnings"]))
+    # AND A PROFILE TOO OLD FOR THE CURRENT RULES STILL SAYS SOMETHING: what it stored,
+    # rather than nothing. `statefulness` held as a bare string is one the code cannot read.
+    _row_old = cr._row({"statefulness": "junk",
+                        "hints": [{"level": "warn", "text": "stored at recon time"}]},
+                       "t", "2026-08-17 10:00")
+    check("...while one the rules cannot read falls back to the text it carries",
+          _row_old["warnings"] == ["stored at recon time"], str(_row_old["warnings"]))
     for state, want in ((True, "leaks"), (False, "held")):
         r = cr._row({"disclosure_open": state}, "t", "w")
         check(f"disclosure_open={state} renders as {want}", r["disclosure"] == want)
@@ -1612,9 +1630,19 @@ def main():
                            os.path.join(_work, "history"))
         _env = dict(os.environ, QATRATION_OUT=_work,
                     PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+        _said_by = {}
         for _cmd in sorted(_pagey):
-            _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd],
-                      capture_output=True, text=True, timeout=300, env=_env)
+            _said_by[_cmd] = _sp_p.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd],
+                                       capture_output=True, text=True, timeout=300,
+                                       env=_env).stdout
+        # AND WHAT THEY SAY ON THE CONSOLE IS WORDS, not a Python repr. `fixes` closed with
+        # `1 root cause(s) ({'high': 1})` -- braces and quotes in the one line a stranger reads
+        # after the command -- found by walking the commands in order on a fresh workspace.
+        _reprs = ["%s: %s" % (_c, _l.strip()[:90]) for _c, _o in sorted(_said_by.items())
+                  for _l in (_o or "").splitlines() if "{'" in _l or "['" in _l]
+        check("the commands that build a page say what they wrote in words, not in a repr "
+              "(%d command(s) read)" % len(_said_by), not _reprs and len(_said_by) >= 3,
+              "; ".join(_reprs[:3]))
         # AND THE FORTY-FIVE PAGES THE SCAN ABOVE CANNOT SEE. `_pagey` reads page names out
         # of the source as literals, and `rejudge` builds `f"report_{name}.html"` -- a name
         # computed per target, so the scan matched none of them and this gate covered 4 of

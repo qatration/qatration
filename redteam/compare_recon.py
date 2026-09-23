@@ -68,7 +68,18 @@ def _row(profile, name, when):
     mem = memory_phrase(profile, unknown="unmeasured", no="stateless",
                         clears="remembers, reset clears", sticks="RESET DOES NOT CLEAR",
                         chain_only="single sends: no (carries chains)")
-    warns = [h["text"] for h in profile.get("hints", [])
+    # RECOMPUTED FROM THE STORED MEASUREMENTS, not read as stored prose. The hints were
+    # written into the artifact at recon time, so a wording fixed since then never reached
+    # the page: `recon.hints` printed the leaked canary as a list repr, `['MCP-CANARY-7788']`,
+    # and the corrected sentence could only arrive by re-running recon against the target.
+    # The measurements are what was stored; the sentence is the code's. A profile too old
+    # for the current `hints` falls back to the text it carries, rather than to nothing.
+    from recon import hints as _hints
+    try:
+        _h = _hints(profile)
+    except Exception:
+        _h = profile.get("hints", [])
+    warns = [h["text"] for h in _h
              if isinstance(h, dict) and h.get("level") == "warn"]
     lock = profile.get("token_lock") or {}
     # COUNTED OUT OF WHAT WAS ASKED, not out of what was listed. An unmeasured token used to

@@ -2123,7 +2123,11 @@ everything the model reads (prompts, retrieved documents, tool output) as untrus
         _f.write(doc)
     # The console line leads the same way the page does, or the two disagree about what was
     # found and the terminal is the one somebody pastes into a ticket.
-    print(f"wrote {out} — {n_roots} root cause(s) ({ {k: v for k, v in root_sev.items() if v} }) "
+    # IN WORDS, not a dict's repr. This printed `1 root cause(s) ({'high': 1})` -- Python's
+    # braces and quotes in the one line a stranger reads after `qatration fixes` -- found by
+    # walking the commands in order, as someone who has never seen the source would.
+    _sev_words = ", ".join("%d %s" % (v, k) for k, v in root_sev.items() if v) or "none"
+    print(f"wrote {out} — {n_roots} root cause(s) ({_sev_words}) "
           f"seen {n_breaches} time(s), {len(ordered)} fixes, "
           f"{len(tested)} targets"
           + (f", {len(_unrun)} not measured" if _unrun else ""))
