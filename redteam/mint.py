@@ -46,7 +46,8 @@ def instructions(secret, verify, config_path="<your.yaml>"):
         "",
         "Before the run, confirm the paste actually landed:",
         "",
-        "    qatration onboard --config %s --verify-honeytoken %s" % (config_path, verify),
+        "    qatration onboard --config %s --verify-honeytoken %s"
+        % (__import__("workspace").shell_arg(config_path), verify),
         "",
         "Nothing real leaves your side. The value the attacks hunt for is one this command "
         "generated, and it stops meaning anything the moment you remove it.",

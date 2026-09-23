@@ -23,6 +23,7 @@ from encoders import ENCODERS
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 from workspace import arsenal_files as _arsenal_files, point_at_configs as _point_at_configs
+from workspace import shell_arg as _shell_arg
 
 
 def known_targets():
@@ -1151,7 +1152,7 @@ def main():
               f"{'and %d more ' % (len(_theirs) - 4) if len(_theirs) > 4 else ''}"
               f"{'is' if len(_theirs) == 1 else 'are'} in the directory you ran this from "
               f"and\n    {'was' if len(_theirs) == 1 else 'were'} not opened. "
-              f"`qatration lint --attacks {_theirs[0]}` lints it.")
+              f"`qatration lint --attacks {_shell_arg(_theirs[0])}` lints it.")
 
 
 if __name__ == "__main__":

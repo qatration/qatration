@@ -14,7 +14,7 @@ except Exception:
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
-from workspace import SCOPES, DEFAULT_ARSENAL
+from workspace import SCOPES, DEFAULT_ARSENAL, shell_arg
 from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -1201,7 +1201,7 @@ def main():
         for name, keys in sorted(_loud.items()):
             print("      %-*sunset: %s" % (_ln, name, ", ".join(keys)))
         print("      A benign sweep measures how often that happens here:")
-        print("          qatration benign --target-config %s" % args.target_config)
+        print("          qatration benign --target-config %s" % shell_arg(args.target_config))
 
     # AN ATTACK WHOSE EVERY DECLARED DETECTOR IS INERT MUST NOT RUN. It used to: the console
     # said which detectors could not fire and the sweep sent the attacks anyway, so each came

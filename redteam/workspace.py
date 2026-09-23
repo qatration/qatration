@@ -294,6 +294,28 @@ _CTX_KEYS = None
 _CFG_KEYS = None
 
 
+def shell_arg(value):
+    """-> `value` as ONE argument a reader can paste into bash, PowerShell or cmd.
+
+    A PRINTED COMMAND IS ONE A READER RUNS. Nine places print `qatration <cmd> --target-config
+    <path>` with the path dropped in bare, and a path with a space in it -- a Windows home
+    directory, a folder a person named -- becomes two arguments. Walked from a config in a
+    folder with a space in its name: the command the sweep printed to fix its own
+    attribution caveat did not run. `point_at_configs` already quotes, and says why; this is
+    that rule for every command.
+
+    A placeholder (`<your.yaml>`) is left as it is: it is not a path, and quoting it would
+    make it look like one.
+    """
+    import re as _re
+    s = str(value)
+    if not s or (s.startswith("<") and s.endswith(">")):
+        return s
+    if not _re.search(r"[\s\"'&|<>^%$`;()*?!#~]", s):
+        return s
+    return '"%s"' % s.replace('"', '\\"')
+
+
 def point_at_configs(path=None, indent="    "):
     """The lines that point every command at a config, for both shells. -> [line, line].
 

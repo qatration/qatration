@@ -830,6 +830,48 @@ def check_every_command_refuses():
     check("...and a file holding a list is overwritten, not crashed into",
           (_rc_l != 2, "Traceback (most recent call last)" in _out_l), (True, False))
 
+    # --- A PRINTED COMMAND RUNS WHEN IT IS PASTED ----------------------------------------
+    #
+    # Nine places printed `qatration <cmd> --target-config <path>` with the path dropped in
+    # bare, and a path with a space in it became two arguments. The rule is `shell_arg`;
+    # every source line printing such a command must interpolate a path flag through it.
+    import re as _re_sa, glob as _glob_sa
+    _sa_bare, _sa_seen = [], 0
+    _PATH_FLAGS = r"--(?:target-config|config|attacks|results|recon|objectives|out|json)"
+    for _mf in sorted(_glob_sa.glob(_os.path.join(_here, "*.py"))):
+        if _os.path.basename(_mf).startswith("test_"):
+            continue
+        _lines_sa = _io.open(_mf, encoding="utf-8").read().splitlines()
+        for _i, _line in enumerate(_lines_sa):
+            # ANY line, not only one naming `qatration`: the benign note builds its flag on
+            # one line and the command on the next, and a scan keyed on the word missed it.
+            if _line.lstrip().startswith("#") and "{" not in _line:
+                continue
+            for _m in _re_sa.finditer(_PATH_FLAGS + r" (\{[^}]*\}|%s)", _line):
+                _sa_seen += 1
+                _field = _m.group(1)
+                _ok = (_re_sa.match(r"\{_?shell_arg\(", _field) if _field != "%s"
+                       else "shell_arg" in " ".join(_lines_sa[_i:_i + 3]))
+                # A `str.format` FIELD (`{out}` in `init`'s template) is quoted where the
+                # template is filled: the module must pass that field through the rule.
+                if not _ok and _re_sa.fullmatch(r"\{\w+\}", _field):
+                    _ok = bool(_re_sa.search(r"\b%s=_?shell_arg\(" % _field[1:-1],
+                                             "\n".join(_lines_sa)))
+                if not _ok:
+                    _sa_bare.append("%s:%d %s" % (_os.path.basename(_mf), _i + 1,
+                                                  _line.strip()[:70]))
+    check("every printed command interpolates a path through shell_arg", _sa_bare, [])
+    check("...over the printed commands that interpolate one", _sa_seen >= 8, True)
+    _sa_dir = _os.path.join(_tfp.mkdtemp(), "my folder")
+    _os.makedirs(_sa_dir)
+    _sa_cfg = _os.path.join(_sa_dir, "my bot.yaml")
+    _rc_sa, _out_sa = _cmd_out(["init", "--out", _sa_cfg])
+    check("init --out <a path with a space> prints the next command with it quoted",
+          ('--target-config "%s"' % _sa_cfg) in _out_sa, True)
+    check("...and writes it quoted into the file's own header",
+          ('--target-config "%s"' % _sa_cfg)
+          in _io.open(_sa_cfg, encoding="utf-8").read(), True)
+
     # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
     #
     # Four counts took a bare `type=int`: `recon --max-tokens -3` sliced its token list to all

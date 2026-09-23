@@ -243,7 +243,8 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     """The file's text. Separated from writing it so a test can read it without a filesystem."""
     if secret is None or verify is None:
         secret, verify = _ht.mint()
-    return TEMPLATE.format(out=out, url=url, name=name, secret=secret, verify=verify,
+    from workspace import shell_arg as _shell_arg
+    return TEMPLATE.format(out=_shell_arg(out), url=url, name=name, secret=secret, verify=verify,
                            model=model)
 
 
@@ -322,8 +323,9 @@ def main():
     print("Then check the mapping against the live endpoint -- this is the step that catches "
           "a config\nwhich would otherwise produce a clean report from a broken mapping:")
     print()
+    from workspace import shell_arg as _shell_arg
     print("    qatration onboard --target-config %s --verify-honeytoken %s"
-          % (args.out, verify))
+          % (_shell_arg(args.out), verify))
     # WITHOUT THIS, HALF THE TOOL CANNOT SEE THE FILE IT JUST WROTE. `rejudge`, `coverage`
     # and the report builders look up a target's canaries and markers by enumerating
     # configs, and that enumeration used to look only inside the package. A config kept

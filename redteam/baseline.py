@@ -438,7 +438,8 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
         # `rejudge` from the config it resolved. Where neither does, say both forms rather
         # than the in-repo shorthand alone, because the shorthand is the one that fails for
         # the reader who needs this line.
-        how = (f"--target-config {config_path}" if config_path else
+        from workspace import shell_arg as _shell_arg
+        how = (f"--target-config {_shell_arg(config_path)}" if config_path else
                f"--target-config <the config you swept>   "
                f"(or `--target {target}` for a bot shipped with this repository)")
         return (f"  ! no benign run for '{target}' — every verdict below is unattributed: "

@@ -25,6 +25,7 @@ except Exception:
 import yaml
 from generate import objectives_from_profile, prohibitions, to_yaml
 from workspace import OUT as WORKSPACE_OUT
+from workspace import shell_arg as _shell_arg
 
 
 def main():
@@ -80,7 +81,7 @@ def main():
         # this repository and nowhere in an installed package, so the line telling a
         # reader what to do next was the one thing on the page they could not run.
         print(f"no recon profile at {prof_path} - profile the target first:"
-              f"\n    qatration recon --target-config {args.target_config}")
+              f"\n    qatration recon --target-config {_shell_arg(args.target_config)}")
         return 3
     # THROUGH THE ONE READER, like the target config twenty lines up. This opened the path
     # and handed whatever came back to `prohibitions`, which reads it by key: a profile
@@ -158,8 +159,14 @@ def main():
     # THE COMMAND, NOT THE FILE. `run_isolation.py` exists in a checkout of this repository
     # and nowhere in an installed package, and this line is the one a first-time reader
     # copies. Same defect `compare_recon` carried, in the sibling that hands off to it.
-    print(f"next: qatration isolation --target-config {args.target_config} "
-          f"--objectives {os.path.basename(out)} --keys")
+    # THE NAME WHERE `isolation` WILL FIND IT, the path where it will not. `isolation` looks
+    # for a bare name beside the reader and in the workspace, so a file written anywhere else
+    # by `--out` has to be named in full, or the line this prints fails.
+    _obj = (os.path.basename(out)
+            if os.path.dirname(os.path.abspath(out)) == os.path.abspath(WORKSPACE_OUT)
+            else os.path.abspath(out))
+    print(f"next: qatration isolation --target-config {_shell_arg(args.target_config)} "
+          f"--objectives {_shell_arg(_obj)} --keys")
 
 
 if __name__ == "__main__":
