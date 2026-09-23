@@ -716,6 +716,31 @@ def check_every_command_refuses():
     _sh_q.rmtree(_qr, ignore_errors=True)
     _sh_q.rmtree(_qempty, ignore_errors=True)
 
+    # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
+    #
+    # Four counts took a bare `type=int`: `recon --max-tokens -3` sliced its token list to all
+    # but the last three, `mcp --timeout 0` blamed a live server, and two more read a negative
+    # as zero. Found by scan, not listed: no command in the CLI table may declare `type=int`.
+    import ast as _ast_ai, cli as _cli_ai
+    _bare_int = []
+    for _cmd_ai, (_mod_ai, _) in sorted(_cli_ai.COMMANDS.items()):
+        _tree_ai = _ast_ai.parse(_io.open(_os.path.join(_here, _mod_ai + ".py"),
+                                          encoding="utf-8").read())
+        for _n in _ast_ai.walk(_tree_ai):
+            if isinstance(_n, _ast_ai.Call) and getattr(_n.func, "attr", "") == "add_argument":
+                for _k in _n.keywords:
+                    if _k.arg == "type" and getattr(_k.value, "id", "") == "int":
+                        _bare_int.append("%s %s" % (_cmd_ai, _ast_ai.unparse(_n.args[0])))
+    check("no command takes a number with no floor", _bare_int, [])
+    for _args_ai in (["recon", "--target-config", "x.yaml", "--max-tokens", "-3"],
+                     ["verify", "--confirm-trials", "-2"],
+                     ["mcp", "--timeout", "0", "python", "x.py"],
+                     ["runs", "--limit", "-1"]):
+        _rc_ai, _out_ai = _cmd_out(_args_ai)
+        check("%s %s %s is refused, naming the flag" % tuple(_args_ai[:1] + _args_ai[-2:]),
+              (_rc_ai, "Traceback (most recent call last)" in _out_ai,
+               "is below" in _out_ai), (2, False, True))
+
     # --- THE ARSENAL NOBODY NAMED IS ONE ARSENAL -----------------------------------------
     #
     # Spelled out in six places and five agreed. `matrix` defaulted to `attacks.yaml`, where

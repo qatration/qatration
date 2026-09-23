@@ -47,7 +47,8 @@ def main():
     ap.add_argument("--tool-prompt", default=None,
                     help="a benign request that SHOULD make the target use a tool "
                          "(defaults to the config's baseline_prompt)")
-    ap.add_argument("--max-tokens", type=int, default=4,
+    from workspace import at_least as _at_least
+    ap.add_argument("--max-tokens", type=_at_least(0, "--max-tokens"), default=4,
                     help="how many forbidden_tokens to bare-echo test")
     ap.add_argument("--json", default=None,
                     help="write the raw profile here (default out/recon_<target>.json, "

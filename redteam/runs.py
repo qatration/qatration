@@ -323,7 +323,8 @@ def main(argv=None):
                     help="only runs against this target name")
     ap.add_argument("--state", default=None, choices=list(STATES),
                     help="only runs that ended this way")
-    ap.add_argument("--limit", type=int, default=25,
+    from workspace import at_least as _at_least
+    ap.add_argument("--limit", type=_at_least(0, "--limit"), default=25,
                     help="how many to show, newest first (0 for all)")
     args = ap.parse_args(argv)
 

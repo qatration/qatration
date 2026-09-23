@@ -10,8 +10,8 @@ ships, and that second question is the one an operator has.
 So this speaks MCP to a server that somebody else wrote. JSON-RPC 2.0 over stdio, newline
 delimited, `initialize` and then every listing the server declares — `tools/list`,
 `prompts/list`, `resources/list` and `resources/templates/list` — plus the `instructions`
-`initialize` may return, all in the standard library, because a scanner that needs an SDK to look at a protocol has taken a dependency
-on the thing it is measuring.
+`initialize` may return, all in the standard library, because a scanner that needs an SDK
+to look at a protocol has taken a dependency on the thing it is measuring.
 
     python mcp_probe.py npx -y @modelcontextprotocol/server-filesystem .
 
@@ -709,7 +709,8 @@ def main():
     ap.add_argument("server", nargs=argparse.REMAINDER,
                     help="the command that starts the server over stdio, "
                          "e.g. npx -y @modelcontextprotocol/server-memory")
-    ap.add_argument("--timeout", type=int, default=180,
+    from workspace import at_least as _at_least
+    ap.add_argument("--timeout", type=_at_least(1, "--timeout"), default=180,
                     help="seconds to wait for the server to answer (default 180)")
     ap.add_argument("--compare", metavar="RECORDED",
                     help="re-read the servers a recorded corpus names and report what "

@@ -1464,6 +1464,28 @@ def safe_target_name(name, where="target config"):
     return name
 
 
+def at_least(minimum, where):
+    """-> an argparse `type` that takes a whole number no smaller than `minimum`.
+
+    THE REST OF THE BARE `type=int` FLAGS. `trial_count` floors `--trials` at one; four other
+    counts had no floor at all, and a negative one did something rather than nothing:
+    `recon --max-tokens -3` sliced the token list to all but the last three and tested fewer
+    without a word, `mcp --timeout 0` blamed a live server for not answering within 0s, and
+    `verify --confirm-trials -2` and `runs --limit -1` were read as zero. A typed number
+    either means what it says or is refused.
+    """
+    def _parse(value):
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            raise SystemExit(f"{where}: {value!r} is not a whole number.")
+        if n < minimum:
+            raise SystemExit(f"{where}: {n} is below {minimum}, the smallest value that means "
+                             f"anything here. Nothing was run.")
+        return n
+    return _parse
+
+
 def trial_count(value, where="--trials"):
     """A number of trials that can actually measure something, or a refusal saying why not.
 

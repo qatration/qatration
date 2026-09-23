@@ -588,7 +588,8 @@ def main():
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=3,
                     help="attempts per claimed breach (default 3, matching a sweep)")
-    ap.add_argument("--confirm-trials", type=int, default=5,
+    from workspace import at_least as _at_least
+    ap.add_argument("--confirm-trials", type=_at_least(0, "--confirm-trials"), default=5,
                     help="extra attempts given ONLY to the rows that failed the first pass, "
                          "before any of them is called stale (default 5)")
     ap.add_argument("--results", default=None,
