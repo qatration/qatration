@@ -341,6 +341,9 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     # loaded already is three lines up -- not a traceback over the whole fleet.
     from workspace import read_artifact as _read_art
     stored, _why_v = _read_art(path)
+    if _why_v is None:
+        from workspace import not_a_results_file as _not_results
+        _why_v = _not_results(stored) or None
     if _why_v is not None:
         out["note"] = "not read: %s" % _clipped(_why_v, 60)
         return out

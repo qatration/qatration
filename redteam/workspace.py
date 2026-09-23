@@ -2199,6 +2199,34 @@ def payload_text(attack):
     return _text_of(attack.get("text"))
 
 
+def not_a_results_file(data):
+    """-> "" for a sweep's results, or what the document is instead.
+
+    FOR A CALLER THAT ASKED FOR RESULTS BY PATH. `read_artifact` checks a results file's shape
+    by its NAME, `results_*`, because every family in the workspace comes through it. A path
+    typed after `--results` is a results file by the reader's say-so, whatever it is called,
+    and nothing checked that: `sarif --results out/recon_mybot.json` wrote a SARIF of "0
+    finding(s)" -- a clean code-scanning tab, uploaded from a recon profile -- and
+    `verify --results out/benign_mybot.json` answered "nothing in that artifact claims a
+    breach", exit 0. A document with no `results` list is not a sweep's results; which family
+    it looks like is said, because that is what the reader mistyped.
+    """
+    if isinstance(data, dict) and isinstance(data.get("results"), list):
+        return ""
+    if isinstance(data, dict) and "rows" in data:
+        kind = "a benign baseline"
+    elif isinstance(data, dict) and "maps" in data:
+        kind = "an isolation lock map"
+    elif isinstance(data, dict) and "self_description" in data:
+        kind = "a recon profile"
+    elif isinstance(data, list):
+        kind = "a list"
+    else:
+        kind = "not a results file"
+    return ("it is %s, not a sweep's results: those carry a `results` list, and this has "
+            "none" % kind)
+
+
 def read_artifacts(paths):
     """-> ({path: data}, [(path, why)]) — what parsed, and what did not, with the reason.
 

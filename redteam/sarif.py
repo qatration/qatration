@@ -509,6 +509,9 @@ def main():
     # interrupted write leaves, which is the state a stopped sweep is in.
     from workspace import read_artifact
     results, why = read_artifact(args.results)
+    if not why:
+        from workspace import not_a_results_file as _not_results
+        why = _not_results(results) or None
     if why:
         print("%s could not be read (%s). Nothing was exported: an absent SARIF upload reads "
               "as a clean scan, so this fails rather than producing one." % (args.results, why))

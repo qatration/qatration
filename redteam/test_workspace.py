@@ -716,6 +716,36 @@ def check_every_command_refuses():
     _sh_q.rmtree(_qr, ignore_errors=True)
     _sh_q.rmtree(_qempty, ignore_errors=True)
 
+    # --- A PATH TYPED AFTER --results IS A RESULTS FILE OR IS REFUSED ---------------------
+    #
+    # `read_artifact` checks a results file's shape by its NAME, so `--results` handed a recon
+    # profile or a benign baseline passed: `sarif` wrote "0 finding(s)", a clean code-scanning
+    # tab, and `verify` said "nothing in that artifact claims a breach", exit 0.
+    import json as _js_rf
+    _rf_cfg = _os.path.join(_cw, "rfbot.yaml")
+    _io.open(_rf_cfg, "w", encoding="utf-8").write(
+        'name: rfbot\nadapter: http\nurl: "http://127.0.0.1:9/x"\n'
+        'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n')
+    for _kind_rf, _doc_rf in (("a recon profile", {"target": "rfbot", "self_description": "hi",
+                                                   "refusal_vocab": []}),
+                              ("a benign baseline", {"meta": {"target": "rfbot"}, "rows": []}),
+                              ("an isolation lock map", {"meta": {"target": "rfbot"},
+                                                         "maps": []})):
+        _rf_path = _os.path.join(_cw, "not_results.json")
+        _io.open(_rf_path, "w", encoding="utf-8").write(_js_rf.dumps(_doc_rf))
+        _rc_s, _out_s = _cmd_out(["sarif", "--results", _rf_path,
+                                  "--out", _os.path.join(_cw, "nr.sarif")])
+        check("sarif --results on %s is refused, naming what it is" % _kind_rf,
+              (_rc_s, _kind_rf in _out_s, _os.path.exists(_os.path.join(_cw, "nr.sarif"))),
+              (2, True, False))
+        _rc_v, _out_v = _cmd_out(["verify", "--target-config", _rf_cfg, "--results", _rf_path,
+                                  "--trials", "1"])
+        check("verify --results on %s is refused, naming what it is" % _kind_rf,
+              (_rc_v, _kind_rf in _out_v), (2, True))
+    _rc_ok, _out_ok = _cmd_out(["sarif", "--results", _res_path,
+                                "--out", _os.path.join(_cw, "ok.sarif")])
+    check("...while a real results file still exports", _rc_ok, 0)
+
     # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
     #
     # Four counts took a bare `type=int`: `recon --max-tokens -3` sliced its token list to all
