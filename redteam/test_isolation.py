@@ -591,13 +591,27 @@ def main():
     check("...while a usable count passes through unchanged", _ws.trial_count(3), 3)
 
     # AND EVERY DOOR ACTUALLY USES IT. The checks above exercise the validator; none of them
-    # would notice a command going back to `type=int`, which is how the zero got in. Six
-    # commands accept `--trials`, so each is asked, by running it. A refusal here costs no
+    # would notice a command going back to `type=int`, which is how the zero got in. Every
+    # module that declares `--trials` is asked, by running it. A refusal here costs no
     # network: argparse rejects before anything is built.
-    import subprocess as _sp, os as _os, sys as _sys
+    #
+    # FOUND, NOT LISTED. This named six doors, and `verify` was a seventh on a bare `type=int`
+    # that the list could not see: `verify --trials 0` sent nothing and reported every claimed
+    # row as errored.
+    import subprocess as _sp, os as _os, sys as _sys, ast as _ast_tr, glob as _glob_tr
     _here = _os.path.dirname(_os.path.abspath(__file__))
-    for _door in ("benign", "model_matrix", "onboard", "run_all", "run_isolation",
-                  "run_redteam"):
+    _doors = []
+    for _mf in sorted(_glob_tr.glob(_os.path.join(_here, "*.py"))):
+        if _os.path.basename(_mf).startswith("test_"):
+            continue
+        _tr = _ast_tr.parse(open(_mf, encoding="utf-8").read())
+        if any(isinstance(n, _ast_tr.Call) and getattr(n.func, "attr", "") == "add_argument"
+               and n.args and isinstance(n.args[0], _ast_tr.Constant)
+               and n.args[0].value == "--trials" for n in _ast_tr.walk(_tr)):
+            _doors.append(_os.path.basename(_mf)[:-3])
+    check("the doors that take --trials are found, verify among them",
+          ("verify" in _doors, len(_doors) >= 7), (True, True))
+    for _door in _doors:
         _p = _sp.run([_sys.executable, _os.path.join(_here, f"{_door}.py"), "--trials", "0"],
                      cwd=_here, stdout=_sp.PIPE, stderr=_sp.STDOUT,
                      env=dict(_os.environ, PYTHONIOENCODING="utf-8",

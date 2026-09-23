@@ -581,7 +581,12 @@ def main():
     ap.add_argument("--all", action="store_true",
                     help="every target that has a stored artifact, in one table. A target that "
                          "cannot be reached is reported as unreachable, never as stale")
-    ap.add_argument("--trials", type=int, default=3,
+    # THROUGH THE ONE FLOOR. `trial_count` was written for "the six commands that accept"
+    # `--trials`, and this was a seventh on a bare `type=int`: `verify --trials 0` sent
+    # nothing and then said "every claimed row errored or came back empty", about rows that
+    # were never sent, where every other command refuses the zero at the parser.
+    from workspace import trial_count as _trial_count
+    ap.add_argument("--trials", type=_trial_count, default=3,
                     help="attempts per claimed breach (default 3, matching a sweep)")
     ap.add_argument("--confirm-trials", type=int, default=5,
                     help="extra attempts given ONLY to the rows that failed the first pass, "
