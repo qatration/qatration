@@ -482,8 +482,11 @@ def compare(before, after):
         # server that declared `prompts` last time and refuses to list them now has its
         # prompts missing from this reading, and without this they arrive as items that
         # were removed — a change reported in place of a measurement that failed.
-        blind = sorted(set(a.get("channels_absent") or {})
-                       - set(b.get("channels_absent") or {}))
+        # AND ONLY A CHANNEL THAT WAS READ BEFORE can have stopped being readable. A reading
+        # that never recorded a channel -- a corpus holding `tools` alone -- said nothing about
+        # it, so the same channel undeclared now is not a loss of anything.
+        blind = sorted(c for c in (a.get("channels_absent") or {})
+                       if c not in (b.get("channels_absent") or {}) and c in b)
         # AND ITS ITEMS ARE NOT REPORTED AS REMOVED. They are not known to be gone: the
         # channel that held them could not be read, and reporting the two together prints
         # a change over a measurement that failed.
@@ -520,6 +523,35 @@ def compare(before, after):
 # under "This is a bug in qatration, not a finding about your target and not a problem with
 # your config" -- about a file the tool itself produced. Walked: six of seven wrong shapes,
 # including the three a `.get` on a list gives.
+def server_record(found, why):
+    """-> one server's reading in the shape `out/mcp_tools.json` carries, from `list_surface`.
+
+    ONE SHAPE ON BOTH SIDES OF A COMPARISON. `--compare` re-read each server through
+    `list_tools` and kept `name` and `description` of its tools alone, while the corpus holds
+    every item whole on all four channels and `compare` flattens both through
+    `instruction_text`. So against servers that had not changed at all, every tool with a
+    title or a parameter description read as rewritten and every prompt and resource as gone:
+    replayed over the corpus with the corpus itself as the second reading, all six servers came
+    back RUG PULL, and the command exited 1 -- its one finding, raised about nothing.
+
+    A channel that was read carries its items as they came; one that was not is named under
+    `channels_absent` with the reason, which is what `compare` reads to tell a channel that
+    stopped being readable from one that emptied.
+    """
+    rec = {}
+    absent = {}
+    for chan, _method, _key in CHANNELS:
+        if found.get(chan) is None:
+            absent[chan] = why.get(chan) or "not read"
+        else:
+            rec[chan] = list(found[chan])
+    if absent:
+        rec["channels_absent"] = absent
+    rec["chars"] = len(instruction_text(rec.get("tools") or []))
+    rec["surface_chars"] = len(surface_text(found))
+    return rec
+
+
 _CORPUS_REQUIRE = {
     "servers": (dict, True,
                 "each key is a server name and each value is what that run recorded for it"),
@@ -579,16 +611,13 @@ def _compare_command(path, timeout):
         cmd = rec.get("command")
         if not cmd:
             continue
-        tools, why = list_tools(list(cmd), timeout=timeout)
+        found, why, _caps, fatal = list_surface(list(cmd), timeout=timeout)
         fresh = {"package": rec.get("package"), "version": rec.get("version"),
                  "command": cmd}
-        if why:
-            fresh["unreadable"] = why
+        if fatal:
+            fresh["unreadable"] = fatal
         else:
-            fresh["tools"] = [{"name": x.get("name"),
-                               "description": x.get("description") or ""}
-                              for x in tools]
-            fresh["chars"] = len(instruction_text(tools))
+            fresh.update(server_record(found, why))
         after["servers"][name] = fresh
     moved = compare(before, after)
     pulls = [r for r in moved if r[1] == "RUG PULL"]
