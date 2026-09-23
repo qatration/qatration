@@ -226,6 +226,10 @@ def wake_worker(root, python=None):
     worker with nothing to claim prints a reason and exits, and the claim marker makes two
     workers reaching for one job impossible rather than unlikely.
     """
+    # A SUITE THAT QUEUES JOBS IT DOES NOT MEAN TO RUN says so, and no detached sweep outlives
+    # it: a worker started from a test runs against a fixture server the test is about to shut.
+    if (os.environ.get("QATRATION_NO_WORKER") or "").strip():
+        return False
     try:
         kwargs = {"cwd": os.path.dirname(HERE),
                   "env": dict(os.environ, QATRATION_OUT=str(root), PYTHONIOENCODING="utf-8"),

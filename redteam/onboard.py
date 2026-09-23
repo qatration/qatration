@@ -698,6 +698,22 @@ def main():
     d = q.depth(args.root)
     print(f"\nqueued      {job['job_id']}")
     print(f"position    {d['queued']} queued, {d['running']} running")
+    # AND SOMETHING TO RUN IT. The worker is "spawned by the queue rather than typed by a
+    # person" and has no command of its own, and the only door that spawned one was the HTTP
+    # intake. Walked: `onboard --submit` printed `queued` and a position, `qatration runs`
+    # said nothing had been run, and nothing ever would -- a job accepted and never started,
+    # through the door this module's own docstring calls the front one. Two doors into the
+    # queue, one rule: the same wake the intake does.
+    from intake import wake_worker as _wake_worker
+    # AND WHERE IT LANDS, which is not the root: each job runs in its own namespace under
+    # `runs/<job_id>`, so `qatration runs` on the root lists nothing of it.
+    _job_dir = os.path.join(args.root, "runs", job["job_id"])
+    if _wake_worker(args.root):
+        print(f"worker      started in the background; the run, its report and its record "
+              f"go to\n            {_job_dir}\n            -- point QATRATION_OUT there and "
+              f"`qatration runs` lists it")
+    else:
+        print(f"worker      NOT started, so the job waits in {args.root} until one is")
 
 
 if __name__ == "__main__":

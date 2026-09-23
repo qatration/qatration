@@ -93,7 +93,7 @@ def _sub_env():
     if _ISOLATED is None:
         _ISOLATED = tempfile.mkdtemp()
     return dict(os.environ, QATRATION_OUT=_ISOLATED, PYTHONIOENCODING="utf-8",
-                PYTHONDONTWRITEBYTECODE="1")
+                PYTHONDONTWRITEBYTECODE="1", QATRATION_NO_WORKER="1")
 
 
 def _deep(n):
@@ -887,6 +887,34 @@ def main():
         check("...and the arsenal written to run against anything",
               jobs and "generic" in os.path.basename(jobs[0]["attacks"] or ""),
               str(jobs and jobs[0].get("attacks")))
+        check("...and a suite that asks for no worker is told none was started",
+              "NOT started" in (r.stdout or ""), (r.stdout or "")[-300:])
+
+        # AND SOMETHING RUNS IT. The worker has no command of its own and the only door that
+        # started one was the HTTP intake, so a job queued here was accepted and never run:
+        # `qatration runs` said nothing had been. Driven with the worker allowed, against the
+        # same loopback bot, and followed to the directory the command names.
+        import glob, time
+        qroot_w = os.path.join(work, "queue_worked")
+        _env_w = _sub_env()
+        _env_w.pop("QATRATION_NO_WORKER", None)
+        _rw = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", multi, "--submit",
+             "--root", qroot_w, "--trials", "1"], capture_output=True, text=True,
+            timeout=120, env=_env_w)
+        _said_w = _rw.stdout or ""
+        _named = [l.strip() for l in _said_w.splitlines() if "runs" in l and qroot_w in l]
+        _job_w = (q.listing(qroot_w) or [{}])[0]
+        _deadline_w = time.time() + 240
+        while (_job_w.get("state") in ("queued", "running", "claimed")
+               and time.time() < _deadline_w):
+            time.sleep(1)
+            _job_w = q.load(qroot_w, _job_w.get("job_id")) or {}
+        check("--submit starts a worker, and the job it queued is run to the end",
+              _job_w.get("state") == "done", "%s %s" % (_job_w, _said_w[-300:]))
+        check("...leaving its run record in the directory the command printed",
+              bool(_named) and bool(glob.glob(os.path.join(_named[0], "run_*.json"))),
+              "%s %s" % (_named, _said_w[-300:]))
 
         # --- a config for a built-in target is not an onboarding config --------------------
         builtin = os.path.join(work, "targets_builtin.yaml")
