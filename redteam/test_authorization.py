@@ -189,6 +189,32 @@ def main():
     check("with no secret set, the refusal says what the secret is for",
           "the key proof tokens are issued with" in _err0.getvalue(), _err0.getvalue()[-300:])
 
+    # A MALFORMED URL IS NOT A REMOTE TARGET. `localhost:8000/chat` -- the scheme left off --
+    # was told it needed QATRATION_AUTH_SECRET, and so were `not a url` and `http://`.
+    for _bad_u, _says in (("localhost:8000/chat", "did you mean http://localhost:8000/chat"),
+                          ("not a url", "no scheme"), ("ftp://x/y", "'ftp'"),
+                          ("http://", "no host")):
+        check("url_problem names what is wrong with %r" % _bad_u,
+              _says in (az.url_problem(_bad_u) or ""), az.url_problem(_bad_u))
+    check("...and says nothing about a real one, or an empty one the adapter answers for",
+          [az.url_problem(u) for u in ("https://api.acmeshop.example/v1/chat",
+                                        "http://127.0.0.1:9/x", "")] == [None, None, None],
+          "")
+    _prev_s = os.environ.pop("QATRATION_AUTH_SECRET", None)
+    try:
+        try:
+            az.gate({"name": "typo", "url": "localhost:8000/chat"}, "test")
+            _gx = None
+        except SystemExit as _e_g:
+            _gx = _e_g
+    finally:
+        if _prev_s is not None:
+            os.environ["QATRATION_AUTH_SECRET"] = _prev_s
+    check("the gate refuses a malformed url as a config problem, not an authorisation one",
+          _gx is not None and not isinstance(_gx, az.NotAuthorised)
+          and "not a URL a target can be reached at" in str(_gx)
+          and "QATRATION_AUTH_SECRET" not in str(_gx), str(_gx))
+
     ok, why = az.check(cfg("header", echoed="qat-" + "0" * 32), SECRET)
     check("an echoed value that is not the issued token is refused", not ok, why)
 

@@ -417,6 +417,17 @@ def main():
                                            PYTHONIOENCODING="utf-8"))
     check("...while an ordinary one is written", _po.returncode == 0 and os.path.exists(_ok_nm),
           (_po.stdout or "")[-200:])
+    # AND A URL THE GATE WOULD REFUSE. `localhost:8000/chat` was written, and the next
+    # command called it a remote target to prove ownership of.
+    _url_cfg = os.path.join(_wn, "badurl.yaml")
+    _pu = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--url",
+                      "localhost:8000/chat", "--out", _url_cfg], capture_output=True,
+                     text=True, timeout=120, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                                      PYTHONIOENCODING="utf-8"))
+    check("init refuses a url with no scheme, suggesting the one it meant, and writes nothing",
+          _pu.returncode == 2 and not os.path.exists(_url_cfg)
+          and "http://localhost:8000/chat" in ((_pu.stdout or "") + (_pu.stderr or "")),
+          "exit %s" % _pu.returncode)
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:

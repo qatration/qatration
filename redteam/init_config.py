@@ -277,6 +277,13 @@ def main():
     # rule is `safe_target_name`; asked here, the reader hears it before the file exists.
     from workspace import safe_target_name as _safe_name
     args.name = _safe_name(args.name, "init --name")
+    # AND THE URL THROUGH THE RULE THE GATE APPLIES, for the same reason: a config whose url
+    # has no scheme was written, and the next command called it a remote target to authorise.
+    from authorization import url_problem as _url_problem
+    _bad_url = _url_problem(args.url)
+    if _bad_url:
+        raise SystemExit("init --url: %r is not a URL a target can be reached at: %s. Nothing "
+                         "was written." % (args.url, _bad_url))
 
     # NEVER OVERWRITE WITHOUT BEING TOLD TO. The file this would replace is the one holding a
     # canary the user has already planted in a live system, and the endpoint mapping they got

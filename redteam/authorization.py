@@ -309,6 +309,40 @@ def record(cfg, sentence, secret_id="local"):
 LOCAL = {"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"}
 
 
+def url_problem(url):
+    """-> why `url` is not an http(s) URL a target can be reached at, or None.
+
+    A MALFORMED URL IS NOT A REMOTE TARGET. On a workstation this gate asked one question --
+    local or not -- and everything that was not local was somebody else's system needing a
+    proof of ownership. So `localhost:8000/chat`, the commonest typo there is (the scheme left
+    off, which makes `localhost` the scheme), was told "mybot is a remote target and
+    QATRATION_AUTH_SECRET is not set"; so were `not a url`, `ftp://x/y` and `http://`. A
+    reader sent to set up authorisation for their own laptop is further from the fix than
+    one told the URL is wrong. The hosted path already refused these through
+    `unreachable_by_policy`; this is the same test, for both.
+
+    Empty is left to the adapter, which says `url is required`.
+    """
+    from urllib.parse import urlparse
+    s = str(url or "").strip()
+    if not s:
+        return None
+    try:
+        u = urlparse(s)
+    except Exception:
+        return "it does not parse as a URL"
+    if not u.scheme:
+        return "it has no scheme; a target URL starts http:// or https://"
+    if u.scheme not in ("http", "https"):
+        if "//" not in s:
+            return ("it has no scheme, so %r reads as one -- did you mean http://%s"
+                    % (u.scheme, s))
+        return "the scheme %r is not http or https" % u.scheme
+    if not u.hostname:
+        return "it names no host"
+    return None
+
+
 def is_local(url):
     """A practice target on this machine. Everything else is somebody's system.
 
@@ -638,6 +672,11 @@ def gate(cfg, where):
             _said = f"{where}: refusing {url!r}: {why}. Nothing was sent."
             print(f"ABORT — {_said}", file=sys.stderr)
             raise NotAuthorised(_said)
+    elif url and url_problem(url):
+        # A CONFIG PROBLEM, NOT AN AUTHORISATION ONE: 2, the code for a refused invocation,
+        # and the sentence names the URL rather than the secret. See `url_problem`.
+        raise SystemExit(f"ABORT — {where}: url {url!r} is not a URL a target can be "
+                         f"reached at: {url_problem(url)}. Nothing was sent.")
     elif not url or is_local(url):
         return None
     # THERE WAS A SECOND `if not url: return None` HERE and nothing could reach it. Off the

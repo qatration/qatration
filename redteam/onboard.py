@@ -270,7 +270,9 @@ def check(cfg_path, probe_text=PROBE):
         rep["exit"] = 4
         return False, rep
     except SystemExit as e:
-        rep["problems"].append(f"not authorised: {e}")
+        # NOT LABELLED "not authorised": the gate's other refusal is a url that is not a URL,
+        # which is the config's problem, and its own sentence says which.
+        rep["problems"].append(str(e))
         return False, rep
 
     try:
