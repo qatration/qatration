@@ -1152,8 +1152,23 @@ def main():
             'name: freshbot\nadapter: http\nurl: "http://127.0.0.1:%d/chat"\n'
             'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
             % _srv_f.server_address[1])
+        # THE SAME FILE, SPELLED ANOTHER WAY, which is what CI's macOS runner handed it: the
+        # temp directory there is a symlink, the working directory comes back resolved and a
+        # configured path does not. Reproduced on every platform: through a symlink where one
+        # can be made, and in another case on Windows, whose file system ignores it.
+        _cfg_spelled = _cfg_f
+        if os.name == "nt":
+            _cfg_spelled = _cfg_f.upper()
+        else:
+            try:
+                _link = os.path.join(_tf_f.mkdtemp(), "linked")
+                os.symlink(_wf, _link)
+                _cfg_spelled = os.path.join(_link, "freshbot.yaml")
+            except OSError:
+                pass
+        check("the fixture spells the config two ways", _cfg_spelled != _cfg_f, _cfg_spelled)
         _env_f = dict(os.environ, QATRATION_OUT=os.path.join(_wf, "out"),
-                      QATRATION_CONFIGS=_cfg_f, PYTHONDONTWRITEBYTECODE="1",
+                      QATRATION_CONFIGS=_cfg_spelled, PYTHONDONTWRITEBYTECODE="1",
                       PYTHONIOENCODING="utf-8")
         # RELATIVE, the way a reader types it from the config's own directory, while
         # QATRATION_CONFIGS carries the absolute path: the two must still agree.
@@ -1167,6 +1182,16 @@ def main():
               "would change 0 attack row(s) across 0 file(s)" in _said_f, _said_f[-400:])
         check("...and the note's remedy is not rewritten to a placeholder",
               "<the config you swept>" not in _said_f, _said_f[-400:])
+        # AND THE MIRROR: the other spelling handed to `run`, the plain one configured.
+        _env_m = dict(_env_f, QATRATION_OUT=os.path.join(_wf, "out2"), QATRATION_CONFIGS=_cfg_f)
+        _sp_f.run([sys.executable, os.path.join(HERE, "cli.py"), "run", "--target-config",
+                   _cfg_spelled, "--scope", "quick", "--trials", "1"], capture_output=True,
+                  text=True, timeout=300, env=_env_m)
+        _rjm = _sp_f.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                         capture_output=True, text=True, timeout=300, env=_env_m)
+        check("...and with the spellings swapped between run and config, still nothing",
+              "would change 0 attack row(s) across 0 file(s)" in (_rjm.stdout or ""),
+              (_rjm.stdout or "")[-400:])
     finally:
         _srv_f.shutdown()
         _sh_f.rmtree(_wf, ignore_errors=True)

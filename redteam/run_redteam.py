@@ -1516,10 +1516,13 @@ def main():
     from baseline import note as _baseline_note
     # The config path travels with it, so the command the note prints is the one this reader
     # can actually run. `--target` only resolves against the fleet shipped in this package.
-    # ABSOLUTE, so the command reads the same from any directory and the same as `rejudge`
-    # writes it when it replays this file with the config resolved.
+    # RESOLVED, so the command reads the same from any directory and the same as `rejudge`
+    # writes it when it replays this file with the config resolved. `realpath`, not
+    # `abspath`: on macOS the temp directory is a symlink (`/var` -> `/private/var`), the
+    # working directory comes back resolved and a QATRATION_CONFIGS path does not, and the
+    # two spellings of one file made `rejudge` report a change -- red on CI's macOS runner.
     attribution_note = _baseline_note(target.name, results, _ht.declared(ctx),
-                                      config_path=(os.path.abspath(args.target_config)
+                                      config_path=(os.path.realpath(args.target_config)
                                                    if getattr(args, "target_config", None)
                                                    else None))
     if attribution_note:

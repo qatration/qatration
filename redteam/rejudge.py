@@ -359,7 +359,8 @@ def main():
     _collisions = []
     ctxs = contexts(collisions=_collisions)
     from workspace import configs_by_name as _configs_by_name
-    _config_paths = {n: os.path.abspath(fp) for n, (fp, _c) in _configs_by_name().items()}
+    # `realpath`, the same spelling `run` writes: see the note there about macOS symlinks.
+    _config_paths = {n: os.path.realpath(fp) for n, (fp, _c) in _configs_by_name().items()}
     # SAID BEFORE ANYTHING IS REWRITTEN, rather than found afterwards in a diff. `coverage`
     # printed this and this did not, and of the two commands it is this one that overwrites
     # the stored verdict and the page built from it.
