@@ -212,6 +212,21 @@ def main():
     runs.finish(_w, _rec2, "finished", spent={"requests": 12})
     _rc, _out = _runs_cmd(_w)
     check("a workspace with records lists them and exits 0", _rc == 0, "exit %s" % _rc)
+
+    # AND THE RUNS THE QUEUE RAN. A queued job runs in `runs/<job_id>/` under the root, so
+    # `runs` on a workspace where the queue had finished its jobs said nothing had been run.
+    _wq = _tf_d.mkdtemp()
+    _jd = os.path.join(_wq, "runs", "2026-09-01T1200-q00001")
+    os.makedirs(_jd)
+    _jr = runs.start(_jd, "2026-09-01T1200-cccccc", "queuedbot", scope="quick", when=_t9)
+    runs.finish(_jd, _jr, "finished", spent={"requests": 3})
+    _rcq, _outq = _runs_cmd(_wq)
+    check("a run the queue ran is listed from the workspace root", _rcq == 0
+          and "queuedbot" in _outq, "exit %s: %s" % (_rcq, _outq[-300:]))
+    check("...naming the job it ran for", "job 2026-09-01T1200-q00001" in _outq, _outq[-300:])
+    check("...while the worker's own read of one job's directory is unchanged",
+          [r.get("target") for r in runs.listing(_wq)] == [], str(runs.listing(_wq)))
+    shutil.rmtree(_wq, ignore_errors=True)
     check("...newest first", _out.index("botB") < _out.index("botA"), _out[:200])
     check("...with what it cost", "requests 12" in _out, _out[:300])
     # AN OPEN RECORD IS THE ONE WORTH SEEING, and it is said separately: `start` writes

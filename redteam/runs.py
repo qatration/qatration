@@ -215,8 +215,15 @@ def _duration(seconds):
     return "%d second%s" % (seconds, "" if seconds == 1 else "s")
 
 
-def listing(root):
-    """Every run in this workspace, newest first, with what it cost and how it ended."""
+def listing(root, jobs=False):
+    """Every run in this workspace, newest first, with what it cost and how it ended.
+
+    `jobs` takes in the runs the queue ran too. A queued job runs in a namespace of its own,
+    `runs/<job_id>/` under the root, so its record is not beside the others -- and `runs` on a
+    workspace where the queue had finished three jobs said "nothing has been run in this
+    workspace". Each such record carries `_job`, the job it ran for. Off by default because the
+    worker reads this for the one run it just made, in that job's own directory.
+    """
     import glob
     out = []
     for p in glob.glob(os.path.join(str(root), "run_*.json")):
@@ -224,6 +231,13 @@ def listing(root):
         rec = load(root, rid)
         if rec:
             out.append(rec)
+    if jobs:
+        for p in glob.glob(os.path.join(str(root), "runs", "*", "run_*.json")):
+            _dir = os.path.dirname(p)
+            rid = os.path.basename(p)[len("run_"):-len(".json")]
+            rec = load(_dir, rid)
+            if rec:
+                out.append(dict(rec, _job=os.path.basename(_dir)))
     return sorted(out, key=lambda r: r.get("started_at") or "", reverse=True)
 
 
@@ -314,7 +328,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     from workspace import OUT
-    rows = listing(OUT)
+    rows = listing(OUT, jobs=True)
     if not rows:
         # NOT ZERO ROWS PRINTED AS AN EMPTY TABLE. A workspace with no records and a
         # workspace this command cannot find are different facts, and the second is the
@@ -344,7 +358,7 @@ def main(argv=None):
         return 3
     shown = picked if args.limit <= 0 else picked[:args.limit]
     for rec in shown:
-        print(summarise(rec))
+        print(summarise(rec) + (f"  job {rec['_job']}" if rec.get("_job") else ""))
         # UNDER THE ROW RATHER THAN IN IT. The reason is a sentence and the row is a table;
         # joined, the columns stop lining up and the sentence is cut at whatever width the
         # last one left. Same shape as the open-runs section below.
