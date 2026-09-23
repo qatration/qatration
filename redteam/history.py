@@ -93,6 +93,10 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
             # here so the comparison below can stay silent on the second.
             "inert": (sorted(meta["inert"]) if isinstance(meta.get("inert"), dict)
                       else None),
+            # THE CONFIG'S HALF OF IT, which `inert` cannot be separated into after the fact.
+            # See `run_redteam`'s meta. None on a run recorded before it existed.
+            "inert_config": (list(meta["inert_config"])
+                             if isinstance(meta.get("inert_config"), list) else None),
             "trials": meta.get("trials"), "attacks": len(rows),
             # HOW BIG THE ARSENAL WAS, beside how many rows came back. `attacks` is the row
             # count, so a run that stopped part way looks like a SMALLER ARSENAL -- and the
@@ -453,19 +457,48 @@ def diff(target):
 
     # THE THIRD INPUT, on the same both-sides-or-nothing rule. A detector that was inert
     # in one run and armed in the other did not change because the target did.
-    if isinstance(prev.get("inert"), list) and isinstance(cur.get("inert"), list):
+    #
+    # BUT `inert` IS NOT ONLY THE CONFIG'S. It also follows which detectors the arsenal names
+    # and whether the target made a tool call, and this said "the config armed a different set
+    # of detectors" about every difference in it -- walked, over one unchanged config, a full
+    # run then a quick one. The config's own half is recorded apart now: where both sides have
+    # it, a difference there is the config's and one only in `inert` is not; where either side
+    # predates it, the sentence says it cannot tell.
+    def _speak(was, now, armed=True):
+        # `armed`: only the config's half can say a detector became ABLE to speak. A detector
+        # missing from the other half may simply not have been asked about.
+        _parts = []
+        if sorted(was - now):
+            _parts.append(("%s can speak now and could not before" if armed else
+                           "%s listed as unable to speak before and not now")
+                          % named_or_more(sorted(was - now), 3))
+        if sorted(now - was):
+            _parts.append(("%s cannot speak now and could before" if armed else
+                           "%s listed now and not before")
+                          % named_or_more(sorted(now - was), 3))
+        return "; ".join(_parts)
+
+    _cfg_known = (isinstance(prev.get("inert_config"), list)
+                  and isinstance(cur.get("inert_config"), list))
+    if _cfg_known and set(prev["inert_config"]) != set(cur["inert_config"]):
+        confounds.append("the config armed a different set of detectors: %s, so a verdict "
+                         "that moved may be the config rather than the target"
+                         % _speak(set(prev["inert_config"]), set(cur["inert_config"])))
+    elif isinstance(prev.get("inert"), list) and isinstance(cur.get("inert"), list):
         _was, _now = set(prev["inert"]), set(cur["inert"])
         if _was != _now:
-            _armed = sorted(_was - _now)
-            _silenced = sorted(_now - _was)
-            _parts = []
-            if _armed:
-                _parts.append("%s can speak now and could not before"
-                              % named_or_more(_armed, 3))
-            if _silenced:
-                _parts.append("%s cannot speak now and could before"
-                              % named_or_more(_silenced, 3))
-            confounds.append("the config armed a different set of detectors: %s, so a verdict that moved may be the config rather than the target" % "; ".join(_parts))
+            if _cfg_known:
+                confounds.append("a different set of detectors was listed as unable to speak "
+                                 "(%s) with the config unchanged: the arsenal decides which "
+                                 "detectors a run asks about, and the tool-call detectors "
+                                 "follow whether the target made any calls"
+                                 % _speak(_was, _now, armed=False))
+            else:
+                confounds.append("a different set of detectors was listed as unable to speak "
+                                 "(%s): the config or the arsenal, which decides which "
+                                 "detectors a run asks about, and a run recorded before the "
+                                 "two were kept apart cannot say which"
+                                 % _speak(_was, _now, armed=False))
     # A RUN THAT STOPPED DID NOT SHRINK THE ARSENAL. Said first, because it is the reason
     # for the difference the line below would otherwise blame on the attacks file.
     for _side, _snap in (("the earlier run", prev), ("this run", cur)):

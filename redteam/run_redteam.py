@@ -1599,7 +1599,16 @@ def main():
             # exists to draw, surviving exactly as long as the terminal scrollback. Every later
             # reader needs it: the SARIF export turns it into a tool notification, and a
             # replay a year from now has no console to consult.
-            "inert": {name: list(keys) for name, keys in sorted(_dead_here.items())}}
+            "inert": {name: list(keys) for name, keys in sorted(_dead_here.items())},
+            # AND WHICH OF THAT IS THE CONFIG'S. `inert` above has three causes -- the config,
+            # which detectors the ARSENAL names (a detector nobody declared is never asked
+            # about), and whether the target made a tool call -- and `history` read every
+            # difference in it as the config. Walked: the same config, a full run then a
+            # `--scope quick` one, and history said "the config armed a different set of
+            # detectors" over five detectors the quick arsenal simply does not name. This is
+            # the config's half alone: every detector, the config's own context, nothing from
+            # the arsenal.
+            "inert_config": sorted(inert_for(ctx, list(_ALL_DETECTORS)))}
     from target import judged_now as _judged_now
     meta = _judged_now(meta)
     # a --model override writes results_<target>_<model>.json (2 underscores) so it

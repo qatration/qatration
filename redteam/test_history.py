@@ -550,9 +550,11 @@ def main():
         # silent to armed, and the findings it then produces are not the target getting
         # worse. Removing a key does the reverse and hides findings as a clean bill.
         H.record({"target": "cf8", "model": "m", "trials": 3,
-                  "inert": {"sysprompt_leak": ["sysprompt_markers"]}},
+                  "inert": {"sysprompt_leak": ["sysprompt_markers"]},
+                  "inert_config": ["sysprompt_leak"]},
                  R(a1="DEFENDED"), when="2026-08-01 10:00")
-        H.record({"target": "cf8", "model": "m", "trials": 3, "inert": {}},
+        H.record({"target": "cf8", "model": "m", "trials": 3, "inert": {},
+                  "inert_config": []},
                  R(a1="EXPLOITED"), when="2026-08-02 10:00")
         _di = H.diff("cf8")
         check("a detector armed between two runs is flagged as a confound",
@@ -561,14 +563,60 @@ def main():
               any("sysprompt_leak can speak now" in c for c in _di["confounds"]), str(_di))
 
         # AND THE OTHER DIRECTION, which hides findings rather than adding them.
-        H.record({"target": "cf9", "model": "m", "trials": 3, "inert": {}},
+        H.record({"target": "cf9", "model": "m", "trials": 3, "inert": {},
+                  "inert_config": []},
                  R(a1="EXPLOITED"), when="2026-08-01 10:00")
         H.record({"target": "cf9", "model": "m", "trials": 3,
-                  "inert": {"sysprompt_leak": ["sysprompt_markers"]}},
+                  "inert": {"sysprompt_leak": ["sysprompt_markers"]},
+                  "inert_config": ["sysprompt_leak"]},
                  R(a1="DEFENDED"), when="2026-08-02 10:00")
         check("...and a detector silenced between them is too",
               any("cannot speak now" in c for c in H.diff("cf9")["confounds"]),
               str(H.diff("cf9")))
+
+        # BUT `inert` IS NOT ONLY THE CONFIG'S. It follows which detectors the arsenal names
+        # too. Walked: one config, unchanged, a full run then `--scope quick`, and history
+        # said "the config armed a different set of detectors" over five detectors the quick
+        # arsenal does not name. With the config's own half recorded on both sides and equal,
+        # the difference is said to be something else.
+        H.record({"target": "cfc", "model": "m", "trials": 3,
+                  "inert": {"forced_output": ["forbidden_tokens"]},
+                  "inert_config": ["forced_output"]},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cfc", "model": "m", "trials": 3, "inert": {},
+                  "inert_config": ["forced_output"]},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        _dc = H.diff("cfc")["confounds"]
+        check("an inert set that moved under an unchanged config is not blamed on the config",
+              not any("the config armed" in c for c in _dc), str(_dc))
+        check("...and is still said, as the arsenal or the tool calls",
+              any("with the config unchanged" in c and "forced_output" in c for c in _dc),
+              str(_dc))
+        check("...without saying the detector became able to speak, which nothing measured",
+              not any("can speak now" in c for c in _dc), str(_dc))
+        # AND A RUN RECORDED BEFORE THE TWO WERE KEPT APART says it cannot tell, rather than
+        # guessing the config.
+        H.record({"target": "cfd", "model": "m", "trials": 3,
+                  "inert": {"forced_output": ["forbidden_tokens"]}},
+                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "cfd", "model": "m", "trials": 3, "inert": {}},
+                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+        _dd = H.diff("cfd")["confounds"]
+        check("...while two older runs say they cannot tell config from arsenal",
+              any("cannot say which" in c for c in _dd)
+              and not any("the config armed" in c for c in _dd), str(_dd))
+        # AND THE SWEEP RECORDS THE CONFIG'S HALF FROM THE CONFIG ALONE: every detector, the
+        # config's own context -- not `inert_ctx`, which folds in what the arsenal plants.
+        import ast as _ast_ic
+        _rr_src = open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        _ic = [kv for n in _ast_ic.walk(_ast_ic.parse(_rr_src)) if isinstance(n, _ast_ic.Dict)
+               for kv in zip(n.keys, n.values)
+               if isinstance(kv[0], _ast_ic.Constant) and kv[0].value == "inert_config"]
+        _ic_src = _ast_ic.unparse(_ic[0][1]) if _ic else ""
+        check("the sweep records the config's half in its meta",
+              len(_ic) == 1, "%d" % len(_ic))
+        check("...from the config's context over every detector",
+              "inert_for(ctx," in _ic_src and "_ALL_DETECTORS" in _ic_src, _ic_src)
 
         # EMPTY IS NOT ABSENT. `{}` is a run that looked and found nothing inert, which is
         # a measurement; `None` is a run that never recorded it, which is not.
