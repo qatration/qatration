@@ -276,6 +276,26 @@ def write_page(name, data):
         f.write(build_html(data["meta"], data["results"], recon=_recon, isolation=_iso))
 
 
+def no_such_target(target, what):
+    """-> the sentence for a `--target` no stored results answer to, or None.
+
+    A NAME THAT MATCHED NOTHING IS NOT AN EMPTY WORKSPACE. Both modes of this command ended on
+    `no_results_note` -- "no results in out/ -- run a sweep first" -- over a directory holding
+    results for other targets, so a mistyped name read as lost evidence and sent the reader to
+    spend a sweep. `runs --target` names the targets it has; this does too.
+    """
+    if not target:
+        return None
+    _names = contexts()
+    here = sorted({target_of(s, _names) or s
+                   for s in (os.path.basename(p)[len("results_"):-len(".json")]
+                             for p in glob.glob(os.path.join(OUT_DIR, "results_*.json")))})
+    if not here or target in here:
+        return None
+    return ("no stored results for target %r in %s. The targets with results here: %s. "
+            "Nothing was %s." % (target, OUT_DIR, ", ".join(here), what))
+
+
 def rebuild_pages(only=None):
     """Every committed report page, rebuilt from the record exactly as it is stored.
 
@@ -352,7 +372,7 @@ def main():
         # command to type -- and this one, added last, ended on "rebuilt 0 page(s)", which
         # reads like a report on work done rather than on a directory with nothing in it.
         if not _built:
-            print(no_results_note(OUT_DIR))
+            print(no_such_target(args.target, "rebuilt") or no_results_note(OUT_DIR))
             return 3
         print("rebuilt %d page(s) from stored records; no record was changed"
               % len(_built))
@@ -582,7 +602,8 @@ def main():
     if not examined and not maps_examined:
         # AND NOT "RUN A SWEEP FIRST" OVER A DIRECTORY THAT HOLDS ONE. A workspace whose only
         # results file is unreadable is not an empty one, and the advice for it is different.
-        print(no_results_note(OUT_DIR) if not (skipped or unreadable) else
+        print(no_such_target(args.target, "re-scored") or
+              no_results_note(OUT_DIR) if not (skipped or unreadable) else
               "no artifact could be re-scored: every results file found is unreadable or "
               "for a target with no config, and re-scoring reads the canaries from the config."
               if skipped else

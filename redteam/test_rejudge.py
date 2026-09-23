@@ -1119,6 +1119,20 @@ def main():
                   all(os.path.exists(os.path.join(_dpt, "report_%s.html" % _s))
                       for _s in ("localrag", "localrag_alpha")),
                   (_rpt.stdout + _rpt.stderr)[-300:])
+            # A NAME THAT MATCHES NOTHING IS NOT AN EMPTY WORKSPACE, in either mode: it said
+            # "no results -- run a sweep first" over a directory holding them.
+            for _mode in (["--pages"], []):
+                _rnt = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                       "rejudge"] + _mode + ["--target", "nosuch"],
+                                      capture_output=True, text=True, timeout=300,
+                                      env=dict(os.environ, QATRATION_OUT=_dpt,
+                                               PYTHONIOENCODING="utf-8",
+                                               PYTHONDONTWRITEBYTECODE="1"))
+                check("rejudge %s--target <no such target> names the targets it has"
+                      % ("--pages " if _mode else ""),
+                      _rnt.returncode == 3 and "The targets with results here: localrag"
+                      in _rnt.stdout and "run a sweep first" not in _rnt.stdout,
+                      "exit %s: %s" % (_rnt.returncode, _rnt.stdout[-300:]))
         # AND NOTHING REBUILT IS NOT A SUCCESS, which is the same rule `tools/check.py`
         # applies to finding no suites: an empty directory and a directory whose pages are
         # all current would otherwise print the same sentence and exit the same way.
