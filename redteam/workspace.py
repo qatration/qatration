@@ -1192,6 +1192,21 @@ def refuse_unusable_config(cfg, where):
                                        "reaches its target -- `adapter: http` for an endpoint of "
                                        "your own (`qatration init` writes one) -- and a file "
                                        "without one is not a target config."))
+    # AN HTTP CONFIG WITH NO NAME HAD TWO. `run` built the target with the adapter's default,
+    # `http-target`, and wrote `results_http-target.json`; every command that finds a config
+    # BY NAME asked `config_name`, which falls back to the filename -- `acme.yaml`. Walked with
+    # `acme.yaml` and QATRATION_CONFIGS naming it: rejudge "no config found for: http-target",
+    # coverage replayed its probes with no canary, generate looked for
+    # `recon_acme.yaml.json`, and a second nameless config would have written over the first
+    # one's results under the same default. The practice adapters name themselves after their
+    # own `targets_<name>.yaml`, so only `adapter: http` can reach this, and `init` always
+    # writes the key.
+    if (str((cfg or {}).get("adapter") or "").strip() == "http"
+            and not str((cfg or {}).get("name") or "").strip()):
+        problems.insert(0, ("name", "is missing. It labels every file this run writes and is "
+                                    "how every later command finds this config again -- "
+                                    "without it the run was filed as `http-target`, under the "
+                                    "adapter's default, where no config answers to it."))
     from refusal import bad_patterns
     problems += bad_patterns((cfg or {}).get("oracle_context") or {})
     if not problems:

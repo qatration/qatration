@@ -243,6 +243,10 @@ def check_every_command_refuses():
     check("a config with no adapter is refused as that, not read as the practice bot",
           "adapter" in _refused({"probes": 641, "measured": True})
           and "is missing" in _refused({"probes": 641, "measured": True}), True)
+    check("an http config with no name is refused, not filed as `http-target`",
+          "name" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"})
+          and "http-target" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"}),
+          True)
     check("...while one that names its adapter is not refused for it",
           "is missing" in _refused({"adapter": "http", "name": "b"}), False)
     check("a broken refusal vocabulary is refused",
@@ -251,9 +255,10 @@ def check_every_command_refuses():
     check("...and the message names the command that stopped",
           _refused({"oracle_context": {"canaries": "A"}}).startswith("test:"), True)
     check("a usable config is not refused",
-          _refused({"adapter": "http",
+          _refused({"adapter": "http", "name": "b",
                     "oracle_context": {"canaries": ["ACME-CANARY-9931"]}}), "")
-    check("...nor is one with no oracle_context at all", _refused({"adapter": "http"}), "")
+    check("...nor is one with no oracle_context at all",
+          _refused({"adapter": "http", "name": "b"}), "")
 
     # --- AND THE OTHER HALF: A PATH THAT IS NOT THERE ------------------------------------
     #
