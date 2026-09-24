@@ -410,8 +410,11 @@ def doubtful_count(target, artifact, out_dir=None):
         return 0
 
 
-def note(target, results, canaries=(), out_dir=None, config_path=None):
+def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=None):
     """A short human-readable block for the run output, or '' when there is nothing to say.
+
+    `as_of` is the date of the sweep the note qualifies (default: today, which is the date of a
+    sweep being run now). See the staleness sentence below for why it is not always today.
 
     `results` is the sweep's rows: [{"attack": {...}, "headline": ..., "fired": [...],
     "trials": [...]}]. `canaries` comes from the target's oracle_context and is what lets a
@@ -472,10 +475,25 @@ def note(target, results, canaries=(), out_dir=None, config_path=None):
     if _on:
         _bdate, _bsaid = _on
         import datetime as _dt
-        _age = days_between(_bdate, _dt.date.today().isoformat())
+        # AGAINST THE SWEEP, NOT AGAINST TODAY. The gap that matters is the one named above --
+        # the baseline "thirteen days older than the sweep it qualifies" -- and measuring it to
+        # today made the sentence a function of the calendar: stored in the artifact it was
+        # false the next day, and `rejudge` found every one of the 45 stored notes "changed"
+        # every day, which is the noise a real re-score is then read through.
+        #
+        # AND A SWEEP THAT DID NOT RECORD ITS DATE IS SAID TO BE ONE. `as_of=""` is the caller
+        # saying so (a stored run from before `meta.when`); today is not a stand-in for it.
+        if as_of == "":
+            _ref, _age = None, None
+            stale = ("  ! the benign baseline these rest on was measured %s; this sweep did not "
+                     "record its own date, so how far apart the two are is not known."
+                     % _bdate[:10])
+        else:
+            _ref = str(as_of or _dt.date.today().isoformat())[:10]
+            _age = days_between(_bdate, _ref)
         if _age is not None and _age >= STALE_AFTER_DAYS:
-            stale = ("  ! the benign baseline these rest on was measured %s, %d days ago. An oracle or deployment change since then is not reflected in the attribution above."
-                     % (_bdate[:10], _age))
+            stale = ("  ! the benign baseline these rest on was measured %s, %d days before this sweep (%s). An oracle or deployment change in between is not reflected in the attribution above."
+                     % (_bdate[:10], _age, _ref))
 
     if not lines and not rescued:
         return stale

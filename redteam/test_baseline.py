@@ -293,6 +293,20 @@ def main():
                              "fired": ["canary_in_output"], "trials": []}], [], tmp)
     check("a quiet target produces no caveat at all", silent == "", silent)
 
+    # THE BASELINE'S AGE IS MEASURED AGAINST THE SWEEP, NOT AGAINST TODAY. Against today it
+    # was a function of the calendar: stored, it was false the next day, and `rejudge` found
+    # every stored note "changed" every day.
+    _benign(tmp, "oldbase", [_row(output="ordinary reply") for _ in range(2)],
+            meta={"when": "2026-08-01 10:00"})
+    _as_sweep = note("oldbase", [], [], tmp, as_of="2026-09-01 12:00")
+    check("a stale baseline is dated against the sweep it qualifies",
+          "31 days before this sweep (2026-09-01)" in _as_sweep, _as_sweep)
+    check("...and the same inputs give the same note whatever today is",
+          _as_sweep == note("oldbase", [], [], tmp, as_of="2026-09-01 12:00"), _as_sweep)
+    _undated = note("oldbase", [], [], tmp, as_of="")
+    check("a sweep that did not record its date is said to be one, not dated to today",
+          "did not record its own date" in _undated and "days" not in _undated, _undated)
+
     missing = note("never-run", [{"attack": {"id": "c"}, "headline": "EXPLOITED",
                                   "fired": ["x"], "trials": []}], [], tmp)
     check("an unmeasured target says so loudly rather than passing silently",
@@ -360,7 +374,7 @@ def main():
           _db("not a date", "2026-09-06") is None, str(_db("not a date", "2026-09-06")))
 
     _old = _aged(_STALE + 9)
-    check("a stale baseline is named in the console note", "days ago" in _old, _old[:140])
+    check("a stale baseline is named in the console note", "days before this sweep" in _old, _old[:140])
     check("...with the date, so it can be checked", "20" in _old, _old[:140])
     check("...and it appears with no doubtful rows at all, which is the case that hides",
           "the benign baseline these rest on" in _old, _old[:140])
@@ -373,7 +387,7 @@ def main():
     # when an oracle change stops being unlikely, so it is pinned once, here, and changing
     # it has to be deliberate.
     check("a week is the declared boundary", _STALE == 7, str(_STALE))
-    check("the threshold is the shared one", "days ago" in _aged(_STALE),
+    check("the threshold is the shared one", "days before this sweep" in _aged(_STALE),
           "%d days did not trip it" % _STALE)
     check("...and a day under it is not", _aged(_STALE - 1) == "",
           _aged(_STALE - 1)[:140])
