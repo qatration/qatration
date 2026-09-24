@@ -88,6 +88,9 @@ def main():
                     help="compare per-model runs ALREADY on disk, no GPU — and print when each "
                          "was measured and by which build, because that is the whole risk")
     args = ap.parse_args()
+    # THE CEILING IS READ BEFORE ANY MODEL RUNS, and refused there if it is not one.
+    from workspace import sweep_deadline as _sweep_deadline
+    _deadline = _sweep_deadline()
     if not args.models and not args.from_disk:
         ap.error("--models is required unless --from-disk is given")
 
@@ -196,7 +199,6 @@ def main():
         # A ceiling per model, for the same reason as the fleet sweep: a model that stops
         # producing tokens blocks the matrix on one cell, and a matrix missing a row reads as
         # a model that was not tried rather than one that never answered.
-        _deadline = int(os.environ.get("QATRATION_SWEEP_TIMEOUT", "14400"))
         try:
             rc = subprocess.run([PY, os.path.join(ROOT, "run_redteam.py"),
                                  "--target-config", args.target_config,

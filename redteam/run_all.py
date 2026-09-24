@@ -33,8 +33,10 @@ PY = sys.executable                      # same interpreter/venv that launched u
 # these catch a process that is not running any more — a server that accepted a connection and
 # never answered, a model that stopped producing tokens — which without them blocks this loop
 # for as long as anybody lets it, with the fleet run looking like it is still working.
-SWEEP_DEADLINE = int(os.environ.get("QATRATION_SWEEP_TIMEOUT", "14400"))   # 4h per target
-TOOL_DEADLINE = int(os.environ.get("QATRATION_TOOL_TIMEOUT", "600"))       # offline, seconds
+from workspace import sweep_deadline as _sweep_deadline, env_int as _env_int
+SWEEP_DEADLINE = _sweep_deadline()                                          # 4h per target
+TOOL_DEADLINE = _env_int("QATRATION_TOOL_TIMEOUT", 600, 1,                  # offline, seconds
+                         "it is the seconds an offline step may run before it is stopped")
 
 
 def server_up(url, timeout=2.0):

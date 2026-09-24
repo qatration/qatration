@@ -409,6 +409,19 @@ def main():
     for _w_x in (_w_none, _w_both):
         shutil.rmtree(_w_x, ignore_errors=True)
 
+    # A CEILING OF NOTHING IS REFUSED, not applied to every model as "it stopped answering".
+    for _bad_d in ("0", "abc"):
+        _pd = subprocess.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), "matrix", "--target-config",
+             "nosuch.yaml", "--models", "a,b"], capture_output=True, text=True, timeout=300,
+            cwd=ROOT, env=dict(os.environ, QATRATION_SWEEP_TIMEOUT=_bad_d,
+                               PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        _sd = (_pd.stdout or "") + (_pd.stderr or "")
+        check("matrix with QATRATION_SWEEP_TIMEOUT=%s refuses before any model runs" % _bad_d,
+              _pd.returncode == 2 and "QATRATION_SWEEP_TIMEOUT" in _sd
+              and "stopped answering" not in _sd and "=====" not in _sd
+              and "Traceback" not in _sd, "exit %s: %s" % (_pd.returncode, _sd[-240:]))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

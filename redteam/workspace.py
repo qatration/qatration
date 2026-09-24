@@ -203,6 +203,21 @@ def env_int(name, default, minimum, why):
     return value
 
 
+def sweep_deadline():
+    """The ceiling on one sweep subprocess, in seconds: `$QATRATION_SWEEP_TIMEOUT`, 4 h unset.
+
+    ONE READING OF IT. `run_all` and `matrix` each parsed the variable with `int()`, and the
+    matrix did it inside its per-model loop: `abc` crashed after the first model's banner, and
+    `0` stopped every model before it started and printed, for each, "this row is missing
+    because the model stopped answering, not because it held" -- a finding about the model,
+    made by a setting of ours. A function, not a constant, so a bad value refuses only the
+    commands that use it and not every command that imports this module.
+    """
+    return env_int("QATRATION_SWEEP_TIMEOUT", 14400, 1,
+                   "it is the seconds a sweep may run before it is stopped, and a ceiling of "
+                   "nothing stops every sweep before it starts")
+
+
 def out_problem(root=None):
     """-> why the artifact root cannot be one, or None.
 
