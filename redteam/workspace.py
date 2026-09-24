@@ -2348,6 +2348,18 @@ def run_command(main):
     build problem rather than a security one`.
     """
     import sys as _sys
+    # EVERY LINE AS IT IS PRINTED, through both doors. Into a pipe -- a CI log, `| tee` --
+    # stdout is block-buffered, and four modules had said `line_buffering=True` for
+    # themselves while `run`, `benign`, `verify`, `isolation` and the rest did not. Measured
+    # on a scripted sweep writing to a file: its stdout grew 92 -> 8317 -> 16579 -> 24780
+    # bytes, in eight-kilobyte lumps, so a CI log watching a sweep saw nothing for most of it,
+    # a job killed at its ceiling lost up to the last eight kilobytes -- the attack it was on
+    # -- and every stderr line (a refusal, a traceback, a `!` note) landed ABOVE stdout it
+    # followed.
+    try:
+        _sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
     try:
         return main() or 0
     except SystemExit as e:

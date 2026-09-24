@@ -2628,6 +2628,30 @@ def check_dated():
     return bad
 
 
+def check_line_buffered():
+    """The engine's one door prints each line as it goes, into a pipe as into a terminal.
+
+    Block-buffered stdout into a pipe put every stderr line above the stdout it followed and
+    held a sweep's progress back in eight-kilobyte lumps. Driven in a child, because the
+    property is about a pipe and this process's own stdout is whatever ran the suite.
+    """
+    import subprocess as _sp_lb
+    bad = []
+    _code = ("import sys; sys.path.insert(0, %r); import workspace; "
+             "workspace.run_command(lambda: (print('first on stdout'), "
+             "print('then on stderr', file=sys.stderr)))" % HERE)
+    _p = _sp_lb.run([sys.executable, "-c", _code], stdout=_sp_lb.PIPE,
+                    stderr=_sp_lb.STDOUT, text=True, timeout=120,
+                    env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUNBUFFERED=""))
+    _got = [ln for ln in (_p.stdout or "").splitlines() if ln.strip()]
+    ok = _got == ["first on stdout", "then on stderr"]
+    print("%s  run_command keeps stdout and stderr in the order they were written -> %r"
+          % ("PASS" if ok else "FAIL", _got))
+    if not ok:
+        bad.append("run_command reorders stdout behind stderr in a pipe: %r" % _got)
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -2828,7 +2852,7 @@ def check_evidence_guard():
 
 if __name__ == "__main__":
     _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
-            + check_dated())
+            + check_dated() + check_line_buffered())
     if _bad:
         for _b in _bad:
             print('  !', _b)
