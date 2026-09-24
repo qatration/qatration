@@ -1022,6 +1022,27 @@ def main():
     finally:
         _sh_mt.rmtree(_w_mt, ignore_errors=True)
 
+    # --- A WORKSPACE OF EMPTY REPLIES IS NOTHING MEASURED ----------------------------------
+    #
+    # A lock map of an endpoint that answered nothing was UNMEASURED at its own door and then
+    # replayed here as "replayed 3 stored probes", exit 0. Every probe empty is no evidence.
+    import subprocess as _sp_sl, tempfile as _tf_sl, json as _js_sl
+    _ws_sl = _tf_sl.mkdtemp()
+    open(os.path.join(_ws_sl, "results_quiet.json"), "w", encoding="utf-8").write(_js_sl.dumps(
+        {"meta": {"target": "quiet"},
+         "results": [{"attack": {"id": "a%d" % _i, "text": "hi", "category": "c"},
+                      "headline": "ERROR", "fired": [],
+                      "trials": [{"probe": {"prompt": "hi", "output": ""}}]}
+                     for _i in range(3)]}))
+    _p_sl = _sp_sl.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
+                       capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, QATRATION_OUT=_ws_sl, PYTHONDONTWRITEBYTECODE="1",
+                                PYTHONIOENCODING="utf-8"))
+    check("coverage over probes that all came back empty is nothing measured, exit 3",
+          (_p_sl.returncode, "NOTHING MEASURED" in _p_sl.stdout,
+           "3 of them empty" in _p_sl.stdout) == (3, True, True),
+          "exit %s: %s" % (_p_sl.returncode, _p_sl.stdout[-300:]))
+
     # --- AN EMPTY --json IS REFUSED, NOT IGNORED ------------------------------------------
     #
     # `--json "$COVERAGE_JSON"` with the variable unset wrote no file and exited 0 in silence.

@@ -90,7 +90,7 @@ def provenance(engines, engine_now):
 
 
 def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
-           scanned_out=None, support_out=None):
+           scanned_out=None, support_out=None, silent_out=None):
     """-> (hits, targets per detector, probes scanned, detectors that threw).
 
     `unresolved` collects artifacts whose target could not be matched to any config. They
@@ -141,6 +141,11 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
     def scan(pr, ctx, target, source="attack"):
         nonlocal n
         n += 1
+        # HOW MANY OF THEM CAME BACK EMPTY, counted beside `n` rather than out of it, because
+        # `n` is a number this project publishes. An empty reply is not a measurement (see
+        # `Probe.silent`), and a workspace whose every stored probe is one has measured nothing.
+        if silent_out is not None and pr.silent():
+            silent_out[0] += 1
         if scanned_out is not None and target:
             scanned_out.add(target)
         for name, fn in DETECTORS.items():
@@ -451,8 +456,10 @@ def main():
     _unreadable_seen = []
     _scanned = set()
     _support = {}
+    _silent = [0]
     hits, where, n, broke, sources = replay(unresolved, engines, sent, _unreadable_seen,
-                                            scanned_out=_scanned, support_out=_support)
+                                            scanned_out=_scanned, support_out=_support,
+                                            silent_out=_silent)
     demo = sorted(k for k in DETECTORS if hits[k])
     # Demonstrated ONLY on traffic nobody attacked is a different claim from demonstrated by
     # an attack, and the difference is the interesting one: the detector works, and what it
@@ -490,7 +497,8 @@ def main():
         print(f"  ! {_name} could not be read ({_why}). Its probes are NOT in the "
               f"numbers below.", file=sys.stderr)
     print(f"{len(DETECTORS)} detectors · {len(demo)} demonstrated · {len(declared)} declared "
-          f"only   (replayed {n} stored probes, no model calls)")
+          f"only   (replayed {n} stored probes"
+          + (f", {_silent[0]} of them empty" if _silent[0] else "") + ", no model calls)")
 
     # THE SAME QUESTION ABOUT THE ARSENAL, and nothing was asking it. This tool has always
     # separated a detector that has caught something from one that has only been written, on
@@ -648,6 +656,18 @@ def main():
         print("  Point every command at it:")
         for _line in _point():
             print(_line)
+
+    # AND A WORKSPACE WHOSE EVERY PROBE CAME BACK EMPTY IS THE SAME ANSWER. Walked: a lock map
+    # of an endpoint that answered nothing -- itself UNMEASURED, exit 3 -- was replayed here as
+    # "replayed 3 stored probes", 66 declared only, exit 0.
+    if n and _silent[0] >= n:
+        print("\nNOTHING MEASURED - every one of the %d stored probes came back empty, so no "
+              "detector here could have fired on anything. Check the target is answering, and "
+              "run again." % n)
+        _emit_json(args.json, n, hits, demo, benign_only, declared, where,
+                   untried, unevidenced, unconfigured, broke, unresolved,
+                   _unreadable_seen, model_only)
+        return 3
 
     if not n:
         # NOT A PASS. "66 detectors, 0 demonstrated, 66 declared only" over an empty
