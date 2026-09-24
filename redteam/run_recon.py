@@ -137,7 +137,7 @@ def main():
             print(_refusal, file=sys.stderr)
             return 2
         from workspace import writable_path as _writable
-        out = _writable(out, "profile", "recon")
+        out = _writable(out, "profile", "recon", replaces=("a recon profile",))
         # AND WHEN IT WAS MEASURED. The fleet page dates every recon profile by the
         # file's mtime, which git does not preserve: in a clone all ten carry the clone
         # time. Nothing on disk could answer it, so the writer answers it.

@@ -914,6 +914,34 @@ def check_every_command_refuses():
     check("...and a file holding a list is overwritten, not crashed into",
           (_rc_l != 2, "Traceback (most recent call last)" in _out_l), (True, False))
 
+    # AND THE READER'S SOURCE FILES AND THE OTHER RECORDS, found by the next walk: `recon
+    # --json attacks_mine.yaml` wrote a profile over a hand-written arsenal and exited 0.
+    _kinds_ev = {
+        "an arsenal": ("atk.yaml", "- id: a1\n  category: c\n  text: hi\n"),
+        "an objectives file": ("obj.yaml", "- id: o1\n  properties: []\n"),
+        "a frame library": ("frames.yaml", "- id: f1\n  family: x\n  template: '{task}'\n"),
+        "a lock map": ("map.json", '{"meta": {"target": "x"}, "maps": []}'),
+        "a recon profile": ("prof.json", '{"probes": [], "capabilities": {}}'),
+        "a run record": ("run.json", '{"run_id": "r1", "started_at": "2026-09-24"}'),
+    }
+    for _kind_ev, (_fn_ev, _body_ev) in sorted(_kinds_ev.items()):
+        _pe = _os.path.join(_cw, _fn_ev)
+        _io.open(_pe, "w", encoding="utf-8").write(_body_ev)
+        _rc_k, _out_k = _cmd_out(["coverage", "--json", _pe])
+        check("coverage --json onto %s is refused and leaves it as it was" % _kind_ev,
+              (_rc_k, _io.open(_pe, encoding="utf-8").read() == _body_ev, _kind_ev in _out_k),
+              (2, True, True))
+    # ...WHILE THE WRITER OF EACH KIND STILL REPLACES ITS OWN.
+    _own_ev = []
+    for _mod_ev, _kind_ev in (("run_recon.py", "a recon profile"),
+                              ("run_isolation.py", "a lock map"),
+                              ("run_generate.py", "an objectives file")):
+        if not __import__("re").search(r"""replaces=\(["']%s["'],\)""" % _kind_ev,
+                                       _io.open(_os.path.join(_here, _mod_ev),
+                                                encoding="utf-8").read()):
+            _own_ev.append(_mod_ev)
+    check("...while recon, isolation and generate may each replace their own kind", _own_ev, [])
+
     # --- A PRINTED COMMAND RUNS WHEN IT IS PASTED ----------------------------------------
     #
     # Nine places printed `qatration <cmd> --target-config <path>` with the path dropped in

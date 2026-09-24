@@ -151,7 +151,7 @@ def main():
     # artifact like the rest of them.
     out = args.out or os.path.join(WORKSPACE_OUT, f"isolation_generated_{name}.yaml")
     from workspace import writable_path as _writable
-    out = _writable(out, "objectives", "generate")
+    out = _writable(out, "objectives", "generate", replaces=("an objectives file",))
     from workspace import atomic_write as _atomic
     with _atomic(out) as f:
         f.write(to_yaml(objs, name))

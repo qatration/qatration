@@ -986,7 +986,8 @@ def writable_path(path, what="file", where="", replaces=()):
 
 
 def _evidence_kind(path):
-    """-> "a sweep's results" / "a benign baseline" for a file holding one, else "".
+    """-> what kind of record or source file `path` holds ("a sweep's results", "an arsenal",
+    ...), or "" for anything else.
 
     By CONTENT, not by name: the file a typo lands on is whatever it is called.
     """
@@ -1008,6 +1009,28 @@ def _evidence_kind(path):
     if isinstance(data, dict) and ("adapter" in data or "module" in data) \
             and not isinstance(data.get("results"), list):
         return "a target config"
+    # AND THE READER'S OWN SOURCE FILES, and the other measurements. Found by a seeded random
+    # walk: `recon --json attacks_mine.yaml` wrote a recon profile over the arsenal the reader
+    # had written by hand, exit 0. A list of mappings with ids is an arsenal, an objectives
+    # file or a frame library -- none of them written by anything that would be replacing its
+    # own -- and a lock map, a recon profile and a run record are records like the two below.
+    if isinstance(data, list):
+        _ided = [e for e in data if isinstance(e, dict) and e.get("id")]
+        if not _ided:
+            return ""
+        if any("template" in e for e in _ided):
+            return "a frame library"
+        if any("properties" in e for e in _ided):
+            return "an objectives file"
+        return "an arsenal"
+    if isinstance(data, dict) and isinstance(data.get("maps"), list) \
+            and isinstance(data.get("meta"), dict):
+        return "a lock map"
+    if isinstance(data, dict) and "probes" in data \
+            and ("capabilities" in data or "refusal_vocab" in data):
+        return "a recon profile"
+    if isinstance(data, dict) and data.get("run_id") and data.get("started_at"):
+        return "a run record"
     if not isinstance(data, dict) or not isinstance(data.get("meta"), dict):
         return ""
     if isinstance(data.get("results"), list):
