@@ -1023,6 +1023,14 @@ def main():
         # THE THREE A RUN CANNOT SURVIVE, through the function the run calls too. They
         # were written here and only here, so `run --attacks mine.yaml` never saw them.
         errors += unusable_entries(attacks, fname)
+        # AND THE SHAPES, which `run` and `isolation` get from `refuse_unknown_detectors` and
+        # this door never asked. `success: canary_in_output` without brackets reached the
+        # per-entry loop below as a string and ended the command in a TypeError, where `run`
+        # names the missing brackets. An entry with a field of the wrong shape is reported
+        # once, here, and not walked further.
+        _shape_bad = bad_entry_shapes(attacks)
+        errors += ["%s: %s: %s %s" % (fname, _w, _k, _why) for _w, _k, _why in _shape_bad]
+        _shape_ids = {_w for _w, _k, _why in _shape_bad}
         seen = {}                                  # ids must be unique WITHIN a file
         for i, a in enumerate(attacks):
             # AN ENTRY THAT IS NOT A MAPPING IS `unusable_entries`' ERROR ALREADY ("entry is
@@ -1031,6 +1039,8 @@ def main():
             if not isinstance(a, dict):
                 continue
             aid = a.get("id")
+            if (aid or a.get("name") or "?") in _shape_ids:
+                continue
             where = f"{fname} #{i} ({aid or '??'})"
             if not aid:
                 continue

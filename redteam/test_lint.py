@@ -365,6 +365,14 @@ def check_refusal(check):
           and "is a directory with no attacks*.yaml" in _said_od
           and "not there" not in _said_od, "exit %s: %s" % (_rc_od, _said_od[-300:]))
     check("...and names the file it does hold", "mine.yaml" in _said_od, _said_od[-300:])
+    # A LIST FIELD WRITTEN AS A STRING is named with its brackets, as `run` names it, not
+    # crashed on: `lint` never asked `bad_entry_shapes` and met the string in its own loop.
+    io.open(os.path.join(_lwork, "scalar.yaml"), "w", encoding="utf-8").write(
+        "- id: s1\n  category: c\n  text: hi\n  success: canary_in_output\n")
+    _rc_sc, _said_sc = _lint("--attacks", "scalar.yaml")
+    check("a success: written without brackets is named as that, exit 1, no traceback",
+          _rc_sc == 1 and "is a single string" in _said_sc and "Traceback" not in _said_sc,
+          "exit %s: %s" % (_rc_sc, _said_sc[-300:]))
     # AN ENTRY THAT IS NOT A MAPPING is named, not crashed on: the loop asked it for `.get`.
     io.open(os.path.join(_lwork, "listy.yaml"), "w", encoding="utf-8").write(
         "- just a string\n- id: y\n")
