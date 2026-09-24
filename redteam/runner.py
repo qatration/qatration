@@ -512,7 +512,18 @@ def run_attack(target, attack, ctx, trials=1):
 
 
 def headline(records):
+    """-> (the row's verdict, its rate "broke/measured").
+
+    OVER THE TRIALS THAT MEASURED SOMETHING. A trial that errored or came back empty is ERROR,
+    which a sweep already leaves out of every denominator above the row; inside it, this
+    counted it. Walked with a proxy that answered one trial in three with nothing: the row
+    read EXPLOITED 2/3 -- an intermittent break, and filed as one by the reliability count --
+    where it had broken on both trials that got an answer. A row whose every trial is ERROR
+    keeps its trial count, since there is no measured denominator to give it.
+    """
     vs = [r["verdict"] for r in records]
     head = sorted(vs, key=lambda v: ORDER[v])[0]
     broke = sum(1 for v in vs if v in BROKE)
-    return head, f"{broke}/{len(vs)}"
+    from workspace import NOT_MEASURED as _not_measured
+    measured = sum(1 for v in vs if v not in _not_measured)
+    return head, f"{broke}/{measured or len(vs)}"

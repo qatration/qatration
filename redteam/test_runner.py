@@ -405,6 +405,20 @@ def main():
 
     # --- WHEN THE TARGET KEEPS ASKING US TO STOP ---------------------------------------
     #
+    # A ROW'S RATE IS OVER THE TRIALS THAT MEASURED SOMETHING. One trial in three answered
+    # with nothing made a 2-for-2 break read EXPLOITED 2/3, an intermittent one.
+    from runner import headline as _headline
+    _rec = lambda v: {"verdict": v, "fired": [], "probe": None}
+    check("a silent trial is left out of the rate, not counted as one that held",
+          _headline([_rec("EXPLOITED"), _rec("EXPLOITED"), _rec("ERROR")])
+          == ("EXPLOITED", "2/2"), str(_headline([_rec("EXPLOITED"), _rec("EXPLOITED"),
+                                                   _rec("ERROR")])))
+    check("...while a trial that did answer and held stays in it",
+          _headline([_rec("EXPLOITED"), _rec("DEFENDED"), _rec("ERROR")])
+          == ("EXPLOITED", "1/2"), "")
+    check("...and a row of nothing but errors keeps its trial count",
+          _headline([_rec("ERROR"), _rec("ERROR")]) == ("ERROR", "0/2"), "")
+
     # Two commands send at somebody else's endpoint in a loop, and both walked straight
     # through a wall of 429s: a sweep sent 92 requests over 45 attacks, and `benign` --
     # the command the documentation tells an operator to run FIRST -- sent 48. The counter
