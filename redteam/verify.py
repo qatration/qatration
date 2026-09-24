@@ -608,6 +608,17 @@ def main():
                     help="the artifact to verify (default $QATRATION_OUT/results_<target>.json)")
     args = ap.parse_args()
 
+    # ONE TARGET NAMED IS NOT EVERY TARGET. `--all` returned before either flag was read, so
+    # `verify --all --target-config mybot.yaml` -- a reader naming the one target they meant --
+    # re-sent the claimed breaches of EVERY target with a stored artifact, and `--results`
+    # beside `--all` was dropped the same way. This command sends attack traffic.
+    if args.all and (args.target_config or args.results):
+        ap.error("--all verifies every target with a stored artifact and reads no config or "
+                 "results file of yours; %s names one. Drop --all to verify that one, or drop "
+                 "%s to verify them all. Nothing was sent."
+                 % ("--target-config" if args.target_config else "--results",
+                    "--target-config" if args.target_config else "--results"))
+
     if args.all:
         return audit(args.trials, args.confirm_trials)
     if not args.target_config:

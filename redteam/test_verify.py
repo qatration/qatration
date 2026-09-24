@@ -892,6 +892,14 @@ def main():
               _all.returncode == 3, "exit %d: %s" % (_all.returncode, _all_said[-160:]))
         check("...and does not report that every claim still reproduces",
               "still reproduces" not in _all_said, _all_said[-200:])
+        # AND `--all` BESIDE A NAMED TARGET IS REFUSED: it re-sent every target's breaches.
+        for _named in (["--target-config", "mybot.yaml"], ["--results", "results_x.json"]):
+            _both = _sp_v.run(
+                [sys.executable, os.path.join(HERE, "cli.py"), "verify", "--all"] + _named,
+                capture_output=True, text=True, timeout=180, cwd=_wv, env=_env_v)
+            check("verify --all %s is refused, not widened to every target" % _named[0],
+                  _both.returncode == 2 and "Nothing was sent" in _both.stderr,
+                  "exit %d: %s" % (_both.returncode, (_both.stdout + _both.stderr)[-200:]))
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
