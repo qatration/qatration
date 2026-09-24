@@ -611,7 +611,7 @@ def main():
     #
     # AND A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES. `examined` counted results
     # files only, so a directory with lock maps and no sweep — which is what
-    # `qatration isolation --target x` alone leaves — got `no results, run a
+    # `qatration isolation --target-config x.yaml` alone leaves — got `no results, run a
     # sweep first` and exit 3 AFTER this command had corrected those maps and written them
     # back. The case that proved it is the one `rescore_map` was written for: a stored
     # HARDENED replaced with EXPLOITED, the file rewritten, and the number a pipeline reads

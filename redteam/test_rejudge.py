@@ -708,7 +708,7 @@ def main():
 
     # --- A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES -------------------------------
     #
-    # `examined` counted results files. `qatration isolation --target x` leaves a lock map
+    # `examined` counted results files. `qatration isolation --target-config x.yaml` leaves a lock map
     # and no sweep, and in that directory this command re-scored every map, rewrote them
     # with `--write`, printed `no results, run a sweep first`, and returned 3 -- which
     # `docs/ci.md` defines as `nothing was measured`. A pipeline reading the number is told

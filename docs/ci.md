@@ -423,7 +423,7 @@ carries the difference for a pipeline. A command that reads the
 workspace, finds it empty and exits `0` tells a pipeline the check ran.
 
 The same number was wrong in the other direction for a second artifact family. `rejudge`
-re-scores lock maps as well as sweep results, and `qatration isolation --target x` leaves a
+re-scores lock maps as well as sweep results, and `qatration isolation --target-config x.yaml` leaves a
 map with no sweep beside it — in that directory the command corrected the maps, wrote them
 back with `--write`, and still exited `3`. A stored **HARDENED** replaced with **EXPLOITED**
 is the correction this replay exists to make, and it was being reported as an absence.

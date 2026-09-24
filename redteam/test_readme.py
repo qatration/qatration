@@ -499,6 +499,12 @@ def main():
     import cli
     bad = []
     helps = {}
+
+    # THE FLAG AS A WORD, NOT AS A SUBSTRING. `flag in help` let `--target` pass wherever the
+    # parser declares `--target-config`, so docs/ci.md documented `qatration isolation --target x`
+    # -- a command that argparse rejects -- and this gate called it present.
+    def _has_flag(help_text, flag):
+        return bool(re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(flag), help_text))
     # A shell continuation splits one command across lines, and the first version of this
     # pattern stopped at the newline — so every flag in `docs/ci.md`'s workflow, which is
     # written the way anyone would actually write it, went unchecked. The guard covered the
@@ -522,7 +528,7 @@ def main():
                                capture_output=True, text=True, timeout=120)
             helps[cmd] = p.stdout
         for flag in re.findall(r"--[\w-]+", flags):
-            if flag not in helps[cmd]:
+            if not _has_flag(helps[cmd], flag):
                 bad.append("qatration %s %s is documented but the parser has no such flag"
                            % (cmd, flag))
     # THE OTHER SPELLING, and it is the one a contributor actually types. Everything above
@@ -549,7 +555,7 @@ def main():
                                cwd=ROOT_DIR)
             helps[key] = (p.stdout or "") + (p.stderr or "")
         for flag in sorted(flags):
-            if flag not in helps[key]:
+            if not _has_flag(helps[key], flag):
                 bad.append("python %s %s is documented but the script has no such flag"
                            % (rel, flag))
 
