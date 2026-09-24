@@ -56,6 +56,9 @@ NO_CLI_DOOR = "the HTTP door itself; a server runs it, a person does not"
 
 
 MAX_BODY = 64 * 1024          # a target config, not a payload
+# HOW LONG, AND HOW MUCH, a refusal waits for the body it is refusing -- see `_refuse_unread`.
+LINGER_SECONDS = 2.0
+LINGER_BYTES = 8 * 1024 * 1024
 
 # WHAT A STRANGER MAY CALL A THING THAT BECOMES A FILENAME. `name` lands in
 # `results_<name>.json` and `history/<name>.jsonl`; `job_id` lands in `job_<id>.json` and
@@ -364,15 +367,54 @@ def make_handler(root):
             try:
                 n = int(raw) if raw not in (None, "") else 0
             except ValueError:
-                return self._send(*_problem(400, f"Content-Length: {raw!r} is not a number"))
+                return self._refuse_unread(400, f"Content-Length: {raw!r} is not a number")
             if n < 0:
-                return self._send(*_problem(400, "Content-Length may not be negative"))
+                return self._refuse_unread(400, "Content-Length may not be negative")
             if n > MAX_BODY:
-                return self._send(*_problem(413, f"a target config is under {MAX_BODY} bytes"))
+                return self._refuse_unread(413, f"a target config is under {MAX_BODY} bytes")
             # `read(n)` can return less if the connection ends early; that is the submitter's
             # problem to see as a parse error, not this loop's to wait out.
             code, obj = submit(root, self.rfile.read(n))
             self._send(code, obj)
+
+        def _refuse_unread(self, code, why):
+            """Refuse on the header alone, and let the refusal survive the body still coming.
+
+            A REFUSAL THE SUBMITTER NEVER SEES. These three are decided before the body is
+            read, and the connection was then closed with that body unread -- which a TCP
+            stack answers with a reset, taking the response already on the wire with it.
+            Measured against this handler: a body that arrives 50 ms after its headers, which
+            is any client not on this machine, got `ConnectionAbortedError` instead of the 413
+            twenty times in twenty; a 2 MB body sent at once, six in twenty. The submitter of
+            an oversized config learned that the door was broken, not that the config was too
+            big. `test_intake` had met the same race on the two 400s and stopped sending a
+            body to them, calling the server blameless.
+
+            So: answer, half-close, and read what is still coming until it ends -- bounded in
+            time and in bytes, for the reason `_drain` is bounded: the length is the
+            submitter's number, and a door that reads without limit to be polite is holding
+            itself open.
+            """
+            import socket as _socket
+            import time as _time
+            self._send(*_problem(code, why))
+            self.close_connection = True
+            try:
+                self.wfile.flush()
+                self.connection.shutdown(_socket.SHUT_WR)
+                deadline = _time.monotonic() + LINGER_SECONDS
+                left = LINGER_BYTES
+                while left > 0:
+                    wait = deadline - _time.monotonic()
+                    if wait <= 0:
+                        break
+                    self.connection.settimeout(wait)
+                    chunk = self.connection.recv(min(65536, left))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+            except OSError:
+                pass
 
         def _drain(self):
             """Read whatever the submitter sent, so the refusal reaches them.

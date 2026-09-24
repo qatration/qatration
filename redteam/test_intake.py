@@ -610,6 +610,31 @@ def main():
         check("...and a body over the cap is 413 rather than read",
               _st == 413, "%s %s" % (_st, _tx[:80]))
 
+        # AND THE 413 REACHES A SUBMITTER WHOSE BODY IS STILL ARRIVING. Closed with the body
+        # unread, the connection was reset and the answer went with it: a body 50 ms behind
+        # its headers lost the 413 twenty times in twenty.
+        import http.client as _hc_l, time as _time_l
+
+        def _late(port, size, delay=0.05):
+            _c = _hc_l.HTTPConnection('127.0.0.1', port, timeout=10)
+            try:
+                _c.putrequest('POST', '/runs', skip_accept_encoding=True)
+                _c.putheader('Content-Length', str(intake.MAX_BODY + 1))
+                _c.endheaders()
+                _time_l.sleep(delay)
+                try:
+                    _c.send(b'x' * size)
+                except OSError:
+                    pass
+                return _c.getresponse().status
+            except Exception as e:
+                return type(e).__name__
+            finally:
+                _c.close()
+        _got_l = [_late(_iport, 262144) for _ in range(5)]
+        check("...and it reaches a submitter whose body is still on its way",
+              _got_l == [413] * 5, str(_got_l))
+
         # AND THE READ SIDE. `status` and `report` build a path from the job id, so the id
         # is checked before it is joined to anything.
         _st, _tx = _ask(_iport, None, b'', '/runs/..%2f..%2fetc', 'GET')
