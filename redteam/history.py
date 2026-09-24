@@ -39,6 +39,7 @@ except Exception:
     pass
 
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import NOT_MEASURED   # and of what counts as not measured
 from workspace import named_build   # and one definition of what counts as a build
 from workspace import measured_when # and one definition of when a run happened
 # and one definition of what an attack IS -- the same one `lint` reads, so a field that
@@ -776,7 +777,7 @@ def main():
                 # already on disk reads the same way.
                 _rows_r = r.get("rows") if isinstance(r.get("rows"), dict) else {}
                 _unm = sum(1 for _x in _rows_r.values()
-                           if isinstance(_x, dict) and _x.get("v") in ("ERROR", "SKIP"))
+                           if isinstance(_x, dict) and _x.get("v") in NOT_MEASURED)
                 if _att is not None and _unm:
                     _att = _att - _unm
                 _count = ("%3s/%s" % (_broke, _att) if _broke is not None
