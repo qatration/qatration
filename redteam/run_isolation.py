@@ -277,11 +277,15 @@ def main():
                 alts = {k: v for k, v in spec.items()
                         if k.startswith("task") or k == "frame_vars"}
                 # judged under the property's own narrowing, same as the solo probe was
-                out = search(target, task, spec.get("success", []), prop_ctx(spec, ctx),
-                             frames=frames, trials=args.trials,
-                             stop_on_hit=args.stop_on_hit, tasks=alts)
-                p["keysearch"] = {k: v for k, v in out.items() if k != "results"}
-                print(format_search(p["name"], out))
+                #
+                # `found`, NOT `out`: `out` is the artifact path, settled before the probes, and
+                # this name used to reuse it -- harmless while the path was computed after the
+                # loop, a crash in `write_maps` the moment it moved above it (d040215).
+                found = search(target, task, spec.get("success", []), prop_ctx(spec, ctx),
+                               frames=frames, trials=args.trials,
+                               stop_on_hit=args.stop_on_hit, tasks=alts)
+                p["keysearch"] = {k: v for k, v in found.items() if k != "results"}
+                print(format_search(p["name"], found))
                 print()
             # the map's verdict predates the search; a found key can invalidate it
             apply_keysearch(result)

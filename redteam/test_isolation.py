@@ -815,6 +815,24 @@ def main():
             check("isolation --json <an arsenal> is refused with nothing sent",
                   (_cp.returncode, len(_hits_cn),
                    io.open(_arsenal_cn, encoding="utf-8").read() == _ars_body), (2, 0, True))
+            # AND A KEY SEARCH RUNS TO ITS WRITE. Nothing here drove `--keys` to the end, so
+            # the loop reusing `out` -- the artifact path -- for the search result crashed
+            # `write_maps` on every key search, and the whole suite stayed green.
+            _km = _os_w.path.join(_uw, "keys_map.json")
+            _kp = _sp_u.run(
+                [sys.executable,
+                 _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+                 "isolation", "--target-config", _ccfg, "--trials", "1", "--keys",
+                 "--frame-families", "authority", "--json", _km],
+                capture_output=True, text=True, timeout=900,
+                env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                         PYTHONIOENCODING="utf-8"))
+            _kout = (_kp.stdout or "") + (_kp.stderr or "")
+            check("isolation --keys searches, then writes its map",
+                  (_kp.returncode, "Traceback" in _kout, _os_w.path.isfile(_km),
+                   "keysearch" in (io.open(_km, encoding="utf-8").read()
+                                   if _os_w.path.isfile(_km) else "")),
+                  (0, False, True, True))
         finally:
             _srv_cn.shutdown()
 
