@@ -970,6 +970,13 @@ def main():
     from workspace import artifact_path as _artifact_path
     _json_path = _artifact_path(OUT_DIR, "results", target.name, args.model)
     _html_path = _artifact_path(OUT_DIR, "report", target.name, args.model, "html")
+    # AND BOTH PATHS CAN BE WRITTEN, asked before the first attack. Found by a seeded random
+    # walk: with `results_mybot.json` a directory, the sweep ran to the end and crashed in
+    # `atomic_write` replacing it -- every attack sent, no results, a traceback. A refusal
+    # here is a SystemExit, and the guard on `main` closes the run record with it.
+    from workspace import writable_path as _writable_path
+    _writable_path(_json_path, "results", "run", replaces=("a sweep's results",))
+    _writable_path(_html_path, "report", "run")
     _refusal = refuse_to_overwrite_evidence(
         _json_path,
         force=getattr(args, "overwrite_evidence", False))

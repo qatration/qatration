@@ -2822,6 +2822,53 @@ def _unwritable_at(_root, _sp_uw, _tf_uw):
     return bad
 
 
+def check_run_results_path_first():
+    """`run` refuses a results path it cannot write BEFORE the sweep, not after it."""
+    import subprocess as _sp_rp, tempfile as _tf_rp, threading as _th_rp, json as _js_rp
+    from http.server import BaseHTTPRequestHandler as _BH_rp, ThreadingHTTPServer as _TS_rp
+    bad, hits = [], []
+
+    class _Count(_BH_rp):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            hits.append(1)
+            _b = _js_rp.dumps({"reply": "Our store is open 9 to 5."}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+    srv = _TS_rp(("127.0.0.1", 0), _Count)
+    _th_rp.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _d = _tf_rp.mkdtemp()
+        _cfg = os.path.join(_d, "countbot.yaml")
+        open(_cfg, "w").write('name: countbot\nadapter: http\nurl: "http://127.0.0.1:%d/c"\n'
+                              'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
+                              % srv.server_address[1])
+        _out = os.path.join(_d, "ws")
+        os.makedirs(os.path.join(_out, "results_countbot.json"))
+        _p = _sp_rp.run([sys.executable, os.path.join(HERE, "cli.py"), "run", "--target-config",
+                         _cfg, "--scope", "quick", "--trials", "1"], capture_output=True,
+                        text=True, timeout=300, cwd=_d,
+                        env=dict(os.environ, QATRATION_OUT=_out, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8"))
+        _said = _p.stdout + _p.stderr
+        ok = (_p.returncode == 2 and "is a directory" in _said and not hits
+              and "Traceback" not in _said)
+        print("%s  run with its results path a directory is refused before any attack "
+              "-> exit %s, %d request(s)" % ("PASS" if ok else "FAIL", _p.returncode, len(hits)))
+        if not ok:
+            bad.append("run results path: exit %s, %d request(s): %s"
+                       % (_p.returncode, len(hits), _said.strip()[-200:]))
+    finally:
+        srv.shutdown()
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -3023,7 +3070,8 @@ def check_evidence_guard():
 if __name__ == "__main__":
     _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
             + check_dated() + check_line_buffered() + check_out_is_a_directory()
-            + check_no_adapter_at_the_doors() + check_unwritable_workspace())
+            + check_no_adapter_at_the_doors() + check_unwritable_workspace()
+            + check_run_results_path_first())
     if _bad:
         for _b in _bad:
             print('  !', _b)
