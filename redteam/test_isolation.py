@@ -774,6 +774,50 @@ def main():
         check("...while the map is still written, because it is a real record",
               any(f.startswith("isolation_deadbot") for f in _os_w.listdir(_uw)), True)
 
+        # A DESTINATION THAT WILL BE REFUSED IS REFUSED BEFORE THE PROBES, as in `recon`: both
+        # refusals read only the path and were made after every probe had been sent.
+        import threading as _th_cn, json as _js_cn
+        from http.server import BaseHTTPRequestHandler as _BH_cn, ThreadingHTTPServer as _TS_cn
+        _hits_cn = []
+
+        class _CountBot(_BH_cn):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length") or 0))
+                _hits_cn.append(1)
+                _b = _js_cn.dumps({"reply": "Our store is open 9 to 5."}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            def log_message(self, *a):
+                pass
+        _srv_cn = _TS_cn(("127.0.0.1", 0), _CountBot)
+        _th_cn.Thread(target=_srv_cn.serve_forever, daemon=True).start()
+        try:
+            _ccfg = _os_w.path.join(_uw, "targets_countbot.yaml")
+            io.open(_ccfg, "w", encoding="utf-8").write(chr(10).join([
+                "name: countbot", "adapter: http",
+                'url: "http://127.0.0.1:%d/chat"' % _srv_cn.server_address[1],
+                "request:", '  message: "{prompt}"', "response:", '  reply: "reply"',
+                "oracle_context:", '  canaries: ["ACME-CANARY-9931"]', ""]))
+            _arsenal_cn = _os_w.path.join(_uw, "attacks_mine.yaml")
+            _ars_body = "- id: a1" + chr(10) + "  category: c" + chr(10) + "  text: hi" + chr(10)
+            io.open(_arsenal_cn, "w", encoding="utf-8").write(_ars_body)
+            _cp = _sp_u.run(
+                [sys.executable,
+                 _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+                 "isolation", "--target-config", _ccfg, "--trials", "1", "--json", _arsenal_cn],
+                capture_output=True, text=True, timeout=900,
+                env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                         PYTHONIOENCODING="utf-8"))
+            check("isolation --json <an arsenal> is refused with nothing sent",
+                  (_cp.returncode, len(_hits_cn),
+                   io.open(_arsenal_cn, encoding="utf-8").read() == _ars_body), (2, 0, True))
+        finally:
+            _srv_cn.shutdown()
+
         # A FLAG THAT STEERS THE KEY SEARCH IS NOT DROPPED WITHOUT `--keys`. `--frames` at a
         # broken library ran the plain map, never read the file, and exited 0.
         _bad_fr = _os_w.path.join(_uw, "frames_mapping.yaml")

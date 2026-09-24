@@ -213,6 +213,40 @@ def main():
               f"which is not the same as nothing being open")
         return 3
 
+    # THE DESTINATION BEFORE THE PROBES, as in `recon`: both refusals below read only the path
+    # -- the reader's flag, or the target's name and the objectives file's -- and were made
+    # after every probe and every key search had been sent.
+    # The artifact name follows the OBJECTIVES, not just the target: a run of generated
+    # objectives used to overwrite the results of the curated ones for the same bot, which
+    # is a silent loss of the more expensive artifact of the two.
+    stem = os.path.splitext(os.path.basename(path))[0]
+    tag = re.sub(r"^isolation_", "", stem)
+    tag = re.sub(rf"_?{re.escape(target.name)}$", "", tag)     # no guardbot_…_guardbot
+    tag = "" if tag in ("", target.name, "example", "more") else "_" + tag
+    # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
+    # the directory this module is installed in, so `--json x.json` from a workspace landed
+    # beside site-packages -- and the next CI step, reading `x.json`, found nothing.
+    out = os.path.abspath(args.json or os.path.join(WORKSPACE_OUT,
+                                                    f"isolation_{target.name}{tag}.json"))
+    # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
+    # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
+    # with eight rows and `coverage` reported 958 fewer probes. It was then wired into
+    # two of the five commands that write evidence into `out/`, and this is one of the
+    # other three: the repository tracks 11 isolation maps, each a record of a real
+    # target's replies that `run` folds into a report.
+    #
+    # An untracked file is still overwritten in silence, which is the point: a person
+    # re-running their own sweep is not asked permission.
+    _refusal = refuse_to_overwrite_evidence(
+        out, force=getattr(args, "overwrite_evidence", False))
+    if _refusal:
+        # 2, THE SAME AS `run`: the invocation was refused and nothing was measured,
+        # so a pipeline must not read it as a finding.
+        print(_refusal, file=sys.stderr)
+        return 2
+    from workspace import writable_path as _writable
+    out = _writable(out, "maps", "isolation", replaces=("a lock map",))
+
     print(f"target: {target.name}   objectives: {len(objectives)}   "
           f"trials: {args.trials}\n")
     fams = args.frame_families.split(",") if args.frame_families else None
@@ -291,35 +325,8 @@ def main():
         print("coupled objectives (locks open alone, blocked together): "
               + ", ".join(coupled))
 
-    # The artifact name follows the OBJECTIVES, not just the target: a run of generated
-    # objectives used to overwrite the results of the curated ones for the same bot, which
-    # is a silent loss of the more expensive artifact of the two.
-    stem = os.path.splitext(os.path.basename(path))[0]
-    tag = re.sub(r"^isolation_", "", stem)
-    tag = re.sub(rf"_?{re.escape(target.name)}$", "", tag)     # no guardbot_…_guardbot
-    tag = "" if tag in ("", target.name, "example", "more") else "_" + tag
-    out = args.json or os.path.join(WORKSPACE_OUT, f"isolation_{target.name}{tag}.json")
+    # (`out` and both refusals of it are settled above, before the probes.)
     if out:
-        # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
-        # the directory this module is installed in, so `--json x.json` from a workspace landed
-        # beside site-packages -- and the next CI step, reading `x.json`, found nothing.
-        out = os.path.abspath(out)
-        # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
-        # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
-        # with eight rows and `coverage` reported 958 fewer probes. It was then wired into
-        # two of the five commands that write evidence into `out/`, and this is one of the
-        # other three: the repository tracks 11 isolation maps, each a record of a real
-        # target's replies that `run` folds into a report.
-        #
-        # An untracked file is still overwritten in silence, which is the point: a person
-        # re-running their own sweep is not asked permission.
-        _refusal = refuse_to_overwrite_evidence(
-            out, force=getattr(args, "overwrite_evidence", False))
-        if _refusal:
-            # 2, THE SAME AS `run`: the invocation was refused and nothing was measured,
-            # so a pipeline must not read it as a finding.
-            print(_refusal, file=sys.stderr)
-            return 2
         # AND A RUN THAT MEASURED NOTHING DOES NOT REPLACE ONE THAT DID. `run` refuses the
         # same trade in as many words, `benign` refuses it, `recon` refuses it; this wrote.
         # The rule lives in `isolation` beside the writer it guards.
@@ -327,8 +334,6 @@ def main():
         if _lost:
             print("\n" + _lost, file=sys.stderr)
         else:
-            from workspace import writable_path as _writable
-            out = _writable(out, "maps", "isolation", replaces=("a lock map",))
         # through write_maps, so the artifact carries the build that produced it — lock maps
         # were a bare list with no meta and could not be stamped even in principle
         # THE MOMENT THIS MEASURED, said here because this is what knows it. `write_maps`
