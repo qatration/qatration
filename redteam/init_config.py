@@ -58,7 +58,12 @@ def placeholders_left(cfg):
     the alternative is the string spelled a second time in whatever reads it.
     """
     out = []
-    if str(((cfg or {}).get("request") or {}).get("model") or "").strip() == DEFAULT_MODEL:
+    # A `request:` THAT IS NOT A MAPPING HAS NO `model` IN IT, and asking crashed `onboard`,
+    # which reports the shape itself; found by a seeded config fuzzer.
+    _req = (cfg or {}).get("request") or {}
+    if not isinstance(_req, dict):
+        return out
+    if str(_req.get("model") or "").strip() == DEFAULT_MODEL:
         out.append(("request.model", DEFAULT_MODEL))
     return out
 

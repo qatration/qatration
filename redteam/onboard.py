@@ -187,7 +187,12 @@ def check(cfg_path, probe_text=PROBE):
     # config would be advice they cannot act on, in a note whose whole value is that it can
     # be acted on.
     from runner import ATTACK_CONTEXT_KEYS as _ATTACK_KEYS
-    _all_inert = _inert_o((cfg or {}).get("oracle_context") or {}, _DETS_o)
+    # A CONTEXT THAT IS NOT A MAPPING is reported below by `bad_context_shapes`; the three
+    # questions that read INTO it (inert detectors, refusal vocabulary, weak canaries) are
+    # asked of an empty one rather than crashing this report. Found by a seeded config fuzzer.
+    _oc_raw = (cfg or {}).get("oracle_context") or {}
+    _oc = _oc_raw if isinstance(_oc_raw, dict) else {}
+    _all_inert = _inert_o(_oc, _DETS_o)
     _theirs = {_d: [_k for _k in _w if _k not in _ATTACK_KEYS]
                for _d, _w in _all_inert.items()}
     rep["inert"] = {_d: _w for _d, _w in _theirs.items() if _w}
@@ -197,18 +202,26 @@ def check(cfg_path, probe_text=PROBE):
     # check above passes it; what it CONTAINS is a second vocabulary with its own spellings,
     # and a class name nothing names disarms the whole list under it in silence.
     from refusal import bad_patterns as _bad_patterns
-    for _where, _why in _bad_patterns((cfg or {}).get("oracle_context") or {}):
+    for _where, _why in _bad_patterns(_oc):
         rep["problems"].append("%s %s" % (_where, _why))
     # AND THE SHAPE OF WHAT IS THERE. A string is iterable, so a scalar where a list belongs
     # raises nothing and empties nothing — it just gets used one character at a time.
     from workspace import bad_context_shapes as _bad_shapes
-    for _where, _why in _bad_shapes(cfg):
-        rep["problems"].append("oracle_context.%s %s" % (_where, _why))
+    _shapes = _bad_shapes(cfg)
+    for _where, _why in _shapes:
+        rep["problems"].append("%s %s" % (_where if _where == "oracle_context"
+                                          else "oracle_context.%s" % _where, _why))
+    # AND NO FURTHER WITH A CONTEXT OF THE WRONG SHAPE: what follows reads these values as
+    # the shapes they should be -- the canaries as a list, the verify token as text -- and
+    # asks the endpoint for them. Found by a seeded config fuzzer: `canaries: 1.5` and
+    # `honeytoken_verify: {k: v}` each crashed this report after the shape was already named.
+    if _shapes:
+        return False, rep
     # AND WHETHER THE CANARY CAN CARRY THE EVIDENCE. A NOTE rather than a problem: a
     # customer's real secret may genuinely be short, and refusing that would block the test
     # they came to run. The benign sweep answers it properly and this points there.
     from honeytoken import weak_canaries as _weak
-    for _c, _why in _weak((cfg or {}).get("oracle_context") or {}):
+    for _c, _why in _weak(_oc):
         rep["notes"].append("canary %r %s" % (_c, _why))
     # AND WHETHER THE TEMPLATE'S OWN WORDS ARE STILL IN IT. `init` writes `YOUR-MODEL-ID`
     # expecting the endpoint to reject it, which is true of an API that validates the field

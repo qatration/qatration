@@ -240,6 +240,24 @@ def check_every_command_refuses():
           "one character at a time" in _refused({"oracle_context": {"canaries": "ACME"}}), True)
     # AND A FILE THAT NAMES NO ADAPTER: it was read as the DVLA practice bot, whose absence
     # was then the error.
+    # THE SHAPES A SEEDED CONFIG FUZZER FOUND CRASHING THE REFUSAL ITSELF: a context that is not
+    # a mapping (a list reached `bad_patterns` and `.get`), an empty list read as "no context",
+    # and a key read as TEXT given a mapping. Each must come back as a sentence.
+    _base_sh = {"adapter": "http", "name": "b"}
+    _shape_cases = [({"oracle_context": ["a"]}, "is list, not a mapping"),
+                    ({"oracle_context": 7}, "is int, not a mapping"),
+                    ({"oracle_context": []}, "is list, not a mapping"),
+                    ({"oracle_context": {"canaries": 1.5}}, "is float; this key is read as a list"),
+                    ({"oracle_context": {"honeytoken_verify": {"k": "v"}}},
+                     "is dict; this key is read as TEXT")]
+    check("every fuzzed context shape is refused with a sentence, not a crash",
+          [_says in _refused(dict(_base_sh, **_c)) for _c, _says in _shape_cases],
+          [True] * len(_shape_cases))
+    check("...and the whole block is named once, not as oracle_context.oracle_context",
+          "oracle_context.oracle_context" in _refused(dict(_base_sh, oracle_context=["a"])),
+          False)
+    check("the keys read as text are found by reading the code",
+          {"honeytoken_verify", "system_prompt"} <= _ws.string_context_keys(), True)
     check("a config with no adapter is refused as that, not read as the practice bot",
           "adapter" in _refused({"probes": 641, "measured": True})
           and "is missing" in _refused({"probes": 641, "measured": True}), True)

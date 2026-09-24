@@ -698,6 +698,28 @@ def number_context_keys(root=None):
     return keys
 
 
+def string_context_keys(root=None):
+    """Every `oracle_context` key the engine reads as TEXT -- `ctx.get(k) or ""` and then a
+    string method -- scanned, not listed, like `list_context_keys`.
+
+    THE THIRD SHAPE, AND IT HAD NO RULE. `honeytoken_verify: {k: v}` passed every check and
+    reached `.strip()` in the pre-flight: a traceback under "this is a bug in qatration" for a
+    value the reader typed. Found by a seeded config fuzzer.
+    """
+    import glob as _glob
+    import re as _re
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    pat = _re.compile(r'\b(?:ctx|_ctx|c|context|oracle_context)\s*(?:or\s*\{\}\s*\))?'
+                      r'\.get\(\s*"([a-z_]+)"\s*\)\s*or\s*""')
+    keys = set()
+    for fp in _glob.glob(os.path.join(here, "*.py")):
+        if os.path.basename(fp).startswith("test_"):
+            continue
+        with open(fp, encoding="utf-8") as fh:
+            keys.update(pat.findall(fh.read()))
+    return keys
+
+
 def bad_context_shapes(cfg):
     """-> [(key, what is wrong)] for context values of a shape the engine cannot use.
 
@@ -707,9 +729,20 @@ def bad_context_shapes(cfg):
     look exactly like a real one.
     """
     out = []
-    ctx = (cfg or {}).get("oracle_context") or {}
+    # `is None`, NOT `or {}`: an EMPTY LIST is falsy, so `or {}` turned `oracle_context: []`
+    # into a clean, empty context here while `benign` read the same key without the `or` and
+    # crashed on `.get`. Only an absent block is an empty one.
+    ctx = (cfg or {}).get("oracle_context")
+    if ctx is None:
+        ctx = {}
     if not isinstance(ctx, dict):
         return [("oracle_context", "is %s, not a mapping" % type(ctx).__name__)]
+    # AND THE KEYS READ AS TEXT, which is the shape nothing asked about.
+    _text = string_context_keys()
+    for k, v in ctx.items():
+        if k in _text and v is not None and not isinstance(v, str):
+            out.append((k, "is %s; this key is read as TEXT, and a value that is not one "
+                           "raises where it is first read" % type(v).__name__))
     # NO "IF THE SCAN IS EMPTY" GUARD HERE, and its absence is deliberate: the loop below
     # already skips every key that is not in `want`, so an empty set accuses nothing by
     # construction. The guard its neighbour `unread_context_keys` needs — that one asks the
@@ -1269,7 +1302,10 @@ def refuse_unusable_config(cfg, where):
                  % near)
                 for k, near in near_miss_keys(cfg, config_keys_read(),
                                               suspects=config_key_suspects())]
-    problems += [("oracle_context.%s" % k, why) for k, why in bad_context_shapes(cfg)]
+    # THE WHOLE BLOCK IS NAMED ONCE: `bad_context_shapes` reports a non-mapping context under
+    # the key `oracle_context` itself, and prefixing it again read "oracle_context.oracle_context".
+    problems += [(k if k == "oracle_context" else "oracle_context.%s" % k, why)
+                 for k, why in bad_context_shapes(cfg)]
     # A CONFIG THAT NAMES NO ADAPTER IS NOT THE PRACTICE BOT'S. `load_target` defaults a
     # missing `adapter:` to `dvla`, which every shipped config spells out, so the default is
     # reached only by a config that forgot the key or by a file that is not a config at all.
@@ -1298,7 +1334,11 @@ def refuse_unusable_config(cfg, where):
                                     "without it the run was filed as `http-target`, under the "
                                     "adapter's default, where no config answers to it."))
     from refusal import bad_patterns
-    problems += bad_patterns((cfg or {}).get("oracle_context") or {})
+    # A CONTEXT THAT IS NOT A MAPPING is `bad_context_shapes`' finding, two lines up; asking
+    # its refusal vocabulary as well handed a list to `.get` and crashed the one function whose
+    # job is to refuse this config. Found by a seeded config fuzzer.
+    _oc = (cfg or {}).get("oracle_context") or {}
+    problems += bad_patterns(_oc if isinstance(_oc, dict) else {})
     if not problems:
         return
     raise SystemExit(
@@ -1327,7 +1367,12 @@ def unread_context_keys(cfg):
     known = context_keys_read()
     if not known:
         return []
-    return sorted(k for k in ((cfg or {}).get("oracle_context") or {}) if k not in known)
+    # A CONTEXT THAT IS NOT A MAPPING HAS NO KEYS TO ASK ABOUT; its shape is
+    # `bad_context_shapes`' finding. Iterating it raised on `oracle_context: 7`.
+    _oc = (cfg or {}).get("oracle_context") or {}
+    if not isinstance(_oc, dict):
+        return []
+    return sorted(k for k in _oc if k not in known)
 
 
 def context_keys_read(root=None):

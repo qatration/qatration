@@ -738,6 +738,23 @@ def main():
         check("...and the problem is the one that says why",
               any("one character at a time" in _p for _p in _sc_rep["problems"]),
               str(_sc_rep["problems"])[:200])
+        # AND THE SHAPES A SEEDED CONFIG FUZZER FOUND CRASHING THIS REPORT, each after its shape
+        # was already named: a context that is not a mapping, a canary that is a number, a
+        # verify token that is a mapping. Each must be a PROBLEM, not an exception.
+        _crashed = []
+        for _nm_f, _extra_f in (("ocstr", 'oracle_context: "x"\n'),
+                                ("ocint", "oracle_context: 7\n"),
+                                ("canfloat", "oracle_context:\n  canaries: 1.5\n"),
+                                ("hvdict", "oracle_context:\n  honeytoken_verify: {k: v}\n")):
+            _fz = write("fz" + _nm_f, "choices.0.message.content", extra=_extra_f)
+            try:
+                _fz_ok, _fz_rep = onboard.check(_fz)
+                if _fz_ok or not _fz_rep["problems"]:
+                    _crashed.append("%s passed" % _nm_f)
+            except Exception as _e_fz:
+                _crashed.append("%s: %s: %s" % (_nm_f, type(_e_fz).__name__, _e_fz))
+        check("every fuzzed context shape is a PROBLEM in the report, not an exception",
+              not _crashed, "; ".join(_crashed))
         # AND THE OTHER HALF OF THAT PAIR: a refusal vocabulary the engine cannot use.
         _badpat = write("badpattern", "choices.0.message.content",
                         extra='oracle_context:\n  refusal_patterns:\n'
