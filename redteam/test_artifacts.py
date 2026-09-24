@@ -301,18 +301,18 @@ def main():
     from workspace import _RESULTS_REQUIRE as _table
     _base = {"meta": {"target": "t"},
              "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": [],
-                          "trials": [{"verdict": "DEFENDED"}]}]}
+                          "trials": [{"verdict": "DEFENDED", "probe": {}}]}]}
     _unreached = []
     for _key, (_kind, _req, _) in _table.items():
         _wrong = 7 if _kind is str else "x"
         _b = json.loads(json.dumps(_base))
+        # Walked BY THE PATH, whatever its depth, so a row added a level further down is
+        # reached without this loop learning about it.
         _parts = _key.replace("[]", "").split(".")
-        _obj = {"meta": _b["meta"], "results": _b["results"][0]}[_parts[0]]
-        if _parts[1:2] == ["trials"] and len(_parts) > 2:
-            _obj, _parts = _obj["trials"][0], _parts[1:]
-        elif _parts[1:2] == ["attack"] and len(_parts) > 2:
-            _obj, _parts = _obj["attack"], _parts[1:]
-        _field = _parts[1]
+        _obj = _b
+        for _p in _parts[:-1]:
+            _obj = _obj[_p][0] if isinstance(_obj[_p], list) else _obj[_p]
+        _field = _parts[-1]
         _obj[_field] = [_wrong] if _key.endswith("[]") else _wrong
         _d9, _why9 = _artifact("results_x.json", _b)
         if not (_d9 is None and _field in (_why9 or "")
@@ -320,6 +320,16 @@ def main():
             _unreached.append((_key, _why9))
     check("every row of the results shape table refuses a value of the wrong kind, by name",
           _unreached == [], str(_unreached))
+    # A CALL IS A PAIR. `for t, ti in tool_calls` unpacks each one, so a list of three is the
+    # right kind and still raises; every one of the 852 stored is two strings.
+    _b = json.loads(json.dumps(_base))
+    _b["results"][0]["trials"][0]["probe"]["tool_calls"] = [["tool", "{}", "extra"]]
+    _whyp = _artifact("results_x.json", _b)[1]
+    check("a stored tool call that is not a pair is refused, naming the call",
+          "tool_calls[0]" in (_whyp or "") and "not 2" in (_whyp or ""), str(_whyp))
+    _b["results"][0]["trials"][0]["probe"]["tool_calls"] = [["tool", "{}"]]
+    check("...while a pair is not", _artifact("results_x.json", _b)[1] is None,
+          str(_artifact("results_x.json", _b)[1]))
     # THE HEADLINE IS ONE OF FIVE WORDS. `headline: "x"` is a str and passed the kind; the
     # report colours a row by looking it up, and died on a KeyError.
     _b = json.loads(json.dumps(_base))

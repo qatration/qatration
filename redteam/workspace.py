@@ -2236,7 +2236,25 @@ _RESULTS_REQUIRE = {
                                  "`fixes`, `coverage` and the report quote what was sent "
                                  "and what came back from it"),
     "results[].trials[].refusal": (dict, False, "`fixes` reads the refusal class off it"),
+    # AND ONE LEVEL DOWN, INSIDE THE PROBE, by the same sweep pointed at its keys: ten more
+    # sites -- `.strip()` on `output: -1`, `for t, ti in tool_calls` on `tool_calls:
+    # [{k: 1}]`, `tuple(x)` on `resolved: [1]`. `turns` is not here: `Probe` accepts it as
+    # one dict per exchange or as a flat alternating list, and checks it itself.
+    "results[].trials[].probe.output": (str, False, "every page quotes the reply from it"),
+    "results[].trials[].probe.prompt": (str, False, "`coverage` replays what was sent"),
+    "results[].trials[].probe.tool_calls": (list, False, "the pages list each call"),
+    "results[].trials[].probe.tool_calls[]": (list, False,
+                                              "each call is read as a (name, arguments) pair"),
+    "results[].trials[].probe.resolved": (list, False,
+                                          "`fixes` asks which channels a probe reached"),
+    "results[].trials[].probe.resolved[]": (list, False,
+                                            "each one is read as a (path, value) pair"),
+    "results[].trials[].probe.observations": (list, False,
+                                              "`coverage` replays what the tools returned"),
 }
+# The `[]` rows whose elements are unpacked as `a, b = element`: a list of the wrong length
+# is the right kind and still raises. Every one of the 852 stored is a pair.
+_PAIR_ROWS = ("results[].trials[].probe.tool_calls[]", "results[].trials[].probe.resolved[]")
 
 
 def _level_fault(obj, prefix, label):
@@ -2255,6 +2273,9 @@ def _level_fault(obj, prefix, label):
         if (key + "[]") in _RESULTS_REQUIRE and isinstance(obj.get(name), list):
             for j, _e in enumerate(obj[name]):
                 _why = shape_fault(key + "[]", _e, True)
+                if not _why and key + "[]" in _PAIR_ROWS and len(_e) != 2:
+                    _why = ("a results file whose %s holds %d item(s), not 2: %s"
+                            % (key + "[]", len(_e), _RESULTS_REQUIRE[key + "[]"][2]))
                 if _why:
                     return _why.replace(key + "[]", "%s%s[%d]" % (label, name, j))
     return None
@@ -2479,6 +2500,11 @@ def _unusable_results(data, name=""):
             _why = _level_fault(_tr, "results[].trials[].", "results[%d].trials[%d]." % (i, j))
             if _why:
                 return _why
+            if isinstance(_tr.get("probe"), dict):
+                _why = _level_fault(_tr["probe"], "results[].trials[].probe.",
+                                    "results[%d].trials[%d].probe." % (i, j))
+                if _why:
+                    return _why
     return None
 
 
