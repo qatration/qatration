@@ -334,16 +334,24 @@ def bad_entry_shapes(entries):
         if not isinstance(e, dict):
             continue
         who = e.get("id") or e.get("name") or "?"
-        for k, v in e.items():
-            if k not in want or v is None or isinstance(v, (list, tuple)):
-                continue
-            if isinstance(v, str):
-                out.append((who, k, "is a single string; this field is read as a LIST, so %r "
-                                    "would be used one character at a time. Write it as "
-                                    "[%r]" % (v, v)))
-            else:
-                out.append((who, k, "is %s; this field is read as a list"
-                            % type(v).__name__))
+        # AND AN OBJECTIVE'S PROPERTIES, whose `success`/`partial` are the same lists one level
+        # down. Walked: `success: canary_in_output` inside a property sailed past this check
+        # and `isolation` refused sixteen "names" -- 'c', 'a', 'n', ... -- as unknown detectors.
+        _props = e.get("properties")
+        _inner = [("%s property %r" % (who, p.get("name") or "?"), p)
+                  for p in (_props if isinstance(_props, list) else []) if isinstance(p, dict)]
+        for _who, _e, _fields in [(who, e, want)] + [(w, p, ("success", "partial"))
+                                                      for w, p in _inner]:
+            for k, v in _e.items():
+                if k not in _fields or v is None or isinstance(v, (list, tuple)):
+                    continue
+                if isinstance(v, str):
+                    out.append((_who, k, "is a single string; this field is read as a LIST, so "
+                                         "%r would be used one character at a time. Write it "
+                                         "as [%r]" % (v, v)))
+                else:
+                    out.append((_who, k, "is %s; this field is read as a list"
+                                % type(v).__name__))
     return out
 
 

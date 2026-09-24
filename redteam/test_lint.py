@@ -153,6 +153,12 @@ def check_refusal(check):
           len(bad_entry_shapes([{"id": "a", "success": "canary_in_output"}])) == 1, "not caught")
     check("...and so is an applies_to that nothing else would refuse",
           len(bad_entry_shapes([{"id": "b", "applies_to": "httpbot"}])) == 1, "not caught")
+    # AND ONE LEVEL DOWN, in an objective's property: isolation read its letters as sixteen
+    # unknown detectors.
+    _nested = bad_entry_shapes([{"id": "o", "properties": [
+        {"name": "a", "success": "canary_in_output"}, {"name": "b", "success": ["x"]}]}])
+    check("...and a property's success written without brackets, named by its property",
+          len(_nested) == 1 and "property 'a'" in _nested[0][0], str(_nested))
     check("...naming the field rather than a letter from inside it",
           bad_entry_shapes([{"id": "a", "success": "x"}])[0][1] == "success", "wrong field")
 
