@@ -241,8 +241,17 @@ def wake_worker(root, python=None):
         if os.name == "nt":
             # Otherwise the child dies with the intake's console, and a submission accepted
             # right before a restart would be accepted and never run.
-            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | \
-                getattr(subprocess, "DETACHED_PROCESS", 0)
+            #
+            # A CONSOLE OF ITS OWN, HIDDEN -- NOT NONE. This was DETACHED_PROCESS: a worker with
+            # no console at all, so every console program IT starts -- the sweep, the report,
+            # each a `python` -- got a brand-new console, and Windows hands a new console to
+            # the default terminal, which opens a window on the user's screen. Measured with a
+            # window hook over `test_onboard`'s one `--submit`: three terminal windows, one per
+            # python the worker started. CREATE_NO_WINDOW gives the worker a console nobody
+            # sees, and its children inherit that one.
+            kwargs["creationflags"] = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000))
         else:
             kwargs["start_new_session"] = True
         subprocess.Popen([python or sys.executable, os.path.join(HERE, "worker.py"),

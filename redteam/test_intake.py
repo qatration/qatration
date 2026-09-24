@@ -493,7 +493,32 @@ def main():
             src2 = open(os.path.join(HERE, mod), encoding="utf-8").read()
             check(f"{mod} does not poll on a timer", "time.sleep" not in src2, mod)
         check("the worker is started detached, so a submission returns while the run continues",
-              "Popen(" in src and ("start_new_session" in src or "DETACHED_PROCESS" in src))
+              "Popen(" in src and ("start_new_session" in src or "CREATE_NEW_PROCESS_GROUP" in src))
+        # AND ON WINDOWS WITH A HIDDEN CONSOLE, NOT WITHOUT ONE: a console-less worker's every
+        # child got a new console, which the default terminal opens as a window on the user's
+        # screen -- three of them for one `onboard --submit`. Driven through `wake_worker` with
+        # Popen recorded, on the Windows branch whatever this runs on.
+        _rec_w = []
+
+        class _RecPopen:
+            def __init__(self, *a, **kw):
+                _rec_w.append(kw)
+        _old_popen, _old_osname = intake.subprocess.Popen, intake.os.name
+        _old_nw = os.environ.pop("QATRATION_NO_WORKER", None)
+        try:
+            intake.subprocess.Popen = _RecPopen
+            intake.os.name = "nt"
+            intake.wake_worker(tempfile.mkdtemp())
+        finally:
+            intake.os.name = _old_osname
+            intake.subprocess.Popen = _old_popen
+            if _old_nw is not None:
+                os.environ["QATRATION_NO_WORKER"] = _old_nw
+        _fl_w = (_rec_w[0].get("creationflags") if _rec_w else None) or 0
+        check("on Windows the worker gets a hidden console (CREATE_NO_WINDOW), not none "
+              "(DETACHED_PROCESS), so what it starts opens no window",
+              bool(_fl_w & 0x08000000) and not (_fl_w & 0x00000008) and bool(_fl_w & 0x200),
+              "creationflags=%#x" % _fl_w)
     finally:
         srv.shutdown()
         if old_env is None:
