@@ -898,6 +898,10 @@ def main():
     # to whom, on whose authority, and what did it cost" — and the runs worth having a record
     # of are disproportionately the ones that do not finish.
     import runs as _runs
+    # SOMEWHERE THE RECORD CAN BE WRITTEN, asked before it is opened -- and before anything is
+    # sent. An artifact directory nobody can write to crashed `_runs.start` with a traceback.
+    from workspace import writable_dir as _writable_dir
+    _writable_dir(OUT_DIR, "run record and results", "run")
     _run_id = _runs.new_id()
     _budgets = dict((tcfg.get("rate") or {}))
     _rec = _runs.start(OUT_DIR, _run_id, target.name, scope=args.scope,

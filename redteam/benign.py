@@ -1178,6 +1178,10 @@ def main():
     # baselines are evidence, the false-positive rates on the front page and every `weakened`
     # verdict are recounted from them, and refusing after fifty probes have been paid for is an
     # error message rather than a guard.
+    # AND SOMEWHERE IT CAN BE WRITTEN, for the same reason: an unwritable artifact directory
+    # let all fifty probes go and then crashed on the write.
+    workspace.writable_path(os.path.join(OUT_DIR, f"benign_{args.target}.json"), "baseline",
+                            "benign", replaces=("a benign baseline",))
     _refusal = refuse_to_overwrite_evidence(
         os.path.join(OUT_DIR, f"benign_{args.target}.json"),
         force=getattr(args, "overwrite_evidence", False))

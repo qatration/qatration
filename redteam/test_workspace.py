@@ -636,7 +636,8 @@ def check_every_command_refuses():
     _io.open(_afile, "w", encoding="utf-8").write("x")
     _said_under, _ = _writable(_os.path.join(_afile, "page.html"))
     check("a parent that is itself a file is refused with the system's own reason",
-          "cannot make" in _said_under and "Nothing was written" in _said_under, True)
+          "cannot write" in _said_under and "Nothing was written" in _said_under
+          and bool(__import__("re").search(r"\bE[A-Z]+: ", _said_under)), True)
     # AND AN ORDINARY PATH IN AN ORDINARY DIRECTORY IS UNTOUCHED, or a rule that refuses
     # everything passes all of that.
     check("...while an ordinary path is returned as it came",
@@ -2754,6 +2755,57 @@ def check_no_adapter_at_the_doors():
     return bad
 
 
+def check_unwritable_workspace():
+    """A workspace that cannot be written in is refused before the work, not crashed after."""
+    import subprocess as _sp_uw, tempfile as _tf_uw
+    bad = []
+    # TWO SHAPES: a directory that cannot be made, and one that EXISTS and cannot be written
+    # in -- the second is the one `makedirs(exist_ok=True)` alone lets through.
+    if os.name == "nt":
+        _ro = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+    else:
+        _ro = _tf_uw.mkdtemp()
+        os.chmod(_ro, 0o500)
+    # AN ELEVATED OR ROOT USER CAN WRITE ANYWHERE. One attempt, not `mkstemp`, which on
+    # Windows retries forever in a directory an ACL closes (see `workspace.writable_dir`).
+    try:
+        _pr_uw = os.path.join(_ro, ".qatration-test-%d" % os.getpid())
+        os.close(os.open(_pr_uw, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+        os.remove(_pr_uw)
+        print("SKIP  an unwritable workspace: this user can write in %s" % _ro)
+        return bad
+    except OSError:
+        pass
+    for _root in (os.path.join(_ro, "qatration-cannot-write-here"), _ro):
+        bad += _unwritable_at(_root, _sp_uw, _tf_uw)
+    return bad
+
+
+def _unwritable_at(_root, _sp_uw, _tf_uw):
+    bad = []
+    _d = _tf_uw.mkdtemp()
+    _cfg = os.path.join(_d, "deadbot.yaml")
+    open(_cfg, "w").write('name: deadbot\nadapter: http\nurl: "http://127.0.0.1:9/x"\n'
+                          'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n')
+    for _argv in (["run", "--target-config", _cfg, "--scope", "quick", "--trials", "1"],
+                  ["benign", "--target-config", _cfg],
+                  ["init", "--out", os.path.join(_root, "x.yaml")]):
+        _p = _sp_uw.run([sys.executable, os.path.join(HERE, "cli.py")] + _argv,
+                        capture_output=True, text=True, timeout=120, cwd=_d,
+                        env=dict(os.environ, QATRATION_OUT=_root, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8"))
+        _said = _p.stdout + _p.stderr
+        ok = (_p.returncode == 2 and "Traceback" not in _said
+              and "cannot write" in _said and "did not answer" not in _said)
+        print("%s  %s into %s is refused before the work -> exit %s"
+              % ("PASS" if ok else "FAIL", _argv[0],
+                 "an existing unwritable workspace" if os.path.isdir(_root)
+                 else "a workspace that cannot be made", _p.returncode))
+        if not ok:
+            bad.append("%s: exit %s: %s" % (_argv[0], _p.returncode, _said.strip()[-240:]))
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -2955,7 +3007,7 @@ def check_evidence_guard():
 if __name__ == "__main__":
     _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
             + check_dated() + check_line_buffered() + check_out_is_a_directory()
-            + check_no_adapter_at_the_doors())
+            + check_no_adapter_at_the_doors() + check_unwritable_workspace())
     if _bad:
         for _b in _bad:
             print('  !', _b)

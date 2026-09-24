@@ -973,16 +973,48 @@ def writable_path(path, what="file", where="", replaces=()):
     if _held and _held not in replaces:
         raise SystemExit(lead + "ABORT — %s holds %s, and writing the %s there would replace "
                          "it. Name another file. Nothing was written." % (path, _held, what))
-    parent = os.path.dirname(os.path.abspath(path))
+    writable_dir(os.path.dirname(os.path.abspath(path)), what, where)
+    # AND THE FILE ITSELF, when it is there: `atomic_write` replaces it, and a read-only one
+    # refuses the replace after the work that produced it.
+    if os.path.exists(path) and not os.access(path, os.W_OK):
+        raise SystemExit(lead + "ABORT — %s is read-only, so the %s cannot be written over it. "
+                         "Nothing was written." % (path, what))
+    return path
+
+
+def writable_dir(directory, what="file", where=""):
+    """Make `directory` and prove a file can be written in it, or refuse. -> the directory.
+
+    MADE IS NOT WRITABLE. This used to be the tail of `writable_path`, and it only made the
+    directory: one that already existed and could not be written in passed, and the write
+    failed later. Walked with $QATRATION_OUT under C:\\Windows\\System32: `run` crashed opening
+    its run record, `init --out` crashed in `atomic_write`, and `benign` sent all fifty of
+    its probes and then crashed writing the baseline -- three tracebacks under "this is a bug
+    in qatration" for a directory the reader cannot write to. A file is written and removed
+    here, because asking the permission bits is a guess on Windows and on network shares.
+
+    ONE ATTEMPT, NOT `tempfile.mkstemp`. On Windows mkstemp answers a PermissionError by
+    trying the next name whenever `os.access(dir, W_OK)` says yes -- and `os.access` reads
+    only the read-only attribute, so under an ACL that denies writes (System32 is one) it
+    says yes forever and mkstemp loops until TMP_MAX, which is two billion. Measured: the
+    first version of this hung a suite for twenty minutes on exactly that directory.
+    """
+    import errno
+    import secrets as _secrets
+    lead = (where + ": ") if where else ""
     try:
-        os.makedirs(parent, exist_ok=True)
+        os.makedirs(directory, exist_ok=True)
+        _probe = os.path.join(directory, ".qatration-write-%s" % _secrets.token_hex(8))
+        _fd = os.open(_probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(_fd)
+        os.remove(_probe)
     except OSError as e:
         # NOT A GUESS ABOUT WHY. A parent that is itself a file, a permission, a read-only
         # mount: the errno is what the operating system said and the reader has to act on it.
-        raise SystemExit(lead + "ABORT — cannot make %s to write the %s into: %s: %s. "
-                         "Nothing was written."
-                         % (parent, what, errno.errorcode.get(e.errno, type(e).__name__), e))
-    return path
+        raise SystemExit(lead + "ABORT — cannot write the %s in %s: %s: %s. Nothing was "
+                         "written." % (what, directory,
+                                       errno.errorcode.get(e.errno, type(e).__name__), e))
+    return directory
 
 
 def _evidence_kind(path):
