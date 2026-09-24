@@ -1000,7 +1000,11 @@ def writable_path(path, what="file", where="", replaces=()):
     writable_dir(os.path.dirname(os.path.abspath(path)), what, where)
     # AND THE FILE ITSELF, when it is there: `atomic_write` replaces it, and a read-only one
     # refuses the replace after the work that produced it.
-    if os.path.exists(path) and not os.access(path, os.W_OK):
+    #
+    # WINDOWS ONLY, which is where it is true. There the read-only attribute makes `os.replace`
+    # onto the file fail; on POSIX a rename replaces a 0444 file in a writable directory
+    # without asking the file, so refusing it there refused a write that would have worked.
+    if os.name == "nt" and os.path.exists(path) and not os.access(path, os.W_OK):
         raise SystemExit(lead + "ABORT — %s is read-only, so the %s cannot be written over it. "
                          "Nothing was written." % (path, what))
     return path

@@ -674,6 +674,24 @@ def check_every_command_refuses():
     check("...while an ordinary path is returned as it came",
           _writable(_os.path.join(_ww, "plain.html"))[1],
           _os.path.join(_ww, "plain.html"))
+    # A READ-ONLY FILE IS REFUSED WHERE THE REPLACE WOULD FAIL, and only there: on Windows the
+    # attribute blocks `os.replace`; on POSIX a rename replaces a 0444 file without asking it.
+    import stat as _stat_ro
+    _ro_path = _os.path.join(_ww, "readonly.html")
+    _io.open(_ro_path, "w", encoding="utf-8").write("x")
+    _os.chmod(_ro_path, _stat_ro.S_IREAD)
+    try:
+        _said_ro, _got_ro = _writable(_ro_path)
+        _replaced = True
+        try:
+            with _ws.atomic_write(_ro_path) as _fh_ro:
+                _fh_ro.write("y")
+        except OSError:
+            _replaced = False
+        check("a read-only file is refused exactly where writing over it would fail",
+              ("read-only" in _said_ro), not _replaced)
+    finally:
+        _os.chmod(_ro_path, _stat_ro.S_IREAD | _stat_ro.S_IWRITE)
 
     # AND THE COMMANDS, DRIVEN, because the rule is a function and the defect was six
     # commands that never called one. `sarif` and `coverage` are the two the walk crashed.
