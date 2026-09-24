@@ -421,6 +421,19 @@ def main():
               _pd.returncode == 2 and "QATRATION_SWEEP_TIMEOUT" in _sd
               and "stopped answering" not in _sd and "=====" not in _sd
               and "Traceback" not in _sd, "exit %s: %s" % (_pd.returncode, _sd[-240:]))
+    # ...AND ONLY BY THE MODE THAT USES IT: `--from-disk` starts no model and must not be
+    # refused over a variable it never reads.
+    _w_fd = _workspace({"aaa": (None, "2026-09-01 10:00"), "bbb": (None, "2026-09-01 10:00")})
+    _pfd = subprocess.run(
+        [sys.executable, os.path.join(HERE, "cli.py"), "matrix", "--target-config",
+         os.path.join(_w_fd, "targets_matbot.yaml"), "--from-disk"],
+        capture_output=True, text=True, timeout=300, cwd=ROOT,
+        env=dict(os.environ, QATRATION_OUT=_w_fd, QATRATION_SWEEP_TIMEOUT="0",
+                 PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+    check("matrix --from-disk is not refused over a sweep timeout it never uses",
+          _pfd.returncode != 2 and "QATRATION_SWEEP_TIMEOUT" not in (_pfd.stdout + _pfd.stderr),
+          "exit %s: %s" % (_pfd.returncode, (_pfd.stdout + _pfd.stderr)[-240:]))
+    shutil.rmtree(_w_fd, ignore_errors=True)
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:

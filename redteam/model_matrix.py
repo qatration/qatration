@@ -88,9 +88,11 @@ def main():
                     help="compare per-model runs ALREADY on disk, no GPU — and print when each "
                          "was measured and by which build, because that is the whole risk")
     args = ap.parse_args()
-    # THE CEILING IS READ BEFORE ANY MODEL RUNS, and refused there if it is not one.
+    # THE CEILING IS READ BEFORE ANY MODEL RUNS, and refused there if it is not one -- and
+    # only by the mode that starts one: `--from-disk` spawns nothing, and a bad value in a
+    # variable it never uses refused it.
     from workspace import sweep_deadline as _sweep_deadline
-    _deadline = _sweep_deadline()
+    _deadline = None if args.from_disk else _sweep_deadline()
     if not args.models and not args.from_disk:
         ap.error("--models is required unless --from-disk is given")
 
