@@ -1133,6 +1133,20 @@ def main():
                       _rnt.returncode == 3 and "The targets with results here: localrag"
                       in _rnt.stdout and "run a sweep first" not in _rnt.stdout,
                       "exit %s: %s" % (_rnt.returncode, _rnt.stdout[-300:]))
+        # `--pages --write` IS REFUSED, not answered as `--pages`: the re-score it names never
+        # ran, under "no record was changed".
+        with tempfile.TemporaryDirectory() as _dpw:
+            shutil.copy(_src_p, os.path.join(_dpw, "results_localrag.json"))
+            _rpw = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                   "rejudge", "--pages", "--write"],
+                                  capture_output=True, text=True, timeout=300,
+                                  env=dict(os.environ, QATRATION_OUT=_dpw,
+                                           PYTHONIOENCODING="utf-8",
+                                           PYTHONDONTWRITEBYTECODE="1"))
+            check("rejudge --pages --write is refused rather than read as --pages",
+                  _rpw.returncode == 2 and "different jobs" in _rpw.stderr
+                  and not os.path.exists(os.path.join(_dpw, "report_localrag.html")),
+                  "exit %s: %s" % (_rpw.returncode, (_rpw.stdout + _rpw.stderr)[-240:]))
         # AND NOTHING REBUILT IS NOT A SUCCESS, which is the same rule `tools/check.py`
         # applies to finding no suites: an empty directory and a directory whose pages are
         # all current would otherwise print the same sentence and exit the same way.

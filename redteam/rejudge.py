@@ -360,6 +360,14 @@ def main():
                     help="rebuild each HTML report from the stored record and write "
                          "nothing else")
     args = ap.parse_args()
+    # TWO ANSWERS TO ONE QUESTION, and `--pages` returned first. `--pages --write` rebuilt the
+    # pages from the records as stored, said "no record was changed" and exited 0: the re-score
+    # the reader asked for by name was never run, in a sentence that reads as it having found
+    # nothing to change.
+    if args.pages and args.write:
+        ap.error("--pages rebuilds the pages from the records as they are; --write re-scores the "
+                 "records and rebuilds the pages from the new scores. They are different jobs: "
+                 "run one. Nothing was written.")
 
     if args.pages:
         _built = rebuild_pages(args.target)
