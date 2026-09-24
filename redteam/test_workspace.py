@@ -238,13 +238,21 @@ def check_every_command_refuses():
 
     check("a scalar canary is refused",
           "one character at a time" in _refused({"oracle_context": {"canaries": "ACME"}}), True)
+    # AND A FILE THAT NAMES NO ADAPTER: it was read as the DVLA practice bot, whose absence
+    # was then the error.
+    check("a config with no adapter is refused as that, not read as the practice bot",
+          "adapter" in _refused({"probes": 641, "measured": True})
+          and "is missing" in _refused({"probes": 641, "measured": True}), True)
+    check("...while one that names its adapter is not refused for it",
+          "is missing" in _refused({"adapter": "http", "name": "b"}), False)
     check("a broken refusal vocabulary is refused",
           "not a class this classifier names" in _refused(
               {"oracle_context": {"refusal_patterns": {"refusal_contnet": ["x"]}}}), True)
     check("...and the message names the command that stopped",
           _refused({"oracle_context": {"canaries": "A"}}).startswith("test:"), True)
     check("a usable config is not refused",
-          _refused({"oracle_context": {"canaries": ["ACME-CANARY-9931"]}}), "")
+          _refused({"adapter": "http",
+                    "oracle_context": {"canaries": ["ACME-CANARY-9931"]}}), "")
     check("...nor is one with no oracle_context at all", _refused({"adapter": "http"}), "")
 
     # --- AND THE OTHER HALF: A PATH THAT IS NOT THERE ------------------------------------
@@ -2678,6 +2686,31 @@ def check_out_is_a_directory():
     return bad
 
 
+def check_no_adapter_at_the_doors():
+    """A file with no `adapter:` is refused as that at every command that reads a config.
+
+    `run` built the target before it asked, so it answered as the DVLA practice bot -- "clone
+    it into dvla/" -- where the other doors named the missing key.
+    """
+    import subprocess as _sp_na, tempfile as _tf_na
+    bad = []
+    _d = _tf_na.mkdtemp()
+    _cfg = os.path.join(_d, "notaconfig.yaml")
+    open(_cfg, "w").write("probes: 641\nmeasured: true\n")
+    for _cmd in ("run", "recon", "benign", "isolation", "verify", "generate"):
+        _p = _sp_na.run([sys.executable, os.path.join(HERE, "cli.py"), _cmd, "--target-config",
+                         _cfg], capture_output=True, text=True, timeout=120, cwd=_d,
+                        env=dict(os.environ, QATRATION_OUT=_d, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8"))
+        _said = _p.stdout + _p.stderr
+        ok = _p.returncode == 2 and "is missing" in _said and "dvla" not in _said.lower()
+        print("%s  %s --target-config <no adapter> names the missing key -> exit %s"
+              % ("PASS" if ok else "FAIL", _cmd, _p.returncode))
+        if not ok:
+            bad.append("%s: exit %s: %s" % (_cmd, _p.returncode, _said.strip()[-200:]))
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -2878,7 +2911,8 @@ def check_evidence_guard():
 
 if __name__ == "__main__":
     _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
-            + check_dated() + check_line_buffered() + check_out_is_a_directory())
+            + check_dated() + check_line_buffered() + check_out_is_a_directory()
+            + check_no_adapter_at_the_doors())
     if _bad:
         for _b in _bad:
             print('  !', _b)

@@ -214,8 +214,11 @@ def main():
     check("a workspace with records lists them and exits 0", _rc == 0, "exit %s" % _rc)
 
     # A RUN STOPPED FROM INSIDE SOMETHING IT CALLS STILL CLOSES ITS RECORD. `QATRATION_CONFIGS`
-    # naming a missing file stops the run inside `target_configs`, after the record is open;
-    # it stayed `started` and `runs` said the run "may still be running".
+    # naming a missing file stopped the run inside `target_configs`, after the record was open;
+    # it stayed `started` and `runs` said the run "may still be running". That one is refused
+    # before the record opens now, with the rest of the config's faults, so the stop here is
+    # an arsenal entry that is not a mapping -- a bare `raise SystemExit` after the record is
+    # open, which is the shape the guard exists for.
     import http.server as _hs_o, threading as _th_o
     class _Bot_o(_hs_o.BaseHTTPRequestHandler):
         def do_POST(self):
@@ -238,19 +241,21 @@ def main():
             'name: openbot\nadapter: http\nurl: "http://127.0.0.1:%d/chat"\n'
             'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
             % _srv_o.server_address[1])
+        _atk_o = os.path.join(_wo, "attacks_listy.yaml")
+        open(_atk_o, "w", encoding="utf-8").write("- just a string\n- id: y\n")
         _po = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
-                         "--target-config", _cfg_o, "--scope", "quick", "--trials", "1"],
+                         "--target-config", _cfg_o, "--scope", "quick", "--trials", "1",
+                         "--attacks", _atk_o],
                         capture_output=True, text=True, timeout=300,
                         env=dict(os.environ, QATRATION_OUT=_wo, PYTHONDONTWRITEBYTECODE="1",
-                                 PYTHONIOENCODING="utf-8",
-                                 QATRATION_CONFIGS=os.path.join(_wo, "missing.yaml")))
+                                 PYTHONIOENCODING="utf-8"))
         _recs_o = runs.listing(_wo)
         check("a run stopped from inside a call it made is refused, exit 2",
               _po.returncode == 2, "exit %s: %s" % (_po.returncode, (_po.stderr or "")[-200:]))
         check("...and its record is closed as aborted, not left open",
               [r.get("state") for r in _recs_o] == ["aborted"], str(_recs_o)[:300])
         check("...saying what stopped it",
-              bool(_recs_o) and "QATRATION_CONFIGS" in (_recs_o[0].get("note") or ""),
+              bool(_recs_o) and "not a list of attacks" in (_recs_o[0].get("note") or ""),
               str(_recs_o[:1])[:300])
         # AND A RUN THAT FINISHED STAYS FINISHED. With a gate the sweep ends in `sys.exit`
         # AFTER closing its record, and the guard sees that exit too: it must leave a record

@@ -788,6 +788,11 @@ def main():
                  "  qatration onboard --target-config mybot.yaml   checks it answers\n"
                  "  qatration run --target-config mybot.yaml       then this")
     tcfg = _load(args.target_config, "target config")
+    # REFUSED BEFORE THE TARGET IS BUILT, not after: `load_target` reads `adapter:` first, and
+    # a file with none was answered as the DVLA practice bot -- "clone it into dvla/" -- before
+    # the rule below could name what was actually wrong. See the note where it used to be.
+    from workspace import refuse_unusable_config as _refuse_config
+    _refuse_config(tcfg, "run")
     if args.model:
         # AN OVERRIDE THAT DOES NOTHING MUST SAY SO. For an `adapter: http` target the model is
         # the operator's, chosen inside `request:` on their side, and nothing here can change
@@ -1035,8 +1040,7 @@ def main():
     # rule written at this one was a rule missing from the other nine — `benign`, which is the
     # command this tool tells an operator to run to measure their false-positive rate, among
     # them.
-    from workspace import refuse_unusable_config as _refuse_config
-    _refuse_config(tcfg, "run")
+    # (Called where the config is read, above, before the target is built.)
     # A CANARY THAT APPEARS IN ORDINARY TEXT MANUFACTURES BREACHES, the mirror of one that
     # was never planted. Said before the sweep rather than refused, because a real secret may
     # be short; `qatration benign` measures how often it actually fires unattacked.

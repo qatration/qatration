@@ -1180,6 +1180,18 @@ def refuse_unusable_config(cfg, where):
                 for k, near in near_miss_keys(cfg, config_keys_read(),
                                               suspects=config_key_suspects())]
     problems += [("oracle_context.%s" % k, why) for k, why in bad_context_shapes(cfg)]
+    # A CONFIG THAT NAMES NO ADAPTER IS NOT THE PRACTICE BOT'S. `load_target` defaults a
+    # missing `adapter:` to `dvla`, which every shipped config spells out, so the default is
+    # reached only by a config that forgot the key or by a file that is not a config at all.
+    # Walked with a `coverage --json` file as --target-config: `run`, `recon`, `benign` and
+    # `isolation` all answered "targets_dvla needs the DVLA practice app, which is not
+    # vendored ... clone it into dvla/" -- an instruction to install somebody else's app, for
+    # a reader whose file is simply not a target config.
+    if not str((cfg or {}).get("adapter") or "").strip():
+        problems.insert(0, ("adapter", "is missing. A target config names the adapter that "
+                                       "reaches its target -- `adapter: http` for an endpoint of "
+                                       "your own (`qatration init` writes one) -- and a file "
+                                       "without one is not a target config."))
     from refusal import bad_patterns
     problems += bad_patterns((cfg or {}).get("oracle_context") or {})
     if not problems:
