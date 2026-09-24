@@ -2300,6 +2300,31 @@ def main():
     finally:
         __import__("shutil").rmtree(_d9, ignore_errors=True)
 
+    # --- `--write` ALONE IS NOT A LIVE SWEEP --------------------------------------------------
+    #
+    # Each mode returns, so `--write` without `--rejudge` fell through to the default and sent
+    # the corpus. Pointed at a port with nothing on it, so a send would show as a different
+    # refusal (the endpoint did not answer) rather than as this one.
+    import subprocess as _sp_w, tempfile as _tf_w, shutil as _sh_w
+    _dw = _tf_w.mkdtemp()
+    try:
+        _cw = os.path.join(_dw, "deadbot.yaml")
+        open(_cw, "w", encoding="utf-8").write(
+            "name: deadbot\nadapter: http\nurl: \"http://127.0.0.1:9/chat\"\n"
+            "request:\n  message: \"{prompt}\"\nresponse:\n  reply: \"reply\"\n")
+        for _argv_w, _says_w in ((["--write", "--target-config", _cw], "--write applies a --rejudge"),
+                                 (["--rejudge", "--summary"], "different jobs")):
+            _pw = _sp_w.run([sys.executable, os.path.join(HERE, "cli.py"), "benign"] + _argv_w,
+                            capture_output=True, text=True, timeout=300,
+                            env=dict(os.environ, QATRATION_OUT=_dw, PYTHONDONTWRITEBYTECODE="1",
+                                     PYTHONIOENCODING="utf-8"))
+            check("benign %s is refused before anything is sent" % " ".join(_argv_w[:2]),
+                  _pw.returncode == 2 and _says_w in _pw.stderr
+                  and "did not answer" not in (_pw.stdout + _pw.stderr),
+                  "exit %s: %s" % (_pw.returncode, (_pw.stdout + _pw.stderr).strip()[-240:]))
+    finally:
+        _sh_w.rmtree(_dw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

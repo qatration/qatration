@@ -838,6 +838,19 @@ def main():
                          "cannot fire on the PROMPT alone, no model needed")
     args = ap.parse_args()
 
+    # FOUR JOBS, ONE AT A TIME, and `--write` belongs to one of them. Each branch below returns,
+    # so a second mode flag was dropped in silence -- and `--write` without `--rejudge` fell
+    # through all of them to the default: a LIVE sweep of the corpus against the target. Walked,
+    # `benign --write --target-config mybot.yaml`, typed to apply a re-score, sent fifty probes.
+    _modes = [_f for _f, _on in (("--rejudge", args.rejudge), ("--summary", args.summary),
+                                 ("--dry-run", args.dry_run)) if _on]
+    if len(_modes) > 1:
+        ap.error("%s are different jobs, and only the first would run. Run them one at a time. "
+                 "Nothing was sent." % " and ".join(_modes))
+    if args.write and not args.rejudge:
+        ap.error("--write applies a --rejudge and does nothing on its own: without --rejudge "
+                 "this was about to run a live sweep of the corpus instead. Nothing was sent.")
+
     if args.rejudge:
         total, replayable, skipped_rows, seen = 0, 0, 0, []
         for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
