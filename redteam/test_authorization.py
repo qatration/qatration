@@ -777,6 +777,15 @@ def main():
         os.environ["QATRATION_HOSTED"] = "1"
         importlib.reload(az)
         check("the hosted flag turns the mode on", az.hosted())
+        # FAIL CLOSED: a value nobody listed is ON, and only what says off is off.
+        _hv = {}
+        for _v in ("on", "enabled", "Y", "2", "0", "false", "OFF", "no", " "):
+            os.environ["QATRATION_HOSTED"] = _v
+            _hv[_v] = az.hosted()
+        check("an unlisted value turns hosted mode ON; only an off-word turns it off",
+              _hv == {"on": True, "enabled": True, "Y": True, "2": True, "0": False,
+                      "false": False, "OFF": False, "no": False, " ": False}, str(_hv))
+        os.environ["QATRATION_HOSTED"] = "1"
         rc = None
         try:
             az.gate({"name": "x", "url": "http://localhost:8140/chat"}, "intake")

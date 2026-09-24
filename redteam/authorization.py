@@ -378,8 +378,19 @@ def is_local(url):
 
 
 def hosted():
-    """Is this engine running as a SERVICE, taking URLs from strangers?"""
-    return os.environ.get("QATRATION_HOSTED", "").strip().lower() in ("1", "true", "yes")
+    """Is this engine running as a SERVICE, taking URLs from strangers?
+
+    FAIL CLOSED. This read the flag as ON only for `1`, `true` or `yes`, so every other value
+    anybody might type for "on" -- `on`, `enabled`, `y`, `2` -- turned the mode OFF, and with
+    it the refusal of loopback and private targets and the redirect policy: the unsafe
+    reading of a flag whose whole job is safety. OFF is now what says off -- unset, empty,
+    `0`, `false`, `no`, `off` -- and anything else is ON, which at worst refuses a local
+    target somebody meant to allow and says why.
+    """
+    return os.environ.get("QATRATION_HOSTED", "").strip().lower() not in HOSTED_OFF
+
+
+HOSTED_OFF = ("", "0", "false", "no", "off")
 
 
 # A TABLE OF BLOCKED NETWORKS USED TO SIT HERE, and nothing read it. `_BLOCKED_NETS` listed
