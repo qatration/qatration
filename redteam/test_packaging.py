@@ -1758,7 +1758,7 @@ def test_the_tool_that_edits_stored_evidence():
         # business editing either, and it says so instead of skipping it.
         return {"meta": {"target": "t", "attacks_n": 1},
                 "results": [
-                    {"attack": {"id": "a-1"}, "headline": "h", "verdict": "exploited",
+                    {"attack": {"id": "a-1"}, "headline": "EXPLOITED", "verdict": "exploited",
                      "fired": [],
                      "trials": [{"verdict": "exploited",
                                  "probe": {"output": reply, "error": ""}}]}]}

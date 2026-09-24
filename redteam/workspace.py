@@ -2176,7 +2176,69 @@ _RESULTS_REQUIRE = {
                          "them"),
     "results[].trials[].verdict": (str, False,
                                    "`fixes` chooses which trial to quote by it"),
+    # AND EVERY OTHER FIELD A PAGE READS, which the rows above did not reach. A sweep that
+    # set each key of a stored record -- meta, a row, a trial -- to a string, a number, a
+    # mapping, a list and a bool in turn, and ran all ten readers of stored results over
+    # each, found THIRTY-ONE places that crashed under "this is a bug in qatration": the
+    # arithmetic in `measured` on `meta.errors: "x"`, `.strip()` on `meta.attribution: -1`,
+    # `.get` on `trials[].probe: "x"`, `" ".join` on `meta.caps: [1]`. Every kind below is
+    # the one the writer puts there and the only one found in the 53 results files stored
+    # in this repository and the walk's workspace; none of them is required, because an
+    # artifact written before the field existed carries none.
+    "meta.model": (str, False, "every page prints it beside the target"),
+    "meta.delivery": (str, False, "`rejudge --pages` and `sarif` print it"),
+    "meta.when": (str, False, "`history` and the pages date the run by it"),
+    "meta.authorization": (dict, False, "`rejudge --pages` and `sarif` state it"),
+    "meta.caps": (list, False, "`compare` and the report label the run with it"),
+    "meta.caps[]": (str, False, "a capability is printed by its name"),
+    "meta.trials": (int, False, "`compare` checks every target ran the same count"),
+    "meta.unresolved_paths": (list, False, "the pages name each path that never resolved"),
+    "meta.unresolved_paths[]": (str, False, "`fixes` joins the paths into one line"),
+    "meta.run_id": (str, False, "`runs` and `index` tie a page to its run by it"),
+    "meta.broke": (int, False, "`verdict_for` decides the run's exit from it"),
+    "meta.skipped": (int, False, "`sarif` and the report count it"),
+    "meta.not_applicable": (int, False, "the report counts it"),
+    "meta.not_sent": (int, False, "the report counts it"),
+    "meta.errors": (int, False, "`measured` subtracts it from what was sent"),
+    "meta.unreached": (int, False, "`measured` subtracts it from what was sent"),
+    "meta.arsenal": (str, False, "`compare` checks every target ran the same corpus"),
+    "meta.stopped": (str, False, "the pages say why a run ended early"),
+    "meta.baseline": (list, False, "the report names the benign run behind a rate"),
+    "meta.baseline[]": (str, False, "the report names the benign run behind a rate"),
+    "meta.attribution": (str, False, "`rejudge --pages` prints it"),
+    "meta.inert": (dict, False, "`rejudge --pages` and `sarif` name each inert detector"),
+    "meta.engine": (str, False, "every page states the build that wrote it"),
+    "results[].rate": (str, False, "every page prints it"),
+    "results[].locks": (dict, False, "the report's lock column reads it"),
+    "results[].fired[]": (str, False, "a detector is named by it"),
+    "results[].trials[].fired": (list, False, "`coverage` counts detectors out of it"),
+    "results[].trials[].fired[]": (str, False, "a detector is counted by its name"),
+    "results[].trials[].probe": (dict, False,
+                                 "`fixes`, `coverage` and the report quote what was sent "
+                                 "and what came back from it"),
+    "results[].trials[].refusal": (dict, False, "`fixes` reads the refusal class off it"),
 }
+
+
+def _level_fault(obj, prefix, label):
+    """-> why one mapping cannot be used, checked against every row of `_RESULTS_REQUIRE`
+    one level under `prefix`, or None. A list-valued row with a `[]` beside it has its
+    elements checked too."""
+    for key in _RESULTS_REQUIRE:
+        if not key.startswith(prefix):
+            continue
+        name = key[len(prefix):]
+        if "." in name or "[" in name:
+            continue
+        _why = shape_fault(key, obj.get(name), name in obj)
+        if _why:
+            return _why.replace(prefix, label)
+        if (key + "[]") in _RESULTS_REQUIRE and isinstance(obj.get(name), list):
+            for j, _e in enumerate(obj[name]):
+                _why = shape_fault(key + "[]", _e, True)
+                if _why:
+                    return _why.replace(key + "[]", "%s%s[%d]" % (label, name, j))
+    return None
 
 
 def shape_fault(where, value, present, table=None, what="results file"):
@@ -2365,31 +2427,39 @@ def _unusable_results(data, name=""):
     if _meta is not None and not isinstance(_meta, dict):
         return ("a results file whose meta is %s, not a mapping: %s"
                 % (type(_meta).__name__, _RESULTS_REQUIRE["meta.target"][2]))
-    _meta = _meta or {}
-    for _k in ("target", "attacks_n"):
-        _why = shape_fault("meta.%s" % _k, _meta.get(_k), bool(_meta.get(_k) is not None))
-        if _why:
-            return _why
+    _why = _level_fault(_meta or {}, "meta.", "meta.")
+    if _why:
+        return _why
+    # THE ATTACK A ROW STORES IS AN ARSENAL ENTRY, copied, so it is held to the arsenal's own
+    # shape rule rather than to a second one written here: `success: -1` reached a
+    # `sorted(...)` in `compare` and `history`, `steps: true` a loop in `sent_strings`,
+    # `partial: "x"` a set in `coverage`. Measured over the 3,035 attacks stored in this
+    # repository and the walk's workspace: the rule names none of them.
+    from lint_arsenal import bad_entry_shapes as _attack_shapes
+    from oracle import ORDER as _verdicts
     for i, r in enumerate(data["results"]):
         if not isinstance(r, dict):
             return "results[%d] is %s, not a mapping" % (i, type(r).__name__)
-        for _k in ("headline", "attack", "fired", "trials"):
-            _why = shape_fault("results[].%s" % _k, r.get(_k), _k in r)
-            if _why:
-                return _why.replace("results[].", "results[%d]." % i)
-        _why = shape_fault("results[].attack.id", (r.get("attack") or {}).get("id"),
-                            "id" in (r.get("attack") or {}))
+        _why = _level_fault(r, "results[].", "results[%d]." % i)
+        if _why:
+            return _why
+        # A HEADLINE IS ONE OF FIVE WORDS, and the report colours the row by looking it up:
+        # `headline: "x"` is a str, passed the kind above, and died as a KeyError.
+        if r["headline"] not in _verdicts:
+            return ("a results file whose results[%d].headline is %.40r, not a verdict this "
+                    "engine writes (%s)" % (i, r["headline"], ", ".join(_verdicts)))
+        _why = shape_fault("results[].attack.id", r["attack"].get("id"), "id" in r["attack"])
         if _why:
             return _why.replace("results[].", "results[%d]." % i)
+        for _who, _field, _what in _attack_shapes([r["attack"]]):
+            return ("a results file whose results[%d].attack.%s %s" % (i, _field, _what))
         for j, _tr in enumerate(r.get("trials") or []):
             if not isinstance(_tr, dict):
                 return ("results[%d].trials[%d] is %s, not a mapping"
                         % (i, j, type(_tr).__name__))
-            _why = shape_fault("results[].trials[].verdict", _tr.get("verdict"),
-                                "verdict" in _tr)
+            _why = _level_fault(_tr, "results[].trials[].", "results[%d].trials[%d]." % (i, j))
             if _why:
-                return _why.replace("results[].trials[].",
-                                    "results[%d].trials[%d]." % (i, j))
+                return _why
     return None
 
 

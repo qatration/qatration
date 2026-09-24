@@ -262,19 +262,19 @@ def main():
           "results": [{"headline": {}, "attack": {"id": "a"}, "fired": []}]},
          "headline", "dict", "not str"),
         ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": "a", "fired": []}]},
+          "results": [{"headline": "DEFENDED", "attack": "a", "fired": []}]},
          "attack", "str", "not dict"),
         ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": {"id": 7}, "fired": []}]},
+          "results": [{"headline": "DEFENDED", "attack": {"id": 7}, "fired": []}]},
          "attack.id", "int", "not str"),
         ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": 7}]},
+          "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": 7}]},
          "fired", "int", "not list"),
         ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": [],
+          "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": [],
                        "trials": "many"}]}, "trials", "str", "not list"),
         ({"meta": {"target": "t"},
-          "results": [{"headline": "X", "attack": {"id": "a"}, "fired": [],
+          "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": [],
                        "trials": [{"verdict": 7}]}]}, "verdict", "int", "not str"),
     ]
     for _body, _key, _kind, _want in _SHAPES:
@@ -290,6 +290,72 @@ def main():
         # reads the same from outside unless the reason is read.
         check("...and what it should have been",
               _want in (_why7 or ""), str(_why7))
+
+    # --- AND EVERY ROW OF THE TABLE, NOT THE NINE ABOVE -----------------------------------
+    #
+    # A sweep that set each key of a stored record to a value of the wrong kind and ran all
+    # ten readers found thirty-one crash sites, on keys the table did not have. The table
+    # has them now, and this walks EVERY row of it rather than a list of cases chosen here:
+    # a row the rule never reaches -- a nesting the walker skips -- is a row that refuses
+    # nothing, and it fails below by name.
+    from workspace import _RESULTS_REQUIRE as _table
+    _base = {"meta": {"target": "t"},
+             "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": [],
+                          "trials": [{"verdict": "DEFENDED"}]}]}
+    _unreached = []
+    for _key, (_kind, _req, _) in _table.items():
+        _wrong = 7 if _kind is str else "x"
+        _b = json.loads(json.dumps(_base))
+        _parts = _key.replace("[]", "").split(".")
+        _obj = {"meta": _b["meta"], "results": _b["results"][0]}[_parts[0]]
+        if _parts[1:2] == ["trials"] and len(_parts) > 2:
+            _obj, _parts = _obj["trials"][0], _parts[1:]
+        elif _parts[1:2] == ["attack"] and len(_parts) > 2:
+            _obj, _parts = _obj["attack"], _parts[1:]
+        _field = _parts[1]
+        _obj[_field] = [_wrong] if _key.endswith("[]") else _wrong
+        _d9, _why9 = _artifact("results_x.json", _b)
+        if not (_d9 is None and _field in (_why9 or "")
+                and type(_wrong).__name__ in (_why9 or "")):
+            _unreached.append((_key, _why9))
+    check("every row of the results shape table refuses a value of the wrong kind, by name",
+          _unreached == [], str(_unreached))
+    # THE HEADLINE IS ONE OF FIVE WORDS. `headline: "x"` is a str and passed the kind; the
+    # report colours a row by looking it up, and died on a KeyError.
+    _b = json.loads(json.dumps(_base))
+    _b["results"][0]["headline"] = "x"
+    _whyh = _artifact("results_x.json", _b)[1]
+    check("a headline that is not a verdict is refused, and the reason lists the verdicts",
+          "headline" in (_whyh or "") and "EXPLOITED" in (_whyh or ""), str(_whyh))
+    # THE STORED ATTACK IS HELD TO THE ARSENAL'S RULE, not to a second one written here.
+    for _f, _v in (("success", -1), ("partial", "x"), ("steps", True), ("text", ["a"])):
+        _b = json.loads(json.dumps(_base))
+        _b["results"][0]["attack"][_f] = _v
+        _whya = _artifact("results_x.json", _b)[1]
+        check("a stored attack whose %s is %s is refused, naming the field"
+              % (_f, type(_v).__name__),
+              ("attack.%s" % _f) in (_whya or ""), str(_whya))
+    # AND THE TABLE HAS A ROW FOR EVERY META KEY A MODULE READS. The walk above proves each
+    # row refuses; nothing there proves a row EXISTS, and deleting `meta.errors` from the
+    # table left this suite green while `compare` crashed on it again. So the keys are found
+    # by reading the code, the way a new reader will add one.
+    import glob as _g_m
+    import re as _re_m
+    _read = set()
+    for _src in _g_m.glob(os.path.join(HERE, "*.py")):
+        if os.path.basename(_src).startswith("test_"):
+            continue
+        _read |= set(_re_m.findall(r'\bmeta(?:\.get\(|\[)"([a-z_]+)"',
+                                   io.open(_src, encoding="utf-8").read()))
+    # Keys of OTHER families' meta, read under the same variable name: a benign baseline's
+    # row count and refusals (`_BENIGN_REQUIRE` holds the one a page subscripts), and the
+    # snapshot `history` writes for itself, which it reads behind an isinstance.
+    _elsewhere = {"probes", "refused", "inert_config"}
+    _missing = sorted(k for k in _read - _elsewhere if "meta." + k not in _table)
+    check("every meta key a module reads has a row in the results shape table",
+          len(_read) >= 15 and _missing == [], "read %d, missing %s" % (len(_read), _missing))
+    check("...and the complete record those cases were built from is not",
+          _artifact("results_x.json", _base)[1] is None, str(_artifact("results_x.json", _base)[1]))
     # --- AND A NAME MADE OF NOTHING PASSED EVERY ONE OF THEM ------------------------------
     #
     # `""` is a str, so the kind rule above hands it on as usable. Every string in these two
