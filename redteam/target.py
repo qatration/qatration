@@ -184,9 +184,19 @@ class Probe:
 
         Tool calls and turns count as an answer: an agent that called a tool and said nothing
         has told us a great deal.
+
+        A TURN COUNTS WHEN SOMETHING CAME BACK IN IT, not because it exists. This read any
+        non-empty `turns` as an answer, so a conversation whose every turn was empty passed as
+        heard: walked against an endpoint answering `{"reply": ""}` to everything, the benign
+        corpus reported 47 empty and one clean -- the two-turn conversation, with nothing in
+        either turn.
         """
-        return not ((self.output or "").strip() or self.tool_calls or self.turns
-                    or self.observations)
+        def _heard(t):
+            _get = t.get if isinstance(t, dict) else (lambda k, d=None: getattr(t, k, d))
+            return bool((_get("output") or "").strip() or _get("tool_calls")
+                        or _get("observations"))
+        return not ((self.output or "").strip() or self.tool_calls
+                    or any(_heard(t) for t in (self.turns or [])) or self.observations)
 
 
 class Target:

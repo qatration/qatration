@@ -1760,6 +1760,18 @@ def main():
           not Probe(prompt="q", output="", tool_calls=[("lookup", "x")]).silent())
     check("...nor an observation with no prose",
           not Probe(prompt="q", output="", observations=["retrieved: refunds"]).silent())
+    # A CONVERSATION IS HEARD BY WHAT CAME BACK IN ITS TURNS, not by having turns: two empty
+    # turns passed as an answer, and the benign corpus counted that conversation clean.
+    _empty_turns = [{"prompt": "a", "output": "", "tool_calls": []},
+                    {"prompt": "b", "output": "  ", "tool_calls": []}]
+    check("...but a conversation whose every turn came back empty is silent",
+          Probe(prompt="q", output="", turns=_empty_turns).silent())
+    check("...while one turn that answered makes it heard",
+          not Probe(prompt="q", output="", turns=_empty_turns[:1] + [
+              {"prompt": "b", "output": "noted", "tool_calls": []}]).silent())
+    check("...and so does one turn that called a tool",
+          not Probe(prompt="q", output="", turns=_empty_turns[:1] + [
+              {"prompt": "b", "output": "", "tool_calls": [("lookup", "x")]}]).silent())
 
     class _Mute:
         """A target that answers 200 with an empty body, which is what started this."""
