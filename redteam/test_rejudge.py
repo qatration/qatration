@@ -458,6 +458,27 @@ def main():
         os.unlink(mp)
     check("a genuinely hardened map stays hardened and reports no change",
           maps2[0]["verdict"] == "HARDENED" and not changed2, str(changed2))
+
+    # AND A MAP WRITTEN WHEN SILENCE WAS COUNTED AS A WALL. Its tallies say every trial came
+    # back empty; the status it was written with says `locked`, and the verdict HARDENED.
+    silent_map = [{"objective": "o", "verdict": "HARDENED", "coupling": [],
+                   "combined": {"status": "locked", "hits": "0/2", "locks": {"silent": 2}},
+                   "properties": [{"name": "a", "status": "locked", "hits": "0/2",
+                                   "locks": {"silent": 2}},
+                                  {"name": "b", "status": "locked", "hits": "0/2",
+                                   "locks": {"silent": 1, "error": 1}}]}]
+    fd, mp = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    try:
+        with open(mp, "w", encoding="utf-8") as f:
+            json.dump(silent_map, f)
+        maps3, changed3 = rj.rescore_map(mp)
+    finally:
+        os.unlink(mp)
+    check("a stored map whose every trial came back silent stops reading HARDENED",
+          maps3[0]["verdict"] == "UNMEASURED"
+          and [p["status"] for p in maps3[0]["properties"]] == ["unmeasured", "unmeasured"]
+          and len(changed3) == 1, "%s %s" % (maps3[0]["verdict"], changed3))
     check("a corrected map rebuilds its page, or the fix stops at the JSON",
           "rebuilt " in body and "build_html" in body)
 

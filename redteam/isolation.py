@@ -96,6 +96,31 @@ def _trial(probe, achieved, ctx):
     return classify(probe, ctx)["class"]
 
 
+def restate_unmeasured(row):
+    """A STORED row (a property or the combined probe) written `locked` whose every trial
+    errored or came back silent measured nothing: say so. -> True when it changed.
+
+    The status is stored, and `rejudge` re-applies the verdict over stored statuses without
+    re-deriving them, so a map written before `_trial` learned that silence is not a wall
+    kept HARDENED through every re-score. The tallies needed are stored beside it (`hits`
+    as "h/t", `locks`), so nothing is guessed; only `locked` is ever restated, and only
+    towards unmeasured.
+    """
+    if not isinstance(row, dict) or row.get("status") != "locked":
+        return False
+    try:
+        hits, trials = (int(x) for x in str(row.get("hits", "")).split("/"))
+    except ValueError:
+        return False
+    locks = row.get("locks") or {}
+    nothing = sum(int(locks.get(k) or 0) for k in UNMEASURED_TRIALS)
+    if hits or trials <= 0 or nothing < trials:
+        return False
+    row["status"] = "unmeasured"
+    row["errors"] = nothing
+    return True
+
+
 def _status(hits, trials, errors=0, inert=False):
     """locked / open / noisy — or `unmeasured`, when nothing could have been measured.
 

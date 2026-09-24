@@ -40,7 +40,7 @@ from runner import headline
 from report_engine import build_html
 import datetime
 from isolation import (apply_keysearch, _verdict, read_maps, write_maps,
-                       map_target as _map_target)
+                       map_target as _map_target, restate_unmeasured)
 from baseline import note as _baseline_note
 from baseline import two_factor_note as _two_factor_note
 
@@ -248,6 +248,9 @@ def rescore_map(path):
     changed = []
     for m in maps:
         before = (m.get("verdict"), tuple(m.get("keyed") or ()))
+        # THE STORED STATUSES FIRST, where the tallies beside them say they measured nothing.
+        for _row in (m.get("properties") or []) + [m.get("combined")]:
+            restate_unmeasured(_row)
         m["verdict"] = _verdict(m.get("properties") or [], m.get("combined") or {},
                                 m.get("coupling") or [])
         apply_keysearch(m)
