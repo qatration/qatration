@@ -253,6 +253,22 @@ def check_every_command_refuses():
     check("an unknown adapter is answered with the near one and the list",
           "did you mean 'http'" in _said_a and "memorybot" in _said_a
           and "http" in _rr_a.adapters_known() and "dvla" in _rr_a.adapters_known(), True)
+    # ONE READING OF AN ON/OFF VARIABLE: QATRATION_NO_WORKER=0 used to switch the worker off.
+    _prev_nw = os.environ.get("QATRATION_NO_WORKER")
+    _fl = {}
+    for _v in ("0", "off", "1", "yes", "on"):
+        os.environ["QATRATION_NO_WORKER"] = _v
+        _fl[_v] = _ws.env_flag("QATRATION_NO_WORKER")
+    if _prev_nw is None:
+        os.environ.pop("QATRATION_NO_WORKER", None)
+    else:
+        os.environ["QATRATION_NO_WORKER"] = _prev_nw
+    check("env_flag reads off-words as off and anything else as on",
+          _fl, {"0": False, "off": False, "1": True, "yes": True, "on": True})
+    _src_fl = "".join(open(os.path.join(HERE, _m), encoding="utf-8").read()
+                      for _m in ("authorization.py", "intake.py"))
+    check("...and hosted mode and the worker switch both read it",
+          _src_fl.count('_env_flag("QATRATION_'), 2)
     check("an http config with no name is refused, not filed as `http-target`",
           "name" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"})
           and "http-target" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"}),

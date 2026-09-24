@@ -231,7 +231,8 @@ def wake_worker(root, python=None):
     """
     # A SUITE THAT QUEUES JOBS IT DOES NOT MEAN TO RUN says so, and no detached sweep outlives
     # it: a worker started from a test runs against a fixture server the test is about to shut.
-    if (os.environ.get("QATRATION_NO_WORKER") or "").strip():
+    from workspace import env_flag as _env_flag
+    if _env_flag("QATRATION_NO_WORKER"):
         return False
     try:
         kwargs = {"cwd": os.path.dirname(HERE),

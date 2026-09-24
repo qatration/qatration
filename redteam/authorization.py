@@ -387,10 +387,8 @@ def hosted():
     `0`, `false`, `no`, `off` -- and anything else is ON, which at worst refuses a local
     target somebody meant to allow and says why.
     """
-    return os.environ.get("QATRATION_HOSTED", "").strip().lower() not in HOSTED_OFF
-
-
-HOSTED_OFF = ("", "0", "false", "no", "off")
+    from workspace import env_flag as _env_flag
+    return _env_flag("QATRATION_HOSTED")
 
 
 # A TABLE OF BLOCKED NETWORKS USED TO SIT HERE, and nothing read it. `_BLOCKED_NETS` listed

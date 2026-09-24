@@ -173,6 +173,20 @@ def out_origin():
 OUT = out_dir()
 
 
+# WHAT SAYS OFF, for every on/off variable this engine reads. Anything else is on.
+FLAG_OFF = ("", "0", "false", "no", "off")
+
+
+def env_flag(name):
+    """-> is `$name` on? One reading for every on/off variable.
+
+    Two were read two ways: QATRATION_HOSTED was on only for `1`/`true`/`yes`, so `on` turned
+    a safety mode off, and QATRATION_NO_WORKER was on for any text at all, so `0` turned the
+    worker off. Off is what says off; anything else is on.
+    """
+    return (os.environ.get(name) or "").strip().lower() not in FLAG_OFF
+
+
 def env_int(name, default, minimum, why):
     """-> the integer `$name` holds, or `default` when it is unset; refused, exit 2, otherwise.
 
