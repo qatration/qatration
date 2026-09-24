@@ -622,7 +622,7 @@ def reopened(target):
     return out
 
 
-def backfill(dated=None):
+def backfill(dated=None, only=None):
     """Seed the timeline from the results already on disk.
 
     Without this the feature is useless until someone re-runs everything, which is the
@@ -653,8 +653,13 @@ def backfill(dated=None):
     dated.setdefault("run", 0)
     dated.setdefault("mtime", 0)
     for fp in results_files(OUT):   # per-model copies are the same run, twice
-        seen += 1
         d, why = read_artifact(fp)
+        # ONE TARGET WHEN ONE WAS NAMED. `history --backfill --target x` seeded every target
+        # in the workspace: `--target` was read only by the listing below the backfill branch.
+        # A file that cannot be read is still counted -- it cannot say whose it is.
+        if only and not why and (d.get("meta") or {}).get("target") != only:
+            continue
+        seen += 1
         if why:
             # A run that cannot be read is not a run with no findings. Recording it as one
             # would put a false "everything fixed" step into the timeline.
@@ -703,7 +708,7 @@ def main():
         # `meta.when` -- so over results a current build wrote, every entry dated by the
         # record was announced as dated by the filesystem.
         _dated = {}
-        n, seen = backfill(dated=_dated)
+        n, seen = backfill(dated=_dated, only=args.target)
         print(f"seeded {n} timeline(s) from {seen} stored result(s)"
               + (f": {_dated['run']} dated by the run's own record, {_dated['mtime']} by the "
                  f"file's modification time (results older than that record), and each entry "
@@ -711,6 +716,13 @@ def main():
         # NOTHING TO SEED FROM IS NOT A SEEDING THAT FOUND NOTHING NEW. `seeded 0` over an
         # empty workspace is this repository's own class: a command that read nothing,
         # said so in a voice that reads like success, and handed a build exit 0.
+        if not seen and args.target:
+            _here = sorted({((read_artifact(_f)[0] or {}).get("meta") or {}).get("target")
+                            for _f in results_files(OUT)} - {None})
+            if _here:
+                print(f"no stored results for target {args.target!r} in {OUT}. The targets "
+                      f"with results here: {', '.join(_here)}. Nothing was seeded.")
+                return 3
         if not seen:
             print(f"there is no stored results file in {OUT} to seed from — run a sweep "
                   f"first:\n    qatration run --target-config <your-config>.yaml")

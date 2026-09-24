@@ -743,6 +743,28 @@ def main():
         check("backfilling twice does not duplicate the entry",
               H.backfill()[0] == 0 and len(H.load("bf")) == 1, str(H.load("bf")))
 
+        # ONE TARGET WHEN ONE IS NAMED. `--target` was read only by the listing, so
+        # `history --backfill --target x` seeded every target in the workspace.
+        for _t_o in ("bfa", "bfb"):
+            with open(os.path.join(tmp, "results_%s.json" % _t_o), "w", encoding="utf-8") as f:
+                json.dump({"meta": {"target": _t_o}, "results": R(x1="EXPLOITED")}, f)
+        check("backfill of one named target seeds that one and no other",
+              H.backfill(only="bfa")[0] == 1 and H.load("bfa") and not H.load("bfb"),
+              "bfa %d, bfb %d" % (len(H.load("bfa")), len(H.load("bfb"))))
+        import subprocess as _sp_o
+        _po = _sp_o.run([sys.executable, os.path.join(HERE, "cli.py"), "history", "--backfill",
+                         "--target", "nosuch"], capture_output=True, text=True, timeout=300,
+                        env=dict(os.environ, QATRATION_OUT=tmp, PYTHONIOENCODING="utf-8",
+                                 PYTHONDONTWRITEBYTECODE="1"))
+        check("...and a name no results answer to is named, with the ones that do, exit 3",
+              _po.returncode == 3 and "no stored results for target 'nosuch'" in _po.stdout
+              and "bfb" in _po.stdout and not H.load("bfb"),
+              "exit %s: %s" % (_po.returncode, _po.stdout[-240:]))
+        for _t_o in ("bfa", "bfb"):
+            os.remove(os.path.join(tmp, "results_%s.json" % _t_o))
+            if os.path.exists(os.path.join(H.HIST, "%s.jsonl" % _t_o)):
+                os.remove(os.path.join(H.HIST, "%s.jsonl" % _t_o))
+
         # AND THE DATE COMES FROM THE RUN WHERE THE RUN SAID IT. This read the mtime
         # unconditionally, which is a filesystem event: git does not preserve mtimes, so on
         # a fresh clone every artifact carries the clone time and a whole fleet's timeline
