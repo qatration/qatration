@@ -84,7 +84,26 @@ def load_target(cfg):
     if adapter == "guardbot":
         from targets_guardbot import GuardBotTarget
         return GuardBotTarget(model=cfg.get("model", "mistral-nemo"))
-    raise SystemExit(f"unknown adapter: {adapter!r}")
+    # THE ONES THERE ARE, and the one that was probably meant. "unknown adapter: 'htttp'" was
+    # the whole answer, and the list lived only as the `if` chain above -- read off it here, so
+    # an adapter added above is in the sentence without anyone remembering to add it.
+    _known = adapters_known()
+    import difflib as _difflib
+    _near = _difflib.get_close_matches(str(adapter), _known, n=1, cutoff=0.6)
+    raise SystemExit(f"unknown adapter: {adapter!r}"
+                     + (f" -- did you mean {_near[0]!r}?" if _near else "")
+                     + f" This build has: {', '.join(_known)}. `http` is the one for an "
+                       f"endpoint of your own.")
+
+
+def adapters_known():
+    """-> every `adapter:` value `load_target` answers to, read off its own branches."""
+    import ast as _ast, inspect as _inspect
+    _tree = _ast.parse(_inspect.getsource(load_target))
+    return sorted({_n.comparators[0].value for _n in _ast.walk(_tree)
+                   if isinstance(_n, _ast.Compare) and isinstance(_n.left, _ast.Name)
+                   and _n.left.id == "adapter" and _n.comparators
+                   and isinstance(_n.comparators[0], _ast.Constant)})
 
 
 def load_target_or_explain(cfg, config_path, was_default):

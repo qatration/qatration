@@ -243,6 +243,16 @@ def check_every_command_refuses():
     check("a config with no adapter is refused as that, not read as the practice bot",
           "adapter" in _refused({"probes": 641, "measured": True})
           and "is missing" in _refused({"probes": 641, "measured": True}), True)
+    # AN UNKNOWN ADAPTER NAMES THE ONES THERE ARE, and the one probably meant.
+    import run_redteam as _rr_a
+    try:
+        _rr_a.load_target({"adapter": "htttp"})
+        _said_a = ""
+    except SystemExit as _e_a:
+        _said_a = str(_e_a)
+    check("an unknown adapter is answered with the near one and the list",
+          "did you mean 'http'" in _said_a and "memorybot" in _said_a
+          and "http" in _rr_a.adapters_known() and "dvla" in _rr_a.adapters_known(), True)
     check("an http config with no name is refused, not filed as `http-target`",
           "name" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"})
           and "http-target" in _refused({"adapter": "http", "url": "http://127.0.0.1:9/x"}),
