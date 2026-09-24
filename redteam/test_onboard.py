@@ -596,6 +596,25 @@ def main():
               "nothing in this engine reads" not in ((_fp.stdout or "") + (_fp.stderr or "")),
               (_fp.stdout or "")[-300:])
 
+        # "READY TO QUEUE" IS NOT "QUEUED". Without --submit the queue flags were dropped in
+        # silence and nothing named the flag that queues.
+        _qroot = os.path.join(work, "never-made")
+        _qp = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _fine,
+             "--scope", "full", "--trials", "5", "--root", _qroot],
+            capture_output=True, text=True, timeout=120, env=_sub_env())
+        _qout = _qp.stdout or ""
+        check("onboard without --submit says nothing was queued, and names --submit",
+              _qp.returncode == 0 and "nothing was queued: add --submit" in _qout,
+              "exit %s: %s" % (_qp.returncode, _qout[-300:]))
+        check("...and names the queue flags it did not use",
+              all(_f in _qout for _f in ("--scope", "--trials", "--root"))
+              and not os.path.exists(_qroot), _qout[-300:])
+        check("...and names none when none were given",
+              "only shape" not in (_fp.stdout or "")
+              and "nothing was queued: add --submit" in (_fp.stdout or ""),
+              (_fp.stdout or "")[-300:])
+
         # A KEY THE ATTACK SUPPLIES IS NOT ADVICE. `judged_ctx` merges `planted_markers`
         # and `expects_refusal` from the ATTACK, for that attack's judgement only, so
         # telling an operator to put them in their config is advice they cannot act on,
@@ -869,8 +888,11 @@ def main():
         check("a pre-flight check with no --submit passes", _pre.returncode == 0,
               (_pre.stdout + _pre.stderr)[-300:])
         check("...and queues nothing at all", not q.listing(qroot), str(q.listing(qroot)))
+        # THE POSITION LINE, which starts `queued`. The word itself is now in the sentence
+        # that says nothing was queued.
         check("...and says nothing about a queue position",
-              "queued" not in (_pre.stdout or ""), (_pre.stdout or "")[-300:])
+              not any(_l.strip().startswith("queued")
+                      for _l in (_pre.stdout or "").splitlines()), (_pre.stdout or "")[-300:])
 
         r = submit(multi)
         rc = r.returncode

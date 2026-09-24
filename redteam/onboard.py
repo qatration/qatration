@@ -691,6 +691,19 @@ def main():
         # from "get permission first".
         sys.exit(rep.get("exit") or 2)
     if not args.submit:
+        # "READY TO QUEUE" IS NOT "QUEUED", and nothing said which it was. Walked:
+        # `onboard --config mybot.yaml --scope full --trials 5 --requester me --root X` checked
+        # the config, printed `ready to queue`, exited 0, queued nothing and made no X -- four
+        # flags that only shape a queued run, dropped without a word, and no mention anywhere
+        # of the flag that queues.
+        _shaping = [_f for _f, _dest in (("--root", "root"), ("--scope", "scope"),
+                                         ("--attacks", "attacks"), ("--trials", "trials"),
+                                         ("--requester", "requester"))
+                    if getattr(args, _dest) != ap.get_default(_dest)]
+        print("nothing was queued: add --submit to queue this run"
+              + (" -- %s only shape%s a queued run and %s not used"
+                 % (", ".join(_shaping), "s" if len(_shaping) == 1 else "",
+                    "was" if len(_shaping) == 1 else "were") if _shaping else "") + ".")
         return
 
     cfg = yaml.safe_load(open(args.config, encoding="utf-8")) or {}
