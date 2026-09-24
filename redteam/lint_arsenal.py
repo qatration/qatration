@@ -1025,6 +1025,11 @@ def main():
         errors += unusable_entries(attacks, fname)
         seen = {}                                  # ids must be unique WITHIN a file
         for i, a in enumerate(attacks):
+            # AN ENTRY THAT IS NOT A MAPPING IS `unusable_entries`' ERROR ALREADY ("entry is
+            # str, not a mapping"), and this loop then asked it for `.get` and crashed the
+            # command whose job is to name it. Found by a seeded random walk.
+            if not isinstance(a, dict):
+                continue
             aid = a.get("id")
             where = f"{fname} #{i} ({aid or '??'})"
             if not aid:

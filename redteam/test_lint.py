@@ -365,6 +365,13 @@ def check_refusal(check):
           and "is a directory with no attacks*.yaml" in _said_od
           and "not there" not in _said_od, "exit %s: %s" % (_rc_od, _said_od[-300:]))
     check("...and names the file it does hold", "mine.yaml" in _said_od, _said_od[-300:])
+    # AN ENTRY THAT IS NOT A MAPPING is named, not crashed on: the loop asked it for `.get`.
+    io.open(os.path.join(_lwork, "listy.yaml"), "w", encoding="utf-8").write(
+        "- just a string\n- id: y\n")
+    _rc_ls, _said_ls = _lint("--attacks", "listy.yaml")
+    check("an arsenal entry that is not a mapping is named as that, exit 1, no traceback",
+          _rc_ls == 1 and "entry is str, not a mapping" in _said_ls
+          and "Traceback" not in _said_ls, "exit %s: %s" % (_rc_ls, _said_ls[-300:]))
 
     # A CUSTOMER'S ANNOTATIONS PASS THIS DOOR TOO. `unusable_entries` was written not to refuse
     # `owner:` or `ticket:`, and `lint --attacks mine.yaml` -- the check offered before a run --
