@@ -73,6 +73,29 @@ def achieved_combined(probe, objective, ctx):
                              "require_all": True}, ctx)
 
 
+# THE TRIALS THAT MEASURED NOTHING: they count as errors, never as a lock held.
+UNMEASURED_TRIALS = ("error", "silent")
+
+
+def _trial(probe, achieved, ctx):
+    """-> "hit", or what this trial records as its lock: "error", "silent", or a reply class.
+
+    ONE READING FOR A PROPERTY'S TRIALS AND THE COMBINED ONE, which were two copies of the same
+    four lines. NOTHING CAME BACK IS NOT A WALL: `oracle.judge` scores a silent probe ERROR and
+    a sweep leaves it out of the denominator, and both copies here counted it as a LOCKED
+    trial -- so against an endpoint answering every request with an empty reply every
+    property was locked and the objective printed HARDENED, the strongest claim this command
+    makes, over nothing at all.
+    """
+    if probe is None or probe.error:
+        return "error"
+    if probe.silent():
+        return "silent"
+    if achieved(probe):
+        return "hit"
+    return classify(probe, ctx)["class"]
+
+
 def _status(hits, trials, errors=0, inert=False):
     """locked / open / noisy — or `unmeasured`, when nothing could have been measured.
 
@@ -149,13 +172,12 @@ def probe_property(target, prop, ctx, trials=3):
         # 'open 2/2' and 'blocked by content' at once — the reply refused one half
         # of the ask while complying with the other, and only the failures are
         # evidence about the wall.
-        if probe is None or probe.error:
-            errors += 1
-            locks.append("error")
-        elif _achieved(probe, prop, ctx):
+        _o = _trial(probe, lambda p: _achieved(p, prop, ctx), ctx)
+        if _o == "hit":
             hits += 1
         else:
-            locks.append(classify(probe, ctx)["class"])
+            locks.append(_o)
+            errors += _o in UNMEASURED_TRIALS
     # Every detector this property relies on, unable to fire against this config. Not a new
     # rule: `oracle.inert_for` is the one that already answers it, and this is the caller that
     # never asked.
@@ -269,13 +291,12 @@ def run_isolation(target, objective, ctx, trials=3):
                     lambda t=payload(comb): target.send(t),
                     objective.get("id", "combined"))
             cprobes.append(probe)
-            if probe is None or probe.error:
-                errors += 1
-                locks.append("error")
-            elif achieved_combined(probe, objective, ctx):
+            _o = _trial(probe, lambda p: achieved_combined(p, objective, ctx), ctx)
+            if _o == "hit":
                 hits += 1
             else:
-                locks.append(classify(probe, ctx)["class"])
+                locks.append(_o)
+                errors += _o in UNMEASURED_TRIALS
         combined = {"status": _status(hits, trials, errors), "errors": errors,
                     "hits": f"{hits}/{trials}",
                     "locks": _tally(locks),

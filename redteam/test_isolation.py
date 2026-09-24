@@ -382,6 +382,24 @@ def main():
     check("...and one property unreachable downgrades the claim rather than voiding it",
           _map(HalfDead)["verdict"], "PARTIAL")
 
+    # AND A TARGET THAT ANSWERS WITH NOTHING, which is not an error and not a wall: every
+    # trial was counted as a LOCK HELD, so an endpoint returning empty replies was HARDENED.
+    class Silent(Target):
+        name = "silent"
+        capabilities = set()
+
+        def send(self, p):
+            return Probe(prompt=p, output="")
+
+        def reset(self):
+            pass
+    _sil = _map(Silent)
+    check("a target that answers every probe with nothing is not called hardened",
+          _sil["verdict"], "UNMEASURED")
+    check("...and neither the properties nor the combined probe read as locked",
+          (sorted(p["status"] for p in _sil["properties"]), _sil["combined"]["status"]),
+          (["unmeasured", "unmeasured"], "unmeasured"))
+
     # --- ZERO TRIALS IS NOT EVERY LOCK HELD --------------------------------------------------
     #
     # `--trials 0` skipped the probe loop and `_status(0, 0, 0)` returned "locked": the errors
