@@ -660,21 +660,15 @@ def main():
     # AND A WORKSPACE WHOSE EVERY PROBE CAME BACK EMPTY IS THE SAME ANSWER. Walked: a lock map
     # of an endpoint that answered nothing -- itself UNMEASURED, exit 3 -- was replayed here as
     # "replayed 3 stored probes", 66 declared only, exit 0.
-    if n and _silent[0] >= n:
-        print("\nNOTHING MEASURED - every one of the %d stored probes came back empty, so no "
-              "detector here could have fired on anything. Check the target is answering, and "
-              "run again." % n)
-        _emit_json(args.json, n, hits, demo, benign_only, declared, where,
-                   untried, unevidenced, unconfigured, broke, unresolved,
-                   _unreadable_seen, model_only)
-        return 3
-
-    if not n:
+    if not n or _silent[0] >= n:
         # NOT A PASS. "66 detectors, 0 demonstrated, 66 declared only" over an empty
         # workspace is not a coverage measurement, it is the absence of one -- and it read
         # as the worst possible result while exiting 0, which is the combination a pipeline
         # cannot act on. `docs/ci.md` gives an unanswerable question code 3.
-        print("\n" + no_results_note(OUT))
+        print("\n" + (no_results_note(OUT) if not n else
+                      "NOTHING MEASURED - every one of the %d stored probes came back empty, "
+                      "so no detector here could have fired on anything. Check the target is "
+                      "answering, and run again." % n))
         _emit_json(args.json, n, hits, demo, benign_only, declared, where,
                    untried, unevidenced, unconfigured, broke, unresolved,
                    _unreadable_seen, model_only)
