@@ -237,20 +237,27 @@ def control_ids(root=None):
     unstated. That is this repository's own named failure, in the section that exists to
     police it.
     """
-    import glob as _glob
-    out = set()
-    for fname in _arsenal_files(root or ROOT):
+    return {a["id"] for a in _corpus_attacks(root or ROOT)
+            if a.get("category") == "control" and a.get("id")}
+
+
+def _corpus_attacks(root):
+    """Every attack mapping in the arsenals under `root`, the one reader the three questions
+    about the shipped corpus share (`control_ids`, `list_attack_fields`,
+    `attack_field_types`). A corpus file that will not parse is `lint`'s business, not
+    theirs: skipping it understates the corpus, which keeps a caller's caveat small rather
+    than inventing one."""
+    import io as _io
+    for fname in _arsenal_files(root):
         try:
-            doc = yaml.safe_load(open(fname, encoding="utf-8")) or []
+            doc = yaml.safe_load(_io.open(fname, encoding="utf-8").read()) or []
         except Exception:
-            # A corpus file that will not parse is `lint`'s business, not this function's.
-            # Skipping it here understates the corpus, which keeps the caller's caveat small
-            # rather than inventing one.
             continue
-        for a in (doc if isinstance(doc, list) else doc.get("attacks") or []):
-            if isinstance(a, dict) and a.get("category") == "control" and a.get("id"):
-                out.add(a["id"])
-    return out
+        if isinstance(doc, dict):
+            doc = doc.get("attacks") or []
+        for a in (doc if isinstance(doc, list) else []):
+            if isinstance(a, dict):
+                yield a
 
 
 _LIST_FIELDS = None
@@ -277,23 +284,46 @@ def list_attack_fields(root=None):
     here = root or ROOT
     if _LIST_FIELDS is not None and _LIST_FIELDS[0] == here:
         return _LIST_FIELDS[1]
-    import glob as _glob
-    import io as _io
-    import yaml as _yaml
     seen = {}
-    for fn in _arsenal_files(here):
-        try:
-            rows = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or []
-        except Exception:
-            continue
-        if not isinstance(rows, list):
-            continue
-        for a in rows:
-            if isinstance(a, dict):
-                for k, v in a.items():
-                    seen.setdefault(k, set()).add(type(v).__name__)
+    for a in _corpus_attacks(here):
+        for k, v in a.items():
+            seen.setdefault(k, set()).add(type(v).__name__)
     out = {k for k, kinds in seen.items() if kinds == {"list"}}
     _LIST_FIELDS = (here, out)
+    return out
+
+
+_FIELD_TYPES = None
+
+
+def attack_field_types(root=None):
+    """-> {field: type name} for every scalar field, and {field: "list of <type>"} for every
+    list field, derived from the arsenals that ship -- the same source and the same argument
+    as `list_attack_fields`: no field in the corpus is written with two types, and no list
+    holds two kinds of element.
+
+    THE REST OF THE SHAPE. `list_attack_fields` answered "is this a list" and nothing asked
+    what was IN it, or what a scalar field was. A seeded arsenal fuzzer (240 cases) found
+    twenty tracebacks under "this is a bug in qatration" in `lint` and in `run`: `text: [a]`
+    reached a `" ".join`, `encode: [a]` a set, `applies_to: [[a]]` a set, `partial:
+    [{role: user}]` the detector-name check, `history: [[a]]` a `.get`.
+    """
+    global _FIELD_TYPES
+    here = root or ROOT
+    if _FIELD_TYPES is not None and _FIELD_TYPES[0] == here:
+        return _FIELD_TYPES[1]
+    scal, elem = {}, {}
+    for a in _corpus_attacks(here):
+        for k, v in a.items():
+            if isinstance(v, list):
+                for e in v:
+                    elem.setdefault(k, set()).add(type(e).__name__)
+            elif v is not None:
+                scal.setdefault(k, set()).add(type(v).__name__)
+    out = {k: next(iter(t)) for k, t in scal.items() if len(t) == 1 and k not in elem}
+    out.update({k: "list of " + next(iter(t)) for k, t in elem.items()
+                if len(t) == 1 and k not in scal})
+    _FIELD_TYPES = (here, out)
     return out
 
 
@@ -342,6 +372,21 @@ def bad_entry_shapes(entries):
         _props = e.get("properties")
         _inner = [("%s property %r" % (who, p.get("name") or "?"), p)
                   for p in (_props if isinstance(_props, list) else []) if isinstance(p, dict)]
+        # AND WHAT A FIELD HOLDS, not only whether it is a list: see `attack_field_types`.
+        _types = attack_field_types()
+        for k, v in e.items():
+            _t = _types.get(k)
+            if not _t or v is None or k == "id":
+                continue
+            if _t.startswith("list of ") and isinstance(v, (list, tuple)):
+                _et = _t[len("list of "):]
+                _odd = [x for x in v if type(x).__name__ != _et]
+                if _odd:
+                    out.append((who, k, "holds %s where each entry is read as %s (%.40r)"
+                                % (type(_odd[0]).__name__, _et, _odd[0])))
+            elif not _t.startswith("list of ") and type(v).__name__ != _t:
+                out.append((who, k, "is %s; this field is read as %s (%.40r)"
+                            % (type(v).__name__, _t, v)))
         for _who, _e, _fields in [(who, e, want)] + [(w, p, ("success", "partial"))
                                                       for w, p in _inner]:
             for k, v in _e.items():
@@ -1156,7 +1201,7 @@ def main():
                                  f"-- kept as your annotation, it changes nothing about "
                                  f"how the attack is sent or scored")
 
-            for d in unknown_detectors(succ + a.get("partial", [])):
+            for d in unknown_detectors(list(succ or []) + list(a.get("partial") or [])):
                 errors.append(f"{fname}: {aid}: unknown detector {d!r} in success/partial "
                               f"(SILENT no-fire — typo? not registered in oracle.py?)")
 

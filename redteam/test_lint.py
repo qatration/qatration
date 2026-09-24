@@ -153,6 +153,24 @@ def check_refusal(check):
           len(bad_entry_shapes([{"id": "a", "success": "canary_in_output"}])) == 1, "not caught")
     check("...and so is an applies_to that nothing else would refuse",
           len(bad_entry_shapes([{"id": "b", "applies_to": "httpbot"}])) == 1, "not caught")
+    # AND WHAT A FIELD HOLDS. A seeded arsenal fuzzer found twenty tracebacks in lint and run
+    # from fields of the wrong type: text as a list, encode as a mapping, applies_to holding
+    # lists, partial holding mappings, history holding lists.
+    from lint_arsenal import attack_field_types as _aft
+    _ft = _aft()
+    check("field types are derived from the corpus, scalars and list elements both",
+          (_ft.get("text"), _ft.get("encode"), _ft.get("applies_to"), _ft.get("history"))
+          == ("str", "str", "list of str", "list of dict"), str(_ft))
+    _fz_cases = [{"id": "f1", "text": ["a"]}, {"id": "f2", "encode": {"k": "v"}},
+                 {"id": "f3", "applies_to": [["a"]]}, {"id": "f4", "partial": [{"role": "u"}]},
+                 {"id": "f5", "history": [["a"]]}, {"id": "f6", "text": 7}]
+    _fz_got = [len(bad_entry_shapes([_c])) for _c in _fz_cases]
+    check("each fuzzed field type is named by the shape rule",
+          _fz_got == [1] * len(_fz_cases), str(_fz_got))
+    _ok_shape = bad_entry_shapes([{"id": "ok", "text": "hi", "applies_to": ["mybot"],
+                                   "history": [{"role": "user", "content": "x"}]}])
+    check("...and a field of the right type is not", _ok_shape == [], str(_ok_shape))
+
     # AND ONE LEVEL DOWN, in an objective's property: isolation read its letters as sixteen
     # unknown detectors.
     _nested = bad_entry_shapes([{"id": "o", "properties": [
