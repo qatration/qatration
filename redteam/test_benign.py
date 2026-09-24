@@ -1788,6 +1788,46 @@ def main():
     _s = summary(_rows)
     check("a target that answers with nothing produces silent rows, not clean ones",
           _s["silent"] == len(_rows) and _s["clean"] == 0, str(_s))
+    # AND THE COMMAND SAYS ONE THING ABOUT IT. Driven against an endpoint answering every
+    # request with an empty reply: "Nothing fired on traffic nobody attacked, which is the
+    # baseline a sweep wants" was printed, and then "NOTHING MEASURED -- every probe came back
+    # empty" -- the praise was guarded by `errors` alone, and silence is not an error.
+    import subprocess as _sp_mu, threading as _th_mu, tempfile as _tf_mu, json as _js_mu
+    from http.server import BaseHTTPRequestHandler as _BH_mu, ThreadingHTTPServer as _TS_mu
+
+    class _EmptyReply(_BH_mu):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _b = _js_mu.dumps({"reply": ""}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+    _srv_mu = _TS_mu(("127.0.0.1", 0), _EmptyReply)
+    _th_mu.Thread(target=_srv_mu.serve_forever, daemon=True).start()
+    try:
+        _dmu = _tf_mu.mkdtemp()
+        _cmu = os.path.join(_dmu, "mutebot.yaml")
+        open(_cmu, "w", encoding="utf-8").write(
+            'name: mutebot\nadapter: http\nurl: "http://127.0.0.1:%d/c"\n'
+            'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
+            % _srv_mu.server_address[1])
+        _pmu = _sp_mu.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                           "--target-config", _cmu], capture_output=True, text=True,
+                          timeout=600, env=dict(os.environ, QATRATION_OUT=_dmu,
+                                                PYTHONDONTWRITEBYTECODE="1",
+                                                PYTHONIOENCODING="utf-8"))
+        _smu = _pmu.stdout + _pmu.stderr
+        check("benign against an endpoint that answers nothing says NOTHING MEASURED, exit 3",
+              _pmu.returncode == 3 and "NOTHING MEASURED" in _smu, "exit %s" % _pmu.returncode)
+        check("...and does not first call it the baseline a sweep wants",
+              "baseline a sweep wants" not in _smu, _smu[-300:])
+    finally:
+        _srv_mu.shutdown()
     check("a skipped conversation is neither clean nor a finding",
           s["skipped"] == 1 and s["clean"] == 1, str(s))
     check("errors are counted, never silently dropped", s["errors"] == 1, str(s))

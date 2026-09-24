@@ -1222,7 +1222,10 @@ def main():
               "traffic has\nshown nothing when it fires under attack, so `qatration run` "
               "reads this file and marks\nany finding leaning on one as weakened rather than "
               "counting it.")
-    elif not s["errors"]:
+    # NOT OVER SILENCE EITHER. This was guarded by `errors` alone, and an empty reply is not an
+    # error: against an endpoint answering nothing it praised the baseline and then, a few
+    # lines on, refused to write it as NOTHING MEASURED.
+    elif not s["errors"] and not s.get("silent"):
         print("\nNothing fired on traffic nobody attacked, which is the baseline a sweep wants: "
               "every\nfinding it reports afterwards will be attributable to the attack that "
               "produced it.")
