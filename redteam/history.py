@@ -769,11 +769,22 @@ def main():
                 # field, which is a traceback about a file this tool writes itself.
                 _broke = r.get("broke")
                 _att = r.get("attacks")
+                # OVER WHAT WAS MEASURED, and the rest named. A row that errored or came back
+                # empty is in `attacks`, so a run whose breach was answered with silence read
+                # "6/7 broken" -- one attack held -- where the sweep itself said "6/6, 1 more
+                # errored and was not scored". Counted from the stored rows, so every snapshot
+                # already on disk reads the same way.
+                _rows_r = r.get("rows") if isinstance(r.get("rows"), dict) else {}
+                _unm = sum(1 for _x in _rows_r.values()
+                           if isinstance(_x, dict) and _x.get("v") in ("ERROR", "SKIP"))
+                if _att is not None and _unm:
+                    _att = _att - _unm
                 _count = ("%3s/%s" % (_broke, _att) if _broke is not None
                           and _att is not None else "  ?/%s" % (_att if _att is not None
                                                                 else "?"))
-                print(f"  {r.get('run') or '(undated run)'}  {_count} broken  "
-                      f"{r.get('model') or ''}{mark}")
+                print(f"  {r.get('run') or '(undated run)'}  {_count} broken"
+                      + (", %d not measured" % _unm if _unm else "")
+                      + f"  {r.get('model') or ''}{mark}")
         if "reason" in d:
             _tail = (" — a single run is a snapshot, not a trend"
                      if d.get("runs") == 1 else "")

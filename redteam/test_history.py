@@ -821,6 +821,17 @@ def main():
         check("...and one without a date says where its date came from",
               "dated by the file" in _page, _page[:300])
 
+        # A ROW THAT WAS NOT MEASURED IS NOT IN THE DENOMINATOR. A breach answered with
+        # silence the next time is an ERROR row, and the line read "6/7 broken" -- one held --
+        # where the sweep said "6/6, 1 more errored and was not scored".
+        with open(os.path.join(tmp, "results_unm.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "unm", "when": "2026-07-06 09:30"},
+                       "results": R(x1="EXPLOITED", x2="ERROR")}, f)
+        H.backfill(only="unm")
+        _page = _listing("unm")
+        check("the timeline counts a run over what it measured and names the rest",
+              "1/1 broken, 1 not measured" in _page, _page[:300])
+
         # THE CASE THAT MATTERED AND WAS NOT COVERED. The check above backfills the same file
         # twice, so both passes read one mtime and the old clock-based key matched. A run the
         # SWEEP recorded carries `datetime.now()`, taken when the snapshot was built; the file
