@@ -173,6 +173,36 @@ def out_origin():
 OUT = out_dir()
 
 
+def env_int(name, default, minimum, why):
+    """-> the integer `$name` holds, or `default` when it is unset; refused, exit 2, otherwise.
+
+    A NUMBER FROM THE ENVIRONMENT IS THE READER'S, and it was parsed with a bare `int()` at
+    import. `QATRATION_MAX_REPLY=abc` crashed every command that loads the HTTP adapter under
+    "this is a bug in qatration"; `=0` and `=10` cut every reply to nothing or to the first
+    bytes of its JSON envelope, so the pre-flight told the reader their honeytoken "was not
+    applied" to a deployment that had it; `=-1` read as "the endpoint did not answer". Each
+    is a wrong diagnosis of the reader's own system, caused by a setting of ours.
+
+    `SystemExit(2)` after printing, not `SystemExit(message)`: this runs at import, which for
+    `python <module>.py` is outside `run_command`, and a message-carrying exit is ONE there --
+    the code for a finding.
+    """
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        value = None
+    if value is None or value < minimum:
+        import sys as _sys
+        print("ABORT — $%s=%r: it must be a whole number of at least %d, because %s. Unset it "
+              "for the default, %d. Nothing was run." % (name, raw, minimum, why, default),
+              file=_sys.stderr)
+        raise SystemExit(2)
+    return value
+
+
 def out_problem(root=None):
     """-> why the artifact root cannot be one, or None.
 

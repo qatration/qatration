@@ -1308,6 +1308,28 @@ def main():
             except Exception:
                 pass
 
+    # A CAP FROM THE ENVIRONMENT IS CHECKED, not handed to `int()`. `abc` crashed every command
+    # that loads this adapter; `0` and `10` cut every reply to nothing or to its JSON envelope,
+    # and the pre-flight blamed the reader's deployment for a honeytoken it could not see.
+    import subprocess as _sp_mr
+    for _env_name, _bad_v in (("QATRATION_MAX_REPLY", "abc"), ("QATRATION_MAX_REPLY", "0"),
+                              ("QATRATION_MAX_REPLY", "10"), ("QATRATION_MAX_ERROR_BODY", "-1")):
+        _pm = _sp_mr.run([sys.executable, "-c", "import targets_http"], cwd=HERE,
+                         capture_output=True, text=True, timeout=60,
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8", **{_env_name: _bad_v}))
+        check("$%s=%s is refused with its name, exit 2, not a traceback" % (_env_name, _bad_v),
+              _pm.returncode == 2 and _env_name in _pm.stderr and "Traceback" not in _pm.stderr,
+              "exit %s: %s" % (_pm.returncode, _pm.stderr.strip()[-200:]))
+    _pm_ok = _sp_mr.run([sys.executable, "-c",
+                         "import targets_http; print(targets_http.MAX_REPLY)"], cwd=HERE,
+                        capture_output=True, text=True, timeout=60,
+                        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                 QATRATION_MAX_REPLY="200000"))
+    check("...while a sensible value is taken as given",
+          _pm_ok.returncode == 0 and _pm_ok.stdout.strip() == "200000",
+          "exit %s: %s" % (_pm_ok.returncode, (_pm_ok.stdout + _pm_ok.stderr).strip()[-200:]))
+
     _old_cap = _th_cap.MAX_REPLY
     _th_cap.MAX_REPLY = 2000
     _dsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Dribbler)

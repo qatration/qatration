@@ -94,7 +94,10 @@ def expand_env(value, where, allowed=None):
 # Generous on purpose: the longest reply in the shipped evidence is about 45,000 characters,
 # produced by an attack that asks a bot to generate until something stops it, and that attack
 # has to keep working. This is twenty times that.
-MAX_REPLY = int(os.environ.get("QATRATION_MAX_REPLY", 1_000_000))
+from workspace import env_int as _env_int
+MAX_REPLY = _env_int("QATRATION_MAX_REPLY", 1_000_000, 4096,
+                     "below that the JSON envelope of an ordinary chat reply is cut, and every "
+                     "reply is judged as a fragment of its own wrapper")
 
 # AND HOW MUCH OF AN ERROR BODY. A different question from the one above: a reply's length is
 # evidence -- `unbounded_output` judges it -- and an error body is only ever quoted, truncated
@@ -107,7 +110,9 @@ MAX_REPLY = int(os.environ.get("QATRATION_MAX_REPLY", 1_000_000))
 # Measured against a scripted endpoint answering 500 with 200 MB of spaced text: the 200 path
 # held 2 MB and took 0.1s, the 500 path held 2.67 GB and took 112.7 seconds, to keep 300
 # characters. A non-200 is also the easier answer for a hostile target to choose.
-MAX_ERROR_BODY = int(os.environ.get("QATRATION_MAX_ERROR_BODY", 64 * 1024))
+MAX_ERROR_BODY = _env_int("QATRATION_MAX_ERROR_BODY", 64 * 1024, 1024,
+                          "an error body is quoted to 300 characters, and a budget under that "
+                          "quotes less of the remote's own words than the report prints")
 
 
 def read_capped(response, limit=None, seconds=None):
