@@ -874,6 +874,19 @@ def main():
               (r.stdout + r.stderr)[-200:])
         check("...and queues nothing", not q.listing(qroot), str(q.listing(qroot)))
 
+        # A QUEUE ROOT THAT CANNOT HOLD A JOB is refused before the check, not crashed on
+        # after it: `--submit --root <a file>` ran the check and then raised queueing.
+        _rootfile = os.path.join(work, "not-a-directory")
+        open(_rootfile, "w").write("x")
+        _rf = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", multi,
+             "--submit", "--root", _rootfile], capture_output=True, text=True,
+            timeout=120, env=_sub_env())
+        _rfs = _rf.stdout + _rf.stderr
+        check("--submit --root <a file> is refused, exit 2, before the check runs",
+              _rf.returncode == 2 and "cannot write the queued job" in _rfs
+              and "Traceback" not in _rfs and "ready to queue" not in _rfs, _rfs[-300:])
+
         # WITHOUT `--submit`, NOTHING IS QUEUED, and that is the whole difference between
         # this command and `run`. `if not args.submit: return` had no case: deleting it
         # turned every pre-flight check into a submission, and because the runs that do not

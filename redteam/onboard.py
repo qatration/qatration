@@ -618,6 +618,13 @@ def main():
                     help="ask the target for its deployment reference and say whether the "
                          "snippet actually landed")
     args = ap.parse_args()
+    # THE QUEUE'S ROOT BEFORE THE CHECK. `--submit --root <a file>` ran the whole check --
+    # a request to the target included -- and then crashed queueing the job, a traceback under
+    # "this is a bug in qatration". `writable_dir` makes the directory and proves it takes a
+    # file, or refuses with the system's reason.
+    if args.submit:
+        from workspace import writable_dir as _writable_dir
+        _writable_dir(args.root, "queued job", "onboard")
 
     # --- the honeytoken flow ---------------------------------------------------------------
     #
