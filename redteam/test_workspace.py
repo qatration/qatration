@@ -253,6 +253,21 @@ def check_every_command_refuses():
     check("an unknown adapter is answered with the near one and the list",
           "did you mean 'http'" in _said_a and "memorybot" in _said_a
           and "http" in _rr_a.adapters_known() and "dvla" in _rr_a.adapters_known(), True)
+    # A FAILED REPLACE LEAVES NOTHING BEHIND EITHER: the body finished, the replace onto a
+    # directory failed, and the `.tmp` stayed.
+    import tempfile as _tf_aw
+    _aw_dir = _tf_aw.mkdtemp()
+    _aw_target = os.path.join(_aw_dir, "results_x.json")
+    os.makedirs(_aw_target)
+    _aw_raised = False
+    try:
+        with _ws.atomic_write(_aw_target) as _fh_aw:
+            _fh_aw.write("{}")
+    except OSError:
+        _aw_raised = True
+    check("atomic_write whose replace fails raises and leaves no .tmp",
+          (_aw_raised, sorted(os.listdir(_aw_dir))), (True, ["results_x.json"]))
+
     # ONE READING OF AN ON/OFF VARIABLE: QATRATION_NO_WORKER=0 used to switch the worker off.
     _prev_nw = os.environ.get("QATRATION_NO_WORKER")
     _fl = {}

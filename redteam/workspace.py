@@ -934,7 +934,17 @@ def atomic_write(path, encoding="utf-8"):
             pass
         raise
     fh.close()
-    os.replace(tmp, path)
+    # AND WHEN THE REPLACE ITSELF FAILS, which the promise above did not cover: the body had
+    # finished, so nothing removed the temporary. Found by a seeded random walk -- a directory
+    # at the results path, and `results_mybot.json.tmp` (71 KB) left beside it.
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def writable_path(path, what="file", where="", replaces=()):
