@@ -774,6 +774,22 @@ def main():
         check("...while the map is still written, because it is a real record",
               any(f.startswith("isolation_deadbot") for f in _os_w.listdir(_uw)), True)
 
+        # A FLAG THAT STEERS THE KEY SEARCH IS NOT DROPPED WITHOUT `--keys`. `--frames` at a
+        # broken library ran the plain map, never read the file, and exited 0.
+        _bad_fr = _os_w.path.join(_uw, "frames_mapping.yaml")
+        io.open(_bad_fr, "w", encoding="utf-8").write("not: a list\n")
+        _fp = _sp_u.run(
+            [sys.executable,
+             _os_w.path.join(_os_w.path.dirname(_os_w.path.abspath(__file__)), "cli.py"),
+             "isolation", "--target-config", _ucfg, "--frames", _bad_fr, "--trials", "1"],
+            capture_output=True, text=True, timeout=900,
+            env=dict(_os_w.environ, QATRATION_OUT=_uw, PYTHONDONTWRITEBYTECODE="1",
+                     PYTHONIOENCODING="utf-8"))
+        _fout = (_fp.stdout or "") + (_fp.stderr or "")
+        check("--frames without --keys still reads the library it names, and refuses a "
+              "broken one", (_fp.returncode, "is a mapping, not a list" in _fout), (2, True))
+        check("...and says the search is implied", "--keys is implied" in _fout, True)
+
         # AND THE OBJECTIVES FILE IS ASKED ABOUT ITS KEYS, which is the half a rule test
         # cannot see: `refuse_unknown_detectors` can be perfect while the one command that
         # loads a customer's objectives never tells it which corpus it has. Refused before a

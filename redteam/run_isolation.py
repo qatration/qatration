@@ -133,6 +133,19 @@ def main():
     args = ap.parse_args()
     if args.compose:
         args.keys = True          # composition needs the keys the search finds
+    # AND THE THREE FLAGS THAT ONLY STEER THE SEARCH imply it the same way. Without `--keys`
+    # they were dropped in silence: walked, `--frame-families authority --stop-on-hit --frames
+    # <a broken library>` ran the plain map, never opened the library it was pointed at,
+    # printed two locked properties as HARDENED and exited 0 -- a family search asked for by
+    # name, reported as a wall nothing had searched.
+    _steer = [_f for _f, _on in (("--frame-families", args.frame_families is not None),
+                                 ("--frames", args.frames is not None),
+                                 ("--stop-on-hit", args.stop_on_hit)) if _on]
+    if _steer and not args.keys:
+        args.keys = True
+        print("isolation: %s only steer%s the key search, so the search runs: --keys is "
+              "implied, as it is by --compose.\n"
+              % (" and ".join(_steer), "s" if len(_steer) == 1 else ""))
 
     path = objectives_path(args.objectives)
     from workspace import load_yaml_or_refuse as _load_yaml
