@@ -333,7 +333,9 @@ def bad_entry_shapes(entries):
         # spend the same hour.
         if not isinstance(e, dict):
             continue
-        who = e.get("id") or e.get("name") or "?"
+        # A STRING, because it names the entry in a sentence and the caller files it in a set:
+        # `id: [a]` is `unusable_entries`' finding, and it must not become a TypeError here.
+        who = str(e.get("id") or e.get("name") or "?")
         # AND AN OBJECTIVE'S PROPERTIES, whose `success`/`partial` are the same lists one level
         # down. Walked: `success: canary_in_output` inside a property sailed past this check
         # and `isolation` refused sixteen "names" -- 'c', 'a', 'n', ... -- as unknown detectors.
@@ -1047,7 +1049,11 @@ def main():
             if not isinstance(a, dict):
                 continue
             aid = a.get("id")
-            if (aid or a.get("name") or "?") in _shape_ids:
+            # AN ID THAT IS NOT A STRING is `unusable_entries`' finding already; asking it
+            # anything more here (a set, a sentence) is the TypeError that rule exists to avoid.
+            if aid is not None and not isinstance(aid, str):
+                continue
+            if str(aid or a.get("name") or "?") in _shape_ids:
                 continue
             where = f"{fname} #{i} ({aid or '??'})"
             if not aid:

@@ -379,6 +379,15 @@ def check_refusal(check):
     check("a success: written without brackets is named as that, exit 1, no traceback",
           _rc_sc == 1 and "is a single string" in _said_sc and "Traceback" not in _said_sc,
           "exit %s: %s" % (_rc_sc, _said_sc[-300:]))
+    # AN ID OR NAME THAT IS NOT A STRING is named, not crashed on: the shape check filed it
+    # in a set, and `id: [a]` / `name: [x]` raised TypeError: unhashable type.
+    io.open(os.path.join(_lwork, "unhash.yaml"), "w", encoding="utf-8").write(
+        "- id: [a]\n  category: c\n  text: hi\n  success: canary_in_output\n"
+        "- name: [x]\n  category: c\n  text: hi\n")
+    _rc_uh, _said_uh = _lint("--attacks", "unhash.yaml")
+    check("an id or name that is a list is named, exit 1, no traceback",
+          _rc_uh == 1 and "id is list, not a string" in _said_uh
+          and "Traceback" not in _said_uh, "exit %s: %s" % (_rc_uh, _said_uh[-300:]))
     # AN ENTRY THAT IS NOT A MAPPING is named, not crashed on: the loop asked it for `.get`.
     io.open(os.path.join(_lwork, "listy.yaml"), "w", encoding="utf-8").write(
         "- just a string\n- id: y\n")
