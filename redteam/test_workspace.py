@@ -981,6 +981,19 @@ def check_every_command_refuses():
         check("coverage --json onto %s is refused and leaves it as it was" % _kind_ev,
               (_rc_k, _io.open(_pe, encoding="utf-8").read() == _body_ev, _kind_ev in _out_k),
               (2, True, True))
+    # AND THE OLDER SHAPES OF TWO OF THEM, which is what every committed copy is: a recon
+    # profile from before `probes`, and a lock map from before `write_maps` had a meta.
+    for _fn_old, _body_old, _kind_old in (
+            ("old_prof.json", '{"capabilities": {}, "refusal_vocab": {}, "baseline_reply": ""}',
+             "a recon profile"),
+            ("old_map.json", '[{"objective": "o", "verdict": "HARDENED", "properties": []}]',
+             "a lock map")):
+        _po = _os.path.join(_cw, _fn_old)
+        _io.open(_po, "w", encoding="utf-8").write(_body_old)
+        _rc_o, _out_o = _cmd_out(["coverage", "--json", _po])
+        check("coverage --json onto %s in its older shape is refused" % _kind_old,
+              (_rc_o, _io.open(_po, encoding="utf-8").read() == _body_old, _kind_old in _out_o),
+              (2, True, True))
     # ...WHILE THE WRITER OF EACH KIND STILL REPLACES ITS OWN.
     _own_ev = []
     for _mod_ev, _kind_ev in (("run_recon.py", "a recon profile"),

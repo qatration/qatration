@@ -1075,6 +1075,10 @@ def _evidence_kind(path):
     # file or a frame library -- none of them written by anything that would be replacing its
     # own -- and a lock map, a recon profile and a run record are records like the two below.
     if isinstance(data, list):
+        # A LOCK MAP FROM BEFORE `write_maps` HAD A META: a bare list of objectives' maps. All
+        # eleven committed ones are this shape, and none has an `id` to be read as an arsenal.
+        if any(isinstance(e, dict) and "objective" in e and "properties" in e for e in data):
+            return "a lock map"
         _ided = [e for e in data if isinstance(e, dict) and e.get("id")]
         if not _ided:
             return ""
@@ -1086,8 +1090,11 @@ def _evidence_kind(path):
     if isinstance(data, dict) and isinstance(data.get("maps"), list) \
             and isinstance(data.get("meta"), dict):
         return "a lock map"
-    if isinstance(data, dict) and "probes" in data \
-            and ("capabilities" in data or "refusal_vocab" in data):
+    # A RECON PROFILE by what every version of one carries -- `capabilities` beside the
+    # refusal vocabulary or the baseline reply. `probes` arrived later: all ten committed
+    # profiles predate it, and the first version of this rule, keyed on it, protected none.
+    if isinstance(data, dict) and "capabilities" in data \
+            and ("refusal_vocab" in data or "baseline_reply" in data or "probes" in data):
         return "a recon profile"
     if isinstance(data, dict) and data.get("run_id") and data.get("started_at"):
         return "a run record"
