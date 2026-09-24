@@ -362,9 +362,28 @@ def apply_keysearch(result):
              if isinstance(p, dict) and (p.get("keysearch") or {}).get("verdict")
              == "KEYED"]
     result["keyed"] = keyed
-    if keyed and result.get("verdict") == "HARDENED":
+    # AND FROM UNMEASURED TOO. Since `_trial` stopped counting an empty reply as a lock held,
+    # a guard that answers a blocked ask with an empty 200 leaves its properties unmeasured;
+    # a frame that then opens one has measured it, and the objective is one composition away,
+    # not "says nothing about the target". `rejudge` restating a stored silent row did the
+    # same to a map whose key search had already found the bypass.
+    if keyed and result.get("verdict") in ("HARDENED", "UNMEASURED"):
         result["verdict"] = "PARTIAL"
     return result
+
+
+def searchable(prop_result):
+    """Is this property worth a key search? Locked -- or unmeasured with every trial SILENT.
+
+    An empty reply is not a measurement (see `_trial`), and it is also what a guard that
+    blocks by answering nothing looks like; a frame is exactly the tool for asking whether a
+    different wording gets past it. Errors are not searched: a target that is down stays down.
+    """
+    if prop_result.get("status") == "locked":
+        return True
+    locks = prop_result.get("locks") or {}
+    return (prop_result.get("status") == "unmeasured" and bool(locks)
+            and set(locks) == {"silent"})
 
 
 def _verdict(props, combined, coupling):

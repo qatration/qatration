@@ -265,7 +265,9 @@ def main():
         if args.keys:
             # only locked properties are worth a search — an open one has nothing to open,
             # and a `task` is required because a frame wraps the bare ask, not a full probe
-            locked = [p for p in result["properties"] if p["status"] == "locked"]
+            # ...and the properties an empty reply left unmeasured: see `isolation.searchable`.
+            from isolation import searchable as _searchable
+            locked = [p for p in result["properties"] if _searchable(p)]
             for p in locked:
                 spec = by_name.get(p["name"], {})
                 task = spec.get("task")
