@@ -2652,6 +2652,32 @@ def check_line_buffered():
     return bad
 
 
+def check_out_is_a_directory():
+    """A workspace that is a file is refused at the one door, before any command runs."""
+    import subprocess as _sp_of, tempfile as _tf_of
+    bad = []
+    _d = _tf_of.mkdtemp()
+    _file = os.path.join(_d, "results_x.json")
+    open(_file, "w").write("{}")
+    _env = dict(os.environ, QATRATION_OUT=_file, PYTHONDONTWRITEBYTECODE="1",
+                PYTHONIOENCODING="utf-8")
+    for _argv in (["runs"], ["run", "--target-config", "nosuch.yaml"], ["runs", "--help"]):
+        _p = _sp_of.run([sys.executable, os.path.join(HERE, "cli.py")] + _argv,
+                        capture_output=True, text=True, timeout=120, env=_env, cwd=_d)
+        _said = _p.stdout + _p.stderr
+        if _argv[-1] == "--help":
+            ok = _p.returncode == 0 and "usage" in _said
+        else:
+            ok = (_p.returncode == 2 and "is a file, not a directory" in _said
+                  and "Traceback" not in _said and "nothing has been run" not in _said)
+        print("%s  QATRATION_OUT=<a file>, `%s` -> exit %s"
+              % ("PASS" if ok else "FAIL", " ".join(_argv), _p.returncode))
+        if not ok:
+            bad.append("QATRATION_OUT=<a file>, %s: exit %s: %s"
+                       % (" ".join(_argv), _p.returncode, _said.strip()[-200:]))
+    return bad
+
+
 def check_named_build():
     """An `unknown` build is an absence wearing a value.
 
@@ -2852,7 +2878,7 @@ def check_evidence_guard():
 
 if __name__ == "__main__":
     _bad = (check_evidence_guard() + check_measured_when() + check_named_build()
-            + check_dated() + check_line_buffered())
+            + check_dated() + check_line_buffered() + check_out_is_a_directory())
     if _bad:
         for _b in _bad:
             print('  !', _b)

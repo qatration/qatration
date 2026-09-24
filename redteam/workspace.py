@@ -173,6 +173,25 @@ def out_origin():
 OUT = out_dir()
 
 
+def out_problem(root=None):
+    """-> why the artifact root cannot be one, or None.
+
+    A FILE IS NOT A WORKSPACE. `QATRATION_OUT` naming a file -- a results file, a typo that
+    hit one -- was taken as given: `runs` answered "no run records in <the file> ... nothing
+    has been run in this workspace", which is an absence reported about a directory that is
+    not one, and `run` got as far as opening the run record and crashed under "this is a bug
+    in qatration". A path that does not exist yet is fine: every writer makes it.
+    """
+    root = OUT if root is None else root
+    if os.path.exists(root) and not os.path.isdir(root):
+        named = (os.environ.get(ENV_VAR) or "").strip()
+        return ("ABORT — %s is a file, not a directory%s. Artifacts are written to and read "
+                "from a directory; point %s at one (a path that does not exist yet is made). "
+                "Nothing was run." % (root, " ($%s names it)" % ENV_VAR if named else "",
+                                      "$" + ENV_VAR if named else "the workspace"))
+    return None
+
+
 def model_tag(model):
     """The suffix a `--model` run adds to its artifact names, separator included.
 
@@ -2360,6 +2379,12 @@ def run_command(main):
         _sys.stdout.reconfigure(line_buffering=True)
     except (AttributeError, ValueError):
         pass
+    # THE WORKSPACE BEFORE THE COMMAND, and not in front of `--help`, which reads nothing.
+    if not any(_a in ("-h", "--help") for _a in _sys.argv[1:]):
+        _why_out = out_problem()
+        if _why_out:
+            print(_why_out, file=_sys.stderr)
+            return 2
     try:
         return main() or 0
     except SystemExit as e:
