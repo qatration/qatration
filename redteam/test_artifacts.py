@@ -689,6 +689,59 @@ def main():
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
+    # --- AN ATTACK WITH NO ID IS ONE THE TABLE LETS THROUGH, so every reader must take it ---
+    #
+    # `results[].attack.id` is optional in `_RESULTS_REQUIRE` on purpose: refusing the file
+    # would lose the measured findings beside it. A sweep of stored records found `rejudge
+    # --pages` and `history` subscripting `["id"]` anyway and dying on the file the table had
+    # just passed, under "this is a bug in qatration". A finding and a fired control, both
+    # without an id, through every command that reads the rows.
+    import copy as _cp_u
+    work = _workspace(corrupt=False)
+    try:
+        _u = _cp_u.deepcopy(GOOD)
+        _u["meta"]["target"] = "opsbot"
+        _hit = _cp_u.deepcopy(_u["results"][0])
+        _hit["attack"].pop("id")
+        _hit["headline"], _hit["rate"] = "EXPLOITED", "1/1"
+        _ctl = _cp_u.deepcopy(_hit)
+        _ctl["attack"]["category"] = "control"
+        _ctl["fired"] = ["canary_in_output"]
+        _u["results"] = [_hit, _ctl]
+        io.open(os.path.join(work, "results_opsbot.json"), "w",
+                encoding="utf-8").write(json.dumps(_u))
+        for _cmd in (["rejudge", "--pages"], ["history", "--backfill"], ["discrimination"],
+                     ["compare"], ["fixes"], ["index"], ["coverage"]):
+            code, out = _run("cli.py", work, _cmd)
+            check("%s takes a stored attack with no id" % " ".join(_cmd),
+                  code in (0, 1, 3) and "Traceback" not in out,
+                  "exit %s: %s" % (code, out[-300:]))
+        _pages = [p for p in os.listdir(work) if p.endswith(".html") and "opsbot" in p]
+        check("...and the report files the row under the one phrase for it",
+              any("(unnamed attack)" in io.open(os.path.join(work, p), encoding="utf-8").read()
+                  for p in _pages), str(_pages))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    # AND NO READER SUBSCRIPTS IT. Five did while six spelled the fallback out for themselves;
+    # `workspace.attack_name` is the one answer now, and a new `["attack"]["id"]` in a module
+    # that reads stored rows is the same crash waiting for the same file. `run_redteam` is
+    # the one exception: its rows are the live run's, built from an arsenal `lint` has
+    # already required an id of.
+    import glob as _g_u
+    import re as _re_u
+    _subs = []
+    for _src in sorted(_g_u.glob(os.path.join(HERE, "*.py"))):
+        _b = os.path.basename(_src)
+        if _b.startswith("test_") or _b == "run_redteam.py":
+            continue
+        for _n, _line in enumerate(io.open(_src, encoding="utf-8"), 1):
+            if _re_u.search(r"""\[['"]attack['"]\]\[['"]id['"]\]""", _line):
+                _subs.append("%s:%d" % (_b, _n))
+            if "(unnamed attack)" in _line and _b != "workspace.py":
+                _subs.append("%s:%d spells the fallback" % (_b, _n))
+    check("no reader of stored rows subscripts attack id or spells its own fallback",
+          _subs == [], str(_subs))
+
     # --- sarif: one named file, so a refusal rather than a skip ------------------------------
     work = _workspace(corrupt=True)
     try:

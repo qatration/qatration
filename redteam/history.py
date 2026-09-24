@@ -39,6 +39,7 @@ except Exception:
     pass
 
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import attack_name
 from workspace import NOT_MEASURED   # and of what counts as not measured
 from workspace import named_build   # and one definition of what counts as a build
 from workspace import measured_when # and one definition of when a run happened
@@ -70,7 +71,7 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
         # AND WHAT THE ATTACK WAS, twelve characters of it. Everything else in this row
         # is a verdict; this is the question that produced it, and without it the diff
         # below compares two answers to two different questions under one name.
-        rows[r["attack"]["id"]] = {"v": r["headline"], "rate": r.get("rate", ""),
+        rows[attack_name(r["attack"])] = {"v": r["headline"], "rate": r.get("rate", ""),
                                    "fired": sorted(r.get("fired") or []),
                                    "h": attack_digest(r["attack"])}
     return {"run": when or datetime.datetime.now().isoformat(" ", "seconds"),

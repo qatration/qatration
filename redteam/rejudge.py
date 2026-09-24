@@ -199,7 +199,7 @@ def rescore(path, ctx, why=None):
         # --write without having seen the finding it adds, in the one tool that overwrites
         # the record of expensive runs. What fired is part of what changed.
         if before != (head, rate) or sorted(r.get("fired") or []) != fired:
-            changed.append((attack["id"], before, (head, rate), fired))
+            changed.append((workspace.attack_name(attack), before, (head, rate), fired))
         r["headline"], r["rate"] = head, rate
         r["fired"] = fired
         r["locks"] = summarize(recs, ctx)

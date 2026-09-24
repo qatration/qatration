@@ -117,6 +117,7 @@ def arsenal_claim(rows):
 
 
 from workspace import esc as _ws_esc
+from workspace import attack_name
 # ONE DEFINITION OF WHAT AN ATTACK IS, the same one `history.diff` compares runs with
 # and the same one `lint` reads. A field that starts changing what gets sent joins this
 # page's comparison by being added there.
@@ -446,7 +447,7 @@ def main():
             # a bug in this tool; `workspace._unusable_results` types the key and leaves it
             # optional, because it is read here and in `fixes` and by neither of the other
             # three pages. Grouped under a name that cannot collide with a real id.
-            aid = (r.get("attack") or {}).get("id") or "(unnamed attack)"
+            aid = attack_name(r.get("attack"))
             # THE CATEGORY TRAVELS. Dropping it here is why `pair_diffs` was the one
             # module in nine that scored a control as a finding: eight others exclude
             # `category == "control"` and this one could not see it. Appended third, so

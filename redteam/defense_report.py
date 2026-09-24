@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from workspace import measured_when
+from workspace import attack_name
 from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, target_of,
                        fleet_names, fleet_filter,
                        read_artifact, read_artifacts, say_unreadable, measured,
@@ -968,7 +969,7 @@ def _unobservable():
                         (asked if _named else unasked).get(tgt, 0) + 1
                 for b in blind_spots(pr, cfg):
                     out.setdefault(tgt, {}).setdefault(b, set()).add(
-                        (r.get("attack") or {}).get("id") or "(unnamed attack)")
+                        attack_name(r.get("attack")))
     return out, asked, unasked
 
 
@@ -1689,7 +1690,7 @@ def main():
         for tgt, attack, head, probe, rate, fired in unmapped:
             for d in fired:
                 by_det.setdefault(d, []).append(
-                    (tgt, (attack or {}).get("id") or "(unnamed attack)", head, rate))
+                    (tgt, attack_name(attack), head, rate))
         rows = ""
         for det in sorted(by_det, key=lambda d: -len(by_det[d])):
             items = by_det[det]
@@ -2037,9 +2038,9 @@ def main():
         # pages do not. A row with no id is still a finding with a headline, detectors and
         # a target, and it renders under a name that cannot collide with a real one.
         trig = "".join(f'<li><span class="mono">{esc(t)}</span> · '
-                       f'{esc((a or {}).get("id") or "(unnamed attack)")}'
+                       f'{esc(attack_name(a))}'
                        f'<span class="rate">{esc(rt)}</span>'
-                       f'{_meta(t, (a or {}).get("id") or "(unnamed attack)")}</li>'
+                       f'{_meta(t, attack_name(a))}</li>'
                        for t, a, h, p, rt in items)
         sections += f"""
         <section class="finding">
@@ -2054,7 +2055,7 @@ def main():
           <div class="fix"><span class="fixlabel">Remediation</span>{esc(rem['fix'])}</div>
           {chan_html}
           <details>
-            <summary>Evidence — <span class="mono">{esc((a0 or {}).get('id') or '(unnamed attack)')}</span> on <span class="mono">{esc(t0)}</span></summary>
+            <summary>Evidence — <span class="mono">{esc(attack_name(a0))}</span> on <span class="mono">{esc(t0)}</span></summary>
             <div class="ph">attack</div><pre>{esc(payload_text(a0))}</pre>
             {tc_html}
             <div class="ph">what happened</div><pre>{esc(reply)}</pre>

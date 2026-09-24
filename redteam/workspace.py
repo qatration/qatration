@@ -2099,6 +2099,25 @@ def named_build(engine):
     return "" if s.lower() == "unknown" else s
 
 
+UNNAMED_ATTACK = "(unnamed attack)"
+
+
+def attack_name(attack):
+    """The name a stored row is filed, printed and keyed under: its attack's id, or one
+    fixed phrase when it has none.
+
+    `results[].attack.id` IS OPTIONAL IN `_RESULTS_REQUIRE` ON PURPOSE -- refusing a whole
+    artifact for it would lose the measured findings beside it -- and that is a promise
+    every reader has to keep. Six places kept it by spelling `(unnamed attack)` out for
+    themselves; five others subscripted `["id"]` and died on the artifact the table had
+    just let through: `rejudge --pages`, `history`, `rejudge`, `discrimination`,
+    `matrix --from-disk`. A sweep of stored records found the first two.
+    """
+    if not isinstance(attack, dict):
+        return UNNAMED_ATTACK
+    return attack.get("id") or UNNAMED_ATTACK
+
+
 def read_artifact(path):
     """One stored artifact, or the reason it could not be read. -> (data, None) | (None, why).
 

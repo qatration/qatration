@@ -6,7 +6,7 @@ detectors, and each attack's probe) — target-agnostic, works for any adapter.
 import html
 import re
 from recon import memory_phrase
-from workspace import measured, BROKE
+from workspace import measured, BROKE, attack_name
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -379,7 +379,7 @@ def build_html(meta, results, recon=None, isolation=None):
         fired = ", ".join(r["fired"]) or "—"
         rows.append(f"""
         <tr class="row" onclick="this.nextElementSibling.classList.toggle('open')">
-          <td class="mono">{esc(a['id'])}</td>
+          <td class="mono">{esc(attack_name(a))}</td>
           <td>{esc(a.get('category',''))}</td>
           <td class="mono dim">{esc(a.get('delivery','direct'))}</td>
           <td><span class="badge" style="color:{color};background:{bg}">{head}</span></td>

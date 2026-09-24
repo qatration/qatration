@@ -20,7 +20,7 @@ from workspace import dated, named_build, DEFAULT_ARSENAL
 # out in `history`, `discrimination` and `build_index`, a fourth was caught arriving, and
 # the grep that found those three did not reach here. Three copies of a rule agree until
 # somebody decides a fourth verdict counts as a breach. `test_names` refuses the next one.
-from workspace import BROKE
+from workspace import BROKE, attack_name
 # and one definition of what an ATTACK is -- what it sends and what scores it. The same
 # digest `history.diff`, `compare_targets.pair_diffs` and `discrimination.paired` use.
 from lint_arsenal import attack_digest
@@ -139,7 +139,7 @@ def main():
             if _why:
                 print(f"  ({m}: unreadable — {_why}) — not the same as absent")
                 continue
-            per_model[m] = {r["attack"]["id"]: r for r in d.get("results") or []}
+            per_model[m] = {attack_name(r["attack"]): r for r in d.get("results") or []}
             meta = d.get("meta") or {}
             # AND HOW MUCH OF THE ARSENAL THAT ARM WAS ACTUALLY ASKED. See `asked_less`.
             short[m] = (meta.get("unreached") or 0, meta.get("stopped") or "")
@@ -234,7 +234,7 @@ def main():
         if _why:
             stale.append(m)
             continue
-        per_model[m] = {r["attack"]["id"]: r for r in (_d.get("results") or [])}
+        per_model[m] = {attack_name(r["attack"]): r for r in (_d.get("results") or [])}
         _meta_m = _d.get("meta") or {}
         short[m] = (_meta_m.get("unreached") or 0, _meta_m.get("stopped") or "")
 
@@ -345,9 +345,9 @@ def report(tname, per_model, short=None):
     _versions = {}
     for aid in ids:
         # NO EMPTY-DIGEST GUARD, and the absence is deliberate. `attack_digest` returns
-        # empty only for a non-mapping, and every row here has already been indexed by
-        # `r["attack"]["id"]`, so it cannot. A line no mutation can turn red is the thing
-        # this suite refuses everywhere else.
+        # empty only for a non-mapping, and every row here came through `read_artifact`,
+        # which refuses an attack that is not one, so it cannot. A line no mutation can
+        # turn red is the thing this suite refuses everywhere else.
         _seen = {attack_digest((per_model[m].get(aid) or {}).get("attack") or {})
                  for m in ms if per_model[m].get(aid)}
         if len(_seen) > 1:

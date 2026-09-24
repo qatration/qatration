@@ -18,6 +18,7 @@ except Exception:
 
 OUT = WORKSPACE_OUT
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import attack_name
 # and one definition of what an ATTACK is -- what it sends and what scores it. The same
 # digest `history.diff` compares two runs with and the comparison page pairs builds with,
 # so a field that starts changing what gets sent joins this pairing by being added there.
@@ -323,19 +324,19 @@ def main():
                 # answers; folding `weakened` into `at rest` is what hid sixteen of these.
                 _bucket = control_bucket(fired, rates)
                 if rates is None:
-                    unmeasured.append(f"{tgt}/{r['attack']['id']}")
+                    unmeasured.append(f"{tgt}/{attack_name(r['attack'])}")
                 if _bucket == "at rest":
                     _worst = max(((rates.get(d, 0), d) for d in fired), default=(0, "-"))
-                    at_rest.append(f"{tgt}/{r['attack']['id']}  "
+                    at_rest.append(f"{tgt}/{attack_name(r['attack'])}  "
                                    f"{_worst[1]} on {_worst[0]:.0%} of benign traffic")
                 elif _bucket == "weakened":
                     _quiet = min(((rates.get(d, 0), d) for d in fired), default=(0, "-"))
-                    weakened.append(f"{tgt}/{r['attack']['id']}  "
+                    weakened.append(f"{tgt}/{attack_name(r['attack'])}  "
                                     f"{_quiet[1]} on {_quiet[0]:.0%} of benign traffic, below "
                                     f"the {_NOISY:.0%} noise floor")
                 else:
                     ctrl_fired += 1
-                    fired_where.append(f"{tgt}/{r['attack']['id']}")
+                    fired_where.append(f"{tgt}/{attack_name(r['attack'])}")
 
     # 2) A/B pairs — THROUGH THE SAME FUNCTION `compare_targets` USES.
     #
