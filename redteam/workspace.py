@@ -2236,46 +2236,52 @@ _RESULTS_REQUIRE = {
                                  "`fixes`, `coverage` and the report quote what was sent "
                                  "and what came back from it"),
     "results[].trials[].refusal": (dict, False, "`fixes` reads the refusal class off it"),
-    # AND ONE LEVEL DOWN, INSIDE THE PROBE, by the same sweep pointed at its keys: ten more
-    # sites -- `.strip()` on `output: -1`, `for t, ti in tool_calls` on `tool_calls:
-    # [{k: 1}]`, `tuple(x)` on `resolved: [1]`. `turns` is not here: `Probe` accepts it as
-    # one dict per exchange or as a flat alternating list, and checks it itself.
-    "results[].trials[].probe.output": (str, False, "every page quotes the reply from it"),
-    "results[].trials[].probe.prompt": (str, False, "`coverage` replays what was sent"),
-    "results[].trials[].probe.tool_calls": (list, False, "the pages list each call"),
-    "results[].trials[].probe.tool_calls[]": (list, False,
-                                              "each call is read as a (name, arguments) pair"),
-    "results[].trials[].probe.resolved": (list, False,
-                                          "`fixes` asks which channels a probe reached"),
-    "results[].trials[].probe.resolved[]": (list, False,
-                                            "each one is read as a (path, value) pair"),
-    "results[].trials[].probe.observations": (list, False,
-                                              "`coverage` replays what the tools returned"),
+}
+# AND ONE LEVEL DOWN, INSIDE A STORED PROBE, by the same sweep pointed at its keys: ten more
+# sites -- `.strip()` on `output: -1`, `for t, ti in tool_calls` on `tool_calls: [{k: 1}]`,
+# `tuple(x)` on `resolved: [1]`. `turns` is not here: `Probe` accepts it as one dict per
+# exchange or as a flat alternating list, and checks it itself.
+#
+# ONE TABLE FOR EVERY FAMILY THAT STORES A PROBE, keyed relative to it: a benign baseline's
+# rows carry the same probe, `coverage` replays both through the same code, and the same
+# sweep over a baseline found the same three fields crashing it.
+_PROBE_REQUIRE = {
+    "output": (str, False, "every page quotes the reply from it"),
+    "prompt": (str, False, "`coverage` replays what was sent"),
+    "tool_calls": (list, False, "the pages list each call"),
+    "tool_calls[]": (list, False, "each call is read as a (name, arguments) pair"),
+    "resolved": (list, False, "`fixes` asks which channels a probe reached"),
+    "resolved[]": (list, False, "each one is read as a (path, value) pair"),
+    "observations": (list, False, "`coverage` replays what the tools returned"),
 }
 # The `[]` rows whose elements are unpacked as `a, b = element`: a list of the wrong length
 # is the right kind and still raises. Every one of the 852 stored is a pair.
-_PAIR_ROWS = ("results[].trials[].probe.tool_calls[]", "results[].trials[].probe.resolved[]")
+_PROBE_PAIRS = ("tool_calls[]", "resolved[]")
+_RESULTS_REQUIRE.update(("results[].trials[].probe." + _k, _v)
+                        for _k, _v in _PROBE_REQUIRE.items())
 
 
-def _level_fault(obj, prefix, label):
-    """-> why one mapping cannot be used, checked against every row of `_RESULTS_REQUIRE`
-    one level under `prefix`, or None. A list-valued row with a `[]` beside it has its
-    elements checked too."""
-    for key in _RESULTS_REQUIRE:
+def _level_fault(obj, prefix, label, table=None, what="results file"):
+    """-> why one mapping cannot be used, checked against every row of `table` (the results
+    table by default) one level under `prefix`, or None. A list-valued row with a `[]`
+    beside it has its elements checked too."""
+    table = _RESULTS_REQUIRE if table is None else table
+    for key in table:
         if not key.startswith(prefix):
             continue
         name = key[len(prefix):]
         if "." in name or "[" in name:
             continue
-        _why = shape_fault(key, obj.get(name), name in obj)
+        _why = shape_fault(key, obj.get(name), name in obj, table, what)
         if _why:
             return _why.replace(prefix, label)
-        if (key + "[]") in _RESULTS_REQUIRE and isinstance(obj.get(name), list):
+        if (key + "[]") in table and isinstance(obj.get(name), list):
             for j, _e in enumerate(obj[name]):
-                _why = shape_fault(key + "[]", _e, True)
-                if not _why and key + "[]" in _PAIR_ROWS and len(_e) != 2:
-                    _why = ("a results file whose %s holds %d item(s), not 2: %s"
-                            % (key + "[]", len(_e), _RESULTS_REQUIRE[key + "[]"][2]))
+                _why = shape_fault(key + "[]", _e, True, table, what)
+                if (not _why and prefix.endswith("probe.") and name + "[]" in _PROBE_PAIRS
+                        and len(_e) != 2):
+                    _why = ("a %s whose %s holds %d item(s), not 2: %s"
+                            % (what, key + "[]", len(_e), table[key + "[]"][2]))
                 if _why:
                     return _why.replace(key + "[]", "%s%s[%d]" % (label, name, j))
     return None
@@ -2365,7 +2371,12 @@ _BENIGN_REQUIRE = {
     "rows[].fired[]": (str, False, "a detector is counted by its name"),
     "rows[].probe": (dict, False,
                      "`coverage` replays what was sent and what came back from it"),
+    # The detector a probe was written to tempt, counted BY NAME: `provokes: [1]` reached a
+    # Counter in the roll-up and died as unhashable. `null` is a probe that tempts nothing.
+    "rows[].provokes": (str, False, "the roll-up counts the detector a probe was written "
+                                    "to tempt"),
 }
+_BENIGN_REQUIRE.update(("rows[].probe." + _k, _v) for _k, _v in _PROBE_REQUIRE.items())
 
 
 def _unusable_benign(data, name=""):
@@ -2412,14 +2423,15 @@ def _unusable_benign(data, name=""):
         _why = _bad("rows[]", row, True)
         if _why:
             return _why.replace("rows[]", "rows[%d]" % i)
-        for _k in ("fired", "probe"):
-            _why = _bad("rows[].%s" % _k, row.get(_k), _k in row)
+        _why = _level_fault(row, "rows[].", "rows[%d]." % i, _BENIGN_REQUIRE,
+                            "benign baseline")
+        if _why:
+            return _why
+        if isinstance(row.get("probe"), dict):
+            _why = _level_fault(row["probe"], "rows[].probe.", "rows[%d].probe." % i,
+                                _BENIGN_REQUIRE, "benign baseline")
             if _why:
-                return _why.replace("rows[].", "rows[%d]." % i)
-        for j, _f in enumerate(row.get("fired") or []):
-            _why = _bad("rows[].fired[]", _f, True)
-            if _why:
-                return _why.replace("rows[].fired[]", "rows[%d].fired[%d]" % (i, j))
+                return _why
     return None
 
 

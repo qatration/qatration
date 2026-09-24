@@ -298,28 +298,35 @@ def main():
     # has them now, and this walks EVERY row of it rather than a list of cases chosen here:
     # a row the rule never reaches -- a nesting the walker skips -- is a row that refuses
     # nothing, and it fails below by name.
-    from workspace import _RESULTS_REQUIRE as _table
+    from workspace import _RESULTS_REQUIRE as _table, _BENIGN_REQUIRE as _btable
     _base = {"meta": {"target": "t"},
              "results": [{"headline": "DEFENDED", "attack": {"id": "a"}, "fired": [],
                           "trials": [{"verdict": "DEFENDED", "probe": {}}]}]}
-    _unreached = []
-    for _key, (_kind, _req, _) in _table.items():
-        _wrong = 7 if _kind is str else "x"
-        _b = json.loads(json.dumps(_base))
-        # Walked BY THE PATH, whatever its depth, so a row added a level further down is
-        # reached without this loop learning about it.
-        _parts = _key.replace("[]", "").split(".")
-        _obj = _b
-        for _p in _parts[:-1]:
-            _obj = _obj[_p][0] if isinstance(_obj[_p], list) else _obj[_p]
-        _field = _parts[-1]
-        _obj[_field] = [_wrong] if _key.endswith("[]") else _wrong
-        _d9, _why9 = _artifact("results_x.json", _b)
-        if not (_d9 is None and _field in (_why9 or "")
-                and type(_wrong).__name__ in (_why9 or "")):
-            _unreached.append((_key, _why9))
-    check("every row of the results shape table refuses a value of the wrong kind, by name",
-          _unreached == [], str(_unreached))
+    # AND THE BENIGN TABLE BY THE SAME WALK: its rows carry the same probe, and the same
+    # sweep over a stored baseline found `coverage` and the roll-up crashing inside it.
+    _bbase = {"meta": {"target": "t", "probes": 1}, "rows": [{"fired": [], "probe": {}}]}
+    for _fam, _tbl, _doc, _fname in (("results", _table, _base, "results_x.json"),
+                                     ("benign", _btable, _bbase, "benign_x.json")):
+        _unreached = []
+        for _key, (_kind, _req, _) in _tbl.items():
+            _wrong = 7 if _kind is str else "x"
+            _b = json.loads(json.dumps(_doc))
+            # Walked BY THE PATH, whatever its depth, so a row added a level further down
+            # is reached without this loop learning about it.
+            _parts = _key.replace("[]", "").split(".")
+            _obj = _b
+            for _p in _parts[:-1]:
+                _obj = _obj[_p][0] if isinstance(_obj[_p], list) else _obj[_p]
+            _field = _parts[-1]
+            _obj[_field] = [_wrong] if _key.endswith("[]") else _wrong
+            _d9, _why9 = _artifact(_fname, _b)
+            if not (_d9 is None and _field in (_why9 or "")
+                    and type(_wrong).__name__ in (_why9 or "")):
+                _unreached.append((_key, _why9))
+        check("every row of the %s shape table refuses a value of the wrong kind, by name"
+              % _fam, _unreached == [], str(_unreached))
+        check("...and the %s record the walk mutates is itself usable" % _fam,
+              _artifact(_fname, _doc)[1] is None, str(_artifact(_fname, _doc)[1]))
     # A CALL IS A PAIR. `for t, ti in tool_calls` unpacks each one, so a list of three is the
     # right kind and still raises; every one of the 852 stored is two strings.
     _b = json.loads(json.dumps(_base))
