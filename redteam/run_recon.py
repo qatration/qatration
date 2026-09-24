@@ -79,6 +79,21 @@ def main():
         # filename in six places, one of them an append.
         target.name = safe_target_name(tcfg["name"], "target config")
 
+    # THE DESTINATION BEFORE THE PROBES. Both refusals below were made where the profile is
+    # written, after every probe had gone to the target: `recon --json <an arsenal>` sent its
+    # traffic and then said "Nothing was written". Nothing in them depends on the replies --
+    # the path is the reader's flag or the target's name -- so they are asked first.
+    out = os.path.abspath(args.json or os.path.join(WORKSPACE_OUT, f"recon_{target.name}.json"))
+    _refusal = refuse_to_overwrite_evidence(
+        out, force=getattr(args, "overwrite_evidence", False))
+    if _refusal:
+        # 2, THE SAME AS `run`: the invocation was refused, nothing was measured, and
+        # a pipeline must not read it as a finding.
+        print(_refusal, file=sys.stderr)
+        return 2
+    from workspace import writable_path as _writable
+    out = _writable(out, "profile", "recon", replaces=("a recon profile",))
+
     print(f"recon → target='{target.name}' model='{tcfg.get('model', '')}' "
           f"(benign probes only)\n")
     profile = fingerprint(target, ctx,
@@ -112,12 +127,11 @@ def main():
               " (review, then paste) ---")
         print(frag)
 
-    out = args.json or os.path.join(WORKSPACE_OUT, f"recon_{target.name}.json")
     if out:
         # A PATH THE READER TYPED IS THEIRS, relative to where they typed it. This joined it onto
         # the directory this module is installed in, so `--json x.json` from a workspace landed
         # beside site-packages -- and the next CI step, reading `x.json`, found nothing.
-        out = os.path.abspath(out)
+        # (`out` is resolved above, before the probes.)
         # THE SAME REFUSAL `run` AND `benign` MAKE. `refuse_to_overwrite_evidence` was
         # written after a `--attacks` run replaced a full sweep's `results_httpbot.json`
         # with eight rows and `coverage` reported 958 fewer probes. It was then wired into
@@ -129,15 +143,7 @@ def main():
         #
         # An untracked file is still overwritten in silence, which is the whole point: a
         # person re-running their own sweep is not asked permission.
-        _refusal = refuse_to_overwrite_evidence(
-            out, force=getattr(args, "overwrite_evidence", False))
-        if _refusal:
-            # 2, THE SAME AS `run`: the invocation was refused, nothing was measured, and
-            # a pipeline must not read it as a finding.
-            print(_refusal, file=sys.stderr)
-            return 2
-        from workspace import writable_path as _writable
-        out = _writable(out, "profile", "recon", replaces=("a recon profile",))
+        # (Both refusals are made before the probes are sent: see where the target is built.)
         # AND WHEN IT WAS MEASURED. The fleet page dates every recon profile by the
         # file's mtime, which git does not preserve: in a clone all ten carry the clone
         # time. Nothing on disk could answer it, so the writer answers it.

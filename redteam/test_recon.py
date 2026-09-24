@@ -806,6 +806,51 @@ def main():
     check("...and the widths are taken from the rows",
           "max(len(h)" in (_fmt_src or ""), True)
 
+    # A DESTINATION THAT WILL BE REFUSED IS REFUSED BEFORE THE PROBES. `recon --json <an
+    # arsenal>` sent every probe to the target and then said "Nothing was written". Driven
+    # against a server that counts what it is sent.
+    import os as _os_d, io as _io_d, json as _js_d, subprocess as _sp_d, tempfile as _tf_d
+    import threading as _th_d
+    from http.server import BaseHTTPRequestHandler as _BH_d, ThreadingHTTPServer as _TS_d
+    _hits_d = []
+
+    class _Counting(_BH_d):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _hits_d.append(1)
+            _b = _js_d.dumps({"reply": "Our store is open 9 to 5."}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+    _srv_d = _TS_d(("127.0.0.1", 0), _Counting)
+    _th_d.Thread(target=_srv_d.serve_forever, daemon=True).start()
+    try:
+        _wd = _tf_d.mkdtemp()
+        _cfg_d = _os_d.path.join(_wd, "countbot.yaml")
+        _io_d.open(_cfg_d, "w", encoding="utf-8").write(
+            'name: countbot\nadapter: http\nurl: "http://127.0.0.1:%d/chat"\n'
+            'request:\n  message: "{prompt}"\nresponse:\n  reply: reply\n'
+            % _srv_d.server_address[1])
+        _atk_d = _os_d.path.join(_wd, "attacks_mine.yaml")
+        _atk_body = "- id: a1\n  category: c\n  text: hi\n"
+        _io_d.open(_atk_d, "w", encoding="utf-8").write(_atk_body)
+        _pd = _sp_d.run([sys.executable, _os_d.path.join(_os_d.path.dirname(
+                            _os_d.path.abspath(__file__)), "cli.py"), "recon",
+                         "--target-config", _cfg_d, "--json", _atk_d],
+                        capture_output=True, text=True, timeout=300,
+                        env=dict(_os_d.environ, QATRATION_OUT=_wd, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8"))
+        check("recon --json <an arsenal> is refused with nothing sent",
+              (_pd.returncode, len(_hits_d),
+               _io_d.open(_atk_d, encoding="utf-8").read() == _atk_body), (2, 0, True))
+    finally:
+        _srv_d.shutdown()
+
     # Counted as they run, not declared, and taken HERE rather than partway up. A hardcoded
     # total is a coverage claim nothing keeps true — five of these suites had drifted below
     # their real count, this one reporting 41 while running 45 — and a snapshot is the same
