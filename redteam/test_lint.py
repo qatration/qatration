@@ -180,6 +180,32 @@ def check_refusal(check):
     check("...naming the field rather than a letter from inside it",
           bad_entry_shapes([{"id": "a", "success": "x"}])[0][1] == "success", "wrong field")
 
+    # AND WHAT AN OBJECTIVE'S FIELDS HOLD, by kinds derived from the objectives that ship. A
+    # field-type sweep over an objectives file found `isolation` crashing on shapes the attack
+    # rule could not see, because an objective is not an attack.
+    from lint_arsenal import objective_field_kinds as _ofk
+    _ok_k, _pk_k = _ofk()
+    check("objective kinds are derived from the corpus, a union where it writes two",
+          (_ok_k.get("combined", ((),))[0] == frozenset(["str", "list"]),
+           _pk_k.get("name", ((),))[0] == frozenset(["str"])) == (True, True),
+          str((_ok_k.get("combined"), _pk_k.get("name"))))
+    _prop = {"name": "p", "probe": "hi", "success": ["canary_in_output"]}
+    _obj_cases = [
+        ("combined", {"id": "o1", "combined": 7, "properties": [dict(_prop)]}),
+        ("name", {"id": "o2", "properties": [dict(_prop, name=7)]}),
+        ("success", {"id": "o3", "properties": [dict(_prop, success=[["a"]])]}),
+        ("steps", {"id": "o4", "properties": [dict(_prop, steps=7)]}),
+        ("probe", {"id": "o5", "properties": [dict(_prop, probe={"k": "v"})]}),
+    ]
+    for _f, _c in _obj_cases:
+        _got = bad_entry_shapes([_c])
+        check("an objective whose %s is the wrong kind is named, once" % _f,
+              len(_got) == 1 and _got[0][1] == _f, str(_got))
+    check("...while an objective written both ways the corpus writes `combined` is not",
+          bad_entry_shapes([{"id": "o6", "combined": "x", "properties": [dict(_prop)]},
+                            {"id": "o7", "combined": ["a", "b"],
+                             "properties": [dict(_prop)]}]) == [], "a valid objective named")
+
     # THE INVARIANT `bad_entry_shapes` RESTS ON. It reads `e.get("id")` with nothing in
     # front of it, because an entry that is not a mapping has already been reported by the
     # door that loaded the corpus. There WAS a `continue` there for it, and

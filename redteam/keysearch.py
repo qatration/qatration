@@ -61,6 +61,23 @@ def load_frames(path=None, families=None):
                "%s (%.40r)" % (type(fr).__name__, fr) if not isinstance(fr, dict)
                else "a mapping with no id" if not fr.get("id")
                else "a frame with no template text", len(_bad)))
+    # AND WHAT EACH FIELD HOLDS, by the kinds the shipped library writes it with and the
+    # check the arsenal and the objectives use. A field-type sweep over a library found the
+    # search crashing on `why: 7` (`.strip()`), `id: [1]` (a format spec) and `needs: [1]`
+    # (a dict lookup), each under "this is a bug in qatration", after the probes had started.
+    from lint_arsenal import _field_kinds, _kind_faults
+    import yaml as _yaml_k
+    with open(os.path.join(HERE, "frames.yaml"), encoding="utf-8") as _fk:
+        _shipped = _yaml_k.safe_load(_fk) or []
+    _kinds = _field_kinds([f for f in _shipped if isinstance(f, dict)])
+    _faults = [(repr(fr["id"]), "id", "is %s; a frame is filed under its id, a str"
+                % type(fr["id"]).__name__) for fr in frames if not isinstance(fr["id"], str)]
+    _faults += [x for fr in frames for x in _kind_faults(str(fr["id"]), fr, _kinds)]
+    if _faults:
+        raise SystemExit(
+            "isolation: %d field(s) in the frame library at %s are not the kind the search "
+            "reads. Nothing was sent.\n" % (len(_faults), path)
+            + "\n".join("    %-22s %-10s %s" % f for f in _faults[:8]))
     if families:
         want = {f.strip() for f in families if f and f.strip()}
         # A FAMILY NOBODY HAS IS A TYPO, NOT A SCOPE. `--frame-families nonesuch` scoped the

@@ -1119,7 +1119,8 @@ def main():
             args.target = load_target_or_explain(cfg, args.target_config, was_default=False).name
     # ONE ANSWER FOR BOTH DOORS. `_ctx_for` returns exactly this expression for the `--target`
     # path, so reading it here rather than in each branch keeps the two from drifting.
-    ctx = cfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(cfg)
 
     # IS THIS THE BUILD THE CONFIG DESCRIBES? The same check run_redteam makes, here because
     # a guard only covers where it looks and this is the second door. It matters more here,

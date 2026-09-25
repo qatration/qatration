@@ -68,7 +68,8 @@ def main():
 
     from workspace import config_name as _config_name
     name = _config_name(args.target_config, tcfg)
-    ctx = tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(tcfg)
 
     prof_path = args.recon or os.path.join(WORKSPACE_OUT, f"recon_{name}.json")
     if not os.path.exists(prof_path):

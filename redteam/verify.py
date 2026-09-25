@@ -333,7 +333,8 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     if tcfg.get("name"):
         target.name = safe_target_name(tcfg["name"], "target config")
     out["target"] = target.name
-    ctx = tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(tcfg)
 
     # THROUGH `read_artifact`, the one reader for this directory. `with open(...):
     # json.load(f)` was a shape the gate against raw reads could not see.

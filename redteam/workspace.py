@@ -698,6 +698,27 @@ def number_context_keys(root=None):
     return keys
 
 
+def oracle_context_of(cfg):
+    """A config's oracle_context, with an absent block and a written-out `null` both read as
+    the empty one. `cfg.get("oracle_context", {})` -- seven commands' spelling -- returns
+    `None` for `oracle_context: null`, because the default only applies when the key is
+    missing; `run` then died in `honeytoken.declared` and `isolation` in `prop_ctx`, under
+    "this is a bug in qatration", on a config `bad_context_shapes` had passed as empty. A
+    block that is some other non-mapping is that rule's to refuse, and is handed back as it
+    is so the refusal still sees it."""
+    ctx = (cfg or {}).get("oracle_context")
+    return {} if ctx is None else ctx
+
+
+# THE LIST KEYS WHOSE EVERY READER TURNS AN ENTRY INTO TEXT ITSELF (`str(x)`), so a number
+# written without quotes -- a phone number in `known_pii` -- is read correctly and is not
+# refused. Every other list key has at least one reader calling `.lower()` or hashing the
+# entry as a name, where a number raises: `allowed_domains: [1]` died in `d_xss_in_output`.
+# `test_workspace` scans every reader of these four and fails if one stops coercing.
+NUMBER_TOLERANT_LIST_KEYS = ("known_pii", "expected_completions", "baseline_tool_inputs",
+                             "command_baseline")
+
+
 def string_context_keys(root=None):
     """Every `oracle_context` key the engine reads as TEXT -- `ctx.get(k) or ""` and then a
     string method -- scanned, not listed, like `list_context_keys`.
@@ -779,6 +800,21 @@ def bad_context_shapes(cfg):
                         % (v, ", ".join(repr(c) for c in v[:3]), v)))
         else:
             out.append((k, "is %s; this key is read as a list" % type(v).__name__))
+    # AND WHAT THE LISTS HOLD. Each entry is read as text: a domain, a canary, a tool name.
+    # A mapping, a list or a bool is never one; a number is one only where every reader
+    # turns it into text itself (`NUMBER_TOLERANT_LIST_KEYS`).
+    for k, v in ctx.items():
+        if k not in want or not isinstance(v, (list, tuple)):
+            continue
+        _ok = (str, int, float) if k in NUMBER_TOLERANT_LIST_KEYS else (str,)
+        for i, x in enumerate(v):
+            if x is None or (isinstance(x, _ok) and not isinstance(x, bool)):
+                continue
+            out.append(("%s[%d]" % (k, i),
+                        "is %s (%.40r); each entry of this key is read as text%s"
+                        % (type(x).__name__, x,
+                           ", so write it in quotes" if isinstance(x, (int, float)) else "")))
+            break
     return out
 
 
@@ -2352,6 +2388,7 @@ _TRIAL_ROWS = {
     "locks": (dict, False, "the report's lock column reads it"),
     "errors": (int, False, "an errored trial is not counted as held"),
     "sample": (dict, False, "the report quotes the reply behind the verdict"),
+    "inert": (dict, False, "`isolation` names the detectors that could not fire"),
 }
 _LOCKMAP_REQUIRE = {
     "meta": (dict, False, "`read_maps` and the report date the map by it"),

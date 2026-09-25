@@ -848,7 +848,8 @@ def main():
     # reaches the same arithmetic without passing any parser at all.
     trials = (args.trials if args.trials is not None
               else _trial_count(tcfg.get("trials", 3), where="trials: in the target config"))
-    ctx = tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(tcfg)
 
     # WHO ASKED FOR THIS? Remote targets need proof before the first probe; the practice fleet
     # on localhost passes untouched, because a gate that makes the fleet unusable is a gate that

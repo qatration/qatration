@@ -260,6 +260,85 @@ def _corpus_attacks(root):
                 yield a
 
 
+def _corpus_objectives(root):
+    """Every objective mapping in the `isolation*.yaml` files under `root`, scratch excluded
+    by the rule `arsenal_files` keeps for the arsenal."""
+    import glob as _glob
+    import io as _io
+    for fname in sorted(_glob.glob(os.path.join(root, "isolation*.yaml"))):
+        if fname.endswith(("_tmp.yaml", ".tmp.yaml")):
+            continue
+        try:
+            doc = yaml.safe_load(_io.open(fname, encoding="utf-8").read()) or []
+        except Exception:
+            continue
+        for o in (doc if isinstance(doc, list) else []):
+            if isinstance(o, dict):
+                yield o
+
+
+def _field_kinds(entries):
+    """-> {field: (the kinds it is written with, the kinds of what its lists hold)} over a
+    corpus of mappings. A SET, not one kind: an objective's `combined` is a string in eleven
+    shipped objectives and a list of turns in one, and both are read."""
+    kinds, elems = {}, {}
+    for e in entries:
+        for k, v in e.items():
+            if v is None:
+                continue
+            kinds.setdefault(k, set()).add(type(v).__name__)
+            if isinstance(v, list):
+                for x in v:
+                    elems.setdefault(k, set()).add(type(x).__name__)
+    return {k: (frozenset(t), frozenset(elems.get(k, ()))) for k, t in kinds.items()}
+
+
+def _kind_faults(who, entry, kinds, lists_elsewhere=()):
+    """-> [(who, field, why)] for every field of `entry` holding a kind `kinds` says it is
+    never written with, or a list holding one. ONE check for an attack, an objective and a
+    property. A non-list in a field named in `lists_elsewhere` is left to the list rule,
+    which says it in the words that fit a missing pair of brackets."""
+    out = []
+    for k, v in entry.items():
+        if k == "id" or v is None or k not in kinds:
+            continue
+        ks, es = kinds[k]
+        if type(v).__name__ not in ks:
+            if ks == frozenset(["list"]) and k in lists_elsewhere:
+                continue
+            out.append((who, k, "is %s; this field is read as %s (%.40r)"
+                        % (type(v).__name__, " or ".join(sorted(ks)), v)))
+        elif isinstance(v, list) and es:
+            _odd = [x for x in v if type(x).__name__ not in es]
+            if _odd:
+                out.append((who, k, "holds %s where each entry is read as %s (%.40r)"
+                            % (type(_odd[0]).__name__, " or ".join(sorted(es)), _odd[0])))
+    return out
+
+
+_OBJECTIVE_KINDS = None
+
+
+def objective_field_kinds(root=None):
+    """-> (kinds of an objective's fields, kinds of a property's fields), derived from the
+    objectives that ship, by the argument `attack_field_types` makes for the arsenal.
+
+    A field-type sweep over an objectives file found `isolation` crashing on five shapes the
+    attack rule could not see, because an objective is not an attack: `combined: 7` reached
+    `payload`'s `.strip()`, `properties[].name: 7` a format spec in `format_map`,
+    `success: [[a]]` inside a property the detector-name check.
+    """
+    global _OBJECTIVE_KINDS
+    here = root or ROOT
+    if _OBJECTIVE_KINDS is not None and _OBJECTIVE_KINDS[0] == here:
+        return _OBJECTIVE_KINDS[1]
+    objs = list(_corpus_objectives(here))
+    props = [p for o in objs for p in (o.get("properties") or []) if isinstance(p, dict)]
+    out = (_field_kinds(objs), _field_kinds(props))
+    _OBJECTIVE_KINDS = (here, out)
+    return out
+
+
 _LIST_FIELDS = None
 
 
@@ -293,7 +372,16 @@ def list_attack_fields(root=None):
     return out
 
 
-_FIELD_TYPES = None
+_ATTACK_KINDS = None
+
+
+def attack_field_kinds(root=None):
+    """`_field_kinds` over the shipped attacks, read once per corpus root."""
+    global _ATTACK_KINDS
+    here = root or ROOT
+    if _ATTACK_KINDS is None or _ATTACK_KINDS[0] != here:
+        _ATTACK_KINDS = (here, _field_kinds(_corpus_attacks(here)))
+    return _ATTACK_KINDS[1]
 
 
 def attack_field_types(root=None):
@@ -308,22 +396,17 @@ def attack_field_types(root=None):
     reached a `" ".join`, `encode: [a]` a set, `applies_to: [[a]]` a set, `partial:
     [{role: user}]` the detector-name check, `history: [[a]]` a `.get`.
     """
-    global _FIELD_TYPES
-    here = root or ROOT
-    if _FIELD_TYPES is not None and _FIELD_TYPES[0] == here:
-        return _FIELD_TYPES[1]
-    scal, elem = {}, {}
-    for a in _corpus_attacks(here):
-        for k, v in a.items():
-            if isinstance(v, list):
-                for e in v:
-                    elem.setdefault(k, set()).add(type(e).__name__)
-            elif v is not None:
-                scal.setdefault(k, set()).add(type(v).__name__)
-    out = {k: next(iter(t)) for k, t in scal.items() if len(t) == 1 and k not in elem}
-    out.update({k: "list of " + next(iter(t)) for k, t in elem.items()
-                if len(t) == 1 and k not in scal})
-    _FIELD_TYPES = (here, out)
+    # A VIEW OF `attack_field_kinds`, which is what `bad_entry_shapes` asks: one derivation,
+    # printed in the words a reader of the arsenal uses.
+    out = {}
+    for k, (ks, es) in attack_field_kinds(root).items():
+        if len(ks) != 1:
+            continue
+        (t,) = ks
+        if t != "list":
+            out[k] = t
+        elif len(es) == 1:
+            out[k] = "list of " + next(iter(es))
     return out
 
 
@@ -372,21 +455,15 @@ def bad_entry_shapes(entries):
         _props = e.get("properties")
         _inner = [("%s property %r" % (who, p.get("name") or "?"), p)
                   for p in (_props if isinstance(_props, list) else []) if isinstance(p, dict)]
-        # AND WHAT A FIELD HOLDS, not only whether it is a list: see `attack_field_types`.
-        _types = attack_field_types()
-        for k, v in e.items():
-            _t = _types.get(k)
-            if not _t or v is None or k == "id":
-                continue
-            if _t.startswith("list of ") and isinstance(v, (list, tuple)):
-                _et = _t[len("list of "):]
-                _odd = [x for x in v if type(x).__name__ != _et]
-                if _odd:
-                    out.append((who, k, "holds %s where each entry is read as %s (%.40r)"
-                                % (type(_odd[0]).__name__, _et, _odd[0])))
-            elif not _t.startswith("list of ") and type(v).__name__ != _t:
-                out.append((who, k, "is %s; this field is read as %s (%.40r)"
-                            % (type(v).__name__, _t, v)))
+        # AND WHAT A FIELD HOLDS, not only whether it is a list: see `attack_field_types`,
+        # and for an objective and each of its properties, `objective_field_kinds`.
+        if "properties" in e:
+            _okinds, _pkinds = objective_field_kinds()
+            out.extend(_kind_faults(who, e, _okinds, want))
+            for _w, _p in _inner:
+                out.extend(_kind_faults(_w, _p, _pkinds, ("success", "partial")))
+        else:
+            out.extend(_kind_faults(who, e, attack_field_kinds(), want))
         for _who, _e, _fields in [(who, e, want)] + [(w, p, ("success", "partial"))
                                                       for w, p in _inner]:
             for k, v in _e.items():

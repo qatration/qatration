@@ -1496,6 +1496,48 @@ def check_context_shapes():
         _n += 1
         check("%s has a usable context" % _os.path.basename(_fp), bad_context_shapes(_c), [])
     check("...over every config that ships", _n >= 20, True)
+
+    # AND WHAT THE LISTS HOLD. A deep config sweep found `run` dying in `d_xss_in_output` on
+    # `allowed_domains: [1]`: most readers `.lower()` each entry. A number is still an entry
+    # where every reader turns it into text itself -- a phone number in `known_pii`.
+    def _el(k, v):
+        return [p for p, _ in bad_context_shapes({"oracle_context": {k: v}})]
+    check("a list entry that is a number is refused where readers need text",
+          _el("allowed_domains", ["a.example", 1]), ["allowed_domains[1]"])
+    check("...and a mapping, a list or a bool anywhere",
+          (_el("known_pii", [{"a": 1}]), _el("canaries", [["X"]]), _el("tool_names", [True])),
+          (["known_pii[0]"], ["canaries[0]"], ["tool_names[0]"]))
+    check("...while a number is accepted where every reader coerces it",
+          _el("known_pii", [5551234, "x@y.example"]), [])
+    # THE PROMISE `NUMBER_TOLERANT_LIST_KEYS` MAKES, read out of the code: every line that
+    # iterates one of those keys turns the entry into text. A reader added without `str(`
+    # makes the tolerance a crash, and this names it.
+    _uncoerced = []
+    for _src in _g.glob(_os.path.join(_here, "*.py")):
+        if _os.path.basename(_src).startswith("test_"):
+            continue
+        for _ln, _line in enumerate(_io.open(_src, encoding="utf-8"), 1):
+            for _k in _ws.NUMBER_TOLERANT_LIST_KEYS:
+                if ('"%s"' % _k) in _line and ".get(" in _line and " for " in _line \
+                        and "str(" not in _line:
+                    _uncoerced.append("%s:%d" % (_os.path.basename(_src), _ln))
+    check("every reader that iterates a number-tolerant key coerces its entries",
+          _uncoerced, [])
+
+    # AND `oracle_context: null`, which the rule reads as absent and seven commands read as
+    # None: `cfg.get("oracle_context", {})` -- the default applies only when the key is
+    # missing. `run` died in `honeytoken.declared`, `isolation` in `prop_ctx`.
+    check("an oracle_context written as null is the empty one",
+          (_ws.oracle_context_of({"oracle_context": None}), _ws.oracle_context_of({})),
+          ({}, {}))
+    _spelled = []
+    for _src in _g.glob(_os.path.join(_here, "*.py")):
+        if _os.path.basename(_src).startswith("test_"):
+            continue
+        for _ln, _line in enumerate(_io.open(_src, encoding="utf-8"), 1):
+            if 'get("oracle_context", {})' in _line and "`" not in _line:
+                _spelled.append("%s:%d" % (_os.path.basename(_src), _ln))
+    check("no module reads the context with a default that null slips past", _spelled, [])
     return fails
 
 

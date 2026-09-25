@@ -69,7 +69,8 @@ def main():
 
     if args.model:
         tcfg["model"] = args.model
-    ctx = tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(tcfg)
 
     from run_redteam import load_target        # one adapter registry, three entry points
     target = load_target(tcfg)                 # (this chdir's into the target)

@@ -53,7 +53,8 @@ def load_target(cfg_path, model=None):
         # value to an adapter that never validates it, and the name becomes a
         # filename in six places, one of them an append.
         target.name = safe_target_name(tcfg["name"], "target config")
-    return target, tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    return target, _octx(tcfg)
 
 
 def objectives_path(name):
@@ -361,13 +362,46 @@ def main():
     # The map is still WRITTEN. It is an honest record that a run happened and learned
     # nothing, and `coverage` and the report both read it; the exit code is the part a
     # pipeline acts on, and it was the part that was wrong.
+    #
+    # AND THE REASON IS THE ONE THE MAP RECORDS. This said "every property errored on every
+    # trial" for every UNMEASURED run, and told the reader to check the endpoint. Walked on a
+    # bot that answered every probe: its properties rested on `bfla_call` and
+    # `forced_output`, which cannot fire on a config with no tools and no forbidden text, so
+    # each came back `unmeasured` with no error at all -- and the reader was sent to debug a
+    # server that was up, when what was missing was in their own config.
     if maps and all(m["verdict"] == "UNMEASURED" for m in maps):
         _n = len(maps)
         _which = "the objective" if _n == 1 else "none of the %d objectives" % _n
-        print("\nNOTHING MEASURED - every property errored on every trial, so %s above "
-              "says nothing about %s.\n"
-              "  Nothing measured is not the same as nothing open. Check the endpoint is "
-              "up and answering, then run this again." % (_which, target.name))
+        _unm = [p for m in maps for p in (m.get("properties") or [])
+                if p.get("status") == "unmeasured"]
+        _deaf = {}
+        for p in _unm:
+            for _d, _w in (p.get("inert") or {}).items():
+                _deaf.setdefault(_d, _w)
+        _dead = [p for p in _unm if not p.get("inert")]
+        print("\nNOTHING MEASURED - so %s above says nothing about %s." % (_which, target.name))
+        if _deaf:
+            print("  %d propert%s could not be scored on this config: every detector %s "
+                  "on cannot fire here, and the oracle_context lacks what each needs -- %s. "
+                  "That is the config, not the endpoint: it answered, and nothing could "
+                  "have judged the answer."
+                  % (len(_unm) - len(_dead), "y" if len(_unm) - len(_dead) == 1 else "ies",
+                     "it relies" if len(_unm) - len(_dead) == 1 else "they rely",
+                     "; ".join("%s: %s" % (_d, " and ".join(map(str, _w))
+                                           if isinstance(_w, (list, tuple)) else _w)
+                               for _d, _w in sorted(_deaf.items()))))
+        if _dead:
+            print("  %d propert%s errored or came back empty on every trial. Check the "
+                  "endpoint is up and answering, then run this again."
+                  % (len(_dead), "y" if len(_dead) == 1 else "ies"))
+        _skip = [p for m in maps for p in (m.get("properties") or [])
+                 if p.get("status") == "skipped"]
+        if _skip:
+            print("  %d propert%s not sent: %s."
+                  % (len(_skip), "y was" if len(_skip) == 1 else "ies were",
+                     "; ".join(sorted({str(p.get("note") or "no reason recorded")
+                                       for p in _skip}))))
+        print("  Nothing measured is not the same as nothing open.")
         return 3
 
 

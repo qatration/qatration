@@ -39,6 +39,7 @@ from refusal import classify, summarize
 from runner import headline
 from report_engine import build_html
 import datetime
+from isolation import restate_combined_inert
 from isolation import (apply_keysearch, _verdict, read_maps, write_maps,
                        map_target as _map_target, restate_unmeasured)
 from baseline import note as _baseline_note
@@ -251,6 +252,7 @@ def rescore_map(path):
         # THE STORED STATUSES FIRST, where the tallies beside them say they measured nothing.
         for _row in (m.get("properties") or []) + [m.get("combined")]:
             restate_unmeasured(_row)
+        restate_combined_inert(m)
         m["verdict"] = _verdict(m.get("properties") or [], m.get("combined") or {},
                                 m.get("coupling") or [])
         apply_keysearch(m)

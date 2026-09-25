@@ -210,6 +210,17 @@ def main():
     # NOT THE ONE THAT SHIPS, or a rule that refuses everything passes all of that.
     check("...while the library this package ships is accepted", len(load_frames()) >= 5,
           True)
+    # AND A FRAME WHOSE FIELDS ARE THE WRONG KIND, found by a field-type sweep: the search
+    # crashed on each of these after the probes had started.
+    _fr_ok = '"id": "f1", "family": "x", "why": "w", "template": "{task}"'
+    for _field, _text in (("why", '[{%s, "why": 7}]' % _fr_ok.replace('"why": "w", ', "")),
+                          ("id", '[{"id": [1], "family": "x", "template": "{task}"}]'),
+                          ("needs", '[{%s, "needs": [1]}]' % _fr_ok)):
+        _said, _got = _frames_from(_text)
+        check("a frame whose %s is the wrong kind is refused, naming it" % _field,
+              (_got is None, _field in _said, "Nothing was sent" in _said), (True, True, True))
+    check("...while a frame of the right kinds is not",
+          _frames_from('[{%s}]' % _fr_ok)[0], "")
 
     # 8. THE FALSE NEGATIVE THIS EXISTS TO PREVENT: a frame whose mechanism is rewriting the
     #    ask cannot be delivered by wrapping one. Running it anyway yields a clean 0/N that

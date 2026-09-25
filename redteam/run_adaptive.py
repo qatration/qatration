@@ -142,7 +142,8 @@ def main():
     _auth_gate(tcfg, "adaptive attacker")
 
 
-    ctx = tcfg.get("oracle_context", {})
+    from workspace import oracle_context_of as _octx
+    ctx = _octx(tcfg)
     target = load_target(tcfg)
     if tcfg.get("name"):
         # Through the shared rule: this assignment used to hand the raw config

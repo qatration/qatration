@@ -56,7 +56,8 @@ def _achieved(probe, prop, ctx):
     if probe is None or probe.error:
         return False
     c = prop_ctx(prop, ctx)
-    names = [n for n in prop.get("success", []) if n in DETECTORS]
+    # `or []`: a `success: null` is a property with no scoring, which is what absent means.
+    names = [n for n in (prop.get("success") or []) if n in DETECTORS]
     fn = all if prop.get("require_all") else any
     return bool(names) and fn(DETECTORS[n](probe, c) for n in names)
 
@@ -118,6 +119,47 @@ def restate_unmeasured(row):
         return False
     row["status"] = "unmeasured"
     row["errors"] = nothing
+    return True
+
+
+def combined_inert(prop_rows, objective=None, ctx=None):
+    """-> {detector: what it lacks} when the COMBINED test can never pass on this config, or {}.
+
+    `achieved_combined` requires every scored property's own condition to hold, so ONE
+    property whose detectors cannot fire makes the combination unwinnable: the combined probe
+    comes back `locked` 0/n, which reads as "the combination is the wall" -- a claim about
+    the target, made by a detector that could not speak. Walked on the scripted bot: every
+    property `unmeasured` for exactly this reason, and `[combined] locked 0/1` beneath them.
+
+    From the property ROWS, whose `inert` records it, so a stored map answers the same way a
+    live run does. Where no property is scored the combined test falls back to the
+    objective's own `success:` list with `require_all`, and one inert name there does the
+    same -- that needs the objective and the ctx, which only a live run has.
+    """
+    deaf = {}
+    for p in prop_rows or []:
+        if isinstance(p, dict) and isinstance(p.get("inert"), dict):
+            deaf.update(p["inert"])
+    if deaf or objective is None:
+        return deaf
+    if any(isinstance(p, dict) and p.get("success")
+           for p in (objective.get("properties") or [])):
+        return {}
+    names = [n for n in (objective.get("success") or []) if n in DETECTORS]
+    _d = inert_for(ctx or {}, names) if names else {}
+    return {n: _d[n] for n in names if n in _d}
+
+
+def restate_combined_inert(m):
+    """A STORED map whose combined row reads `locked` while `combined_inert` says it could not
+    have passed: restate it `unmeasured`, carrying the reason. -> True when it changed."""
+    c = m.get("combined")
+    if not isinstance(c, dict) or c.get("status") != "locked":
+        return False
+    _deaf = combined_inert(m.get("properties") or [])
+    if not _deaf:
+        return False
+    c["status"], c["inert"] = "unmeasured", _deaf
     return True
 
 
@@ -207,11 +249,18 @@ def probe_property(target, prop, ctx, trials=3):
     # rule: `oracle.inert_for` is the one that already answers it, and this is the caller that
     # never asked.
     _names = [n for n in (prop.get("success") or []) if n in DETECTORS]
-    _blind = bool(_names) and set(inert_for(prop_ctx(prop, ctx), _names)) >= set(_names)
+    _deaf = inert_for(prop_ctx(prop, ctx), _names) if _names else {}
+    _blind = bool(_names) and set(_deaf) >= set(_names)
     return {
         "name": prop["name"],
         "status": _status(hits, trials, errors, inert=_blind),
         "errors": errors,
+        # WHICH DETECTORS, AND WHAT EACH ONE LACKS, kept with the verdict it explains. An
+        # `unmeasured` row reads the same whether the endpoint never answered or answered
+        # every trial to a detector that could not have fired, and the run's closing line
+        # said "every property errored on every trial" for both -- sending the reader to
+        # check an endpoint that was up, when what was missing was in their config.
+        "inert": {n: _deaf[n] for n in _names} if _blind else {},
         "hits": f"{hits}/{trials}",
         "locks": _tally(locks),
         "sample": _sample(probes, hits, prop, ctx),
@@ -322,7 +371,9 @@ def run_isolation(target, objective, ctx, trials=3):
             else:
                 locks.append(_o)
                 errors += _o in UNMEASURED_TRIALS
-        combined = {"status": _status(hits, trials, errors), "errors": errors,
+        _cdeaf = combined_inert(props, objective, ctx)
+        combined = {"status": _status(hits, trials, errors, inert=bool(_cdeaf)),
+                    "errors": errors, "inert": _cdeaf,
                     "hits": f"{hits}/{trials}",
                     "locks": _tally(locks),
                     "sample": _sample(cprobes, hits,
