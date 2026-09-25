@@ -36,6 +36,7 @@ decide how much the oracle can see:
 """
 import json, os, re, sys, time, urllib.request, urllib.error
 from target import Probe, Target, payload
+from target import _pair as _probe_pair
 
 _ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -687,6 +688,15 @@ class HttpConfiguredTarget(Target):
         # that channel spent the run judging an empty list — the difference between "your tool
         # surface is clean" and "this run never saw your tool calls".
         self.resolutions = {"tool_calls": 0, "resolved": 0, "observations": 0}
+        # AND HOW OFTEN IT FOUND SOMETHING IT COULD NOT READ. `resolutions` counts the PATH
+        # finding a value, before `_pairs` normalises it, and `_pairs` turns a shape it does
+        # not understand into [] -- by design, since a guessed tool call is worse than none.
+        # Walked: an endpoint answering `tool_calls: "lookup_order(7)"` on every reply
+        # resolved 47 times, recorded 0 tool calls, and the sweep exited 0 saying nothing:
+        # every tool-call detector judged an empty list against evidence dropped in transit.
+        self.unreadable = {"tool_calls": 0, "resolved": 0, "observations": 0}
+        self.readable = {"tool_calls": 0, "resolved": 0, "observations": 0}
+        self.unreadable_kind = {}
         if isinstance(history, dict):
             _bad = sorted(k for k in history if k not in HISTORY_KEYS)
             if _bad:
@@ -987,6 +997,23 @@ class HttpConfiguredTarget(Target):
             calls = _pairs(_rawcalls) if self.calls_path else []
             resolved = _pairs(_rawres) if self.resolved_path else []
             obs = _observations(_rawobs) if self.observations_path else []
+            # SOMETHING THERE AND NOTHING READ: a non-empty value the normaliser could not
+            # turn into a single entry. An empty one is a reply with no tool call, which is
+            # ordinary and says nothing.
+            for _k, _raw, _got in (("tool_calls", _rawcalls, calls),
+                                   ("resolved", _rawres, resolved),
+                                   ("observations", _rawobs, obs)):
+                # READ MEANS WHAT `Probe` WILL KEEP. A call with no name comes out of `_pairs`
+                # as ("", ...) and `target._pair` drops it on the way into the probe, so
+                # counting it here as read let a reply whose every call was nameless pass as a
+                # channel that worked -- 0 calls recorded and nothing said.
+                if _k != "observations":
+                    _got = [_x for _x in _got if _probe_pair(_x) is not None]
+                if _got:
+                    self.readable[_k] += 1
+                elif _raw not in (None, "", [], {}):
+                    self.unreadable[_k] += 1
+                    self.unreadable_kind.setdefault(_k, type(_raw).__name__)
             return Probe(prompt=prompt, output=str(reply), tool_calls=calls,
                          observations=obs, resolved=resolved,
                          seconds=round(time.time() - t0, 1))

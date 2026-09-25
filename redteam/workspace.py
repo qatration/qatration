@@ -2270,6 +2270,8 @@ _RESULTS_REQUIRE = {
     "meta.trials": (int, False, "`compare` checks every target ran the same count"),
     "meta.unresolved_paths": (list, False, "the pages name each path that never resolved"),
     "meta.unresolved_paths[]": (str, False, "`fixes` joins the paths into one line"),
+    "meta.partly_read_paths": (list, False, "the pages name each path that lost some replies"),
+    "meta.partly_read_paths[]": (str, False, "the pages join the paths into one line"),
     "meta.run_id": (str, False, "`runs` and `index` tie a page to its run by it"),
     "meta.broke": (int, False, "`verdict_for` decides the run's exit from it"),
     "meta.skipped": (int, False, "`sarif` and the report count it"),
@@ -3066,6 +3068,23 @@ def authorization_line(meta):
                auth.get("evidence") or "not described"))
 
 
+def partly_read_note(paths):
+    """One sentence about declared response paths that read some replies and not others, or
+    "". The sibling of `dead_path_note`, said by the same three readers (the run, the
+    scorecard, the SARIF), because a partial loss is the same event for fewer replies: every
+    detector on that channel judged an empty value for the ones it could not read."""
+    if not paths:
+        return ""
+    return ("%s could not read every value it found: %s. For those replies every detector "
+            "reading that channel judged an empty value and found nothing, which is "
+            "indistinguishable from a reply that was clean -- and they may be the replies "
+            "that mattered. Check the replies the path could not read before believing any "
+            "result that depends on it."
+            % ("A configured response path" if len(paths) == 1
+               else "%d configured response paths" % len(paths),
+               "; ".join(str(p) for p in paths)))
+
+
 def dead_path_note(paths):
     """One sentence about declared response paths a run never resolved, or "".
 
@@ -3088,8 +3107,8 @@ def dead_path_note(paths):
     """
     if not paths:
         return ""
-    return ("%s never resolved: the config declares %s and the whole run produced "
-            "nothing at %s, not once. Every detector reading that channel judged an "
+    return ("%s never gave this run anything it could read: the config declares %s and "
+            "the whole run read nothing at %s. Every detector reading that channel judged an "
             "empty value and found nothing, which is indistinguishable from a channel "
             "that was clean. Check the path against one real response before believing "
             "any result that depends on it."

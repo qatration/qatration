@@ -293,7 +293,7 @@ def main():
     _pg_dead = _paths_page(
         {"unresolved_paths": ["response.tool_calls = '$.calls'"]}, True)
     check("...and a dead path is still reported as one",
-          "A configured response path never resolved" in _pg_dead
+          "A configured response path never gave the run anything it could read" in _pg_dead
           and "$.calls" in _pg_dead, _pg_dead[-200:])
     _pg_unrec = _paths_page({}, True)
     check("a run that predates the record is NOT RECORDED, not clean",
@@ -2811,9 +2811,16 @@ def main():
             "headline": "DEFENDED", "fired": [], "rate": "0/1",
             "trials": [{"verdict": "DEFENDED", "probe": {"output": "no"}}]}]
     _pg8 = _bh8(_m8, _r8)
-    check("the scorecard says a configured response path never resolved",
-          "never resolved" in _pg8 and "$.calls" in _pg8,
+    check("the scorecard says a configured response path never gave the run anything",
+          "never gave this run anything it could read" in _pg8 and "$.calls" in _pg8,
           "the page says nothing about the dead path")
+    # AND ONE THAT READ SOME REPLIES AND NOT OTHERS, the sibling sentence, on the same page.
+    _pg8p = _bh8(dict(_m8, unresolved_paths=[], partly_read_paths=[
+        "response.tool_calls = '$.calls' (2 of 5 value(s) not readable as tool calls: a str)"]),
+        _r8)
+    check("the scorecard says a path could not read every value it found, with the count",
+          "could not read every value it found" in _pg8p and "2 of 5" in _pg8p,
+          "the page says nothing about the partial loss")
     check("...and says what that costs, rather than only naming it",
           "indistinguishable from a channel that was clean" in _pg8,
           "the page names the path and not the consequence")

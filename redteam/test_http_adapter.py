@@ -437,6 +437,93 @@ def main():
               sorted(_unres_h(_Zero())) == ["response.resolved = 'trace.resolved'",
                                             "response.tool_calls = 'trace.tools'"],
               str(_unres_h(_Zero())))
+        # AND ONE THAT FOUND VALUES IT COULD NEVER READ. Walked: an endpoint answering
+        # `tool_calls: "lookup_order(7)"` resolved on every reply, recorded 0 tool calls, and
+        # the sweep said nothing -- every tool-call detector judged an empty list. Driven
+        # through the adapter, so the counters are the ones a real reply moves.
+        class _StrCalls(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("content-length") or 0))
+                _calls = _STRCALLS[0]
+                if _calls == "ALTERNATE":
+                    _ALT[0] += 1
+                    _calls = [["lookup", "1"]] if _ALT[0] % 2 else "lookup(1)"
+                _b = json.dumps({"reply": "ok", "calls": _calls}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(_b)))
+                self.end_headers()
+                self.wfile.write(_b)
+
+            def log_message(self, *a):
+                pass
+        _STRCALLS = ["lookup_order(7)"]
+        _ALT = [0]
+        _ssrv = ThreadingHTTPServer(("127.0.0.1", 0), _StrCalls)
+        threading.Thread(target=_ssrv.serve_forever, daemon=True).start()
+        try:
+            _st = HttpConfiguredTarget(
+                url="http://127.0.0.1:%d/c" % _ssrv.server_address[1], name="strcalls",
+                request={"message": "{prompt}"},
+                response={"reply": "reply", "tool_calls": "calls"})
+            _st.send("hi")
+            _st.send("again")
+            _sgot = _unres_h(_st)
+            check("a path that found only values it could not read as tool calls is named",
+                  len(_sgot) == 1 and "never as anything readable as tool calls: a str"
+                  in _sgot[0], str(_sgot))
+            _STRCALLS[0] = [["lookup_order", "7"]]
+            _st.send("third")
+            # ...BUT NOT ONCE ONE REPLY'S TOOL CALLS WERE READ: that is a partial loss, not
+            # a channel that never read anything, and this sentence does not claim it.
+            check("...and once a reply's tool calls are read, the path is no longer named",
+                  _st.readable["tool_calls"] == 1 and _unres_h(_st) == [],
+                  str((_st.readable, _unres_h(_st))))
+            # ...BECAUSE IT IS A PARTIAL LOSS, named by the sibling with the count.
+            from run_redteam import _partly_read as _part_h
+            check("...and named instead as a path that could not read every value, 2 of 3",
+                  len(_part_h(_st)) == 1 and "2 of 3 value(s)" in _part_h(_st)[0],
+                  str(_part_h(_st)))
+            # AND THROUGH A REAL SWEEP, into the record every page reads: an endpoint whose
+            # replies alternate between a readable list and a string.
+            import subprocess as _sp_pr, tempfile as _tf_pr
+            _STRCALLS[0] = "ALTERNATE"
+            _prw = _tf_pr.mkdtemp()
+            _prc = os.path.join(_prw, "altbot.yaml")
+            open(_prc, "w", encoding="utf-8").write(chr(10).join([
+                "adapter: http", "name: altbot",
+                'url: "http://127.0.0.1:%d/c"' % _ssrv.server_address[1],
+                "request:", '  message: "{prompt}"', "response:", '  reply: "reply"',
+                '  tool_calls: "calls"', ""]))
+            _prp = _sp_pr.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
+                               "--target-config", _prc, "--scope", "quick", "--trials", "1"],
+                              capture_output=True, text=True, errors="replace", timeout=600,
+                              env=dict(os.environ, QATRATION_OUT=_prw,
+                                       PYTHONIOENCODING="utf-8"))
+            try:
+                _prm = json.load(open(os.path.join(_prw, "results_altbot.json"),
+                                      encoding="utf-8"))["meta"]
+            except Exception as _e_pr:
+                _prm = {"error": str(_e_pr), "said": ((_prp.stdout or "")
+                                                     + (_prp.stderr or ""))[-300:]}
+            check("a sweep over replies that alternate records the partial loss in its meta",
+                  len(_prm.get("partly_read_paths") or []) == 1
+                  and "not readable as tool calls" in (_prm.get("partly_read_paths") or [""])[0],
+                  str(_prm.get("partly_read_paths", _prm)))
+            # AND A LIST OF CALLS THAT NAME NO TOOL. `_pairs` hands them on as ("", ...),
+            # `Probe` drops them, and counting them as read hid the loss again: found by the
+            # reply-shape sweep, `function: null` in every call, 0 calls recorded, silence.
+            _STRCALLS[0] = [{"type": "function", "function": None}]
+            _sn = HttpConfiguredTarget(
+                url="http://127.0.0.1:%d/c" % _ssrv.server_address[1], name="nameless",
+                request={"message": "{prompt}"},
+                response={"reply": "reply", "tool_calls": "calls"})
+            _sn.send("hi")
+            check("a path whose every call names no tool is named as unreadable",
+                  len(_unres_h(_sn)) == 1 and "found 1 time(s)" in _unres_h(_sn)[0],
+                  str(_unres_h(_sn)))
+        finally:
+            _ssrv.shutdown()
 
         # A PATH THAT FINDS AN UNUSABLE VALUE STILL FOUND SOMETHING. `trace.resolved` is
         # replaced with a string here: `_pairs` cannot make pairs of it and returns [],
@@ -460,8 +547,17 @@ def main():
             check("a path resolving to an unusable shape yields no pairs",
                   _pu.tool_calls == [] and _pu.resolved == [],
                   str((_pu.tool_calls, _pu.resolved)))
-            check("...and not one of the three mappings is reported as pointing nowhere",
-                  _unres_h(_tu) == [], str(_unres_h(_tu)))
+            # NOT AS POINTING NOWHERE -- the path is right -- and NOT IN SILENCE EITHER, which
+            # is what this used to assert: nothing on either channel was ever judged, and the
+            # sweep said so nowhere. Each is named as FOUND and unreadable, with the kind it
+            # held; the empty object on the third is a quiet channel and is not named at all.
+            _tu_got = _unres_h(_tu)
+            check("...and each of the two is named as found but unreadable, not as nowhere",
+                  sorted(x.split(" (")[0] for x in _tu_got)
+                  == ["response.resolved = 'trace.resolved'",
+                      "response.tool_calls = 'trace.tools'"]
+                  and all("found 1 time(s)" in x and "a str" in x for x in _tu_got),
+                  str(_tu_got))
         finally:
             EXTRA.pop("trace", None)
 

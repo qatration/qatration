@@ -550,8 +550,15 @@ def build_html(meta, results, recon=None, isolation=None):
     deadpath_html = ""
     if _dead_txt:
         deadpath_html = (
-            f'<div class="panel"><div class="ptitle">a configured response path never '
-            f'resolved</div><div class="warn">{esc(_dead_txt)}</div></div>')
+            f'<div class="panel"><div class="ptitle">a configured response path never gave '
+            f'this run anything it could read</div><div class="warn">{esc(_dead_txt)}</div>'
+            f'</div>')
+    from workspace import partly_read_note as _part_note
+    _part_txt = _part_note(meta.get("partly_read_paths") or [])
+    if _part_txt:
+        deadpath_html += (
+            f'<div class="panel"><div class="ptitle">a configured response path could not '
+            f'read every value it found</div><div class="warn">{esc(_part_txt)}</div></div>')
 
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -609,8 +609,43 @@ def _unresolved(target):
     declared = {"tool_calls": getattr(target, "calls_path", None),
                 "resolved": getattr(target, "resolved_path", None),
                 "observations": getattr(target, "observations_path", None)}
-    return sorted(f"response.{k} = {declared[k]!r}"
-                  for k, path in declared.items() if path and not counts.get(k))
+    # AND A PATH THAT FOUND VALUES THIS ENGINE COULD NOT READ, which is the same event for
+    # every detector on that channel -- an empty list judged -- arrived at the other way.
+    # Named in the same list, because every reader of it already says the right thing:
+    # nothing on that channel was ever judged.
+    #
+    # ONLY WHERE NOTHING ON THE CHANNEL WAS READ, which is what every reader of this list
+    # says. A channel that read some replies and not others lost part of its evidence; that
+    # is not this sentence, and it is not reported yet.
+    _read = getattr(target, "readable", None) or {}
+    _bad = {k: n for k, n in (getattr(target, "unreadable", None) or {}).items()
+            if n and not _read.get(k)}
+    _kind = getattr(target, "unreadable_kind", None) or {}
+    return sorted([f"response.{k} = {declared[k]!r}"
+                   for k, path in declared.items() if path and not counts.get(k)]
+                  + [f"response.{k} = {declared[k]!r} (found {_bad[k]} time(s), never as "
+                     f"anything readable as {k.replace('_', ' ')}: a {_kind.get(k, '?')})"
+                     for k, path in declared.items() if path and _bad.get(k)])
+
+
+def _partly_read(target):
+    """Declared response paths that read SOME replies and could not read others.
+
+    `_unresolved` names a channel that read nothing across a run. This is the other half: an
+    endpoint that answers most replies in one shape and some in another loses the tool calls
+    in the second kind, and every tool-call detector judged an empty list for exactly those
+    replies -- which may be the ones that mattered. Per-run, like its sibling.
+    """
+    _read = getattr(target, "readable", None) or {}
+    _bad = getattr(target, "unreadable", None) or {}
+    _kind = getattr(target, "unreadable_kind", None) or {}
+    declared = {"tool_calls": getattr(target, "calls_path", None),
+                "resolved": getattr(target, "resolved_path", None),
+                "observations": getattr(target, "observations_path", None)}
+    return sorted(f"response.{k} = {declared[k]!r} ({_bad[k]} of {_bad[k] + _read[k]} "
+                  f"value(s) not readable as {k.replace('_', ' ')}: a {_kind.get(k, '?')})"
+                  for k, path in declared.items()
+                  if path and _bad.get(k) and _read.get(k))
 
 
 def nothing_measured(results):
@@ -1678,6 +1713,7 @@ def main():
             # detectors read the tool-call channel, and against a mistyped path every one of
             # them judged an empty list and found nothing.
             "unresolved_paths": _unresolved(target),
+            "partly_read_paths": _partly_read(target),
             # WHICH RUN PRODUCED THIS. `runs.py` records what a sweep did, what it cost and
             # how it ENDED -- finished, stopped, aborted -- and forty-five stored artifacts
             # carried no way to reach it. The id is three hundred lines up in this same
@@ -1758,6 +1794,10 @@ def main():
     _dead = _dead_note(_unresolved(target))
     if _dead:
         print("\n  ! " + _dead)
+    from workspace import partly_read_note as _part_note
+    _part = _part_note(_partly_read(target))
+    if _part:
+        print("\n  ! " + _part)
     if _retried:
         print(f"\n  ! {_retried} of {_sends + _retried} send(s) had to be retried. A run that limped"
           f"\n    is not a clean run: a retried send may have reached a different state of the"

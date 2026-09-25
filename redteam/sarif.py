@@ -297,6 +297,13 @@ def build(results, target_config=None, out_dir=None):
         "level": "note",
         "message": {"text": _auth_line(meta)},
         "descriptor": {"id": "authorization/record"}})
+    from workspace import partly_read_note as _part_note
+    _part_txt = _part_note(meta.get("partly_read_paths") or [])
+    if _part_txt:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": _part_txt},
+            "descriptor": {"id": "mapping/partly-read-path"}})
     from workspace import dead_path_note as _dead_note
     _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
     if _dead_txt:

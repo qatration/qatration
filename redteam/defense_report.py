@@ -1730,10 +1730,10 @@ def main():
             f'<li><span class="mono">{esc(t)}</span><br><span class="muted">{esc(", ".join(p))}'
             f'</span></li>' for t, p in sorted(dead_paths.items()))
         if dead_paths:
-            _dead_head = "A configured response path never resolved"
+            _dead_head = "A configured response path never gave the run anything it could read"
             _dead_body = (
                 '<div class="fix"><span class="fixlabel">What this means</span>the config '
-                'declares these paths and the whole run produced nothing at any of them, '
+                'declares these paths and the whole run read nothing at any of them, '
                 'not once. The capability is still listed above because the config claims '
                 'it, so every detector that reads that channel ran against an empty value '
                 'and reported nothing — which is indistinguishable, on this page, from a '

@@ -247,6 +247,14 @@ _dpnone = build([row("a1", "DEFENDED", [])], {}, inert={}, unresolved_paths=[])
 check("a run that recorded none says nothing about paths",
       not [i for i in [n["descriptor"]["id"] for n in notifications(_dpnone)]
            if i.startswith("mapping/")])
+# AND A PATH THAT READ SOME REPLIES AND NOT OTHERS, the sibling: a partial loss is the same
+# event for fewer replies.
+_dpp = build([row("a1", "DEFENDED", [])], {}, inert={}, unresolved_paths=[],
+             partly_read_paths=["response.tool_calls = '$.calls' (2 of 5 value(s) not "
+                                "readable as tool calls: a str)"])
+check("a path that could not read every value is a notification, with the count",
+      any(n["descriptor"]["id"] == "mapping/partly-read-path" and "2 of 5" in n["message"]["text"]
+          for n in notifications(_dpp)), str([n["descriptor"]["id"] for n in notifications(_dpp)]))
 # The same three states as `inert`, and the third is the one that reads as fine.
 _dpold = build([row("a1", "DEFENDED", [])], {}, inert={})
 check("a result predating the field says it is UNKNOWN, not fine",
