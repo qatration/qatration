@@ -139,6 +139,19 @@ def execute(job, root, python=None):
     """Baseline, then sweep, then the deliverable. Returns (state, note, run_id)."""
     out = run_dir(root, job)
     os.makedirs(out, exist_ok=True)
+    # ONE LEASE FOR ALL THREE STEPS, not one each. `_run` gave every step the full
+    # LEASE_SECONDS, so a baseline and a sweep could take two hours between them while the
+    # lease expired after one -- and a second worker claimed the job and started a second
+    # sweep against the same endpoint, in the same directory. Found by an independent review.
+    import time as _time_w
+    _end = _time_w.time() + q.LEASE_SECONDS - 30
+
+    def _left():
+        return max(1, int(_end - _time_w.time()))
+    # AND WHICH RUN RECORDS WERE HERE BEFORE THIS ATTEMPT: the directory is per JOB, so a
+    # retry that is refused before it starts a run would otherwise be joined to the previous
+    # attempt's record.
+    _before = {r.get("run_id") for r in (_runs.listing(out) or [])}
 
     # THE BASELINE COMES FIRST, and it is not optional. A breach verdict is worth exactly what
     # the system's silence is worth when nobody attacks it, and a fresh per-job workspace has
@@ -156,7 +169,7 @@ def execute(job, root, python=None):
     # report says which findings could not be attributed, and the operator gets a narrower
     # answer rather than none.
     base = _run([os.path.join(HERE, "benign.py"), "--target-config", job["config"]],
-                out, python)
+                out, python, deadline=_left())
     baseline_note = None
     if base.returncode != 0:
         baseline_note = ("the benign baseline did not complete, so nothing has measured what "
@@ -167,7 +180,7 @@ def execute(job, root, python=None):
            "--trials", str(job.get("trials") or 3)]
     if job.get("attacks"):
         cmd += ["--attacks", job["attacks"]]
-    proc = _run(cmd, out, python)
+    proc = _run(cmd, out, python, deadline=_left())
     if isinstance(proc, _Timeout):
         # Named, not filed under an exit code it never produced. "the sweep exited -9" would
         # read as a crash and send somebody looking for a traceback that does not exist.
@@ -193,7 +206,12 @@ def execute(job, root, python=None):
     # and how it ended; without the link, the queue can only say a job "finished" and the
     # question an operator actually asks — how far did it get before something stopped it —
     # has no answer.
-    rec = (_runs.listing(out) or [None])[0]
+    # THIS ATTEMPT'S RECORD, OR NONE. `listing(out)[0]` is the newest in the job's directory,
+    # and an attempt refused before `runs.start` (not authorised, a build mismatch, a config
+    # refusal) left the previous attempt's finished run as the newest: a failed job was shown
+    # with a finished run under it. Found by an independent review.
+    rec = next((r for r in (_runs.listing(out) or []) if r.get("run_id") not in _before),
+               None)
     run_id = rec.get("run_id") if rec else None
     if rec and rec.get("state") == "stopped" and state == "done":
         note = stopped_note(rec)
@@ -205,7 +223,7 @@ def execute(job, root, python=None):
     # that produced results: a report rendered over an aborted sweep is a page describing
     # nothing, and an empty page is the most flattering possible answer.
     if state == "done":
-        rep = _run([os.path.join(HERE, "defense_report.py")], out, python)
+        rep = _run([os.path.join(HERE, "defense_report.py")], out, python, deadline=_left())
         if rep.returncode != 0:
             note = ((note + "; ") if note else "") + "the report could not be rendered"
     if baseline_note:

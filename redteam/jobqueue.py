@@ -329,6 +329,12 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
         if not _lease_expired(j, now):
             live.append(j)
             continue
+        # AND IT IS STILL THE RECORD THAT WAS LISTED. A worker that released `done` between
+        # the listing and this write would have its close overwritten with `queued`, and the
+        # job run again after it had written results. Found by an independent review.
+        _cur = load(root, j.get("job_id")) or {}
+        if _cur.get("state") != "running" or _cur.get("lease") != j.get("lease"):
+            continue
         j["history"] = (j.get("history") or []) + [
             {"at": now.isoformat(" ", "seconds"), "event": "lease expired",
              "worker": (j.get("lease") or {}).get("worker")}]
@@ -461,6 +467,13 @@ def release(root, job, state="done", run_id=None, note=None, when=None):
         theirs = (current or {}).get("lease") or {}
         if current is None:
             return job, "the job is gone: it was closed or removed while this run was going"
+        # A JOB THAT IS NO LONGER RUNNING IS NOT THIS WORKER'S TO CLOSE. Reclaimed to
+        # `queued`, or given up on as `dead`, its record carries no lease, so every refusal
+        # below compared against nothing: a late worker's `done` turned a dead job done and
+        # dropped its history. Found by an independent review.
+        if current.get("state") not in ("running", "unreadable"):
+            return current, (f"refusing to close: the job is {current.get('state')!r} now, "
+                             f"not running -- this run's lease expired and it was reclaimed")
         if current.get("state") == "unreadable":
             # THE LEASE CHECK BELOW CANNOT RUN, and it silently passed: a torn record
             # has no `lease` key, so `theirs` was empty and every refusal below was
@@ -515,6 +528,9 @@ def depth(root):
     jobs = listing(root)
     q = [j for j in jobs if j.get("state") == "queued"]
     r = [j for j in jobs if j.get("state") == "running"]
+    # AND WHAT COULD NOT BE READ, which `claim` refuses to work past: a torn record made
+    # `claim` answer "busy" while this said "1 queued, 0 running" and the job never ran.
+    u = [j for j in jobs if j.get("state") == "unreadable"]
     waiting = None
     if q:
         try:
@@ -522,7 +538,7 @@ def depth(root):
                        ).total_seconds()
         except Exception:
             waiting = None
-    return {"queued": len(q), "running": len(r),
+    return {"queued": len(q), "running": len(r), "unreadable": len(u),
             "head_waiting_seconds": None if waiting is None else round(waiting)}
 
 

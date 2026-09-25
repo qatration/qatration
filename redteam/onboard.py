@@ -727,12 +727,24 @@ def main():
         return
 
     cfg = yaml.safe_load(open(args.config, encoding="utf-8")) or {}
-    job = q.submit(args.root, rep["name"], os.path.abspath(args.config), scope=args.scope,
+    # A COPY, NOT THE LIVE FILE, which is what the intake already does: the job stored the
+    # operator's path and the worker read it at run time, so an edit to `url` after submitting
+    # ran against the new endpoint while the lock was still keyed to the old one. Found by an
+    # independent review.
+    import shutil as _sh_ob, uuid as _uuid_ob
+    _cfg_dir = os.path.join(args.root, "configs")
+    os.makedirs(_cfg_dir, exist_ok=True)
+    _cfg_copy = os.path.join(_cfg_dir, "%s-%s.yaml" % (rep["name"], _uuid_ob.uuid4().hex[:12]))
+    _sh_ob.copyfile(args.config, _cfg_copy)
+    job = q.submit(args.root, rep["name"], _cfg_copy, scope=args.scope,
                    authorization=rep.get("authorization"), budgets=cfg.get("rate") or {},
                    attacks=args.attacks, trials=args.trials, requester=args.requester)
     d = q.depth(args.root)
     print(f"\nqueued      {job['job_id']}")
-    print(f"position    {d['queued']} queued, {d['running']} running")
+    print(f"position    {d['queued']} queued, {d['running']} running"
+          + (f", {d['unreadable']} job record(s) that could not be read -- the worker will "
+             f"not claim anything until they are repaired or removed"
+             if d.get("unreadable") else ""))
     # AND SOMETHING TO RUN IT. The worker is "spawned by the queue rather than typed by a
     # person" and has no command of its own, and the only door that spawned one was the HTTP
     # intake. Walked: `onboard --submit` printed `queued` and a position, `qatration runs`

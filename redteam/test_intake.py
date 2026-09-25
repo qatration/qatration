@@ -80,6 +80,25 @@ def main():
               inspect.signature(intake.submit).parameters["wake"].default is None
               and "wake or wake_worker" in inspect.getsource(intake.submit))
         allow_loopback = lambda u: None
+        # --- FINDINGS OF AN INDEPENDENT REVIEW -------------------------------------------
+        # A SCOPE THAT DOES NOT EXIST IS REFUSED BEFORE ANYTHING IS WRITTEN OR SENT, and NOT
+        # AUTHORISED IS 403 -- a missing proof came back 422 "fix your config" -- and a
+        # refused config is not kept in `configs/`.
+        import glob as _g_i
+        _rv = tempfile.mkdtemp()
+        _c1, _o1 = intake.submit(_rv, body(scope="bogus"), policy=allow_loopback,
+                                 wake=lambda r: False)
+        check("an unknown scope is refused before a config is written",
+              (_c1, _g_i.glob(os.path.join(_rv, "configs", "*.yaml"))) == (400, []),
+              "%s %s" % (_c1, _g_i.glob(os.path.join(_rv, "configs", "*.yaml"))))
+        _c2, _o2 = intake.submit(_rv, body(cfg={"url": "https://bot.example.com/chat"}),
+                                 policy=allow_loopback, wake=lambda r: False)
+        check("a remote target with no proof of authorisation is 403, not 422",
+              _c2 == 403, "%s %s" % (_c2, str(_o2)[:200]))
+        check("...and its refused config is not kept",
+              _g_i.glob(os.path.join(_rv, "configs", "*.yaml")) == [],
+              str(_g_i.glob(os.path.join(_rv, "configs", "*.yaml"))))
+        shutil.rmtree(_rv, ignore_errors=True)
         woke = []
         code, obj = intake.submit(root, body(), policy=allow_loopback,
                                   wake=lambda r: woke.append(r) or True)

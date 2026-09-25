@@ -933,6 +933,14 @@ def main():
               jobs and "authorization" in jobs[0])
         check("...and the config path the worker will need",
               jobs and os.path.isabs(jobs[0]["config"]), str(jobs and jobs[0]["config"]))
+        # A COPY UNDER THE QUEUE ROOT, NOT THE LIVE FILE: an edit to `url` after submitting
+        # ran against the new endpoint while the lock was keyed to the old. Found by an
+        # independent review.
+        check("...and that path is a copy under the queue root, not the operator's file",
+              jobs and os.path.dirname(jobs[0]["config"]) == os.path.join(qroot, "configs")
+              and os.path.abspath(jobs[0]["config"]) != os.path.abspath(multi)
+              and open(jobs[0]["config"], encoding="utf-8").read()
+              == open(multi, encoding="utf-8").read(), str(jobs and jobs[0]["config"]))
         # THE TARGET-AGNOSTIC ARSENAL, not the engine's default. attacks.yaml scopes almost
         # every attack `applies_to` a specific practice bot, so the first job that went through
         # this door sent 5 of 137 and skipped 132 — a 3% assessment presented as an assessment.

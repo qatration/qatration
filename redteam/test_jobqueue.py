@@ -730,6 +730,69 @@ def main():
                             for _c in _ast_w.walk(_ex)),
           "execute does not call stopped_note")
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE SERVICE PATH ----------------------------
+    import worker as _wk
+    _sw = tempfile.mkdtemp()
+    try:
+        # A STALE CLOSE DOES NOT REVIVE A DEAD JOB. Its record carries no lease, so every
+        # refusal compared against nothing, and a late `done` erased "gave up".
+        _sj = q.submit(_sw, "t", os.path.join(_sw, "t.yaml"))
+        _cj, _ = q.claim(_sw, worker="w1")
+        _dead = dict(q.load(_sw, _sj["job_id"]), state="dead", lease=None, note="gave up")
+        json.dump(_dead, open(os.path.join(_sw, "job_%s.json" % _sj["job_id"]), "w",
+                             encoding="utf-8"))
+        _rel, _why_rel = q.release(_sw, _cj, "done")
+        check("a late close of a job that was given up on is refused, and the job stays dead",
+              (bool(_why_rel), (q.load(_sw, _sj["job_id"]) or {}).get("state")) == (True, "dead"),
+              str((_why_rel, q.load(_sw, _sj["job_id"]))))
+        # DEPTH COUNTS WHAT IT COULD NOT READ, which `claim` refuses to work past.
+        open(os.path.join(_sw, "job_torn.json"), "w", encoding="utf-8").write("{")
+        check("depth counts a job record it could not read",
+              q.depth(_sw).get("unreadable") == 1, str(q.depth(_sw)))
+        os.remove(os.path.join(_sw, "job_torn.json"))
+
+        # THE RECLAIM RE-READS BEFORE IT WRITES. A worker that closed `done` between the
+        # reclaim's listing and its write had its close overwritten with `queued`.
+        _rj = q.submit(_sw, "r", os.path.join(_sw, "r.yaml"))
+        _rc, _ = q.claim(_sw, worker="w2")
+        _snap = q.listing(_sw)
+        q.release(_sw, _rc, "done", run_id="RUN-R")
+        _real_listing = q.listing
+        q.listing = lambda root, state=None: [dict(j) for j in _snap]
+        try:
+            q.claim(_sw, worker="w3", now=q._now() + datetime.timedelta(
+                seconds=q.LEASE_SECONDS + 600))
+        finally:
+            q.listing = _real_listing
+        check("a close written between the reclaim's listing and its write is kept",
+              (q.load(_sw, _rj["job_id"]) or {}).get("state") == "done",
+              str(q.load(_sw, _rj["job_id"])))
+
+        # THE THREE STEPS SHARE ONE LEASE, and a retry is joined only to its OWN run record.
+        class _Done:
+            returncode, stdout, stderr = 0, "", ""
+        _deadlines = []
+        _real_run = _wk._run
+        _wk._run = lambda cmd, out, python=None, deadline=None: (
+            _deadlines.append(deadline), _Done())[1]
+        try:
+            _job = {"job_id": "jx", "config": os.path.join(_sw, "t.yaml"), "scope": "quick"}
+            _out = _wk.run_dir(_sw, _job)
+            os.makedirs(_out, exist_ok=True)
+            json.dump({"run_id": "RUN-ATTEMPT-1", "state": "finished",
+                       "started_at": "2026-09-01 10:00:00"},
+                      open(os.path.join(_out, "run_RUN-ATTEMPT-1.json"), "w", encoding="utf-8"))
+            _st, _note, _rid = _wk.execute(_job, _sw)
+        finally:
+            _wk._run = _real_run
+        check("every step of a job is bounded by the one lease, not a lease each",
+              len(_deadlines) >= 2 and all(d is not None and d <= q.LEASE_SECONDS
+                                           for d in _deadlines), str(_deadlines))
+        check("...and an attempt that wrote no run record is not joined to the last one's",
+              _rid is None, str(_rid))
+    finally:
+        shutil.rmtree(_sw, ignore_errors=True)
+
     # --- A JOB RECORD WHOSE FIELDS ARE THE WRONG KIND IS UNREADABLE, NOT A CRASH -----------
     #
     # A field-type sweep over a job queued by `onboard --submit` found the listing dying on

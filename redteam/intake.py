@@ -175,6 +175,13 @@ def submit(root, body, policy=None, wake=None):
         return _problem(400, f"`name` must match {ID_RE.pattern} — it becomes a filename, in "
                              f"results_<name>.json and history/<name>.jsonl")
 
+    # THE SCOPE BEFORE ANYTHING IS WRITTEN OR SENT: it was checked after the probe, so a
+    # `scope: bogus` submission had already reached the submitter's endpoint and left its
+    # config on disk before its 400. Found by an independent review.
+    scope = payload.get("scope") or "quick"
+    if scope not in SCOPES:
+        return _problem(400, f"scope={scope!r} is not one of {list(SCOPES)}")
+
     # Written BEFORE the job is submitted, and under a name this service chose. The queue mints
     # the job id, so writing into the job's own directory would mean submitting a path that does
     # not exist yet and racing a worker to create it — the worker only has to poll once to win.
@@ -197,11 +204,17 @@ def submit(root, body, policy=None, wake=None):
     except Exception as e:
         return _problem(400, f"the config could not be driven: {type(e).__name__}: {e}")
     if not ok:
-        return _problem(422, {"problems": rep.get("problems"), "notes": rep.get("notes")})
-
-    scope = payload.get("scope") or "quick"
-    if scope not in SCOPES:
-        return _problem(400, f"scope={scope!r} is not one of {list(SCOPES)}")
+        # A REFUSED CONFIG IS NOT KEPT: it is the input to an assessment that will not run,
+        # and every refusal left one in `configs/`. And NOT AUTHORISED IS 403: `onboard.check`
+        # catches the gate itself and reports exit 4, so the `except SystemExit` above never
+        # saw it and a missing proof came back as 422, "fix your config". Found by an
+        # independent review.
+        try:
+            os.remove(cfg_path)
+        except OSError:
+            pass
+        _code = 403 if rep.get("exit") == 4 else 422
+        return _problem(_code, {"problems": rep.get("problems"), "notes": rep.get("notes")})
 
     job = q.submit(root, name, cfg_path,
                    scope=scope,
