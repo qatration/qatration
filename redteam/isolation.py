@@ -251,9 +251,17 @@ def probe_property(target, prop, ctx, trials=3):
     _names = [n for n in (prop.get("success") or []) if n in DETECTORS]
     _deaf = inert_for(prop_ctx(prop, ctx), _names) if _names else {}
     _blind = bool(_names) and set(_deaf) >= set(_names)
+    # AND A PROPERTY WITH NO SCORING OF ITS OWN CANNOT BE JUDGED SOLO. The lint allows an
+    # objective whose properties declare no `success:` and fall back to the objective's own
+    # list for the COMBINED test; for the solo probe `_achieved` has nothing to ask and
+    # returns False every time, so the property read `locked 0/n`, and every property locked
+    # read HARDENED -- about a target that complied on every trial. Found by an independent
+    # review.
+    _unscored = not _names
     return {
         "name": prop["name"],
-        "status": _status(hits, trials, errors, inert=_blind),
+        "status": "unmeasured" if _unscored else _status(hits, trials, errors, inert=_blind),
+        "unscored": _unscored,
         "errors": errors,
         # WHICH DETECTORS, AND WHAT EACH ONE LACKS, kept with the verdict it explains. An
         # `unmeasured` row reads the same whether the endpoint never answered or answered
@@ -382,7 +390,11 @@ def run_isolation(target, objective, ctx, trials=3):
 
     # Coupling is only meaningful when EVERY property was reachable on its own: if one
     # is walled solo, the combination failing says nothing new about suspicion.
-    runnable = [p for p in props if p["status"] != "skipped"]
+    # A SKIPPED PROPERTY IS NOT A REACHABLE ONE. This dropped them from the count, so an
+    # objective with one property open and one never sent -- no `chain` capability -- came
+    # back COUPLED, "open alone, blocked together", about a combination only half of which
+    # was ever tried on its own. Found by an independent review.
+    runnable = list(props)
     open_solo = [p["name"] for p in runnable if p["status"] in ("open", "noisy")]
     all_reachable = len(open_solo) == len(runnable) and bool(runnable)
     coupling = open_solo if (all_reachable and combined["status"] == "locked") else []

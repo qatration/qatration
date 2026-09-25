@@ -286,7 +286,8 @@ def main():
                 # loop, a crash in `write_maps` the moment it moved above it (d040215).
                 found = search(target, task, spec.get("success", []), prop_ctx(spec, ctx),
                                frames=frames, trials=args.trials,
-                               stop_on_hit=args.stop_on_hit, tasks=alts)
+                               stop_on_hit=args.stop_on_hit, tasks=alts,
+                               require_all=bool(spec.get("require_all")))
                 p["keysearch"] = {k: v for k, v in found.items() if k != "results"}
                 print(format_search(p["name"], found))
                 print()
@@ -300,19 +301,7 @@ def main():
         # reliably goes wrong, and the only way to tell "the combination is the wall"
         # apart from "nothing works"
         if args.compose and result["verdict"] != "EXPLOITED":
-            parts, missing = [], []
-            for p in result["properties"]:
-                spec = by_name.get(p["name"], {})
-                task = (spec.get("task") or "").strip()
-                keys = ((p.get("keysearch") or {}).get("keys") or [])
-                if not task:
-                    missing.append(f"{p['name']} (no 'task')")
-                    continue
-                if p["status"] == "locked" and not keys:
-                    missing.append(f"{p['name']} (locked, no key found)")
-                    continue
-                parts.append({"name": p["name"], "task": task,
-                              "frame_template": keys[0]["template"] if keys else None})
+            parts, missing = compose_parts(result, by_name)
             if missing:
                 # composing around a property that never opened would produce a failure
                 # that proves nothing — say so instead of running it
@@ -378,7 +367,8 @@ def main():
         for p in _unm:
             for _d, _w in (p.get("inert") or {}).items():
                 _deaf.setdefault(_d, _w)
-        _dead = [p for p in _unm if not p.get("inert")]
+        _dead = [p for p in _unm if not p.get("inert") and not p.get("unscored")]
+        _unscored = [p for p in _unm if p.get("unscored")]
         print("\nNOTHING MEASURED - so %s above says nothing about %s." % (_which, target.name))
         if _deaf:
             print("  %d propert%s could not be scored on this config: every detector %s "
@@ -394,6 +384,13 @@ def main():
             print("  %d propert%s errored or came back empty on every trial. Check the "
                   "endpoint is up and answering, then run this again."
                   % (len(_dead), "y" if len(_dead) == 1 else "ies"))
+        if _unscored:
+            print("  %d propert%s declare no `success:` of %s own, so %s solo probe%s could "
+                  "not be judged; only the combined test reads the objective's list."
+                  % (len(_unscored), "y" if len(_unscored) == 1 else "ies",
+                     "its" if len(_unscored) == 1 else "their",
+                     "its" if len(_unscored) == 1 else "their",
+                     "" if len(_unscored) == 1 else "s"))
         _skip = [p for m in maps for p in (m.get("properties") or [])
                  if p.get("status") == "skipped"]
         if _skip:
@@ -403,6 +400,31 @@ def main():
                                        for p in _skip}))))
         print("  Nothing measured is not the same as nothing open.")
         return 3
+
+
+def compose_parts(result, by_name):
+    """-> (parts to compose, [why a property was left out]) for one objective's map.
+
+    OPEN, OR OPENED BY A KEY -- and nothing else. This excluded `locked` alone, so an
+    `unmeasured` property (errored, silent, or unscored) and a `skipped` one went into the
+    ladder with their bare ask, and a zero-hit ladder printed COUPLED, "every property was
+    reachable on its own". Found by an independent review. A function so the rule can be
+    asked without a target.
+    """
+    parts, missing = [], []
+    for p in result["properties"]:
+        spec = by_name.get(p["name"], {})
+        task = (spec.get("task") or "").strip()
+        keys = ((p.get("keysearch") or {}).get("keys") or [])
+        if not task:
+            missing.append(f"{p['name']} (no 'task')")
+            continue
+        if p["status"] not in ("open", "noisy") and not keys:
+            missing.append(f"{p['name']} ({p['status']}, no key found)")
+            continue
+        parts.append({"name": p["name"], "task": task,
+                      "frame_template": keys[0]["template"] if keys else None})
+    return parts, missing
 
 
 if __name__ == "__main__":

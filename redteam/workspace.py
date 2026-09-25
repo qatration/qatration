@@ -2437,6 +2437,7 @@ _TRIAL_ROWS = {
     "errors": (int, False, "an errored trial is not counted as held"),
     "sample": (dict, False, "the report quotes the reply behind the verdict"),
     "inert": (dict, False, "`isolation` names the detectors that could not fire"),
+    "unscored": (bool, False, "`isolation` names a property with no scoring of its own"),
 }
 _LOCKMAP_REQUIRE = {
     "meta": (dict, False, "`read_maps` and the report date the map by it"),
