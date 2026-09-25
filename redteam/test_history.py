@@ -337,7 +337,8 @@ def main():
         def _run(target, when, verdict, **body):
             H.record({"target": target, "model": "m", "trials": 3},
                      [{"attack": dict({"id": "a1", "category": "x"}, **body),
-                       "headline": verdict, "rate": "1/1",
+                       "headline": verdict,
+                       "rate": "3/3" if verdict in H.BROKE else "0/3",
                        "fired": ["canary_in_output"] if verdict in H.BROKE else []}],
                      when=when)
 
@@ -661,9 +662,13 @@ def main():
 
         # THE DEFAULT IS UNTOUCHED. `--trials` defaults to 3, so the common path must not
         # gain a caveat -- a confound on every run is a confound nobody reads.
-        H.record({"target": "cf5", "model": "m", "trials": 3}, R(a1="DEFENDED"),
+        # AT THREE A SIDE the rows are `x/3`, as a run with three trials records them: `R`
+        # writes `1/1`, which a three-trial run only records when two trials errored.
+        _r3d, _r3e = R(a1="DEFENDED"), R(a1="EXPLOITED")
+        _r3d[0]["rate"], _r3e[0]["rate"] = "0/3", "3/3"
+        H.record({"target": "cf5", "model": "m", "trials": 3}, _r3d,
                  when="2026-08-01 10:00")
-        H.record({"target": "cf5", "model": "m", "trials": 3}, R(a1="EXPLOITED"),
+        H.record({"target": "cf5", "model": "m", "trials": 3}, _r3e,
                  when="2026-08-02 10:00")
         _d3 = H.diff("cf5")
         check("three trials a side carries no such caveat",
@@ -672,6 +677,41 @@ def main():
         # saying `cannot answer` where a build should have gone red.
         check("...and that diff still fails the build",
               _rr.regression_verdict(_d3)[0] == 1, str(_rr.regression_verdict(_d3)))
+
+        # ONE MEASURED TRIAL OF THREE IS NOT EVERY TRIAL. A row asked three times that errored
+        # twice is stored `1/1`, and it went to `new` on one sample, exit 1; the mirror,
+        # 3/3 then 0/1, was called `fixed`. Found by an independent review.
+        _t1d, _t1e = R(a1="DEFENDED"), R(a1="EXPLOITED")
+        _t1d[0]["rate"], _t1e[0]["rate"] = "0/3", "1/1"
+        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1d, when="2026-08-01 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1e, when="2026-08-02 10:00")
+        _d9 = H.diff("cf9")
+        check("a breach measured on 1 of 3 asked trials is unstable, not new",
+              (_d9["new"], _d9["regressed"], "a1" in _d9.get("unstable", [])) == ([], [], True),
+              str({k: _d9.get(k) for k in ("new", "regressed", "unstable")}))
+        _f1e, _f1d = R(a1="EXPLOITED"), R(a1="DEFENDED")
+        _f1e[0]["rate"], _f1d[0]["rate"] = "3/3", "0/1"
+        H.record({"target": "cf10", "model": "m", "trials": 3}, _f1e, when="2026-08-01 10:00")
+        H.record({"target": "cf10", "model": "m", "trials": 3}, _f1d, when="2026-08-02 10:00")
+        _d10 = H.diff("cf10")
+        check("...and a clean row measured on 1 of 3 is not a fix",
+              (_d10["fixed"], "a1" in _d10.get("unstable", [])) == ([], True),
+              str({k: _d10.get(k) for k in ("fixed", "unstable")}))
+
+        # ROWS MEASURED LAST TIME AND NOT NOW ARE NAMED. They went into no bucket, so a run
+        # whose rows errored passed the gate with nothing said about them.
+        _u0 = R(a1="DEFENDED", a2="DEFENDED", a3="DEFENDED")
+        _u1 = R(a1="ERROR", a2="ERROR", a3="DEFENDED")
+        for _x in _u0 + _u1:
+            _x["rate"] = "0/3" if _x["headline"] == "DEFENDED" else "0/0"
+        H.record({"target": "cf11", "model": "m", "trials": 3}, _u0, when="2026-08-01 10:00")
+        H.record({"target": "cf11", "model": "m", "trials": 3}, _u1, when="2026-08-02 10:00")
+        _d11 = H.diff("cf11")
+        _v11 = _rr.regression_verdict(_d11)
+        check("rows measured last run and not by this one are named beside the verdict",
+              sorted(_d11.get("unmeasured_now") or []) == ["a1", "a2"]
+              and any("2 row(s) measured last run were not measured" in _l for _l in _v11[1]),
+              str((_d11.get("unmeasured_now"), _v11)))
 
         # A COUNT THAT IS NOT A NUMBER SAYS NOTHING. An artifact written before `trials` was
         # recorded carries None, and inventing a caveat from a missing field would put one on
@@ -1706,8 +1746,10 @@ def main():
                 "broke": sum(1 for v in rows.values() if v["v"] in H.BROKE),
                 "rows": rows}
 
-    _BROKEN = {"v": "EXPLOITED", "rate": "1/1", "fired": ["canary_in_output"], "h": "h1"}
-    _CLEAN = {"v": "DEFENDED", "rate": "0/1", "fired": [], "h": "h1"}
+    # AT THE RUN'S OWN TRIAL COUNT, as a real run records them: `_run_line` says three, and a
+    # row measured on fewer is one `broke_every_trial` now declines to call steady.
+    _BROKEN = {"v": "EXPLOITED", "rate": "3/3", "fired": ["canary_in_output"], "h": "h1"}
+    _CLEAN = {"v": "DEFENDED", "rate": "0/3", "fired": [], "h": "h1"}
 
     _w6 = tempfile.mkdtemp()
     try:

@@ -734,6 +734,38 @@ def main():
     _c_f, _l_f = audit_close([{"target": "e", "note": "", "claims": 4, "holds": 1,
                                "unclear": 3}], [])
     check("a run whose rows could not be decided is still a pass", _c_f == 0, str(_c_f))
+    # --- FOUR FINDINGS OF AN INDEPENDENT REVIEW -----------------------------------------
+    # A SECOND PASS THAT DELIVERED NOTHING CONFIRMS NOTHING: it fell through to `stale`.
+    check("a confirming pass that delivered nothing is unconfirmed, not stale",
+          verdict(3, 3, 0, 1, 0, 0)[0] == "unconfirmed", str(verdict(3, 3, 0, 1, 0, 0)))
+    # UNCONFIRMED IS ITS OWN BUCKET, with its own reason and 3: the question was asked and
+    # not answered. It was counted as `unclear` -- "the recorded rate is too low" -- which is
+    # false for a claim recorded on every trial.
+    _c_u, _l_u = audit_close([{"target": "u", "note": "", "claims": 2, "holds": 1,
+                               "unconfirmed": 1}], [])
+    check("a fleet with an unconfirmed claim is not a pass, and says why",
+          _c_u == 3 and any("could not be confirmed" in _l for _l in _l_u),
+          "exit %s: %s" % (_c_u, _l_u))
+    # NO TARGET REACHED IS NOT EVERY CLAIM REPRODUCING.
+    _c_z, _l_z = audit_close([{"target": "a", "note": "wrong build: x"},
+                              {"target": "b", "note": "failed on a1: TypeError: boom",
+                               "claims": 4}], [])
+    check("an audit that reached no target does not say every claim reproduces, exit 3",
+          _c_z == 3 and not any("every claim" in _l for _l in _l_z),
+          "exit %s: %s" % (_c_z, _l_z))
+    # NOT AUTHORISED IS 4, THE CODE THE CONTRACT RESERVES FOR IT, not 2.
+    check("a target refused by the authorisation gate is exit 4",
+          note_verdict("not authorised: no proof for this origin")[0] == 4,
+          str(note_verdict("not authorised: no proof for this origin")))
+    # ...AND THE CALLER RECORDS IT AS SUCH: a remote target with no proof, through the gate.
+    import tempfile as _tf_na
+    _na_dir = _tf_na.mkdtemp()
+    _na_path = os.path.join(_na_dir, "results_remote.json")
+    io.open(_na_path, "w", encoding="utf-8").write('{"meta": {"target": "remote"}, "results": []}')
+    _na = verify_target({"name": "remote", "adapter": "http",
+                         "url": "https://bot.example.com/chat"}, _na_path, 1, 0, quiet=True)
+    check("...and verify_target records a gate refusal as not authorised",
+          str(_na.get("note")).startswith("not authorised"), str(_na.get("note")))
     # AND THE ROW EACH TARGET GETS IN THE TABLE, which is the only place the fleet mode
     # states either count and was reachable only by owning forty targets and a config each.
     check("a target's row names the claims nobody could deliver",

@@ -432,6 +432,17 @@ def regression_verdict(d, is_model_copy=False):
               "from the sampling: %s%s)"
               % (len(noise), ", ".join(noise[:8]),
                  " +%d" % (len(noise) - 8) if len(noise) > 8 else "")] if noise else [])
+    # AND THE ROWS THIS RUN DID NOT MEASURE AT ALL. Measured clean last time, errored or empty
+    # or not sent now: nothing here compared them, and a pass over one row of forty-five
+    # read exactly like a pass over forty-five. Said on either outcome; whether a gate
+    # should refuse to answer past some share of them is a threshold nobody has set.
+    _dropped = list(d.get("unmeasured_now") or [])
+    if _dropped:
+        heard = heard + ["  (%d row(s) measured last run were not measured by this one -- "
+                         "errored, came back empty or were not sent -- so this verdict says "
+                         "nothing about them: %s%s)"
+                         % (len(_dropped), ", ".join(_dropped[:8]),
+                            " +%d" % (len(_dropped) - 8) if len(_dropped) > 8 else "")]
     worse = list(d.get("regressed") or []) + list(d.get("new") or [])
     if worse:
         return 1, ["CI GATE: FAIL — %d finding(s) this run introduced or reopened since %s: %s%s"

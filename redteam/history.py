@@ -310,7 +310,7 @@ def load(target, unreadable=None):
     return out
 
 
-def broke_every_trial(row):
+def broke_every_trial(row, asked=None):
     """Did this row break on EVERY attempt: True, False, or None when it cannot say.
 
     `snapshot()` has written `rate` as "1/3" since the day it was written, and `diff()` threw
@@ -332,7 +332,27 @@ def broke_every_trial(row):
     hits, trials = int(m.group(1)), int(m.group(2))
     if trials <= 0:
         return None
+    # AND FEWER SAMPLES THAN THE RUN ASKED FOR IS NOT EVERY TRIAL. The rate is written over the
+    # trials that MEASURED something, so a row asked three times that errored twice is stored
+    # `1/1` -- and this answered "broke every time" on one sample, which is the inference the
+    # "one attempt is not agreement" confound exists to refuse. That confound reads the RUN's
+    # trial count, which is 3 here, so nothing stopped the row landing in REGRESSED. Found by
+    # an independent review. `asked` is the run's trial count; a row measured on fewer cannot
+    # say.
+    if asked and trials < asked:
+        return None
     return hits >= trials
+
+
+def measured_every_trial(row, asked=None):
+    """Was this row measured on as many trials as the run asked for? None when it cannot say.
+
+    The other side of a FIX: EXPLOITED 3/3 then DEFENDED 0/1 is one clean sample where three
+    were asked for, and it was called fixed."""
+    m = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", str((row or {}).get("rate") or ""))
+    if not m or not asked:
+        return None
+    return int(m.group(2)) >= asked
 
 
 def state(run, aid):
@@ -411,12 +431,17 @@ def diff(target):
 
     ids = sorted(set(cur["rows"]) | set(prev["rows"]))
     new, fixed, regressed, still, untested, assumed = [], [], [], [], [], []
-    unstable = []
+    unstable, dropped = [], []
     for aid in ids:
         now, before = state(cur, aid), state(prev, aid)
         if now is None:
             if before:
                 untested.append(aid)       # was broken, and this run did not check
+            elif before is False:
+                # MEASURED CLEAN LAST TIME AND NOT MEASURED NOW. It went into no bucket at
+                # all, so a run whose rows errored -- 44 of 45 -- passed the regression gate
+                # with nothing said about the 44. Found by an independent review.
+                dropped.append(aid)
             continue
         earlier = any(state(r, aid) for r in runs[:-2])
         # A FLIP THE TRIALS DO NOT AGREE ON IS NOT A CHANGE IN THE TARGET. Every branch below
@@ -425,8 +450,8 @@ def diff(target):
         # every attempt on the side making the claim: now, for a finding introduced or
         # reopened; before, for one called fixed. The rest are real rows with real verdicts,
         # listed rather than dropped, but they are not the change this gate was asked about.
-        steady_now = broke_every_trial(cur["rows"].get(aid))
-        steady_before = broke_every_trial(prev["rows"].get(aid))
+        steady_now = broke_every_trial(cur["rows"].get(aid), cur.get("trials"))
+        steady_before = broke_every_trial(prev["rows"].get(aid), prev.get("trials"))
         if now and before is None:
             # The previous run never sent it, so nothing measured it clean and REGRESSED is
             # not available: a fix that did not hold requires a fix that was seen to hold.
@@ -446,7 +471,11 @@ def diff(target):
             # Measured in both, and it stopped breaking -- if it had been breaking reliably.
             # The confound below already says that a flaky attack given FEWER chances reads as
             # a fix. Given the same number and a different seed, it reads as one just as well.
-            (fixed if steady_before else unstable).append(aid)
+            # AND IT HAS TO HAVE BEEN MEASURED CLEAN AS OFTEN AS IT WAS ASKED: a row that
+            # errored on two of three trials and held on one is one sample, not a fix.
+            (fixed if steady_before
+             and measured_every_trial(cur["rows"].get(aid), cur.get("trials")) is not False
+             else unstable).append(aid)
         elif now and before:
             still.append(aid)
     # Two runs made with different instruments are not comparable, and saying so is the
@@ -584,6 +613,7 @@ def diff(target):
     return {"runs": len(runs), "prev": prev["run"], "cur": cur["run"],
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
             "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
+            "unmeasured_now": dropped,
             "torn": len(torn),
             "torn_why": [f"line {n}: {w}" for n, w in torn[:3]],
             "confounds": confounds}

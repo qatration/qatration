@@ -151,6 +151,13 @@ def verdict(before_hits, before_trials, now_hits, now_trials,
     if again_hits is None:
         return "candidate", ("recorded %d of %d, reproduced 0 of %d — send it again"
                              % (before_hits, before_trials, now_trials))
+    # A SECOND PASS THAT DELIVERED NOTHING CONFIRMS NOTHING. This fell through to `stale` --
+    # the one word that accuses the artifact -- on "0 of 1 and 0 of 0 again": a first pass
+    # that landed one send, then a target that went down, and the claim was called wrong on a
+    # single sample. Found by an independent review.
+    if not again_trials:
+        return "unconfirmed", ("recorded %d of %d, reproduced 0 of %d, and the second pass "
+                               "delivered nothing" % (before_hits, before_trials, now_trials))
     if again_hits:
         return "holds", ("0 of %d, then %d of %d on a second pass"
                          % (now_trials, again_hits, again_trials))
@@ -260,6 +267,8 @@ def note_verdict(note):
     if note.startswith("unreachable"):
         return 3, ("NOTHING MEASURED - every claimed row errored or came back empty. "
                    "The artifact is untouched and unverified.")
+    if note.startswith("not authorised"):
+        return 4, ("NOT VERIFIED - %s. Nothing was sent." % note)
     return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
 
 
@@ -276,6 +285,7 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     from runner import run_attack, headline, judged_ctx
 
     out = {"target": tcfg.get("name") or "?", "claims": 0, "holds": 0, "unclear": 0,
+           "unconfirmed": 0,
            "stale": 0, "stale_ids": [], "note": "", "sent": 0, "not_sent": 0,
            # WHY IT STOPPED AND WHAT IT DID NOT REACH. Both are empty on a run that
            # finished, and a reader of this dict must not have to infer either from a
@@ -294,7 +304,11 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     try:
         _auth_gate(tcfg, "verify")
     except SystemExit as e:
-        out["note"] = "not loaded: %s" % _clipped(str(e).splitlines()[0], 70)
+        # NOT AUTHORISED IS ITS OWN CODE. `authorization.gate` raises NotAuthorised, a
+        # SystemExit(4), and this folded it into `not loaded`, which `note_verdict` maps to 2:
+        # the contract reserves 4 for exactly this. Found by an independent review.
+        out["note"] = ("not authorised: %s" if getattr(e, "code", None) == 4
+                       else "not loaded: %s") % _clipped(str(e).splitlines()[0], 70)
         return out
 
     # THE WRONG BUILD ANSWERING IS NOT A STALE CLAIM, and the fleet audit was about to publish
@@ -409,7 +423,8 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         # THREE STATES AND A DEFAULT, rather than two and everything else. `not sent` is
         # the one that was missing: a row nobody delivered is not a row that could not be
         # decided, and the sentence this command ends with is built from these counters.
-        out[{"holds": "holds", "stale": "stale", "not sent": "not_sent"}.get(v, "unclear")] += 1
+        out[{"holds": "holds", "stale": "stale", "not sent": "not_sent",
+             "unconfirmed": "unconfirmed"}.get(v, "unclear")] += 1
         if v == "stale":
             out["stale_ids"].append((attack.get("id"), why))
         if not quiet:
@@ -431,6 +446,7 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         # nothing. Counted as unreachable, never as a page of stale claims.
         out["note"] = "unreachable: nothing was measured"
         out["stale"], out["holds"], out["unclear"], out["stale_ids"] = 0, 0, 0, []
+        out["unconfirmed"] = 0
         out["not_sent"] = 0
     return out
 
@@ -450,9 +466,10 @@ def target_line(r):
     if r.get("note"):
         return r["note"]
     _unsent = ", %d not sent" % r["not_sent"] if r.get("not_sent") else ""
-    return ("%d claims: %d hold, %d unclear, %d stale%s"
+    _unconf = ", %d unconfirmed" % r["unconfirmed"] if r.get("unconfirmed") else ""
+    return ("%d claims: %d hold, %d unclear, %d stale%s%s"
             % (r.get("claims") or 0, r.get("holds") or 0, r.get("unclear") or 0,
-               r.get("stale") or 0, _unsent))
+               r.get("stale") or 0, _unsent, _unconf))
 
 
 def audit_close(rows, total_stale):
@@ -477,12 +494,16 @@ def audit_close(rows, total_stale):
             % (len(reached), len(rows), sum(r.get("claims") or 0 for r in reached))]
     partial = [r for r in reached if r.get("unchecked")]
     unsent = sum(r.get("not_sent") or 0 for r in reached)
+    unconfirmed = sum(r.get("unconfirmed") or 0 for r in reached)
     _claims = sum(r.get("claims") or 0 for r in reached)
     _holds = sum(r.get("holds") or 0 for r in reached)
     if total_stale:
         out += ["", "%d claim(s) no longer reproduce:" % len(total_stale)]
         out += ["   %-18s %-26s %s" % (t, aid, why) for t, aid, why in total_stale]
-    elif _holds == _claims and not partial:
+    # AND NOT OVER NOTHING. With no target reached, `_holds == _claims == 0` and this printed
+    # "every claim on every reachable target still reproduces" under "0 of 2 targets
+    # reachable", exit 0. Found by an independent review.
+    elif reached and _holds == _claims and not partial:
         out += ["", "every claim on every reachable target still reproduces."]
     else:
         # NOT `every claim on every reachable target still reproduces`, which was printed
@@ -493,6 +514,10 @@ def audit_close(rows, total_stale):
         if unsent:
             out += ["   %d could not be re-sent at all: nothing was delivered for them."
                     % unsent]
+        if unconfirmed:
+            out += ["   %d could not be confirmed: they reproduced on no re-send, and the "
+                    "second pass that decides it was not made or delivered nothing."
+                    % unconfirmed]
     if partial:
         out += ["", "stopped part way (%d): %s"
                 % (len(partial), ", ".join("%s (%d not re-sent: %s)"
@@ -510,7 +535,7 @@ def audit_close(rows, total_stale):
     # `unclear` is not one of these: a row that WAS re-sent and whose recorded rate cannot
     # decide is a designed outcome rather than a gap, and a fleet job that goes amber on one
     # goes amber forever.
-    return (3 if (partial or unsent) else 0), out
+    return (3 if (partial or unsent or unconfirmed or not reached) else 0), out
 
 
 def fleet_configs(directory=None):
@@ -677,6 +702,13 @@ def main():
                          (r["not_sent"], "could not be re-sent at all: nothing was "
                                          "delivered for them, so what they claim is "
                                          "neither confirmed nor refuted"),
+                         # ITS OWN REASON: this was counted under `unclear` and printed as
+                         # "the rate the artifact records is too low", which is false for a
+                         # claim recorded on every trial. Found by an independent review.
+                         (r.get("unconfirmed") or 0,
+                          "could not be confirmed: they reproduced on no re-send, and the "
+                          "second pass that decides it was not asked for (--confirm-trials "
+                          "0) or delivered nothing, so they are neither held nor stale"),
                          (r["unchecked"], "were not re-sent: %s" % (r["why"] or
                                                                     "the run stopped"))):
         if _n:
@@ -692,7 +724,7 @@ def main():
     # `the published findings still hold`. `unclear` is not one of these: it is a row that WAS
     # re-sent and whose recorded rate cannot decide, which is a designed outcome rather than a
     # gap, and a command that goes amber on it goes amber forever.
-    return 3 if (r.get("unchecked") or r.get("not_sent")) else 0
+    return 3 if (r.get("unchecked") or r.get("not_sent") or r.get("unconfirmed")) else 0
 
 
 if __name__ == "__main__":
