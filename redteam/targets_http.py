@@ -1128,7 +1128,8 @@ class HttpConfiguredTarget(Target):
             resolved += list(getattr(probe, "resolved", None) or [])
             secs += float(getattr(probe, "seconds", 0) or 0)
             turns.append({"prompt": p, "output": probe.output,
-                          "tool_calls": probe.tool_calls})
+                          "tool_calls": probe.tool_calls,
+                          "seconds": float(getattr(probe, "seconds", 0) or 0)})
             hist.append({"role": "user", "content": p})
             hist.append({"role": "assistant", "content": probe.output})
         return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,

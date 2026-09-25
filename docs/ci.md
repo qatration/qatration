@@ -143,8 +143,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 379 | 1,464 | ~49 min | ~98 min |
-| `--scope full`, 1 trial | 379 | 488 | ~16 min | ~33 min |
+| `--scope full`, 3 trials (the default) | 380 | 1,470 | ~49 min | ~98 min |
+| `--scope full`, 1 trial | 380 | 490 | ~16 min | ~33 min |
 | `--scope quick`, 3 trials | 60 | 219 | ~7 min | ~15 min |
 | `--scope quick`, 1 trial | 60 | 73 | ~2 min | ~5 min |
 
@@ -225,20 +225,20 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.77 / $2.30 / $3.83 | $2.08 / $6.23 / $10.38 |
-| `full` x1 | $0.26 / $0.77 / $1.28 | $0.69 / $2.08 / $3.46 |
+| `full` x3 (the default) | $0.77 / $2.31 / $3.85 | $2.08 / $6.25 / $10.42 |
+| `full` x1 | $0.26 / $0.77 / $1.28 | $0.69 / $2.08 / $3.47 |
 | `quick` x3 | $0.12 / $0.35 / $0.58 | $0.31 / $0.93 / $1.56 |
 | `quick` x1 | $0.04 / $0.12 / $0.19 | $0.10 / $0.31 / $0.52 |
 
 **The dominant cost is your own system prompt, not the attacks.** An attack payload averages 47
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,464 requests that is 1.5M input tokens of your own instructions — about
+single request. At 1,470 requests that is 1.5M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
 
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.23 to
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.25 to
   around $2.28. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on

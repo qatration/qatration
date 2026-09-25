@@ -1613,13 +1613,13 @@ def check_ctx_read_forms():
     from workspace import CTX_READ_FORMS, ctx_keys_in
     SRC = ('ctx.get("alpha") and ctx["beta"] and '
            '_configured("gamma", ctx) and _num(ctx, "delta", 3) and '
-           'oracle_context.get("epsilon")')
+           'oracle_context.get("epsilon") and _tool_set(ctx, "zeta")')
     check("every documented form of a context read is found",
           sorted(ctx_keys_in(SRC))
-          == ["alpha", "beta", "delta", "epsilon", "gamma"],
+          == ["alpha", "beta", "delta", "epsilon", "gamma", "zeta"],
           str(sorted(ctx_keys_in(SRC))))
-    check("...and there are five of them, so a form cannot go missing quietly",
-          len(CTX_READ_FORMS) == 5, str(len(CTX_READ_FORMS)))
+    check("...and there are six of them, so a form cannot go missing quietly",
+          len(CTX_READ_FORMS) == 6, str(len(CTX_READ_FORMS)))
     check("...and a source that reads nothing yields nothing",
           ctx_keys_in("return True") == set(), str(ctx_keys_in("return True")))
     check("...and None is not a crash", ctx_keys_in(None) == set(), "")

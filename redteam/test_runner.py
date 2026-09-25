@@ -582,6 +582,23 @@ def main():
           set(_rank_c) == set(_deliv_c) and len(set(_rank_c.values())) == len(_deliv_c),
           "%s vs %s" % (sorted(_rank_c), sorted(_deliv_c)))
 
+    # A SESSIONS PROBE CARRIES EACH TURN'S OWN TIME, so `slow_response` judges the slowest
+    # reply and not the sum: three 25 s answers under a 60 s ceiling are not one 75 s answer.
+    from runner import _run_sessions as _rs
+    from target import Probe as _Pr
+    import oracle as _or_s
+
+    class _Slow:
+        def reset(self):
+            pass
+
+        def send(self, prompt):
+            return _Pr(prompt=prompt, output="ok", tool_calls=[], seconds=25.0)
+    _sp = _rs(_Slow(), ["a", "b", "c"])
+    check("a sessions probe of three 25 s replies is not slow under a 60 s ceiling",
+          (_sp.seconds, _or_s.DETECTORS["slow_response"](_sp, {"max_seconds": 60}))
+          == (75.0, False), str([_t.get("seconds") for _t in _sp.turns]))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

@@ -1522,6 +1522,8 @@ CTX_READ_FORMS = (
     # `_num(ctx, "key", default)` is the numeric read, and it exists because
     # `int(ctx.get(k) or D)` threw away a configured 0.
     r'_num\(\s*ctx\s*,\s*["\']([a-z_]+)["\']',
+    # `_tool_set(ctx, "key")` is the tool-name read, one case-folded form for every set.
+    r'_tool_set\(\s*ctx\s*,\s*["\']([a-z_]+)["\']',
 )
 
 

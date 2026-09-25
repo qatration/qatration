@@ -53,7 +53,8 @@ class HttpTarget(Target):
                 return probe
             out = probe.output
             secs += float(getattr(probe, "seconds", 0) or 0)
-            turns.append({"prompt": p, "output": probe.output, "tool_calls": []})
+            turns.append({"prompt": p, "output": probe.output, "tool_calls": [],
+                          "seconds": float(getattr(probe, "seconds", 0) or 0)})
             history.append({"role": "user", "content": p})
             history.append({"role": "assistant", "content": probe.output})
         return Probe(prompt="\n".join(prompts), output=out, turns=turns, seconds=secs)

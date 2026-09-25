@@ -244,7 +244,7 @@ def _run_sessions(target, steps):
         resolved += list(getattr(p, "resolved", None) or [])
         secs += float(getattr(p, "seconds", 0) or 0)
         turns.append({"prompt": step, "output": p.output, "tool_calls": p.tool_calls,
-                      "new_session": i > 0})
+                      "new_session": i > 0, "seconds": float(getattr(p, "seconds", 0) or 0)})
     return Probe(prompt=steps[-1] if steps else "", output=out, tool_calls=calls,
                  observations=obs, turns=turns, seconds=secs, resolved=resolved)
 

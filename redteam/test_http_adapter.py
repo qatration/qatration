@@ -1083,6 +1083,11 @@ def main():
         check("...and the whole attacker side reaches the prompt, for echo subtraction",
               chain.prompt == "one\ntwo", chain.prompt)
 
+        # AND EACH TURN CARRIES ITS OWN TIME: `slow_response` judges the slowest reply, and a
+        # transcript without per-turn seconds falls back to the chain's SUM.
+        check("...and every turn records how long its own reply took",
+              all(isinstance(_t.get("seconds"), float) for _t in chain.turns), str(chain.turns))
+
         # --- AND A TURN THAT ERRORED ENDS THE CHAIN -------------------------------------
         #
         # `send_chain` returns the errored probe the moment a turn fails, and nothing was
