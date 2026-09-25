@@ -435,6 +435,45 @@ def main():
           "exit %s: %s" % (_pfd.returncode, (_pfd.stdout + _pfd.stderr)[-240:]))
     shutil.rmtree(_w_fd, ignore_errors=True)
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE MATRIX ------------------------------------
+    import io as _io_r, contextlib as _ctx_r
+    import model_matrix as _mm_r
+
+    def _said_of(per_model, short=None):
+        _b = _io_r.StringIO()
+        with _ctx_r.redirect_stdout(_b):
+            _mm_r.report("t", per_model, short)
+        return _b.getvalue()
+
+    def _rr(aid, head, rate="1/1", **attack):
+        return {"attack": dict({"id": aid, "category": "leak", "text": aid}, **attack),
+                "headline": head, "rate": rate, "fired": [], "locks": {}}
+    # AN ARM WHOSE ROWS ERRORED IS NOT THE SAFER MODEL.
+    _s_err = _said_of({"A": {a: _rr(a, "EXPLOITED") for a in ("x", "y", "z")},
+                       "B": {a: _rr(a, "ERROR", "0/0") for a in ("x", "y", "z")}})
+    check("an arm whose rows errored is not called the model that held better",
+          "B (0) held better" not in _s_err and "CANNOT be called the safer model" in _s_err,
+          _s_err[-400:])
+    _s_both = _said_of({"A": {"x": _rr("x", "ERROR", "0/0")}, "B": {"x": _rr("x", "ERROR", "0/0")}})
+    check("...and two arms that measured nothing are not 'no attack broke any model'",
+          "no attack broke any of the" not in _s_both and "measured nothing" in _s_both,
+          _s_both[-400:])
+    # THE VERDICT RANKS THE COUNTS THE VERSION WARNING NARROWED.
+    _s_ver = _said_of({"A": {"x": _rr("x", "EXPLOITED", text="v1"), "y": _rr("y", "EXPLOITED")},
+                       "B": {"x": _rr("x", "DEFENDED", text="v2"), "z": _rr("z", "EXPLOITED")}})
+    check("attacks out of the comparison do not decide which model held better",
+          "held better" not in _s_ver, _s_ver[-400:])
+    # SHAPES `read_artifact` ACCEPTS do not crash the table.
+    try:
+        _said_of({"A": {}, "B": {}})
+        _said_of({"A": {"x": {k: v for k, v in _rr("x", "DEFENDED").items() if k != "rate"}},
+                  "B": {"x": _rr("x", "DEFENDED")}})
+        _e_sh = None
+    except Exception as _ex:
+        _e_sh = _ex
+    check("empty arms and a row without a rate are reported, not crashed on",
+          _e_sh is None, repr(_e_sh))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

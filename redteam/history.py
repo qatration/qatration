@@ -355,6 +355,21 @@ def measured_every_trial(row, asked=None):
     return int(m.group(2)) >= asked
 
 
+def _counted_clean(run, aid):
+    """Can this run's clean row carry a counted move? Measured on every trial asked, and with
+    a rate that can be read at all.
+
+    `measured_every_trial` says None for two different things: a snapshot from before `trials`
+    was recorded, which the diff has always accepted, and a rate it cannot parse -- which
+    `broke_every_trial` keeps out of every counted bucket and this let through as "fixed".
+    Found by an independent review."""
+    row = (run.get("rows") or {}).get(aid)
+    _rate = (row or {}).get("rate")
+    if _rate is not None and not re.match(r"^\s*\d+\s*/\s*\d+\s*$", str(_rate)):
+        return False
+    return measured_every_trial(row, run.get("trials")) is not False
+
+
 def state(run, aid):
     """-> True broken, False MEASURED clean, None nothing measured — for one attack in one run.
 
@@ -463,7 +478,11 @@ def diff(target):
         elif now and not before:
             # A regression is a repeat, not a first sighting: it has to have been broken
             # in some run before the one that showed it clean.
-            if not steady_now:
+            # AND THE CLEAN RUN IN BETWEEN HAS TO HAVE BEEN MEASURED AS OFTEN AS IT ASKED, the
+            # rule the fix below already follows: EXPLOITED 3/3, DEFENDED 0/1 of three, then
+            # EXPLOITED 3/3 failed the gate as REGRESSED on one clean sample. Found by an
+            # independent review.
+            if not steady_now or (earlier and not _counted_clean(prev, aid)):
                 unstable.append(aid)
             else:
                 (regressed if earlier else new).append(aid)
@@ -473,8 +492,7 @@ def diff(target):
             # a fix. Given the same number and a different seed, it reads as one just as well.
             # AND IT HAS TO HAVE BEEN MEASURED CLEAN AS OFTEN AS IT WAS ASKED: a row that
             # errored on two of three trials and held on one is one sample, not a fix.
-            (fixed if steady_before
-             and measured_every_trial(cur["rows"].get(aid), cur.get("trials")) is not False
+            (fixed if steady_before and _counted_clean(cur, aid)
              else unstable).append(aid)
         elif now and before:
             still.append(aid)
@@ -579,8 +597,12 @@ def diff(target):
     # THE ARSENAL IS WHAT WAS SCOPED, not what came back. Both sides or nothing: an entry
     # written before `scoped` existed carries none, and the row count is the best available
     # answer there.
-    _pa = prev.get("scoped") if prev.get("scoped") and cur.get("scoped") else prev["attacks"]
-    _ca = cur.get("scoped") if prev.get("scoped") and cur.get("scoped") else cur["attacks"]
+    # `.get`: `unusable_snapshot` accepts a line without `attacks` or `run`, and this
+    # subscripted both. Found by an independent review.
+    _pa = (prev.get("scoped") if prev.get("scoped") and cur.get("scoped")
+           else prev.get("attacks", len(prev.get("rows") or {})))
+    _ca = (cur.get("scoped") if prev.get("scoped") and cur.get("scoped")
+           else cur.get("attacks", len(cur.get("rows") or {})))
     if _pa != _ca:
         confounds.append(f"arsenal {_pa} → {_ca} attacks")
     # AND THE ATTACKS THAT STAYED, REWRITTEN. The line above counts them; an attack
@@ -610,7 +632,7 @@ def diff(target):
     # wants to say `this target's stored timeline is damaged` on a page cannot get that out
     # of prose, and the short return above carries the same field, so both shapes answer
     # the question the same way.
-    return {"runs": len(runs), "prev": prev["run"], "cur": cur["run"],
+    return {"runs": len(runs), "prev": prev.get("run"), "cur": cur.get("run"),
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
             "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
             "unmeasured_now": dropped,

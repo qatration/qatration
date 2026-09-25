@@ -766,6 +766,13 @@ check("a control row is not exported as a finding",
 check("...and an errored control is not an attack that produced no measurement",
       not any("produced no measurement" in json.dumps(n) for n in notifications(_log_c)),
       json.dumps(notifications(_log_c))[:300])
+# A DETECTOR THAT RAISED ON THE BASELINE is named as unmeasured, not as a missing baseline.
+_log_r = build([row("atk-r", "EXPLOITED", ["canary_in_output"])],
+               {"!canary_in_output:TypeError": 1.0})
+_msg_r = json.dumps(_log_r["runs"][0]["results"])
+check("a breach on a detector that raised on the baseline is exported as unmeasured, named",
+      "UNMEASURED" in _msg_r and "raised an error" in _msg_r
+      and "no benign baseline exists" not in _msg_r, _msg_r[:300])
 # THE ERROR IS ON THE PROBE, where every stored trial keeps it.
 _bud = [row("atk-1", "DEFENDED", []),
         dict(row("atk-2", "ERROR", []),

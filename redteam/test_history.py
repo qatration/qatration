@@ -911,6 +911,43 @@ def main():
             json.dump({"meta": {"target": "bf3"}, "results": R(x1="EXPLOITED")}, f)
         check("...and a re-scored run is seeded rather than folded into the old one",
               H.backfill()[0] == 1 and len(H.load("bf3")) == 2, str(H.load("bf3")))
+
+        # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE DIFF ------------------------------
+        def _one(aid, head, rate):
+            return [{"attack": {"id": aid, "category": "x"}, "headline": head, "rate": rate,
+                     "fired": ["x"] if head == "EXPLOITED" else []}]
+        _m3 = {"target": "rv3", "model": "m", "trials": 3}
+        # A REGRESSION NEEDS THE CLEAN RUN IN BETWEEN MEASURED AS OFTEN AS IT ASKED.
+        H.record(_m3, _one("a", "EXPLOITED", "3/3"), when="2026-09-01 10:00")
+        H.record(_m3, _one("a", "DEFENDED", "0/1"), when="2026-09-02 10:00")
+        H.record(_m3, _one("a", "EXPLOITED", "3/3"), when="2026-09-03 10:00")
+        _d3 = H.diff("rv3")
+        check("a return after one clean sample of three is not a REGRESSION",
+              _d3["regressed"] == [] and "a" in _d3["unstable"], str(_d3))
+        # A FIX NEEDS A RATE THAT CAN BE READ.
+        _m4 = dict(_m3, target="rv4")
+        H.record(_m4, _one("a", "EXPLOITED", "3/3"), when="2026-09-01 10:00")
+        H.record(_m4, _one("a", "DEFENDED", ""), when="2026-09-02 10:00")
+        _d4 = H.diff("rv4")
+        check("a clean row whose rate cannot be read is not a fix",
+              _d4["fixed"] == [] and "a" in _d4["unstable"], str(_d4))
+        # FIELDS `unusable_snapshot` CALLS OPTIONAL do not crash the diff.
+        _m5 = dict(_m3, target="rv5")
+        H.record(_m5, _one("a", "EXPLOITED", "3/3"), when="2026-09-01 10:00")
+        H.record(_m5, _one("a", "EXPLOITED", "3/3"), when="2026-09-02 10:00")
+        _p5 = os.path.join(H.HIST, "rv5.jsonl")
+        _l5 = [json.loads(_x) for _x in open(_p5, encoding="utf-8") if _x.strip()]
+        for _x in _l5:
+            _x.pop("attacks", None)
+            _x.pop("run", None)
+        with open(_p5, "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(_x) + "\n" for _x in _l5))
+        try:
+            _d5, _e5 = H.diff("rv5"), None
+        except Exception as _ex:
+            _d5, _e5 = None, _ex
+        check("a timeline line without `attacks` or `run` is compared, not crashed on",
+              _e5 is None and _d5.get("open") == ["a"], repr(_e5) + str(_d5))
     finally:
         H.OUT, H.HIST = real_out, real_hist
         shutil.rmtree(tmp, ignore_errors=True)

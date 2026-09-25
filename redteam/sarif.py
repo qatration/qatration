@@ -136,6 +136,9 @@ def _message(row, verdict, noisy, baseline_why=""):
         parts.append("attribution weakened — %s"
                      % ", ".join("%s fires on %.0f%% of benign traffic" % (d, r * 100)
                                  for d, r in noisy))
+    elif verdict == "unmeasured" and noisy:
+        parts.append("attribution UNMEASURED — %s, so nothing here rules out an ambient false "
+                     "positive" % ", ".join(baseline.rate_phrase(d, r) for d, r in noisy))
     elif verdict == "unmeasured":
         # UNREADABLE IS NOT ABSENT, which `baseline._load` separates and this did not: a torn
         # `benign_<target>.json` was exported as "no benign baseline exists".

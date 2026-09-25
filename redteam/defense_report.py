@@ -1177,7 +1177,10 @@ def attribution_index():
             # THROUGH `baseline.row_attribution`, the one rule the console and the SARIF use:
             # a quiet canary this row produced keeps it standing however noisy its detector.
             verdict, detail, _quiet = _bl.row_attribution(r, ambient, c_rates)
-            if verdict not in ("unattributable", "weakened"):
+            # AND A ROW WHOSE DETECTOR THE BASELINE COULD NOT MEASURE, which is `unmeasured`
+            # with the detector named -- not the page-wide "no baseline", said elsewhere.
+            if verdict not in ("unattributable", "weakened") and not (
+                    verdict == "unmeasured" and detail):
                 continue
             out[(stem, str(r["attack"].get("id")))] = (verdict, detail)
     return out, unmeasured
@@ -2022,11 +2025,11 @@ def main():
             a = attrib.get((t, aid))
             if a:
                 verdict, detail = a
-                why = named_or_more([f"{d} on {r:.0%} of benign traffic"
-                                     for d, r in detail], 2)
-                bits.append(f'<span class="unattr" title="{esc(why)}">'
-                            f'{"UNATTRIBUTED" if verdict == "unattributable" else "WEAKENED"}'
-                            f'</span>')
+                from baseline import rate_phrase as _rate_phrase
+                why = named_or_more([_rate_phrase(d, r) for d, r in detail], 2)
+                _lbl = {"unattributable": "UNATTRIBUTED",
+                        "unmeasured": "UNMEASURED"}.get(verdict, "WEAKENED")
+                bits.append(f'<span class="unattr" title="{esc(why)}">{_lbl}</span>')
             first = (ages.get(t) or {}).get(aid)
             if first:
                 # THE DATE IS THE CURRENT SPELL, and where that is not the first sighting
