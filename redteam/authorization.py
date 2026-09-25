@@ -112,6 +112,12 @@ def origin_of(url):
         # written so two of them still compare equal to each other and to nothing else.
         return f"{scheme}://{u.netloc}"
     host = u.hostname or ""
+    # AN IPv6 LITERAL KEEPS ITS BRACKETS. Without them `http://[::1]:8080` and
+    # `http://[::1:8080]` both came out `http://::1:8080`, so a token issued for one
+    # authorised the other, and the well-known probe URL built from it did not parse. Found
+    # by an independent review.
+    if ":" in host:
+        host = f"[{host}]"
     # COMPARED AS A NUMBER. `":80" in netloc` is true of `:8000` and `:8099`, which is the
     # substring trap this file warns about elsewhere and which caught the first probe
     # written to measure this very defect.

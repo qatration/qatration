@@ -169,9 +169,39 @@ def main():
     check("an artifact from before the link claims nothing",
           _r.record_for({}, _d) is None and _r.unfinished_note({}, _d) == "",
           "an artifact with no run_id was given a verdict")
-    check("...and neither does one whose record is gone",
-          _r.unfinished_note({"run_id": "missing"}, _d) == "",
-          _r.unfinished_note({"run_id": "missing"}, _d))
+    # BUT ONE THAT NAMES A RUN WHOSE RECORD IS GONE IS NOT SILENT: silence read as "it
+    # finished" to the SARIF export. It claims neither ending, and says it cannot say.
+    _gone = _r.unfinished_note({"run_id": "missing"}, _d)
+    check("...while one whose record is gone says it cannot say, and claims no ending",
+          "cannot be said" in _gone and "run_missing.json" in _gone
+          and "ended as" not in _gone, _gone)
+    # AND A RECORD FOR ANOTHER TARGET IS NOT THIS ARTIFACT'S.
+    check("...and a record written for another target is not taken as this one's",
+          (_r.record_for({"run_id": "fin", "target": "someone-else"}, _d) or {}).get("state")
+          == "mismatched", str(_r.record_for({"run_id": "fin", "target": "someone-else"}, _d)))
+    # SHAPES THE RECORD VALIDATOR ACCEPTS do not crash `qatration runs`.
+    try:
+        _sum_null = _r.summarise({"run_id": "n1", "state": None, "target": "t"})
+        _e_null = None
+    except Exception as _ex:
+        _sum_null, _e_null = "", _ex
+    check("a record with `state: null` is listed, not crashed on",
+          _e_null is None and "n1" in _sum_null, repr(_e_null))
+    try:
+        _ov = _r.open_verdict({"state": "started",
+                               "started_at": "2026-09-25 10:00:00+00:00"})
+        _e_tz = None
+    except Exception as _ex:
+        _ov, _e_tz = "", _ex
+    check("...nor one whose start carries a UTC offset", _e_tz is None and bool(_ov),
+          repr(_e_tz))
+    # AND THE SWEEP CLOSES ITS RECORD ONLY ONCE THE PAGE EXISTS: a renderer that raised left
+    # `finished` over a run with no scorecard.
+    import inspect as _insp_r, run_redteam as _rr_r
+    _src_r = _insp_r.getsource(_rr_r)
+    check("the sweep marks its run finished after the scorecard is written, not before",
+          _src_r.index('_runs.finish(OUT_DIR, _rec, "stopped" if _stopped')
+          > _src_r.index("f.write(build_html(meta, results"), "finish precedes the page")
 
 
     # --- THE RECORD HAS A DOOR ---------------------------------------------------------

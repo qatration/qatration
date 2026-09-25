@@ -377,6 +377,15 @@ def main():
     check("an origin drops the path", az.origin_of(URL) == "https://api.acmeshop.example")
     check("a port is part of the origin",
           az.origin_of("http://localhost:8102/chat") == "http://localhost:8102")
+    # AN IPv6 LITERAL KEEPS ITS BRACKETS, or two different origins become one string and a
+    # token issued for one authorises the other.
+    check("two different IPv6 origins stay two",
+          az.origin_of("http://[::1]:8080/v1") != az.origin_of("http://[::1:8080]/v1"),
+          "%s vs %s" % (az.origin_of("http://[::1]:8080/v1"),
+                        az.origin_of("http://[::1:8080]/v1")))
+    check("...and an IPv6 origin is still a URL",
+          az.origin_of("https://[2001:db8::1]:8443/x") == "https://[2001:db8::1]:8443",
+          az.origin_of("https://[2001:db8::1]:8443/x"))
     try:
         az.origin_of("not a url")
         check("a non-URL is rejected", False, "it was accepted")

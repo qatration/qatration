@@ -505,7 +505,12 @@ def build(results, target_config=None, out_dir=None):
 
     _rec = runs.record_for(meta, out_dir or workspace.OUT)
     _unfinished = bool(_rec) and _rec.get("state") != "finished"
-    if _unfinished:
+    if _unfinished and _rec.get("state") in runs.UNKNOWN_RECORD:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": runs.unfinished_note(meta, out_dir or workspace.OUT) + "."},
+            "descriptor": {"id": "run/record-unreadable"}})
+    elif _unfinished:
         notifications.append({
             "level": "error",
             "message": {"text": (runs.unfinished_note(meta, out_dir or workspace.OUT)

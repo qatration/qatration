@@ -66,8 +66,27 @@ def record_for(meta, root):
         return None
     # THROUGH `read_artifact`, the one reader for this directory.
     from workspace import read_artifact as _read_art
-    _rec, _why_r = _read_art(_path(root, rid))
-    return _rec if _why_r is None else None
+    _p = _path(root, rid)
+    _rec, _why_r = _read_art(_p)
+    # A RUN_ID WHOSE RECORD CANNOT BE READ IS NOT A RUN THAT FINISHED. This returned None for
+    # it, the same None as "the artifact predates run_id", so a deleted, torn or foreign
+    # record left the SARIF export `executionSuccessful: true` and the fleet table silent,
+    # while the same artifact beside a `stopped` record was flagged. Found by an independent
+    # review.
+    if _why_r is not None:
+        if not os.path.exists(_p):
+            return {"run_id": rid, "state": "missing",
+                    "note": "there is no %s beside it" % os.path.basename(_p)}
+        return {"run_id": rid, "state": "unreadable", "note": _why_r}
+    _t = (meta or {}).get("target")
+    if _t and _rec.get("target") and _rec.get("target") != _t:
+        return {"run_id": rid, "state": "mismatched",
+                "note": "the record is for %r, not %r" % (_rec.get("target"), _t)}
+    return _rec
+
+
+# What `record_for` says when the artifact names a run and the record cannot answer for it.
+UNKNOWN_RECORD = ("missing", "unreadable", "mismatched")
 
 
 def unfinished_note(meta, root):
@@ -84,6 +103,10 @@ def unfinished_note(meta, root):
     rec = record_for(meta, root)
     if not rec or rec.get("state") == "finished":
         return ""
+    if rec.get("state") in UNKNOWN_RECORD:
+        return ("the run record behind this evidence (%s) is %s -- %s -- so whether the run "
+                "finished cannot be said" % (rec.get("run_id"), rec.get("state"),
+                                             rec.get("note")))
     why = (rec.get("note") or "").strip()
     return ("the run behind this evidence ended as %r%s"
             % (rec.get("state"), ": " + why if why else ""))
@@ -189,7 +212,12 @@ def open_verdict(rec, now=None):
     except ValueError:
         return ("the record does not say when it started, so how long it has been open"
                 " cannot be said")
-    open_s = ((now or _dt.datetime.now()) - began).total_seconds()
+    # IN THE RECORD'S OWN ZONE: an ISO stamp with an offset is a valid `started_at`, and
+    # naive minus aware was a TypeError out of `qatration runs`.
+    _now = now or _dt.datetime.now(began.tzinfo)
+    if (_now.tzinfo is None) != (began.tzinfo is None):
+        _now = _now.replace(tzinfo=began.tzinfo)
+    open_s = (_now - began).total_seconds()
     if open_s < 0:
         return "the record starts in the future (%s), so its age says nothing" % started
     how_long = _duration(open_s)
@@ -259,7 +287,7 @@ def summarise(rec):
     # word, which `run_redteam` had already learned from `refusal_capability:1-`. A name can
     # be 64 characters by rule, so the pad is a floor and not a ceiling: a longer one pushes
     # the row out rather than being cut.
-    return (f"{rec.get('run_id')}  {rec.get('state','?'):<9}"
+    return (f"{rec.get('run_id')}  {str(rec.get('state') or '?'):<9}"
             f"{str(rec.get('target','?')) + '  ':<26}"
             f"scope={_scope(rec):<6}auth={auth:<11}{cost}")
 

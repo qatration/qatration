@@ -213,6 +213,16 @@ def execute(job, root, python=None):
     rec = next((r for r in (_runs.listing(out) or []) if r.get("run_id") not in _before),
                None)
     run_id = rec.get("run_id") if rec else None
+    # EXIT 2 AFTER A RUN BEGAN IS A CRASH, NOT A REFUSAL. `run_command` maps every unhandled
+    # exception to 2, and 2 here meant "refused, nothing was sent, a retry cannot change it":
+    # a sweep that spent 140 requests and died on a KeyError was closed `dead` under that
+    # sentence while its own record said `aborted, crashed`. A record this attempt wrote
+    # proves `runs.start` ran, so the run's own note is the reason and a retry may help.
+    # Found by an independent review.
+    if rec and proc.returncode == 2 and rec.get("state") not in ("finished", "stopped"):
+        state = "failed"
+        note = ("the sweep began and then stopped: %s"
+                % (rec.get("note") or rec.get("state") or "no reason recorded"))
     if rec and rec.get("state") == "stopped" and state == "done":
         note = stopped_note(rec)
     if state != "done" and not note:

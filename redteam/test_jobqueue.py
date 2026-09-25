@@ -790,6 +790,27 @@ def main():
                                            for d in _deadlines), str(_deadlines))
         check("...and an attempt that wrote no run record is not joined to the last one's",
               _rid is None, str(_rid))
+        # EXIT 2 AFTER THE RUN BEGAN IS A CRASH, not "refused, nothing was sent".
+        class _Crashed:
+            returncode, stdout, stderr = 2, "", "KeyError: 'x'"
+
+        def _crash(cmd, out, python=None, deadline=None):
+            if cmd and cmd[0].endswith("run_redteam.py"):
+                json.dump({"run_id": "RUN-CRASHED", "state": "aborted", "target": "t",
+                           "started_at": "2026-09-02 10:00:00",
+                           "note": "crashed: KeyError after 140 requests"},
+                          open(os.path.join(out, "run_RUN-CRASHED.json"), "w",
+                               encoding="utf-8"))
+                return _Crashed()
+            return _Done()
+        _wk._run = _crash
+        try:
+            _st2, _note2, _rid2 = _wk.execute(dict(_job, job_id="jy"), _sw)
+        finally:
+            _wk._run = _real_run
+        check("a sweep that crashed after it began is failed with its own reason, not dead",
+              (_st2, _rid2) == ("failed", "RUN-CRASHED") and "crashed: KeyError" in (_note2 or ""),
+              str((_st2, _note2, _rid2)))
     finally:
         shutil.rmtree(_sw, ignore_errors=True)
 

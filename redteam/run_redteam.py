@@ -1835,11 +1835,6 @@ def main():
     # note at all. The same merge `closing_line` was split for two commits ago, still whole
     # in the record a person opens afterwards.
     _stopped = _budget_note or _rl_stopped
-    _runs.finish(OUT_DIR, _rec, "stopped" if _stopped else "finished", spent=_spent,
-                 note=((f"budget spent ({_budget_note}); the remaining attacks were never "
-                        f"sent") if _budget_note else
-                       "%s; the remaining attacks were never sent" % _rl_stopped)
-                 if _stopped else None)
 
     # THROUGH `workspace.side_artifact`, because `rejudge --write` rewrites this same page
     # and was building it without either panel. The unwrapping of a provenance-wrapped lock
@@ -1851,6 +1846,15 @@ def main():
     with _atomic(html_path) as f:
         f.write(build_html(meta, results, recon=recon, isolation=isolation))
     print(f"report → {html_path}")
+    # FINISHED ONCE THE DELIVERABLE EXISTS, not before it: `finish` ran ahead of the page,
+    # so a renderer that raised left `state: finished` over a run with no scorecard, and
+    # `_close_open_run` skips a record that is no longer `started`. Found by an independent
+    # review.
+    _runs.finish(OUT_DIR, _rec, "stopped" if _stopped else "finished", spent=_spent,
+                 note=((f"budget spent ({_budget_note}); the remaining attacks were never "
+                        f"sent") if _budget_note else
+                       "%s; the remaining attacks were never sent" % _rl_stopped)
+                 if _stopped else None)
 
     # Where the oracle could not see, said out loud. A code agent that hands a tool a
     # VARIABLE rather than a value exfiltrates in a way no pattern can follow — measured,

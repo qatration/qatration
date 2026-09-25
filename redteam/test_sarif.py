@@ -781,6 +781,12 @@ _log_b = build(_bud, None)
 check("the no-measurement notification names the error the probe recorded",
       "BudgetExhausted x1" in json.dumps(notifications(_log_b)),
       json.dumps(notifications(_log_b))[:300])
+# A RUN_ID WHOSE RECORD IS GONE IS NOT A RUN THAT FINISHED.
+_log_g = build([row("atk-1", "DEFENDED", [])], None, run_id="GONE-1")
+check("an artifact naming a run whose record is gone is not a successful execution",
+      _log_g["runs"][0]["invocations"][0]["executionSuccessful"] is False
+      and "run/record-unreadable" in json.dumps(notifications(_log_g)),
+      json.dumps(_log_g["runs"][0]["invocations"][0])[:300])
 
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
