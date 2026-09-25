@@ -123,6 +123,20 @@ def main():
               f"aimed at another. Nothing was generated.")
         return 2
 
+    # AND THE PROBES THE RULES ARE READ FROM HAVE TO HAVE LANDED. A profile whose
+    # self-description and disclosure probes both errored holds no rules because nothing was
+    # asked, and this said "states no prohibitions ... an answer about the target", exit 0.
+    # Found by an independent review.
+    _unm = [x for x in (profile.get("unmeasured") or [])
+            if x in ("self_description", "disclosure")]
+    if len(_unm) == 2:
+        print(f"generate: {prof_path}: the two probes this command reads a target's rules "
+              f"from (its self-description and the disclosure ask) did not land, so there "
+              f"is nothing to read. Nothing was generated; run `qatration recon` again.")
+        return 3
+    if _unm:
+        print(f"note: the {_unm[0].replace('_', '-')} probe did not land; the rules below are "
+              f"read from the other one only.")
     rules = prohibitions(profile)
     objs, skipped = objectives_from_profile(profile, ctx, name)
     print(f"target: {name}   rules found: {len(rules)}   "

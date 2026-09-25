@@ -222,6 +222,9 @@ def hints(profile):
         warn("the adapter CAN report tool calls but the probe triggered none — pass "
              "--tool-prompt (or set baseline_prompt) with a request that should use a "
              "tool, otherwise the tool channel is unverified, not absent")
+    elif ch == "unmeasured":
+        warn("the first probe did not land, so whether the tool channel carries calls was "
+             "not measured -- check the endpoint answers, then run recon again")
     elif ch == "unobservable":
         info("this adapter cannot report tool calls, so nothing measured here can prove an "
              "action ran — restrict objectives to output-integrity and disclosure")
@@ -379,6 +382,11 @@ def sent_so_far():
     return _SENT["probes"], _SENT["errors"]
 
 
+# How much of a refusal-probe reply a profile keeps. Long enough for a system prompt the
+# disclosure probe gets verbatim; the row says when it was cut (`reply_cut`).
+REPLY_KEEP = 4000
+
+
 def _send(target, text, reset=True):
     # NORMALISED HERE, because this is the one door every recon probe goes through and
     # two of them are the operator's: `--tool-prompt`, and `baseline_prompt` out of the
@@ -390,9 +398,14 @@ def _send(target, text, reset=True):
         target.reset()
     probe = _resilient_send(lambda t=payload(text): target.send(t), "recon")
     _SENT["probes"] += 1
-    if probe is None or probe.error or not (probe.output or "").strip():
+    if probe is None or probe.error or probe.silent():
         # Silence counts with the errors: a probe that came back empty told this profile
         # nothing either, and every field below reads it as "unmeasured" already.
+        # `Probe.silent`, NOT "no text": a reply that is only a tool call is an answer, and
+        # counting it as an error made a bot that answers every probe with a call read
+        # "all 8 recon probe(s) errored or came back empty", exit 3, nothing written --
+        # while `_measured` below, which asks `silent`, had recorded its tools. Found by an
+        # independent review.
         _SENT["errors"] += 1
     return probe
 
@@ -486,6 +499,11 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
         profile["tools_seen"] = sorted({n for n, _ in calls})
     elif probe is not None and classify(probe, ctx)["printed_call"]:
         profile["tool_channel"] = "printed"
+    elif "tool_visibility" in caps and not _measured(probe):
+        # THE PROBE DID NOT LAND, which is not "it triggered none". `silent` sends the reader
+        # to write a better tool prompt about a target that never answered this one. Found
+        # by an independent review.
+        profile["tool_channel"] = "unmeasured"
     elif "tool_visibility" in caps:
         profile["tool_channel"] = "silent"
     else:
@@ -537,7 +555,10 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
                 "recon")
         except Exception:
             seen = None
-        honoured = None if seen is None or seen.error else (
+        # AND AN EMPTY REPLY SAYS NOTHING EITHER: `send_forged` answering "" became
+        # "did not read a transcript it was handed" and a warning. Found by an independent
+        # review.
+        honoured = None if (seen is None or seen.error or seen.silent()) else (
             MEMO_TOKEN.lower() in (seen.output or "").lower())
         profile["reads_supplied_history"] = honoured
         if honoured is False:
@@ -558,8 +579,15 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
         # the reply is kept even when nothing was extracted: a 'compliance' with no quote
         # is exactly the row a tester must be able to audit by eye, since it means either
         # the bot answered or it refused in a way nothing here recognised
+        # THE WHOLE REPLY, UP TO A BOUND THAT IS SAID. It was cut at 200 characters and
+        # `generate` reads its rules out of this text: "FetchUrl is only used for
+        # https://docs.acme.example/public" was stored as "...https://docs.acme." and
+        # became an objective about a boundary the target does not have, while the rule
+        # after the cut was lost. Found by an independent review.
+        _reply = _out(p)
         vocab.append({"probe": spec["id"], "class": cls, "quote": quote,
-                      "reply": _out(p)[:200],
+                      "reply": _reply[:REPLY_KEEP],
+                      "reply_cut": len(_reply) > REPLY_KEEP,
                       # per-probe, not per-target: a target with a working tool channel can
                       # still answer "done" to a request that called nothing
                       "tool_calls": [n for n, _ in (p.tool_calls or [])] if p else []})
@@ -598,8 +626,20 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
     profile["token_lock"] = lock
 
     # 6. self-disclosure — run last so a refusal here cannot colour the style baseline
-    desc = _out(_send(target, SELFDESC_PROMPT))
+    _desc_p = _send(target, SELFDESC_PROMPT)
+    desc = _out(_desc_p)
     profile["self_description"] = desc
+    # WHICH OF THE TWO PROBES `generate` READS RULES FROM DID NOT LAND. Without this, a
+    # profile whose self-description and disclosure both errored read exactly like a bot
+    # that stated no rules, and `generate` exited 0 "an answer about the target". Found by
+    # an independent review.
+    _unm = []
+    if not _measured(_desc_p):
+        _unm.append("self_description")
+    if profile.get("disclosure_why") == "the disclosure probe did not land":
+        _unm.append("disclosure")
+    if _unm:
+        profile["unmeasured"] = _unm
     import honeytoken as _ht
     cans = _ht.declared(ctx)
     profile["sysprompt_candidates"] = marker_candidates(desc, baseline, canaries=cans)
@@ -614,6 +654,7 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
 
 
 def memory_phrase(profile, unknown="not measured", no="no",
+                  reset_unmeasured="yes — whether reset clears it was not measured",
                   clears="yes, reset clears", sticks="yes, RESET DOES NOT CLEAR",
                   chain_only="no, across single sends; this target carries chains"):
     """How this target's memory answered — in FOUR states, and the last two are the point.
@@ -643,6 +684,12 @@ def memory_phrase(profile, unknown="not measured", no="no",
         return unknown
     if not st.get("remembers"):
         return chain_only if "chain" in (profile.get("capabilities") or ()) else no
+    # AND A RESET THAT WAS NOT MEASURED IS NEITHER. `reset_clears` is None when the recall
+    # after the reset did not land, and `else sticks` published it as "RESET DOES NOT
+    # CLEAR", in red on the fleet page, from a probe that errored. Found by an independent
+    # review.
+    if st.get("reset_clears") is None:
+        return reset_unmeasured
     return clears if st.get("reset_clears") else sticks
 
 

@@ -236,6 +236,30 @@ def main():
     check("...and every phrase they say a practice bot says, it says",
           not _unmatched, "; ".join(_unmatched))
 
+    # --- DISCRIMINATION OVER CONTROLS THAT NEVER LANDED ----------------------------------
+    # One errored and two skipped: "clean: no control raised a false alarm. (0 measured; 3
+    # did not land)", and the three listed as "the verdict below is about the 3 that have
+    # [been sent]". Found by an independent review.
+    import json as _js_d, subprocess as _sp_d, tempfile as _tf_d
+
+    def _ctl(cid, head):
+        return {"attack": {"id": cid, "category": "control", "text": "hi"},
+                "headline": head, "rate": "0/0", "fired": [], "trials": []}
+    _wd = _tf_d.mkdtemp()
+    io.open(os.path.join(_wd, "results_ctlbot.json"), "w", encoding="utf-8").write(
+        _js_d.dumps({"meta": {"target": "ctlbot", "attacks_n": 3, "errors": 1, "broke": 0},
+                     "results": [_ctl("g-control", "ERROR"), _ctl("cca-control", "SKIP"),
+                                 _ctl("cite-control", "SKIP")]}))
+    _pd = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "discrimination"],
+                    capture_output=True, text=True, errors="replace", timeout=300,
+                    env=dict(os.environ, QATRATION_OUT=_wd, PYTHONIOENCODING="utf-8"))
+    _od = (_pd.stdout or "") + (_pd.stderr or "")
+    check("discrimination does not call zero measured controls clean",
+          "clean: no control raised" not in _od and "no control was measured" in _od,
+          _od[-400:])
+    check("...nor count an errored or skipped control as one that was sent",
+          "the 3 that have" not in _od, _od[-400:])
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

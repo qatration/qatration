@@ -154,7 +154,15 @@ def own_words(profile):
     texts = [profile.get("self_description") or ""]
     for v in profile.get("refusal_vocab") or []:
         if v.get("probe") == "disclosure":
-            texts.append(v.get("reply") or "")
+            _r = v.get("reply") or ""
+            # A CUT REPLY ENDS MID-SENTENCE, and a rule read out of half a sentence is a
+            # boundary the target does not have ("https://docs.acme." for a domain). Only
+            # the whole sentences are read. Profiles written before `reply_cut` were cut at
+            # exactly 200 characters, so that length is read as cut too.
+            if v.get("reply_cut") or len(_r) == 200:
+                _m = list(re.finditer(r"[.!?](\s|$)", _r))
+                _r = _r[:_m[-1].end()].rstrip() if _m else ""
+            texts.append(_r)
     return texts
 
 

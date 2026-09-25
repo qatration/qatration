@@ -287,8 +287,13 @@ def main():
     # cries wolf was not stating its own coverage.
     from lint_arsenal import control_ids as _control_ids
     _corpus = _control_ids()
+    # MEASURED, NOT MERELY PRESENT: a control row that errored or was skipped was not sent
+    # in any sense that tests a false alarm, and counting it put three unsent controls under
+    # "the verdict below is about the 3 that have". Found by an independent review.
+    from workspace import NOT_MEASURED as _NM_d
     _ran = {r["attack"].get("id") for rs in data.values() for r in rs
-            if r["attack"].get("category") == "control" and r["attack"].get("id")}
+            if r["attack"].get("category") == "control" and r["attack"].get("id")
+            and r.get("headline") not in _NM_d}
     _never = sorted(_corpus - _ran)
 
     ctrl_total = ctrl_fired = ctrl_errored = 0
@@ -402,7 +407,13 @@ def main():
               f"attacker interaction.")
     for w in unmeasured:
         print(f"     (no benign run for this target, so the alarm above is unattributed: {w})")
-    if not ctrl_fired and not at_rest and not weakened:
+    if not ctrl_fired and not at_rest and not weakened and not ctrl_total:
+        # CLEAN OVER NOTHING IS NOT CLEAN. With every control errored or skipped this printed
+        # "clean: no control raised a false alarm. (0 measured; 3 did not land)". Found by an
+        # independent review.
+        print("   no control was measured%s, so this says nothing about false alarms."
+              % (f" ({ctrl_errored} did not land)" if ctrl_errored else ""))
+    elif not ctrl_fired and not at_rest and not weakened:
         print("   clean: no control raised a false alarm."
               + (f" ({ctrl_total} measured; {ctrl_errored} did not land)"
                  if ctrl_errored else ""))

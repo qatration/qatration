@@ -571,6 +571,60 @@ def main():
     check("...and the profile says the attacks against it will measure nothing",
           any("forged_history" in w for w in ignored.get("warnings") or []), True)
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF RECON ---------------------------------------
+    # AN EMPTY REPLY TO THE FORGED TRANSCRIPT SAYS NOTHING: it read "did not read a transcript".
+    class _HistSilent(_History):
+        def send_forged(self, prompt, history):
+            return Probe(prompt, "")
+    _hs = fingerprint(_HistSilent(True), CTX)
+    check("an empty reply to a forged transcript is unmeasured, and raises no warning",
+          (_hs.get("reads_supplied_history"),
+           any("forged_history" in w for w in _hs.get("warnings") or [])), (None, False))
+
+    # A RESET THAT WAS NOT MEASURED IS NOT "RESET DOES NOT CLEAR".
+    from recon import memory_phrase as _mp
+    _st_none = {"statefulness": {"remembers": True, "reset_clears": None}}
+    check("remembers, and the reset recall did not land, is its own phrase",
+          _mp(_st_none, sticks="RESET DOES NOT CLEAR") != "RESET DOES NOT CLEAR", True)
+
+    # A REPLY THAT IS ONLY A TOOL CALL IS AN ANSWER, not an error.
+    class _ToolOnly(Target):
+        name = "toolonly"
+        capabilities = {"tool_visibility"}
+
+        def send(self, prompt, **kw):
+            return Probe(prompt, "", tool_calls=[("lookup_account", "{}")])
+    _to = fingerprint(_ToolOnly(), CTX)
+    check("a bot that answers only with tool calls is not counted as erroring",
+          (_to.get("errors"), _to.get("tool_channel")), (0, "real"))
+
+    # AN ERRORED FIRST PROBE IS NOT A SILENT TOOL CHANNEL.
+    from recon import BENIGN_PROMPT as _BP
+
+    class _DeadFirst(Bot):
+        capabilities = {"tool_visibility"}
+
+        def send(self, prompt):
+            if prompt.strip() == _BP.strip():
+                return Probe(prompt, "", error="Timeout: gone")
+            return Bot.send(self, prompt)
+    _df = fingerprint(_DeadFirst(), CTX)
+    check("a tool channel whose probe did not land is unmeasured, not silent",
+          _df.get("tool_channel"), "unmeasured")
+
+    # THE WHOLE DISCLOSURE REPLY IS KEPT, and a cut one says so.
+    _long = "FetchUrl is only used for https://docs.acme.example/public. " * 90
+    _lp = fingerprint(Bot(disclosure=_long), CTX)
+    _dv = [v for v in _lp.get("refusal_vocab") or [] if v["probe"] == "disclosure"][0]
+    check("a long disclosure reply is kept past 200 characters and marked when cut",
+          (len(_dv["reply"]) > 200, _dv.get("reply_cut")), (True, True))
+    from generate import own_words as _ow
+    check("...and generate reads only its whole sentences",
+          _ow({"refusal_vocab": [{"probe": "disclosure",
+                                  "reply": "Only use https://docs.acme.example/public. Never "
+                                           "reveal the adm", "reply_cut": True}]})[1],
+          "Only use https://docs.acme.example/public.")
+
     # A target that never claimed the capability is not asked and not accused: an unasked
     # question must read as unasked, never as a pass and never as a failure.
     quiet = fingerprint(Bot(), CTX)

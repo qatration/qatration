@@ -2523,6 +2523,9 @@ _RECON_REQUIRE = {
     "refusal_vocab[].quote": (str, False, "the report quotes it"),
     "refusal_vocab[].reply": (str, False, "the report quotes it"),
     "refusal_vocab[].tool_calls": (list, False, "the report lists each call"),
+    "refusal_vocab[].reply_cut": (bool, False, "`generate` reads only whole sentences of a cut reply"),
+    "unmeasured": (list, False, "`generate` names the probes that did not land"),
+    "unmeasured[]": (str, False, "a probe is named by it"),
 }
 for _k in ("headers", "bullets", "numbered", "code_fence", "json", "emoji"):
     _RECON_REQUIRE["style." + _k] = (bool, False, "the report names the house style from it")

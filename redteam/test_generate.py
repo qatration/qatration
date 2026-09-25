@@ -362,6 +362,19 @@ def main():
               _rc_quiet, 0)
         check("...and says which of the two it is",
               "answer about the target" in _quiet.getvalue(), True)
+        # AND A PROFILE WHOSE TWO RULE PROBES DID NOT LAND IS NOT "NO PROHIBITIONS": nothing
+        # was asked. It said "an answer about the target", exit 0. Found by an independent
+        # review.
+        io.open(os.path.join(_ws, "recon_quiet.json"), "w", encoding="utf-8",
+                newline="").write(_js_g.dumps(
+                    {"target": "quiet", "self_description": "", "refusal_vocab": [],
+                     "hints": [], "unmeasured": ["self_description", "disclosure"]}))
+        sys.argv = ["generate", "--target-config", _cfg2]
+        _unm_g = io.StringIO()
+        with contextlib.redirect_stdout(_unm_g):
+            _rc_unm = _rg.main()
+        check("a profile whose rule probes did not land exits 3, not 'no prohibitions'",
+              (_rc_unm, "answer about the target" in _unm_g.getvalue()), (3, False))
     finally:
         sys.argv = _argv
         if _was is None:
