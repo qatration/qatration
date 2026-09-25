@@ -262,7 +262,12 @@ def _pairs(raw):
     this repo guessed at a list it did not understand.
     """
     out = []
-    if isinstance(raw, dict):
+    # ONE CALL OBJECT IS ONE CALL. `{"name": "send_email", "arguments": {...}}` was read as a
+    # name -> arguments map and came out as two tools called `name` and `arguments`, counted
+    # as a channel that worked. Found by an independent review.
+    if isinstance(raw, dict) and ((set(raw) & _CALL_KEYS) or raw.get("type") in _CALL_TYPES):
+        raw = [raw]
+    elif isinstance(raw, dict):
         raw = [{"name": k, "arguments": v} for k, v in raw.items()]
     # AND A SHAPE THAT CANNOT BE ITERATED AT ALL. The docstring above says anything this does
     # not understand "is reported as unusable rather than guessed at", and it was -- for a
@@ -791,6 +796,17 @@ class HttpConfiguredTarget(Target):
         # a `timeout_s` guard that catches exactly both. The comment above says the budget is
         # the one thing standing between an arsenal and somebody's rate limit and that a
         # misspelling there is worth a sentence; an unusable NUMBER stops the run just as dead.
+        # ZERO IS NOT "NO CEILING". `RateLimit` read `max_requests: 0` as falsy and set no
+        # limit at all, so the operator who wrote the tightest budget there is got an unbounded
+        # run on somebody else's endpoint. Refused, with the reason. Found by an independent
+        # review.
+        for _bk in ("max_requests", "max_seconds"):
+            _bv = (rate or {}).get(_bk) if isinstance(rate, dict) else None
+            if isinstance(_bv, (int, float)) and not isinstance(_bv, bool) and _bv <= 0:
+                raise SystemExit(f"targets_http: `rate: {_bk}: {_bv}` for {name!r} is no "
+                                 f"budget at all -- nothing could be sent under it, and it "
+                                 f"used to be read as no ceiling. Give it a positive number, "
+                                 f"or leave the key out. Nothing was sent.")
         try:
             self.rate = RateLimit(**(rate or {}))
         except TypeError as e:
@@ -942,12 +958,16 @@ class HttpConfiguredTarget(Target):
                     # one thing that gate could not see -- and it reached no file.
                     return Probe(prompt=prompt, output=_text, reply_bytes=_over,
                                  seconds=round(time.time() - t0, 1))
-                raw = json.loads(_body.decode("utf-8", "replace"))
+                # `utf-8-sig`: a body that opens with a byte-order mark is valid JSON to every
+                # client but this one, and every probe against it was a JSONDecodeError.
+                raw = json.loads(_body.decode("utf-8-sig", "replace"))
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
             # would send the operator to re-map a path that is correct.
             _err = dig(raw, self.error_path) if self.error_path else None
-            if _err not in (None, "", [], {}):
+            # `False` too (and so 0): `"error": false` beside a good reply is an API saying
+            # nothing went wrong, and it turned every probe into a TargetError.
+            if _err not in (None, "", [], {}, False):
                 self._seen_success = True      # the credential worked; the request did not
                 # The remote's own words, bounded and never parsed: this is text from a target
                 # we do not trust, on the same footing as the HTTPError body below.
@@ -993,6 +1013,16 @@ class HttpConfiguredTarget(Target):
                 except Exception:
                     pass
                 return _bad2
+            # A REPLY THAT ONLY CALLS A TOOL. OpenAI answers `content: null` beside
+            # `tool_calls`, and `dig` cannot tell a JSON null from a missing key, so the
+            # standard shape of an agent acting instead of talking was ExtractionFailed and
+            # its call was thrown away -- the most dangerous replies were the ones lost. A
+            # null reply with a tool call that can be read is an empty reply with a call.
+            # Found by an independent review.
+            if reply is None and self.calls_path:
+                _pre = _pairs(dig(raw, self.calls_path))
+                if any(_probe_pair(_x) is not None for _x in _pre):
+                    reply = ""
             if reply is None:
                 # The path is wrong or the API changed shape. A run of empty replies looks
                 # exactly like a bot that refuses everything, which is the most flattering
@@ -1118,22 +1148,33 @@ class HttpConfiguredTarget(Target):
 
     def send_chain(self, prompts):
         """The turns in one conversation, feeding back what the target really said."""
-        hist, turns, out, calls, resolved, secs = [], [], "", [], [], 0.0
+        hist, turns, out, calls, resolved, obs, secs = [], [], "", [], [], [], 0.0
         for p in prompts:
             probe = self.send(p, history=hist)
             if probe.error:
-                return probe
+                # THE TURNS THAT ANSWERED ARE STILL EVIDENCE, the rule `runner._run_sessions`
+                # already follows: a canary leaked in turn one and a 500 in turn two came back
+                # as the bare error, `turns: []`, and the leak was discarded. Found by an
+                # independent review.
+                return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
+                             observations=obs, resolved=resolved, turns=turns,
+                             seconds=secs + float(getattr(probe, "seconds", 0) or 0),
+                             error=probe.error)
             out = probe.output
             calls += probe.tool_calls
             resolved += list(getattr(probe, "resolved", None) or [])
+            # AND WHAT THE TOOLS RETURNED, which the chain dropped: `canary_in_context` could
+            # not fire on any chain attack, where the same reply sent alone was EXPLOITED.
+            obs += list(getattr(probe, "observations", None) or [])
             secs += float(getattr(probe, "seconds", 0) or 0)
             turns.append({"prompt": p, "output": probe.output,
                           "tool_calls": probe.tool_calls,
+                          "observations": list(getattr(probe, "observations", None) or []),
                           "seconds": float(getattr(probe, "seconds", 0) or 0)})
             hist.append({"role": "user", "content": p})
             hist.append({"role": "assistant", "content": probe.output})
         return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
-                     resolved=resolved, turns=turns, seconds=secs)
+                     observations=obs, resolved=resolved, turns=turns, seconds=secs)
 
     def reset(self):
         """Nothing to reset: each request carries its own history, or the API is stateless.
