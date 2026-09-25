@@ -1825,6 +1825,24 @@ def main():
     finally:
         shutil.rmtree(_wn, ignore_errors=True)
 
+    # --- TWO ATTACKS WITH NO ID ARE TWO ROWS, NOT ONE ------------------------------------
+    #
+    # `snapshot` keys its rows by `attack_name`, and one fixed phrase for every id-less
+    # attack collapsed them: an EXPLOITED and a DEFENDED one came out `attacks=1, broke=0`,
+    # the breach gone from the timeline. Found by an independent review of the range.
+    _un = H.snapshot({"target": "t"}, [
+        {"attack": {"category": "x", "text": "one"}, "headline": "EXPLOITED", "fired": [],
+         "rate": "1/1"},
+        {"attack": {"category": "x", "text": "two"}, "headline": "DEFENDED", "fired": [],
+         "rate": "0/1"}])
+    check("two unnamed attacks are two rows, and the breach among them is counted",
+          (len(_un["rows"]), _un.get("broke")) == (2, 1), str((len(_un["rows"]), _un.get("broke"))))
+    _un2 = H.snapshot({"target": "t"}, [
+        {"attack": {"category": "x", "text": "one"}, "headline": "EXPLOITED", "fired": [],
+         "rate": "1/1"}])
+    check("...and the same unnamed attack is filed under the same name in the next run",
+          sorted(_un2["rows"])[0] in _un["rows"], str((sorted(_un2["rows"]), sorted(_un["rows"]))))
+
     # --- AND WHAT EACH FIELD HOLDS, EVERY ROW OF `_SNAPSHOT_REQUIRE` ----------------------
     #
     # A field-type sweep over a stored timeline found `fixes` dying on `run: 7` and on a row

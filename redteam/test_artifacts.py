@@ -429,6 +429,14 @@ def main():
     _whyh = _artifact("results_x.json", _b)[1]
     check("a headline that is not a verdict is refused, and the reason lists the verdicts",
           "headline" in (_whyh or "") and "EXPLOITED" in (_whyh or ""), str(_whyh))
+    # AND WHAT THE ENGINE WRITES IS NEVER REFUSED. `meta.baseline` carried a config's
+    # `baseline_tool_inputs` as written, numbers included -- a key the config rule accepts
+    # numbers in -- and an element row demanding text refused the sweep's own file. Found by
+    # an independent review; the report prints each entry through `str()` anyway.
+    _b = json.loads(json.dumps(_base))
+    _b["meta"]["baseline"] = [1234, "x"]
+    check("a results file whose baseline holds a number is read, as the engine wrote it",
+          _artifact("results_x.json", _b)[1] is None, str(_artifact("results_x.json", _b)[1]))
     # THE STORED ATTACK IS HELD TO THE ARSENAL'S RULE, not to a second one written here.
     for _f, _v in (("success", -1), ("partial", "x"), ("steps", True), ("text", ["a"])):
         _b = json.loads(json.dumps(_base))
@@ -640,7 +648,7 @@ def main():
         check("`compare` draws a page over a row whose attack has no id", not _ct_err,
               _ct_err)
         check("...and the row is grouped under a name that cannot collide with a real id",
-              "(unnamed attack)" in io.open(os.path.join(_drw, "compare_targets.html"),
+              "(unnamed attack " in io.open(os.path.join(_drw, "compare_targets.html"),
                                             encoding="utf-8").read(),
               sorted(os.listdir(_drw)))
     finally:
@@ -820,7 +828,7 @@ def main():
                   "exit %s: %s" % (code, out[-300:]))
         _pages = [p for p in os.listdir(work) if p.endswith(".html") and "opsbot" in p]
         check("...and the report files the row under the one phrase for it",
-              any("(unnamed attack)" in io.open(os.path.join(work, p), encoding="utf-8").read()
+              any("(unnamed attack " in io.open(os.path.join(work, p), encoding="utf-8").read()
                   for p in _pages), str(_pages))
     finally:
         shutil.rmtree(work, ignore_errors=True)

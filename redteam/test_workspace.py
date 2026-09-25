@@ -1509,20 +1509,15 @@ def check_context_shapes():
           (["known_pii[0]"], ["canaries[0]"], ["tool_names[0]"]))
     check("...while a number is accepted where every reader coerces it",
           _el("known_pii", [5551234, "x@y.example"]), [])
-    # THE PROMISE `NUMBER_TOLERANT_LIST_KEYS` MAKES, read out of the code: every line that
-    # iterates one of those keys turns the entry into text. A reader added without `str(`
-    # makes the tolerance a crash, and this names it.
-    _uncoerced = []
-    for _src in _g.glob(_os.path.join(_here, "*.py")):
-        if _os.path.basename(_src).startswith("test_"):
-            continue
-        for _ln, _line in enumerate(_io.open(_src, encoding="utf-8"), 1):
-            for _k in _ws.NUMBER_TOLERANT_LIST_KEYS:
-                if ('"%s"' % _k) in _line and ".get(" in _line and " for " in _line \
-                        and "str(" not in _line:
-                    _uncoerced.append("%s:%d" % (_os.path.basename(_src), _ln))
-    check("every reader that iterates a number-tolerant key coerces its entries",
-          _uncoerced, [])
+    # AND THE SET IS READ OUT OF THE CODE. It was a hand-written tuple of four, and an
+    # independent review found `own_object_ids: [1001]` -- numeric order ids, both readers
+    # coercing -- refused by it. Derived now: a key whose every reading line says `str(`.
+    check("a numeric order id is accepted, because every reader of that key coerces it",
+          _el("own_object_ids", [1001, 1002]), [])
+    _tol = _ws.number_tolerant_list_keys()
+    check("...and the derived set holds the keys whose readers coerce, not the others",
+          ("known_pii" in _tol, "own_object_ids" in _tol, "allowed_domains" in _tol,
+           "canaries" in _tol), (True, True, False, False))
 
     # AND `oracle_context: null`, which the rule reads as absent and seven commands read as
     # None: `cfg.get("oracle_context", {})` -- the default applies only when the key is

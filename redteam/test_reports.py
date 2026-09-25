@@ -238,7 +238,7 @@ def main():
     # the same blank space meant `every declared path resolved` and `this run predates the
     # question`. That is the confusion the section's own prose is about, one level up: a
     # channel that produced nothing is indistinguishable, on this page, from a clean one.
-    _dead_r, _pa_r, _pu_r = dr._unresolved_paths()
+    _dead_r, _pa_r, _pu_r, _pp_r = dr._unresolved_paths()
     check("the stored fleet records which declared paths resolved",
           len(_pa_r) >= 5, str(len(_pa_r)))
     check("...and a run that predates the record is named, not counted as clean",
@@ -295,6 +295,15 @@ def main():
     check("...and a dead path is still reported as one",
           "A configured response path never gave the run anything it could read" in _pg_dead
           and "$.calls" in _pg_dead, _pg_dead[-200:])
+    # AND A PATH THAT READ SOME REPLIES AND NOT OTHERS, which the run, the scorecard and the
+    # SARIF say, and this page did not.
+    _pg_part = _paths_page(
+        {"unresolved_paths": [], "partly_read_paths": [
+            "response.tool_calls = '$.calls' (2 of 5 value(s) not readable as tool calls: "
+            "a str)"]}, True)
+    check("...and a path that read only some of its replies is named, with the count",
+          "could not read every value it found" in _pg_part and "2 of 5" in _pg_part,
+          _pg_part[-300:])
     _pg_unrec = _paths_page({}, True)
     check("a run that predates the record is NOT RECORDED, not clean",
           "Not recorded" in _pg_unrec and "path-fake" in _pg_unrec,

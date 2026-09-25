@@ -710,13 +710,42 @@ def oracle_context_of(cfg):
     return {} if ctx is None else ctx
 
 
-# THE LIST KEYS WHOSE EVERY READER TURNS AN ENTRY INTO TEXT ITSELF (`str(x)`), so a number
-# written without quotes -- a phone number in `known_pii` -- is read correctly and is not
-# refused. Every other list key has at least one reader calling `.lower()` or hashing the
-# entry as a name, where a number raises: `allowed_domains: [1]` died in `d_xss_in_output`.
-# `test_workspace` scans every reader of these four and fails if one stops coercing.
-NUMBER_TOLERANT_LIST_KEYS = ("known_pii", "expected_completions", "baseline_tool_inputs",
-                             "command_baseline")
+_NUMBER_TOLERANT = None
+
+
+def number_tolerant_list_keys(root=None):
+    """The list keys whose EVERY reader turns an entry into text itself (`str(x)` on the line
+    that reads the key), so a number written without quotes -- a phone number in `known_pii`,
+    an order id in `own_object_ids` -- is read correctly and is not refused. Every other list
+    key has a reader that calls `.lower()` on the entry or hashes it as a name, where a number
+    raises: `allowed_domains: [1]` died in `d_xss_in_output`.
+
+    READ OUT OF THE CODE, like `list_context_keys`. The first version was a hand-written
+    tuple of four, and an independent review found it short by five: `own_object_ids: [1001]`
+    -- numeric order ids, the natural way to write them -- had worked, and the new rule
+    refused it though both its readers coerce. A reader added without `str(` takes its key
+    out of this set, which refuses a number rather than letting it crash a detector.
+    """
+    global _NUMBER_TOLERANT
+    here = root or os.path.dirname(os.path.abspath(__file__))
+    if _NUMBER_TOLERANT is not None and _NUMBER_TOLERANT[0] == here:
+        return _NUMBER_TOLERANT[1]
+    import glob as _glob
+    keys = list_context_keys()
+    reads = {k: [] for k in keys}
+    for _src in sorted(_glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(_src).startswith("test_"):
+            continue
+        with open(_src, encoding="utf-8") as _fh:
+            for _line in _fh:
+                if _line.strip().startswith("#") or ".get(" not in _line:
+                    continue
+                for k in keys:
+                    if ('"%s"' % k) in _line:
+                        reads[k].append("str(" in _line)
+    out = frozenset(k for k, r in reads.items() if r and all(r))
+    _NUMBER_TOLERANT = (here, out)
+    return out
 
 
 def string_context_keys(root=None):
@@ -802,11 +831,11 @@ def bad_context_shapes(cfg):
             out.append((k, "is %s; this key is read as a list" % type(v).__name__))
     # AND WHAT THE LISTS HOLD. Each entry is read as text: a domain, a canary, a tool name.
     # A mapping, a list or a bool is never one; a number is one only where every reader
-    # turns it into text itself (`NUMBER_TOLERANT_LIST_KEYS`).
+    # turns it into text itself (`number_tolerant_list_keys`).
     for k, v in ctx.items():
         if k not in want or not isinstance(v, (list, tuple)):
             continue
-        _ok = (str, int, float) if k in NUMBER_TOLERANT_LIST_KEYS else (str,)
+        _ok = (str, int, float) if k in number_tolerant_list_keys() else (str,)
         for i, x in enumerate(v):
             if x is None or (isinstance(x, _ok) and not isinstance(x, bool)):
                 continue
@@ -2170,7 +2199,17 @@ def attack_name(attack):
     """
     if not isinstance(attack, dict):
         return UNNAMED_ATTACK
-    return attack.get("id") or UNNAMED_ATTACK
+    if attack.get("id"):
+        return attack["id"]
+    # AND TWO UNNAMED ATTACKS ARE NOT ONE. `history.snapshot` and `model_matrix` key their
+    # rows by this name, so one fixed phrase for every id-less attack collapsed them into a
+    # single row: an EXPLOITED and a DEFENDED one came out `attacks=1, broke=0`, the breach
+    # gone from the timeline and a later `diff` free to call it fixed. The phrase carries
+    # what the attack SENDS, digested, so the name is stable across runs of the same attack
+    # and different for different ones -- and still cannot collide with a real id.
+    from lint_arsenal import attack_digest as _digest
+    _d = _digest(attack)
+    return "%s %s" % (UNNAMED_ATTACK[:-1], _d + ")") if _d else UNNAMED_ATTACK
 
 
 def read_artifact(path):
@@ -2281,8 +2320,7 @@ _RESULTS_REQUIRE = {
     "meta.unreached": (int, False, "`measured` subtracts it from what was sent"),
     "meta.arsenal": (str, False, "`compare` checks every target ran the same corpus"),
     "meta.stopped": (str, False, "the pages say why a run ended early"),
-    "meta.baseline": (list, False, "the report names the benign run behind a rate"),
-    "meta.baseline[]": (str, False, "the report names the benign run behind a rate"),
+    "meta.baseline": (list, False, "the report lists the clean tool inputs a run was given"),
     "meta.attribution": (str, False, "`rejudge --pages` prints it"),
     "meta.inert": (dict, False, "`rejudge --pages` and `sarif` name each inert detector"),
     "meta.engine": (str, False, "every page states the build that wrote it"),

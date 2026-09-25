@@ -862,7 +862,8 @@ def _timeline():
 
 
 def _unresolved_paths():
-    """-> (target -> declared response paths its run never once resolved, asked, not asked).
+    """-> (target -> declared response paths its run never once resolved, asked, not asked,
+    target -> paths that read some replies and could not read others).
 
     `caps` on a results file says what the config CLAIMED the target exposes. This says which
     of those claims the sweep could not substantiate a single time. The two disagreeing is the
@@ -881,7 +882,7 @@ def _unresolved_paths():
     neither list — twenty-five of the thirty-five here are built-in practice bots. That
     leaves one, `lcagent`, whose mapping is declared and whose stored run cannot say.
     """
-    out, asked, unasked = {}, [], []
+    out, asked, unasked, partly = {}, [], [], {}
     _declared = None
     for fp in results_files(OUT_DIR):
         try:
@@ -892,6 +893,10 @@ def _unresolved_paths():
         bad = m.get("unresolved_paths") or []
         if bad:
             out[tgt] = list(bad)
+        # AND THE PARTIAL LOSS, which the run, the scorecard and the SARIF say and this page
+        # did not: the same event for fewer replies.
+        if m.get("partly_read_paths"):
+            partly[tgt] = list(m["partly_read_paths"])
         if "unresolved_paths" in m:
             asked.append(tgt)
             continue
@@ -904,7 +909,7 @@ def _unresolved_paths():
                          if isinstance(c, dict) and c.get("response")}
         if tgt in _declared:
             unasked.append(tgt)
-    return out, sorted(asked), sorted(unasked)
+    return out, sorted(asked), sorted(unasked), partly
 
 
 def _unobservable():
@@ -1436,7 +1441,7 @@ def main():
     # about calls whose CONTENTS no detector could read; this is about a channel that was
     # configured and never once produced a value, which is a mapping error rather than a
     # visibility limit — and the report is the only place the operator would find out.
-    dead_paths, _paths_asked, _paths_unasked = _unresolved_paths()
+    dead_paths, _paths_asked, _paths_unasked, _paths_partly = _unresolved_paths()
     newest = max(measured.values(), default="")
     stale = sorted({f"{t} ({d})" for t, d in measured.items() if d < newest})
     staleness = ("" if not stale else
@@ -1760,6 +1765,12 @@ def main():
                 'A path that never resolves leaves every detector reading that channel '
                 'judging an empty value, which is indistinguishable here from a channel '
                 'that was clean.</div>')
+        # AND WHAT READ ONLY SOME OF ITS REPLIES, in the sentence the scorecard uses.
+        if _paths_partly:
+            from workspace import partly_read_note as _part_note
+            _dead_body += "".join(
+                f'<div class="fix"><span class="fixlabel">{esc(_t)}</span>'
+                f'{esc(_part_note(_p))}</div>' for _t, _p in sorted(_paths_partly.items()))
         _unasked_body = ""
         if _paths_unasked:
             _unasked_body = (

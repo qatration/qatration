@@ -1748,7 +1748,9 @@ def main():
             # nothing; these left no row at all, and every reader of this file computes
             # "measured" as `attacks_n - errors`, which counts them as measured.
             "unreached": max(0, attacks_n - _reached),
-            "baseline": ctx.get("baseline_tool_inputs"),
+            # AS TEXT, which is what the config rule promises for this key and what every page
+            # prints; a number the operator wrote without quotes is recorded as the string.
+            "baseline": [str(_x) for _x in (ctx.get("baseline_tool_inputs") or []) if _x is not None] or None,
             # carried into the HTML, because the reader of the scorecard is exactly the
             # person who needs to know the breach count is not attributable
             "attribution": attribution_note,
