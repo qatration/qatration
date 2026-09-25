@@ -1116,7 +1116,10 @@ def main():
         # why. Eleven configs omit `name:`, and this is the door a configured target arrives
         # through.
         if cfg.get("name"):
-            args.target = cfg["name"]
+            # THROUGH THE SHARED RULE, as `run` names it: `name: "spacebot "` wrote
+            # `benign_spacebot .json`, and `run` then looked for `benign_spacebot.json`.
+            from workspace import safe_target_name as _stn
+            args.target = _stn(cfg["name"], "target config")
         else:
             from run_redteam import load_target_or_explain
             args.target = load_target_or_explain(cfg, args.target_config, was_default=False).name

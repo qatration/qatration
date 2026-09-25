@@ -2101,7 +2101,10 @@ def main():
     # scan that silently stops recognising a shape is a scan whose universal claim is about
     # whatever it still sees, which is the defect this whole check exists to prevent one
     # level up.
-    check("the scan can see the engine's refusal helper", len(_refused) >= 2,
+    # AT LEAST ONE, not two: the published-canary `_refuse(5, ...)` moved into
+    # `honeytoken.precondition` with the other canary refusals, and its code now comes back
+    # through `_refuse(_code, ...)`, which no scan of a literal can read.
+    check("the scan can see the engine's refusal helper", len(_refused) >= 1,
           str(sorted(_refused)))
     check("...and the table that decides a code from a cause", len(_tabled) >= 2,
           str(sorted(_tabled)))

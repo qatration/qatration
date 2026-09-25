@@ -269,6 +269,10 @@ def note_verdict(note):
                    "The artifact is untouched and unverified.")
     if note.startswith("not authorised"):
         return 4, ("NOT VERIFIED - %s. Nothing was sent." % note)
+    if note.startswith("precondition: "):
+        # 5, as `run` refuses on it: the canary cannot be confirmed present, so a claim that
+        # does not reproduce says nothing about the target.
+        return 5, ("NOT VERIFIED - %s. No claim was re-sent." % note[len("precondition: "):])
     return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
 
 
@@ -372,6 +376,18 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
                        % (_art_target, target.name))
         return out
     rows = claimed(stored.get("results") or [])
+    # THE PRECONDITIONS `run` REFUSES ON, before a claim is re-sent: with the honeytoken
+    # snippet reverted -- the step the docs tell a user to take afterwards -- every canary
+    # claim came back "stale", exit 1, "the artifact overstates what this target does
+    # today", when the target had merely stopped holding the secret. Found by an
+    # independent review.
+    if rows:
+        import honeytoken as _ht_v
+        _pre = _ht_v.precondition(target, ctx)
+        if _pre is not None:
+            out["note"] = "precondition: %s" % _pre[2]
+            out["precondition_exit"] = _pre[0]
+            return out
     out["claims"] = len(rows)
     if not quiet:
         print("verify -> target='%s'  %d claimed breach(es) in %s  trials=%d (+%d to confirm)"
@@ -661,6 +677,9 @@ def main():
     if not tcfg.get("name"):
         from workspace import config_name as _config_name
         tcfg["name"] = _config_name(args.target_config, {})
+    # THE NAME `run` WROTE THE RESULTS UNDER, not the raw value: a trailing space made this
+    # look for `results_spacebot .json` beside the `results_spacebot.json` that exists.
+    tcfg["name"] = safe_target_name(tcfg["name"], "target config")
     path = args.results or os.path.join(OUT_DIR, "results_%s.json" % tcfg["name"])
     r = verify_target(tcfg, path, args.trials, args.confirm_trials)
 

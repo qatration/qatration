@@ -223,7 +223,7 @@ def main():
         # said `ready to queue`. Walked against this same scripted endpoint before the fix:
         # three wrong mappings, three clean bills.
         for _bad_path, _got in (("id", "cmpl-1"), ("model", "scripted")):
-            _wrongfield = write("wrongfield_%s" % _bad_path, _bad_path)
+            _wrongfield = write("wrongfield-%s" % _bad_path, _bad_path)
             _ok2, _rep2 = onboard.check(_wrongfield)
             check("a reply path that resolves to %r does not pass" % _got, not _ok2,
                   str(_rep2.get("problems")))
@@ -353,7 +353,7 @@ def main():
             check("...and it multiplies by the arsenal, not by a literal",
                   "need_req" in _expr and not _re.search(r"\*\s*\d\d\s*\*", _expr), _expr.strip())
             check("...and the sentence beside it names the same count",
-                  "{need_att} attacks x 3" in _src, "the note does not name need_att")
+                  "{need_att} attacks x {_t}" in _src, "the note does not name need_att")
 
         # --- AND A CHAIN COSTS ONE REQUEST PER STEP -------------------------------------
         #
@@ -394,6 +394,19 @@ def main():
         check("...while a budget that covers every step is not warned about",
               "STOP part way" not in " ".join(_rep3["notes"]),
               " ".join(_rep3["notes"])[:200])
+        # THE RUN THIS WILL QUEUE, not a default one: the same budget is short at ten trials,
+        # and a config that says `trials: 10` is sized at ten when no flag is given.
+        _ok3b, _rep3b = onboard.check(_budget, trials=10)
+        check("a budget enough for three trials is warned about at ten",
+              "STOP part way" in " ".join(_rep3b["notes"])
+              and "x 10 trials" in " ".join(_rep3b["notes"]),
+              " ".join(_rep3b["notes"])[:220])
+        _budget10 = write("tentrials", "choices.0.message.content",
+                          extra=_HIST + "trials: 10\nrate:\n  max_requests: %d\n"
+                          "  max_seconds: 999999\n" % _need)
+        _ok3c, _rep3c = onboard.check(_budget10)
+        check("...and so is a config whose own `trials` is ten",
+              "x 10 trials" in " ".join(_rep3c["notes"]), " ".join(_rep3c["notes"])[:220])
 
         # --- AND ONLY WHAT THE TARGET CAN BE SENT ---------------------------------------
         #
@@ -941,6 +954,19 @@ def main():
               and os.path.abspath(jobs[0]["config"]) != os.path.abspath(multi)
               and open(jobs[0]["config"], encoding="utf-8").read()
               == open(multi, encoding="utf-8").read(), str(jobs and jobs[0]["config"]))
+        # THE CONFIG'S `trials` WHEN NO FLAG IS GIVEN, as `run` reads it: the job queued three
+        # against a config saying five, and the worker's `--trials 3` overrode it.
+        _five = write("fivetrials", "choices.0.message.content", extra="trials: 5\n")
+        _q5 = os.path.join(work, "queue-five")
+        _r5 = subprocess.run(
+            [sys.executable, os.path.join(HERE, "onboard.py"), "--config", _five,
+             "--submit", "--root", _q5], capture_output=True, text=True, timeout=120,
+            env=_sub_env())
+        _j5 = q.listing(_q5)
+        check("...and a config saying `trials: 5` is queued at five",
+              _r5.returncode == 0 and _j5 and _j5[0].get("trials") == 5,
+              "rc=%s %s %s" % (_r5.returncode, _j5 and _j5[0].get("trials"),
+                               (_r5.stdout + _r5.stderr)[-200:]))
         # THE TARGET-AGNOSTIC ARSENAL, not the engine's default. attacks.yaml scopes almost
         # every attack `applies_to` a specific practice bot, so the first job that went through
         # this door sent 5 of 137 and skipped 132 — a 3% assessment presented as an assessment.

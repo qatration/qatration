@@ -487,13 +487,28 @@ def main():
 
     # The value is what is matched, so where a copy lives and how it is flagged do not matter.
     # That is the whole point of the rewrite and it is worth asserting rather than assuming.
+    # THROUGH `precondition`, which every door that sends asks -- `run`, `onboard`, `verify`
+    # and `isolation` -- rather than a check written into the sweep alone.
+    import inspect as _insp_p
     check("the refusal keys on the VALUE, not on a file location or a flag",
-          "published_canaries()" in rr and "root" not in _ht.published_canaries.__code__.co_names,
+          "published_canaries()" in _insp_p.getsource(_ht.precondition)
+          and "root" not in _ht.published_canaries.__code__.co_names,
           "still reading the filesystem")
+    _pub_c = sorted(_ht.published_canaries())[0]
 
+    class _NoSend:
+        name = "pubbot"
+
+        def reset(self):
+            pass
+
+        def send(self, p):
+            raise AssertionError("a probe was sent")
+    _pre_p = _ht.precondition(_NoSend(), {"canaries": [_pub_c]})
     check("the sweep refuses a config still carrying a published canary",
-          "published_canaries()" in rr and "ships with this tool" in rr)
-    check("...before anything is sent, and says so", "Nothing was sent." in rr)
+          bool(_pre_p) and _pre_p[0] == 5 and "ships with this tool" in _pre_p[2]
+          and "_ht.precondition(target, ctx)" in rr, str(_pre_p)[:200])
+    check("...before anything is sent", bool(_pre_p) and _pre_p[3] is None, str(_pre_p)[:200])
 
     # A canary the user minted is theirs alone and must pass. Asserted because a check that
     # refuses everything is as useless as one that refuses nothing, in the opposite direction.

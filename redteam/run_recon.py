@@ -67,8 +67,8 @@ def main():
     _auth_gate(tcfg, "recon")
 
 
-    if args.model:
-        tcfg["model"] = args.model
+    from workspace import apply_model_override as _amo
+    _amo(tcfg, args.model, "recon")
     from workspace import oracle_context_of as _octx
     ctx = _octx(tcfg)
 

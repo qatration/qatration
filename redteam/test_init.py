@@ -399,7 +399,7 @@ def main():
     import subprocess as _sp_nm, tempfile as _tf_nm
     _wn = _tf_nm.mkdtemp()
     _bad_nm = []
-    for _i_nm, _nm in enumerate(("my bot", "../evil", "bot/x", "", "a" * 80)):
+    for _i_nm, _nm in enumerate(("my bot", "../evil", "bot/x", "", "a" * 80, "my_bot")):
         _cfg_nm = os.path.join(_wn, "n%d.yaml" % _i_nm)
         _pn = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--name", _nm,
                           "--out", _cfg_nm], capture_output=True, text=True, timeout=120,
@@ -412,7 +412,7 @@ def main():
           not _bad_nm, "; ".join(_bad_nm))
     _ok_nm = os.path.join(_wn, "ok.yaml")
     _po = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--name",
-                      "ok_name-1.2", "--out", _ok_nm], capture_output=True, text=True,
+                      "ok-name-1.2", "--out", _ok_nm], capture_output=True, text=True,
                      timeout=120, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
                                            PYTHONIOENCODING="utf-8"))
     check("...while an ordinary one is written", _po.returncode == 0 and os.path.exists(_ok_nm),

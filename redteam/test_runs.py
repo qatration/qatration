@@ -538,7 +538,8 @@ def main():
             # `_refuse(_code, ...)`. Five causes, four call sites. That every one of them
             # closes the record is the leak check above; this only asks that the helper is
             # what they go through, which four sites still say.
-            check("...and is used by every refusal that used to leak", len(_refuse) >= 4,
+            # THREE since the published-canary refusal joined `honeytoken.precondition` too.
+            check("...and is used by every refusal that used to leak", len(_refuse) >= 3,
                   "%d call(s)" % len(_refuse))
 
     # --- A FILTER CANNOT SAY AN UNREADABLE RECORD IS NOT ONE OF YOURS ---------------

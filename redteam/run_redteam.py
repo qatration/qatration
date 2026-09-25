@@ -842,37 +842,11 @@ def main():
     # the rule below could name what was actually wrong. See the note where it used to be.
     from workspace import refuse_unusable_config as _refuse_config
     _refuse_config(tcfg, "run")
-    if args.model:
-        # AN OVERRIDE THAT DOES NOTHING MUST SAY SO. For an `adapter: http` target the model is
-        # the operator's, chosen inside `request:` on their side, and nothing here can change
-        # it. Accepting the flag silently would write results_<target>_<model>.json — a file
-        # named after a model that was never used, filed beside the canonical run, and read by
-        # the matrix as a second measurement.
-        if (tcfg.get("adapter") or "") == "http":
-            # AND `request.model` IS NOW A KEY WITH A NAME. When this refusal was written the
-            # only place an http model could live was somewhere inside the operator's request
-            # body, unnamed and unfindable, so the override could not be applied and saying so
-            # was the whole of the honest answer. `init` writes `request: {model: ...}` since
-            # 0.4.0, because every OpenAI-shaped API requires it, so for that shape the
-            # substitution is exactly defined. Without it `qatration matrix`, which is offered
-            # to everyone and does nothing else, was inert on the one adapter every user has:
-            # both sub-runs aborted and the matrix reported nothing to compare.
-            #
-            # Only where the key is already a string. A config that keeps its model elsewhere
-            # (the Anthropic, Bedrock and Vertex shapes each differ) still gets the refusal,
-            # because writing `model` into a body with no such field would produce results
-            # named after a model that was never used, which is what the refusal was for.
-            _req = tcfg.get("request")
-            if isinstance(_req, dict) and isinstance(_req.get("model"), str):
-                _req["model"] = args.model
-            else:
-                print(f"ABORT — --model {args.model!r} cannot apply to this `adapter: http` "
-                      f"target: it carries no `request.model` to substitute, so the model "
-                      f"belongs to the endpoint and nothing here can change it. Nothing was "
-                      f"sent.", file=sys.stderr)
-                sys.exit(2)
-        else:
-            tcfg["model"] = args.model
+    # AN OVERRIDE THAT DOES NOTHING MUST SAY SO: on an http target the model is substituted
+    # into `request.model`, or the run is refused. Through `workspace.apply_model_override`,
+    # which `isolation` and `recon` now share -- they set a key the http adapter never reads.
+    from workspace import apply_model_override as _amo
+    _amo(tcfg, args.model, "run")
     # trials precedence: explicit --trials > target config's 'trials' > default 3
     # THE CONFIG DOOR TOO. `--trials` is floored by argparse; `trials:` in a target file
     # reaches the same arithmetic without passing any parser at all.
@@ -980,16 +954,8 @@ def main():
     #
     # Checked before the honeytoken precondition below, because it is the cheaper mistake to
     # make and the more expensive one to believe.
-    _published = _ht.published_canaries() & set(_ht.declared(ctx))
-    if _published:
-        print(f"ABORT — {target.name} uses a canary that ships with this tool: "
-              f"{', '.join(sorted(_published))}.\n"
-              f"  That value is published, so anything can match it without knowing anything "
-              f"about your deployment, and a run that fails to extract it would prove nothing.\n"
-              f"  Mint your own — `qatration mint` — and put the pair in your system prompt and "
-              f"your config.\n"
-              f"  Nothing was sent.", file=sys.stderr)
-        _refuse(5, f"{target.name} declares a canary this tool publishes ({sorted(_published)[0]}); nothing was sent and nothing was written")
+    # A CANARY THIS TOOL PUBLISHES is refused by `honeytoken.precondition` below, the one
+    # statement every door asks -- it was here alone, and `verify` and `isolation` skipped it.
 
     # BEFORE A SINGLE PROBE. The results file is written at the END of the run, so a check
     # there would refuse after somebody had paid for forty-seven minutes of model time and

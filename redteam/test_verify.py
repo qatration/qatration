@@ -933,6 +933,57 @@ def main():
                   _both.returncode == 2 and "Nothing was sent" in _both.stderr,
                   "exit %d: %s" % (_both.returncode, (_both.stdout + _both.stderr)[-200:]))
 
+    # --- THE OTHER DOORS ASK WHAT `run` ASKS -------------------------------------------------
+    # An independent review found four commands answering the same config differently from
+    # the sweep. Each is driven here at the function the command calls.
+    import json as _json_d, honeytoken as _ht_d, verify as _vmod
+    from verify import note_verdict as _nv, verify_target as _vt
+    _wd = _tfm_v.mkdtemp()
+    try:
+        _pub = sorted(_ht_d.published_canaries())[0]
+        _cfg_pub = {"name": "pubbot", "adapter": "http", "url": "http://127.0.0.1:9/x",
+                    "request": {"message": "{prompt}", "model": "scripted"},
+                    "response": {"reply": "r"}, "oracle_context": {"canaries": [_pub]}}
+        _res = os.path.join(_wd, "results_pubbot.json")
+        with open(_res, "w", encoding="utf-8") as f:
+            _json_d.dump({"meta": {"target": "pubbot", "trials": 1, "attacks_n": 1},
+                          "results": [{"attack": {"id": "a", "category": "x", "text": "t"},
+                                       "headline": "EXPLOITED", "rate": "1/1",
+                                       "fired": ["canary_in_output"], "locks": {},
+                                       "trials": [{"verdict": "EXPLOITED",
+                                                   "probe": {"output": _pub}}]}]}, f)
+        _o = _vt(dict(_cfg_pub), _res, 1, 0, quiet=True)
+        check("verify refuses a published canary before re-sending a claim, exit 5",
+              _o["note"].startswith("precondition:") and _o["sent"] == 0
+              and _nv(_o["note"])[0] == 5, "%r %r" % (_o["note"][:120], _nv(_o["note"])))
+        # ISOLATION: the same refusal, and `--model` substituted the sweep's way.
+        import yaml as _y_d, run_isolation as _ri
+        _cp = os.path.join(_wd, "targets_pubbot.yaml")
+        with open(_cp, "w", encoding="utf-8") as f:
+            _y_d.safe_dump(_cfg_pub, f)
+        try:
+            _ri.load_target(_cp)
+            _iso = None
+        except SystemExit as _e:
+            _iso = _e.code
+        check("isolation refuses a published canary, exit 5", _iso == 5, repr(_iso))
+        _cfg_ok = dict(_cfg_pub, name="okbot", oracle_context={"canaries": ["MINE-7781-QZ"]})
+        _cp2 = os.path.join(_wd, "targets_okbot.yaml")
+        with open(_cp2, "w", encoding="utf-8") as f:
+            _y_d.safe_dump(_cfg_ok, f)
+        _tgt, _ = _ri.load_target(_cp2, model="bigmodel-70b")
+        _req = getattr(_tgt, "request", None) or getattr(_tgt, "request_template", None) or {}
+        check("isolation --model reaches request.model on an http target",
+              "bigmodel-70b" in _json_d.dumps(_req), _json_d.dumps(_req)[:200])
+    finally:
+        _shm_v.rmtree(_wd, ignore_errors=True)
+    # RECON and BENIGN go through the shared rules too.
+    import inspect as _insp_d, run_recon as _rr_d, benign as _bn_d
+    check("recon applies --model through the shared override",
+          "apply_model_override" in _insp_d.getsource(_rr_d), "recon sets tcfg['model']")
+    check("benign names the target through the shared rule",
+          "safe_target_name" in _insp_d.getsource(_bn_d.main), "raw cfg['name']")
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

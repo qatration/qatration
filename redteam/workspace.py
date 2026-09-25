@@ -1926,9 +1926,43 @@ def safe_target_name(name, where="target config"):
     if not _re.fullmatch(r"[A-Za-z0-9._-]{1,64}", name) or name.strip(".") == "":
         raise SystemExit(
             f"{where}: name={name!r} is not usable as a filename. It is interpolated into "
-            f"results_<name>.json and history/<name>.jsonl, so letters, digits, dot, "
-            f"dash and underscore only, up to 64 characters.")
+            f"results_<name>.json and history/<name>.jsonl, so letters, digits, dot "
+            f"and dash only, up to 64 characters.")
+    # NOT AN UNDERSCORE, which is the separator of `results_<target>_<model>.json`: a target
+    # called `my_bot` was read as a `--model` copy by `is_per_model_copy`, so `--fail-on
+    # regression` could never answer for it, no timeline was written, and every fleet page
+    # skipped its results. No shipped config uses one. Found by an independent review.
+    if "_" in name:
+        raise SystemExit(
+            f"{where}: name={name!r} contains an underscore, which separates the target from "
+            f"the model in results_<target>_<model>.json: this target's own results would be "
+            f"read as another run's per-model copy and left out of every comparison. Use a "
+            f"dash: {name.replace('_', '-')!r}.")
     return name
+
+
+def apply_model_override(tcfg, model, command):
+    """Put `--model` into a config the way every command that takes it must. -> None.
+
+    ONE RULE FOR `run`, `isolation` AND `recon`. The sweep substituted `request.model` on an
+    http target, or refused where there was none; the other two set `tcfg["model"]`, which the
+    http adapter never reads, so `isolation --model bigmodel-70b` sent the config's own model
+    on every probe and filed a HARDENED map as though the named one had been asked. Found by
+    an independent review.
+    """
+    if not model:
+        return
+    if (tcfg.get("adapter") or "") == "http":
+        _req = tcfg.get("request")
+        if isinstance(_req, dict) and isinstance(_req.get("model"), str):
+            _req["model"] = model
+            return
+        import sys as _sys_m
+        print(f"ABORT — --model {model!r} cannot apply to this `adapter: http` target: it "
+              f"carries no `request.model` to substitute, so the model belongs to the "
+              f"endpoint and nothing here can change it. Nothing was sent.", file=_sys_m.stderr)
+        _sys_m.exit(2)
+    tcfg["model"] = model
 
 
 def at_least(minimum, where):

@@ -134,7 +134,7 @@ def unread_context_keys(cfg):
     return _unread(cfg)
 
 
-def check(cfg_path, probe_text=PROBE):
+def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None):
     """Returns (ok, report dict). Sends one request, and a second when the config declares
     a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
@@ -447,7 +447,16 @@ def check(cfg_path, probe_text=PROBE):
         # money had its own arithmetic, and it understated -- which in a warning whose whole
         # sentence is `it will STOP part way` means silence exactly where it should speak.
         from runner import requests_for as _requests_for, undeliverable as _undeliverable
-        _all_atk = _arsenal()
+        # THE RUN THIS WILL QUEUE, not a default one: the arsenal, trials and scope it was
+        # asked for, and the attacks the config excludes. At `--scope full --trials 10` a run
+        # needing 3,100 requests against a budget of 1,000 was "ready to queue" with no note,
+        # because this counted the default arsenal at three trials. Found by an independent
+        # review.
+        _all_atk = _arsenal(attacks)
+        _ex = cfg.get("exclude_attacks")
+        if isinstance(_ex, list):
+            _all_atk = [a for a in _all_atk
+                        if not (isinstance(a, dict) and str(a.get("id")) in set(map(str, _ex)))]
         # ONLY WHAT THIS TARGET CAN BE SENT, which is what `run` counts. The sweep removes
         # every attack whose delivery the target cannot take before it sizes its budget; this
         # counted the whole arsenal, so the two commands disagreed about the same run. Walked
@@ -459,11 +468,16 @@ def check(cfg_path, probe_text=PROBE):
         _caps = getattr(target, "capabilities", None) or set()
         _atk = [a for a in _all_atk if not _undeliverable(a, _caps)]
         _unsent = len(_all_atk) - len(_atk)
+        if scope == "quick":
+            from run_redteam import breadth_slice as _bs
+            _atk = _bs(_atk)[0]
         need_att = len(_atk)
-        need_req = _requests_for(_atk, 3)
+        from workspace import trial_count as _tc_c
+        _t = trials or _tc_c(cfg.get("trials", 3), "trials: in the target config")
+        need_req = _requests_for(_atk, _t)
         if rate.max_requests and rate.max_requests < need_req:
             rep["notes"].append(
-                f"a default run sends about {need_req} requests ({need_att} attacks x 3 trials, "
+                f"this run sends about {need_req} requests ({need_att} attacks x {_t} trials, "
                 f"counting a chain by its steps"
                 + (f"; {_unsent} more need a delivery this target cannot take and are not "
                    f"sent" if _unsent else "")
@@ -485,7 +499,7 @@ def check(cfg_path, probe_text=PROBE):
             need = rep["seconds"] * need_req
             if need > rate.max_seconds:
                 rep["notes"].append(
-                    f"that reply took {rep['seconds']}s, so a default run ({need_att} attacks x 3 "
+                    f"that reply took {rep['seconds']}s, so this run ({need_att} attacks x {_t} "
                     f"trials, {need_req} requests) needs roughly {need / 60:.0f} min against a budget of "
                     f"{rate.max_seconds / 60:.0f} min. It will STOP part way, and the attacks "
                     f"it never sent are a gap rather than rows that held.")
@@ -620,8 +634,9 @@ def main():
     ap.add_argument("--attacks", default=DEFAULT_ARSENAL,
                     help="arsenal to queue; defaults to the target-agnostic set")
     from workspace import trial_count as _trial_count
-    ap.add_argument("--trials", type=_trial_count, default=3,
-                    help="runs per attack in the queued sweep (default 3)")
+    ap.add_argument("--trials", type=_trial_count, default=None,
+                    help="runs per attack in the queued sweep (default: the config's `trials`, "
+                         "else 3)")
     ap.add_argument("--requester", default=None,
                     help="who is asking, recorded on the job and on the run record")
     ap.add_argument("--mint-honeytoken", action="store_true",
@@ -702,7 +717,7 @@ def main():
             # to go and look at a system prompt that was fine.
             sys.exit(_ht.VERIFY_EXIT.get(_why[0], 5))
 
-    ok, rep = check(args.config)
+    ok, rep = check(args.config, attacks=args.attacks, trials=args.trials, scope=args.scope)
     render(ok, rep)
     if not ok:
         # 2 UNLESS THE REPORT SAYS OTHERWISE. Every problem this command finds is a refused
@@ -738,7 +753,13 @@ def main():
     _sh_ob.copyfile(args.config, _cfg_copy)
     job = q.submit(args.root, rep["name"], _cfg_copy, scope=args.scope,
                    authorization=rep.get("authorization"), budgets=cfg.get("rate") or {},
-                   attacks=args.attacks, trials=args.trials, requester=args.requester)
+                   # THE CONFIG'S `trials` WHEN THE FLAG IS ABSENT, as `run` reads it: this
+                   # queued three against a config saying five, and the worker's `--trials 3`
+                   # then overrode the config the direct run would have honoured.
+                   attacks=args.attacks,
+                   trials=args.trials or _trial_count(cfg.get("trials", 3),
+                                                      "trials: in the target config"),
+                   requester=args.requester)
     d = q.depth(args.root)
     print(f"\nqueued      {job['job_id']}")
     print(f"position    {d['queued']} queued, {d['running']} running"

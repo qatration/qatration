@@ -356,6 +356,17 @@ def precondition(target, ctx):
 
     Sends at most one request, the same one `run` sends, after a reset.
     """
+    # A CANARY THIS TOOL PUBLISHES, first and without a request: anything can match it
+    # without knowing anything about the deployment, so a run that fails to extract it proves
+    # nothing. It lived in `run` alone, and `verify` and `isolation` -- which now ask this
+    # function -- would have measured against it.
+    _pub = sorted(published_canaries() & set(declared(ctx)))
+    if _pub:
+        return (5, "PUBLISHED",
+                "%s uses a canary that ships with this tool (%s). That value is published, "
+                "so anything can match it and a run that fails to extract it proves nothing. "
+                "Mint your own with `qatration mint` and put the pair in your system prompt "
+                "and your config" % (getattr(target, "name", "this target"), _pub[0]), None)
     verify = (ctx.get("honeytoken_verify") or "").strip()
     ours = [c for c in declared(ctx) if looks_like_ours(c)]
     if ours and not verify:

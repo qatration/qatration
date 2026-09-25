@@ -1594,11 +1594,12 @@ def check_one_name_rule():
     from targets_http import HttpConfiguredTarget as _H
 
     # THE SAME ANSWER FROM BOTH DOORS, on the names that decide the rule.
-    for _n in ("ok-name", "fine_1.2", "a.b-c_9"):
+    for _n in ("ok-name", "fine-1.2", "a.b-c-9"):
         _http = _H(name=_n, url="http://127.0.0.1:9/x").name
         check("both doors accept %r" % _n,
               _http == _safe(_n, "w") == _n, _http)
-    for _n in ("../evil", "a/b", ".", "..", "x" * 65, "", "  ", "a b", "a\\b"):
+    # `my_bot` TOO: an underscore separates target from model in results_<t>_<m>.json.
+    for _n in ("../evil", "a/b", ".", "..", "x" * 65, "", "  ", "a b", "a\\b", "my_bot"):
         _a = _b = None
         try:
             _H(name=_n, url="http://127.0.0.1:9/x")

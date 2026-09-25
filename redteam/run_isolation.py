@@ -45,8 +45,8 @@ def load_target(cfg_path, model=None):
     # here, while the documentation said "any non-local target".
     from authorization import gate as _auth_gate
     _auth_gate(tcfg, "isolation")
-    if model:
-        tcfg["model"] = model
+    from workspace import apply_model_override as _amo
+    _amo(tcfg, model, "isolation")
     target = _build_target(tcfg)
     if tcfg.get("name"):
         # Through the shared rule: this assignment used to hand the raw config
@@ -54,6 +54,15 @@ def load_target(cfg_path, model=None):
         # filename in six places, one of them an append.
         target.name = safe_target_name(tcfg["name"], "target config")
     from workspace import oracle_context_of as _octx
+    # AND THE CANARY THE OBJECTIVES LOOK FOR IS THERE, which `run` refuses without: with the
+    # honeytoken snippet reverted, the canary objective read HARDENED, exit 0 -- a lock that
+    # held against a secret the target no longer had. Found by an independent review.
+    import honeytoken as _ht_i
+    _pre = _ht_i.precondition(target, _octx(tcfg))
+    if _pre is not None:
+        print("ABORT — %s\n  nothing was sent and nothing was written." % _pre[2],
+              file=sys.stderr)
+        sys.exit(_pre[0])
     return target, _octx(tcfg)
 
 
