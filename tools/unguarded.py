@@ -131,6 +131,41 @@ def _drop_note():
         pass
 
 
+def mutant_without(lines, i):
+    """The module with the guard at line `i` (0-based) removed, or None if nothing compiles.
+
+    TWO LINES, WHERE THAT COMPILES -- the mutation this sweep has always made. Where it does
+    not (the guard is the only statement in its block, or its body runs past one line), the
+    whole statement is replaced with `pass` at its own indentation. Deleting two lines
+    blindly left a module that did not compile; every suite then crashed on the import and
+    the crash counted as the guard being defended: 26 of 74 documented guards were reported
+    defended without being measured. Found by an independent review.
+    """
+    import ast as _ast
+    src = "\n".join(lines[:i] + lines[i + 2:])
+    # PARSED, NOT COMPILED: whether a mutant is a module is a syntax question, and this
+    # engine runs no string as code (`test_survives_target`).
+    try:
+        _ast.parse(src)
+        return src
+    except SyntaxError:
+        pass
+    try:
+        tree = _ast.parse("\n".join(lines))
+    except SyntaxError:
+        return None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.stmt) and node.lineno == i + 1:
+            ind = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+            src = "\n".join(lines[:i] + [ind + "pass"] + lines[node.end_lineno:])
+            try:
+                _ast.parse(src)
+                return src
+            except SyntaxError:
+                return None
+    return None
+
+
 def write_mutant(path, mutant, orig):
     """Put a mutant on disk, having first written down how to undo it.
 
@@ -570,7 +605,16 @@ def sweep_guards(only=()):
         with source_restored(path):
             for i in hits:
                 tested += 1
-                write_mutant(path, "\n".join(lines[:i] + lines[i + 2:]), orig)
+                _mut = mutant_without(lines, i)
+                if _mut is None:
+                    # A MUTANT THAT DOES NOT COMPILE MEASURES NOTHING: every suite dies on the
+                    # import, and that crash was counted as the guard being defended. Named as
+                    # a survivor, because a guard nobody could remove is not one anybody
+                    # showed a suite would miss.
+                    survivors.append((mod, i + 1, lines[i].strip() + "  [no mutant compiles]",
+                                      ",".join(_suites_reaching(mod))))
+                    continue
+                write_mutant(path, _mut, orig)
                 red, _slow = _any_caught(suites)
                 clear_mutant(path, orig)
                 if _slow and not red:
@@ -584,8 +628,7 @@ def sweep_guards(only=()):
                     # NOT A SURVIVOR UNTIL THE SUITES THE SET DID NOT NAME HAVE BEEN ASKED.
                     # `_suites_touching` matches direct imports only, and 44 of the 63
                     # modules here are reached by a suite that goes through another module.
-                    _by = _who_drives(path, "\n".join(lines[:i] + lines[i + 2:]),
-                                      orig, mod, suites)
+                    _by = _who_drives(path, _mut, orig, mod, suites)
                     if _by:
                         caught += 1
                         print("  %-20s line %-5d driven by %s, which does not import this "

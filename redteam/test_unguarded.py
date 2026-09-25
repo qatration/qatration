@@ -615,6 +615,20 @@ def main():
     # afterwards it passes with the guard deleted. The guard really was undriven, and the
     # instrument said otherwise because it could not tell `failed` from `never finished`.
     check("a suite that failed caught the mutant", unguarded._caught(1) is True, "1")
+    # A GUARD WHOSE TWO-LINE DELETION DOES NOT COMPILE IS STILL MEASURED: the module that did
+    # not compile crashed every suite on its import, and the crash counted as a catch.
+    import ast as _ast_u
+    _lines_u = ["def f(xs):", "    for x in xs:", "        # a documented guard",
+                "        if x is None:", "            raise ValueError(x)", "    return 1", ""]
+    _mu = unguarded.mutant_without(_lines_u, 3)
+    _ok_u = False
+    try:
+        _ast_u.parse(_mu or "")
+        _ok_u = _mu is not None and "raise ValueError" not in _mu
+    except SyntaxError:
+        pass
+    check("a guard that is the only statement in its block has a mutant that parses",
+          _ok_u, repr(_mu))
     check("...and one that passed did not", unguarded._caught(0) is False, "0")
     check("...and one that never finished is neither",
           unguarded._caught(unguarded.TIMED_OUT) is None, str(unguarded.TIMED_OUT))

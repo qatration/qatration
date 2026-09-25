@@ -1420,6 +1420,118 @@ def main():
     check("...and every Cyrillic run outside a dictionary is a language naming itself",
           not _stray, "; ".join(_stray))
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE GATES ------------------------------------
+    # Each a file the gate read as noise, or did not read, and then passed.
+    import zipfile as _zf_r, gzip as _gz_r
+    _key_r = "AKIA" + "ZQWXRTYPLMNBVCXD"
+    _real_root = guard.ROOT
+    with tempfile.TemporaryDirectory() as _d_r:
+        _renv = git_env(_d_r)
+
+        def _g(*a):
+            return subprocess.run(["git", "-C", _d_r] + list(a), capture_output=True,
+                                  text=True, env=_renv)
+        _g("init", "-q")
+        _g("commit", "-q", "--allow-empty", "-m", "start")
+        _start = _g("rev-parse", "HEAD").stdout.strip()
+        guard.ROOT = _d_r
+        try:
+            def _tree_refuses(rel):
+                _rf = []
+                guard.scan_files([rel], guard._read_tree, _rf)
+                return bool(_rf)
+
+            io.open(os.path.join(_d_r, "notes.txt"), "w", encoding="utf-16").write(
+                "key = " + _key_r + "\n")
+            check("a UTF-16 text file holding a credential is refused",
+                  _tree_refuses("notes.txt"), "passed")
+            with _zf_r.ZipFile(os.path.join(_d_r, "leak.zip"), "w", _zf_r.ZIP_DEFLATED) as _z:
+                _z.writestr("inner/config.txt", "key = " + _key_r + "\n" + "x" * 500)
+            check("...and so is a zip whose deflated member holds one",
+                  _tree_refuses("leak.zip"), "passed")
+            with _zf_r.ZipFile(os.path.join(_d_r, "leak.docx"), "w", _zf_r.ZIP_DEFLATED) as _z:
+                _z.writestr("word/document.xml", "<w:t>" + _key_r + "</w:t>" + "y" * 500)
+            check("...and a .docx", _tree_refuses("leak.docx"), "passed")
+            with _gz_r.open(os.path.join(_d_r, "dump.txt.gz"), "wb") as _gzf:
+                _gzf.write(("key = " + _key_r + "\n").encode())
+            check("...and a gzip", _tree_refuses("dump.txt.gz"), "passed")
+            # AND A CLEAN ZIP IS NOT REFUSED, or the rules above are a wall.
+            with _zf_r.ZipFile(os.path.join(_d_r, "clean.zip"), "w", _zf_r.ZIP_DEFLATED) as _z:
+                _z.writestr("readme.txt", "nothing here " * 50)
+            check("...while a zip holding nothing is not", not _tree_refuses("clean.zip"),
+                  "a clean zip was refused")
+            # A STAGED FILE WITH A NON-ASCII NAME is read from the index, not skipped.
+            _name = "caf" + chr(0xE9) + ".txt"
+            io.open(os.path.join(_d_r, _name), "w", encoding="utf-8").write(
+                "key = " + _key_r + "\n")
+            _g("add", "-A")
+            _st = guard._staged_files()
+            _blobs = guard._staged_contents(_st)
+            check("a staged file with a non-ASCII name is read from the index",
+                  _name in _st and _key_r in (_blobs.get(_name) or ""),
+                  "%r %r" % (_st, sorted(_blobs)))
+            _g("rm", "-q", "--cached", "-r", ".")
+            # HISTORY: a credential in a .png committed and then removed is still in the push.
+            io.open(os.path.join(_d_r, "img.png"), "wb").write(
+                b"\x89PNG\r\n\x1a\n" + _key_r.encode() + b"\x00" * 16)
+            _g("add", "img.png")
+            _g("commit", "-q", "-m", "add")
+            io.open(os.path.join(_d_r, "img.png"), "wb").write(
+                b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+            _g("commit", "-qam", "drop")
+            _rf_rng = []
+            guard.scan_history(_start + "..HEAD", _rf_rng)
+            check("a credential in a binary committed and then removed is refused by --range",
+                  any("img.png" in x for x in _rf_rng), str(_rf_rng)[:300])
+        finally:
+            guard.ROOT = _real_root
+
+    # A CYRILLIC JSON KEY is written by whoever wrote the file, never by a model.
+    check("Cyrillic in a stored artifact's KEY is refused, not only in its values",
+          bool(guard._cyrillic_outside_model_output(
+              '{"results": [], "' + chr(0x416) + chr(0x43E) + '": 1}')), "passed")
+    # A TRANSLATION IS EXACTLY ITS PATH, not any path ending in one.
+    _cy = "".join(chr(c) for c in (0x421, 0x43B, 0x43E, 0x432, 0x43E)) + " " + \
+        "".join(chr(c) for c in (0x442, 0x435, 0x43A, 0x441, 0x442))
+    check("Cyrillic prose under a path that merely ends like a translation is refused",
+          bool(scan("redteam/site/uk/index.html", "<p>" + _cy + "</p>")), "passed")
+    check("...while the translation itself is not",
+          not scan("site/uk/index.html", "<p>" + _cy + "</p>"),
+          str(scan("site/uk/index.html", "<p>" + _cy + "</p>")))
+
+    # LICENCES: an extra list read from a file, and a bracket inside a quoted string.
+    with tempfile.TemporaryDirectory() as _d_l:
+        _pp = os.path.join(_d_l, "pyproject.toml")
+        io.open(_pp, "w", encoding="utf-8").write(
+            '[project]\nname = "x"\nversion = "0"\ndependencies = []\n'
+            'dynamic = ["optional-dependencies"]\n')
+        check("dynamic optional-dependencies are refused as unchecked",
+              any("optional-dependencies" in x for x in lic.problems(_pp)),
+              str(lic.problems(_pp)))
+        io.open(_pp, "w", encoding="utf-8").write(
+            '[project]\nname = "x"\nversion = "0"\n'
+            'dependencies = ["pyyaml[libyaml]>=6", "pymupdf>=1.24"]\n')
+        # THE 3.9 PATH, on any interpreter: `import tomllib` made to fail.
+        _real_toml = sys.modules.get("tomllib")
+        sys.modules["tomllib"] = None
+        try:
+            _fb = lic.problems(_pp)
+        finally:
+            if _real_toml is not None:
+                sys.modules["tomllib"] = _real_toml
+            else:
+                sys.modules.pop("tomllib", None)
+        check("the 3.9 fallback parser reads past an extra's bracket to the next package",
+              any("pymupdf" in x for x in _fb), str(_fb))
+
+    # CHECK.PY: a suite that says fewer passed than ran is not ok.
+    _chk = _load("qat_check", os.path.join(ROOT, "tools", "check.py"))
+    _m_t = [(_m.group(1), _m.group(2)) for _m in _chk._TALLY.finditer("  ! x\n3/5 passed\n")]
+    check("the runner reads both halves of `N/M passed`", _m_t == [("3", "5")], str(_m_t))
+    _src_chk = io.open(os.path.join(ROOT, "tools", "check.py"), encoding="utf-8").read()
+    check("...and a tally below its total is a lie, not a pass",
+          "int(_m.group(1)) < int(_m.group(2))" in _src_chk, "the comparison is gone")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

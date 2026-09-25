@@ -44,8 +44,10 @@ SUITES = os.path.join(ROOT, "redteam")
 # a summary nor a single per-check line has reported ZERO, and zero is the answer: output
 # nobody can count is indistinguishable from a run that did nothing, which is the sentence
 # the `0/0 passed` literal already carried for one of the three forms.
+# `N/M passed`: N counts what ran, and N < M is a suite reporting its own failures.
+_TALLY = re.compile(r"(\d+)\s*/\s*(\d+)\s+passed\b")
 _COUNT_FORMS = (
-    re.compile(r"(\d+)\s*/\s*\d+\s+passed\b"),
+    _TALLY,
     re.compile(r"^\s*[A-Za-z_][A-Za-z_0-9]*:\s*(\d+)\s+checks?\b"),
 )
 
@@ -290,6 +292,12 @@ def main(argv):
         # nobody would ever see it. Every suite here exits correctly today; nothing made
         # that true of the next one.
         lied = [ln for ln in text.splitlines() if ln.strip().startswith("FAIL")]
+        # AND A TALLY THAT SAYS FEWER PASSED THAN RAN. Most suites here print a failure as
+        # `  ! ...`, not `FAIL`, and the count above read only the numerator of `N/M passed`:
+        # a suite printing `3/5 passed` and exiting 0 was `ok`. Found by an independent review.
+        for _m in _TALLY.finditer(text):
+            if int(_m.group(1)) < int(_m.group(2)):
+                lied.append("it said %s/%s passed" % (_m.group(1), _m.group(2)))
         # AND A SUITE THAT RAN NOTHING IS NOT A PASS EITHER, which this asked as a literal:
         # `0/0 passed`. Fifty of the fifty-one suites end that way and one does not --
         # `packaging` prints `packaging: 24 checks` and runs twenty-four functions it finds

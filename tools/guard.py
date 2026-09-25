@@ -317,7 +317,79 @@ UNPARSEABLE = "<unparseable>"
 # kind this repository actually risks would show up.
 SELF = {"tools/guard.py", "redteam/test_guard.py"}
 
-BINARY = (".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".gz", ".ico", ".woff", ".woff2")
+BINARY = (".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".gz", ".ico", ".woff", ".woff2",
+          ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".jar", ".whl", ".epub")
+
+# How much a compressed file may expand to before it is refused as unreadable rather than
+# read: a zip bomb is a file whose contents cannot be inspected, which is what UNREADABLE says.
+EXPANDED_MAX = 64 * 1024 * 1024
+
+
+class _Unreadable(Exception):
+    pass
+
+
+def _text_of(raw, path, budget=None):
+    """The text a rule can read out of these bytes. -> str; raises `_Unreadable`.
+
+    ONE DECODER FOR THE TREE, THE INDEX AND THE HISTORY. Each read bytes as UTF-8 and
+    nothing else, so three shapes that hold text were read as noise and passed: a UTF-16 file
+    (Notepad, PowerShell 5.1 `Out-File`) is interleaved with NULs and no pattern matches it; a
+    zip -- and every .docx, .xlsx and .jar is one -- is deflated; a PDF keeps its text in
+    Flate streams. The ok line then said these files "were read for credentials". Each is
+    unpacked here, and what cannot be unpacked is unreadable, never clean. Found by an
+    independent review.
+    """
+    import zlib
+    budget = [EXPANDED_MAX] if budget is None else budget
+    if raw[:4] == b"PK\x03\x04":
+        import zipfile
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(raw))
+            parts = []
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                budget[0] -= info.file_size
+                if budget[0] < 0:
+                    raise _Unreadable("expands past %d bytes" % EXPANDED_MAX)
+                parts.append(_text_of(zf.read(info), info.filename, budget))
+            return "\n".join(parts)
+        except (zipfile.BadZipFile, RuntimeError, NotImplementedError, zlib.error,
+                EOFError, OSError) as e:
+            raise _Unreadable("a zip whose members could not be read (%s)" % type(e).__name__)
+    if raw[:2] == b"\x1f\x8b":
+        import gzip
+        try:
+            with gzip.GzipFile(fileobj=io.BytesIO(raw)) as g:
+                inner = g.read(budget[0] + 1)
+        except (OSError, EOFError, zlib.error) as e:
+            raise _Unreadable("a gzip that could not be decompressed (%s)" % type(e).__name__)
+        if len(inner) > budget[0]:
+            raise _Unreadable("expands past %d bytes" % EXPANDED_MAX)
+        budget[0] -= len(inner)
+        return _text_of(inner, path[:-3] if path.lower().endswith(".gz") else path, budget)
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16", "replace")
+    if not path.lower().endswith(BINARY) and b"\x00" in raw[:4096] and len(raw) > 1:
+        # UTF-16 without a byte-order mark: the NULs fall on the odd bytes for little-endian.
+        return raw.decode("utf-16-le" if raw[1:2] == b"\x00" else "utf-16-be", "replace")
+    text = raw.decode("utf-8", "replace")
+    if raw[:5] == b"%PDF-":
+        # AND THE STREAMS, which is where a PDF keeps its text. One that does not inflate is
+        # an image or a font, and its raw bytes are already in `text`.
+        more = []
+        for m in re.finditer(rb"stream\r?\n(.*?)\r?\n?endstream", raw, re.S):
+            try:
+                d = zlib.decompressobj().decompress(m.group(1), budget[0] + 1)
+            except zlib.error:
+                continue
+            budget[0] -= len(d)
+            if budget[0] < 0:
+                raise _Unreadable("expands past %d bytes" % EXPANDED_MAX)
+            more.append(d.decode("utf-8", "replace"))
+        text = "\n".join([text] + more)
+    return text
 
 
 def _git(*args):
@@ -328,8 +400,12 @@ def _git(*args):
     # real run of this hook refused sixty-eight files, one line each, at whichever line held
     # their first non-ASCII character. `--tree` was green at the same moment, because it reads
     # files directly and already said `encoding="utf-8"`: one check, two readers, two answers.
-    return subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True,
-                          encoding="utf-8", errors="replace")
+    # AND NAMES AS WRITTEN. git quotes a non-ASCII path (`"caf\303\251.txt"`) unless told
+    # not to, and the quoted name then matched nothing in `ls-files --stage`: a staged
+    # `café.txt` holding a credential was skipped and the commit passed. Found by an
+    # independent review.
+    return subprocess.run(["git", "-C", ROOT, "-c", "core.quotePath=false"] + list(args),
+                          capture_output=True, encoding="utf-8", errors="replace")
 
 
 def _local_literals():
@@ -421,7 +497,10 @@ def _read_blobs_report(sha_by_path):
             # a named failure a reader can act on instead of a traceback out of a git parser.
             break
         if header[1] == b"blob":
-            out[path] = raw[pos:pos + size].decode("utf-8", "replace")
+            try:
+                out[path] = _text_of(raw[pos:pos + size], _path_part(path))
+            except _Unreadable:
+                lost.append(path)
         pos += size + 1                               # ALWAYS, blob or not
     return out, lost
 
@@ -458,6 +537,11 @@ def _staged_contents(paths):
 UNREADABLE = object()
 
 
+def _path_part(label):
+    """`path@sha` (a history label) -> path; a plain path is returned as it is."""
+    return label.rsplit("@", 1)[0] if "@" in label else label
+
+
 def _read_tree(path):
     """The file's text, or `UNREADABLE`. -> str | UNREADABLE
 
@@ -478,8 +562,9 @@ def _read_tree(path):
     """
     full = os.path.join(ROOT, path)
     try:
-        return open(full, encoding="utf-8", errors="replace").read()
-    except OSError:
+        with open(full, "rb") as f:
+            return _text_of(f.read(), path)
+    except (OSError, _Unreadable):
         return UNREADABLE
 
 
@@ -544,6 +629,10 @@ def _cyrillic_outside_model_output(text):
                 out.append((where, node[:60]))
         elif isinstance(node, dict):
             for k, v in node.items():
+                # THE KEY IS WRITTEN BY WHOEVER WROTE THE FILE, never by a model: only values
+                # were read, so `{"<word>": 1}` passed where the same word as a value did not.
+                if lit.search(str(k)) or esc.search(str(k)):
+                    out.append((f"{where}.{k}" if where else str(k), str(k)[:60]))
                 stack.append((v, f"{where}.{k}" if where else str(k), str(k)))
         elif isinstance(node, list):
             for i, v in enumerate(node):
@@ -631,7 +720,9 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
                     f"{item}: does not parse as JSON ({sample}), so what it holds is unknown"
                     if where == UNPARSEABLE else
                     f"{item}: Cyrillic under `{where}`, which is not a model's reply: {sample!r}")
-        elif not any(rel == t or rel.endswith("/" + t) for t in translations):
+        # EXACTLY THESE PATHS. `endswith` exempted any path that merely ENDED in one, so
+        # Cyrillic prose in `redteam/site/uk/index.html` passed as a translation.
+        elif rel not in translations:
             # WHOLE RUNS, not the first character. Matching a single letter and comparing it
             # against a language name would let anything through the moment one name was
             # allowed; a maximal run means a language's own name is exempt and a sentence
@@ -862,7 +953,9 @@ def scan_history(rng, refusals):
     for line in proc.stdout.splitlines():
         sha, _, path = line.partition(" ")
         path = path.strip()
-        if path and not path.lower().endswith(BINARY):
+        # BINARIES TOO: `scan_files` handles them itself, and dropping them here meant a
+        # credential in a .png committed and then removed left the push green.
+        if path:
             blobs[f"{path}@{sha}"] = sha
     if not blobs:
         return
@@ -1014,7 +1107,8 @@ def main(argv=None):
         _pending_stamp(refusals)
         staged = _staged_files()
         blobs = _staged_contents(staged)
-        scan_files(staged, lambda p: blobs.get(p, ""), refusals, partial=partial)
+        # A PATH THE INDEX DID NOT ANSWER FOR IS UNREAD, not empty.
+        scan_files(staged, lambda p: blobs.get(p, UNREADABLE), refusals, partial=partial)
     elif args.tree:
         # THE BACKSTOP. CI is not making a commit, so here the question is what the history
         # already holds -- this is what catches a rewritten or force-pushed branch. On a
@@ -1049,7 +1143,8 @@ def main(argv=None):
         _shown = ", ".join(sorted(partial)[:6])
         _more = len(partial) - 6
         print(f"      {len(partial)} binary file(s) were read for credentials and "
-              f"`.guard-local` strings only, not as text: {_shown}"
+              f"`.guard-local` strings only (zip and gzip members and PDF streams "
+              f"unpacked), not as text: {_shown}"
               + (f" and {_more} more" if _more > 0 else ""))
     return 0
 

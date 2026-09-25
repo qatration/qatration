@@ -88,6 +88,27 @@ def _split_items(body):
     return out
 
 
+def _close_at(body):
+    """The index of the `]` that closes this array, outside any quoted string, or -1.
+
+    `split("]")` cut at the first bracket anywhere, and PEP 508 puts one inside a string:
+    `"pyyaml[libyaml]>=6", "pymupdf>=1.24"` read as `pyyaml[libyaml` and nothing after it, so
+    on 3.9 and 3.10 -- where this fallback runs -- a copyleft package after an extra was never
+    declared. The same quote rule `_split_items` already follows for commas. Found by an
+    independent review.
+    """
+    q = None
+    for i, ch in enumerate(body):
+        if q:
+            if ch == q:
+                q = None
+        elif ch in "\"'":
+            q = ch
+        elif ch == "]":
+            return i
+    return -1
+
+
 def _decomment(block):
     """Drop `#` comments from a block of TOML, without cutting a quoted string.
 
@@ -158,15 +179,16 @@ def parse(pyproject_path):
         if not rest.startswith("["):
             continue
         body = rest[1:]
-        if "]" not in body:                       # a multi-line array: read to the closing ]
+        if _close_at(body) < 0:                   # a multi-line array: read to the closing ]
             # THE RAW TEXT, so the per-line `#` strip above never reached it. A comment inside
             # the array came back as packages — `#`, `and`, `or`, `which` — and this fallback
             # is what runs on Python 3.9, one of the four legs in CI. Feeding invented names to
             # the thing that decides whether a copyleft dependency was declared is worse than a
             # cosmetic bug.
-            body = _decomment(text.split(line, 1)[1].split("]", 1)[0])
+            _after = _decomment(text.split(line, 1)[1])
+            body = _after[:_close_at(_after)] if _close_at(_after) >= 0 else _after
         else:
-            body = body.split("]", 1)[0]
+            body = body[:_close_at(body)]
         # SPLIT OUTSIDE THE QUOTES. `"langchain>=0.2,<1"` is ONE dependency, and splitting on
         # every comma turned it into `langchain>=0.2` and `<1` — the second of which becomes a
         # package named "". `>=x,<y` is the ordinary way to pin a range, so this fallback could
@@ -211,6 +233,10 @@ def declared(pyproject_path):
             out.setdefault(dist_name(spec), f"dependency-groups.{group}")
     if "dependencies" in (proj.get("dynamic") or []):
         out.setdefault("<dynamic dependencies>", "project.dynamic")
+    # AND THE EXTRAS, which can be dynamic just the same: `optional-dependencies` read from a
+    # requirements file named pymupdf and `problems()` said nothing.
+    if "optional-dependencies" in (proj.get("dynamic") or []):
+        out.setdefault("<dynamic optional-dependencies>", "project.dynamic")
     return out
 
 
@@ -222,8 +248,9 @@ def problems(pyproject_path):
             out.append(f"{pyproject_path} has no [project] table, so nothing about its "
                        f"dependencies was checked")
             continue
-        if name == "<dynamic dependencies>":
-            out.append("pyproject.toml declares `dependencies` as dynamic, so the list is in a "
+        if name.startswith("<dynamic "):
+            out.append(f"pyproject.toml declares `{name[len('<dynamic '):-1]}` as dynamic, so "
+                       "the list is in a "
                        "file this cannot read and no licence was checked. Declare them here, or "
                        "state in tools/licences.py where they are and why that is acceptable")
             continue
