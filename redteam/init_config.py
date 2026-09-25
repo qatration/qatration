@@ -266,22 +266,28 @@ def main():
                     help="your bot's endpoint (default: a localhost placeholder)")
     ap.add_argument("--name", default="mybot",
                     help="labels the target in every result file (default: mybot)")
-    ap.add_argument("--out", default=DEFAULT_OUT, help="where to write (default: %s)" % DEFAULT_OUT)
+    ap.add_argument("--out", default=None,
+                    help="where to write (default: <name>.yaml, so %s)" % DEFAULT_OUT)
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
     args = ap.parse_args()
+    # THE NAME THROUGH THE RULE EVERY LATER COMMAND APPLIES. `init --name "my bot"` wrote a
+    # config, printed "Wrote ..., with a canary nobody else has", and the very next command
+    # it told the reader to run refused that config: `name='my bot' is not usable as a
+    # filename`. So did `../evil`, `bot/x`, an empty name and one past 64 characters. The
+    # rule is `safe_target_name`; asked here, the reader hears it before the file exists.
+    # AND FIRST, because the default file is named after it: `init --name strbot` wrote
+    # `mybot.yaml`, and a second bot's `init --name otherbot` was then refused over the
+    # first one's file.
+    from workspace import safe_target_name as _safe_name
+    args.name = _safe_name(args.name, "init --name")
+    if args.out is None:
+        args.out = "%s.yaml" % args.name
     # THE SEVENTH WRITER. `writable_path` was written for the six commands that take a path to
     # be written, and this one -- the first command anybody runs -- was not among them:
     # `init --out ''` crashed into the atomic write, and a directory or a missing parent went
     # the same way. Through the one rule, before the overwrite check reads the path.
     from workspace import writable_path as _writable
     args.out = _writable(args.out, "target config", "init", replaces=("a target config",))
-    # THE NAME THROUGH THE RULE EVERY LATER COMMAND APPLIES. `init --name "my bot"` wrote a
-    # config, printed "Wrote ..., with a canary nobody else has", and the very next command
-    # it told the reader to run refused that config: `name='my bot' is not usable as a
-    # filename`. So did `../evil`, `bot/x`, an empty name and one past 64 characters. The
-    # rule is `safe_target_name`; asked here, the reader hears it before the file exists.
-    from workspace import safe_target_name as _safe_name
-    args.name = _safe_name(args.name, "init --name")
     # AND THE URL THROUGH THE RULE THE GATE APPLIES, for the same reason: a config whose url
     # has no scheme was written, and the next command called it a remote target to authorise.
     from authorization import url_problem as _url_problem

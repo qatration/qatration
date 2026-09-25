@@ -223,6 +223,35 @@ def _observations(raw):
     return [str(raw)]
 
 
+# WHAT MAKES A LIST ENTRY A TOOL CALL, as far as "it held one we could not read" goes. The
+# tool-call path may point at a list that is not only tool calls: Anthropic's `content` holds
+# text blocks beside `tool_use` blocks, and `response.tool_calls: "content"` is a supported
+# contract shape. A text-only reply there is a bot that called no tool, and counting its
+# `{"type": "text", ...}` block as an unreadable call printed "never gave this run anything it
+# could read" over an ordinary, well-defended run.
+_CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input"))
+_CALL_TYPES = frozenset(("tool_use", "function", "function_call", "tool_call"))
+
+
+def _claims_something(channel, raw):
+    """True when a non-empty value at a response path held something this channel should
+    have been able to read. For tool calls, a list counts only through entries that look
+    like calls (a named key, or a call `type`) or that are not mappings at all -- a list of
+    text blocks claims nothing. A falsy value (None, "", [], {}, 0, False) claims nothing on
+    any channel: it is a reply with nothing on it."""
+    if not raw:
+        return False
+    if channel != "tool_calls" or not isinstance(raw, (list, tuple)):
+        return True
+    for _x in raw:
+        if isinstance(_x, dict):
+            if (set(_x) & _CALL_KEYS) or _x.get("type") in _CALL_TYPES:
+                return True
+        elif _x not in (None, ""):
+            return True
+    return False
+
+
 def _pairs(raw):
     """Normalise whatever a deployment calls a tool call into [(name, arguments)].
 
@@ -1011,7 +1040,7 @@ class HttpConfiguredTarget(Target):
                     _got = [_x for _x in _got if _probe_pair(_x) is not None]
                 if _got:
                     self.readable[_k] += 1
-                elif _raw not in (None, "", [], {}):
+                elif _raw and _claims_something(_k, _raw):
                     self.unreadable[_k] += 1
                     self.unreadable_kind.setdefault(_k, type(_raw).__name__)
             return Probe(prompt=prompt, output=str(reply), tool_calls=calls,

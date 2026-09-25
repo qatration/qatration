@@ -591,7 +591,10 @@ def main():
               f"files do not carry them.\n"
               f"  Point at it, and every other command with it:\n"
               + "\n".join(point_at_configs(indent="      ")))
-    verb = "rescored" if args.write else "would change"
+    # "CHANGED", NOT "RESCORED": the sentence below ends "having re-scored N", and on a stranger's
+    # first `--write` it read "rescored 0 attack row(s) ... having re-scored 46" -- the same
+    # word for the rows that moved and the rows that were looked at.
+    verb = "changed" if args.write else "would change"
     # A COUNT OVER THE FILES IT COULD READ, printed as one over the directory, is the gap
     # this whole engine is named after. The files it could not read are named beside it.
     if unreadable:

@@ -624,7 +624,8 @@ def _unresolved(target):
     return sorted([f"response.{k} = {declared[k]!r}"
                    for k, path in declared.items() if path and not counts.get(k)]
                   + [f"response.{k} = {declared[k]!r} (found {_bad[k]} time(s), never as "
-                     f"anything readable as {k.replace('_', ' ')}: a {_kind.get(k, '?')})"
+                     f"anything readable as {k.replace('_', ' ')}; the values were of type "
+                     f"{_kind.get(k, '?')})"
                      for k, path in declared.items() if path and _bad.get(k)])
 
 
@@ -643,7 +644,8 @@ def _partly_read(target):
                 "resolved": getattr(target, "resolved_path", None),
                 "observations": getattr(target, "observations_path", None)}
     return sorted(f"response.{k} = {declared[k]!r} ({_bad[k]} of {_bad[k] + _read[k]} "
-                  f"value(s) not readable as {k.replace('_', ' ')}: a {_kind.get(k, '?')})"
+                  f"value(s) not readable as {k.replace('_', ' ')}; of type "
+                  f"{_kind.get(k, '?')})"
                   for k, path in declared.items()
                   if path and _bad.get(k) and _read.get(k))
 

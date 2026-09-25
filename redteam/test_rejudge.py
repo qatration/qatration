@@ -745,6 +745,11 @@ def main():
               _rm.returncode == 0, "exit %s: %s" % (_rm.returncode, _saidm[-300:]))
         check("...and it says which half of the command found nothing to do",
               "NO SWEEP RESULT WAS RE-SCORED" in _saidm, _saidm[-300:])
+        # AND THE WORD FOR WHAT MOVED IS NOT THE WORD FOR WHAT WAS LOOKED AT. `--write` said
+        # "rescored 0 attack row(s) ... having re-scored 46" on a stranger's first run.
+        check("...and a write says what it CHANGED, not that it rescored",
+              "changed 1 lock-map objective(s)" in _saidm and "rescored " not in _saidm,
+              _saidm[-300:])
     # AND `--target` REACHES THE MAPS TOO. The results loop and the lock-map loop each carry
     # their own copy of the filter, and only one of them had a case: deleting `if args.target
     # and tgt != args.target: continue` from the map loop left every suite green while

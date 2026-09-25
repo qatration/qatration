@@ -417,6 +417,16 @@ def main():
                                            PYTHONIOENCODING="utf-8"))
     check("...while an ordinary one is written", _po.returncode == 0 and os.path.exists(_ok_nm),
           (_po.stdout or "")[-200:])
+    # AND WITH NO --out, THE FILE IS NAMED AFTER THE TARGET. `init --name strbot` wrote
+    # `mybot.yaml` on a stranger's first run, and a second bot's init was then refused over
+    # the first one's file.
+    _wd_nm = _tf_nm.mkdtemp()
+    _pd = _sp_nm.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--name", "strbot"],
+                     capture_output=True, text=True, timeout=120, cwd=_wd_nm,
+                     env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+    check("init --name with no --out writes <name>.yaml, not mybot.yaml",
+          (_pd.returncode, sorted(os.listdir(_wd_nm))) == (0, ["strbot.yaml"]),
+          "exit %s, wrote %s" % (_pd.returncode, sorted(os.listdir(_wd_nm))))
     # AND A URL THE GATE WOULD REFUSE. `localhost:8000/chat` was written, and the next
     # command called it a remote target to prove ownership of.
     _url_cfg = os.path.join(_wn, "badurl.yaml")

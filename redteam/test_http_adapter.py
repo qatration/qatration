@@ -470,7 +470,7 @@ def main():
             _st.send("again")
             _sgot = _unres_h(_st)
             check("a path that found only values it could not read as tool calls is named",
-                  len(_sgot) == 1 and "never as anything readable as tool calls: a str"
+                  len(_sgot) == 1 and "never as anything readable as tool calls; the values were of type str"
                   in _sgot[0], str(_sgot))
             _STRCALLS[0] = [["lookup_order", "7"]]
             _st.send("third")
@@ -522,6 +522,36 @@ def main():
             check("a path whose every call names no tool is named as unreadable",
                   len(_unres_h(_sn)) == 1 and "found 1 time(s)" in _unres_h(_sn)[0],
                   str(_unres_h(_sn)))
+            # BUT A LIST THAT HOLDS NO CALL AT ALL CLAIMS NOTHING. Anthropic's `content` holds
+            # text blocks beside `tool_use` ones, and `tool_calls: "content"` is a contract
+            # shape: a text-only reply is a bot that called no tool, and an independent review
+            # found it printing "never gave this run anything it could read" over an ordinary
+            # run. Nor does a falsy flag like `false`.
+            for _lbl_q, _val_q in (("text-only content blocks",
+                                    [{"type": "text", "text": "No."}]),
+                                   ("a false flag", False), ("a zero", 0)):
+                _STRCALLS[0] = _val_q
+                _sq = HttpConfiguredTarget(
+                    url="http://127.0.0.1:%d/c" % _ssrv.server_address[1], name="quiet",
+                    request={"message": "{prompt}"},
+                    response={"reply": "reply", "tool_calls": "calls"})
+                _sq.send("hi")
+                _sq.send("again")
+                check("a reply holding %s is a reply with no tool call, not an unreadable one"
+                      % _lbl_q, _sq.unreadable["tool_calls"] == 0,
+                      str((_sq.unreadable, _sq.readable)))
+            # ...WHILE A tool_use BLOCK BESIDE THE TEXT IS READ.
+            _STRCALLS[0] = [{"type": "text", "text": "Checking."},
+                            {"type": "tool_use", "name": "lookup", "input": {"id": 7}}]
+            _sa = HttpConfiguredTarget(
+                url="http://127.0.0.1:%d/c" % _ssrv.server_address[1], name="anth",
+                request={"message": "{prompt}"},
+                response={"reply": "reply", "tool_calls": "calls"})
+            _pa = _sa.send("hi")
+            check("...while a tool_use block beside the text is read as a call",
+                  (_pa.tool_calls, _sa.readable["tool_calls"], _sa.unreadable["tool_calls"])
+                  == ([("lookup", '{"id": 7}')], 1, 0),
+                  str((_pa.tool_calls, _sa.readable, _sa.unreadable)))
         finally:
             _ssrv.shutdown()
 
@@ -556,7 +586,7 @@ def main():
                   sorted(x.split(" (")[0] for x in _tu_got)
                   == ["response.resolved = 'trace.resolved'",
                       "response.tool_calls = 'trace.tools'"]
-                  and all("found 1 time(s)" in x and "a str" in x for x in _tu_got),
+                  and all("found 1 time(s)" in x and "of type str" in x for x in _tu_got),
                   str(_tu_got))
         finally:
             EXTRA.pop("trace", None)
