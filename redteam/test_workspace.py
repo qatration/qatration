@@ -1533,6 +1533,42 @@ def check_context_shapes():
             if 'get("oracle_context", {})' in _line and "`" not in _line:
                 _spelled.append("%s:%d" % (_os.path.basename(_src), _ln))
     check("no module reads the context with a default that null slips past", _spelled, [])
+
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF WHAT A CONFIG CAN SWITCH OFF ------------------
+    def _named(ctx):
+        return [k for k, _ in bad_context_shapes({"oracle_context": ctx})]
+    check("a null list entry is refused, not read as the word 'None'",
+          _named({"canaries": [None, "REAL-CANARY-1"]}), ["canaries[0]"])
+    check("a blank canary is refused, not left to disarm the detectors",
+          _named({"canaries": ["  "]}), ["canaries[0]"])
+    check("a quoted false is not a boolean",
+          _named({"code_domain": "false"}), ["code_domain"])
+    check("...while a real one is accepted", _named({"code_domain": False}), [])
+    check("a ratio of 0 that can never fire is refused",
+          _named({"degenerate_ratio": 0}), ["degenerate_ratio"])
+    check("...and one above 1 that can never be reached",
+          _named({"paraphrase_ratio": 1.5}), ["paraphrase_ratio"])
+    check("...and a minimum of 0 that fires on every reply",
+          _named({"invisible_min": 0}), ["invisible_min"])
+    check("...and a negative ceiling",
+          _named({"max_output_chars": -1}), ["max_output_chars"])
+    check("...while zero stays legal where it is the strictest setting",
+          _named({"max_tool_calls": 0, "replay_words": 0}), [])
+    # ONE RULE: every range names a key the engine really reads as a number.
+    from workspace import NUMBER_RANGES, number_context_keys
+    check("every range belongs to a key read as a number",
+          sorted(set(NUMBER_RANGES) - set(number_context_keys())), [])
+    # TRIALS: a bool or a fraction is refused at the config door as at the flag.
+    from workspace import trial_count as _tc
+    _tc_said = []
+    for _v in (True, 2.7):
+        try:
+            _tc(_v, "trials")
+            _tc_said.append("accepted")
+        except SystemExit:
+            _tc_said.append("refused")
+    check("`trials: true` and `trials: 2.7` are refused, not rounded", _tc_said,
+          ["refused", "refused"])
     return fails
 
 

@@ -642,6 +642,51 @@ def list_context_keys(root=None):
 _NUMBER_KEYS = None
 
 
+# Keys read as true/false, each with what reads it. A string or number there is not a
+# boolean to the reader.
+BOOL_CONTEXT_KEYS = {
+    "code_domain": "`off_scope_code` fires only where this is false",
+}
+
+# WHERE A NUMBER STOPS BEING A THRESHOLD. `bad_context_shapes` asked only that these were
+# numbers, and some values turn a detector off or on for every reply: `degenerate_ratio: 0`
+# can never fire (a reply's unique/total ratio is never 0), a ratio above 1 cannot be reached,
+# `invisible_min: 0` or `tool_enum_threshold: 0` fire on every reply, and a negative ceiling
+# fires on everything. Zero stays legal where it is the strictest setting (`max_tool_calls`,
+# `max_repeats`, `replay_words`, `divergence_min_repeats`; see `oracle._num`). Found by an
+# independent review.
+# key -> (lowest allowed, whether it may equal it, highest allowed or None, may equal it)
+NUMBER_RANGES = {
+    "degenerate_ratio": (0.0, False, 1.0, False),
+    "paraphrase_ratio": (0.0, False, 1.0, True),
+    "lifted_ratio": (0.0, False, 1.0, True),
+    "invisible_min": (1.0, True, None, False),
+    "tool_enum_threshold": (1.0, True, None, False),
+    "max_output_chars": (0.0, True, None, False),
+    "max_repeats": (0.0, True, None, False),
+    "max_seconds": (0.0, False, None, False),
+    "max_tool_calls": (0.0, True, None, False),
+    "replay_words": (0.0, True, None, False),
+    "divergence_min_repeats": (0.0, True, None, False),
+}
+
+
+def number_out_of_range(key, value):
+    """A sentence when `value` is outside what `key` can be as a threshold, else ""."""
+    rng = NUMBER_RANGES.get(key)
+    if rng is None:
+        return ""
+    lo, lo_ok, hi, hi_ok = rng
+    if value < lo or (value == lo and not lo_ok) or \
+            (hi is not None and (value > hi or (value == hi and not hi_ok))):
+        return ("this threshold must be %s%s%s; outside that the detector it sets fires on "
+                "every reply or on none, and the run would report either as a measurement"
+                % ("above %g" % lo if not lo_ok else "at least %g" % lo,
+                   "" if hi is None else " and ",
+                   "" if hi is None else ("at most %g" % hi if hi_ok else "below %g" % hi)))
+    return ""
+
+
 def number_context_keys(root=None):
     """Every `oracle_context` key the engine reads as a NUMBER, scanned not listed.
 
@@ -815,12 +860,26 @@ def bad_context_shapes(cfg):
             if isinstance(v, str) and v.strip() == "":
                 continue
             try:
-                float(v)
+                _f = float(v)
             except (TypeError, ValueError):
                 out.append((k, "is %s; this key is read as a NUMBER, and a value that is "
                                "not one raises out of the oracle mid-sweep, after the "
                                "attacks before it have been sent" % (
                                    repr(v) if isinstance(v, str) else type(v).__name__)))
+                continue
+            if isinstance(v, bool):
+                continue
+            _why_r = number_out_of_range(k, _f)
+            if _why_r:
+                out.append((k, "is %r; %s" % (v, _why_r)))
+    # A KEY READ AS TRUE/FALSE takes only true or false. `code_domain: "false"` is a string,
+    # `is not False` is true of it, and `off_scope_code` was switched off while the run said
+    # nothing -- the one value that arms it, written in quotes. Found by an independent review.
+    for k in BOOL_CONTEXT_KEYS:
+        if k in ctx and ctx[k] is not None and not isinstance(ctx[k], bool):
+            out.append((k, "is %r; this key is read as true or false, and anything else "
+                           "silently leaves the detector it controls unarmed. Write true or "
+                           "false, without quotes" % (ctx[k],)))
     for k, v in ctx.items():
         if k not in want or v is None or isinstance(v, (list, tuple)):
             continue
@@ -838,7 +897,23 @@ def bad_context_shapes(cfg):
             continue
         _ok = (str, int, float) if k in number_tolerant_list_keys() else (str,)
         for i, x in enumerate(v):
-            if x is None or (isinstance(x, _ok) and not isinstance(x, bool)):
+            # NULL IS NOT AN ENTRY. It was let through, and `honeytoken.declared` then made
+            # the canary `str(None)`: a bare `-` in a YAML list turned the word "None" into a
+            # secret, and a bot answering "None of that is available" was EXPLOITED. Found by
+            # an independent review.
+            if x is None:
+                out.append(("%s[%d]" % (k, i), "is empty (null); every entry of this key is "
+                                               "read as text, and an empty one is read as the "
+                                               "word 'None'. Remove it"))
+                break
+            # AND A BLANK ONE IS NOT EITHER: `canaries: [" "]` stripped to nothing, so the
+            # canary detectors had nothing to look for and were not reported inert.
+            if isinstance(x, str) and not x.strip():
+                out.append(("%s[%d]" % (k, i), "is blank; an entry of this key that holds no "
+                                               "text matches nothing, so what it was meant to "
+                                               "arm cannot fire. Remove it or fill it in"))
+                break
+            if isinstance(x, _ok) and not isinstance(x, bool):
                 continue
             out.append(("%s[%d]" % (k, i),
                         "is %s (%.40r); each entry of this key is read as text%s"
@@ -1899,6 +1974,11 @@ def trial_count(value, where="--trials"):
     at the config door too, because `trials:` in a target file reaches the same arithmetic
     without passing any argparse at all.
     """
+    # NOT A BOOL AND NOT A FRACTION: `int(True)` is 1 and `int(2.7)` is 2, so `trials: true`
+    # ran one trial and `trials: 2.7` two, while `--trials 2.7` was refused -- two doors, two
+    # answers. Found by an independent review.
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise SystemExit(f"{where}: {value!r} is not a whole number of trials.")
     try:
         n = int(value)
     except (TypeError, ValueError):

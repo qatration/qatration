@@ -193,6 +193,17 @@ def _review_reply_shapes(check):
               not _p5.error and _p5.output == "hello", "%r" % _p5.error)
     finally:
         srv.shutdown()
+    # THE ENGINE'S OWN KEYS ARE NOT UNKNOWN KEYS on the one adapter an outside user has.
+    from run_redteam import load_target as _lt
+    try:
+        _lt({"adapter": "http", "url": url, "name": "eng", "request": {"message": "{prompt}"},
+             "response": {"reply": "r"}, "trials": 2, "exclude_attacks": ["s-code"],
+             "baseline_prompt": "hello"})
+        _eng = ""
+    except SystemExit as e:
+        _eng = str(e)
+    check("an http config may carry `trials`, `exclude_attacks` and `baseline_prompt`",
+          _eng == "", _eng[:200])
     # A BUDGET OF ZERO IS REFUSED, not read as no ceiling.
     for _k in ("max_requests", "max_seconds"):
         try:

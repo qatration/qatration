@@ -518,6 +518,11 @@ HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "i
 
 CONFIG_ONLY_KEYS = ("adapter", "skip_in_fleet", "oracle_context", "authorization",
                     "provenance", "provenance_note", "expect_build",
+                    # AND THE ENGINE'S OWN KEYS, which `run_redteam` reads off every config:
+                    # refused here as unknown, they could not be used on the one adapter an
+                    # outside user has, while `--trials`' help promises the config's `trials`.
+                    # Found by an independent review.
+                    "trials", "exclude_attacks", "baseline_prompt",
                     # `--model` is injected into the config by the sweep. For an http target the
                     # model lives inside `request:` and belongs to the operator's deployment, so
                     # the override is meaningless here and run_redteam SAYS so rather than

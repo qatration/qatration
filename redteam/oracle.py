@@ -293,8 +293,10 @@ def _num(ctx, key, default):
     `max_tool_calls: 0` -- and it became 8, so eight calls passed as ordinary.
 
     The same shape sits on `max_repeats` (no repetition tolerated), `replay_words` and
-    `divergence_min_repeats` (no floor at all) and `degenerate_ratio`. In each the operator
-    typed the tightest value the key accepts and got the loose default back.
+    `divergence_min_repeats` (no floor at all). In each the operator typed the tightest value
+    the key accepts and got the loose default back. NOT `degenerate_ratio`, which this listed:
+    it fires on `unique/total <= ratio`, so 0 never fires, and `workspace.NUMBER_RANGES`
+    refuses it.
 
     Absent, empty and boolean still take the default: `None` is a key nobody set, `""` is
     an empty YAML value, and True/False are not thresholds. Anything else is coerced the

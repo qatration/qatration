@@ -1447,6 +1447,21 @@ oracle_context:
              "--target-config", _bcfg, "--attacks", atk_path, "--trials", "1"],
             timeout=300, capture_output=True, text=True, env=dict(env, QATRATION_OUT=_bw2),
             cwd=os.path.dirname(HERE))
+        # `exclude_attacks` WRITTEN AS ONE STRING was iterated a character at a time and
+        # excluded nothing. Refused, before anything is sent.
+        _xcfg = os.path.join(_bw2, "exclude.yaml")
+        with open(_xcfg, "w", encoding="utf-8") as f:
+            f.write(open(cfg_path, encoding="utf-8").read()
+                    .replace("name: e2e-bot", "name: e2e-exclude")
+                    + "\nexclude_attacks: e2e-leak\n")
+        _xr = subprocess.run(
+            [sys.executable, os.path.join(HERE, "run_redteam.py"),
+             "--target-config", _xcfg, "--attacks", atk_path, "--trials", "1"],
+            timeout=300, capture_output=True, text=True, env=dict(env, QATRATION_OUT=_bw2),
+            cwd=os.path.dirname(HERE))
+        check("`exclude_attacks` written as one string is refused, not read letter by letter",
+              _xr.returncode == 2 and "single string" in (_xr.stdout + _xr.stderr),
+              "exit %s: %s" % (_xr.returncode, (_xr.stdout + _xr.stderr)[-300:]))
         from workspace import measured as _ms_b, verdict_for as _vf_b, error_split as _es_b
         _bf = os.path.join(_bw2, "results_e2e-budget.json")
         _bd = json.load(open(_bf, encoding="utf-8")) if os.path.exists(_bf) else {}

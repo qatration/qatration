@@ -1042,7 +1042,16 @@ def main():
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
     # be a clean baseline on a target that's compromised at rest — see targets_localrag.yaml).
-    exclude = set(tcfg.get("exclude_attacks", []))
+    # A LIST OF IDS: `exclude_attacks:` left empty is null, and a bare string was iterated
+    # one character at a time, so nothing was excluded and nothing said so.
+    _ex = tcfg.get("exclude_attacks")
+    if isinstance(_ex, str):
+        raise SystemExit(f"exclude_attacks: {_ex!r} is a single string; it is read as a list "
+                         f"of attack ids. Write it as [{_ex!r}]. Nothing was sent.")
+    if _ex is not None and not isinstance(_ex, list):
+        raise SystemExit(f"exclude_attacks is {type(_ex).__name__}; it is read as a list of "
+                         f"attack ids. Nothing was sent.")
+    exclude = set(str(x) for x in (_ex or []))
     # THE ARSENAL HAS TO BE A LIST OF ATTACKS BEFORE IT CAN BE FILTERED. Without this, an entry
     # that is not a mapping raises AttributeError out of `a.get` and an entry with no `id`
     # raises KeyError, and both reach Python's default handler and exit 1 — the code this
