@@ -638,6 +638,51 @@ def main():
     finally:
         shutil.rmtree(_rl, ignore_errors=True)
 
+    # --- A RECORD WHOSE FIELDS ARE THE WRONG KIND IS UNREADABLE, NOT A CRASH ----------------
+    #
+    # A field-type sweep over a stored `run_*.json` found `runs` dying on `authorization:
+    # "x"`, `spent: 7`, `started_at: 7`, `state: [1]` and `scope: {}`, each under "this is a
+    # bug in qatration". `load` goes through `read_artifact`, which now asks
+    # `_RUN_RECORD_REQUIRE`; every row of it is walked here through `load`, and the
+    # command is driven over one of them.
+    import subprocess as _sp_k
+    from workspace import _RUN_RECORD_REQUIRE as _ktable
+    _kbase = {"run_id": "2026-09-01T1000-aaaaaa", "state": "finished", "target": "t",
+              "started_at": "2026-09-01 10:00:00"}
+    _kw = tempfile.mkdtemp()
+    try:
+        _kmissed = []
+        for _key, (_kind, _req, _) in _ktable.items():
+            _wrong = 7 if _kind is str else "x"
+            _b = dict(_kbase, **{_key: _wrong})
+            with open(os.path.join(_kw, "run_%s.json" % _kbase["run_id"]), "w",
+                      encoding="utf-8") as _fk:
+                json.dump(_b, _fk)
+            _rec = runs.load(_kw, _kbase["run_id"]) or {}
+            if not (_rec.get("state") == "unreadable" and _key in str(_rec.get("note"))
+                    and type(_wrong).__name__ in str(_rec.get("note"))):
+                _kmissed.append((_key, _rec.get("state"), _rec.get("note")))
+        check("every row of the run record table makes a record unreadable, by name",
+              _kmissed == [], str(_kmissed[:3]))
+        with open(os.path.join(_kw, "run_%s.json" % _kbase["run_id"]), "w",
+                  encoding="utf-8") as _fk:
+            json.dump(dict(_kbase, spent=7), _fk)
+        _kr = _sp_k.run([sys.executable, os.path.join(HERE, "cli.py"), "runs"],
+                        capture_output=True, text=True, errors="replace",
+                        env=dict(os.environ, QATRATION_OUT=_kw, PYTHONIOENCODING="utf-8"),
+                        timeout=300)
+        _ko = (_kr.stdout or "") + (_kr.stderr or "")
+        check("`runs` over a record holding a number as `spent` names it, no traceback",
+              "Traceback" not in _ko and "spent" in _ko, _ko[-300:])
+        with open(os.path.join(_kw, "run_%s.json" % _kbase["run_id"]), "w",
+                  encoding="utf-8") as _fk:
+            json.dump(_kbase, _fk)
+        check("...while the record the walk mutates is itself readable",
+              (runs.load(_kw, _kbase["run_id"]) or {}).get("state") == "finished",
+              str(runs.load(_kw, _kbase["run_id"])))
+    finally:
+        shutil.rmtree(_kw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

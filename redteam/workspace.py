@@ -2171,7 +2171,7 @@ def read_artifact(path):
     # .artifact` decides the prefix -- so the name answers what the content cannot.
     _name = os.path.basename(str(path))
     why = (_unusable_results(data, _name) or _unusable_benign(data, _name)
-           or _unusable_recon(data, _name))
+           or _unusable_recon(data, _name) or _unusable_run_record(data, _name))
     return (None, why) if why else (data, None)
 
 
@@ -2450,6 +2450,40 @@ def recon_profile_fault(profile):
         return ("a recon profile that is %s, not a mapping"
                 % ("nothing" if profile is None else type(profile).__name__))
     return _tree_fault(profile, "", "", _RECON_REQUIRE, "recon profile")
+
+
+# A RUN RECORD, `run_<id>.json`, which `runs.start` writes before the first probe and `finish`
+# closes. The same sweep: `runs` died on `authorization: "x"` (`.get`), `spent: 7` (`.items`),
+# `started_at: 7` (sorted against strings), `state: [1]` and `scope: {}` (format specs). The
+# kinds are the ones `runs` writes and the only ones in the 32 records stored in this
+# repository and the walk's workspace. What is inside `budgets` and `spent` is left open: a
+# ceiling is an int or a float depending on what the operator typed.
+_RUN_RECORD_REQUIRE = {
+    "run_id": (str, False, "`runs` lists the run by it"),
+    "state": (str, False, "`runs` says how the run ended from it"),
+    "target": (str, False, "`runs --target` filters by it"),
+    "scope": (str, False, "`runs` prints it"),
+    "engine": (str, False, "`runs` names the build by it"),
+    "arsenal": (str, False, "`runs` names the corpus by it"),
+    "trials": (int, False, "`runs` prints it"),
+    "authorization": (dict, False, "`runs` names the proof of authorisation from it"),
+    "budgets": (dict, False, "`runs` says whether a run outlived its own ceiling"),
+    "spent": (dict, False, "`runs` prints what the run cost"),
+    "started_at": (str, False, "`runs` sorts and dates every run by it"),
+    "finished_at": (str, False, "`runs` dates the end by it"),
+    "note": (str, False, "`runs` prints it"),
+}
+
+
+def _unusable_run_record(data, name=""):
+    """-> why a stored run record cannot be used, or None; for `read_artifact`, which
+    identifies a family by its name."""
+    if not (name.startswith("run_") and name.endswith(".json")):
+        return None
+    if not isinstance(data, dict):
+        return ("a run record that is %s, not a mapping"
+                % ("nothing" if data is None else type(data).__name__))
+    return _level_fault(data, "", "", _RUN_RECORD_REQUIRE, "run record")
 
 
 def _unusable_recon(data, name=""):
