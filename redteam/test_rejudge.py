@@ -1274,6 +1274,35 @@ def main():
         _srv_f.shutdown()
         _sh_f.rmtree(_wf, ignore_errors=True)
 
+    # A NO-OP RESCORE OF A STOPPED RUN KEEPS WHAT IT MEASURED. The rows cannot count the
+    # attacks the run never reached; `attacks_n` recounted from them alone subtracted those
+    # twice, and a budget row the sweep keeps out of `errors` was put back into it.
+    from workspace import measured as _ms_rj
+    _stopped = {"meta": {"target": "t", "broke": 0, "attacks_n": 4, "unreached": 1,
+                         "errors": 0, "never_sent": 1},
+                "results": [{"attack": {"id": "s%d" % _i, "category": "x", "text": "t"},
+                             "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                             "trials": [{"verdict": "DEFENDED", "fired": [],
+                                         "probe": {"prompt": "p", "output": "no",
+                                                   "tool_calls": [], "observations": [],
+                                                   "turns": []}}]}
+                            for _i in range(2)]
+                + [{"attack": {"id": "s-budget", "category": "x", "text": "t"},
+                    "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {},
+                    "trials": [{"verdict": "ERROR", "fired": [],
+                                "probe": {"prompt": "p", "output": "", "tool_calls": [],
+                                          "observations": [], "turns": [],
+                                          "error": "BudgetExhausted: requests"}}]}]}
+    _before = _ms_rj(_stopped["meta"], _stopped["results"])
+    _p_st = _write(_stopped)
+    _after_d, _ = rescore(_p_st, {})
+    os.unlink(_p_st)
+    _after = _ms_rj(_after_d["meta"], _after_d["results"])
+    check("a re-score of a stopped run measures what the run measured",
+          _before == _after == (2, 0), "before %s after %s, meta %s"
+          % (_before, _after, {k: _after_d["meta"].get(k)
+                               for k in ("attacks_n", "errors", "never_sent", "unreached")}))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

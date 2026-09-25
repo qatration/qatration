@@ -15,6 +15,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
 from workspace import SCOPES, DEFAULT_ARSENAL, shell_arg
+from workspace import error_split
 from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -141,37 +142,6 @@ def load_target_or_explain(cfg, config_path, was_default):
             lines.append('  Install the extra that adapter needs: pip install "qatration[fleet]"')
         lines.append("  Nothing was sent.")
         raise SystemExit("\n".join(lines))
-
-
-def error_split(results):
-    """-> (errored, never sent) over the unscored rows of a run.
-
-    TWO WAYS TO END UP WITH NO VERDICT AND ONLY ONE OF THEM IS ABOUT THE TARGET, which is the
-    distinction `closing_line` was fixed for once and then lost in the other direction. It had
-    no row-level fact to work from: the budget writes its reason onto the probe, nothing read
-    it, and the only signal downstream was `rate.exhausted` -- a RUN-level flag being used to
-    describe every row. So a sweep where twenty-five attacks died on a refused connection and
-    twenty-seven were then never sent closed with `the run stopped on its budget`, naming a
-    limit the operator set and never mentioning that nothing answered.
-
-    A row is never-sent only if EVERY one of its trials was never sent. A row that reached the
-    endpoint once and ran out of budget on the second trial was sent, and what happened to it
-    is the target's answer.
-    """
-    from signing import NEVER_SENT
-    errored = never = 0
-    for r in results or []:
-        if r.get("headline") != "ERROR":
-            continue
-        if (r.get("attack") or {}).get("category") == "control":
-            continue
-        errs = [str((_t.get("probe") or {}).get("error") or "")
-                for _t in (r.get("trials") or [])]
-        if errs and all(e.startswith(NEVER_SENT) for e in errs):
-            never += 1
-        else:
-            errored += 1
-    return errored, never
 
 
 def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored="",
@@ -1606,6 +1576,7 @@ def main():
     # the budget's own prefix off each probe instead of inferring a row's fate from a
     # run-level flag.
     _errored_rows, _never_sent_rows = error_split(results)
+    _budget_rows = _never_sent_rows          # rows only; `unreached` is added below
     # THE BUDGET'S OWN WORDS, read here rather than at the record two hundred lines below,
     # because this is where the number is stated and the caveat belongs beside it.
     _budget_note = str(getattr(getattr(target, "rate", None), "exhausted", "") or "")
@@ -1784,6 +1755,9 @@ def main():
             # A run with an errored CONTROL -- which is how `GiveUpWall` stops a sweep whose
             # controls are refused -- would have under-reported what it measured.
             "errors": _errored_rows,
+            # AND THE OTHER HALF OF `error_split`, which `errors` leaves out on purpose and
+            # `workspace.measured` must subtract. See `never_sent` there.
+            "never_sent": _budget_rows,
             # WHICH arsenal, because "5 sent, 132 scoped out" is reassuring or alarming
             # depending entirely on whether the file was written for a target like this
             # one, and the page cannot tell the reader without the name.

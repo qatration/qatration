@@ -211,13 +211,18 @@ def rescore(path, ctx, why=None):
     # A SKIP ROW IS NOT AN ATTACK THAT FIRED. Older artifacts can carry them — the sweep only
     # started withholding an undeliverable attack up front — and counting them here would put
     # the overstatement back into a file that had been rescored to remove it.
-    data["meta"]["attacks_n"] = sum(1 for r in real if r["headline"] != "SKIP")
+    # PLUS WHAT THE RUN NEVER REACHED, which left no row to count and which `measured`
+    # subtracts: recounting from the rows alone took them off twice, and a no-op rejudge of a
+    # stopped run lowered what it had measured. Found by an independent review.
+    data["meta"]["attacks_n"] = (sum(1 for r in real if r["headline"] != "SKIP")
+                                 + (data["meta"].get("unreached") or 0))
     # AND THE ERRORED COUNT, which is as derived as the two above it and was not in the
     # list. `workspace.measured` -- the denominator the scorecard, the defence page, the
     # fleet index and the SARIF export all share -- reads it, so a re-score moved
     # `attacks_n` and left `errors` describing the rows before it. Measured: a file whose
     # every row was rewritten came back with the count it was handed.
-    data["meta"]["errors"] = sum(1 for r in real if r["headline"] == "ERROR")
+    # Through `error_split`, the sweep's own rule: a row the budget never sent is not errored.
+    data["meta"]["errors"], data["meta"]["never_sent"] = workspace.error_split(real)
     return data, changed
 
 

@@ -221,6 +221,12 @@ def build(results, target_config=None, out_dir=None):
     unrun = []
     for row in rows:
         head = row.get("headline", "")
+        # A CONTROL IS NOT A FINDING. It is an ordinary request sent as the target's own
+        # baseline, and every other surface leaves it out: this exported 41 of them as
+        # results beside `properties.breached: 77`, and an errored one as "an attack that
+        # produced no measurement". Found by an independent review.
+        if (row.get("attack") or {}).get("category") == "control":
+            continue
         # AN ATTACK THAT NEVER RAN IS NOT A DEFENDED ATTACK. `ERROR` and `SKIP` used to fall
         # through the same `continue` as `DEFENDED`, so a run that exhausted its request budget
         # a third of the way through — 285 attacks at 3 trials is 855 requests against a
@@ -391,7 +397,9 @@ def build(results, target_config=None, out_dir=None):
         reasons = {}
         for row in unrun:
             for t in row.get("trials") or []:
-                err = str((t or {}).get("error") or "").split(":")[0].strip()
+                # ON THE PROBE, where every stored trial keeps it. The trial itself carries
+                # no `error`, so this always said "no error recorded".
+                err = str(((t or {}).get("probe") or {}).get("error") or "").split(":")[0].strip()
                 if err:
                     reasons[err] = reasons.get(err, 0) + 1
         detail = ("; ".join("%s x%d" % (k, v) for k, v in sorted(reasons.items()))

@@ -1339,7 +1339,8 @@ def coverage(why=None, split=None):
         split.update({"not_applicable": 0, "not_sent": 0})
     for fp in results_files(OUT_DIR):
         try:
-            meta = (read_artifact(fp)[0] or {})["meta"]
+            _art = read_artifact(fp)[0] or {}
+            meta = _art["meta"]
         except (ValueError, KeyError, OSError):
             # A results file that cannot be read is not a run that sent nothing. Say nothing
             # about it rather than counting it as zero, which would understate coverage in
@@ -1355,7 +1356,9 @@ def coverage(why=None, split=None):
         # AN ERRORED ROW IS NOT A SENT ATTACK. `measured` carries the reasoning; what it
         # means here is that a run whose budget stopped it after one probe can no longer
         # tell this page it sent the whole arsenal.
-        _m, _e = measured(meta)
+        # WITH THE ROWS, which answer for a file that predates `errors`: without them an
+        # absent count read as zero, and nineteen ERROR rows of twenty read as sent.
+        _m, _e = measured(meta, _art.get("results"))
         sent += _m
         errored += _e
         skipped += sk

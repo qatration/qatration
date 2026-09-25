@@ -481,8 +481,8 @@ def main():
                          # WHAT WAS MEASURED, not what was attempted — the same rule the
                          # index and the scorecard read, so the three columns a reader puts
                          # side by side cannot disagree about one run.
-                         model=meta.get("model", ""), attacks_n=measured_counts(meta)[0],
-                         errored=measured_counts(meta)[1],
+                         model=meta.get("model", ""), attacks_n=measured_counts(meta, d["results"])[0],
+                         errored=measured_counts(meta, d["results"])[1],
                          # AND HOW MANY OF THOSE BREACHES CANNOT BE ATTRIBUTED — see
                          # `doubtful_count` above for the run this page published without it.
                          doubtful=baseline.doubtful_count(meta.get("target"), d,

@@ -4366,6 +4366,62 @@ def main():
     finally:
         shutil.rmtree(_xw, ignore_errors=True)
 
+    # --- A FILE THAT PREDATES `errors`: the rows answer, on every surface ---------------------
+    # The defence page and the fleet table called `measured(meta)` without the rows, so an
+    # absent count read as zero and nineteen ERROR rows of twenty read as sent.
+    _ow = tempfile.mkdtemp()
+    try:
+        _old = {"meta": {"target": "oldbot", "broke": 0, "attacks_n": 20, "skipped": 0,
+                         "trials": 1},
+                "results": [{"attack": {"id": "o%02d" % _i, "category": "x", "text": "t"},
+                             "headline": "DEFENDED" if _i == 0 else "ERROR",
+                             "rate": "0/1", "fired": [], "locks": {},
+                             "trials": [{"verdict": "DEFENDED" if _i == 0 else "ERROR",
+                                         "probe": {"output": "no" if _i == 0 else "",
+                                                   "error": None if _i == 0
+                                                   else "ConnectionError: refused"}}]}
+                            for _i in range(20)]}
+        with open(os.path.join(_ow, "results_oldbot.json"), "w", encoding="utf-8") as f:
+            json.dump(_old, f)
+        _real_o = dr.OUT_DIR
+        dr.OUT_DIR = __import__("pathlib").Path(_ow)
+        try:
+            _cov = dr.coverage()
+        finally:
+            dr.OUT_DIR = _real_o
+        check("the defence page counts the errored rows of a file that predates `errors`",
+              _cov[0] == 1 and _cov[2] == 19, str(_cov))
+        _cdir = os.path.join(_ow, "cmp")
+        _cr = subprocess.run([sys.executable, os.path.join(HERE, "compare_targets.py"),
+                              "--out", _cdir], capture_output=True, text=True,
+                             env=dict(os.environ, QATRATION_OUT=_ow, PYTHONIOENCODING="utf-8",
+                                      PYTHONDONTWRITEBYTECODE="1"), timeout=120)
+        _chtml = "".join(open(_p, encoding="utf-8").read()
+                         for _p in glob.glob(os.path.join(_cdir, "*.html")))
+        check("...and so does the fleet table",
+              "19 errored" in _chtml, (_cr.stdout + _cr.stderr)[-300:])
+    finally:
+        shutil.rmtree(_ow, ignore_errors=True)
+
+    # --- ROWS THE BUDGET NEVER SENT ARE NOT MEASURED, and the scorecard says so -------------
+    import report_engine as _re_b
+    _bmeta = {"target": "b", "broke": 0, "attacks_n": 5, "errors": 0, "unreached": 0}
+    _brows = [{"attack": {"id": "b0", "category": "x", "text": "t"}, "headline": "DEFENDED",
+               "rate": "0/1", "fired": [], "locks": {},
+               "trials": [{"verdict": "DEFENDED", "probe": {"output": "no"}}]}] + [
+              {"attack": {"id": "b%d" % _i, "category": "x", "text": "t"}, "headline": "ERROR",
+               "rate": "0/1", "fired": [], "locks": {},
+               "trials": [{"verdict": "ERROR",
+                           "probe": {"output": "", "error": "BudgetExhausted: requests"}}]}
+              for _i in range(1, 5)]
+    check("rows the budget never sent are not measured, and the run is not hardened",
+          (workspace.measured(_bmeta, _brows)[0], workspace.verdict_for(_bmeta, _brows))
+          == (1, "Not measured"),
+          str((workspace.measured(_bmeta, _brows), workspace.verdict_for(_bmeta, _brows))))
+    _bhtml = _re_b.build_html(_bmeta, _brows)
+    check("...and the scorecard gives them a tile of their own",
+          "never sent — the request budget ran out" in _bhtml)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

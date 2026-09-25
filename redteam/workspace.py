@@ -363,7 +363,8 @@ def verdict_for(meta, rows=None):
     if _broke > 0:
         return "Vulnerable"
     _n, _errs = measured(meta, rows)
-    if _n <= 0 or _errs > 0 or (meta.get("unreached") or 0) > 0:
+    if (_n <= 0 or _errs > 0 or (meta.get("unreached") or 0) > 0
+            or never_sent(meta, rows) > 0):
         return "Not measured"
     return "Hardened"
 
@@ -2041,6 +2042,8 @@ def scoped_to(entry, name):
 QUALIFIERS = {
     "errors": ("rows that measured nothing, so a count over them is not coverage",
                ("measured", "measured_counts", "NOT_MEASURED")),
+    "never_sent": ("rows the request budget never sent, which measured nothing either",
+                   ("measured", "measured_counts", "NOT_MEASURED")),
     "not_applicable": ("attacks this deployment cannot take", ()),
     "not_sent": ("attacks the invocation held back, which a flag brings back", ()),
     "inert": ("detectors that could not speak here, whose silence is not a defence", ()),
@@ -2074,6 +2077,57 @@ def _rows_with(rows, headlines):
     return sum(1 for r in (rows or [])
                if str((r or {}).get("headline", "")) in headlines
                and ((r or {}).get("attack") or {}).get("category") != "control")
+
+
+def error_split(results):
+    """-> (errored, never sent) over the unscored rows of a run.
+
+    HERE, NOT IN `run_redteam`, because `measured` below needs it: the sweep stored only the
+    first half as `errors`, so every reader subtracted the errored rows and counted the
+    never-sent ones as measured.
+
+    TWO WAYS TO END UP WITH NO VERDICT AND ONLY ONE OF THEM IS ABOUT THE TARGET, which is the
+    distinction `closing_line` was fixed for once and then lost in the other direction. It had
+    no row-level fact to work from: the budget writes its reason onto the probe, nothing read
+    it, and the only signal downstream was `rate.exhausted` -- a RUN-level flag being used to
+    describe every row. So a sweep where twenty-five attacks died on a refused connection and
+    twenty-seven were then never sent closed with `the run stopped on its budget`, naming a
+    limit the operator set and never mentioning that nothing answered.
+
+    A row is never-sent only if EVERY one of its trials was never sent. A row that reached the
+    endpoint once and ran out of budget on the second trial was sent, and what happened to it
+    is the target's answer.
+    """
+    from signing import NEVER_SENT
+    errored = never = 0
+    for r in results or []:
+        if r.get("headline") != "ERROR":
+            continue
+        if (r.get("attack") or {}).get("category") == "control":
+            continue
+        errs = [str((_t.get("probe") or {}).get("error") or "")
+                for _t in (r.get("trials") or [])]
+        if errs and all(e.startswith(NEVER_SENT) for e in errs):
+            never += 1
+        else:
+            errored += 1
+    return errored, never
+
+
+def never_sent(meta, rows=None):
+    """How many rows of a run the request budget never sent. See `measured`.
+
+    `never_sent` in the meta where the sweep wrote it. Where it did not, and the file carries
+    `errors`, the rows are asked: `errors` then counts only the other half, and a budget row
+    read as zero is a row read as measured. Where `errors` is absent too, `measured` counts
+    every ERROR row from the rows already, and this adds nothing."""
+    meta = meta or {}
+    n = meta.get("never_sent")
+    if n is not None:
+        return n
+    if rows is not None and meta.get("errors") is not None:
+        return error_split(rows)[1]
+    return 0
 
 
 def measured(meta, rows=None):
@@ -2111,7 +2165,12 @@ def measured(meta, rows=None):
     if errs is None:
         errs = _rows_with(rows, ("ERROR",)) if rows is not None else 0
     unreached = meta.get("unreached") or 0
-    return max(0, (meta.get("attacks_n") or 0) - errs - unreached), errs
+    # AND THE ROWS THE BUDGET NEVER SENT. `error_split` keeps them out of `errors` on purpose
+    # -- the closing line names the budget, not the target, for them -- and nothing
+    # subtracted them anywhere else: four budget rows and one DEFENDED read "5 attacks
+    # measured · 0 breached" and HARDENED, while the index recounted the rows and said "not
+    # measured" about the same file. Found by an independent review.
+    return max(0, (meta.get("attacks_n") or 0) - errs - unreached - never_sent(meta, rows)), errs
 
 
 def measured_when(meta, path=None):
@@ -2320,6 +2379,7 @@ _RESULTS_REQUIRE = {
     "meta.not_sent": (int, False, "the report counts it"),
     "meta.errors": (int, False, "`measured` subtracts it from what was sent"),
     "meta.unreached": (int, False, "`measured` subtracts it from what was sent"),
+    "meta.never_sent": (int, False, "`measured` subtracts it from what was sent"),
     "meta.arsenal": (str, False, "`compare` checks every target ran the same corpus"),
     "meta.stopped": (str, False, "the pages say why a run ended early"),
     "meta.baseline": (list, False, "the report lists the clean tool inputs a run was given"),

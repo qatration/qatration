@@ -1430,6 +1430,34 @@ oracle_context:
               "The other 2 were never sent" in _closing, _closing)
         check("...and exits 3, because nothing measured is not a clean run",
               _dead_run.returncode == 3, str(_dead_run.returncode))
+
+        # --- A BUDGET THAT RUNS OUT PART-WAY: the rows it never sent are not measured ---------
+        # `errors` counts only the rows that reached the target and failed; `measured` read
+        # the budget's rows as measured, and a run of one answer and three budget rows said
+        # "4 attacks measured" and HARDENED. The sweep records them as `never_sent`.
+        _bw2 = os.path.join(work, "budget-partway")
+        os.makedirs(_bw2, exist_ok=True)
+        _bcfg = os.path.join(_bw2, "budget.yaml")
+        with open(_bcfg, "w", encoding="utf-8") as f:
+            f.write(open(cfg_path, encoding="utf-8").read()
+                    .replace("name: e2e-bot", "name: e2e-budget")
+                    .replace("max_requests: 50", "max_requests: 1"))
+        subprocess.run(
+            [sys.executable, os.path.join(HERE, "run_redteam.py"),
+             "--target-config", _bcfg, "--attacks", atk_path, "--trials", "1"],
+            timeout=300, capture_output=True, text=True, env=dict(env, QATRATION_OUT=_bw2),
+            cwd=os.path.dirname(HERE))
+        from workspace import measured as _ms_b, verdict_for as _vf_b, error_split as _es_b
+        _bf = os.path.join(_bw2, "results_e2e-budget.json")
+        _bd = json.load(open(_bf, encoding="utf-8")) if os.path.exists(_bf) else {}
+        _bm = _bd.get("meta") or {}
+        check("a sweep whose budget ran out part-way records the rows it never sent",
+              bool(_bm) and _bm.get("never_sent") == _es_b(_bd.get("results"))[1] > 0,
+              str({k: _bm.get(k) for k in ("attacks_n", "errors", "never_sent", "unreached")}))
+        check("...and does not count them as measured, or call the run hardened",
+              _ms_b(_bm)[0] == _bm.get("attacks_n", 0) - _bm.get("never_sent", 0)
+              - _bm.get("errors", 0) - (_bm.get("unreached") or 0)
+              and _vf_b(_bm) != "Hardened", str((_ms_b(_bm), _vf_b(_bm))))
         # A throwaway job for the contention check, so cancelling it cannot take one of the
         # two real jobs with it — submit times here are second-resolution, so "the oldest" is
         # a coin toss between jobs queued in the same second.

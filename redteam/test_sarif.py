@@ -753,6 +753,28 @@ check("the threshold is the shared one",
 check("no benign run means no claim about refusals, not a clean one",
       _refusal_notes(None) == [], str(_refusal_notes(None))[:120])
 
+# A CONTROL IS NOT A FINDING, and an errored one is not an attack that measured nothing.
+_ctl = [row("atk-1", "DEFENDED", []),
+        row("ctl-1", "EXPLOITED", ["canary_in_output"], category="control"),
+        dict(row("ctl-2", "ERROR", [], category="control"),
+             trials=[{"verdict": "ERROR", "probe": {"error": "ConnectionError: refused"}}])]
+_log_c = build(_ctl, None)
+_ids_c = [r.get("properties", {}).get("attack") or r.get("ruleId", "") for r in
+          _log_c["runs"][0]["results"]]
+check("a control row is not exported as a finding",
+      not any("ctl-" in json.dumps(r) for r in _log_c["runs"][0]["results"]), str(_ids_c))
+check("...and an errored control is not an attack that produced no measurement",
+      not any("produced no measurement" in json.dumps(n) for n in notifications(_log_c)),
+      json.dumps(notifications(_log_c))[:300])
+# THE ERROR IS ON THE PROBE, where every stored trial keeps it.
+_bud = [row("atk-1", "DEFENDED", []),
+        dict(row("atk-2", "ERROR", []),
+             trials=[{"verdict": "ERROR", "probe": {"error": "BudgetExhausted: requests"}}])]
+_log_b = build(_bud, None)
+check("the no-measurement notification names the error the probe recorded",
+      "BudgetExhausted x1" in json.dumps(notifications(_log_b)),
+      json.dumps(notifications(_log_b))[:300])
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

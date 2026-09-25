@@ -6,7 +6,7 @@ detectors, and each attack's probe) — target-agnostic, works for any adapter.
 import html
 import re
 from recon import memory_phrase
-from workspace import measured, BROKE, attack_name
+from workspace import measured, never_sent, BROKE, attack_name
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -371,6 +371,12 @@ def build_html(meta, results, recon=None, isolation=None):
     _unreached_card = (f'<div class="stat"><div class="n">{_unreached}</div>'
                        f'<div class="l">never sent — the run stopped</div></div>'
                        if _unreached else "")
+    # AND THE ROWS THE BUDGET REFUSED TO SEND, which have a row each and no verdict: not
+    # errored (nothing reached the target) and not measured. See `workspace.never_sent`.
+    _budget_n = never_sent(meta, results)
+    _unreached_card += (f'<div class="stat"><div class="n">{_budget_n}</div>'
+                        f'<div class="l">never sent — the request budget ran out</div></div>'
+                        if _budget_n else "")
     rows = []
     for r in results:
         a = r["attack"]
