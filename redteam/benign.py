@@ -729,7 +729,10 @@ def roll_up():
         _dead = set(inert_for(_ctx, DETECTORS)) if _ctx else set(DETECTORS)
         for r in d["rows"]:
             _aim = r.get("provokes")
-            if (_aim and r.get("probe") and _aim not in _dead
+            # AND NOT AN EMPTY REPLY. A probe that came back with nothing (`silent`) never
+            # gave the detector anything to be quiet about, and counting it filed the detector
+            # under "aimed at and quiet ... a pass, not a gap". Found by an independent review.
+            if (_aim and r.get("probe") and not r.get("silent") and _aim not in _dead
                     and _aim not in (r.get("fired") or [])):
                 exercised[_aim] += 1
             for f in r.get("fired", []):

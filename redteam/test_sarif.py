@@ -426,6 +426,42 @@ with tempfile.TemporaryDirectory() as _bdir:
                                        "attack": {"id": "a", "category": "x"},
                                        "fired": ["canary_in_output"], "locks": {},
                                        "trials": [{}]}]}, out_dir=_bdir)
+    # --- AN UNREADABLE BASELINE IS NOT A MISSING ONE -----------------------------------
+    # `baseline._load` separates the two and this export did not: a torn file was reported as
+    # "No benign baseline exists ... Run `qatration benign`". Found by an independent review.
+    io.open(os.path.join(_bdir, "benign_tornbot.json"), "w", encoding="utf-8").write("{")
+    _torn = sarif.build({"meta": {"target": "tornbot", "attacks_n": 1, "errors": 0, "broke": 1},
+                         "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                      "attack": {"id": "a", "category": "x"},
+                                      "fired": ["canary_in_output"], "locks": {},
+                                      "trials": [{}]}]}, out_dir=_bdir)
+    _tids = [n["descriptor"]["id"] for n in notifications(_torn)]
+    check("a torn baseline is exported as unreadable, not as missing",
+          "baseline/unreadable" in _tids and "baseline/missing" not in _tids, str(_tids))
+    check("...and its findings say it could not be read, not that none exists",
+          all("could not be read" in r["message"]["text"]
+              for r in _torn["runs"][0]["results"]), str(_torn["runs"][0]["results"][:1]))
+    # --- AND A ROW THE CONSOLE SAYS STANDS IS NOT EXPORTED AS UNATTRIBUTABLE ------------
+    # `qualified` rescues a noisy-detector row on a canary the target does not emit on its
+    # own; this export called `attribution` alone and demoted it to a note -- a real finding
+    # that stopped failing a pipeline. One rule now, `baseline.row_attribution`.
+    io.open(os.path.join(_bdir, "benign_canbot.json"), "w", encoding="utf-8").write(json.dumps(
+        {"meta": {"target": "canbot", "probes": 10, "when": "2026-08-21 17:28"},
+         "rows": [{"probe": {"output": "noise"}, "fired": ["canary_in_output"]}] * 8
+         + [{"probe": {"output": "fine"}, "fired": []}] * 2}))
+    _cfgp = os.path.join(_bdir, "canbot.yaml")
+    io.open(_cfgp, "w", encoding="utf-8").write(
+        "name: canbot\nadapter: http\nurl: http://127.0.0.1:1/x\n"
+        "oracle_context:\n  canaries: [K-CANARY-9931]\n")
+    _can = sarif.build({"meta": {"target": "canbot", "attacks_n": 1, "errors": 0, "broke": 1},
+                        "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                     "attack": {"id": "a", "category": "x"},
+                                     "fired": ["canary_in_output"], "locks": {},
+                                     "trials": [{"probe": {"output": "the key is K-CANARY-9931"}}]}]},
+                       target_config=_cfgp, out_dir=_bdir)
+    _clev = [r["level"] for r in _can["runs"][0]["results"]]
+    check("a noisy-detector row rescued on a quiet canary keeps its level, as the console says",
+          _clev == ["error"], str(_clev))
     _eids = [n["descriptor"]["id"] for n in notifications(_empty)]
     check("...and a baseline file that measured nothing is not dated either",
           "baseline/measured-on" not in _eids, str(_eids))

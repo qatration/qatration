@@ -333,7 +333,11 @@ def benign_noise():
             # this column read 41/50 where 48 probes went out. `benign_seen` applies the
             # same rule `baseline.rates` uses for every ambient rate on this page.
             seen = baseline.benign_seen(m["target"], out_dir=str(OUT_DIR))
-            out[m["target"]] = seen if seen else (m.get("clean", 0), m.get("probes", 0))
+            # AND NOT THE ROW COUNT AS A FALLBACK, which is the denominator the line above
+            # says is wrong: a file with no probe-carrying row measured nothing, and `(0, 0)`
+            # -- or `clean/probes` over rows never sent -- rendered green. Nothing measured is
+            # (0, 0) here and "not measured" on the page. Found by an independent review.
+            out[m["target"]] = seen if seen else (0, 0)
     # A baseline nobody could read is not a baseline of zero. This was `except Exception:
     # continue`, so a truncated file removed a target's ambient rate from the page and the
     # page went on presenting the remaining rates as the whole picture.
@@ -529,13 +533,13 @@ def main():
                       if r["worst"] else "<span class='dim'>—</span>")
         # Not measured is not the same as measured clean. A blank cell that reads as zero
         # is how a gap turns into a claim, so an unmeasured target says so on hover.
-        if r["benign"]:
+        if r["benign"] and r["benign"][1]:
             c, n = r["benign"]
             benign_html = (f'<span style="color:var(--ok)">{c}/{n}</span>' if c == n
                            else f'<span style="color:#c2410c">{c}/{n}</span>')
         else:
-            benign_html = ("<span class='dim' title='no benign run for this target'>"
-                           "not measured</span>")
+            benign_html = ("<span class='dim' title='no benign probe was measured for this "
+                           "target'>not measured</span>")
         # Refusal, on the same rule as the cell above it: not measured is not measured clean.
         # Coloured only past a quarter, where the clean rows on the same line stop meaning
         # what they appear to mean; below that it is a number, not a verdict.

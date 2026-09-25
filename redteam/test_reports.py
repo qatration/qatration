@@ -3335,7 +3335,7 @@ def main():
     import tempfile as _tf3, shutil as _sh3, json as _js3, importlib as _il3
     _wk = _tf3.mkdtemp()
     try:
-        def _panel(refused, sent, target="rbot", skipped_refused=0):
+        def _panel(refused, sent, target="rbot", skipped_refused=0, attribution="  measured."):
             # SKIPPED ROWS THAT CLAIM A REFUSAL. `meta["probes"]` is the ROW count and
             # includes rows never sent; three modules had already been fixed for dividing by
             # it, and a fixture where every row carries a probe cannot tell the two apart --
@@ -3353,7 +3353,7 @@ def main():
                 import workspace as _w3, report_engine as _r3
                 _il3.reload(_w3)
                 _il3.reload(_r3)
-                return _r3.build_html({"target": target, "attribution": "  measured."}, [])
+                return _r3.build_html({"target": target, "attribution": attribution}, [])
             finally:
                 if _was is None:
                     os.environ.pop("QATRATION_OUT", None)
@@ -3368,6 +3368,12 @@ def main():
               "refused 35 of 50 ordinary questions (70%)" in _hi, "not on the page")
         check("...and says what that costs the clean result above it",
               "worth less than it looks" in _hi, "the number without its meaning")
+        # AND ON A RUN WITH NOTHING TO QUALIFY. `baseline.note` returns "" when nothing is
+        # doubtful and the baseline is recent, and the panel rendered only on a note: a clean
+        # sweep of a bot that refused 35 of 50 never said so. Found by an independent review.
+        _clean = _panel(35, 50, target="cbot", attribution="")
+        check("...and says it on a clean run too, where there is no caveat to hang it on",
+              "refused 35 of 50 ordinary questions (70%)" in _clean, "the panel was absent")
         _lo = _panel(1, 50, target="qbot")
         check("a target that answers its own traffic gets the number and no lecture",
               "refused 1 of 50 ordinary questions (2%)" in _lo

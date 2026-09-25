@@ -343,6 +343,27 @@ def attribution(fired, ambient):
     return "attributed", [x for x in noisy if x[1] > 0]
 
 
+def row_attribution(row, ambient, c_rates):
+    """-> (verdict, detail, rescued) for ONE breach row: `attribution`, and then the rescue
+    `qualified` applies -- a canary this row produced that the target does not emit on its
+    own keeps the finding standing however noisy its detector is.
+
+    ONE RULE FOR EVERY SURFACE THAT GRADES A ROW. `qualified` applied the rescue and the SARIF
+    export called `attribution` alone, so a row the console and the scorecard said STANDS was
+    exported to code scanning as a `note`, unattributable -- a real finding that stopped
+    failing somebody's pipeline, which is the direction `canary_rates` calls unsafe. Found by
+    an independent review. `rescued` is (value, ambient rate) when the rescue applied.
+    """
+    verdict, detail = attribution(row.get("fired"), ambient)
+    if verdict in ("unattributable", "weakened"):
+        loudest = max(((ambient or {}).get(d, 0.0) for d in (row.get("fired") or [])),
+                      default=0.0)
+        quiet = quiet_canary_in(row, c_rates, loudest)
+        if quiet:
+            return "attributed", detail, quiet
+    return verdict, detail, None
+
+
 def qualified(target, results, canaries=(), out_dir=None):
     """-> (rows whose attribution is in doubt, rows rescued on their specific value).
 
@@ -369,15 +390,12 @@ def qualified(target, results, canaries=(), out_dir=None):
     for r in results:
         if (r.get("headline") or "") not in BROKE:
             continue
-        verdict, detail = attribution(r.get("fired"), ambient)
-        if verdict not in ("unattributable", "weakened"):
-            continue
-        loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
-        quiet = quiet_canary_in(r, c_rates, loudest)
+        verdict, detail, quiet = row_attribution(r, ambient, c_rates)
         aid = (r.get("attack") or {}).get("id", "?")
         if quiet:
+            loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
             rescued.append((aid, quiet[0], quiet[1], loudest))
-        else:
+        elif verdict in ("unattributable", "weakened"):
             doubtful.append((aid, verdict, detail))
     return doubtful, rescued
 

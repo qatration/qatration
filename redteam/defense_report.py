@@ -1174,12 +1174,11 @@ def attribution_index():
         for r in rows:
             if (r.get("headline") or "") not in BROKE:
                 continue
-            verdict, detail = _bl.attribution(r.get("fired"), ambient)
+            # THROUGH `baseline.row_attribution`, the one rule the console and the SARIF use:
+            # a quiet canary this row produced keeps it standing however noisy its detector.
+            verdict, detail, _quiet = _bl.row_attribution(r, ambient, c_rates)
             if verdict not in ("unattributable", "weakened"):
                 continue
-            loudest = max((ambient.get(d, 0.0) for d in (r.get("fired") or [])), default=0.0)
-            if _bl.quiet_canary_in(r, c_rates, loudest):
-                continue                 # the specific value it produced is quiet: it stands
             out[(stem, str(r["attack"].get("id")))] = (verdict, detail)
     return out, unmeasured
 

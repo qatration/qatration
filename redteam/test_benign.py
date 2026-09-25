@@ -2108,6 +2108,37 @@ def main():
     _rescued = [d for d in _ex if d not in (roll.get("reached") or {})]
     check("...and it takes detectors OUT of the untested list, or it changed nothing",
           bool(_rescued), "no detector moved from untested to passed")
+    # AND AN EMPTY REPLY IS NOT A PROBE THE DETECTOR WAS QUIET ON. A row marked `silent`
+    # carries a probe, and counting it filed its detector as a pass. One workspace holding
+    # only such a row: the detector it aimed at must not be counted as exercised.
+    import benign as _bn_s, tempfile as _tf_s, io as _io_s, json as _js_s
+    _ws_s = _tf_s.mkdtemp()
+    _io_s.open(os.path.join(_ws_s, "benign_silentbot.json"), "w", encoding="utf-8").write(
+        _js_s.dumps({"meta": {"target": "silentbot", "probes": 2, "when": "2026-09-01 10:00"},
+                    "rows": [{"id": "q1", "provokes": "canary_in_output", "fired": [],
+                              "silent": True, "probe": {"prompt": "hi", "output": ""}},
+                             {"id": "q2", "provokes": "canary_in_output", "fired": [],
+                              "probe": {"prompt": "hi", "output": "an answer"}}]}))
+    # A CONFIG THAT ARMS THE DETECTOR, or every detector is inert for this target and nothing
+    # is counted either way -- which is how the first version of this passed its mutation.
+    _cfg_s = os.path.join(_ws_s, "silentbot.yaml")
+    _io_s.open(_cfg_s, "w", encoding="utf-8").write(
+        chr(10).join(["name: silentbot", "adapter: http", "url: http://127.0.0.1:1/x",
+                      "oracle_context:", "  canaries: [K-CANARY-9931]", ""]))
+    _was_s, _was_c = _bn_s.OUT_DIR, os.environ.get("QATRATION_CONFIGS")
+    try:
+        _bn_s.OUT_DIR = _ws_s
+        os.environ["QATRATION_CONFIGS"] = _cfg_s
+        _roll_s = _bn_s.roll_up()
+    finally:
+        _bn_s.OUT_DIR = _was_s
+        if _was_c is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _was_c
+    check("an empty reply is not counted as the detector it aimed at being quiet: 1, not 2",
+          (_roll_s.get("exercised") or {}).get("canary_in_output") == 1,
+          str(_roll_s.get("exercised")))
 
 
     # --- every baseline was measured against THIS corpus, or is named -----------------------

@@ -105,7 +105,7 @@ def _uri(path):
     return text
 
 
-def _message(row, verdict, noisy):
+def _message(row, verdict, noisy, baseline_why=""):
     a = row.get("attack") or {}
     parts = ["%s: %s (%s)" % (row.get("headline", "?"),
                               a.get("id", "?"), a.get("category", "uncategorised"))]
@@ -137,7 +137,12 @@ def _message(row, verdict, noisy):
                      % ", ".join("%s fires on %.0f%% of benign traffic" % (d, r * 100)
                                  for d, r in noisy))
     elif verdict == "unmeasured":
-        parts.append("attribution UNMEASURED — no benign baseline exists for this target, so "
+        # UNREADABLE IS NOT ABSENT, which `baseline._load` separates and this did not: a torn
+        # `benign_<target>.json` was exported as "no benign baseline exists".
+        parts.append(("attribution UNMEASURED — the benign baseline for this target could not "
+                      "be read (%s), so nothing here rules out an ambient false positive"
+                      % baseline_why) if baseline_why else
+                     "attribution UNMEASURED — no benign baseline exists for this target, so "
                      "nothing here rules out an ambient false positive")
     return " · ".join(parts)
 
@@ -194,6 +199,23 @@ def build(results, target_config=None, out_dir=None):
             % target)
 
     ambient = baseline.rates(target, out_dir=out_dir or workspace.OUT)
+    _b_data, _b_why = baseline._load(target, out_dir or workspace.OUT)
+    # THE CANARIES OF THE CONFIG THIS RUN WAS POINTED AT, for the rescue `qualified` applies:
+    # without them a row the console says STANDS is exported as unattributable.
+    _cfg_c = (workspace.configs_by_name().get(target) or (None, {}))[1] or {}
+    if target_config:
+        try:
+            with open(target_config, encoding="utf-8") as _fc:
+                _cfg_c = yaml.safe_load(_fc) or _cfg_c
+        except Exception:
+            pass
+    # `honeytoken.declared`, which is how `defense_report` and `baseline.note` read the values
+    # a row can be rescued on -- the planted honeytoken as well as the listed canaries.
+    import honeytoken as _ht
+    _canaries = _ht.declared((workspace.oracle_context_of(_cfg_c)
+                              if isinstance(_cfg_c, dict) else {}) or {})
+    _c_rates = (baseline.canary_rates(target, _canaries, out_dir or workspace.OUT)
+                if ambient is not None and _canaries else {})
 
     rules, seen, sarif_results = [], set(), []
     unrun = []
@@ -216,7 +238,7 @@ def build(results, target_config=None, out_dir=None):
         level = BASE_LEVEL.get(head)
         if not level:                       # DEFENDED, and anything the engine may add later
             continue
-        verdict, noisy = baseline.attribution(row.get("fired"), ambient)
+        verdict, noisy, _rescued = baseline.row_attribution(row, ambient, _c_rates)
         level = _cap(level, verdict)
 
         fired = row.get("fired") or []
@@ -236,7 +258,7 @@ def build(results, target_config=None, out_dir=None):
         sarif_results.append({
             "ruleId": rule_id,
             "level": level,
-            "message": {"text": _message(row, verdict, noisy)},
+            "message": {"text": _message(row, verdict, noisy, _b_why)},
             # NO LOCATION RATHER THAN A FALSE ONE. SARIF 2.1.0 allows a result with no
             # physical location, and that is the honest shape when the config this run was
             # pointed at cannot be found from here.
@@ -345,7 +367,15 @@ def build(results, target_config=None, out_dir=None):
                             % (target, _n, _tot, _pct)},
                 "descriptor": {"id": "baseline/over-refusing"}})
 
-    if ambient is None:
+    if ambient is None and _b_why:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": "The benign baseline for %s could not be read (%s), so no "
+                                "finding here can be attributed: an ambient false positive "
+                                "and a breach look the same. It is not missing -- re-run "
+                                "`qatration benign` to replace it." % (target, _b_why)},
+            "descriptor": {"id": "baseline/unreadable"}})
+    elif ambient is None:
         notifications.append({
             "level": "warning",
             "message": {"text": "No benign baseline exists for %s, so no finding here can be "

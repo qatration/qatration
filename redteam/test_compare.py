@@ -207,6 +207,29 @@ def main():
     # rather than render a blank that reads as zero.
     check("a target with no benign run is absent rather than zero",
           "no-such-target" not in noise)
+    # AND A BENIGN RUN THAT MEASURED NOTHING IS NOT MEASURED CLEAN. A file whose every row
+    # was skipped has no probe to count; the column fell back to the row count the loader's
+    # own comment calls the wrong denominator, and `(0, 0)` rendered green as `0/0`.
+    import subprocess as _sp_n, tempfile as _tf_n, json as _js_n, io as _io_n
+    _wn = _tf_n.mkdtemp()
+    _io_n.open(os.path.join(_wn, "benign_skipbot.json"), "w", encoding="utf-8").write(
+        _js_n.dumps({"meta": {"target": "skipbot", "probes": 3, "clean": 3,
+                              "when": "2026-09-01 10:00"},
+                     "rows": [{"skipped": "no chain capability", "fired": []}] * 3}))
+    _io_n.open(os.path.join(_wn, "results_skipbot.json"), "w", encoding="utf-8").write(
+        _js_n.dumps({"meta": {"target": "skipbot", "attacks_n": 1, "broke": 0, "errors": 0},
+                     "results": [{"attack": {"id": "a1", "category": "x", "text": "t"},
+                                  "headline": "DEFENDED", "rate": "0/1", "fired": [],
+                                  "trials": [{"verdict": "DEFENDED",
+                                              "probe": {"output": "no"}}]}]}))
+    _pg_n = os.path.join(_wn, "compare_targets.html")
+    _sp_n.run([sys.executable, os.path.join(HERE, "cli.py"), "compare"],
+              capture_output=True, text=True, timeout=300,
+              env=dict(os.environ, QATRATION_OUT=_wn, PYTHONIOENCODING="utf-8"))
+    _html_n = _io_n.open(_pg_n, encoding="utf-8").read() if os.path.exists(_pg_n) else ""
+    check("a benign run that measured nothing is `not measured`, not a green 0/0",
+          bool(_html_n) and ">0/0<" not in _html_n and ">3/3<" not in _html_n
+          and "not measured" in _html_n, _html_n[-300:] or "no page")
 
     check("esc escapes markup so a target name cannot inject into the page",
           esc("<b>&") == "&lt;b&gt;&amp;", esc("<b>&"))

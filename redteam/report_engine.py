@@ -411,7 +411,13 @@ def build_html(meta, results, recon=None, isolation=None):
     # that lives anywhere except beside the number it qualifies has not been delivered.
     attribution_html = ""
     note = (meta.get("attribution") or "").strip()
-    if note:
+    # AND WHEN THERE IS NO CAVEAT BUT THERE IS A BASELINE. `baseline.note` returns "" when
+    # nothing is doubtful and the baseline is recent, and the panel rendered only on a note --
+    # so a sweep with no breaches, against a bot that refused 35 of 50 ordinary questions,
+    # never said so: the one case the refusal line exists for. Found by an independent review.
+    from baseline import refusal_rate as _rr_has
+    from workspace import OUT as _OUT_has
+    if note or ((_rr_has(meta.get("target"), out_dir=_OUT_has) or (0, 0))[1]):
         lines = "".join(f"<div>{esc(l.strip())}</div>"
                         for l in note.splitlines() if l.strip())
         cls = "warn" if "no benign run" in note or "unattributable" in note else "note"
