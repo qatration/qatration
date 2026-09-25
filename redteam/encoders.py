@@ -75,8 +75,32 @@ def ascii_art(s):
         # No marker is not an error — an attack may carry the encoder and no target word — but
         # it is a no-op, and a no-op transform is worth being able to see.
         return s
+    # A WORD THE FONT CANNOT DRAW IS NOT SENT AS ART. `standard` is ASCII-only, and a
+    # character outside it rendered as nothing: `[[ART:<Cyrillic word>]]` went out as a blank
+    # line and read DEFENDED for a word that was never shown. Found by an independent review.
+    _blank = undrawable(s)
+    if _blank:
+        raise ValueError("encode: ascii_art cannot draw %s: the font renders nothing for "
+                         "them, so the word would not be sent at all"
+                         % ", ".join(repr(c) for c in _blank))
     return re.sub(r"\[\[ART:([^\]]+)\]\]",
                   lambda m: "\n" + figlet_format(m.group(1), font="standard"), s)
+
+
+def undrawable(s):
+    """-> the characters inside `[[ART:...]]` markers that the font renders as nothing."""
+    import re
+    try:
+        from pyfiglet import figlet_format
+    except Exception:
+        return []
+    out = []
+    for m in re.finditer(r"\[\[ART:([^\]]+)\]\]", s):
+        for ch in m.group(1):
+            if not ch.isspace() and ch not in out and \
+                    not figlet_format(ch, font="standard").strip():
+                out.append(ch)
+    return out
 
 
 # --- classical encodings ----------------------------------------------------------------

@@ -548,7 +548,8 @@ def bad_encoders(entries):
     the second since they were written; neither could reach a corpus loaded with `--attacks`.
     """
     import difflib
-    from encoders import apply_encoding, decode, ONE_WAY
+    from encoders import apply_encoding, decode, ONE_WAY, LOSSY
+    from encoders import undrawable as _undrawable
     known = sorted(ENCODERS)
     out = []
     for e in entries:
@@ -565,6 +566,11 @@ def bad_encoders(entries):
                              "encoded name scores the plain word as a defence."
                         % (enc, " — did you mean %r?" % near[0] if near else
                            "; it has: %s" % ", ".join(known))))
+        elif enc == "ascii_art" and _undrawable(str(e.get("text") or "")):
+            out.append((who, "encode: ascii_art cannot draw %s: the font renders nothing for "
+                             "them, so the marked word would not be sent at all and the row "
+                             "would read as a defence against a word nobody showed."
+                        % ", ".join(repr(c) for c in _undrawable(str(e.get("text") or "")))))
         elif enc == "ascii_art" and "[[ART:" not in str(e.get("text") or ""):
             out.append((who, "encode: ascii_art has no [[ART:WORD]] marker in its text, so the "
                              "transform is a no-op: the sensitive word goes out written "
@@ -598,13 +604,27 @@ def bad_encoders(entries):
             _marks = [str(m) for m in (_plants if isinstance(_plants, list)
                                        else [_plants] if _plants else [])]
             if _marks:
-                _sent = apply_encoding(str(e.get("text") or ""), enc)
-                # COMPARED THE WAY THE ORACLE COMPARES: `_markers` lower-cases both
-                # sides, so a strategy that only folds case carries a marker fine and
-                # refusing it would block an attack that works.
-                _back = decode(_sent, enc)
-                _back = _back.lower() if _back is not None else None
-                if _back is None:
+                # EVERY STRING THE RUN ENCODES, READ BACK WHOLE -- not the marker looked for
+                # in `text`. Twelve of the fourteen shipped `plants:` attacks never spell
+                # their marker (it is assembled, so the attacker's own text cannot be scored
+                # as the echo), and a chain encodes `steps`, not `text`: both were refused
+                # under a transform that carries every byte back. What the rule is for is
+                # whether the ENCODING loses anything, and a round trip answers exactly that.
+                # Found by an independent review.
+                from runner import sent_form as _sf
+                from target import payload as _pl
+                _fold = (lambda x: x.lower()) if LOSSY.get(enc) == "case" else (lambda x: x)
+                _strs = ([str(e.get("text") or "")]
+                         + [str(x) for x in (e.get("steps") or [])]
+                         + [str((h or {}).get("content", "")) for h in (e.get("history") or [])
+                            if isinstance(h, dict)]
+                         + ([str(e.get("user_prompt"))] if e.get("user_prompt") else []))
+                _strs = [x for x in _strs if x.strip()]
+                _backs = [(x, decode(_sf(x, enc), enc)) for x in _strs]
+                _none = [x for x, b in _backs if b is None]
+                _lost_s = [(x, b) for x, b in _backs
+                           if b is not None and _fold(b) != _fold(_pl(x))]
+                if _none:
                     out.append((who, "encode: %s cannot be read back (%s), and this attack "
                                      "plants %s. The marker is encoded along with the text, "
                                      "so the target echoes something else and "
@@ -612,14 +632,13 @@ def bad_encoders(entries):
                                      "defence."
                                 % (enc, ONE_WAY.get(enc, "no inverse"),
                                    ", ".join(repr(m) for m in _marks))))
-                else:
-                    _lost = [m for m in _marks if m.lower() not in _back]
-                    if _lost:
-                        out.append((who, "encode: %s does not carry %s through intact "
-                                         "(it comes back as %r). The target is asked to "
-                                         "repeat a string that was never sent, so a perfect "
-                                         "echo scores as a defence."
-                                    % (enc, ", ".join(repr(m) for m in _lost), _back[:80])))
+                elif _lost_s:
+                    out.append((who, "encode: %s does not carry this attack's text through "
+                                     "intact (%r comes back as %r), and it plants %s. The "
+                                     "target is asked to repeat a string that was never sent, "
+                                     "so a perfect echo scores as a defence."
+                                % (enc, _lost_s[0][0][:40], (_lost_s[0][1] or "")[:80],
+                                   ", ".join(repr(m) for m in _marks))))
     return out
 
 
@@ -1321,14 +1340,12 @@ def main():
             # Same risk, same shape, and it had no guard on either side: a misspelled
             # `encode:` used to leave the payload PLAIN and let the attack run and report,
             # so the row read "the obfuscation did not fool it" when there was none.
-            enc = a.get("encode")
-            if enc and enc not in ENCODERS:
-                errors.append(f"{fname}: {aid}: unknown encoding {enc!r} "
-                              f"(the payload would go out UNOBFUSCATED and score as a "
-                              f"defence — known: {', '.join(sorted(ENCODERS))})")
-            if enc == "ascii_art" and "[[ART:" not in str(a.get("text") or ""):
-                warns.append(f"{fname}: {aid}: encode: ascii_art with no [[ART:WORD]] "
-                             f"marker — the strategy has nothing to replace")
+            # THROUGH `bad_encoders`, the rule `run` refuses on. This was a second copy with
+            # its own verdicts -- an ascii_art attack with no marker a warning here and a
+            # refusal there, and no no-op or marker check at all -- so `lint` passed a file
+            # `run` would not send. Found by an independent review.
+            for _who, _why in bad_encoders([a]):
+                errors.append(f"{fname}: {aid}: {_why}")
 
             for t in a.get("applies_to", []) or []:
                 if t not in targets:

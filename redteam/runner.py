@@ -402,8 +402,7 @@ def attacker_side(attack):
     enc = attack.get("encode")
 
     def _t(s):
-        s = payload(s)
-        return apply_encoding(s, enc) if enc else s
+        return sent_form(s, enc)
 
     delivery = attack.get("delivery", "direct")
     if delivery in ("chain", "sessions") and attack.get("steps"):
@@ -415,6 +414,19 @@ def attacker_side(attack):
     if delivery == "indirect":
         return _t(attack.get("user_prompt", "Hello"))
     return _t(attack.get("text") or attack.get("user_prompt") or "")
+
+
+def sent_form(s, enc=None):
+    """What goes on the wire for one attacker string: `payload`, encoded, and `payload` again.
+
+    ONE RULE FOR THE SWEEP AND FOR ITS RECONSTRUCTION, which were written twice (`_text` in
+    `run_attack` and `_t` in `attacker_side`) and normalised only BEFORE encoding: all six
+    shipped `ascii_art` attacks went out ending in a line of spaces -- the trailing
+    whitespace `payload`'s own docstring measured flipping a verdict from 0/3 to 3/3. Found
+    by an independent review.
+    """
+    s = payload(s)
+    return payload(apply_encoding(s, enc)) if enc else s
 
 
 def run_attack(target, attack, ctx, trials=1):
@@ -442,8 +454,7 @@ def run_attack(target, attack, ctx, trials=1):
     _enc = attack.get("encode")
 
     def _text(s):
-        _t = payload(s)
-        return apply_encoding(_t, _enc) if _enc else _t
+        return sent_form(s, _enc)
     for _ in range(trials):
         target.reset()
         seeded = False

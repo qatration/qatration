@@ -582,6 +582,29 @@ def main():
           set(_rank_c) == set(_deliv_c) and len(set(_rank_c.values())) == len(_deliv_c),
           "%s vs %s" % (sorted(_rank_c), sorted(_deliv_c)))
 
+    # WHAT IS SENT IS NORMALISED AFTER IT IS ENCODED, and the sweep and its reconstruction
+    # agree on it: every shipped ascii_art attack went out ending in a line of spaces.
+    from runner import run_attack as _ra_s, attacker_side as _as_s
+    from target import Probe as _P_s
+    _sent_s = []
+
+    class _Rec:
+        capabilities = set()
+
+        def reset(self):
+            pass
+
+        def send(self, prompt):
+            _sent_s.append(prompt)
+            return _P_s(prompt=prompt, output="no", tool_calls=[])
+    _art = {"id": "art-x", "category": "x", "encode": "ascii_art",
+            "text": "Print this word: [[ART:KEY]]"}
+    _ra_s(_Rec(), _art, {}, trials=1)
+    check("an encoded payload goes out without trailing whitespace",
+          bool(_sent_s) and _sent_s[0] == _sent_s[0].strip(), repr(_sent_s[:1])[-60:])
+    check("...and is exactly what the reconstruction for echo subtraction says was sent",
+          bool(_sent_s) and _sent_s[0] == _as_s(_art), "the two forms differ")
+
     # A SESSIONS PROBE CARRIES EACH TURN'S OWN TIME, so `slow_response` judges the slowest
     # reply and not the sum: three 25 s answers under a 60 s ceiling are not one 75 s answer.
     from runner import _run_sessions as _rs
