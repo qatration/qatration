@@ -161,6 +161,34 @@ def same_run(a, b):
             and a.get("rows") == b.get("rows"))
 
 
+# WHAT A SNAPSHOT HOLDS, by kind, asked by the walker the artifact tables use. The checks in
+# `unusable_snapshot` stopped at "rows is a mapping of mappings"; a field-type sweep over a
+# stored timeline found `fixes` dying on `run: 7` (sliced as a date) and on a row with no
+# `v` (`state` subscripts it). The kinds are the ones `snapshot` writes and the only ones in
+# the 84 lines stored in this repository and the walk's workspace. `v` is required inside a
+# row: it is the one field every reader of a row needs.
+_SNAPSHOT_REQUIRE = {
+    "run": (str, False, "every listing and page dates the run by it"),
+    "target": (str, False, "the listing names the target by it"),
+    "model": (str, False, "the listing names the model by it"),
+    "engine": (str, False, "the listing names the build by it"),
+    "note": (str, False, "the listing prints it"),
+    "stopped": (str, False, "the listing says why a run ended early"),
+    "trials": (int, False, "`diff` compares runs of the same trial count"),
+    "attacks": (int, False, "the listing counts the run's attacks"),
+    "scoped": (int, False, "the listing counts the attacks in scope"),
+    "broke": (int, False, "the listing counts what broke"),
+    "dated_by_run": (bool, False, "the listing says where the date came from"),
+    "inert": (list, False, "`diff` names the detectors that could not fire"),
+    "inert[]": (str, False, "a detector is named by it"),
+    "rows[].v": (str, True, "`state` reads the verdict out of every row"),
+    "rows[].rate": (str, False, "`diff` reads how often it broke"),
+    "rows[].fired": (list, False, "`diff` names what fired"),
+    "rows[].fired[]": (str, False, "a detector is named by it"),
+    "rows[].h": (str, False, "`diff` compares what was sent by it"),
+}
+
+
 def unusable_snapshot(rec):
     """-> why this timeline line is not a snapshot, or None.
 
@@ -230,6 +258,17 @@ def unusable_snapshot(rec):
                 "every row, so a line holding one raises out of `diff` as a crash in this "
                 "tool over a file you are told to commit"
                 % (len(bad), bad[0][0], type(bad[0][1]).__name__))
+    # AND WHAT EACH FIELD HOLDS, by `_SNAPSHOT_REQUIRE`.
+    from workspace import _level_fault
+    why = _level_fault(rec, "", "", _SNAPSHOT_REQUIRE, "timeline line")
+    if why:
+        return why
+    for k, v in rec["rows"].items():
+        if v is None:
+            continue
+        why = _level_fault(v, "rows[].", "rows[%s]." % k, _SNAPSHOT_REQUIRE, "timeline line")
+        if why:
+            return why
     return None
 
 

@@ -1825,6 +1825,44 @@ def main():
     finally:
         shutil.rmtree(_wn, ignore_errors=True)
 
+    # --- AND WHAT EACH FIELD HOLDS, EVERY ROW OF `_SNAPSHOT_REQUIRE` ----------------------
+    #
+    # A field-type sweep over a stored timeline found `fixes` dying on `run: 7` and on a row
+    # with no `v`. Walked over the whole table rather than those two, so a field added to
+    # it is reached without this loop learning about it.
+    _sbase = {"run": "2026-09-01 10:00", "target": "t", "rows": {"a1": {"v": "DEFENDED"}}}
+    _smissed = []
+    for _key, (_kind, _req, _) in H._SNAPSHOT_REQUIRE.items():
+        _wrong = 7 if _kind is str else "x"
+        _b = json.loads(json.dumps(_sbase))
+        _field = _key.split(".")[-1].replace("[]", "")
+        _obj = _b["rows"]["a1"] if _key.startswith("rows[].") else _b
+        _obj[_field] = [_wrong] if _key.endswith("[]") else _wrong
+        _whys = H.unusable_snapshot(_b) or ""
+        if not (_field in _whys and type(_wrong).__name__ in _whys):
+            _smissed.append((_key, _whys))
+    check("every row of the snapshot table refuses a value of the wrong kind, by name",
+          _smissed == [], str(_smissed[:4]))
+    check("...and the line the walk mutates is itself a snapshot",
+          H.unusable_snapshot(_sbase) is None, str(H.unusable_snapshot(_sbase)))
+    _b = json.loads(json.dumps(_sbase))
+    _b["rows"]["a1"] = {"rate": "1/1"}
+    check("a row with no verdict is refused, naming it",
+          "rows[a1].v" in (H.unusable_snapshot(_b) or ""), str(H.unusable_snapshot(_b)))
+    # AND EVERY TIMELINE LINE THIS REPOSITORY SHIPS IS STILL ONE.
+    import glob as _g_s
+    _sbad = []
+    _root_s = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for _fs in _g_s.glob(os.path.join(_root_s, "out", "history", "*.jsonl")):
+        for _n, _l in enumerate(open(_fs, encoding="utf-8"), 1):
+            if _l.strip():
+                _w = H.unusable_snapshot(json.loads(_l))
+                if _w:
+                    _sbad.append((os.path.basename(_fs), _n, _w))
+    check("no timeline line this repository ships is refused",
+          len(_g_s.glob(os.path.join(_root_s, "out", "history", "*.jsonl"))) >= 5
+          and _sbad == [], str(_sbad[:3]))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
