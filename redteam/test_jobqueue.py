@@ -730,6 +730,57 @@ def main():
                             for _c in _ast_w.walk(_ex)),
           "execute does not call stopped_note")
 
+    # --- A JOB RECORD WHOSE FIELDS ARE THE WRONG KIND IS UNREADABLE, NOT A CRASH -----------
+    #
+    # A field-type sweep over a job queued by `onboard --submit` found the listing dying on
+    # `state: null` and `lease: "x"`, the worker on `history: 7` and `attempts: [1]` while
+    # claiming, `onboard --submit` on `submitted_at: 7`. `load` goes through `read_artifact`,
+    # which now asks `_JOB_REQUIRE`; every row is walked through `load`, and the listing and
+    # the worker are driven over one of them.
+    import subprocess as _sp_j
+    from workspace import _JOB_REQUIRE as _jtable
+    _jw = tempfile.mkdtemp()
+    try:
+        _jb = q.submit(_jw, "t", os.path.join(_jw, "t.yaml"))
+        _jid = _jb["job_id"]
+        _jmissed = []
+        for _key, (_kind, _req, _) in _jtable.items():
+            if _key == "job_id":
+                continue
+            _wrong = 7 if _kind is str else "x"
+            _b = json.loads(json.dumps(_jb))
+            _parts = _key.replace("[]", "").split(".")
+            _obj = _b
+            for _p in _parts[:-1]:
+                _obj[_p] = _obj.get(_p) or {}
+                _obj = _obj[_p]
+            _obj[_parts[-1]] = [_wrong] if _key.endswith("[]") else _wrong
+            json.dump(_b, open(os.path.join(_jw, "job_%s.json" % _jid), "w", encoding="utf-8"))
+            _rec = q.load(_jw, _jid) or {}
+            if not (_rec.get("state") == "unreadable" and _parts[-1] in str(_rec.get("note"))):
+                _jmissed.append((_key, _rec.get("state"), _rec.get("note")))
+        check("every row of the job table makes a record unreadable, by name",
+              _jmissed == [], str(_jmissed[:3]))
+        _b = dict(_jb, state=None)
+        json.dump(_b, open(os.path.join(_jw, "job_%s.json" % _jid), "w", encoding="utf-8"))
+        check("a job with no state is unreadable, not listed as one",
+              (q.load(_jw, _jid) or {}).get("state"), "unreadable")
+        json.dump(dict(_jb, history=7), open(os.path.join(_jw, "job_%s.json" % _jid), "w",
+                                             encoding="utf-8"))
+        _outs = []
+        for _script in (["jobqueue.py", "--root", _jw], ["worker.py", "--root", _jw, "--once"]):
+            _pj = _sp_j.run([sys.executable, os.path.join(HERE, _script[0])] + _script[1:],
+                            capture_output=True, text=True, errors="replace", timeout=300,
+                            env=dict(os.environ, QATRATION_OUT=_jw, PYTHONIOENCODING="utf-8"))
+            _outs.append((_script[0], "Traceback" in (_pj.stdout or "") + (_pj.stderr or "")))
+        check("the listing and the worker over a job holding `history: 7` do not crash",
+              _outs, [("jobqueue.py", False), ("worker.py", False)])
+        json.dump(_jb, open(os.path.join(_jw, "job_%s.json" % _jid), "w", encoding="utf-8"))
+        check("...while the job the walk mutates is itself readable",
+              (q.load(_jw, _jid) or {}).get("state"), "queued")
+    finally:
+        shutil.rmtree(_jw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

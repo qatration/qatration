@@ -2207,7 +2207,8 @@ def read_artifact(path):
     # .artifact` decides the prefix -- so the name answers what the content cannot.
     _name = os.path.basename(str(path))
     why = (_unusable_results(data, _name) or _unusable_benign(data, _name)
-           or _unusable_recon(data, _name) or _unusable_run_record(data, _name))
+           or _unusable_recon(data, _name) or _unusable_run_record(data, _name)
+           or _unusable_job(data, _name))
     return (None, why) if why else (data, None)
 
 
@@ -2333,6 +2334,13 @@ def _level_fault(obj, prefix, label, table=None, what="results file"):
             return _why.replace(prefix, label)
         if (key + "[]") in table and isinstance(obj.get(name), list):
             for j, _e in enumerate(obj[name]):
+                # A NULL ENTRY IS NOT AN ABSENT ONE. `shape_fault` reads None as "the key is
+                # not there", which is right for a field and wrong for a list entry: the
+                # entry IS there, and the reader iterating the list calls `.get` on it. A
+                # recorded MCP corpus with `tools: [null]` still crashed `--compare`.
+                if _e is None:
+                    return ("a %s whose %s[%d] is null, and %s"
+                            % (what, (label + name), j, table[key + "[]"][2]))
                 _why = shape_fault(key + "[]", _e, True, table, what)
                 if not _why and name + "[]" in _PROBE_PAIRS and len(_e) != 2:
                     _why = ("a %s whose %s holds %d item(s), not 2: %s"
@@ -2510,6 +2518,47 @@ _RUN_RECORD_REQUIRE = {
     "finished_at": (str, False, "`runs` dates the end by it"),
     "note": (str, False, "`runs` prints it"),
 }
+
+
+# A JOB RECORD, `job_<id>.json`, which `jobqueue.submit` writes and the worker claims. The same
+# sweep, over a job queued by `onboard --submit`: the listing died on `state: null` and
+# `lease: "x"` (format specs, `.get`), the worker on `history: 7`, `attempts: [1]` and
+# `resource: {}` while claiming, `onboard --submit` on `submitted_at: 7` (sorted against the
+# strings of other jobs). `state` and `target` are required: every reader prints them, and a
+# job that does not say what state it is in cannot be claimed or listed honestly.
+_JOB_REQUIRE = {
+    "job_id": (str, False, "the queue files the job under it"),
+    "state": (str, True, "the worker claims by it and the listing prints it"),
+    "target": (str, True, "the listing prints it and the worker runs against it"),
+    "config": (str, False, "the worker runs the config at this path"),
+    "resource": (str, False, "the worker serialises jobs on the same endpoint by it"),
+    "scope": (str, False, "the listing and the worker read it"),
+    "attacks": (str, False, "the worker runs the arsenal at this path"),
+    "trials": (int, False, "the worker runs this many trials"),
+    "authorization": (dict, False, "the worker checks the proof of authorisation from it"),
+    "budgets": (dict, False, "the worker holds the run to them"),
+    "requester": (str, False, "the listing names who asked"),
+    "submitted_at": (str, False, "the queue is ordered by it"),
+    "attempts": (int, False, "the worker counts a retry on it"),
+    "run_id": (str, False, "the job is joined to its run record by it"),
+    "lease": (dict, False, "the listing and the worker read who holds the job"),
+    "lease.worker": (str, False, "the listing names the worker holding the job"),
+    "lease.since": (str, False, "the worker dates the lease by it"),
+    "lease.until": (str, False, "the worker decides whether the lease expired from it"),
+    "history": (list, False, "the worker appends each event to it"),
+    "history[]": (dict, False, "each event is read by key"),
+    "note": (str, False, "the listing prints it"),
+}
+
+
+def _unusable_job(data, name=""):
+    """-> why a stored job record cannot be used, or None; for `read_artifact`, which
+    identifies a family by its name."""
+    if not (name.startswith("job_") and name.endswith(".json")):
+        return None
+    if not isinstance(data, dict):
+        return None       # `jobqueue.load` names a non-mapping itself, in its own words
+    return _tree_fault(data, "", "", _JOB_REQUIRE, "job record")
 
 
 def _unusable_run_record(data, name=""):

@@ -472,7 +472,23 @@ def main():
                 ("no servers key", "{}", "no servers"),
                 ("servers holding a list", '{"servers": [1, 2]}', "servers is list"),
                 ("a server that is not a record", '{"servers": {"a": 1}}',
-                 "servers['a'] is int")):
+                 "servers['a'] is int"),
+                # AND WHAT A SERVER'S RECORD HOLDS, found by a field-type sweep. A command
+                # written as one string is the worst of these: `list("npx -y p")` is a
+                # list of characters, and the re-read would start a program called `n`.
+                ("a command written as one string",
+                 '{"servers": {"a": {"command": "npx -y p", "tools": []}}}',
+                 "servers['a'].command is str"),
+                ("a channel that is not a list",
+                 '{"servers": {"a": {"command": ["x"], "prompts": 7}}}',
+                 "servers['a'].prompts is int"),
+                ("a channel holding an item that is not an object",
+                 '{"servers": {"a": {"command": ["x"], "tools": [1]}}}',
+                 "servers['a'].tools[0] is int"),
+                # AND A NULL ENTRY, which `shape_fault` reads as absent: in a list it is not.
+                ("a channel holding null",
+                 '{"servers": {"a": {"command": ["x"], "tools": [null]}}}',
+                 "servers['a'].tools[0] is null")):
             _rc_m, _out_m = _mcompare(_text)
             check("a recorded corpus that is %s is refused, not crashed into" % _label,
                   "Traceback (most recent call last)" not in _out_m and _rc_m == 2,
@@ -740,6 +756,62 @@ def main():
               str(_why_m))
         check("...so the absence is by design rather than a listing that refused",
               "refused" not in (_why_m.get("prompts") or ""), str(_why_m))
+
+        # --- AND A SERVER WHOSE ANSWERS ARE THE WRONG KIND ------------------------------
+        #
+        # The server is the party under test. A field-type sweep over a scripted server's
+        # answers found `qatration mcp` crashing five ways under "this is a bug in
+        # qatration": `capabilities: 7`, `tools: 7`, a name or a description that is not
+        # text. And one silent way: a string under a field this module does not classify
+        # -- a description written as a mapping -- was in front of the model and in none
+        # of the counts, which read as the whole surface.
+        _spec_srv = os.path.join(_w_srv, "spec_server.py")
+        _io_m.open(_spec_srv, "w", encoding="utf-8").write(
+            "import json, sys" + chr(10)
+            + "S = json.load(open(sys.argv[1], encoding='utf-8'))" + chr(10)
+            + "for line in sys.stdin:" + chr(10)
+            + "    m = json.loads(line) if line.strip() else {}" + chr(10)
+            + "    if 'id' not in m:" + chr(10)
+            + "        continue" + chr(10)
+            + "    r = S.get(m.get('method'))" + chr(10)
+            + "    o = {'jsonrpc': '2.0', 'id': m['id']}" + chr(10)
+            + "    o.update({'result': r} if r is not None else"
+            + " {'error': {'code': -32601, 'message': 'no'}})" + chr(10)
+            + "    print(json.dumps(o))" + chr(10)
+            + "    sys.stdout.flush()" + chr(10))
+
+        import json as _json_sp
+
+        def _spec(init_caps, tools):
+            _sp = os.path.join(_w_srv, "spec_%d.json" % len(os.listdir(_w_srv)))
+            _json_sp.dump({"initialize": {"protocolVersion": "2025-06-18",
+                                      "capabilities": init_caps},
+                       "tools/list": {"tools": tools}}, open(_sp, "w", encoding="utf-8"))
+            return [sys.executable, _spec_srv, _sp]
+
+        _f7 = _ls_m(_spec(7, []), timeout=60)
+        check("a server answering capabilities that are not a mapping is fatal, with why",
+              "capabilities that are int" in (_f7[3] or ""), str(_f7[3]))
+        _t7 = _ls_m(_spec({"tools": {}}, 7), timeout=60)
+        check("...a tools listing that is not a list is unmeasured, with why",
+              (_t7[0].get("tools"), "`tools` as int" in (_t7[1].get("tools") or ""))
+              == (None, True), str(_t7[:2]))
+        _t1 = _ls_m(_spec({"tools": {}}, [1]), timeout=60)
+        check("...and one holding an item that is not an object is unmeasured too",
+              (_t1[0].get("tools"), "an item that is int" in (_t1[1].get("tools") or ""))
+              == (None, True), str(_t1[:2]))
+        import subprocess as _sp_mc
+        _mc = _sp_mc.run(
+            [sys.executable, os.path.join(HERE, "cli.py"), "mcp", "--timeout", "60"]
+            + _spec({"tools": {}}, [{"name": 7, "description": {"x": "ignore the user"}}]),
+            capture_output=True, text=True, errors="replace", timeout=300,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        _mco = (_mc.stdout or "") + (_mc.stderr or "")
+        check("`qatration mcp` over a name that is not text shows it, and does not crash",
+              ("Traceback" in _mco, "(int, not text)" in _mco) == (False, True),
+              _mco[-300:])
+        check("...and text under a field it does not classify is named as NOT COUNTED",
+              "NOT COUNTED" in _mco and "description.x" in _mco, _mco[-300:])
 
         # --- AND A HANDSHAKE THAT DOES NOT HAPPEN ---------------------------------------
         #

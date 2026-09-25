@@ -256,17 +256,30 @@ def list_surface(argv, timeout=180, cwd=None, info=None):
             return {}, {}, {}, _silence(proc, _tail, "initialize", timeout)
         if "error" in init:
             return {}, {}, {}, "initialize refused: %s" % json.dumps(init["error"])[:120]
-        caps = ((init.get("result") or {}).get("capabilities") or {})
+        # WHAT A SERVER ANSWERS IS ITS OWN, and a server is exactly the party this command
+        # does not trust. A scripted server answering `capabilities: 7` ended the run in a
+        # TypeError under "this is a bug in qatration", about somebody else's server. The
+        # handshake is the one place nothing can be listed without, so a result or a
+        # capabilities block that is not a mapping ends the read, and says so.
+        _res = init.get("result") or {}
+        caps = _res.get("capabilities") if isinstance(_res, dict) else None
+        caps = {} if caps is None else caps
+        if not isinstance(_res, dict) or not isinstance(caps, dict):
+            return {}, {}, {}, ("initialize answered with %s, not a mapping: nothing it "
+                                "declares can be read"
+                                % ("a result that is %s" % type(_res).__name__
+                                   if not isinstance(_res, dict)
+                                   else "capabilities that are %s" % type(caps).__name__))
         # WHAT THE SERVER SAYS IT IS, for a caller that asks: `--compare` needs the version
         # the re-read actually ran, and this is the only place the server states it.
         if isinstance(info, dict):
-            _si = (init.get("result") or {}).get("serverInfo")
+            _si = _res.get("serverInfo")
             if isinstance(_si, dict):
                 info.update(_si)
         _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized",
                      "params": {}})
         found, why = {}, {}
-        _ins = (init.get("result") or {}).get("instructions")
+        _ins = _res.get("instructions")
         # Keyed by `uri`, which is structural and not counted: "initialize" is our label for
         # where it came from, not text the server wrote.
         found[INSTRUCTIONS] = ([{"uri": "initialize", "description": _ins}]
@@ -320,8 +333,22 @@ def _list_all(proc, lines_q, method, key, first_id, deadline, tail=(), timeout=0
         if "error" in got:
             return None, "declared, and %s refused%s: %s" % (
                 method, _where, json.dumps(got["error"])[:100])
+        # AND A PAGE THAT IS NOT A LIST OF OBJECTS IS A LISTING THAT CANNOT BE READ, which
+        # makes the channel unmeasured with the reason -- never a shorter list. Walked:
+        # `prompts: 7` raised out of `list(...)`, and a listing that dropped the item it
+        # could not read would print a count without it.
         result = got.get("result") or {}
-        items += list(result.get(key) or [])
+        _page = result.get(key) if isinstance(result, dict) else None
+        if not isinstance(result, dict) or not isinstance(_page, (list, type(None))):
+            return None, ("declared, and %s answered%s with %s, not a list of items"
+                          % (method, _where, "a result that is %s" % type(result).__name__
+                             if not isinstance(result, dict)
+                             else "`%s` as %s" % (key, type(_page).__name__)))
+        _odd = [x for x in (_page or []) if not isinstance(x, dict)]
+        if _odd:
+            return None, ("declared, and %s answered%s with an item that is %s, not an "
+                          "object: %.60r" % (method, _where, type(_odd[0]).__name__, _odd[0]))
+        items += list(_page or [])
         cursor = result.get("nextCursor")
         if cursor is None or cursor == "":
             return items, ""
@@ -610,7 +637,23 @@ _CORPUS_REQUIRE = {
                 "each key is a server name and each value is what that run recorded for it"),
     "servers[]": (dict, True,
                   "the command, the package and the version the recorded run read"),
+    # AND WHAT A SERVER'S RECORD HOLDS. A field-type sweep over a recorded corpus found
+    # `--compare` crashing on a channel that is not a list (`.get` on each item) and a
+    # `command` that is a number (`list(...)`). A command written as ONE STRING is worse
+    # than a crash: `list("npx -y pkg")` is a list of characters, and the re-read would
+    # try to start a program called `n`. The kinds are the ones `qatration mcp` records.
+    "servers[].package": (str, False, "the report names the server by it"),
+    "servers[].version": (str, False, "a change under an unchanged version is the finding"),
+    "servers[].command": (list, False, "the re-read starts the server with it, one "
+                                       "argument per entry"),
+    "servers[].command[]": (str, False, "each entry is one argument to the command"),
+    "servers[].chars": (int, False, "the report compares the size of the surface"),
+    "servers[].surface_chars": (int, False, "the report compares the size of the surface"),
+    "servers[].channels_absent": (dict, False, "the report says which channels were not read"),
 }
+for _c in SURFACE:
+    _CORPUS_REQUIRE["servers[].%s" % _c] = (list, False, "the re-read is compared with it")
+    _CORPUS_REQUIRE["servers[].%s[]" % _c] = (dict, False, "each item is read by key")
 
 
 def _compare_command(path, timeout):
@@ -649,6 +692,11 @@ def _compare_command(path, timeout):
         if _why:
             print("%s: %s. Nothing was re-read."
                   % (path, _why.replace("servers[]", "servers[%r]" % _n)))
+            return 2
+        from workspace import _tree_fault as _tf
+        _why = _tf(_rec, "servers[].", "servers[%r]." % _n, _CORPUS_REQUIRE, "recorded corpus")
+        if _why:
+            print("%s: %s. Nothing was re-read." % (path, _why))
             return 2
     # NOT AN EMPTY DIFF. A corpus recorded before the command was stored has nothing to
     # replay, and printing `nothing moved` over it would be the strongest possible
@@ -762,11 +810,32 @@ def main():
     print("  %-20s %s" % (INSTRUCTIONS, "%5d characters, returned by initialize"
                           % len(instruction_text(_ins_items)) if _ins_items
                           else "  none returned by initialize"))
+    # A NAME OR A DESCRIPTION THAT IS NOT TEXT IS SHOWN AS WHAT IT IS, not crashed on: the
+    # protocol says string, the server is the party under test, and a description written
+    # as a list of sentences is still sentences in front of the model (`counted_strings`
+    # counts them). Marked, so the reader sees the server broke the protocol.
+    def _shown(v):
+        if isinstance(v, str):
+            return v
+        return "(%s, not text) %s" % (type(v).__name__, json.dumps(v, default=str))
+
     for chan in SURFACE:
         for item in (found.get(chan) or []):
-            d = " ".join((item.get("description") or "").split())
-            name = item.get("name") or item.get("uriTemplate") or item.get("uri") or "?"
+            d = " ".join(_shown(item.get("description") or "").split())
+            name = _shown(item.get("name") or item.get("uriTemplate") or item.get("uri") or "?")
             print("  %-11s %-24s %5d  %s" % (chan, name[:24], len(d), d[:64]))
+    # AND TEXT THIS COMMAND DOES NOT CLASSIFY IS NAMED, not left out of the count in silence.
+    # `unclassified` was a check over the recorded corpus only: on a live server, a string
+    # under a field this module has no rule for -- `x-note`, or a description written as a
+    # mapping -- was in front of the model and in none of the numbers above, which read as
+    # the whole surface.
+    _unk = sorted({"%s: %s" % (chan, p) for chan in SURFACE for item in (found.get(chan) or [])
+                   for p in unclassified(item)})
+    if _unk:
+        print("")
+        print("NOT COUNTED: %d string field(s) this command does not classify, so none of "
+              "their text is in the counts above -- read them yourself: %s"
+              % (len(_unk), ", ".join(_unk[:8]) + (" ..." if len(_unk) > 8 else "")))
     # A SERVER THAT PUBLISHED NOTHING IS NOT A SERVER WITH A SMALL SURFACE. It answered,
     # so this is not a refusal; nothing was listable, so there is no measurement to
     # report either, and `0 characters` printed against a clean exit reads as one.
