@@ -76,6 +76,12 @@ def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
         except Exception as e:
             return {"success": False, "iterations": i - 1, "error": f"{type(e).__name__}: {e}",
                     "transcript": transcript, "seconds": round(time.time() - t0, 1)}
+        # AN EMPTY MESSAGE IS NOT A ROUND. It was sent, nothing fired on the empty reply to
+        # nothing, and three of them read HELD. Found by an independent review.
+        if not (atk or "").strip():
+            return {"success": False, "iterations": i - 1,
+                    "error": "the attacker model produced no message to send",
+                    "transcript": transcript, "seconds": round(time.time() - t0, 1)}
         target.reset()
         probe = target.send(atk)
         # Through `judge`, which is the same call the sweep makes, rather than the goal's own

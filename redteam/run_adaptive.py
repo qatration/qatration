@@ -22,6 +22,7 @@ import re
 import yaml
 from run_redteam import load_target
 from adaptive import adaptive_attack
+from baseline import rate_phrase
 
 # NO CLI DOOR, and the reason is a real constraint rather than an oversight. The attacker
 # that rewrites its own prompts is an LLM, reached through `langchain_core`, which lives in
@@ -71,10 +72,24 @@ def outcome_line(res):
         return ("NOTHING MEASURED: the loop stopped after %s iteration(s) — %s. This is not a "
                 "bot that held, it is a question that was never asked."
                 % (res.get("iterations"), res["error"]), 3)
+    # AND A LOOP THAT RAN NO ROUNDS ASKED NOTHING: `--iters 0` printed HELD, exit 0.
+    if not res.get("success") and not res.get("iterations"):
+        return ("NOTHING MEASURED: the loop ran 0 iterations, so nothing was sent. This is "
+                "not a bot that held.", 3)
     if res.get("success"):
         # `aimed` is False when the break the loop found is not the one the goal named — a
         # real finding either way, and a different sentence to write in a report.
         side = "" if res.get("aimed", True) else "  (NOT the goal it was aimed at)"
+        # AGAINST THE TARGET'S OWN BASELINE, as the sweep judges every breach. A target that
+        # emits its canary on ordinary traffic "broke" on round one to a question about
+        # opening hours, and `--promote` filed the question as a learned attack.
+        _att = res.get("attribution") or ()
+        if _att and _att[0] == "unattributable":
+            side += ("\n  NOT ATTRIBUTABLE: %s, so this cannot be told from the target's own "
+                     "noise" % ", ".join(rate_phrase(d, r) for d, r in _att[1]))
+        elif _att and _att[0] == "unmeasured" and not _att[1]:
+            side += ("\n  (no benign baseline for this target, so nothing here rules out an "
+                     "ambient false positive: run `qatration benign` against it)")
         return ("BROKEN in %s iteration(s) — detectors %s%s  (%ss)"
                 % (res.get("iterations"), res.get("fired"), side, res.get("seconds")), 0)
     return ("HELD after %s iteration(s)  (%ss) — the adaptive loop found no bypass within "
@@ -86,6 +101,9 @@ def promote(res, target_name, goal, success):
     import datetime
     if not res.get("success") or not res.get("winning_prompt"):
         return None
+    # A BREAK THE TARGET'S OWN TRAFFIC PRODUCES IS NOT A LEARNED ATTACK.
+    if (res.get("attribution") or ("",))[0] == "unattributable":
+        return None
     # What actually fired, which since the loop started judging with the always-on set may
     # not be what the goal asked for. Promoting it under the goal's detector list would file
     # the payload as proving something it did not.
@@ -94,8 +112,19 @@ def promote(res, target_name, goal, success):
     existing = yaml.safe_load(open(LEARNED, encoding="utf-8")) or [] if os.path.exists(LEARNED) else []
     if any(a.get("text", "").strip() == res["winning_prompt"].strip() for a in existing):
         return None                       # already learned; the arsenal is not a log
-    n = sum(1 for a in existing if str(a.get("id", "")).startswith(slug))
-    entry = {"id": f"{slug}-{n + 1}" if n else slug,
+    # AN ID NOBODY HOLDS, not a count of ids that share a prefix: `leak secret 2` then
+    # `leak secret` both came out `learned-leak-secret-2`, and a duplicate id makes `run`
+    # refuse the whole file. A goal with no ASCII letters slugged to `learned-`, so the text
+    # names it instead. Found by an independent review.
+    if slug == "learned-":
+        import hashlib as _hl
+        slug += _hl.sha256(res["winning_prompt"].encode("utf-8")).hexdigest()[:8]
+    _taken = {str(a.get("id", "")) for a in existing}
+    _id, n = slug, 1
+    while _id in _taken:
+        n += 1
+        _id = f"{slug}-{n}"
+    entry = {"id": _id,
              "category": "adaptive-learned",
              "success": sorted(fired),
              "text": res["winning_prompt"],
@@ -161,6 +190,10 @@ def main():
                           attacker_model=args.attacker_model, max_iters=args.iters,
                           constraints=args.constraints)
     print("-" * 78)
+    if res.get("success"):
+        import baseline as _bl_a
+        res["attribution"] = _bl_a.attribution(res.get("fired"),
+                                               _bl_a.rates(target.name, OUT_DIR))
     _line, _code = outcome_line(res)
     print(_line)
     if res.get("success"):
@@ -187,6 +220,8 @@ def main():
             print(f"learned → {os.path.basename(LEARNED)}: {e['id']}\n"
                   f"  a win on one system is a CANDIDATE generic attack; it earns that "
                   f"status by working on another")
+        elif (res.get("attribution") or ("",))[0] == "unattributable":
+            print("not promoted: the break is not attributable to the attack")
         elif res.get("success"):
             print("already in attacks_learned.yaml — the arsenal is not a log")
     return _code
