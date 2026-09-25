@@ -471,9 +471,16 @@ def read_maps(path):
     data, _why = _read_art(path)
     if _why is not None:
         raise ValueError(_why)
-    if isinstance(data, dict):
-        return list(data.get("maps") or []), dict(data.get("meta") or {})
-    return list(data or []), {}
+    # AND ONE THAT PARSES INTO THE WRONG SHAPE IS REFUSED THE SAME WAY, by the question
+    # `side_artifact` asks too: `meta: 7` died in `dict(meta)` here, `properties: 7` in
+    # `rescore_map`, `combined: "x"` in `coverage`, each as a bug in this tool.
+    from workspace import lock_map_fault as _fault
+    rows, meta = ((data.get("maps"), data.get("meta")) if isinstance(data, dict)
+                  else (data, None))
+    _why = _fault([] if rows is None else rows, meta)
+    if _why is not None:
+        raise ValueError(_why)
+    return list(rows or []), dict(meta or {})
 
 
 def map_target(stem, meta, names):

@@ -327,6 +327,54 @@ def main():
               % _fam, _unreached == [], str(_unreached))
         check("...and the %s record the walk mutates is itself usable" % _fam,
               _artifact(_fname, _doc)[1] is None, str(_artifact(_fname, _doc)[1]))
+    # --- AND A LOCK MAP, THROUGH BOTH DOORS THAT READ ONE ----------------------------------
+    #
+    # The same sweep over a stored `isolation_*.json` found twenty-one crash sites across
+    # `rejudge`, `rejudge --pages` and `coverage`. `isolation.read_maps` and
+    # `workspace.side_artifact` each read a lock map, and both now ask `lock_map_fault`;
+    # every row of its table is walked through BOTH, so neither can stop asking alone.
+    from workspace import _LOCKMAP_REQUIRE as _ltable, side_artifact as _side
+    from isolation import read_maps as _read_maps
+    _trial = {"status": "held", "hits": "0/1", "locks": {}, "sample": {"tool_calls": []}}
+    _lbase = {"meta": {"target": "t"},
+              "maps": [{"objective": "o", "verdict": "HARDENED", "coupling": [], "keyed": [],
+                        "combined": dict(_trial), "compose": {},
+                        "properties": [dict(_trial, name="p", keysearch={})]}]}
+
+    def _both(doc):
+        _fp = os.path.join(tempfile.mkdtemp(), "isolation_x.json")
+        io.open(_fp, "w", encoding="utf-8").write(json.dumps(doc))
+        try:
+            _read_maps(_fp)
+            _r = None
+        except ValueError as _e:
+            _r = str(_e)
+        _s = (_side(_fp, "x", "maps") or {}).get("unreadable")
+        return _r, _s
+
+    _lmissed = []
+    for _key, (_kind, _req, _) in _ltable.items():
+        _wrong = 7 if _kind is str else "x"
+        _b = json.loads(json.dumps(_lbase))
+        _parts = _key.replace("[]", "").split(".")
+        _obj = _b
+        for _p in _parts[:-1]:
+            _obj = _obj[_p][0] if isinstance(_obj[_p], list) else _obj[_p]
+        _obj[_parts[-1]] = [_wrong] if _key.endswith("[]") else _wrong
+        for _door, _why_l in zip(("read_maps", "side_artifact"), _both(_b)):
+            if not (_why_l and _parts[-1] in _why_l and type(_wrong).__name__ in _why_l):
+                _lmissed.append((_key, _door, _why_l))
+    check("every row of the lock map table is refused by read_maps and by side_artifact",
+          _lmissed == [], str(_lmissed[:4]))
+    check("...and the lock map the walk mutates is itself usable through both",
+          _both(_lbase) == (None, None), str(_both(_lbase)))
+    # AND EVERY LOCK MAP THIS REPOSITORY SHIPS STILL READS.
+    _lships = sorted(_g_a.glob(os.path.join(ROOT, "out", "isolation_*.json")))
+    _lrefused = [(os.path.basename(_p), _both(json.load(io.open(_p, encoding="utf-8"))))
+                 for _p in _lships]
+    _lrefused = [x for x in _lrefused if x[1] != (None, None)]
+    check("no lock map this repository ships is refused by the shape rule",
+          len(_lships) >= 5 and _lrefused == [], "%d maps, refused %s" % (len(_lships), _lrefused))
     # A CALL IS A PAIR. `for t, ti in tool_calls` unpacks each one, so a list of three is the
     # right kind and still raises; every one of the 852 stored is two strings.
     _b = json.loads(json.dumps(_base))

@@ -1513,6 +1513,14 @@ def side_artifact(explicit, default_name, key, root=None, warn=None, target=None
         if warn:
             warn(path, _why)
         return {key: None, "when": "", "unreadable": _why, "path": path}
+    # A LOCK MAP'S META IS READ BEFORE ITS ROWS, for the date just below, so its shape is
+    # asked here rather than with theirs: `meta: "x"` died in `measured_when`.
+    if key == "maps" and isinstance(data, dict):
+        _why = lock_map_fault([], data.get("meta"))
+        if _why:
+            if warn:
+                warn(path, _why)
+            return {key: None, "when": "", "unreadable": _why, "path": path}
     _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
     # AND IT HAS TO BE THIS TARGET'S. `run --recon` takes any path, and handed rulebot's
     # profile it put rulebot's recon panel on mybot's scorecard -- including "asked plainly to
@@ -1554,6 +1562,11 @@ def side_artifact(explicit, default_name, key, root=None, warn=None, target=None
             # report renders `unreadable` as a panel that says so, and renders None as no
             # panel at all. A reader who asked for a lock map and got nothing must be told
             # which of the two happened.
+            return {key: None, "when": "", "unreadable": _why, "path": path}
+        _why = lock_map_fault(_rows)
+        if _why:
+            if warn:
+                warn(path, _why)
             return {key: None, "when": "", "unreadable": _why, "path": path}
         out[key] = _rows
     # AND A PROFILE IS A MAPPING, the same question for the other family. `_recon_panel`
@@ -2278,12 +2291,103 @@ def _level_fault(obj, prefix, label, table=None, what="results file"):
         if (key + "[]") in table and isinstance(obj.get(name), list):
             for j, _e in enumerate(obj[name]):
                 _why = shape_fault(key + "[]", _e, True, table, what)
-                if (not _why and prefix.endswith("probe.") and name + "[]" in _PROBE_PAIRS
-                        and len(_e) != 2):
+                if not _why and name + "[]" in _PROBE_PAIRS and len(_e) != 2:
                     _why = ("a %s whose %s holds %d item(s), not 2: %s"
                             % (what, key + "[]", len(_e), table[key + "[]"][2]))
                 if _why:
                     return _why.replace(key + "[]", "%s%s[%d]" % (label, name, j))
+    return None
+
+
+def _tree_fault(obj, prefix, label, table, what):
+    """`_level_fault`, and then the same question of every mapping under this one that the
+    table has rows for -- a nested mapping, or each mapping in a list -- at any depth."""
+    _why = _level_fault(obj, prefix, label, table, what)
+    if _why:
+        return _why
+    for key in table:
+        if not key.startswith(prefix):
+            continue
+        name = key[len(prefix):]
+        if "." in name or "[" in name:
+            continue
+        v = obj.get(name)
+        if isinstance(v, dict) and any(k.startswith(key + ".") for k in table):
+            _why = _tree_fault(v, key + ".", label + name + ".", table, what)
+            if _why:
+                return _why
+        elif isinstance(v, list) and any(k.startswith(key + "[].") for k in table):
+            for j, _e in enumerate(v):
+                if isinstance(_e, dict):
+                    _why = _tree_fault(_e, key + "[].", "%s%s[%d]." % (label, name, j),
+                                       table, what)
+                    if _why:
+                        return _why
+    return None
+
+
+# A LOCK MAP, the artifact `isolation` writes, by the same measurement: every path in a
+# stored one set to a string, a number, a mapping and a list in turn, through every reader
+# of stored evidence. TWENTY-ONE crash sites, every one under "this is a bug in qatration":
+# `.get` on `maps[].combined: "x"` in `coverage` and the report, `rescore_map` iterating
+# `properties: 7`, `dict(meta)` on `meta: 7` in `read_maps`, `.get` on `properties[]: "x"`
+# in `_verdict`. The kinds are the ones `isolation` writes and the only ones found in the
+# twelve lock maps stored in this repository and the walk's workspace.
+_SAMPLE_ROWS = {
+    "achieved": (bool, False, "the report marks the sample that broke through"),
+    "output": (str, False, "the report quotes the reply from it"),
+    "tool_calls": (list, False, "the report lists each call"),
+    "tool_calls[]": (list, False, "each call is read as a (name, arguments) pair"),
+}
+_TRIAL_ROWS = {
+    "status": (str, False, "the lock map's verdict is decided from it"),
+    "hits": (str, False, "the report prints it as the rate"),
+    "locks": (dict, False, "the report's lock column reads it"),
+    "errors": (int, False, "an errored trial is not counted as held"),
+    "sample": (dict, False, "the report quotes the reply behind the verdict"),
+}
+_LOCKMAP_REQUIRE = {
+    "meta": (dict, False, "`read_maps` and the report date the map by it"),
+    "meta.target": (str, False, "`coverage` files the map under it"),
+    "meta.when": (str, False, "the report dates the map by it"),
+    "maps[].objective": (str, False, "every page names the objective by it"),
+    "maps[].verdict": (str, False, "`rejudge` and the report print it"),
+    "maps[].coupling": (list, False, "the report lists which defences move together"),
+    "maps[].coupling[]": (str, False, "the report joins the property names into a line"),
+    "maps[].keyed": (list, False, "the report names the properties a key opened"),
+    "maps[].keyed[]": (str, False, "a property is named by it"),
+    "maps[].combined": (dict, False, "`coverage`, `rejudge` and the report read it"),
+    "maps[].properties": (list, False, "`rejudge` re-scores each one"),
+    "maps[].properties[]": (dict, False, "each one is a defence, read by key"),
+    "maps[].properties[].name": (str, False, "the report names the defence by it"),
+    "maps[].properties[].keysearch": (dict, False, "the report reads the key search off it"),
+    "maps[].compose": (dict, False, "the report reads the composed attempt off it"),
+}
+for _where in ("maps[].combined.", "maps[].properties[]."):
+    _LOCKMAP_REQUIRE.update((_where + _k, _v) for _k, _v in _TRIAL_ROWS.items())
+    _LOCKMAP_REQUIRE.update((_where + "sample." + _k, _v) for _k, _v in _SAMPLE_ROWS.items())
+
+
+def lock_map_fault(rows, meta=None):
+    """-> why a stored lock map cannot be used, or None: its maps (the list, already out of
+    whichever container held it) and its meta. ONE question for both doors that read one --
+    `isolation.read_maps` and `side_artifact` -- so they cannot disagree about a file."""
+    if meta is not None:
+        _why = _level_fault({"meta": meta}, "", "", _LOCKMAP_REQUIRE, "lock map")
+        if _why:
+            return _why
+        if isinstance(meta, dict):
+            _why = _level_fault(meta, "meta.", "meta.", _LOCKMAP_REQUIRE, "lock map")
+            if _why:
+                return _why
+    if not isinstance(rows, list):
+        return ("a lock map whose maps are %s, not a list" % type(rows).__name__)
+    for j, _m in enumerate(rows):
+        if not isinstance(_m, dict):
+            return "a lock map whose maps[%d] is %s, not a mapping" % (j, type(_m).__name__)
+        _why = _tree_fault(_m, "maps[].", "maps[%d]." % j, _LOCKMAP_REQUIRE, "lock map")
+        if _why:
+            return _why
     return None
 
 
