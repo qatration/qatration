@@ -113,6 +113,82 @@ def main():
         check("...and says what deliveries the config exposes",
               obj.get("deliveries") is not None, str(obj))
 
+        # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE DOOR ----------------------------------
+        import glob as _gl_i
+        _rr = tempfile.mkdtemp()
+        try:
+            def _sub(**kw):
+                return intake.submit(_rr, body(**kw), policy=allow_loopback,
+                                     wake=lambda r: True)
+            # A STRANGER'S CONFIG NAMES NO HOST VARIABLE: `${VAR}` in a header, listed in
+            # `env:`, was expanded on this host and sent to the submitter's URL.
+            _ce, _oe = _sub(cfg={"env": ["QATRATION_AUTH_SECRET"],
+                                 "headers": {"X-Leak": "${QATRATION_AUTH_SECRET}"}})
+            check("a submitted config naming a host variable is refused before any probe",
+                  _ce == 400 and "environment variables" in json.dumps(_oe), f"{_ce} {_oe}")
+            _ce2, _ = _sub(cfg={"headers": {"X-Leak": "${HOME}"}})
+            check("...and so is `${...}` without an `env:` list", _ce2 == 400, str(_ce2))
+            # ALIASES DO NOT EXPAND: 548 bytes became a 58 MB probe.
+            _yaml_alias = ("adapter: http\nname: alias-bot\nurl: http://127.0.0.1:%d/chat\n"
+                           "request: {message: '{prompt}', pad: &a [x, x]}\n"
+                           "response: {reply: reply}\nextra: [*a, *a]\n" % port)
+            _ca, _oa = intake.submit(_rr, json.dumps({"config": _yaml_alias}).encode(),
+                                     policy=allow_loopback, wake=lambda r: True)
+            check("a submitted config with YAML aliases is refused", _ca == 400,
+                  f"{_ca} {_oa}")
+            _cb, _ = _sub(cfg={"request": {"message": "{prompt}",
+                                           "pad": "x" * (intake.MAX_BODY + 10)}})
+            check("...and a document larger than the body limit is refused", _cb == 413,
+                  str(_cb))
+            # THE 202 CARRIES THE CHECK'S WARNINGS.
+            _cw, _ow = _sub(cfg={"name": "tight-bot", "rate": {"max_requests": 2}})
+            check("an accepted job says what the check warned about",
+                  _cw == 202 and any("STOP part way" in w for w in _ow.get("warnings") or []),
+                  f"{_cw} {_ow.get('warnings')}")
+            # THE CONFIG'S TRIALS.
+            _ct, _ot = _sub(cfg={"name": "five-bot", "trials": 5})
+            _jt = q.load(_rr, _ot.get("job_id")) if _ct == 202 else {}
+            check("a config saying `trials: 5` is queued at five",
+                  (_jt or {}).get("trials") == 5, f"{_ct} {(_jt or {}).get('trials')}")
+            # A REFUSAL RAISED INSIDE THE CHECK IS NOT "NOT AUTHORISED", LEAVES NO CONFIG AND
+            # NO SERVER PATH.
+            _before = set(_gl_i.glob(os.path.join(_rr, "configs", "*.yaml")))
+            _cz, _oz = _sub(cfg={"name": "zero-bot", "trials": 0})
+            check("a config refused inside the check is 422, not 403",
+                  _cz == 422, f"{_cz} {_oz}")
+            check("...its config is not kept",
+                  set(_gl_i.glob(os.path.join(_rr, "configs", "*.yaml"))) == _before,
+                  str(set(_gl_i.glob(os.path.join(_rr, "configs", "*.yaml"))) - _before))
+            check("...and the refusal shows none of this service's paths",
+                  _rr not in json.dumps(_oz) and os.path.basename(_rr) not in json.dumps(_oz),
+                  json.dumps(_oz)[:200])
+            # A REFUSAL THAT QUOTES THE CONFIG'S PATH -- the gate does, in hosted mode -- is
+            # scrubbed before it reaches the stranger.
+            import onboard as _ob_i
+            _real_chk = _ob_i.check
+
+            def _quoting(path, *a, **k):
+                raise SystemExit("%s: refused for a reason" % path)
+            _ob_i.check = _quoting
+            try:
+                _cq, _oq = _sub(cfg={"name": "quote-bot"})
+            finally:
+                _ob_i.check = _real_chk
+            check("...even one that quoted the config's own path",
+                  _cq == 422 and os.path.basename(_rr) not in json.dumps(_oq)
+                  and "the submitted config" in json.dumps(_oq), f"{_cq} {json.dumps(_oq)[:200]}")
+        finally:
+            shutil.rmtree(_rr, ignore_errors=True)
+        # THE GATE THAT NEVER RAISES does not, on an `authorization` that is not a mapping.
+        _ok_a, _why_a = authorization.check({"url": "https://x.example/", "authorization": [1]},
+                                            "s")
+        check("an `authorization` that is not a mapping is refused, not raised on",
+              _ok_a is False and "mapping" in _why_a, _why_a)
+        # A STALLED BODY DOES NOT HOLD A THREAD FOREVER.
+        import inspect as _insp_i
+        check("the intake handler has a read timeout",
+              "timeout = 10" in _insp_i.getsource(intake), "no timeout on the handler")
+
         # The submitted config survives: an assessment whose inputs are gone is not reproducible.
         import glob
         check("the submitted config is stored",

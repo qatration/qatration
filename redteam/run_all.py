@@ -148,12 +148,19 @@ def main():
     print("\n" + "=" * 60)
     print("  regenerating aggregate reports")
     print("=" * 60)
+    # A PAGE THAT FAILED TO BUILD IS A FAILURE: only a timeout was said, and a report script
+    # exiting 1 left its page stale under a green run. Found by an independent review.
+    pages_failed = []
     for script in ("defense_report.py", "compare_targets.py", "build_index.py"):
         try:
-            subprocess.run([PY, os.path.join(ROOT, script)], env=env, timeout=TOOL_DEADLINE)
+            _prc = subprocess.run([PY, os.path.join(ROOT, script)], env=env,
+                                  timeout=TOOL_DEADLINE).returncode
         except subprocess.TimeoutExpired:
             print(f"  ! {script} did not finish in {TOOL_DEADLINE}s; its page is whatever it "
                   f"was before this sweep")
+            _prc = None
+        if _prc != 0:
+            pages_failed.append(script)
 
     print("\n" + "=" * 60)
     print("  discrimination self-audit")
@@ -189,6 +196,16 @@ def main():
         print(f"FAILED  : {', '.join(failed)}  (non-zero exit — check its output above)")
 
     # The exit code carries all of it, or a scheduled sweep is green whatever happened.
+    # NOTHING RAN IS NOT A PASS: every named server down, or a typo in `--only`, printed
+    # "ran 0" and exited 0. Found by an independent review.
+    if not ran and not failed:
+        print("\nEXIT 3 — nothing was swept: %s. The pages above are from earlier runs."
+              % ("every target named was down" if skipped else "no target matched"))
+        sys.exit(3)
+    if pages_failed:
+        print(f"\nEXIT 1 — {', '.join(pages_failed)} did not rebuild its page, so what it "
+              f"shows is from before this sweep.")
+        sys.exit(1)
     if failed:
         print(f"\nEXIT 1 — {len(failed)} target(s) failed to run.")
         sys.exit(1)

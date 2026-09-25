@@ -149,6 +149,10 @@ def check(cfg, secret, fetch=None):
     """
     auth = cfg.get("authorization") or {}
     url = cfg.get("url") or ""
+    # A MAPPING, or this "never raises" gate raised AttributeError on `authorization: [1]`.
+    if not isinstance(auth, dict):
+        return False, ("`authorization` is %s; it is a mapping with a `method` and what that "
+                       "method needs" % type(auth).__name__)
     method = auth.get("method")
     if not method and not auth:
         return False, ("no `authorization` block in the target config — a scan of somebody "

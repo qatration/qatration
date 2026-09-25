@@ -96,6 +96,15 @@ ID_RE = re.compile(r"\A[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}\Z")
 from workspace import SCOPES
 
 
+class _NoAliasLoader(yaml.SafeLoader):
+    """SafeLoader that refuses YAML aliases: a stranger's document is never expanded here."""
+
+    def compose_node(self, parent, index):
+        if self.check_event(yaml.AliasEvent):
+            raise yaml.YAMLError("aliases (`*name`) are not accepted in a submitted config")
+        return super().compose_node(parent, index)
+
+
 def _problem(status, detail):
     return status, {"error": detail}
 
@@ -142,7 +151,7 @@ def submit(root, body, policy=None, wake=None):
         return _problem(400, "no `config`: send the target YAML as a string, or an object")
     if isinstance(raw, str):
         try:
-            cfg = yaml.safe_load(raw) or {}
+            cfg = yaml.load(raw, Loader=_NoAliasLoader) or {}
         except Exception as e:
             return _problem(400, f"the config is not valid YAML: {type(e).__name__}: {e}")
     elif isinstance(raw, dict):
@@ -151,6 +160,28 @@ def submit(root, body, policy=None, wake=None):
         return _problem(400, "`config` must be a YAML string or an object")
     if not isinstance(cfg, dict):
         return _problem(400, "the config did not parse to a mapping")
+    # AND WHAT IT PARSED TO IS BOUNDED, not only the body: the limit was on the bytes that
+    # arrived, and YAML aliases expand them -- 548 bytes of nested `*anchor` lists became a
+    # 58 MB probe, and two more levels run this service out of memory. Aliases are refused
+    # above, and the parsed document is held to the same bound here. Found by an independent
+    # review.
+    try:
+        _size = len(json.dumps(cfg, default=str))
+    except (TypeError, ValueError, RecursionError):
+        return _problem(400, "the config could not be measured as a document")
+    if _size > MAX_BODY:
+        return _problem(413, f"the config expands to {_size} bytes; the limit is {MAX_BODY}")
+
+    # 1: A STRANGER'S CONFIG NAMES NO HOST VARIABLE. `env:` lists the variables `${VAR}` may
+    # expand, and the adapter expands them into headers it sends to the submitter's own URL:
+    # `env: [QATRATION_AUTH_SECRET]` with `X-Leak: "${QATRATION_AUTH_SECRET}"` delivered the
+    # key that mints authorisation tokens to whoever asked, on the onboarding probe before the
+    # 202. A local operator names their own variables; nobody submitting here may name ours.
+    # Found by an independent review.
+    if "env" in cfg or "${" in json.dumps(cfg, default=str):
+        return _problem(400, "a submitted config may not name environment variables (`env:` "
+                             "or `${...}`): they would be read on this service's host. Put "
+                             "the literal value in the config instead")
 
     # ONLY THE CONFIGURED ADAPTER. Every other adapter in this repo runs code that lives here,
     # so accepting one would be arbitrary local execution dressed as a target.
@@ -197,12 +228,30 @@ def submit(root, body, policy=None, wake=None):
     # One probe, through the same check `onboard.py` runs, so the operator hears "your endpoint
     # is unreachable" now rather than after a queue wait. It also runs the authorization gate.
     from onboard import check as onboard_check
+
+    def _scrub(text):
+        # THE SERVICE'S OWN PATHS STAY HERE: a refusal quoted the config's path on this host,
+        # and the queue root with it, to whoever submitted it.
+        return str(text).replace(cfg_path, "the submitted config").replace(str(root), "<queue>")
+
+    def _drop():
+        try:
+            os.remove(cfg_path)
+        except OSError:
+            pass
     try:
-        ok, rep = onboard_check(cfg_path)
+        ok, rep = onboard_check(cfg_path, scope=scope)
     except SystemExit as e:
-        return _problem(403, f"not authorised: {e}")
+        # NOT EVERY REFUSAL IS "NOT AUTHORISED": a `trials: 0` raised here came back 403, and
+        # the refused config stayed on disk. 403 is the gate's; anything else is the config.
+        _drop()
+        if isinstance(e, authorization.NotAuthorised):
+            return _problem(403, _scrub(f"not authorised: {e}"))
+        return _problem(422, _scrub(f"the config was refused: {e}"))
     except Exception as e:
-        return _problem(400, f"the config could not be driven: {type(e).__name__}: {e}")
+        _drop()
+        return _problem(400, _scrub(f"the config could not be driven: {type(e).__name__}: "
+                                    f"{e}"))
     if not ok:
         # A REFUSED CONFIG IS NOT KEPT: it is the input to an assessment that will not run,
         # and every refusal left one in `configs/`. And NOT AUTHORISED IS 403: `onboard.check`
@@ -214,16 +263,29 @@ def submit(root, body, policy=None, wake=None):
         except OSError:
             pass
         _code = 403 if rep.get("exit") == 4 else 422
-        return _problem(_code, {"problems": rep.get("problems"), "notes": rep.get("notes")})
+        return _problem(_code, {"problems": [_scrub(x) for x in rep.get("problems") or []],
+                                "notes": [_scrub(x) for x in rep.get("notes") or []]})
 
+    # THE CONFIG'S `trials`, as `run` and `onboard --submit` read it: this queued three
+    # against a config saying five.
+    from workspace import trial_count as _tc_i
+    try:
+        _trials = _tc_i(cfg.get("trials", 3), "trials: in the config")
+    except SystemExit as e:
+        _drop()
+        return _problem(422, _scrub(str(e)))
     job = q.submit(root, name, cfg_path,
                    scope=scope,
                    authorization=rep.get("authorization"),
                    budgets=dict(cfg.get("rate") or {}),
-                   attacks=DEFAULT_ARSENAL)
+                   attacks=DEFAULT_ARSENAL, trials=_trials)
     woken = wake(root)
+    # AND WHAT THE CHECK WARNED ABOUT: "the budget allows 20, it will STOP part way" and "no
+    # canaries, a leak is invisible" were computed and dropped, so the 202 said a plain
+    # "queued" over a job that would measure almost nothing. Found by an independent review.
     return 202, {"job_id": job.get("job_id"), "state": job.get("state"), "target": name,
                  "deliveries": rep.get("capabilities"),
+                 "warnings": [_scrub(x) for x in rep.get("notes") or []],
                  "note": ("queued; poll /runs/<job_id>" if woken else
                           "queued, but no worker could be started — it will run when one is")}
 
@@ -328,6 +390,9 @@ def report(root, job_id):
 def make_handler(root):
     class Handler(BaseHTTPRequestHandler):
         server_version = "qatration-intake"
+        # A READ THAT NEVER FINISHES: a `Content-Length: 65536` and one byte held a thread
+        # forever, and two hundred of them held two hundred. Found by an independent review.
+        timeout = 10
 
         def _send(self, status_code, obj, ctype="application/json", send_body=True):
             body = (obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False,

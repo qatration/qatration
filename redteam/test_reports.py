@@ -1153,6 +1153,18 @@ def main():
         check("--only with a name nobody has sweeps nothing",
               _ra.fleet_plan(only={"no-such-target-at-all"}, root=_fd) == [],
               "it swept something")
+        # AND THE RUN THAT SWEPT NOTHING DOES NOT EXIT 0: a typo in `--only` printed "ran 0"
+        # and passed. Driven as the command, over a scratch workspace.
+        _ow_ra = os.path.join(_fd, "out")
+        os.makedirs(_ow_ra, exist_ok=True)
+        _pra = subprocess.run([sys.executable, os.path.join(HERE, "run_all.py"), "--only",
+                               "no-such-target-at-all"], capture_output=True, text=True,
+                              timeout=600, env=dict(os.environ, QATRATION_OUT=_ow_ra,
+                                                    PYTHONDONTWRITEBYTECODE="1",
+                                                    PYTHONIOENCODING="utf-8"))
+        check("a fleet run that swept nothing exits 3, not 0",
+              _pra.returncode == 3 and "nothing was swept" in _pra.stdout,
+              "exit %s: %s" % (_pra.returncode, (_pra.stdout + _pra.stderr)[-300:]))
     finally:
         _sh_f.rmtree(_fd, ignore_errors=True)
     # The rule used to be "the filename contains `generic`", which was a proxy for the intent
