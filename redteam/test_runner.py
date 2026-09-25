@@ -454,6 +454,13 @@ def main():
         _w3.saw([_lim(), _ok()])
     check("an attack whose retry landed does not count towards the wall",
           _w3.reason == "", _w3.reason)
+    # AN EMPTY REPLY IS NOT AN ANSWER. One empty 200 set `answered` for good, so a dead
+    # endpoint after it never tripped the wall; and an endpoint answering empty 200s to
+    # everything was sent the whole arsenal. Found by an independent review.
+    _w5 = _W()
+    _t5 = [_w5.saw([_P(prompt="x", output="")]) for _ in range(_GIVE)]
+    check("an endpoint that answers every probe with nothing trips the wall",
+          _t5[-1] is True and "empty reply" in _w5.reason, _w5.reason)
     # NOR DOES A UNIT WITH NOTHING IN IT, which is a skip rather than a refusal.
     _w4 = _W()
     for _ in range(_GIVE * 2):

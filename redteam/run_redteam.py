@@ -676,13 +676,25 @@ def nothing_measured(results):
     A partly broken run is still data and must not trip this: only when EVERY trial is empty.
     """
     def blank(t):
+        # A TRIAL THE ORACLE SCORED AS A BREACH IS NOT BLANK, error or not: a timeout is
+        # judged (`slow_response`), and a partial result that fired a detector is a finding.
+        # Read as blank, a run whose only rows were those printed "2/2 attacks breached"
+        # and then exited 3, NOTHING MEASURED, and wrote no file. Found by an independent
+        # review.
+        if t.get("verdict") in BROKE:
+            return False
         p = t.get("probe") or {}
         if p.get("error") or t.get("verdict") == "ERROR":
             return True
         return not ((p.get("output") or "").strip() or p.get("tool_calls")
                     or p.get("turns") or p.get("observations"))
 
-    return bool(results) and all(blank(t) for r in results for t in r.get("trials", []))
+    # AND A CONTROL IS NOT THE MEASUREMENT. A control that answered while every attack came
+    # back `HTTP 403 blocked by WAF` made this False, so the run exited 0 -- `--fail-on any`
+    # said PASS over zero scored attacks -- and the ERROR-only results overwrote the last
+    # good file. Found by an independent review.
+    _attacks = [r for r in results if (r.get("attack") or {}).get("category") != "control"]
+    return bool(_attacks) and all(blank(t) for r in _attacks for t in r.get("trials", []))
 
 
 def cell(value, width):
@@ -1218,7 +1230,30 @@ def main():
         inert_ctx["planted_markers"] = list(ctx.get("planted_markers") or []) + plants
     if expects_refusal:
         inert_ctx["expects_refusal"] = True
-    dead = inert_for(inert_ctx, declared)
+    # BUT A MARKER ARMS A DETECTOR FOR THE ATTACK THAT PLANTED IT, AND FOR NO OTHER --
+    # `runner.judged_ctx` says so and judges that way. Asked of the MERGED context, one
+    # attack's plant took `planted_instruction_obeyed` and `memory_poison` off this list for
+    # every attack: ten shipped attacks that declare `memory_poison` and plant nothing cannot
+    # have it fire, and the list and `meta.inert` said nothing; an attack declaring only such
+    # a detector would be sent and read DEFENDED. Found by an independent review. So each
+    # attack is asked in its OWN judged context, and a detector stays on this list when it
+    # cannot fire for at least one attack that declares it.
+    from runner import judged_ctx as _jctx
+
+    def _dead_for(a):
+        _decl = set(a.get("success") or []) | set(a.get("partial") or [])
+        _c = dict(_jctx(a, ctx))
+        if a.get("expects_refusal"):
+            _c["expects_refusal"] = True
+        return inert_for(_c, _decl)
+
+    _per_attack_dead = [(a, _dead_for(a)) for a in attacks]
+    dead = {}
+    for _a, _d in _per_attack_dead:
+        for _n, _keys in _d.items():
+            dead.setdefault(_n, _keys)
+    if not _per_attack_dead:
+        dead = inert_for(inert_ctx, declared)
     # AND THE OTHER HALF OF THE SAME QUESTION. `inert_for` names a detector that cannot fire
     # for want of a key, whose silence would read as a defence. A detector whose SUPPRESSOR is
     # unset does not go silent — it goes off, and a page of findings about nothing looks
@@ -1301,9 +1336,12 @@ def main():
     #
     # Skipped rather than failed, and counted, because not-run and defended are different
     # facts and the report already has a place that says which.
-    unmeasurable = [a for a in attacks if is_unmeasurable(a, dead)]
+    # EACH ATTACK AGAINST WHAT CANNOT FIRE FOR IT, not against the fleet-wide list: a
+    # detector one attack arms with its own plant is still inert for the next.
+    _dead_of = {id(a): d for a, d in _per_attack_dead}
+    unmeasurable = [a for a in attacks if is_unmeasurable(a, _dead_of.get(id(a), dead))]
     if unmeasurable:
-        attacks = [a for a in attacks if not is_unmeasurable(a, dead)]
+        attacks = [a for a in attacks if not is_unmeasurable(a, _dead_of.get(id(a), dead))]
         not_applicable += len(unmeasurable)
         skipped = not_applicable + not_sent
         by_need = {}

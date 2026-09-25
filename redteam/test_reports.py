@@ -1235,6 +1235,20 @@ def main():
                                    {"error": "502", "output": "Bad Gateway"})))
     check("...and a timeout that captured a partial answer did too",
           nothing_measured(_trials({"error": "TIMEOUT", "output": "The order stat"})))
+    # BUT A TRIAL THE ORACLE SCORED AS A BREACH IS A MEASUREMENT, error or not: a timeout is
+    # judged, and a partial result that fired a detector is a finding. Read as blank, a run
+    # of those printed "2/2 attacks breached" and exited 3 with no file. Found by an
+    # independent review.
+    check("a trial scored EXPLOITED is not blank, though it carries an error",
+          not nothing_measured([{"attack": {"id": "a"}, "trials": [
+              {"verdict": "EXPLOITED", "probe": {"error": "TIMEOUT", "output": ""}}]}]))
+    # AND A CONTROL IS NOT THE MEASUREMENT: a control that answered beside attacks that all
+    # errored made this False, and the run exited 0 over an ERROR-only file.
+    check("a control that answered does not make a run of errored attacks measured",
+          nothing_measured([{"attack": {"id": "c", "category": "control"},
+                             "trials": [{"probe": {"output": "fine"}}]},
+                            {"attack": {"id": "a", "category": "x"},
+                             "trials": [{"probe": {"error": "HTTP 403"}}]}]))
     # THE VERDICT IS THE OTHER HALF OF THAT PREDICATE, and it is reached by a row whose
     # probe records no error at all -- a trial the runner scored ERROR for its own reasons.
     check("...and a trial the run scored ERROR is not evidence because it had output",

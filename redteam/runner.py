@@ -85,6 +85,14 @@ class GiveUpWall(object):
         # THROUGH THE CONSTANTS `targets_http` writes, not a second spelling of them.
         from signing import RATE_LIMITED as _RL, NEVER_SENT as _NS
         errs = [str(getattr(p, "error", "") or "") for p in probes]
+        # AN EMPTY REPLY IS NOT AN ANSWER, by `Probe.silent`'s own rule. It set `answered`
+        # for good, so one empty HTTP 200 followed by eight refused connections never
+        # tripped the dead-endpoint wall, and an endpoint answering empty 200s to everything
+        # was sent the whole arsenal. A silent probe now counts with the failures, under the
+        # words that say what it was. Found by an independent review.
+        _silent = [bool(not e and hasattr(p, "silent") and p.silent())
+                   for p, e in zip(probes, errs)]
+        errs = [e or ("empty reply" if s else "") for e, s in zip(errs, _silent)]
         if any(not e for e in errs):
             self.answered = True
         if probes and all(e.startswith(_RL) for e in errs):
