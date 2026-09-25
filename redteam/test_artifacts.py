@@ -375,6 +375,43 @@ def main():
     _lrefused = [x for x in _lrefused if x[1] != (None, None)]
     check("no lock map this repository ships is refused by the shape rule",
           len(_lships) >= 5 and _lrefused == [], "%d maps, refused %s" % (len(_lships), _lrefused))
+    # --- AND A RECON PROFILE, THROUGH THE DOORS THAT READ ONE -----------------------------
+    #
+    # The same sweep over a stored `recon_*.json` crashed the report panel and `generate`.
+    # `read_artifact` (by name) and `side_artifact` (the panel) both ask
+    # `recon_profile_fault`; every row of its table is walked through both.
+    from workspace import _RECON_REQUIRE as _rtable
+    _rbase = {"target": "t", "style": {}, "statefulness": {},
+              "refusal_vocab": [{"probe": "p", "class": "c"}]}
+
+    def _rboth(doc):
+        _fp = os.path.join(tempfile.mkdtemp(), "recon_x.json")
+        io.open(_fp, "w", encoding="utf-8").write(json.dumps(doc))
+        return read_artifact(_fp)[1], (_side(_fp, "x", "profile") or {}).get("unreadable")
+
+    _rmissed = []
+    for _key, (_kind, _req, _) in _rtable.items():
+        _wrong = 7 if _kind is str else "x"
+        _b = json.loads(json.dumps(_rbase))
+        _parts = _key.replace("[]", "").split(".")
+        _obj = _b
+        for _p in _parts[:-1]:
+            _obj = _obj[_p][0] if isinstance(_obj[_p], list) else _obj[_p]
+        _obj[_parts[-1]] = [_wrong] if _key.endswith("[]") else _wrong
+        for _door, _why_r in zip(("read_artifact", "side_artifact"), _rboth(_b)):
+            if not (_why_r and _parts[-1] in _why_r and type(_wrong).__name__ in _why_r):
+                _rmissed.append((_key, _door, _why_r))
+    check("every row of the recon profile table is refused by read_artifact and side_artifact",
+          _rmissed == [], str(_rmissed[:4]))
+    check("...and the profile the walk mutates is itself usable through both",
+          _rboth(_rbase) == (None, None), str(_rboth(_rbase)))
+    _rships = sorted(_g_a.glob(os.path.join(ROOT, "out", "recon_*.json")))
+    _rrefused = [(os.path.basename(_p), _rboth(json.load(io.open(_p, encoding="utf-8"))))
+                 for _p in _rships]
+    _rrefused = [x for x in _rrefused if x[1] != (None, None)]
+    check("no recon profile this repository ships is refused by the shape rule",
+          len(_rships) >= 5 and _rrefused == [], "%d profiles, refused %s"
+          % (len(_rships), _rrefused))
     # A CALL IS A PAIR. `for t, ti in tool_calls` unpacks each one, so a list of three is the
     # right kind and still raises; every one of the 852 stored is two strings.
     _b = json.loads(json.dumps(_base))

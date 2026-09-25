@@ -105,6 +105,13 @@ def main():
               f"{', '.join(sorted(map(str, profile))[:8]) or 'nothing'}. Nothing was "
               f"generated.")
         return 2
+    # AND ONE WHOSE FIELDS ARE THE WRONG KIND IS NOT READABLE, by the question the report
+    # and the fleet page ask of the same file: `self_description: 7` reached a regex.
+    from workspace import recon_profile_fault as _recon_fault
+    _why_p = _recon_fault(profile)
+    if _why_p:
+        print(f"generate: {prof_path} could not be read ({_why_p}). Nothing was generated.")
+        return 2
     # AND A PROFILE OF ANOTHER BOT IS NOT THIS BOT'S. `--recon` takes any path, and the
     # objectives are written `applies_to` the config's target: one bot's stated rules turned
     # into attacks on another, filed as if the second had stated them.

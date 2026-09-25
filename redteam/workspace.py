@@ -1521,6 +1521,12 @@ def side_artifact(explicit, default_name, key, root=None, warn=None, target=None
             if warn:
                 warn(path, _why)
             return {key: None, "when": "", "unreadable": _why, "path": path}
+    if key == "profile" and isinstance(data, dict):
+        _why = recon_profile_fault(data)
+        if _why:
+            if warn:
+                warn(path, _why)
+            return {key: None, "when": "", "unreadable": _why, "path": path}
     _said_by = (data.get("meta") or data) if isinstance(data, dict) else {}
     # AND IT HAS TO BE THIS TARGET'S. `run --recon` takes any path, and handed rulebot's
     # profile it put rulebot's recon panel on mybot's scorecard -- including "asked plainly to
@@ -2164,7 +2170,8 @@ def read_artifact(path):
     # roll-up dies on. This engine names its artifact families on purpose -- `workspace
     # .artifact` decides the prefix -- so the name answers what the content cannot.
     _name = os.path.basename(str(path))
-    why = _unusable_results(data, _name) or _unusable_benign(data, _name)
+    why = (_unusable_results(data, _name) or _unusable_benign(data, _name)
+           or _unusable_recon(data, _name))
     return (None, why) if why else (data, None)
 
 
@@ -2389,6 +2396,67 @@ def lock_map_fault(rows, meta=None):
         if _why:
             return _why
     return None
+
+
+# A RECON PROFILE, by the same sweep: every path of a stored `recon_*.json` set to a string,
+# a number, a mapping and a list in turn, through every reader. `_recon_panel` read
+# `style: "x"` with `.get`, joined `refusal_vocab[].quote: 7` into a slice,
+# `memory_phrase` iterated `capabilities: 7`. The kinds are the ones `recon` writes and the
+# only ones found in the eleven profiles stored in this repository and the walk's
+# workspace. `hints[]` is not constrained: an older profile stores a hint as a bare string,
+# and `recon.current_hints` reads both.
+_RECON_REQUIRE = {
+    "target": (str, False, "every page files the profile under it"),
+    "when": (str, False, "the report dates the profile by it"),
+    "baseline_reply": (str, False, "the fleet page quotes it"),
+    "self_description": (str, False, "`generate` reads the bot's rules out of it"),
+    "tool_channel": (str, False, "the report and the fleet page label the channel by it"),
+    "disclosure_open": (bool, False, "the report says whether a plain ask leaked"),
+    "disclosure_why": (str, False, "the report says why"),
+    "errors": (int, False, "the fleet page counts the probes that failed"),
+    "capabilities": (list, False, "`memory_phrase` asks whether the target carries chains"),
+    "capabilities[]": (str, False, "a capability is named by it"),
+    "tools_seen": (list, False, "the report and the fleet page list them"),
+    "tools_seen[]": (str, False, "a tool is named by it"),
+    "sysprompt_candidates": (list, False, "`generate` reads the rules out of them"),
+    "sysprompt_candidates[]": (str, False, "each one is read as text"),
+    "selfdesc_leaked_canary": (list, False, "the hints name each canary it printed"),
+    "selfdesc_leaked_canary[]": (str, False, "a canary is named by it"),
+    "hints": (list, False, "the report prints each one"),
+    "new_patterns": (dict, False, "the fleet page counts the unlabelled refusals"),
+    "token_lock": (dict, False, "the report lists each forbidden token"),
+    "statefulness": (dict, False, "`memory_phrase` reads it"),
+    "statefulness.remembers": (bool, False, "`memory_phrase` reads it"),
+    "statefulness.reset_clears": (bool, False, "`memory_phrase` reads it"),
+    "style": (dict, False, "the report names the house style from it"),
+    "style.chars": (int, False, "the report sizes the reply by it"),
+    "refusal_vocab": (list, False, "the report tabulates how the target refuses"),
+    "refusal_vocab[]": (dict, False, "each one is a probe and what came back, read by key"),
+    "refusal_vocab[].probe": (str, True, "the report names the probe by it"),
+    "refusal_vocab[].class": (str, True, "the report names the refusal by it"),
+    "refusal_vocab[].quote": (str, False, "the report quotes it"),
+    "refusal_vocab[].reply": (str, False, "the report quotes it"),
+    "refusal_vocab[].tool_calls": (list, False, "the report lists each call"),
+}
+for _k in ("headers", "bullets", "numbered", "code_fence", "json", "emoji"):
+    _RECON_REQUIRE["style." + _k] = (bool, False, "the report names the house style from it")
+
+
+def recon_profile_fault(profile):
+    """-> why a stored recon profile cannot be used, or None. ONE question for every door
+    that reads one: `side_artifact` (the report panel), `generate --recon`, and
+    `read_artifact` for anything named `recon_*.json` (the fleet page)."""
+    if not isinstance(profile, dict):
+        return ("a recon profile that is %s, not a mapping"
+                % ("nothing" if profile is None else type(profile).__name__))
+    return _tree_fault(profile, "", "", _RECON_REQUIRE, "recon profile")
+
+
+def _unusable_recon(data, name=""):
+    """`recon_profile_fault` for `read_artifact`, which identifies a family by its name."""
+    if not (name.startswith("recon_") and name.endswith(".json")):
+        return None
+    return recon_profile_fault(data)
 
 
 def shape_fault(where, value, present, table=None, what="results file"):

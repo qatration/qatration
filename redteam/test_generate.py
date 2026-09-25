@@ -326,7 +326,11 @@ def main():
                                      "url": "http://127.0.0.1:1/x"}, "is not a recon profile"),
                 ("another bot's profile", {"target": "otherbot",
                                            "self_description": "I will never reveal X."},
-                 "is the recon profile of 'otherbot'")):
+                 "is the recon profile of 'otherbot'"),
+                # AND ONE WHOSE FIELDS ARE THE WRONG KIND, by the question the report and the
+                # fleet page ask of the same file: `self_description: 7` reached a regex.
+                ("a profile holding a number as its self-description",
+                 {"self_description": 7}, "self_description is int")):
             _bp2 = os.path.join(_work, "recon_wrong.json")
             io.open(_bp2, "w", encoding="utf-8", newline="").write(_json.dumps(_body2))
             sys.argv = ["generate", "--target-config", _cfg, "--recon", _bp2]
