@@ -773,7 +773,7 @@ def main():
             returncode, stdout, stderr = 0, "", ""
         _deadlines = []
         _real_run = _wk._run
-        _wk._run = lambda cmd, out, python=None, deadline=None: (
+        _wk._run = lambda cmd, out, python=None, deadline=None, hosted=False: (
             _deadlines.append(deadline), _Done())[1]
         try:
             _job = {"job_id": "jx", "config": os.path.join(_sw, "t.yaml"), "scope": "quick"}
@@ -790,11 +790,31 @@ def main():
                                            for d in _deadlines), str(_deadlines))
         check("...and an attempt that wrote no run record is not joined to the last one's",
               _rid is None, str(_rid))
+        # A STRANGER'S JOB RUNS UNDER THE HOSTED RULES WHOEVER STARTS THE WORKER: the job
+        # carries the mode, and each step's child gets QATRATION_HOSTED from it.
+        _hj = q.submit(_sw, "h", os.path.join(_sw, "h.yaml"), hosted=True)
+        check("a job submitted in hosted mode records it", _hj.get("hosted") is True, str(_hj))
+        _probe_env = os.path.join(_sw, "env_probe.py")
+        open(_probe_env, "w", encoding="utf-8").write(
+            "import os; print(os.environ.get('QATRATION_HOSTED', 'unset'))\n")
+        _saved_h = os.environ.pop("QATRATION_HOSTED", None)
+        try:
+            _ph = _real_run([_probe_env], _sw, None, deadline=30, hosted=True)
+            _pl = _real_run([_probe_env], _sw, None, deadline=30, hosted=False)
+        finally:
+            if _saved_h is not None:
+                os.environ["QATRATION_HOSTED"] = _saved_h
+        check("...and the worker runs it hosted though the worker was not started so",
+              (_ph.stdout.strip(), _pl.stdout.strip()) == ("1", "unset"),
+              "%r %r" % (_ph.stdout, _pl.stdout))
+        import inspect as _insp_h, intake as _int_h
+        check("...and the intake stamps the mode its door ran under",
+              "hosted=authorization.hosted()" in _insp_h.getsource(_int_h.submit), "")
         # EXIT 2 AFTER THE RUN BEGAN IS A CRASH, not "refused, nothing was sent".
         class _Crashed:
             returncode, stdout, stderr = 2, "", "KeyError: 'x'"
 
-        def _crash(cmd, out, python=None, deadline=None):
+        def _crash(cmd, out, python=None, deadline=None, hosted=False):
             if cmd and cmd[0].endswith("run_redteam.py"):
                 json.dump({"run_id": "RUN-CRASHED", "state": "aborted", "target": "t",
                            "started_at": "2026-09-02 10:00:00",

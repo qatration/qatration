@@ -656,6 +656,11 @@ def _streaks(target):
     for r in runs:
         for aid in r["rows"]:
             s = state(r, aid)
+            # A CLEAN ROW MEASURED ON FEWER TRIALS THAN ASKED IS NOT A FIX, the rule `diff`
+            # applies through `_counted_clean`: EXPLOITED 3/3, DEFENDED 0/1 of three, EXPLOITED
+            # 3/3 restarted "open since" at run 3 and reported it came back after a fix.
+            if s is False and not _counted_clean(r, aid):
+                continue
             if s is False:
                 since.pop(aid, None)
                 last_clean[aid] = r["run"]

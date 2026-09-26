@@ -931,6 +931,11 @@ def main():
         _d4 = H.diff("rv4")
         check("a clean row whose rate cannot be read is not a fix",
               _d4["fixed"] == [] and "a" in _d4["unstable"], str(_d4))
+        # AN AGE IS NOT RESTARTED BY A CLEAN ROW MEASURED ON FEWER TRIALS THAN ASKED.
+        _first = H.first_seen("rv3")
+        _fs = (_first.get("a") if isinstance(_first, dict) else None)
+        check("a clean sample of one in three does not restart how long a finding is open",
+              _fs is not None and "2026-09-01" in str(_fs), str(_first))
         # FIELDS `unusable_snapshot` CALLS OPTIONAL do not crash the diff.
         _m5 = dict(_m3, target="rv5")
         H.record(_m5, _one("a", "EXPLOITED", "3/3"), when="2026-09-01 10:00")

@@ -178,6 +178,11 @@ def submit(root, body, policy=None, wake=None):
     # key that mints authorisation tokens to whoever asked, on the onboarding probe before the
     # 202. A local operator names their own variables; nobody submitting here may name ours.
     # Found by an independent review.
+    # AND NO PROXY: a stranger naming one routes this service's probes wherever they like,
+    # past the network policy that judges only the target's URL.
+    if "proxy" in cfg:
+        return _problem(400, "a submitted config may not name a `proxy:`; the service "
+                             "connects to the target itself")
     if "env" in cfg or "${" in json.dumps(cfg, default=str):
         return _problem(400, "a submitted config may not name environment variables (`env:` "
                              "or `${...}`): they would be read on this service's host. Put "
@@ -278,7 +283,9 @@ def submit(root, body, policy=None, wake=None):
                    scope=scope,
                    authorization=rep.get("authorization"),
                    budgets=dict(cfg.get("rate") or {}),
-                   attacks=DEFAULT_ARSENAL, trials=_trials)
+                   # THE MODE THIS DOOR RAN UNDER travels with the job, so the worker applies
+                   # it whoever starts the worker (`serve` requires QATRATION_HOSTED=1).
+                   attacks=DEFAULT_ARSENAL, trials=_trials, hosted=authorization.hosted())
     woken = wake(root)
     # AND WHAT THE CHECK WARNED ABOUT: "the budget allows 20, it will STOP part way" and "no
     # canaries, a leak is invisible" were computed and dropped, so the 202 said a plain

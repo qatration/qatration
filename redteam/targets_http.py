@@ -33,6 +33,8 @@ decide how much the oracle can see:
     rate:
       min_interval_s: 1.0
       max_requests: 400
+    # proxy: "http://proxy.corp.example:3128"  # only if your network requires one: probes
+    #                                           # never use a proxy named by the environment
 """
 import json, os, re, sys, time, urllib.request, urllib.error
 from target import Probe, Target, payload
@@ -394,7 +396,20 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-_OPENER = urllib.request.build_opener(_GuardedRedirect)
+# NO PROXY FROM THE ENVIRONMENT, the rule `authorization` already follows: `build_opener`
+# adds a default `ProxyHandler()`, which reads HTTP(S)_PROXY (and, on Windows, the registry),
+# so every probe -- the operator's auth header and the canary in it -- went to a third party
+# that could answer in the target's place, while the ownership proof went direct. Found by an
+# independent review. A network that needs one names it in the config: `proxy:`.
+_OPENER = urllib.request.build_opener(_GuardedRedirect, urllib.request.ProxyHandler({}))
+
+
+def _opener_for(proxy):
+    """The opener for a target whose config names a proxy -- said, not inherited."""
+    if not proxy:
+        return _OPENER
+    return urllib.request.build_opener(
+        _GuardedRedirect, urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
 
 def _retry_after(headers):
     """-> seconds this endpoint asked us to wait, or None if it did not say.
@@ -535,7 +550,7 @@ class HttpConfiguredTarget(Target):
 
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
-                 auth=None, env=None, **unknown):
+                 auth=None, env=None, proxy=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -610,6 +625,11 @@ class HttpConfiguredTarget(Target):
         if not str(url).lower().startswith(("http://", "https://")):
             raise SystemExit(f"targets_http: refusing a non-HTTP url: {url!r}")
         self.url = url
+        if proxy is not None and not (isinstance(proxy, str)
+                                      and proxy.lower().startswith(("http://", "https://"))):
+            raise SystemExit(f"targets_http: `proxy: {proxy!r}` for {name!r} is not an http(s) "
+                             f"URL. Nothing was sent.")
+        self._opener = _opener_for(proxy)
         # THE NAME BECOMES A FILENAME: `out/results_{name}.json`, `out/report_{name}.html`,
         # and the run record. In hosted mode the config comes from a stranger, which makes a
         # name containing `..` or a separator a path traversal driven by a config field.
@@ -940,7 +960,7 @@ class HttpConfiguredTarget(Target):
                                      method=self.method)
         t0 = time.time()
         try:
-            with _OPENER.open(req, timeout=self.timeout) as r:
+            with self._opener.open(req, timeout=self.timeout) as r:
                 _body, _over = read_capped(r, seconds=self.timeout)
                 if _over:
                     # A REPLY OVER THE CAP IS A FINDING, NOT A PARSE FAILURE. Truncated JSON

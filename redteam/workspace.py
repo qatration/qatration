@@ -2774,6 +2774,7 @@ _JOB_REQUIRE = {
     "authorization": (dict, False, "the worker checks the proof of authorisation from it"),
     "budgets": (dict, False, "the worker holds the run to them"),
     "requester": (str, False, "the listing names who asked"),
+    "hosted": (bool, False, "the worker runs a stranger's job under the hosted rules"),
     "submitted_at": (str, False, "the queue is ordered by it"),
     "attempts": (int, False, "the worker counts a retry on it"),
     "run_id": (str, False, "the job is joined to its run record by it"),

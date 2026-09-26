@@ -379,6 +379,11 @@ def url_problem(url):
         return "the scheme %r is not http or https" % u.scheme
     if not u.hostname:
         return "it names no host"
+    # CREDENTIALS IN THE URL: this client cannot connect to one (every probe errored), and the
+    # password went verbatim into the job record's `resource`. Put them in `headers:`/`auth:`.
+    if "@" in (u.netloc or ""):
+        return ("it carries credentials before the host (user@host); put them in `headers:` or "
+                "`auth:` instead")
     return None
 
 

@@ -1241,6 +1241,11 @@ def main():
     # 6TO4 IS NOT THIS MACHINE.
     check("a 6to4 address embedding 127.0.0.1 is not waived as local",
           not az.is_local("http://[2002:7f00:1::1]/"), "waived")
+    # CREDENTIALS IN THE URL are refused: nothing here can connect to one, and the password
+    # would be written into the queue's job record.
+    check("a URL carrying user:password@ is refused with a reason",
+          bool(az.url_problem("http://user:pw@api.example.com/chat")),
+          repr(az.url_problem("http://user:pw@api.example.com/chat")))
     # A PORT THAT IS NOT A PORT IS A REFUSAL, not a ValueError.
     for _pu in ("http://example.com:abc/chat", "http://example.com:99999/chat"):
         try:

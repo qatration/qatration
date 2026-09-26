@@ -204,6 +204,53 @@ def _review_reply_shapes(check):
         _eng = str(e)
     check("an http config may carry `trials`, `exclude_attacks` and `baseline_prompt`",
           _eng == "", _eng[:200])
+    # A PROXY THE ENVIRONMENT NAMES IS NOT USED; one the config names is.
+    _seen_p = []
+
+    class _Proxy(BaseHTTPRequestHandler):
+        def do_POST(self):
+            _seen_p.append(self.path)
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            b = b'{"reply": "from the proxy"}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+    _psrv = ThreadingHTTPServer(("127.0.0.1", 0), _Proxy)
+    threading.Thread(target=_psrv.serve_forever, daemon=True).start()
+    _purl = "http://127.0.0.1:%d" % _psrv.server_address[1]
+    _tsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Proxy)
+    threading.Thread(target=_tsrv.serve_forever, daemon=True).start()
+    _turl = "http://127.0.0.1:%d/chat" % _tsrv.server_address[1]
+    _old_env = {k: os.environ.get(k) for k in ("HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy")}
+    try:
+        os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = _purl
+        os.environ.pop("NO_PROXY", None)
+        os.environ.pop("no_proxy", None)
+        import importlib, targets_http as _th_p
+        importlib.reload(_th_p)
+        _seen_p.clear()
+        _th_p.HttpConfiguredTarget(url=_turl, name="px", request={"message": "{prompt}"},
+                                   response={"reply": "reply"}).send("hi")
+        check("a proxy named only by the environment is not used for probes",
+              not any(p.startswith("http://") for p in _seen_p), str(_seen_p))
+        _seen_p.clear()
+        _th_p.HttpConfiguredTarget(url=_turl, name="px", request={"message": "{prompt}"},
+                                   response={"reply": "reply"}, proxy=_purl).send("hi")
+        check("...while a proxy the config names is",
+              any(p.startswith("http://") for p in _seen_p), str(_seen_p))
+    finally:
+        for k, v in _old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        importlib.reload(_th_p)
+        _psrv.shutdown()
+        _tsrv.shutdown()
     # A BUDGET OF ZERO IS REFUSED, not read as no ceiling.
     for _k in ("max_requests", "max_seconds"):
         try:
@@ -308,6 +355,7 @@ def main():
                 "for every adapter and accepts a number as the name `42`",
         "timeout_s": "has its own guard, and it is the one that caught both TypeError and "
                      "ValueError while the budget beside it caught only the first",
+        "proxy": "has its own refusal beside `url`: it must be an http(s) URL string",
     }
     check("every field this adapter accepts has a shape or a reason",
           not (_accepts - set(_covered) - set(_SHAPE_EXEMPT)),

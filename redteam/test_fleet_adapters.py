@@ -65,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
 # found three of the four adapters that open a socket, `targets_http` builds its own opener to
 # refuse redirects, and the exemption written for it then read as stale. Caught by the
 # non-emptiness line below, which is the only reason it is there.
-READS_A_BODY = re.compile(r"urlopen\(|_OPENER\.open\(|requests\.(?:post|get)\(")
+READS_A_BODY = re.compile(r"urlopen\(|_OPENER\.open\(|_opener\.open\(|requests\.(?:post|get)\(")
 
 # Adapters whose failure channel is not a body this suite can drive, WITH THE REASON. Checked
 # in both directions below: an entry naming a module that no longer needs it is as wrong as a

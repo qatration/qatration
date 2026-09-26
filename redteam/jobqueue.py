@@ -181,7 +181,7 @@ def scope_of(rec):
 
 
 def submit(root, target, config_path, scope="quick", authorization=None, budgets=None,
-           attacks=None, trials=3, requester=None, when=None):
+           attacks=None, trials=3, requester=None, when=None, hosted=False):
     """Put a run in the queue and return the job. Nothing is executed here.
 
     `budgets` travels with the JOB rather than being decided by whichever worker picks it up,
@@ -203,6 +203,11 @@ def submit(root, target, config_path, scope="quick", authorization=None, budgets
         "authorization": authorization,
         "budgets": budgets or {},
         "requester": requester,
+        # A STRANGER'S JOB RUNS UNDER THE HOSTED RULES whoever starts the worker: hosted mode
+        # came only from the environment `intake.wake_worker` passed down, so a worker started
+        # by hand ran an intake job under the local ones -- loopback waived, no run-time
+        # policy re-check. Found by an independent review.
+        "hosted": bool(hosted),
         "submitted_at": (when or _now()).isoformat(" ", "seconds"),
         "attempts": 0,
         # Written by the worker, so a job and the run it produced can be joined up later.
