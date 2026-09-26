@@ -1187,6 +1187,70 @@ def main():
               and _n.func.id == "origin_of" for _n in _ast_o.walk(_jq)),
           "jobqueue has its own idea of an endpoint")
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE PROOFS ---------------------------------
+    # A TOKEN SOMEWHERE IN A PAGE IS NOT THE PAGE HOLDING IT.
+    for _body in ("garbage-before%sgarbage-after" % token, "<html>comment: %s</html>" % token):
+        _okb, _whyb = az.check(cfg("well_known"), SECRET, fetch=lambda u, b=_body: b)
+        check("a well-known page merely containing the token is refused (%s...)" % _body[:8],
+              not _okb, _whyb)
+    _okd, _whyd = az.check(cfg("dns_txt", records=["prefix%ssuffix" % token]), SECRET)
+    check("...and so is a TXT record merely containing it", not _okd, _whyd)
+    # WRONGLY TYPED PROOF FIELDS ARE REFUSED, not raised on.
+    for _bad in ({"method": "header", "echoed": 5}, {"method": "dns_txt", "records": 5}):
+        try:
+            _okt, _whyt = az.check(cfg(_bad["method"], **{k: v for k, v in _bad.items()
+                                                          if k != "method"}), SECRET)
+            _raised = None
+        except Exception as _e:
+            _okt, _raised = None, _e
+        check("a %s proof with a wrongly typed field is refused, not raised on" % _bad["method"],
+              _raised is None and _okt is False, repr(_raised))
+    # THE WHOLE FETCH HAS ONE DEADLINE, not one per byte.
+    import threading as _th_a, time as _tm_a
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+
+    class _Drip(_BH):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", "50")
+            self.end_headers()
+            for _i in range(50):
+                try:
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                except Exception:
+                    return
+                _tm_a.sleep(0.3)
+
+        def log_message(self, *a):
+            pass
+    _srv_a = _TS(("127.0.0.1", 0), _Drip)
+    _th_a.Thread(target=_srv_a.serve_forever, daemon=True).start()
+    try:
+        _t0 = _tm_a.monotonic()
+        try:
+            az._http_get("http://127.0.0.1:%d/x" % _srv_a.server_address[1], timeout=1)
+            _got = "returned"
+        except Exception as _e:
+            _got = type(_e).__name__
+        _took = _tm_a.monotonic() - _t0
+    finally:
+        _srv_a.shutdown()
+    check("a well-known file dripping a byte at a time stops at the deadline",
+          _took < 3 and _got != "returned", "%s after %.1fs" % (_got, _took))
+    # 6TO4 IS NOT THIS MACHINE.
+    check("a 6to4 address embedding 127.0.0.1 is not waived as local",
+          not az.is_local("http://[2002:7f00:1::1]/"), "waived")
+    # A PORT THAT IS NOT A PORT IS A REFUSAL, not a ValueError.
+    for _pu in ("http://example.com:abc/chat", "http://example.com:99999/chat"):
+        try:
+            _pw = az.unreachable_by_policy(_pu, resolve=lambda h, p: [])
+            _pr = None
+        except Exception as _e:
+            _pw, _pr = None, _e
+        check("a port that is not a port is refused by the policy (%s)" % _pu.split(":")[-1][:5],
+              _pr is None and bool(_pw), repr(_pr or _pw))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

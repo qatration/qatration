@@ -311,8 +311,11 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         # NOT AUTHORISED IS ITS OWN CODE. `authorization.gate` raises NotAuthorised, a
         # SystemExit(4), and this folded it into `not loaded`, which `note_verdict` maps to 2:
         # the contract reserves 4 for exactly this. Found by an independent review.
+        # THE REASON, not the code: `str(SystemExit(4))` is "4", and the verdict read
+        # "not authorised: 4". `NotAuthorised.why` carries the sentence.
+        _said = str(getattr(e, "why", None) or e)
         out["note"] = ("not authorised: %s" if getattr(e, "code", None) == 4
-                       else "not loaded: %s") % _clipped(str(e).splitlines()[0], 70)
+                       else "not loaded: %s") % _clipped((_said.splitlines() or [""])[0], 70)
         return out
 
     # THE WRONG BUILD ANSWERING IS NOT A STALE CLAIM, and the fleet audit was about to publish

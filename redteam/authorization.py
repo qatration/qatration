@@ -14,8 +14,8 @@ indistinguishable, in a log or a court, from an attack.
 Three proofs, in the order a real operator can actually satisfy them:
 
   * `header`   — the target echoes a token this tool issued, on a header or in its config. Best for
-                 an API: no DNS, no deploy, and it proves control of the ENDPOINT rather than
-                 of a domain, which is the thing actually being tested.
+                 an API: no DNS, no deploy. This build does not ask the endpoint: the echo is
+                 stated in the config, so what it proves is possession of the signing secret.
   * `well_known` — a file at `/.well-known/qatration-authorization` containing the token.
                  Proves control of the origin serving it.
   * `dns_txt`  — a TXT record. Proves control of the DOMAIN, which is the weakest of the three
@@ -24,8 +24,9 @@ Three proofs, in the order a real operator can actually satisfy them:
 Deliberately NOT a checkbox. "I confirm I am authorised" is a record of a claim, and a record
 of a claim is what every abusive scan already has.
 
-An expired proof is not a proof: the token carries the run it was issued for and the day it
-was issued, and a stale one is refused with the reason rather than accepted with a warning.
+An expired proof is not a proof: the token is bound to the origin it was issued for and the
+day it was issued, and a stale one is refused with the reason rather than accepted with a
+warning.
 """
 import datetime, hashlib, hmac, json, os, re, urllib.error, urllib.request
 
@@ -182,7 +183,7 @@ def check(cfg, secret, fetch=None):
     if method == "header":
         # The endpoint itself hands it back. Proves control of the API, which is the thing
         # being tested, rather than of a domain that may be shared with it.
-        got = (auth.get("echoed") or "").strip()
+        got = str(auth.get("echoed") or "").strip()
         if got != token:
             return False, ("authorization.method=header, but the endpoint did not echo the "
                            "token; set it on the target and re-run")
@@ -195,20 +196,34 @@ def check(cfg, secret, fetch=None):
             body = (fetch(probe) or "").strip()
         except Exception as e:
             return False, f"could not read {probe}: {type(e).__name__}: {e}"
-        if token not in body:
-            return False, f"{probe} does not contain the token issued for this origin"
+        # A LINE THAT IS THE TOKEN, not a token somewhere in the file: `token in body` passed
+        # for a page that quoted it among other text or listed many. Found by an independent
+        # review.
+        if not any(_holds(ln, token) for ln in body.splitlines()):
+            return False, (f"{probe} does not hold the token issued for this origin on a line "
+                           f"of its own")
         return True, f"{probe} was fetched and carries a token issued on {day}"
     if method == "dns_txt":
         records = auth.get("records")
         if records is None:
             return False, ("authorization.method=dns_txt needs the TXT records to check; "
                            "this build does not resolve DNS itself, so pass them in")
-        if not any(token in str(r) for r in records):
+        if not isinstance(records, list):
+            return False, "authorization.records is a list of TXT records' text"
+        # A RECORD THAT IS THE TOKEN, quotes aside -- the rule the well-known file follows.
+        if not any(_holds(r, token) for r in records):
             return False, "no TXT record carries the token issued for this origin"
         return True, (f"the operator supplied a TXT record carrying a token issued on "
                       f"{day}; this build does not resolve DNS, so what is proved here is "
                       f"possession of the signing secret")
     return False, f"unknown authorization.method: {method!r}"
+
+
+def _holds(text, token):
+    """Is this line (a well-known file's, a TXT record's) the token -- bare, or as
+    `qatration=<token>` -- rather than text that merely contains it?"""
+    s = str(text).strip().strip('"').strip()
+    return s == token or s == "qatration=" + token
 
 
 def how_to_prove(url, secret, issued=None):
@@ -271,8 +286,22 @@ _OPENER = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({
 
 
 def _http_get(url, timeout=10):
+    """The well-known file, bounded in size AND in total time. `timeout` is per socket read, so
+    an origin sending a byte every few seconds held the gate for hours; the body is read in
+    chunks against one deadline. Found by an independent review."""
+    import time as _t
+    deadline = _t.monotonic() + timeout
     with _OPENER.open(url, timeout=timeout) as r:
-        return r.read(_MAX_WELL_KNOWN + 1)[:_MAX_WELL_KNOWN].decode("utf-8", "replace")
+        buf = b""
+        while len(buf) <= _MAX_WELL_KNOWN:
+            if _t.monotonic() > deadline:
+                raise TimeoutError("the well-known file took longer than %ss to arrive" % timeout)
+            # `read1`, not `read`: `read(n)` waits for all n bytes, which is the drip again.
+            chunk = r.read1(min(256, _MAX_WELL_KNOWN + 1 - len(buf)) or 1)
+            if not chunk:
+                break
+            buf += chunk
+        return buf[:_MAX_WELL_KNOWN].decode("utf-8", "replace")
 
 
 # Which proofs this build OBSERVES, as opposed to reads back out of the config it was handed.
@@ -451,9 +480,11 @@ def _as_address(host):
         ip = ipaddress.ip_address(h)
         # `ipv4_mapped` and `sixtofour` exist on IPv6Address only, so ask the object rather
         # than assuming: an IPv4Address has neither and is already the address it is.
-        return (getattr(ip, "ipv4_mapped", None)
-                or getattr(ip, "sixtofour", None)
-                or ip)
+        # NOT `sixtofour`: 2002:7f00:1::1 is a global unicast address that embeds 127.0.0.1,
+        # not this machine, and reading it as loopback waived the proof for it. The hosted
+        # refusal unwraps 6to4 itself (`_address_refused`), which is the direction where
+        # treating it as its IPv4 address is the safe one. Found by an independent review.
+        return getattr(ip, "ipv4_mapped", None) or ip
     except ValueError:
         pass
 
@@ -603,6 +634,12 @@ def unreachable_by_policy(url, resolve=None):
         return "not a URL"
     if u.scheme not in ("http", "https"):
         return f"scheme {u.scheme!r} is not http(s)"
+    # AND A PORT THAT IS A PORT: `u.port` raises ValueError on `:abc` and `:99999`, which
+    # escaped the gate and dropped the intake's socket instead of answering 422.
+    try:
+        u.port
+    except ValueError:
+        return "the port is not a number from 0 to 65535"
     host = (u.hostname or "").lower().strip("[]")
     if not host:
         return "no host"

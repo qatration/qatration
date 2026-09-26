@@ -977,6 +977,22 @@ def main():
               "bigmodel-70b" in _json_d.dumps(_req), _json_d.dumps(_req)[:200])
     finally:
         _shm_v.rmtree(_wd, ignore_errors=True)
+    # A REFUSAL BY THE GATE SAYS WHY, not "not authorised: 4" (`str(SystemExit(4))`).
+    _wna = _tfm_v.mkdtemp()
+    _rna = os.path.join(_wna, "results_remote-bot.json")
+    with open(_rna, "w", encoding="utf-8") as f:
+        _json_d.dump({"meta": {"target": "remote-bot", "trials": 1, "attacks_n": 1},
+                      "results": [{"attack": {"id": "a", "category": "x", "text": "t"},
+                                   "headline": "EXPLOITED", "rate": "1/1", "fired": ["x"],
+                                   "locks": {}, "trials": [{"verdict": "EXPLOITED",
+                                                            "probe": {"output": "o"}}]}]}, f)
+    _o_na = _vt({"name": "remote-bot", "adapter": "http", "url": "https://bot.example.com/chat",
+                 "request": {"message": "{prompt}"}, "response": {"reply": "r"}},
+                _rna, 1, 0, quiet=True)
+    _shm_v.rmtree(_wna, ignore_errors=True)
+    check("verify's not-authorised note carries the gate's reason, not its exit code",
+          _o_na["note"].startswith("not authorised:") and _o_na["note"] != "not authorised: 4",
+          _o_na["note"][:120])
     # RECON and BENIGN go through the shared rules too.
     import inspect as _insp_d, run_recon as _rr_d, benign as _bn_d
     check("recon applies --model through the shared override",

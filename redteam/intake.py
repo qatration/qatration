@@ -246,7 +246,7 @@ def submit(root, body, policy=None, wake=None):
         # the refused config stayed on disk. 403 is the gate's; anything else is the config.
         _drop()
         if isinstance(e, authorization.NotAuthorised):
-            return _problem(403, _scrub(f"not authorised: {e}"))
+            return _problem(403, _scrub(f"not authorised: {getattr(e, 'why', None) or e}"))
         return _problem(422, _scrub(f"the config was refused: {e}"))
     except Exception as e:
         _drop()

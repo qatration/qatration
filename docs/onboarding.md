@@ -614,11 +614,12 @@ authorised it is worthless as evidence and dangerous as an artifact: in a log it
 indistinguishable from an attack.
 
 Three proofs, in the order an operator can actually satisfy them. `header` — the endpoint
-echoes a token we issued, which needs no DNS and no deploy and proves control of the API
-rather than of a domain that may be shared with it. `well_known` — the token in a file at
-`/.well-known/qatration-authorization`, proving control of the origin. `dns_txt` — a TXT
-record, which is the weakest of the three here, because a subdomain's owner is often not the
-API's owner.
+echoes a token we issued, which needs no DNS and no deploy; this build does not ask the
+endpoint, so the echo is stated in the config and what it proves is possession of the signing
+secret. `well_known` — the token on a line of its own (bare, or as `qatration=<token>`) in a
+file at `/.well-known/qatration-authorization`, which this build fetches, proving control of
+the origin. `dns_txt` — a TXT record holding it the same way, which is the weakest of the
+three here, because a subdomain's owner is often not the API's owner.
 
 Deliberately **not a checkbox**. "I confirm I am authorised" is a record of a claim, and a
 record of a claim is what every abusive scan already has. The token is HMAC'd over the origin
