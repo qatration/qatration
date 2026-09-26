@@ -113,7 +113,7 @@ def _locks_cell(locks):
 # ONE RENDERER, in `workspace`. This module and `defense_report` each had a copy of
 # these lines and the copies had drifted: only one of them named the field an indirect
 # attack was planted in, and neither covered all five of `runner.DELIVERIES`.
-from workspace import payload_text as _payload_text
+from workspace import payload_shown as _payload_text
 
 
 def _proof(trials):

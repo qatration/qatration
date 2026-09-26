@@ -736,7 +736,7 @@ def _rate_frac(rate):
 # ONE RENDERER, in `workspace`. This page carried its own copy of these lines and
 # printed `[planted]` where the assessment report named the field -- which is the one
 # thing a remediation page is for.
-from workspace import payload_text
+from workspace import payload_shown as payload_text
 
 
 def load_all(known=None):

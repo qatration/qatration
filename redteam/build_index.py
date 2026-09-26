@@ -6,6 +6,8 @@ its scorecard. One page to open after a sweep.
 import glob, json, os, sys, html, datetime
 from target import target_configs
 from pathlib import Path
+# A NAME IN A LINK IS URL-QUOTED as well as HTML-escaped: `bot#1` linked to `report_bot`.
+from urllib.parse import quote as _url_quote
 import baseline
 from workspace import no_results_note
 from workspace import (OUT as WORKSPACE_OUT, results_files, verdict_for, read_artifact,
@@ -319,7 +321,7 @@ def main():
         if (m.get("trials") or 0) == 1 and atk:
             pct += " \u00b7 sent once, so a lucky break reads the same"
         cards += f"""
-        <a class="card" href="report_{esc(tgt)}.html">
+        <a class="card" href="report_{esc(_url_quote(str(tgt)))}.html">
           <div class="ct"><span class="dot" style="background:{col}"></span>{esc(tgt)}</div>
           <div class="cs" style="color:{col}">{headline}</div>
           <div class="bar"><span style="width:{bar:.0f}%;background:{col}"></span></div>

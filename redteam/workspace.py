@@ -938,9 +938,20 @@ def bad_context_shapes(cfg):
 # Tab, newline and carriage return are excluded: they are layout in a quoted reply, not
 # concealment, and rendering them as codepoints would turn every multi-line payload into
 # noise.
+# AND THE ONES THIS TOOL ITSELF PLANTS AND DETECTS, which were missing: the Unicode tag block
+# (`encoders.tag_chars`, and exactly what `oracle.invisible_chars` fires on), the variation
+# selectors supplement (`variant_selectors`), the C1 controls (U+009B is a one-byte CSI), the
+# Arabic letter mark, the line and paragraph separators, the deprecated format characters --
+# and lone surrogates, which a hostile target can put in JSON and which crashed the page
+# write (`surrogates not allowed`) so no report existed at all. A page reported
+# `invisible_chars` over a reply that rendered as "Sure." and nothing else. Found by an
+# independent review.
 CONTROL_CHARS = re.compile(
     "[\u0000-\u0006\u0008\u000b\u000c\u000e-\u001f\u007f"
     "\u0007"
+    "\u0080-\u009f\u061c\u2028\u2029\u206a-\u206f"
+    "\ud800-\udfff"
+    "\U000e0000-\U000e007f\U000e0100-\U000e01ef"
     "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
 
 
@@ -983,7 +994,12 @@ def plain(s, oneline=False):
 
     Off by default, so the multi-line reply a report quotes is still quoted as it came.
     """
-    s = CONTROL_CHARS.sub(lambda m: "<U+%04X>" % ord(m.group(0)), str(s))
+    # A MARKER THE TARGET CANNOT FORGE: its own text is never allowed to spell one. A reply
+    # carrying the literal `<U+202E>` rendered byte for byte like a real right-to-left
+    # override, so a target could fake the evidence of a hidden character. The literal is
+    # doubled (`<U++202E>`) before the real ones are written. Found by an independent review.
+    s = str(s).replace("<U+", "<U++")
+    s = CONTROL_CHARS.sub(lambda m: "<U+%04X>" % ord(m.group(0)), s)
     if oneline:
         s = LAYOUT.sub(lambda m: "<U+%04X>" % ord(m.group(0)), s)
     return s
@@ -3085,6 +3101,34 @@ def _listed(attack, field):
 
 def _joined(parts):
     return "\n".join(p for p in parts if p)
+
+
+def payload_shown(attack):
+    """The evidence block a page prints for one attack: `payload_text`, and the encoded form
+    when there was one.
+
+    AN ENCODED ATTACK WAS SHOWN PLAIN. `enc-tagchars` rendered as readable English under a
+    pane that says it shows what was sent, while what went out was invisible tag characters,
+    and `encode` was named nowhere on either page. Found by an independent review.
+
+    The sent form's non-ASCII characters are written as `{U+XXXX}`: a homoglyph encoding's
+    whole trick is that it LOOKS like the plain text, so printing it raw would show the reader
+    exactly nothing. Control and invisible characters are left for `esc`, which marks them.
+    `payload_text` stays the plain text: the priced tables in the docs measure it.
+    """
+    txt = payload_text(attack)
+    enc = attack.get("encode") if isinstance(attack, dict) else None
+    if not enc or not isinstance(enc, str):
+        return txt
+    try:
+        from runner import attacker_side as _as
+        sent = _as(attack)
+    except Exception as e:
+        sent = "(the encoded form could not be rebuilt: %s)" % type(e).__name__
+    sent = "".join(c if (" " <= c <= "~" or c in "\n\t\r" or CONTROL_CHARS.match(c))
+                   else "{U+%04X}" % ord(c) for c in sent)
+    return ("%s\n\n[encoded with `%s` before sending -- what went out, non-ASCII written as "
+            "{U+XXXX}:]\n%s" % (txt, enc, sent))
 
 
 def payload_text(attack):

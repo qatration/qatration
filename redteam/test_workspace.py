@@ -1361,6 +1361,39 @@ def check_esc():
         check("%s renders it the same way" % _m.__name__, _m.esc(_payload), esc(_payload))
 
     check("the control set is not empty", bool(CONTROL_CHARS.search("\x1b")), True)
+
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE PAGES ------------------------------------
+    import encoders as _enc_h, oracle as _or_h
+    check("tag characters, which this tool plants, are shown",
+          esc(_enc_h.tag_chars("K")), "&lt;U+E004B&gt;")
+    check("a C1 CSI is shown", esc("a\x9bb"), "a&lt;U+009B&gt;b")
+    check("a line separator is shown", esc("a b"), "a&lt;U+2028&gt;b")
+    check("a lone surrogate is shown, so the page can be written",
+          esc("a\ud800b").encode("utf-8").decode("utf-8"), "a&lt;U+D800&gt;b")
+    # EVERYTHING THE DETECTOR CALLS INVISIBLE, THE PAGE CAN SHOW: `invisible_chars` fired on
+    # a reply the page rendered as "Sure." and nothing else.
+    _missed = [hex(c) for c in list(range(0, 0x3000)) + list(range(0xFE00, 0xFF00))
+               + list(range(0xE0000, 0xE0200))
+               if _or_h._INVISIBLE.match(chr(c)) and not CONTROL_CHARS.match(chr(c))]
+    check("every character `invisible_chars` fires on is shown on a page", _missed, [])
+    # A TARGET CANNOT FORGE A MARKER: its own `<U+202E>` is not a real one.
+    check("a literal marker in the target's text is not rendered as a real one",
+          esc("<U+202E>") != esc("‮"), True)
+    # AND AN ENCODED ATTACK SHOWS WHAT WENT OUT.
+    from workspace import payload_shown as _pt, payload_text as _ptx
+    _pp = _pt({"id": "e", "encode": "base64", "text": "hello there"})
+    # A HOMOGLYPH IS SHOWN FOR WHAT IT IS, not as the letter it imitates.
+    check("a homoglyph in the sent form is written as its codepoint",
+          "{U+043E}" in _pt({"id": "h", "encode": "homoglyph", "text": "door"}), True)
+    # AND THE PRICED TEXT IS THE PLAIN ONE: the docs' cost tables measure `payload_text`.
+    check("the text the docs price is unchanged by the encoded block",
+          _ptx({"id": "e", "encode": "base64", "text": "hello there"}), "hello there")
+    check("an encoded attack's payload names the encoding and shows the sent form",
+          "`base64`" in _pp and "aGVsbG8gdGhlcmU=" in _pp, True)
+    # A NAME IN A LINK IS URL-QUOTED.
+    import inspect as _insp_h
+    check("the index links a target by its URL-quoted name",
+          "_url_quote(str(tgt))" in _insp_h.getsource(build_index), True)
     return fails
 
 

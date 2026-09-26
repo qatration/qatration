@@ -133,9 +133,9 @@ def main():
     # today is the state this defect started from.
     import workspace as _ws_p, report_engine as _re_p
     check("one payload renderer, imported rather than copied",
-          dr.payload_text is _ws_p.payload_text
-          and _re_p._payload_text is _ws_p.payload_text,
-          "%r %r %r" % (dr.payload_text, _re_p._payload_text, _ws_p.payload_text))
+          dr.payload_text is _ws_p.payload_shown
+          and _re_p._payload_text is _ws_p.payload_shown,
+          "%r %r %r" % (dr.payload_text, _re_p._payload_text, _ws_p.payload_shown))
 
     # --- AND THE TRIAL SHOWN IS THE TRIAL THAT SET THE VERDICT ---------------------------
     #
