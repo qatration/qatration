@@ -118,21 +118,11 @@ class DvlaTarget(Target):
         )
 
     def send_chain(self, prompts):
-        ex = self._build()                   # ONE executor -> memory persists across turns
-        all_tc, all_obs, out, err = [], [], "", None
-        t0 = time.time()
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            for p in prompts:
-                try:
-                    r = ex.invoke({"input": p})
-                except Exception as e:
-                    err = f"{type(e).__name__}: {e}"; break
-                steps = r.get("intermediate_steps", [])
-                all_tc += [(a.tool, str(a.tool_input)) for a, _ in steps]
-                all_obs += [str(o) for _, o in steps]
-                out = r.get("output", "")
-        return Probe(prompt=" ⟶ ".join(prompts), output=out, tool_calls=all_tc,
-                     observations=all_obs, error=err, seconds=round(time.time() - t0, 1))
+        # ONE executor across the turns, so memory persists; the conversation's probe is
+        # `target.chain_probe`'s, the one rule for every adapter.
+        from target import chain_probe, executor_turn
+        ex = self._build()
+        return chain_probe(prompts, lambda p: executor_turn(ex, p))
 
     def seed(self, payload):
         field = payload.get("field", "reference")

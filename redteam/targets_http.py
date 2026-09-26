@@ -1152,34 +1152,18 @@ class HttpConfiguredTarget(Target):
         return self.send(prompt, history=list(history or []))
 
     def send_chain(self, prompts):
-        """The turns in one conversation, feeding back what the target really said."""
-        hist, turns, out, calls, resolved, obs, secs = [], [], "", [], [], [], 0.0
-        for p in prompts:
-            probe = self.send(p, history=hist)
-            if probe.error:
-                # THE TURNS THAT ANSWERED ARE STILL EVIDENCE, the rule `runner._run_sessions`
-                # already follows: a canary leaked in turn one and a 500 in turn two came back
-                # as the bare error, `turns: []`, and the leak was discarded. Found by an
-                # independent review.
-                return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
-                             observations=obs, resolved=resolved, turns=turns,
-                             seconds=secs + float(getattr(probe, "seconds", 0) or 0),
-                             error=probe.error)
-            out = probe.output
-            calls += probe.tool_calls
-            resolved += list(getattr(probe, "resolved", None) or [])
-            # AND WHAT THE TOOLS RETURNED, which the chain dropped: `canary_in_context` could
-            # not fire on any chain attack, where the same reply sent alone was EXPLOITED.
-            obs += list(getattr(probe, "observations", None) or [])
-            secs += float(getattr(probe, "seconds", 0) or 0)
-            turns.append({"prompt": p, "output": probe.output,
-                          "tool_calls": probe.tool_calls,
-                          "observations": list(getattr(probe, "observations", None) or []),
-                          "seconds": float(getattr(probe, "seconds", 0) or 0)})
-            hist.append({"role": "user", "content": p})
-            hist.append({"role": "assistant", "content": probe.output})
-        return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
-                     observations=obs, resolved=resolved, turns=turns, seconds=secs)
+        """The turns in one conversation, feeding back what the target really said, through
+        `target.chain_probe` -- the one rule for what a conversation's probe holds."""
+        from target import chain_probe
+        hist = []
+
+        def _step(p):
+            probe = self.send(p, history=list(hist))
+            if not probe.error:
+                hist.append({"role": "user", "content": p})
+                hist.append({"role": "assistant", "content": probe.output})
+            return probe
+        return chain_probe(prompts, _step)
 
     def reset(self):
         """Nothing to reset: each request carries its own history, or the API is stateless.

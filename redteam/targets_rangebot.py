@@ -193,15 +193,8 @@ class RangeBotTarget(Target):
         return self._run(self._build(), prompt)
 
     def send_chain(self, prompts):
-        """One executor across every turn, so memory carries — the same shape the other
-        chain-capable adapters use."""
+        """One executor across every turn, so memory carries, through `target.chain_probe`:
+        a turn that errored stops the conversation, rather than being scored as measured."""
+        from target import chain_probe
         ex = self._build()
-        t0, turns, calls, obs, out = time.time(), [], [], [], ""
-        for p in prompts:
-            pr = self._run(ex, p)
-            out = pr.output
-            calls += pr.tool_calls
-            obs += pr.observations
-            turns.append({"prompt": p, "output": pr.output, "tool_calls": pr.tool_calls})
-        return Probe(prompt=prompts[-1], output=out, tool_calls=calls,
-                     observations=obs, turns=turns, seconds=time.time() - t0)
+        return chain_probe(prompts, lambda p: self._run(ex, p))

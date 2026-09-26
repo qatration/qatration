@@ -52,14 +52,16 @@ class GuardBotTarget(Target):
         return Probe(prompt=prompt, output=out, error=err, seconds=round(time.time() - t0, 1))
 
     def send_chain(self, prompts):
-        history, out, err, turns = [], "", None, []
-        t0 = time.time()
-        for p in prompts:
+        # Through `target.chain_probe`, the one rule for every adapter.
+        from target import chain_probe
+        history = []
+
+        def _step(p):
+            t0 = time.time()
             history.append(self._human(content=p))
             out, err = self._invoke(history)
             if err:
-                break
+                return Probe(prompt=p, output="", error=err, seconds=round(time.time() - t0, 1))
             history.append(self._ai(content=out))
-            turns.append({"prompt": p, "output": out})
-        return Probe(prompt=" ⟶ ".join(prompts), output=out, error=err,
-                     seconds=round(time.time() - t0, 1), turns=turns)
+            return Probe(prompt=p, output=out, seconds=round(time.time() - t0, 1))
+        return chain_probe(prompts, _step)

@@ -42,22 +42,19 @@ class HttpTarget(Target):
         """Run the turns in one conversation, feeding the history back each time.
 
         Crescendo and its relatives work by using the model's OWN previous reply as the
-        next foothold, so the history has to reach the target. The returned Probe carries
-        the whole exchange: `turns` for the per-turn detectors, and a prompt joined from
-        every attacker message, because echo subtraction has to know all of it.
+        next foothold, so the history has to reach the target. Through `target.chain_probe`,
+        which keeps the turns that answered when a later one errors.
         """
-        history, turns, out, secs = [], [], "", 0.0
-        for p in prompts:
-            probe = self.send(p, history=history)
-            if probe.error:
-                return probe
-            out = probe.output
-            secs += float(getattr(probe, "seconds", 0) or 0)
-            turns.append({"prompt": p, "output": probe.output, "tool_calls": [],
-                          "seconds": float(getattr(probe, "seconds", 0) or 0)})
-            history.append({"role": "user", "content": p})
-            history.append({"role": "assistant", "content": probe.output})
-        return Probe(prompt="\n".join(prompts), output=out, turns=turns, seconds=secs)
+        from target import chain_probe
+        history = []
+
+        def _step(p):
+            probe = self.send(p, history=list(history))
+            if not probe.error:
+                history.append({"role": "user", "content": p})
+                history.append({"role": "assistant", "content": probe.output})
+            return probe
+        return chain_probe(prompts, _step)
 
     def send(self, prompt, history=None):
         payload = {"message": prompt}

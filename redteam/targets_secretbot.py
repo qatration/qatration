@@ -66,20 +66,20 @@ class SecretBotTarget(Target):
         return Probe(prompt=prompt, output=out, error=err, seconds=round(time.time() - t0, 1))
 
     def send_chain(self, prompts):
+        # Through `target.chain_probe`, the one rule for every adapter.
+        from target import chain_probe
         llm = self._get_llm()
         msgs = [self._SM(content=self.system_msg)]
-        turns, out, err = [], "", None
-        t0 = time.time()
-        for p in prompts:
+
+        def _step(p):
+            t0 = time.time()
             msgs.append(self._HM(content=p))
             try:
-                r = llm.invoke(msgs)
-                raw = r.content
-                msgs.append(self._AM(content=raw))       # memory sees the raw answer
-                out = self._dlp(raw)                      # the USER sees the DLP-filtered answer
+                raw = llm.invoke(msgs).content
             except Exception as e:
-                err = f"{type(e).__name__}: {e}"
-                break
-            turns.append({"prompt": p, "output": out, "tool_calls": []})
-        return Probe(prompt=" ⟶ ".join(prompts), output=out, turns=turns,
-                     error=err, seconds=round(time.time() - t0, 1))
+                return Probe(prompt=p, output="", error=f"{type(e).__name__}: {e}",
+                             seconds=round(time.time() - t0, 1))
+            msgs.append(self._AM(content=raw))       # memory sees the raw answer
+            # the USER sees the DLP-filtered answer
+            return Probe(prompt=p, output=self._dlp(raw), seconds=round(time.time() - t0, 1))
+        return chain_probe(prompts, _step)

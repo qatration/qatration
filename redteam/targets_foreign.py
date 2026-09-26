@@ -20,6 +20,11 @@ from target import Probe, Target
 from targets_http import read_capped as _read_capped
 
 
+def _as_list(v):
+    """A call list to hand to `Probe`, which normalises each entry's shape."""
+    return list(v) if isinstance(v, (list, tuple)) else ([v] if isinstance(v, dict) else [])
+
+
 class ForeignAgentTarget(Target):
     name = "foreign"
     # No `seed`: nothing here lets a tester plant content in the agent's retrieval path,
@@ -66,12 +71,14 @@ class ForeignAgentTarget(Target):
                     "off a mapping." % type(d).__name__)
             reply = d.get("reply") or ""
             # tuples, because the oracle unpacks `for name, arg in probe.tool_calls`
-            calls = [(str(c[0]), str(c[1])) for c in (d.get("tool_calls") or []) if c]
+            # THROUGH `target._pair` (in `Probe`), not by hand: `(str(c[0]), str(c[1]))` made
+            # a bare name `GetUser` the call ('G', 'e'), and raised on `{name, arguments}`.
+            calls = _as_list(d.get("tool_calls"))
             obs = [str(o) for o in (d.get("observations") or [])]
             # What the tools actually received, when the deployment reports it. On a code
             # agent this is the only way the oracle can see what crossed the boundary: the
             # step log holds a variable name, this holds its value.
-            res = [(str(c[0]), str(c[1])) for c in (d.get("resolved") or []) if c]
+            res = _as_list(d.get("resolved"))
             err = d.get("error")
         except Exception as e:
             err = f"{type(e).__name__}: {e}"

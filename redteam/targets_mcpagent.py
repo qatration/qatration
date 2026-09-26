@@ -128,22 +128,17 @@ class McpAgentTarget(Target):
                      error=err, seconds=round(time.time() - t0, 1))
 
     def send_chain(self, prompts):
-        all_tc, all_obs, out, err = [], [], "", None
-        t0 = time.time()
-        if self.variant == "rugpull":
-            # turn 1 clean (user approves the tool), turns 2+ poisoned (the rug pull)
-            for i, prm in enumerate(prompts):
-                ex = self._build(poisoned=(i > 0))
-                o, tc, obs, err = self._run_once(ex, prm)
-                all_tc += tc; all_obs += obs; out = o
-                if err:
-                    break
-        else:
-            ex = self._build(poisoned=True)
-            for prm in prompts:
-                o, tc, obs, err = self._run_once(ex, prm)
-                all_tc += tc; all_obs += obs; out = o
-                if err:
-                    break
-        return Probe(prompt=" ⟶ ".join(prompts), output=out, tool_calls=all_tc,
-                     observations=all_obs, error=err, seconds=round(time.time() - t0, 1))
+        # Through `target.chain_probe`, the one rule for every adapter. The rug pull keeps its
+        # shape: turn 1 clean (the user approves the tool), turns 2+ poisoned.
+        from target import chain_probe
+        _n = [0]
+        _one = [None] if self.variant == "rugpull" else [self._build(poisoned=True)]
+
+        def _step(prm):
+            ex = self._build(poisoned=(_n[0] > 0)) if self.variant == "rugpull" else _one[0]
+            _n[0] += 1
+            t0 = time.time()
+            o, tc, obs, err = self._run_once(ex, prm)
+            return Probe(prompt=prm, output=o, tool_calls=tc, observations=obs, error=err,
+                         seconds=round(time.time() - t0, 1))
+        return chain_probe(prompts, _step)

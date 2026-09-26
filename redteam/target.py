@@ -322,6 +322,64 @@ def engine_version():
 _ENGINE_VERSION = None
 
 
+def chain_probe(prompts, step):
+    """One conversation, turn by turn: `step(prompt) -> Probe` sends one turn, and this is the
+    ONE place that decides what the conversation's probe holds.
+
+    SEVEN COPIES OF THIS RULE, AND THEY DISAGREED. Five tool agents returned no `turns` at all,
+    so a canary one turn leaked and the next refused was judged on the last reply alone --
+    DEFENDED -- and `memory_poison` and `capitulation`, which need the turns, could never
+    fire on them. rangebot ignored a turn's error and kept going, so a dropped connection was
+    scored as a measured trial. httpbot returned the bare error and threw away the turns that
+    had answered, the defect `targets_http` had just been fixed for. Three adapters' turns
+    carried no `seconds`, so `slow_response` judged the conversation's total. And the prompt
+    was joined three different ways. Found by an independent review.
+
+    So: every turn is recorded with what it sent, what came back, its tool calls, what the
+    tools returned and its own time; the conversation stops at the turn that errored and
+    keeps the turns that answered beside the error; the attacker's side is every prompt,
+    one per line, the form `runner.attacker_side` reconstructs.
+    """
+    import time as _t
+    turns, out, calls, obs, res, secs = [], "", [], [], [], 0.0
+    for p in prompts:
+        t0 = _t.time()
+        pr = step(p)
+        s = float(getattr(pr, "seconds", 0) or 0) or round(_t.time() - t0, 3)
+        if getattr(pr, "error", None):
+            return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
+                         observations=obs, resolved=res, turns=turns, seconds=secs + s,
+                         error=pr.error)
+        out = pr.output
+        calls += list(pr.tool_calls or [])
+        obs += list(pr.observations or [])
+        res += list(getattr(pr, "resolved", None) or [])
+        secs += s
+        turns.append({"prompt": p, "output": pr.output,
+                      "tool_calls": list(pr.tool_calls or []),
+                      "observations": list(pr.observations or []), "seconds": s})
+    return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls, observations=obs,
+                 resolved=res, turns=turns, seconds=secs)
+
+
+def executor_turn(ex, prompt):
+    """One turn through a LangChain agent executor, as a Probe. The four practice agents
+    built on one carried this body four times, inside their chain loops."""
+    import contextlib as _cl
+    import time as _t
+    t0 = _t.time()
+    with _cl.redirect_stdout(io.StringIO()), _cl.redirect_stderr(io.StringIO()):
+        try:
+            r = ex.invoke({"input": prompt})
+        except Exception as e:
+            return Probe(prompt=prompt, output="", error=f"{type(e).__name__}: {e}",
+                         seconds=round(_t.time() - t0, 1))
+    steps = r.get("intermediate_steps", []) or []
+    return Probe(prompt=prompt, output=r.get("output", "") or "",
+                 tool_calls=[(a.tool, str(a.tool_input)) for a, _ in steps],
+                 observations=[str(o) for _, o in steps], seconds=round(_t.time() - t0, 1))
+
+
 def target_configs(directory=None):
     """Every real target config in a directory, sorted, temporaries excluded.
 

@@ -72,24 +72,23 @@ class MemoryBotTarget(Target):
     def send_chain(self, prompts):
         """Persistent memory across turns: the growing message list IS the memory
         the poison lives in. With guard=True, a standing-rule turn is refused and
-        NOT written to that memory, so it can't influence a later turn."""
+        NOT written to that memory, so it can't influence a later turn. Through
+        `target.chain_probe`, the one rule for every adapter."""
+        from target import chain_probe
         llm = self._get_llm()
         msgs = [self._SM(content=SYSTEM_MSG)]
-        turns, out, err = [], "", None
-        t0 = time.time()
-        for p in prompts:
+
+        def _step(p):
+            t0 = time.time()
             if self.guard and _STANDING_RULE.search(p or ""):
-                out = _REFUSAL                       # quarantine: reply, but don't persist the turn
-                turns.append({"prompt": p, "output": out, "tool_calls": []})
-                continue
+                # quarantine: reply, but don't persist the turn
+                return Probe(prompt=p, output=_REFUSAL, seconds=round(time.time() - t0, 1))
             msgs.append(self._HM(content=p))
             try:
-                r = llm.invoke(msgs)
-                out = r.content
-                msgs.append(self._AM(content=out))
+                out = llm.invoke(msgs).content
             except Exception as e:
-                err = f"{type(e).__name__}: {e}"
-                break
-            turns.append({"prompt": p, "output": out, "tool_calls": []})
-        return Probe(prompt=" ⟶ ".join(prompts), output=out, turns=turns,
-                     error=err, seconds=round(time.time() - t0, 1))
+                return Probe(prompt=p, output="", error=f"{type(e).__name__}: {e}",
+                             seconds=round(time.time() - t0, 1))
+            msgs.append(self._AM(content=out))
+            return Probe(prompt=p, output=out, seconds=round(time.time() - t0, 1))
+        return chain_probe(prompts, _step)
