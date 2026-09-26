@@ -339,6 +339,28 @@ def main():
     check("a column that could not be computed says so instead of coming back empty",
           _mv3 == {} and "could not be read" in _why3, "%r %r" % (_mv3, _why3))
 
+    # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE FLEET PAGE ---------------------------------
+    # A SIDE THAT MEASURED NOTHING IS NOT A SIDE THAT HELD.
+    _mu = [M("bot", {"a": ("ERROR", []), "b": ("SKIP", []), "c": ("DEFENDED", []),
+                     "d": ("DEFENDED", [])}),
+           M("bot-naive", {"a": ("EXPLOITED", ["x"]), "b": ("SKIP", []), "c": ("ERROR", []),
+                           "d": ("EXPLOITED", ["x"])})]
+    _pu = pair_diffs(_mu)[0]
+    check("an errored guarded side is not the control holding",
+          [x["attack"] for x in _pu["diffs"]] == ["d"], str(_pu["diffs"]))
+    check("...and unmeasured pairs are not counted as shared or identical",
+          (_pu["shared"], sorted(_pu["unmeasured"])) == (1, ["a", "b", "c"]),
+          "%s %s" % (_pu["shared"], _pu["unmeasured"]))
+    # THE LEAD SAYS WHAT THE FLEET SHOWS.
+    from compare_targets import fleet_lead as _fl
+    _l1 = _fl(2, 1, 0, same_arsenal=False)
+    check("a fleet of two arsenals is not called one suite, and an unmeasured system did "
+          "not hold", "same attack suite" not in _l1 and "the rest held" not in _l1
+          and "1 measured nothing" in _l1, _l1)
+    _l2 = _fl(3, 1, 2, same_arsenal=True)
+    check("...while one suite with hardened systems keeps its claim",
+          "same attack suite" in _l2 and "2 held" in _l2 and "crying wolf" in _l2, _l2)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

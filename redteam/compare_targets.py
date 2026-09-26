@@ -118,6 +118,7 @@ def arsenal_claim(rows):
 
 from workspace import esc as _ws_esc
 from workspace import attack_name
+from workspace import NOT_MEASURED
 # ONE DEFINITION OF WHAT AN ATTACK IS, the same one `history.diff` compares runs with
 # and the same one `lint` reads. A field that starts changing what gets sent joins this
 # page's comparison by being added there.
@@ -220,7 +221,7 @@ def pair_diffs(matrix):
         if base not in by_name:
             continue
         guarded, naive = by_name[base], by_name[name]
-        diffs, unpaired, mismatched = [], [], []
+        diffs, unpaired, mismatched, unmeasured_p = [], [], [], []
         for aid in sorted(set(guarded) | set(naive)):
             g, n = guarded.get(aid), naive.get(aid)
             if not g or not n:
@@ -243,6 +244,13 @@ def pair_diffs(matrix):
             # not what the control bought.
             if len(g) > 3 and len(n) > 3 and g[3] and n[3] and g[3] != n[3]:
                 mismatched.append(aid)
+                continue
+            # A SIDE THAT MEASURED NOTHING IS NOT A SIDE THAT HELD: ERROR on the guarded build
+            # beside EXPLOITED on the naive one was "the control held", and three unmeasured
+            # pairs read "identical on all 3 ... the change bought nothing measurable". Found
+            # by an independent review.
+            if g[0] in NOT_MEASURED or n[0] in NOT_MEASURED:
+                unmeasured_p.append(aid)
                 continue
             if g[0] == n[0]:
                 continue
@@ -272,12 +280,12 @@ def pair_diffs(matrix):
         # neither this count nor the diffs, and is reported on its own line -- counting it
         # as shared is what would make `identical on all N` a claim about attacks nobody
         # asked the same way.
-        shared = sorted((set(guarded) & set(naive)) - set(mismatched))
+        shared = sorted((set(guarded) & set(naive)) - set(mismatched) - set(unmeasured_p))
         if diffs or name in declared:
             out.append({"base": base, "naive": name, "label": label, "diffs": diffs,
                         "identical": len(shared) if not diffs else 0,
                         "shared": len(shared), "unpaired": unpaired,
-                        "mismatched": mismatched})
+                        "mismatched": mismatched, "unmeasured": unmeasured_p})
     return out
 
 
@@ -347,7 +355,7 @@ def benign_noise():
     return out
 
 
-def fleet_lead(n_systems, n_vuln):
+def fleet_lead(n_systems, n_vuln, n_hardened=None, same_arsenal=True):
     """The sentence at the top of the fleet page, which has to depend on the fleet.
 
     It read "N of M were exploitable; the rest held", and then claimed that a tool "that
@@ -365,13 +373,24 @@ def fleet_lead(n_systems, n_vuln):
         return ("One system, tested with the arsenal below. This page exists to set several "
                 "side by side, and with one there is nothing to hold it against: read it as "
                 "that system's result rather than as a fleet.")
+    # WHAT THE PAGE CAN SAY ABOUT ITS OWN FLEET: "the same attack suite" only when it was one,
+    # and "the rest held" only for the systems measured and hardened -- a system whose rows
+    # all errored is not one that held. Found by an independent review.
+    lead = ("The same attack suite run against every system. " if same_arsenal else
+            "Every system was swept, with the arsenals named above. ")
+    if n_hardened is None:
+        n_hardened = n_systems - n_vuln
+    _unmeasured = n_systems - n_vuln - n_hardened
     if n_vuln >= n_systems:
-        return (f"The same attack suite run against every system. <b>All {n_systems}</b> were "
+        return (f"{lead}<b>All {n_systems}</b> were "
                 f"exploitable, so nothing on this page shows the arsenal leaving a hardened "
                 f"system alone. That claim needs a system it did not break.")
-    return (f"The same attack suite run against every system. <b>{n_vuln} of {n_systems}</b> "
-            f"were exploitable; the rest held. A tool that breaks the undefended and clears "
-            f"the hardened is measuring real posture, not crying wolf.")
+    _rest = (f"{n_hardened} held" if n_hardened else "none was shown to hold")
+    if _unmeasured:
+        _rest += f" and {_unmeasured} measured nothing"
+    _tail = (" A tool that breaks the undefended and clears the hardened is measuring real "
+             "posture, not crying wolf." if n_hardened and same_arsenal else "")
+    return f"{lead}<b>{n_vuln} of {n_systems}</b> were exploitable; {_rest}.{_tail}"
 
 
 def main():
@@ -612,8 +631,11 @@ def main():
                 cells += '<td class="na">·</td>'
             else:
                 head = hit[0]
-                col = {"EXPLOITED": "var(--accent)", "PARTIAL": "#c2410c"}.get(head, "var(--ok)")
-                mark = {"EXPLOITED": "●", "PARTIAL": "◐", "DEFENDED": "○", "SKIP": "·", "ERROR": "!"}.get(head, "·")
+                # A ROW THAT MEASURED NOTHING IS GREY, not the green of a defence, and its mark
+                # is not the "not applicable" dot.
+                col = {"EXPLOITED": "var(--accent)", "PARTIAL": "#c2410c",
+                       "ERROR": "var(--dim)", "SKIP": "var(--dim)"}.get(head, "var(--ok)")
+                mark = {"EXPLOITED": "●", "PARTIAL": "◐", "DEFENDED": "○", "SKIP": "–", "ERROR": "!"}.get(head, "·")
                 tag, ttl = "", head
                 if letter:
                     tag = f'<sup class="vtag">{letter}</sup>'
@@ -659,6 +681,12 @@ def main():
                 f'so a verdict that differs is not what the control bought. They are left '
                 f'out of the counts below: {esc(mids)}{esc(mmore)}. Re-run both builds with '
                 f'one arsenal to compare them.</p>')
+        if p_.get("unmeasured"):
+            pair_html += (
+                f'<p class="dim pn"><b>{len(p_["unmeasured"])} attack(s) measured nothing on '
+                f'one build or both</b> (ERROR or SKIP), so they say nothing about the control '
+                f'and are left out of the counts below: '
+                f'{esc(named_or_more(p_["unmeasured"], 6))}.</p>')
         if not p_["diffs"]:
             # "no difference" is a result, and it is the one this pair was declared to find
             pair_html += (
@@ -726,7 +754,9 @@ def main():
                   'sweeps that stopped.</div>')
     today = datetime.date.today().isoformat()
 
-    lead = fleet_lead(len(rows), n_vuln)
+    lead = fleet_lead(len(rows), n_vuln,
+                      sum(1 for r in rows if r["verdict"] == "Hardened"),
+                      same_arsenal=not _odd_arsenal)
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Fleet Overview</title><style>
@@ -792,7 +822,7 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
 <div class="matrix-wrap"><table class="matrix">
   <thead><tr><th>Attack</th>{mcols}</tr></thead><tbody>{mrows}</tbody>
 </table></div>
-<div class="legend">● exploited · ◐ partial · ○ defended · · not applicable · <sup class="vtag">a</sup>/<sup class="vtag">b</sup> different versions of the same attack id — only cells sharing a letter were sent the same text</div>
+<div class="legend">● exploited · ◐ partial · ○ defended · ! errored · – skipped · · not applicable · <sup class="vtag">a</sup>/<sup class="vtag">b</sup> different versions of the same attack id — only cells sharing a letter were sent the same text</div>
 </div></body></html>"""
     out = PAGE_DIR / "compare_targets.html"
     # The directory may not exist on a first run, and it is the caller's own workspace rather

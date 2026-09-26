@@ -4415,6 +4415,59 @@ def main():
     finally:
         shutil.rmtree(_ow, ignore_errors=True)
 
+    # --- THE FIXES PAGE, BUILT FROM A FIXTURE -------------------------------------------------
+    # A stale artifact the header drops feeds no section; a route that fired is not "not
+    # exercised"; two id-less attacks do not collide; the footer's diagnosis is not constant.
+    _fw = tempfile.mkdtemp()
+    try:
+        def _res(target, rows):
+            with open(os.path.join(_fw, "results_%s.json" % target), "w",
+                      encoding="utf-8") as f:
+                json.dump({"meta": {"target": target, "attacks_n": len(rows), "skipped": 0,
+                                    "trials": 1, "broke": 1},
+                           "results": rows}, f)
+
+        def _row(aid, fired, category="exfil", headline="EXPLOITED"):
+            a = {"category": category, "text": "t"}
+            if aid:
+                a["id"] = aid
+            return {"attack": a, "headline": headline, "rate": "1/1", "fired": fired,
+                    "locks": {}, "trials": [{"verdict": headline, "probe": {"output": "o"}}]}
+        _res("secretbot", [_row("r1", ["canary_encoded", "canary_in_output"])])
+        _res("ghost", [_row("ctrl-ghost", ["canary_in_output"], category="control")])
+        _pf = subprocess.run([sys.executable, os.path.join(HERE, "defense_report.py")],
+                             capture_output=True, text=True, timeout=300,
+                             env=dict(os.environ, QATRATION_OUT=_fw, PYTHONIOENCODING="utf-8",
+                                      PYTHONDONTWRITEBYTECODE="1"))
+        _fh = open(os.path.join(_fw, "defense_report.html"), encoding="utf-8").read() \
+            if os.path.exists(os.path.join(_fw, "defense_report.html")) else ""
+        check("the fixes page is built from the fixture", bool(_fh),
+              (_pf.stdout + _pf.stderr)[-300:])
+        check("a stale artifact the header drops feeds no section",
+              "ghost" not in _fh, "ghost is on the page")
+        _ns = _fh[_fh.find("Not seen in this run"):][:300] if "Not seen in this run" in _fh else ""
+        check("a route that fired is not listed as not exercised",
+              "canary_encoded" not in _ns, _ns)
+        # A PAGE WHOSE ONLY FINDING IS A MISSING AUTHORISATION CHECK is not told the model
+        # was trusted to enforce a boundary.
+        os.remove(os.path.join(_fw, "results_ghost.json"))
+        _res("secretbot", [_row("r2", ["bola_access"], category="authz")])
+        subprocess.run([sys.executable, os.path.join(HERE, "defense_report.py")],
+                       capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, QATRATION_OUT=_fw, PYTHONIOENCODING="utf-8",
+                                PYTHONDONTWRITEBYTECODE="1"))
+        _fh2 = open(os.path.join(_fw, "defense_report.html"), encoding="utf-8").read()
+        check("the footer's model-trust diagnosis is not printed over a page it does not fit",
+              "bola_access" in _fh2 and "the model was trusted to enforce" not in _fh2,
+              "footer present" if "the model was trusted" in _fh2 else "no bola on page")
+    finally:
+        shutil.rmtree(_fw, ignore_errors=True)
+    # ATTRIBUTION IS KEYED BY THE NAME THE PAGE LOOKS UP.
+    import inspect as _insp_f
+    check("attribution is keyed by attack_name, where it is written and where it is read",
+          "out[(stem, attack_name(r[\"attack\"]))]" in _insp_f.getsource(dr.attribution_index)
+          and "(it[0], attack_name(it[1])) in attrib" in _insp_f.getsource(dr.main), "")
+
     # --- ROWS THE BUDGET NEVER SENT ARE NOT MEASURED, and the scorecard says so -------------
     import report_engine as _re_b
     _bmeta = {"target": "b", "broke": 0, "attacks_n": 5, "errors": 0, "unreached": 0}

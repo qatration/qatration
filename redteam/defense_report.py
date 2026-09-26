@@ -739,6 +739,25 @@ def _rate_frac(rate):
 from workspace import payload_shown as payload_text
 
 
+
+def _fleet_files():
+    """The results files this page describes: the fleet's, or everything in a fixture's
+    directory -- the decision `load_all` makes, asked by every reader.
+
+    ONLY `load_all` ASKED IT. The header said "1 systems tested" while five sections read
+    every file in the directory: a stale `results_ghost.json` with no config supplied "1
+    control came back as a breach", forty measured attacks the fleet never sent, and a
+    delivery marked tried that no tested system tried. Found by an independent review.
+    An unreadable file stays in, so the reader that meets it can say so.
+    """
+    files = results_files(OUT_DIR)
+    parsed, _ = read_artifacts(files)
+    metas = {fp: (d.get("meta") or {}) for fp, d in parsed.items()}
+    keep, _drop = fleet_filter(list(metas.values()), fleet_names())
+    names = {(m or {}).get("target") for m in keep}
+    return [fp for fp in files if fp not in metas or metas[fp].get("target") in names]
+
+
 def load_all(known=None):
     """Findings, the targets they came from, and WHEN each target was measured.
 
@@ -884,7 +903,7 @@ def _unresolved_paths():
     """
     out, asked, unasked, partly = {}, [], [], {}
     _declared = None
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         try:
             m = (read_artifact(fp)[0] or {})["meta"]
         except (ValueError, KeyError, OSError):
@@ -940,7 +959,7 @@ def _unobservable():
     except Exception:
         return {}, {}, {}
     out, asked, unasked = {}, {}, {}
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         # The last bare read in this file, and the one that survived the first pass: a
         # truncated artifact raised here and took the whole report down after `load_all` had
         # already been taught to carry on. `load_all` names it; this one carries on quietly
@@ -1040,7 +1059,7 @@ def arsenal_ran():
     the pair of numbers and the name of the arsenal, and the judgement stays theirs.
     """
     out = {}
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         try:
             m = ((read_artifact(fp)[0] or {}).get("meta") or {})
@@ -1105,7 +1124,7 @@ def controls_fired():
     customer would ask on purpose.
     """
     out = []
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         try:
             rows = ((read_artifact(fp)[0] or {}).get("results") or [])
@@ -1150,7 +1169,7 @@ def attribution_index():
     # run, and reading them here would compute caveats for rows the page never renders — the
     # aggregate and its caveats have to be drawn from the same set of files or the difference
     # is a silent filter.
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         tgt = target_of(stem, ctxs) or stem
         ambient = _bl.rates(tgt, str(OUT_DIR))
@@ -1182,7 +1201,9 @@ def attribution_index():
             if verdict not in ("unattributable", "weakened") and not (
                     verdict == "unmeasured" and detail):
                 continue
-            out[(stem, str(r["attack"].get("id")))] = (verdict, detail)
+            # BY `attack_name`, the name the page looks it up by: `str(id)` made every id-less
+            # attack `None`, so two of them collided and the badge fell off both.
+            out[(stem, attack_name(r["attack"]))] = (verdict, detail)
     return out, unmeasured
 
 
@@ -1293,7 +1314,7 @@ def delivered():
     file but never applied is not coverage.
     """
     seen = set()
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         try:
             d = read_artifact(fp)[0] or {}
         except (ValueError, OSError):
@@ -1340,7 +1361,7 @@ def coverage(why=None, split=None):
     # or `None` in a value once any run on the page predates the two counts.
     if split is not None:
         split.update({"not_applicable": 0, "not_sent": 0})
-    for fp in results_files(OUT_DIR):
+    for fp in _fleet_files():
         try:
             _art = read_artifact(fp)[0] or {}
             meta = _art["meta"]
@@ -1496,8 +1517,13 @@ def main():
         # rendering four problems that share one fix.
         key = root_key(rem)
         groups.setdefault(key, []).append((tgt, attack, head, probe, rate))
-        channels.setdefault(key, {}).setdefault(rem, 0)
-        channels[key][rem] += 1
+        # EVERY ROUTE THAT FIRED, not only the one that filed the row: a row that fired
+        # `canary_encoded` and `canary_in_output` recorded the second alone, and the page
+        # said `canary_encoded` was "not exercised, rather than closed". Found by an
+        # independent review.
+        for _m in sorted({d for d in fired if d in REMEDIATION and root_key(d) == key}):
+            channels.setdefault(key, {}).setdefault(_m, 0)
+            channels[key][_m] += 1
 
     ordered = sorted(groups.items(),
                      key=lambda kv: (SEV_RANK[entry(kv[0])["sev"]], entry(kv[0])["order"]))
@@ -1963,6 +1989,17 @@ def main():
         tiles += (f'<div class="tile"><div class="n" style="color:#6b7280">'
                   f'{root_sev["unmapped"]}</div><div class="l">no fix yet</div></div>')
 
+    # THE FOOTER'S DIAGNOSIS ONLY WHERE IT IS THE DIAGNOSIS. It was a constant -- "the model
+    # was trusted to enforce a security boundary" -- under a page whose only finding was a
+    # missing server-side authorisation check, which is the constant `common_thread` was
+    # written to replace. Found by an independent review.
+    pattern_html = ("" if not ordered or unmapped
+                    or not all(k in PROMPT_ENFORCED for k, _ in ordered) else
+                    '<p class="pattern">Root cause across every finding: the model was trusted '
+                    'to enforce a security boundary.\nModels are helpful, not secure. Put the '
+                    'boundary in the tool, the query, and the auth layer — and treat\neverything '
+                    'the model reads (prompts, retrieved documents, tool output) as untrusted '
+                    'input.</p>')
     sections = ""
     for det, items in ordered:
         rem = entry(det)
@@ -2005,11 +2042,17 @@ def main():
         # tries first, and handing them one the target also does without an attack is the
         # fastest way to have the whole document disbelieved.
         items = sorted(items, key=lambda it: (
-            1 if (it[0], str(it[1].get("id"))) in attrib else 0, -_rate_frac(it[4])))
+            1 if (it[0], attack_name(it[1])) in attrib else 0, -_rate_frac(it[4])))
         t0, a0, h0, p0, r0 = items[0]
-        n_unattr = sum(1 for it in items if (it[0], str(it[1].get("id"))) in attrib)
-        caveat_html = (f'<span class="count unattr-count">{n_unattr} not attributable to the '
-                       f'attack</span>') if n_unattr else ""
+        # 5: NOT ATTRIBUTABLE IS NOT UNMEASURED: a row whose detector raised on the baseline
+        # carries an UNMEASURED badge, and the group counted it "not attributable".
+        _att_v = [attrib.get((it[0], attack_name(it[1])), ("",))[0] for it in items]
+        n_unattr = sum(1 for v in _att_v if v in ("unattributable", "weakened"))
+        n_unmeas = sum(1 for v in _att_v if v == "unmeasured")
+        caveat_html = ((f'<span class="count unattr-count">{n_unattr} not attributable to the '
+                        f'attack</span>') if n_unattr else "") + (
+            (f'<span class="count unattr-count">{n_unmeas} attribution unmeasured</span>')
+            if n_unmeas else "")
         reply = (p0.get("output") or "").strip()
         reply = reply if len(reply) < 520 else reply[:520] + " …"
         tcs = p0.get("tool_calls") or []
@@ -2149,7 +2192,7 @@ occurrences answers "how often", which is not the question a fix is chosen by. O
 detector accounting for dozens of rows is one problem with a wide blast radius rather than
 dozens of problems.{prov_line}</p>
 <p class="coverage">Coverage: {len(tested)} target{'s' if len(tested)!=1 else ''}, {len(breached_targets)} with at least
-one exploitable finding. {coverage_line}</p>
+one finding. {coverage_line}</p>
 
 {staleness}
 {unread_bar}
@@ -2164,9 +2207,7 @@ weakness{'' if n_roots == 1 else 'es'}, seen {n_breaches} time{'' if n_breaches 
 {dead_html}{held_html}
 {unmapped_html}
 {unseen_html}
-<p class="pattern">Root cause across every finding: the model was trusted to enforce a security boundary.
-Models are helpful, not secure. Put the boundary in the tool, the query, and the auth layer — and treat
-everything the model reads (prompts, retrieved documents, tool output) as untrusted input.</p>
+{pattern_html}
 </div></body></html>"""
     out = OUT_DIR / "defense_report.html"
     # THROUGH `atomic_write`, whose own docstring lists "every HTML page" among the
