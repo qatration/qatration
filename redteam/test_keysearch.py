@@ -424,6 +424,16 @@ def main():
           (out["control"]["errors"], out["control"]["trials"]), (1, 2))
     check("...and the frame that beat it is still a key",
           [k["frame"] for k in out["keys"]], ["authority"])
+    # A KEY WHOSE FRAME HAS NO `why` IS PRINTED, not raised on after every probe was sent.
+    import keysearch as _ks_w
+    _nowhy = dict(out, keys=[dict(out["keys"][0], why="")])
+    try:
+        _txt_w = _ks_w.format_search("t", _nowhy)
+        _err_w = None
+    except Exception as _e:
+        _txt_w, _err_w = "", _e
+    check("a key whose frame gives no reason is still printed",
+          (_err_w is None, "key: authority" in _txt_w), (True, True))
 
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")

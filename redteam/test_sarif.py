@@ -766,6 +766,27 @@ check("a control row is not exported as a finding",
 check("...and an errored control is not an attack that produced no measurement",
       not any("produced no measurement" in json.dumps(n) for n in notifications(_log_c)),
       json.dumps(notifications(_log_c))[:300])
+# ONE FINDING, ONE IDENTITY ACROSS RUNS: a second run in which one trial also echoed a canary
+# changed `fired[0]`, and the alert closed as fixed while a new one opened for the same breach.
+def _one(fired):
+    r = row("atk-id", "EXPLOITED", fired)
+    r["attack"]["success"] = ["system_prompt_leak"]
+    return build([r], {"system_prompt_leak": 0.0, "canary_in_output": 0.0})["runs"][0]["results"][0]
+_run1, _run2 = _one(["system_prompt_leak"]), _one(["canary_in_output", "system_prompt_leak"])
+check("a finding keeps its fingerprint when another detector also fires",
+      _run1["partialFingerprints"] == _run2["partialFingerprints"],
+      "%s vs %s" % (_run1["partialFingerprints"], _run2["partialFingerprints"]))
+# AND WHERE THE ATTACK AIMED AT NOTHING THAT FIRED, the fingerprint still does not follow
+# the rule: the identity is the attack's.
+def _bare(fired):
+    return build([row("atk-bare", "EXPLOITED", fired)],
+                 {"system_prompt_leak": 0.0, "canary_in_output": 0.0})["runs"][0]["results"][0]
+check("...even for an attack that declared no detector",
+      _bare(["system_prompt_leak"])["partialFingerprints"]
+      == _bare(["canary_in_output", "system_prompt_leak"])["partialFingerprints"], "moved")
+check("...and its rule, the detector the attack aimed at",
+      (_run1["ruleId"], _run2["ruleId"]) == ("system_prompt_leak", "system_prompt_leak"),
+      "%s vs %s" % (_run1["ruleId"], _run2["ruleId"]))
 # A DETECTOR THAT RAISED ON THE BASELINE is named as unmeasured, not as a missing baseline.
 _log_r = build([row("atk-r", "EXPLOITED", ["canary_in_output"])],
                {"!canary_in_output:TypeError": 1.0})

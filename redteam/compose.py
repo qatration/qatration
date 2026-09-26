@@ -76,7 +76,10 @@ def _run(target, rung, objective, ctx, trials):
         # and counting that as the target holding is how a dead endpoint produced
         # COUPLED — "every property was reachable on its own; the combination is the
         # wall" — about a run in which nothing was reachable at all.
-        if probe is None or probe.error:
+        # AND A SILENT ONE IS NOT A MISS EITHER, the rule `isolation._trial` follows: an
+        # endpoint answering nothing made every rung 0/N and the verdict COUPLED -- "the
+        # combination is the wall" -- from silence alone. Found by an independent review.
+        if probe is None or probe.error or probe.silent():
             errors += 1
         elif _achieved(probe, objective, ctx):    # locks describe the MISSES only
             hits += 1
@@ -200,7 +203,11 @@ def compose(target, objective, parts, ctx, trials=3):
             # the lock, the same claims across two turns do not
             "per_message_lock": bool(best and best["strategy"] == "split_turns"
                                      and best["hits"] == best["trials"]
-                                     and any(a["hits"] == 0 for a in attempts
+                                     # REFUSED, not unmeasured: a single-message rung
+                                     # whose every trial errored refused nothing, and the
+                                     # page said the lock re-arms per message.
+                                     and any(a["hits"] == 0 and a["errors"] < a["trials"]
+                                             for a in attempts
                                              if a["strategy"] != "split_turns"))}
 
 

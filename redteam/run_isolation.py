@@ -431,8 +431,21 @@ def compose_parts(result, by_name):
         if p["status"] not in ("open", "noisy") and not keys:
             missing.append(f"{p['name']} ({p['status']}, no key found)")
             continue
-        parts.append({"name": p["name"], "task": task,
-                      "frame_template": keys[0]["template"] if keys else None})
+        # THE KEY AS IT WAS FOUND: its `frame_vars` substituted and the ask it needed
+        # (`task_self` for a self-referential frame). The template alone went out with a
+        # literal `{uid}` in it, and the combination of a payload nobody had measured read
+        # COUPLED. Found by an independent review.
+        tpl = keys[0]["template"] if keys else None
+        if keys:
+            for _k, _v in (spec.get("frame_vars") or {}).items():
+                tpl = tpl.replace("{" + str(_k) + "}", str(_v))
+            _need = keys[0].get("needs")
+            if _need:
+                from keysearch import REQUIREMENTS as _REQ
+                _tk = _REQ.get(_need, (None, ""))[0]
+                if _tk and (spec.get(_tk) or "").strip():
+                    task = spec[_tk].strip()
+        parts.append({"name": p["name"], "task": task, "frame_template": tpl})
     return parts, missing
 
 

@@ -251,7 +251,11 @@ def build(results, target_config=None, out_dir=None):
         level = _cap(level, verdict)
 
         fired = row.get("fired") or []
-        rule_id = fired[0] if fired else "breach"
+        # THE RULE THE ATTACK AIMED AT, where it fired: `fired` is the union over trials in
+        # alphabetical order, so `fired[0]` moved whenever one trial added a detector that
+        # sorts earlier, and the finding was filed under a different rule on the next run.
+        _aimed = [d for d in ((row.get("attack") or {}).get("success") or []) if d in fired]
+        rule_id = _aimed[0] if _aimed else (fired[0] if fired else "breach")
         if rule_id not in seen:
             seen.add(rule_id)
             rule = {"id": rule_id,
@@ -278,8 +282,12 @@ def build(results, target_config=None, out_dir=None):
             # one that is new. Keyed on the attack rather than on the message, because the
             # message carries rates that move between runs and a fingerprint that moves with
             # them would report every finding as new on every run.
+            # AND ON THE ATTACK ALONE, not on the rule: v1 carried the rule, so a run in which
+            # one trial also echoed a canary closed the alert as fixed and opened a second
+            # one for the same breach. Found by an independent review. A new key, so a
+            # consumer holding v1 alerts sees the change as a change of scheme.
             "partialFingerprints": {
-                "qatration/v1": "%s:%s:%s" % (target, attack.get("id", "?"), rule_id)},
+                "qatration/v2": "%s:%s" % (target, attack.get("id", "?"))},
             "properties": {"attribution": verdict,
                            "headline": head,
                            "category": attack.get("category", ""),

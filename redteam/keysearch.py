@@ -194,6 +194,8 @@ def try_frame(target, frame, task, success, ctx, trials=3, frame_vars=None,
         "frame": frame["id"],
         "family": frame.get("family", "?"),
         "why": (frame.get("why") or "").strip(),
+        # AND WHAT THE FRAME NEEDED, so a key re-used downstream is given the same ask.
+        "needs": frame.get("needs"),
         # carried so a key can be re-used downstream (composition, report) without
         # re-reading frames.yaml and matching by id
         "template": frame["template"],
@@ -339,7 +341,10 @@ def format_search(name, out):
         lines.append(f"  {r['frame']:<22}{r['rate']:<8}"
                      f"{_locks_str(r['locks']) or '-'}{mark}")
     for r in out["keys"]:
-        lines.append(f"  key: {r['frame']} ({r['family']}) — {r['why'].splitlines()[0]}")
+        # `or ['-']`: a frame with no `why` is legal, and this raised IndexError after every
+        # probe had been sent, before the map was written.
+        lines.append(f"  key: {r['frame']} ({r['family']}) — "
+                     f"{(r['why'].splitlines() or ['-'])[0]}")
     # a frame that could not be run is not a frame that failed
     for sk in out.get("skipped", []):
         lines.append(f"  n/a: {sk['frame']} — {sk['reason']}")
