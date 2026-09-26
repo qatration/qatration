@@ -208,45 +208,19 @@ def _run_sessions(target, steps):
     under test: on a target whose state lives server-side it is a no-op and the canary
     walks straight through.
     """
-    turns, calls, obs, out, secs = [], [], [], "", 0.0
-    resolved = []
-    for i, step in enumerate(steps):
+    # THROUGH `target.chain_probe`, the one rule for what a multi-turn probe holds -- here with
+    # a reset before every step and every turn after the first marked as a new session.
+    #
+    # WHAT THE EARLIER STEPS ALREADY SHOWED IS NOT UNDONE BY A LATER FAILURE: a sequence that
+    # leaked in step one and hit a socket reset in step two keeps the leak beside the error,
+    # and `judge` reads both -- a breach already seen stands, a clean bill does not.
+    from target import chain_probe
+
+    def _step(step):
         target.reset()
         p = target.send(step)
-        if p is None or p.error:
-            # WHAT THE EARLIER STEPS ALREADY SHOWED IS NOT UNDONE BY A LATER FAILURE. This
-            # returned the error probe alone, so a sequence that leaked in step one and hit a
-            # socket reset in step two came back as verdict ERROR, output '', turns [] — the
-            # leak observed and then discarded, filed as a row nobody measured. `_resilient_send`
-            # then re-sends the whole sequence, which on a memory-poisoning target applies the
-            # plant twice.
-            #
-            # The error travels with the evidence rather than instead of it, and `judge` reads
-            # both: a breach already seen stands, a clean bill does not, because the steps that
-            # would have found one never ran. That asymmetry is the engine's own rule, written
-            # for `workspace.verdict_for` and applied here.
-            err = (p.error if p is not None else "no probe")
-            if not turns:
-                return p if p is not None else Probe(prompt=step, error=err)
-            return Probe(prompt="\n".join(steps[:i + 1]), output=out, tool_calls=calls,
-                         observations=obs, turns=turns, seconds=secs, resolved=resolved,
-                         error=err)
-        out = p.output
-        calls += p.tool_calls
-        obs += p.observations
-        # `resolved` is the target reporting what its tools actually RECEIVED, and it is the
-        # only thing that closes the code-agent blind spot: send_email(body=customer_record)
-        # exfiltrated a record while every detector read a variable name. The aggregate probe
-        # carried tool_calls, observations, turns and seconds and dropped this one — so on any
-        # target that reports it, a sessions attack silently fell back to the argument SOURCE,
-        # which is the state the field was added to get out of. Empty on everything stored
-        # today, which is why it went unnoticed and not why it was acceptable.
-        resolved += list(getattr(p, "resolved", None) or [])
-        secs += float(getattr(p, "seconds", 0) or 0)
-        turns.append({"prompt": step, "output": p.output, "tool_calls": p.tool_calls,
-                      "new_session": i > 0, "seconds": float(getattr(p, "seconds", 0) or 0)})
-    return Probe(prompt=steps[-1] if steps else "", output=out, tool_calls=calls,
-                 observations=obs, turns=turns, seconds=secs, resolved=resolved)
+        return p if p is not None else Probe(prompt=step, error="no probe")
+    return chain_probe(steps, _step, turn_extra=lambda i: {"new_session": i > 0})
 
 
 # WHAT EACH DELIVERY FAMILY NEEDS FROM THE TARGET, in one place, because two readers need

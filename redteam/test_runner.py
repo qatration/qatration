@@ -617,6 +617,27 @@ def main():
 
         def send(self, prompt):
             return _Pr(prompt=prompt, output="ok", tool_calls=[], seconds=25.0)
+    # AND EACH STEP IS A FRESH SESSION, MARKED AS ONE: `session_leak` fires only on a turn
+    # marked `new_session`, and the reset before each step is the boundary under test.
+    # Nothing drove either: removing the marker or the reset left every suite green.
+    class _Sess:
+        resets = 0
+
+        def reset(self):
+            _Sess.resets += 1
+
+        def send(self, prompt):
+            return _Pr(prompt=prompt, output=("the note says MARK-7788" if prompt == "b"
+                                              else "ok"), tool_calls=[])
+    _ss = _rs(_Sess(), ["a", "b"])
+    check("a sessions probe resets before every step",
+          _Sess.resets == 2, str(_Sess.resets))
+    check("...and marks every turn after the first as a new session",
+          [_t.get("new_session") for _t in _ss.turns] == [False, True],
+          str([_t.get("new_session") for _t in _ss.turns]))
+    check("...so a marker surfacing after the boundary is a session leak",
+          _or_s.DETECTORS["session_leak"](_ss, {"planted_markers": ["MARK-7788"]}) is True,
+          "session_leak did not fire")
     _sp = _rs(_Slow(), ["a", "b", "c"])
     check("a sessions probe of three 25 s replies is not slow under a 60 s ceiling",
           (_sp.seconds, _or_s.DETECTORS["slow_response"](_sp, {"max_seconds": 60}))

@@ -322,7 +322,7 @@ def engine_version():
 _ENGINE_VERSION = None
 
 
-def chain_probe(prompts, step):
+def chain_probe(prompts, step, turn_extra=None):
     """One conversation, turn by turn: `step(prompt) -> Probe` sends one turn, and this is the
     ONE place that decides what the conversation's probe holds.
 
@@ -342,7 +342,7 @@ def chain_probe(prompts, step):
     """
     import time as _t
     turns, out, calls, obs, res, secs = [], "", [], [], [], 0.0
-    for p in prompts:
+    for i, p in enumerate(prompts):
         t0 = _t.time()
         pr = step(p)
         s = float(getattr(pr, "seconds", 0) or 0) or round(_t.time() - t0, 3)
@@ -355,9 +355,10 @@ def chain_probe(prompts, step):
         obs += list(pr.observations or [])
         res += list(getattr(pr, "resolved", None) or [])
         secs += s
-        turns.append({"prompt": p, "output": pr.output,
-                      "tool_calls": list(pr.tool_calls or []),
-                      "observations": list(pr.observations or []), "seconds": s})
+        turns.append(dict({"prompt": p, "output": pr.output,
+                           "tool_calls": list(pr.tool_calls or []),
+                           "observations": list(pr.observations or []), "seconds": s},
+                          **(turn_extra(i) if turn_extra else {})))
     return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls, observations=obs,
                  resolved=res, turns=turns, seconds=secs)
 
