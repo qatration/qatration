@@ -304,8 +304,11 @@ def main():
         rate = broke / max(1, atk)
         # Grey, and the words rather than the numbers: "0 / 0 breached" reads as a score, and
         # the reader has no way to tell it from a score that was earned.
-        if not atk:
-            col, headline, bar = SEV.get("unknown", "#6b6b6b"), "not measured", 0
+        # THE CARD'S COLOUR FROM `verdict_for`, the predicate the tiles above use: 1 DEFENDED
+        # beside 19 ERROR is "Not measured" there and was a green `0 / 1 breached` here.
+        if not atk or verdict_for(m) == "Not measured":
+            col, bar = SEV.get("unknown", "#6b6b6b"), 0
+            headline = "not measured" if not atk else f"{broke} / {atk} breached, not measured"
         else:
             col = SEV["none"] if broke == 0 else (SEV["critical"] if rate >= .5 else SEV["high"])
             headline = f'<b style="color:{col}">{broke}</b> / {atk} breached'
@@ -340,13 +343,33 @@ def main():
                 # left this section one entry short with nothing saying so anywhere.
                 _unreadable.append((os.path.basename(str(fp)), why))
                 continue
-            r = d.get("result") or {}
-            ok = r.get("success")
-            col = SEV["critical"] if ok else SEV["none"]
-            verdict = (f"BROKEN in {r['iterations']} iters" if ok
-                       else f"held ({r['iterations']} iters)")
+            # SHAPE FIRST, as `compare_recon.collect` does: `r['iterations']` and
+            # `d["target"]` on an artifact of the wrong shape ended the index with no page.
+            r = d.get("result") if isinstance(d, dict) else None
+            if not isinstance(r, dict) or not d.get("target"):
+                _unreadable.append((os.path.basename(str(fp)),
+                                    "not the shape an adaptive transcript has"))
+                continue
+            # THE RUN'S OWN SENTENCE, through `run_adaptive.outcome_line`: this section read
+            # `success` alone, so a loop that never reached the target was a green "held",
+            # `--iters -3` was "held (-3 iters)", and a break the target's own benign traffic
+            # explains was an unqualified red BROKEN.
+            from run_adaptive import outcome_line as _outcome
+            _line, _code = _outcome(r)
+            if _code == 3:
+                col, verdict = SEV.get("unknown", "#6b6b6b"), "not measured"
+            elif r.get("success"):
+                _att = (r.get("attribution") or ("",))[0]
+                col = SEV["high"] if (_att == "unattributable"
+                                      or not r.get("aimed", True)) else SEV["critical"]
+                verdict = f"BROKEN in {r.get('iterations')} iters" + (
+                    " \u2014 not attributable: the target does this unattacked"
+                    if _att == "unattributable" else "") + (
+                    " \u2014 not the goal it was aimed at" if not r.get("aimed", True) else "")
+            else:
+                col, verdict = SEV["none"], f"held ({r.get('iterations')} iters)"
             items += (f'<li><span class="dot" style="background:{col}"></span>'
-                      f'<b>{esc(d["target"])}</b> — <span style="color:{col}">{verdict}</span>'
+                      f'<b>{esc(d["target"])}</b> — <span style="color:{col}">{esc(verdict)}</span>'
                       f' <span class="cm">attacker: {esc(d.get("attacker",""))}</span></li>')
         adaptive_html = (f'<h2>Adaptive attacker (LLM-in-the-loop)</h2><ul class="adapt">{items}</ul>')
         # SAID ON BOTH SURFACES, and after this loop rather than before it: `unread_bar`
@@ -413,8 +436,9 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
     with _atomic(out) as _f:
         _f.write(doc)
     if unmeasured:
-        print("  ! %d target(s) have a results file that sent NO attacks, so they are shown as "
-              "not measured\n    rather than as hardened: %s"
+        print("  ! %d target(s) have a results file whose attacks were not measured -- none "
+              "sent, or not\n    all of them landed -- so they are shown as not measured "
+              "rather than as hardened: %s"
               % (len(unmeasured), ", ".join(m["target"] for m in unmeasured)))
     print(f"wrote {out} — {n_targets} targets, {n_find} breaches, {len(hardened)} hardened, "
           f"{n_third} third-party ({n_third_find} of the findings)")

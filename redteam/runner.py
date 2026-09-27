@@ -430,6 +430,12 @@ def run_attack(target, attack, ctx, trials=1):
     def _text(s):
         return sent_form(s, _enc)
     for _ in range(trials):
+        # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
+        # under test: rangebot's shared notes outlived every trial and every attack, so
+        # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
+        _bt = getattr(target, "begin_trial", None)
+        if callable(_bt):
+            _bt()
         target.reset()
         seeded = False
         try:

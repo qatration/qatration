@@ -2132,6 +2132,54 @@ def main():
     finally:
         shutil.rmtree(_iw, ignore_errors=True)
 
+    # AND EACH ADAPTIVE ENTRY IS WHAT THE RUN SAID: a loop that never reached the target was
+    # a green "held", an unattributable break an unqualified BROKEN, and an artifact of the
+    # wrong shape took the index down with no page.
+    _iw2 = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_iw2, "results_idx-a.json"), "w", encoding="utf-8") as _f:
+            json.dump({"meta": {"target": "idx-a", "attacks_n": 20, "trials": 1, "broke": 0,
+                                "errors": 19},
+                       "results": [{"attack": {"id": "a", "category": "x"},
+                                    "headline": "DEFENDED", "fired": [],
+                                    "trials": [{"probe": {"output": "no"}}]}]
+                       + [{"attack": {"id": "e%d" % _i, "category": "x"},
+                           "headline": "ERROR", "fired": [],
+                           "trials": [{"probe": {"output": "", "error": "Timeout"}}]}
+                          for _i in range(19)]}, _f)
+        for _nm, _res in (("dead", {"success": False, "iterations": 1,
+                                    "error": "ConnectionRefusedError"}),
+                          ("noisy", {"success": True, "iterations": 1,
+                                     "fired": ["canary_in_output"],
+                                     "attribution": ["unattributable",
+                                                     [["canary_in_output", 1.0]]]})):
+            json.dump({"target": _nm, "attacker": "stub", "result": _res},
+                      open(os.path.join(_iw2, "adaptive_%s.json" % _nm), "w", encoding="utf-8"))
+        json.dump({"target": "shapeless", "result": []},
+                  open(os.path.join(_iw2, "adaptive_shapeless.json"), "w", encoding="utf-8"))
+        import pathlib as _pl_i2
+        _real_i2 = bi.OUT
+        bi.OUT = _pl_i2.Path(_iw2)
+        try:
+            bi.main()
+            _idx2 = io.open(os.path.join(_iw2, "index.html"), encoding="utf-8").read()
+        finally:
+            bi.OUT = _real_i2
+        _li = {n: (re.search(r"<b>%s</b>.*?</li>" % n, _idx2) or [""])[0]
+               for n in ("dead", "noisy")}
+        check("an adaptive loop that never reached its target is not a green `held`",
+              "not measured" in _li["dead"] and "held" not in _li["dead"], _li["dead"][:200])
+        check("...an unattributable break says so on the index",
+              "not attributable" in _li["noisy"], _li["noisy"][:200])
+        check("...an adaptive artifact of the wrong shape is named, not a crash",
+              "adaptive_shapeless.json" in _idx2, _idx2[:300])
+        _card = (re.search(r'class="card" href="report_idx-a\.html">.*?</a>', _idx2, re.S)
+                 or [""])[0]
+        check("a card whose verdict is `Not measured` is not green",
+              "not measured" in _card and bi.SEV["none"] not in _card, _card[:300])
+    finally:
+        shutil.rmtree(_iw2, ignore_errors=True)
+
     # --- A TARGET THAT WAS NEVER ATTACKED IS NOT A TARGET THAT HELD -------------------------
     #
     # Live on the published page: httpbot's results file recorded `attacks_n: 0`, `hardened`

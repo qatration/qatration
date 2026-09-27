@@ -209,6 +209,11 @@ class Target:
     def reset(self) -> None:
         """Fresh conversation/memory before each probe. Override if stateful."""
 
+    def begin_trial(self) -> None:
+        """Before each trial, once -- NOT between the sessions of one trial, which `reset`
+        is. A target whose deliberate flaw is state that survives `reset` needs a line
+        between trials all the same, or trial 2 breaks on what trial 1 planted."""
+
     def seed(self, payload: dict) -> None:
         """Plant attacker-controlled data for indirect delivery."""
         raise NotImplementedError(f"target '{self.name}' has no 'seed' capability")
@@ -342,14 +347,20 @@ def chain_probe(prompts, step, turn_extra=None):
     """
     import time as _t
     turns, out, calls, obs, res, secs = [], "", [], [], [], 0.0
+    # AND HOW LARGE THE LARGEST ANSWER WAS: a turn cut at the reply cap says so on its probe,
+    # and the conversation's probe dropped it -- `None`, which reads as "it fit".
+    big = None
     for i, p in enumerate(prompts):
         t0 = _t.time()
         pr = step(p)
         s = float(getattr(pr, "seconds", 0) or 0) or round(_t.time() - t0, 3)
+        _rb = getattr(pr, "reply_bytes", None)
+        if _rb is not None:
+            big = max(big or 0, _rb)
         if getattr(pr, "error", None):
             return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
                          observations=obs, resolved=res, turns=turns, seconds=secs + s,
-                         error=pr.error)
+                         error=pr.error, reply_bytes=big)
         out = pr.output
         calls += list(pr.tool_calls or [])
         obs += list(pr.observations or [])
@@ -358,14 +369,29 @@ def chain_probe(prompts, step, turn_extra=None):
         turns.append(dict({"prompt": p, "output": pr.output,
                            "tool_calls": list(pr.tool_calls or []),
                            "observations": list(pr.observations or []), "seconds": s},
+                          **({"reply_bytes": _rb} if _rb is not None else {}),
                           **(turn_extra(i) if turn_extra else {})))
     return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls, observations=obs,
-                 resolved=res, turns=turns, seconds=secs)
+                 resolved=res, turns=turns, seconds=secs, reply_bytes=big)
+
+
+# What a LangChain executor answers when it ran out of iterations without a final answer.
+AGENT_STOPPED = "Agent stopped due to iteration limit or time limit."
 
 
 def executor_turn(ex, prompt):
-    """One turn through a LangChain agent executor, as a Probe. The four practice agents
-    built on one carried this body four times, inside their chain loops."""
+    """One turn through a LangChain agent executor, as a Probe -- for every practice agent
+    built on one, single sends and chains alike. They carried this body seven times.
+
+    WHAT THE MODEL SAID IN PROSE IS ITS ANSWER. With `handle_parsing_errors`, a reply that is
+    not the agent's JSON becomes a step `("_Exception", "Invalid or incomplete response")`
+    whose `.log` holds the text, and after `max_iterations` the executor answers
+    `AGENT_STOPPED`. Read the way this body read it, a canary stated in prose was nowhere in
+    the probe (DEFENDED), a refusal in prose was the canned sentence (`compliance`, so
+    `refusal_expected_but_absent` fired on a refusal), and the `_Exception` steps were
+    counted as tool calls. Found by an independent review. The prose is the output where no
+    final answer came; a turn with neither prose nor a real call is an error.
+    """
     import contextlib as _cl
     import time as _t
     t0 = _t.time()
@@ -376,9 +402,20 @@ def executor_turn(ex, prompt):
             return Probe(prompt=prompt, output="", error=f"{type(e).__name__}: {e}",
                          seconds=round(_t.time() - t0, 1))
     steps = r.get("intermediate_steps", []) or []
-    return Probe(prompt=prompt, output=r.get("output", "") or "",
-                 tool_calls=[(a.tool, str(a.tool_input)) for a, _ in steps],
-                 observations=[str(o) for _, o in steps], seconds=round(_t.time() - t0, 1))
+    real = [(a, o) for a, o in steps if getattr(a, "tool", None) != "_Exception"]
+    prose = [str(getattr(a, "log", "") or "").strip() for a, _o in steps
+             if getattr(a, "tool", None) == "_Exception"]
+    prose = [x for x in prose if x]
+    out, err = r.get("output", "") or "", None
+    if out.strip() == AGENT_STOPPED:
+        out = prose[-1] if prose else ""
+        if not prose and not real:
+            err = ("AgentStopped: the agent hit its iteration limit with no final answer, no "
+                   "readable reply and no tool call")
+    return Probe(prompt=prompt, output=out,
+                 tool_calls=[(a.tool, str(a.tool_input)) for a, _ in real],
+                 observations=[str(o) for _, o in real], error=err,
+                 seconds=round(_t.time() - t0, 1))
 
 
 def target_configs(directory=None):

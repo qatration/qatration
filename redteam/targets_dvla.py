@@ -3,9 +3,9 @@ DVLA as ONE adapter behind the generic Target contract. Everything DVLA-specific
 lives here; the engine stays clean. A second target (HTTP bot, browser) is just
 another file like this — no engine change.
 """
-import os, sys, time, io, sqlite3, contextlib
+import os, sys, sqlite3
 from pathlib import Path
-from target import Probe, Target
+from target import Target
 from llm import make_llm
 
 DVLA_DIR = str(Path(__file__).resolve().parents[1] / "dvla")
@@ -102,20 +102,10 @@ class DvlaTarget(Target):
             return_intermediate_steps=True, handle_parsing_errors=True, max_iterations=6)
 
     def send(self, prompt):
-        ex = self._build()                   # fresh agent+memory per probe
-        t0 = time.time()
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            try:
-                r = ex.invoke({"input": prompt}); err = None
-            except Exception as e:
-                r = {"output": "", "intermediate_steps": []}; err = f"{type(e).__name__}: {e}"
-        steps = r.get("intermediate_steps", [])
-        return Probe(
-            prompt=prompt, output=r.get("output", ""),
-            tool_calls=[(a.tool, str(a.tool_input)) for a, _ in steps],
-            observations=[str(o) for _, o in steps],
-            error=err, seconds=round(time.time() - t0, 1),
-        )
+        # Fresh agent and memory per probe, through `target.executor_turn`: the one reading
+        # of an executor's answer, prose replies and the iteration limit included.
+        from target import executor_turn
+        return executor_turn(self._build(), prompt)
 
     def send_chain(self, prompts):
         # ONE executor across the turns, so memory persists; the conversation's probe is

@@ -173,21 +173,18 @@ class RangeBotTarget(Target):
             handle_parsing_errors=True, max_iterations=10)
 
     # --- the contract ---------------------------------------------------------------
+    def begin_trial(self):
+        # The notes survive `reset` on purpose -- that is the flaw -- and not a trial.
+        SHARED_NOTES.clear()
+
     def _run(self, executor, prompt):
-        t0 = time.time()
-        try:
-            res = executor.invoke({"input": prompt})
-        except Exception as e:
-            return Probe(prompt=prompt, error=f"{type(e).__name__}: {e}",
-                         seconds=time.time() - t0)
-        steps = res.get("intermediate_steps") or []
-        out = res.get("output") or ""
-        if self.append_sources and steps:
-            out += ("\n\nSources:\n" + "\n".join(f"- {o}" for _, o in steps))
-        return Probe(prompt=prompt, output=out,
-                     tool_calls=[(a.tool, str(a.tool_input)) for a, _ in steps],
-                     observations=[str(o) for _, o in steps],
-                     seconds=time.time() - t0)
+        # THROUGH `target.executor_turn`, the one reading of an executor's answer.
+        from target import executor_turn
+        p = executor_turn(executor, prompt)
+        if self.append_sources and p.observations and not p.error:
+            p.output = (p.output or "") + (
+                "\n\nSources:\n" + "\n".join(f"- {o}" for o in p.observations))
+        return p
 
     def send(self, prompt):
         return self._run(self._build(), prompt)

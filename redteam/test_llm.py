@@ -334,6 +334,58 @@ def main():
         _l0, _c0 = _outcome({"success": False, "iterations": 0, "seconds": 0.0})
         check("a loop that ran no rounds is not HELD", _l0.startswith("NOTHING MEASURED")
               and _c0 == 3, "%s / %s" % (_l0[:90], _c0))
+        # A NEGATIVE BUDGET SENT NOTHING and `-3` is truthy: HELD, exit 0.
+        check("...nor one with a negative count of rounds",
+              _outcome({"success": False, "iterations": -3, "seconds": 0.0})[1] == 3, "")
+        # AND THE COMMAND REFUSES BEFORE IT SENDS: a negative budget, a goal detector that
+        # does not exist, and an output path it could not write -- which it found only after
+        # the loop had attacked the target.
+        import json as _js_ad, subprocess as _sp_ad
+        _w_ad = _tf_p.mkdtemp()
+        _cfg_ad = _os_p.path.join(_w_ad, "adbot.yaml")
+        io.open(_cfg_ad, "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: adbot" + chr(10)
+            + 'url: "http://127.0.0.1:9/x"' + chr(10))
+        _called_ad = []
+        _real_aa, _real_out = _ra.adaptive_attack, _ra.OUT_DIR
+        _ra.adaptive_attack = lambda *a, **k: _called_ad.append(1) or {"success": False}
+        _ra.OUT_DIR = _w_ad
+        _refused_ad = {}
+        _saved_argv = sys.argv
+        try:
+            for _lbl, _extra in (("iters", ["--iters", "-3"]),
+                                 ("success", ["--success", "sysprompt_leek"]),
+                                 ("path", [])):
+                if _lbl == "path":
+                    _pth_ad = _os_p.path.join(_w_ad, "adaptive_adbot.json")
+                    if _os_p.path.isfile(_pth_ad):
+                        _os_p.remove(_pth_ad)
+                    _os_p.makedirs(_pth_ad, exist_ok=True)
+                sys.argv = ["adaptive", "--target-config", _cfg_ad] + _extra
+                _before_ad = len(_called_ad)
+                try:
+                    _refused_ad[_lbl] = _ra.main()
+                except SystemExit as _e_ad:
+                    _refused_ad[_lbl] = "refused: %s" % str(_e_ad)[:60]
+                if len(_called_ad) > _before_ad:
+                    _refused_ad[_lbl] = "SENT"
+        finally:
+            sys.argv = _saved_argv
+            _ra.adaptive_attack, _ra.OUT_DIR = _real_aa, _real_out
+        check("a negative budget, an unknown detector and an unwritable path are refused "
+              "before the loop sends anything",
+              not _called_ad and all(str(v).startswith("refused") or v == 2
+                                     for v in _refused_ad.values()),
+              "%d loop(s) ran: %s" % (len(_called_ad), _refused_ad))
+        # THE FILE DOOR THROUGH `run_command`: `sys.exit(main() or 0)` answered a refusal with 1.
+        _p_ad = _sp_ad.run([sys.executable, _os_p.path.join(_os_p.path.dirname(_ra.__file__),
+                                                           "run_adaptive.py"),
+                            "--target-config", _os_p.path.join(_w_ad, "nope.yaml")],
+                           capture_output=True, text=True, timeout=300,
+                           env=dict(_os_p.environ, PYTHONDONTWRITEBYTECODE="1",
+                                    PYTHONIOENCODING="utf-8", QATRATION_OUT=_w_ad))
+        check("run_adaptive.py answers a missing config with 2, not the finding code",
+              _p_ad.returncode == 2, "exit %s: %s" % (_p_ad.returncode, _p_ad.stdout[-200:]))
         _sent_e = []
 
         class FakeEmpty:

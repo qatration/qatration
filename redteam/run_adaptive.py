@@ -73,7 +73,8 @@ def outcome_line(res):
                 "bot that held, it is a question that was never asked."
                 % (res.get("iterations"), res["error"]), 3)
     # AND A LOOP THAT RAN NO ROUNDS ASKED NOTHING: `--iters 0` printed HELD, exit 0.
-    if not res.get("success") and not res.get("iterations"):
+    # (`<= 0`, because `--iters -3` sent nothing and `-3` is truthy: HELD, exit 0.)
+    if not res.get("success") and (res.get("iterations") or 0) <= 0:
         return ("NOTHING MEASURED: the loop ran 0 iterations, so nothing was sent. This is "
                 "not a bot that held.", 3)
     if res.get("success"):
@@ -150,7 +151,8 @@ def main():
                                        "code verbatim in its reply")
     ap.add_argument("--success", default="canary_in_output,canary_transformed")
     ap.add_argument("--attacker-model", default="qwen2.5:14b")
-    ap.add_argument("--iters", type=int, default=12)
+    from workspace import at_least as _at_least
+    ap.add_argument("--iters", type=_at_least(1, "--iters"), default=12)
     ap.add_argument("--constraints", default=None,
                     help="hard limits on METHOD that outrank the built-in technique menu, "
                          "e.g. 'no jailbreak vocabulary; write as an ordinary customer'")
@@ -180,6 +182,27 @@ def main():
         # filename in six places, one of them an append.
         target.name = safe_target_name(tcfg["name"], "target config")
     success = [s.strip() for s in args.success.split(",") if s.strip()]
+    # A GOAL'S DETECTOR THAT DOES NOT EXIST IS REFUSED, as `run` and `isolation` refuse it:
+    # the oracle skips a name it does not know, so `--success sysprompt_leek` judged the loop
+    # on the always-on set alone and printed HELD, exit 0.
+    from lint_arsenal import refuse_unknown_detectors as _refuse_unknown
+    _refuse_unknown([{"id": "adaptive", "success": success}], "adaptive --success",
+                    "the command line")
+    # AND THE FILE IT WILL WRITE, BEFORE A REQUEST IS SENT. The overwrite refusal and the
+    # writability check came after the loop: a tracked transcript at the path meant the
+    # target was attacked, the break printed, and the command refused to save it -- exit 2,
+    # which the table says means nothing was sent. `recon` moved this same check for the
+    # same reason.
+    os.makedirs(OUT_DIR, exist_ok=True)
+    path = os.path.join(OUT_DIR, f"adaptive_{target.name}.json")
+    _refusal = refuse_to_overwrite_evidence(
+        path, force=getattr(args, "overwrite_evidence", False))
+    if _refusal:
+        print(_refusal, file=sys.stderr)
+        return 2
+    from workspace import writable_path as _writable
+    path = _writable(path, "adaptive transcript", "adaptive",
+                     replaces=("an adaptive transcript",))
 
     print("=" * 78)
     print(f"  QAtration — ADAPTIVE attacker vs '{target.name}'  (attacker={args.attacker_model})")
@@ -199,16 +222,8 @@ def main():
     if res.get("success"):
         print(f"winning prompt: {res['winning_prompt']!r}")
 
-    os.makedirs(OUT_DIR, exist_ok=True)
-    path = os.path.join(OUT_DIR, f"adaptive_{target.name}.json")
-    # THE SAME REFUSAL `run` AND `benign` MAKE, and see run_recon.py for the incident it
-    # was written after. The repository tracks 3 adaptive transcripts and this door
-    # replaced them in silence. An untracked file is still overwritten without asking.
-    _refusal = refuse_to_overwrite_evidence(
-        path, force=getattr(args, "overwrite_evidence", False))
-    if _refusal:
-        print(_refusal, file=sys.stderr)
-        return 2
+    # (The overwrite refusal -- the one `run` and `benign` make, written after the incident
+    # in run_recon.py -- is asked above, before the first request.)
     from workspace import atomic_write as _atomic2
     with _atomic2(path) as f:
         json.dump({"target": target.name, "goal": args.goal, "attacker": args.attacker_model,
@@ -228,4 +243,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main() or 0)
+    # THROUGH THE ENGINE'S OWN TRANSLATION, like every other door: `sys.exit(main() or 0)`
+    # answered a refused config and a crash with 1, the finding code.
+    from workspace import run_command as _run_command
+    sys.exit(_run_command(main))
