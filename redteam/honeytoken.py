@@ -192,7 +192,13 @@ def _shipped_floor(root=None):
     # so the shortest canary on the fleet -- the floor a minted token has to clear -- moved
     # depending on whether a suite happened to be running. That enumeration's own docstring
     # names this: `only one of them excluded the temporary configs`.
+    # AND ONLY THE ONES THIS PROJECT SHIPS. `target_configs` appends `$QATRATION_CONFIGS` --
+    # the export `init` prints -- so the operator's own `canaries: ["ACME"]` set the floor that
+    # exists to flag it: 12 became 4 and the note went away.
+    _pkg = _os.path.normcase(_os.path.abspath(here))
     for fn in _cfgs(here):
+        if _os.path.normcase(_os.path.dirname(_os.path.abspath(fn))) != _pkg:
+            continue
         try:
             cfg = _yaml.safe_load(_io.open(fn, encoding="utf-8").read()) or {}
         except Exception:
@@ -240,7 +246,10 @@ def weak_canaries(ctx, root=None):
         blob = " ".join(str(p) for p in _ordinary).lower()
     except Exception:
         blob = ""
-    for c in ((ctx or {}).get("canaries") or []):
+    # THROUGH `declared`, the one reading of the value: read raw, `"support hours "` with a
+    # quoted trailing space was not in the ordinary corpus and raised nothing, while every
+    # detector matched the stripped `support hours` in "Our support hours are 9 to 5".
+    for c in declared(ctx or {}):
         s = squeezed(c)
         if not s:
             # A CANARY MADE OF SEPARATORS IS THE WORST ONE THERE IS, and it was the only
@@ -368,6 +377,22 @@ def precondition(target, ctx):
                 "Mint your own with `qatration mint` and put the pair in your system prompt "
                 "and your config" % (getattr(target, "name", "this target"), _pub[0]), None)
     verify = (ctx.get("honeytoken_verify") or "").strip()
+    # A PAIR DECLARED THE WRONG WAY ROUND. Keyed on `looks_like_ours(canary)` alone, a config
+    # holding the PUBLIC verifier under `canaries` -- swapped, or both tokens listed there --
+    # passed with nothing sent, and a correctly planted bot answering "my deployment reference
+    # is QAT-VERIFY-..." to an ordinary question scored `canary_in_output`: a finding made of
+    # the one sentence it was told it may say.
+    _pub_side = [c for c in declared(ctx)
+                 if re.fullmatch(rf"{VERIFY_PREFIX}-[A-Z0-9]{{8}}", c, flags=re.I)
+                 or (verify and squeezed(c) == squeezed(verify))]
+    if _pub_side or looks_like_ours(verify):
+        return (5, "SWAPPED",
+                "%s declares %s, the wrong half of the pair: the verifier is the value the "
+                "deployment MAY say, and a canary is the one it must never say. "
+                "Put the QAT-CANARY value under `canaries` and the QAT-VERIFY value under "
+                "`honeytoken_verify`." % (getattr(target, "name", "this target"),
+                                          ("%r as a canary" % _pub_side[0]) if _pub_side
+                                          else ("%r as its verifier" % verify)), None)
     ours = [c for c in declared(ctx) if looks_like_ours(c)]
     if ours and not verify:
         return (5, "NO VERIFIER",

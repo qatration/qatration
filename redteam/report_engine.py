@@ -156,6 +156,24 @@ def _proof(trials):
         rows = "".join(f'<div class="tc"><span class="tool">{esc(t)}</span>'
                        f'<span class="targ">{esc(ti)}</span></div>' for t, ti in tcs)
         parts.append(f'<div class="ph">Tool calls</div>{rows}')
+    # WHAT THE TOOLS RECEIVED, and the turns before the last. The proof printed `tool_calls`
+    # and `output` alone, so a row that broke on the value a tool was handed (`resolved`), or
+    # in turn one of a chain whose `output` is the last turn, showed evidence without the
+    # leak in it.
+    _res = [x for x in (p.get("resolved") or [])
+            if isinstance(x, (list, tuple)) and len(x) == 2]
+    if _res and [list(x) for x in _res] != [list(x) for x in tcs]:
+        rows = "".join(f'<div class="tc"><span class="tool">{esc(t)}</span>'
+                       f'<span class="targ">{esc(ti)}</span></div>' for t, ti in _res)
+        parts.append(f'<div class="ph">What the tools received</div>{rows}')
+    _turns = [t for t in (p.get("turns") or []) if isinstance(t, dict)]
+    if len(_turns) > 1:
+        rows = "".join(
+            '<div class="tc"><span class="tool">turn %d</span><span class="targ">%s</span></div>'
+            % (_i + 1, esc(_clip_turn(_t.get("output"))))
+            for _i, _t in enumerate(_turns[:-1]) if str(_t.get("output") or "").strip())
+        if rows:
+            parts.append(f'<div class="ph">Earlier turns</div>{rows}')
     out = (p.get("output") or "").strip()
     if out:
         snip = out if len(out) < 900 else out[:900] + " …"
@@ -163,6 +181,11 @@ def _proof(trials):
     if p.get("error"):
         parts.append(f'<div class="ph">Error</div><pre>{esc(p["error"])}</pre>')
     return "".join(parts) or "<em>no probe (skipped)</em>"
+
+
+def _clip_turn(text):
+    text = str(text or "").strip()
+    return text if len(text) < 300 else text[:300] + " \u2026"
 
 
 def _unreadable_panel(kind, art):
@@ -285,8 +308,11 @@ def _isolation_panel(iso):
     blocks = []
     for m in maps:
         v = m.get("verdict", "")
+        # UNMEASURED IS NOT GREEN: `isolation._verdict` returns it when nothing ran, and it
+        # fell through to DEFENDED's colours.
         color, bg = {"EXPLOITED": VERDICT["EXPLOITED"], "COUPLED": VERDICT["PARTIAL"],
-                     "PARTIAL": VERDICT["PARTIAL"]}.get(v, VERDICT["DEFENDED"])
+                     "PARTIAL": VERDICT["PARTIAL"],
+                     "UNMEASURED": VERDICT["ERROR"]}.get(v, VERDICT["DEFENDED"])
         rows = "".join(_iso_row(p) for p in m.get("properties", []))
         comb = m.get("combined")
         if comb:
@@ -426,7 +452,10 @@ def build_html(meta, results, recon=None, isolation=None):
     if note or ((_rr_has(meta.get("target"), out_dir=_OUT_has) or (0, 0))[1]):
         lines = "".join(f"<div>{esc(l.strip())}</div>"
                         for l in note.splitlines() if l.strip())
-        cls = "warn" if "no benign run" in note or "unattributable" in note else "note"
+        # A TORN BASELINE IS THE MISSING ONE'S TWIN: "could not be read ... every verdict
+        # below is unattributed" was rendered grey where "no benign run" is a warning.
+        cls = ("warn" if "no benign run" in note or "unattributable" in note
+               or "could not be read" in note else "note")
         # AND WHAT IT REFUSES WHILE NOBODY IS ATTACKING, in the panel whose heading already
         # promises exactly that. A bot that refuses everything survives the whole arsenal and
         # is useless; the benign corpus is fifty harmless questions and `refused` counts the

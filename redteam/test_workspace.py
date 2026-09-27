@@ -271,6 +271,46 @@ def check_every_command_refuses():
     check("an unknown adapter is answered with the near one and the list",
           "did you mean 'http'" in _said_a and "memorybot" in _said_a
           and "http" in _rr_a.adapters_known() and "dvla" in _rr_a.adapters_known(), True)
+    # EVERY KEY A PRACTICE CONFIG STATES REACHES ITS ADAPTER. `load_target` builds each
+    # practice bot by hand, and the ragbot branch passed `model` alone: `cite_sources: true`
+    # -- the whole of citebot -- was dropped, so `citebot` ran ragbot's prompt under
+    # citebot's name. Asked of every shipped config, with each adapter class replaced by one
+    # that records what it was built with; keys the engine itself reads are left out.
+    import types as _types_lt, yaml as _yaml_lt
+    from targets_http import CONFIG_ONLY_KEYS as _COK_lt
+    _engine_keys = (set(_COK_lt) - {"model"}) | {"name", "compare_with", "compare_label"}
+    _built = {}
+
+    class _Recorder:
+        def __init__(self, **kw):
+            _built.clear()
+            _built.update(kw)
+
+    class _FakeModule(_types_lt.ModuleType):
+        def __getattr__(self, _attr):
+            return _Recorder
+
+    _dropped = []
+    from target import target_configs as _tc_lt
+    for _fp in sorted(_tc_lt(HERE)):
+        _cfg_lt = _yaml_lt.safe_load(open(_fp, encoding="utf-8")) or {}
+        if not isinstance(_cfg_lt, dict) or _cfg_lt.get("adapter", "dvla") == "http":
+            continue
+        _mod_lt = "targets_" + str(_cfg_lt.get("adapter", "dvla"))
+        _saved_lt = sys.modules.get(_mod_lt)
+        sys.modules[_mod_lt] = _FakeModule(_mod_lt)
+        try:
+            _rr_a.load_target(_cfg_lt)
+        finally:
+            if _saved_lt is None:
+                sys.modules.pop(_mod_lt, None)
+            else:
+                sys.modules[_mod_lt] = _saved_lt
+        for _k, _v in _cfg_lt.items():
+            if _k not in _engine_keys and _built.get(_k, object()) != _v:
+                _dropped.append("%s: %s" % (os.path.basename(_fp), _k))
+    check("every key a practice config states reaches the adapter it builds", _dropped, [])
+
     # A FAILED REPLACE LEAVES NOTHING BEHIND EITHER: the body finished, the replace onto a
     # directory failed, and the `.tmp` stayed.
     import tempfile as _tf_aw

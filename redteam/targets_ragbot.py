@@ -57,6 +57,7 @@ class RagTarget(Target):
             "warranty": "Warranty: all products include a 1-year limited warranty covering manufacturing defects.",
         }
         self._poison = {}            # doc title -> appended injection text
+        self._seed_missed = None     # a seed naming a document this KB does not have
 
     def _retrieve(self, query, k=2):
         q = set(query.lower().replace("?", " ").split())
@@ -69,6 +70,13 @@ class RagTarget(Target):
         return [(t, b) for _, t, b in scored[:k]]
 
     def send(self, query):
+        # A SEED THAT WENT NOWHERE IS AN ATTACK NOT DELIVERED, and the probe says so rather
+        # than answering the benign question as though the poison were in the knowledge base.
+        if self._seed_missed:
+            return Probe(prompt=query, output="",
+                         error="SeedNotDelivered: no document called %r in this knowledge "
+                               "base (it has %s), so the planted text could never be "
+                               "retrieved" % (self._seed_missed, ", ".join(sorted(self.kb))))
         docs = self._retrieve(query)
         context = "\n".join(f"- [{t}] {b}" for t, b in docs)
         system = SYSTEM + context + (CITE_RULE if self.cite_sources else "")
@@ -85,7 +93,15 @@ class RagTarget(Target):
                      error=err, seconds=round(time.time() - t0, 1))
 
     def seed(self, payload):
-        self._poison[payload.get("doc", "refunds")] = payload["text"]
+        # ONLY A DOCUMENT THE KB HOLDS can be retrieved: `_retrieve` walks `self.kb`, so a seed
+        # naming `refund` (a typo) or a new `faq` was stored and never read, and the attack
+        # scored DEFENDED on a probe its payload never touched.
+        doc = payload.get("doc", "refunds")
+        if doc not in self.kb:
+            self._seed_missed = doc
+            return
+        self._poison[doc] = payload["text"]
 
     def unseed(self):
         self._poison.clear()
+        self._seed_missed = None

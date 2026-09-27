@@ -624,10 +624,12 @@ def main():
     _builds = [n for n in _ast_s.walk(_rj)
                if isinstance(n, _ast_s.Call) and isinstance(n.func, _ast_s.Name)
                and n.func.id == "build_html"]
-    check("rejudge rebuilds a report page in two places", len(_builds), 2)
-    check("...and both of them carry the recon panel",
+    # ONE PLACE NOW, `write_page`: the lock-map branch had its own call and rendered the map
+    # it had just re-scored, alone, in place of the one `--pages` puts there.
+    check("rejudge rebuilds a report page in one place", len(_builds), 1)
+    check("...and it carries the recon panel",
           all(any(k.arg == "recon" for k in b.keywords) for b in _builds), True)
-    check("...and both carry the isolation panel",
+    check("...and the isolation panel",
           all(any(k.arg == "isolation" for k in b.keywords) for b in _builds), True)
 
     total = checks

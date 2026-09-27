@@ -57,7 +57,11 @@ def load_target(cfg):
         return OpsBotTarget(model=cfg.get("model", "mistral-nemo"))
     if adapter == "ragbot":
         from targets_ragbot import RagTarget
-        return RagTarget(model=cfg.get("model", "mistral-nemo"))
+        # WITH `cite_sources`, which is the whole of citebot: dropped here, `citebot` ran
+        # ragbot's prompt under citebot's name, `fabricated_citation` was judged on a bot
+        # never asked to cite, and `compare_with: ragbot` compared two identical bots.
+        return RagTarget(model=cfg.get("model", "mistral-nemo"),
+                         cite_sources=cfg.get("cite_sources", False))
     if adapter == "localrag":
         from targets_localrag import LocalRagTarget
         return LocalRagTarget(url=cfg.get("url", "http://localhost:8000/rag"))
@@ -1654,6 +1658,12 @@ def main():
     _any_tool_call = any((t.get("probe") or {}).get("tool_calls")
                          for r in results for t in (r.get("trials") or []))
     _dead_here = dict(dead)
+    # LESS WHAT THE RUN SUPPLIED ITSELF. `dead` is asked before the baseline probe learns
+    # `baseline_tool_inputs`, so `meta.inert` listed `rogue_tool_call` as unable to fire beside
+    # a row of this run where it fired, and the page said so over the finding.
+    for _d_s, _keys_s in list(_dead_here.items()):
+        if any(ctx.get(_k_s) for _k_s in (_keys_s or ())):
+            _dead_here.pop(_d_s)
     # AND WHICH KEY, WHERE A KEY IS THE REASON. The page closes this list with "each names the
     # config key that would arm it", and for thirteen rows it named none: an http target whose
     # config maps no `response.tool_calls` cannot report a tool call at all, so "this run

@@ -31,7 +31,7 @@ from target import Probe
 from runner import judged_ctx   # one definition of "what did this attack declare"
 from oracle import DETECTORS, inert_for, reads_tool_calls
 from target import engine_version
-from rejudge import _prompt_of
+from rejudge import _prompt_of, _probe as _rj_probe, run_ctx as _run_ctx
 
 
 # target name -> oracle_context, first config wins, and it SAYS when one did.
@@ -211,12 +211,11 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                 # `refusal_expected_but_absent` fired four times in results_httpbot.json and
                 # this page went on printing it under "never yet seen to fire". Two of our own
                 # outputs contradicting each other, and the one that recounts was wrong.
-                _pr = Probe(prompt=_prompt_of(r["attack"], pd.get("prompt")),
-                            output=pd.get("output") or "",
-                            tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
-                            observations=pd.get("observations") or [],
-                            turns=pd.get("turns") or [], error=pd.get("error"),
-                            seconds=pd.get("seconds") or 0)
+                # THROUGH `rejudge._probe`, the one rebuild of a stored probe. A second copy
+                # here dropped `resolved` and skipped the normalisers, so a trial rejudge
+                # scores EXPLOITED on `canary_in_tool_call` counted no hit here, and the
+                # detector sat under "never seen to fire".
+                _pr = _rj_probe(r["attack"], pd)
                 if support_out is not None:
                     _at = r.get("attack") or {}
                     for _nm in set((_at.get("success") or []) + (_at.get("partial") or [])):
@@ -224,7 +223,7 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                         _row[0] += 1
                         if _pr.tool_calls:
                             _row[1] += 1
-                scan(_pr, judged_ctx(r.get("attack") or {}, ctx), tgt,
+                scan(_pr, judged_ctx(r.get("attack") or {}, _run_ctx(ctx, d.get("meta"))), tgt,
                      source="attack" if fp in _canonical else "model")
         note_engine(d, os.path.basename(fp), n - before)
 

@@ -99,6 +99,26 @@ def _number(value, default):
         return float(default)
 
 
+def run_ctx(ctx, meta):
+    """-> the target context as the RUN judged with it: the config's, plus what the run learned.
+
+    `rogue_tool_call` flags a tool input that deviates from the target's own behaviour, and
+    the sweep learns that behaviour live (`run_redteam.baseline_tool_context`) and records it
+    only in `meta.baseline`. Replayed with the config alone, the detector had no baseline:
+    a sweep's `PARTIAL 2/2 ['rogue_tool_call']` previewed as `DEFENDED 0/2`, and `--write`
+    wrote it. The union, because the run judged against the config's inputs and the learned
+    ones together.
+    """
+    _bl = (meta or {}).get("baseline") if isinstance(meta, dict) else None
+    if not isinstance(_bl, list) or not _bl:
+        return ctx
+    out = dict(ctx)
+    out["baseline_tool_inputs"] = sorted(
+        {str(x) for x in (ctx.get("baseline_tool_inputs") or [])}
+        | {str(x) for x in _bl if x is not None})
+    return out
+
+
 def _probe(attack, d):
     """Rebuild a Probe from stored JSON, losing nothing the detectors read.
 
@@ -163,6 +183,7 @@ def rescore(path, ctx, why=None):
             why.append(_err)
         return None, []
     changed = []
+    ctx = run_ctx(ctx, data.get("meta"))
     for r in data.get("results", []):
         attack = r["attack"]
         recs = []
@@ -199,11 +220,16 @@ def rescore(path, ctx, why=None):
         # said one row would change, in a different attack. The reviewer then approves a
         # --write without having seen the finding it adds, in the one tool that overwrites
         # the record of expensive runs. What fired is part of what changed.
-        if before != (head, rate) or sorted(r.get("fired") or []) != fired:
+        # AND WHAT BLOCKED IT: `locks` is recomputed below and printed on the page as
+        # "Blocked by", and a moved lock was not a change -- the preview was silent, `--write`
+        # skipped the file, and the stale column stayed.
+        _locks = summarize(recs, ctx)
+        if (before != (head, rate) or sorted(r.get("fired") or []) != fired
+                or ("locks" in r and r.get("locks") != _locks)):
             changed.append((workspace.attack_name(attack), before, (head, rate), fired))
         r["headline"], r["rate"] = head, rate
         r["fired"] = fired
-        r["locks"] = summarize(recs, ctx)
+        r["locks"] = _locks
 
     # the headline counters in meta are derived, so they have to move too
     real = [r for r in data.get("results", []) if r["attack"].get("category") != "control"]
@@ -575,18 +601,12 @@ def main():
                     print(f"  ! {os.path.basename(results)} could not be read ({_rd_why}); "
                           f"the lock map is corrected but its page is left as it stands")
                     continue
-                # THE SAME RULE AS `run`'s panel: the artifact's own date where it has
-                # one, and marked as the filesystem's where it does not.
-                from workspace import dated as _dated_fn
-                when, _msaid = _dated_fn(_map_meta.get(path) or {}, path)
+                # THROUGH `write_page`, the one rule for what goes on `report_<T>.html`. This
+                # branch rendered whichever map it had just corrected, alone: a
+                # `isolation_<T>_generated.json` stamped `<T>` replaced the curated map on the
+                # page, and the next `--pages` put the curated one back.
+                write_page(tgt, rd)
                 html = os.path.join(OUT_DIR, f"report_{tgt}.html")
-                # AND THE RECON PANEL TOO. This branch restored the lock map and dropped
-                # the fingerprint, which is the same deletion pointed the other way.
-                _recon2 = workspace.side_artifact(
-                    None, f"recon_{tgt}.json", "profile", root=OUT_DIR)
-                with workspace.atomic_write(html) as f:
-                    f.write(build_html(rd["meta"], rd["results"], recon=_recon2,
-                                       isolation={"maps": maps, "when": when}))
                 print(f"  rebuilt {os.path.basename(html)}")
 
     if skipped:
