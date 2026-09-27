@@ -1069,6 +1069,58 @@ def main():
     finally:
         _sh8.rmtree(_d8, ignore_errors=True)
 
+    # --- FOUND BY A REVIEW OF THE DOCS AGAINST THE CODE ------------------------------------
+    import honeytoken as _ht_d, subprocess as _sp_d, shutil as _sh_d
+    _sec_d, _ver_d = _ht_d.mint()
+    _asked_d = []
+
+    class _Planted(BaseHTTPRequestHandler):
+        def do_POST(self):
+            _b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+                            or b"{}")
+            _q = str(((_b.get("messages") or [{}])[-1]).get("content", ""))
+            _asked_d.append(_q)
+            _txt = ("My deployment reference is %s." % _ver_d
+                    if "deployment reference" in _q else "Happy to help with your order.")
+            _out = json.dumps({"choices": [{"message": {"content": _txt}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_out)))
+            self.end_headers()
+            self.wfile.write(_out)
+
+        def log_message(self, *a):
+            pass
+    _psrv = ThreadingHTTPServer(("127.0.0.1", 0), _Planted)
+    threading.Thread(target=_psrv.serve_forever, daemon=True).start()
+    _dw = tempfile.mkdtemp()
+    try:
+        _dcfg = os.path.join(_dw, "planted.yaml")
+        with open(_dcfg, "w", encoding="utf-8") as _f:
+            _f.write(CFG.format(name="planted", port=_psrv.server_address[1],
+                                path="choices.0.message.content",
+                                extra="oracle_context:\n  canaries: [\"%s\"]\n"
+                                      "  honeytoken_verify: \"%s\"\n"
+                                      "rate:\n  max_requests: 400\n" % (_sec_d, _ver_d)))
+        # `--verify-honeytoken` ASKED FOR THE REFERENCE, AND THEN `check` ASKED AGAIN.
+        _pd = _sp_d.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                         "--target-config", _dcfg, "--verify-honeytoken", _ver_d],
+                        capture_output=True, text=True, errors="replace", timeout=300,
+                        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                 PYTHONIOENCODING="utf-8", QATRATION_OUT=_dw))
+        check("onboard --verify-honeytoken asks the deployment for its reference once",
+              sum(1 for q in _asked_d if "deployment reference" in q) == 1,
+              "%d times: %s" % (len(_asked_d), (_pd.stdout + _pd.stderr)[-300:]))
+        # AND THE RUN THE READER TYPES NEXT: onboard sized the quick run it would queue while
+        # `run` sends the whole arsenal.
+        _okd, _repd = onboard.check(_dcfg, scope="quick")      # the CLI's default
+        check("onboard says when a default `run` would not fit the budget, though a quick one would",
+              any("a default `qatration run`" in n for n in _repd.get("notes") or []),
+              str(_repd.get("notes"))[:400])
+    finally:
+        _psrv.shutdown()
+        _sh_d.rmtree(_dw, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -181,14 +181,15 @@ response:
   # tool_calls: "choices.0.message.tool_calls"
 
 # A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT, sized so a default run finishes inside
-# it. This said 300, and a default run sends about 1086 requests -- 362 attacks times three
-# trials -- so the first run of anyone following the quickstart stopped a third of the way in,
-# and the attacks it never sent look identical to attacks that held. `qatration onboard` does
-# this arithmetic against the corpus you actually have and says so if these numbers stop
-# fitting. Remove the block entirely and there is no ceiling at all.
+# it -- the whole arsenal at three trials, with the multi-turn attacks the `history:` block
+# below turns on. This said 300, and a default run sends well over a thousand requests, so the
+# first run of anyone following the quickstart stopped a third of the way in, and the attacks
+# it never sent look identical to attacks that held. `qatration onboard` does this arithmetic
+# against the corpus you actually have and says so if these numbers stop fitting. Remove the
+# block entirely and there is no ceiling at all.
 rate:
   min_interval_s: 0.0
-  max_requests: 1200
+  max_requests: 1800
   max_seconds: 5400
 
 # MULTI-TURN, and leaving this out costs about a third of the arsenal. Without it the attacks

@@ -1020,9 +1020,13 @@ def main():
         # rather than as an endpoint that was never reached.
         _said = (f"  it said instead: {((_p.output if _p else '') or '')[:160]!r}\n"
                  if _label == "NOT PLANTED" else "")
+        # AND WHAT WAS SENT, which is one ordinary question where the verifier was asked for:
+        # "nothing was sent" was printed over the request that found it missing.
+        _sent_what = ("no attack was sent (only the question asking for the verifier)"
+                      if _p is not None else "nothing was sent")
         print(f"ABORT — {_sentence}\n{_said}"
-              f"  nothing was sent and nothing was written.", file=sys.stderr)
-        _refuse(_code, f"{_sentence}; nothing was sent and nothing was written")
+              f"  {_sent_what} and nothing was written.", file=sys.stderr)
+        _refuse(_code, f"{_sentence}; {_sent_what} and nothing was written")
     if [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)] and _verify:
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
 

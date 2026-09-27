@@ -376,6 +376,28 @@ def audit(text, f):
                 bad.append("history size: the guide says about %.1f KB a run, the stored "
                            "timelines average %.1f KB" % (claimed_kb, real_kb))
 
+    # THE FIRST CONFIG A READER COPIES BUILDS. The onboarding example used `${ACME_TOKEN}`
+    # without the `env:` list the adapter requires, and failed with the variable set.
+    _ob = io.open(os.path.join(ROOT, "docs", "onboarding.md"), encoding="utf-8").read()
+    _blk = re.search(r"```yaml\r?\n(adapter: http\r?\nname: acme-support.*?)```", _ob, re.S)
+    if not _blk:
+        bad.append("onboarding: the acme-support example is gone, so it cannot be built")
+    else:
+        import yaml as _y_ob
+        from targets_http import HttpConfiguredTarget as _HT_ob, CONFIG_ONLY_KEYS as _COK_ob
+        _saved_tok = os.environ.get("ACME_TOKEN")
+        os.environ["ACME_TOKEN"] = "t0ken"
+        try:
+            _c_ob = _y_ob.safe_load(_blk.group(1))
+            _HT_ob(**{k: v for k, v in _c_ob.items() if k not in _COK_ob})
+        except SystemExit as _e_ob:
+            bad.append("onboarding: the example config does not build: %s" % str(_e_ob)[:160])
+        finally:
+            if _saved_tok is None:
+                os.environ.pop("ACME_TOKEN", None)
+            else:
+                os.environ["ACME_TOKEN"] = _saved_tok
+
     # The cost table rests on having measured real replies rather than guessed at them, and
     # "1,273 stored replies" is the sentence that makes it credible. Same rule as everywhere
     # else: a page may understate the evidence behind a claim, never overstate it.

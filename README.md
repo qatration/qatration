@@ -50,7 +50,7 @@ pip install qatration
 
 qatration init --url https://your-bot.example.com/chat --model your-model-id
                                                         # writes mybot.yaml, canary and all
-qatration onboard --target-config mybot.yaml            # one real request: is the mapping right
+qatration onboard --target-config mybot.yaml            # one ordinary request (and the canary check): is the mapping right
 qatration benign  --target-config mybot.yaml            # what fires when NOBODY is attacking
 qatration run     --target-config mybot.yaml            # sweep it
 ```
@@ -60,7 +60,8 @@ repository rather than to the engine, and install separately: `pip install "qatr
 covers LangChain, and the two bots that need smolagents and nemoguardrails each want
 their own environment because those two cannot share one — see the note in
 `pyproject.toml`. Evidence goes to `./qatration-out` unless `$QATRATION_OUT`
-says otherwise.
+says otherwise -- except in a checkout of this repository (including `pip install -e .`), where
+it goes to the tracked `out/`: point `QATRATION_OUT` somewhere else for your own bot.
 
 `init` writes the config so you do not have to invent one, and it mints the canary for you
 rather than leaving it as a step to remember. `qatration mint` still exists on its own, for a
@@ -99,9 +100,9 @@ rather than making you guess twice. Four configs are ready to copy:
   run for thirty minutes, so an auth failure *after* something already worked is reported as a
   credential that expired and the rest of the run as **not measured** — never as defended.
 
-Both test a **deployment** rather than a model: this system prompt, this model, this API. Hold
+Each of these tests a **deployment** rather than a model: this system prompt, this model, this API. Hold
 the prompt fixed and swap the model and the comparison is about the model; hold the model and
-change the prompt and it is about your prompt. Neither is swept by `run_all` — a fleet run that
+change the prompt and it is about your prompt. None of them is swept by `run_all` — a fleet run that
 reached a paid API would turn one command into a bill.
 
 The full walkthrough, including every way a first run can quietly lie to you, is in
@@ -131,7 +132,7 @@ reason has to be recoverable from the number alone:
 | `2` | the config or the invocation was refused — an override that cannot apply, a build that is not the one described, a committed results file this run would replace — or the command crashed, which is a bug in the tool and is deliberately not `1` | **no** |
 | `3` | nothing was measured: every trial errored, so the results file was left alone rather than overwritten with a run of nothing | attempted |
 | `4` | not authorised: the target is not localhost and control of it was not proved | **no** |
-| `5` | a precondition failed: the canary is one this tool publishes, or a declared honeytoken was not found in the target, so the canary detectors could not have spoken | **no** |
+| `5` | a precondition failed: the canary is one this tool publishes, or a declared honeytoken was not found in the target, so the canary detectors could not have spoken | one ordinary question (the verifier), no attack |
 
 `2`, `3` and `5` are deliberately not `1`. A build that fails because a bot was compromised and
 a build that fails because nobody could reach it are different events, and a CI that cannot
@@ -178,7 +179,7 @@ chasing and the calls about what counts as evidence are mine.
 
 None of that needs taking on trust. Every number in this README and on the site is recounted
 from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
-in the suite is allowed to be one that cannot fail — 5,145 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 5,149 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push, on four platforms.
 

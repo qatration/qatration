@@ -21,7 +21,8 @@ qatration run --target-config mybot.yaml --fail-on regression
 ```
 
 `regression` fails **only on what this run introduced or reopened** since the previous one. It
-compares against `out/history/<target>.jsonl`, which is why the history has to survive between
+compares against `history/<target>.jsonl` in the run's workspace (`qatration-out/` for an install,
+`out/` in a checkout, or whatever `QATRATION_OUT` names), which is why the history has to survive between
 runs — see [where the timeline lives](#where-the-timeline-lives).
 
 **A move the trials do not agree on is not a change.** A bot is sampled, not queried, so the
@@ -46,7 +47,8 @@ a gate that quietly dropped it would be making the same mistake in the other dir
 
 Two consequences worth knowing. **Raising `--trials` makes the gate stricter, not noisier**: at
 3 an attack has to break three times, at 5 five, so a flaky finding is less able to reach the
-count. **And at `--trials 1` the gate refuses to answer at all**, because one attempt cannot
+count -- but the run that raises it is compared with one measured differently, so it answers
+`3` once and becomes the new baseline. **And at `--trials 1` the gate refuses to answer at all**, because one attempt cannot
 tell a reliable break from a lucky one: a single hit is trivially "every trial", so every flip
 of a coin the target was already flipping would count as a move. Measured from a fresh install
 against a local model: four sweeps, same config, same model, same 45 attacks, nothing changed
@@ -56,7 +58,7 @@ this rule are named as unsteady rather than assumed reliable, because understati
 direction this repo allows and overstating is not.
 
 **And it refuses to answer rather than passing.** If the arsenal changed, or the model changed,
-or the trial count dropped, or the stored timeline is torn, then before and after were measured
+or the trial count changed, or the stored timeline is torn, then before and after were measured
 with different instruments and neither a pass nor a failure would mean anything. In that case it
 exits **3**, "nothing was measured", with the reason named. A team that sees this once
 re-baselines, which takes a minute and is the correct response. A green in that situation would
@@ -93,7 +95,9 @@ unplanted canary makes every canary detector inert, every attack come back DEFEN
 report say the deployment held — which is the single most expensive way this tool can be wrong.
 
 Keep the secret in your CI secret store, not in the config. The config references it as
-`${VAR}` and the adapter refuses to start when the variable is unset, rather than sending the
+`${VAR}`, names the variable under `env:` -- a config may read only the variables it lists,
+because it names a secret and a destination in one file -- and the adapter refuses to start
+when the variable is unset or undeclared, rather than sending the
 literal `${VAR}` as a bearer token and producing a run of 401s that reads exactly like a
 hardened deployment.
 
@@ -115,8 +119,12 @@ check that renders green is the same defect as an inert detector.
 `--fail-on regression` needs the previous run to compare against, and CI starts from nothing
 every time. So the timeline has to survive, and **the best place for it is your own repository**.
 
-A timeline is one append-only JSONL file per target, one line per run, about **2 KB a run** — a
-target swept daily for a year is a 700 KB text file. Commit `qatration-out/history/` and you get
+A timeline is one append-only JSONL file per target, one line per run, about **2 KB a run**
+averaged over the timelines stored here -- most of them small practice arsenals. A line grows
+with the arsenal: the newest full-arsenal line stored here (`out/history/httpbot.jsonl`, 343
+attacks) is 25 KB, so a target swept nightly at full scope for a year is about 10 MB of text.
+Commit the `history/` directory of each workspace -- `qatration-out/pr/history/` and
+`qatration-out/nightly/history/` in the per-tier setup below -- and you get
 three things a cache cannot give you:
 
 * it survives, permanently, with no expiry to think about
@@ -255,8 +263,10 @@ one that has thought about it.
 
 `cancel-in-progress` stops one branch queueing behind itself and does nothing about ten branches
 hitting one endpoint together. That endpoint's rate limit will win, and the run STOPS after five
-attacks come back rate-limited in a row rather than spending the arsenal on it. That is exit `3`
-with the attacks it never sent named as a gap — honest, and still a check that told you nothing.
+attacks come back rate-limited in a row rather than spending the arsenal on it. Under
+`--fail-on regression` that is exit `3` (the run stopped part way, so it cannot be compared);
+under `--fail-on exploited` or `any` it is judged on what was scored, with the attacks it never
+sent named as a gap — honest, and still a check that told you nothing.
 
 If merges are frequent, serialise rather than cancel:
 

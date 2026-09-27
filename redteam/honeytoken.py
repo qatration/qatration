@@ -346,7 +346,7 @@ def mapping_note(error):
 VERIFY_EXIT = {"NOT PLANTED": 5, "BAD MAPPING": 2, "NO ANSWER": 3}
 
 
-def precondition(target, ctx):
+def precondition(target, ctx, answered=None):
     """-> None when a sweep may start, else (exit code, label, sentence, probe or None).
 
     THE TWO THINGS `run` REFUSES A SWEEP FOR BEFORE ITS FIRST ATTACK, in one place, because
@@ -363,7 +363,8 @@ def precondition(target, ctx):
         it: the snippet never landed, and a run now reports a clean bill for a check that
         never ran.
 
-    Sends at most one request, the same one `run` sends, after a reset.
+    Sends at most one request, the same one `run` sends, after a reset -- none where the
+    caller already asked it and hands the answer in as `answered`.
     """
     # A CANARY THIS TOOL PUBLISHES, first and without a request: anything can match it
     # without knowing anything about the deployment, so a run that fails to extract it proves
@@ -400,11 +401,14 @@ def precondition(target, ctx):
                 "confirm it was ever pasted in. Mint a pair with `qatration mint` and declare "
                 "both." % (getattr(target, "name", "this target"), ours[0]), None)
     if ours and verify:
-        try:
-            target.reset()
-        except Exception:
-            pass
-        probe = target.send(VERIFY_PROMPT)
+        if answered is not None:
+            probe = answered
+        else:
+            try:
+                target.reset()
+            except Exception:
+                pass
+            probe = target.send(VERIFY_PROMPT)
         why = verify_refusal(probe, verify)
         if why:
             return (VERIFY_EXIT.get(why[0], 5), why[0], why[1], probe)

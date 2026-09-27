@@ -134,7 +134,8 @@ def unread_context_keys(cfg):
     return _unread(cfg)
 
 
-def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None):
+def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
+          verified=None):
     """Returns (ok, report dict). Sends one request, and a second when the config declares
     a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
@@ -417,7 +418,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None):
     # hosted intake answers 202 through it: the job was accepted, queued, and died on its
     # first line with exit 5. Walked with the config `qatration init` writes, against a bot
     # without the snippet -- `onboard` said ready, `run` said ABORT.
-    _pre = _ht.precondition(target, cfg.get("oracle_context") or {})
+    # (`verified` is the answer `--verify-honeytoken` already got: asked twice, the
+    # deployment was sent the reference question twice in one command.)
+    _pre = _ht.precondition(target, cfg.get("oracle_context") or {}, answered=verified)
     if _pre is not None:
         rep["problems"].append("honeytoken %s: %s" % (_pre[1].lower(), _pre[2]))
         # THE CODE THE CAUSE EARNS, the one `run` and `--verify-honeytoken` exit with for it:
@@ -468,6 +471,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None):
         _caps = getattr(target, "capabilities", None) or set()
         _atk = [a for a in _all_atk if not _undeliverable(a, _caps)]
         _unsent = len(_all_atk) - len(_atk)
+        _full_atk = list(_atk)
         if scope == "quick":
             from run_redteam import breadth_slice as _bs
             _atk = _bs(_atk)[0]
@@ -483,6 +487,19 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None):
                    f"sent" if _unsent else "")
                 + f") and the budget allows {rate.max_requests}. It will STOP part way, and "
                 f"the attacks it never sent are a gap rather than rows that held.")
+        # AND THE RUN THE READER WILL TYPE NEXT. This sizes the run it would QUEUE, quick by
+        # default, while `qatration run` defaults to the whole arsenal -- so onboard said
+        # "ready" with no budget note over a config whose next `run` needed 1,302 requests
+        # against 1,200 and stopped with 24 attacks never sent. The docs and the `init`
+        # template both say this command checks a default run.
+        elif scope == "quick" and rate.max_requests:
+            _full_req = _requests_for(_full_atk, _t)
+            if rate.max_requests < _full_req:
+                rep["notes"].append(
+                    f"a default `qatration run` (the whole arsenal: {len(_full_atk)} attacks x "
+                    f"{_t} trials) sends about {_full_req} requests and the budget allows "
+                    f"{rate.max_requests}: it will STOP part way. The quick run this would "
+                    f"queue fits.")
         if rep["seconds"] and rate.max_seconds:
             # An estimate, said as one. The arsenal size x 3 trials is the default shape.
             #
@@ -717,7 +734,8 @@ def main():
             # to go and look at a system prompt that was fine.
             sys.exit(_ht.VERIFY_EXIT.get(_why[0], 5))
 
-    ok, rep = check(args.config, attacks=args.attacks, trials=args.trials, scope=args.scope)
+    ok, rep = check(args.config, attacks=args.attacks, trials=args.trials, scope=args.scope,
+                    verified=(probe if args.verify_honeytoken else None))
     render(ok, rep)
     if not ok:
         # 2 UNLESS THE REPORT SAYS OTHERWISE. Every problem this command finds is a refused

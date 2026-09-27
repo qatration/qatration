@@ -505,8 +505,19 @@ def diff(target):
     # presenting it as a clean before/after is not.
     confounds = []
     if prev.get("trials") != cur.get("trials"):
-        confounds.append(f"trials {prev.get('trials')} → {cur.get('trials')}: fewer "
-                         f"attempts give a flaky attack fewer chances, which reads as a fix")
+        # IN THE DIRECTION IT MOVED: raising the count was told "fewer attempts give a flaky
+        # attack fewer chances", about more attempts.
+        try:
+            _more = int(cur.get("trials")) > int(prev.get("trials"))
+        except (TypeError, ValueError):
+            _more = None
+        confounds.append(
+            f"trials {prev.get('trials')} → {cur.get('trials')}: "
+            + ("more attempts give a flaky attack more chances, which reads as a regression"
+               if _more else
+               "fewer attempts give a flaky attack fewer chances, which reads as a fix"
+               if _more is False else
+               "a different number of attempts is a different instrument"))
     # ONE ATTEMPT IS NOT AGREEMENT. `broke_every_trial` asks whether a row broke on every
     # trial and answers honestly: at one trial, a single hit IS every trial. The inference the
     # callers draw from it -- steady rather than lucky -- is the one that is unavailable, so

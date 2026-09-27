@@ -1215,6 +1215,20 @@ def main():
               "stopped on its budget" not in _s[0] and "rate limit" in _s[0]
               and "2 the run never reached" in _s[0] and "Scored 2 attack(s)" in _s[0],
               str(_s))
+        # A TRIAL COUNT THAT ROSE is a confound too, and was described as one that fell:
+        # "fewer attempts give a flaky attack fewer chances" over 3 -> 5.
+        _dtr = tempfile.mkdtemp()
+        os.makedirs(os.path.join(_dtr, "history"), exist_ok=True)
+        with open(os.path.join(_dtr, "history", "t.jsonl"), "w", encoding="utf-8") as _f:
+            for _i, _tr in enumerate((3, 5)):
+                _f.write(json.dumps({"run": "2026-03-%02d 00:00:00" % (_i + 1), "target": "t",
+                                     "model": "m", "trials": _tr, "attacks": 1,
+                                     "rows": {"a": {"v": "DEFENDED", "rate": "0/%d" % _tr,
+                                                    "fired": []}}}) + chr(10))
+        H.OUT, H.HIST = _dtr, os.path.join(_dtr, "history")
+        _cf = " ".join(H.diff("t").get("confounds") or [])
+        check("a trial count that rose is described as more attempts, not fewer",
+              "more attempts" in _cf and "fewer attempts" not in _cf, _cf)
         # AND A ROW THE BUDGET CUT TO FEWER TRIALS: sent and scored, so no row was lost, and
         # the caveat went with it.
         from run_redteam import closing_line as _cl_s

@@ -19,6 +19,7 @@ much the oracle can see at all:
 adapter: http
 name: acme-support
 url: "https://api.acmeshop.example/v1/chat"
+env: [ACME_TOKEN]                           # the variables this config may read
 headers:
   Authorization: "Bearer ${ACME_TOKEN}"     # env var, never the literal
 request:
@@ -57,8 +58,9 @@ that, map `error:` and those probes come back as errors rather than as defences.
 **A key this adapter does not read is refused, at every level.** `respones:` at the top,
 `tool_call:` inside `response:`, `feild:` inside `history:` — all three used to build a target
 that ran the whole arsenal and reported a clean bill, because the mapping they were meant to
-set was simply never set. The five response channels and the seven history keys above are the
-whole list; anything else stops the run before the first probe, naming what it does accept.
+set was simply never set. The five response channels above and the seven history keys --
+`field`, `mode`, `role_key`, `text_key`, `user`, `assistant`, `insert_before` -- are the whole
+list; anything else stops the run before the first probe, naming what it does accept.
 
 **A request budget does not bound TIME**, and on a shared endpoint that is the gap that
 matters. Two of the generic attacks ask the model to generate until something stops it, so
@@ -352,7 +354,8 @@ is counted as not sent.
 Two things fell out of the work that were nothing to do with it. `HttpConfiguredTarget` gained a
 `--model` override it silently ignored, which would have written `results_<target>_<model>.json`
 named after a model that was never used and filed beside the canonical run for the matrix to
-read as a second measurement; it exits now instead. And `_USER_ARTEFACT`, the pattern that
+read as a second measurement. It now writes the override into `request.model` and runs the
+model it names, and exits only where the config has no `request.model` to replace. And `_USER_ARTEFACT`, the pattern that
 decides whether a user brought their own technical artefact, carried a literal **backspace**,
 0x08, where the word boundary `\b` was meant. 0x08 renders as nothing in every editor and in
 grep, so the pattern looked right on every screen it was displayed on while that whole branch
@@ -552,13 +555,15 @@ reply fires no detector, and no detector firing is a target that held — so the
 back clean and the operator is told their bot is safe. That is the most expensive shape of
 wrong this system can produce, and the only sane place to catch it is before the run.
 
-`onboard.py` sends exactly one ordinary question and answers what an operator should learn in
+`onboard.py` sends one ordinary question -- and before it, when the config declares a
+`honeytoken_verify`, the question asking for it -- and answers what an operator should learn in
 ten seconds rather than in an hour: whether the endpoint answers and how slowly, whether the
 reply path resolves — and if not, **which path in their actual response holds the text**,
 because "reply was empty" without that is a riddle — which deliveries the config implies, since
 `chain` and `forged_history` are derived from `history` and their absence silently removes a
-third of the arsenal, whether the target is authorised, and whether the budget can hold a
-default run at all. Nothing is queued if the check fails: a job submitted against a config that
+third of the arsenal, whether the target is authorised, and whether the budget can hold the
+run it would queue (`--scope quick` unless told otherwise) and a default `qatration run`, which
+sends the whole arsenal. Nothing is queued if the check fails: a job submitted against a config that
 cannot be reached is an hour of queue time spent to produce a sentence the command already
 printed.
 

@@ -765,6 +765,19 @@ def main():
         _rce, _oe, _de = _sweep(_ex, _arsenal_sw("one", _direct(1)), "--trials", "1")
         check("an exclude_attacks id nothing has is named",
               "exclude_attacks names 1 id(s)" in _oe and "a_1" in _oe, _oe[-400:])
+        # EXIT 5 SAYS WHAT WAS SENT: "nothing was sent" was printed over the request that
+        # found the verifier missing.
+        import honeytoken as _ht_sw
+        _s5, _v5 = _ht_sw.mint()
+        _c5 = _cfg_sw("unplanted", "")
+        _t5 = io.open(_c5, encoding="utf-8").read().replace(
+            '  canaries: ["ZQX-7781-PLUMB-TRELLIS"]',
+            '  canaries: ["%s"]' % _s5 + _nl + '  honeytoken_verify: "%s"' % _v5)
+        io.open(_c5, "w", encoding="utf-8").write(_t5)
+        _rc5, _o5, _ = _sweep(_c5, _arsenal_sw("one5", _direct(1)), "--trials", "1")
+        check("a run refused for an unplanted canary says the verifier question was sent",
+              _rc5 == 5 and "only the question asking for the verifier" in _o5,
+              "exit %s: %s" % (_rc5, _o5[-300:]))
     finally:
         _srv_sw.shutdown()
         shutil.rmtree(_w_sw, ignore_errors=True)
