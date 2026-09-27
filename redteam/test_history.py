@@ -1206,6 +1206,21 @@ def main():
               bool(_cl) and {k.arg for k in _cl[0].keywords} >= {"skipped", "stopped",
                                                                  "never_sent"},
               str([k.arg for k in _cl[0].keywords]) if _cl else "no call")
+        # WHOSE LIMIT: the target's rate-limit wall arrived here merged into `stopped` and
+        # its unreached rows into `never_sent`, so the gate called somebody else's 429s
+        # "our budget" under a closing line that did not.
+        _c, _s = _av("any", 0, 0, 10, 5, stopped="", never_sent=1, wall="the endpoint "
+                     "answered every one of the last 5 with a rate limit", unreached=2)
+        check("the gate names the target's wall as the target's, and the rows it never reached",
+              "stopped on its budget" not in _s[0] and "rate limit" in _s[0]
+              and "2 the run never reached" in _s[0] and "Scored 2 attack(s)" in _s[0],
+              str(_s))
+        # AND A ROW THE BUDGET CUT TO FEWER TRIALS: sent and scored, so no row was lost, and
+        # the caveat went with it.
+        from run_redteam import closing_line as _cl_s
+        _line_s = _cl_s(0, 9, 0, stopped="requests", trials=3, short=1)
+        check("a closing line over a row the budget cut short names the budget",
+              "fewer trials than asked" in _line_s and "budget" in _line_s, _line_s)
     finally:
         H.OUT, H.HIST = real_out3, real_hist3
         for d in rt_dirs:

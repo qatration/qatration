@@ -640,12 +640,17 @@ def list_context_keys(root=None):
 
 
 _NUMBER_KEYS = None
+# key -> "int" | "float": the type of the default `oracle._num` converts a value to.
+_NUMBER_KINDS = {}
 
 
 # Keys read as true/false, each with what reads it. A string or number there is not a
 # boolean to the reader.
 BOOL_CONTEXT_KEYS = {
     "code_domain": "`off_scope_code` fires only where this is false",
+    # `if ctx.get("pii_expect_phone")`: the string "false" is true there, so a quoted false
+    # switched the phone rule ON and a support number in a reply scored EXPLOITED.
+    "pii_expect_phone": "`pii_in_output` counts phone numbers only where this is true",
 }
 
 # WHERE A NUMBER STOPS BEING A THRESHOLD. `bad_context_shapes` asked only that these were
@@ -739,6 +744,13 @@ def number_context_keys(root=None):
                     and isinstance(node.args[1], _ast.Constant)
                     and isinstance(node.args[1].value, str)):
                 keys.add(node.args[1].value)
+                # AND THE TYPE IT IS READ AS: `_num` does `type(default)(v)`, so a key with an
+                # int default takes `int(v)` -- which `"1e4"` does not survive, although
+                # `float` does.
+                if (len(node.args) >= 3 and isinstance(node.args[2], _ast.Constant)
+                        and type(node.args[2].value) in (int, float)
+                        and not isinstance(node.args[2].value, bool)):
+                    _NUMBER_KINDS[node.args[1].value] = type(node.args[2].value).__name__
     if root is None:
         _NUMBER_KEYS = keys
     return keys
@@ -869,6 +881,22 @@ def bad_context_shapes(cfg):
                 continue
             if isinstance(v, bool):
                 continue
+            # CONVERTED THE WAY THE ORACLE CONVERTS IT, and finite. `float` accepted
+            # `max_output_chars: 1e4` -- a string to YAML -- and `int("1e4")` raised out of
+            # `judge` on the first reply; `.inf` passed and overflowed there; `.nan` passed
+            # every range comparison and left the detector unable to fire, unreported.
+            import math as _math
+            if not _math.isfinite(_f):
+                out.append((k, "is %r; a threshold has to be a finite number" % (v,)))
+                continue
+            if _NUMBER_KINDS.get(k) == "int":
+                try:
+                    int(v)
+                except (TypeError, ValueError, OverflowError):
+                    out.append((k, "is %r; this key is read as a WHOLE number (`int(%r)` "
+                                   "raises), and it would raise out of the oracle mid-sweep"
+                                   % (v, v)))
+                    continue
             _why_r = number_out_of_range(k, _f)
             if _why_r:
                 out.append((k, "is %r; %s" % (v, _why_r)))
@@ -1248,6 +1276,17 @@ def _evidence_kind(path):
         with open(path, encoding="utf-8") as fh:
             data = _json.load(fh)
     except (OSError, ValueError):
+        # A RUN TIMELINE IS JSON LINES: every run of a target, one per line, and not a JSON
+        # document -- so it read as "" and `coverage --json out/history/mybot.jsonl` replaced
+        # a target's whole history with a coverage file.
+        try:
+            with open(path, encoding="utf-8") as fh:
+                _lines = [l for l in fh.read().splitlines() if l.strip()]
+            _recs = [_json.loads(l) for l in _lines]
+            if _recs and all(isinstance(r, dict) and "run" in r and "rows" in r for r in _recs):
+                return "a run timeline"
+        except (OSError, ValueError):
+            pass
         # NOT JSON: perhaps the YAML a target config is. Only a mapping naming how the target
         # is reached counts; a page, a SARIF or a list is none of these.
         try:
@@ -1288,6 +1327,9 @@ def _evidence_kind(path):
         return "a recon profile"
     if isinstance(data, dict) and data.get("run_id") and data.get("started_at"):
         return "a run record"
+    if isinstance(data, dict) and data.get("job_id") and "state" in data \
+            and "submitted_at" in data:
+        return "a job record"
     if not isinstance(data, dict) or not isinstance(data.get("meta"), dict):
         return ""
     if isinstance(data.get("results"), list):
@@ -1295,6 +1337,37 @@ def _evidence_kind(path):
     if isinstance(data.get("rows"), list):
         return "a benign baseline"
     return ""
+
+
+def _unique_key_loader():
+    """A SafeLoader that refuses a mapping holding one key twice.
+
+    PyYAML keeps the LAST of two and says nothing, so appending an `oracle_context:` block to
+    the file `init` writes replaced the one holding the minted canary and its verifier:
+    accepted, the honeytoken pre-flight had nothing left to check, and no rule saw it.
+    """
+    import yaml as _yaml
+
+    class _Unique(_yaml.SafeLoader):
+        def construct_mapping(self, node, deep=False):
+            seen = set()
+            for k_node, _v in node.value:
+                k = self.construct_object(k_node, deep=deep)
+                try:
+                    dup = k in seen
+                except TypeError:
+                    dup = False
+                if dup:
+                    raise _yaml.constructor.ConstructorError(
+                        None, None, "the key %r is written twice in one block; YAML keeps "
+                        "only the last, so everything under the first would be dropped "
+                        "without a word" % (k,), k_node.start_mark)
+                try:
+                    seen.add(k)
+                except TypeError:
+                    pass
+            return super().construct_mapping(node, deep=deep)
+    return _Unique
 
 
 def load_yaml_or_refuse(path, what="target config", where=""):
@@ -1329,7 +1402,7 @@ def load_yaml_or_refuse(path, what="target config", where=""):
                          % (path, what))
     try:
         with open(path, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
+            doc = yaml.load(f, Loader=_unique_key_loader())
     except FileNotFoundError:
         why = "no %s at %s." % (what, path)
     except Exception as e:
@@ -1693,6 +1766,16 @@ def side_artifact(explicit, default_name, key, root=None, warn=None, target=None
     # the page a customer is handed about this one. A profile says its target at the top
     # level and a lock map in `meta`; one naming another target is not folded in.
     _whose = (_said_by.get("target") if isinstance(_said_by, dict) else None)
+    # AND WHERE THE CONTENT DOES NOT SAY, THE NAME DOES: every committed lock map is a bare
+    # list with no target field, so `run --isolation isolation_secretbot.json` put
+    # secretbot's lock map on mybot's page without a word -- while the same call with a recon
+    # profile was refused. Names cannot hold `_` (`safe_target_name`), so the part after the
+    # family's prefix, up to the first `_`, is the target.
+    if target and not _whose:
+        _base = os.path.basename(str(path))
+        _pref = default_name.split("_", 1)[0] + "_"
+        if _base.startswith(_pref) and _base.endswith(".json"):
+            _whose = _base[len(_pref):-len(".json")].split("_", 1)[0] or None
     if target and _whose and str(_whose) != str(target):
         if warn:
             warn(path, "belongs to target %r, not %r" % (_whose, target))
@@ -1806,7 +1889,10 @@ def config_name(path, cfg=None):
     stem = _os.path.basename(str(path))
     if stem.startswith("targets_") and stem.endswith(".yaml"):
         stem = stem[len("targets_"):-len(".yaml")]
-    return (cfg.get("name") or stem) if isinstance(cfg, dict) else stem
+    # AS TEXT: `name: 2024` is an int to YAML, results were filed as target "2024", and the
+    # int key made `rejudge` crash in `target_of` and the fleet pages drop the target.
+    _n = str(cfg.get("name") or "").strip() if isinstance(cfg, dict) else ""
+    return _n or stem
 
 
 def configs_by_name(directory=None, collisions=None):

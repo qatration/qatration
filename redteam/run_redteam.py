@@ -149,7 +149,7 @@ def load_target_or_explain(cfg, config_path, was_default):
 
 
 def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored="",
-                 never_sent=0, wall=""):
+                 never_sent=0, wall="", short=0):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -230,12 +230,17 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
     """
     scored = attacks_n - errored - never_sent
     _budget = (" (%s)" % stopped) if stopped else ""
-    _lost = errored or never_sent
+    # AND A ROW THE BUDGET CUT SHORT: sent, scored, and on fewer trials than asked. The budget
+    # running out inside a row lost no row, so the caveat was dropped -- `0/9 attacks
+    # breached` over a last row measured on two trials of three.
+    _lost = errored or never_sent or (short and stopped)
     _parts = []
     if errored:
         _parts.append("%d more errored and were not scored" % errored)
     if never_sent:
         _parts.append("%d more were never sent" % never_sent)
+    if short and stopped:
+        _parts.append("%d were sent on fewer trials than asked" % short)
     # ONLY WHEN SOMETHING WAS LOST TO IT. A budget that ran out on the last probe of a full
     # run cost nothing, and a caveat on a run that covered everything is one nobody reads.
     if stopped and _lost:
@@ -277,7 +282,7 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
 
 
 def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
-                     skipped=0, stopped="", never_sent=0):
+                     skipped=0, stopped="", never_sent=0, wall="", unreached=0):
     """(exit code, lines to print) for `--fail-on exploited` and `--fail-on any`.
 
     THE LAST LINE OF A RUN WAS `CI GATE: PASS (any).` AND IT NAMED NOTHING IT HAD NOT SEEN.
@@ -312,11 +317,18 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
         unseen.append("%d errored" % errored)
     if never_sent:
         unseen.append("%d the budget stopped before sending" % never_sent)
+    # AND WHOSE LIMIT, the split `closing_line` makes: the target's rate-limit wall arrived
+    # here merged into `stopped` and its unreached rows into `never_sent`, so the gate line
+    # called somebody else's 429s "our budget" two lines under a closing line that did not.
+    if unreached:
+        unseen.append("%d the run never reached" % unreached)
     if skipped:
         unseen.append("%d were never sent" % skipped)
     if stopped:
         unseen.append("the run stopped on its budget (%s)" % stopped)
-    scored = max(0, attacks_n - errored - never_sent)
+    if wall:
+        unseen.append("the run stopped: %s" % wall)
+    scored = max(0, attacks_n - errored - never_sent - unreached)
     # THREE EXACT COUNTS AND NO DERIVED TOTAL. `attacks_n` is what remained after the
     # withholding and `skipped` counts what was taken out, and the two are not cleanly
     # disjoint -- a scoped-out control sits in one and not the other -- so an `N of M`
@@ -633,6 +645,11 @@ def _partly_read(target):
                   f"{_kind.get(k, '?')})"
                   for k, path in declared.items()
                   if path and _bad.get(k) and _read.get(k))
+
+
+def _real(attacks):
+    """-> the attacks among these that are not controls: what a run can score."""
+    return [a for a in attacks if (a or {}).get("category") != "control"]
 
 
 def nothing_measured(results):
@@ -1106,6 +1123,14 @@ def main():
     from workspace import scoped_to as _scoped
     attacks = [a for a in all_attacks
                if _scoped(a, target.name) and a["id"] not in exclude]
+    # AN EXCLUSION THAT MATCHES NOTHING EXCLUDES NOTHING, and said so nowhere: `a_1` for
+    # `a-1` sent the attack. The documented use is a control compromised at rest, so a typo
+    # there runs exactly what the operator meant to hold back.
+    _ex_none = sorted(exclude - {str(a.get("id")) for a in all_attacks})
+    if _ex_none:
+        print("  ! exclude_attacks names %d id(s) no attack in this arsenal has, so nothing was "
+              "held back for them: %s" % (len(_ex_none), ", ".join(_ex_none[:8])
+                                           + (" ..." if len(_ex_none) > 8 else "")))
     # TWO REASONS AN ATTACK IS NOT IN A RUN, AND ONLY ONE OF THEM IS ABOUT THE TARGET.
     # `not_applicable` is the deployment: the arsenal named an `applies_to` that excludes it,
     # a detector it needs is dead here, or the delivery channel does not exist on this bot.
@@ -1122,21 +1147,15 @@ def main():
     not_applicable = len(all_attacks) - len(attacks)
     not_sent = 0
 
-    # A QUICK RUN IS A NARROWER RUN, not a fuller one with most of it withheld. Said out loud
-    # here and recorded on the run, because "we tested 58 techniques" and "we tested 285" are
-    # different claims and the report must not be able to make the second from the first.
-    if args.scope == "quick":
-        attacks, held = breadth_slice(attacks)
-        not_sent += len(held)
-        print(f"  · limited run: one attack from each of {len(attacks)} categories, "
-              f"{len(held)} more not sent — a short run is a BROAD run rather than a deep one, "
-              f"and every probe is a request to your own endpoint, on your own bill")
     print("=" * 78)
     print("  QAtration — adversarial testing harness for LLM features")
     print("=" * 78)
     # guard the data: a 0-attack scope (wrong --attacks file) must NOT clobber a good
     # results_<target>.json with an empty run — bail before writing, leave prior data intact.
-    if not attacks:
+    # AN ATTACK, NOT A ROW: a control is a baseline, and an arsenal left holding only its
+    # controls sent nothing it could score -- `0/0 attacks breached`, `CI GATE: PASS`, exit 0,
+    # and a good results file overwritten with one control row. Found by an independent review.
+    if not _real(attacks):
         # EXIT 3, NOT 0. `return` here exits zero through the console entry point, and zero is
         # documented as "ran, and the gate you asked for was not tripped". Nothing ran. This is
         # the same event as the errored-run branch further down and takes the same code:
@@ -1305,7 +1324,7 @@ def main():
             shown = ", ".join(sorted(ids)[:4])
             more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
             print(f"      needs {k:<{_wk}}{shown}{more}")
-        if not attacks:
+        if not _real(attacks):
             # EXIT 3 for the same reason as the branch above: this is the state the sentence
             # printed here describes, and returning zero would report it as a clean run.
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
@@ -1352,13 +1371,29 @@ def main():
             shown = ", ".join(sorted(ids)[:4])
             more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
             print(f"      {f'{fam} needs {need}':<{_wc}}{shown}{more}")
-        if not attacks:
+        if not _real(attacks):
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                          note=f"every attack needed a delivery {target.name} cannot take; "
                               f"nothing was sent and nothing was written")
             print(f"NOTHING DELIVERABLE — every attack in this arsenal needs a delivery "
                   f"{target.name} cannot take. Leaving results untouched.", file=sys.stderr)
             sys.exit(3)
+
+    # AFTER THE WITHHOLDING, so the one attack a category sends is one that CAN be sent: picked
+    # first, a category whose pick was then withheld as undeliverable was not tested at all
+    # while the line below still counted it -- three categories of the shipped arsenal lost
+    # on a plain chat endpoint. Found by an independent review.
+    #
+    # A QUICK RUN IS A NARROWER RUN, not a fuller one with most of it withheld. Said out loud
+    # here and recorded on the run, because "we tested 58 techniques" and "we tested 285" are
+    # different claims and the report must not be able to make the second from the first.
+    if args.scope == "quick":
+        attacks, held = breadth_slice(attacks)
+        not_sent += len(held)
+        skipped = not_applicable + not_sent
+        print(f"  · limited run: one attack from each of {len(attacks)} categories, "
+              f"{len(held)} more not sent — a short run is a BROAD run rather than a deep one, "
+              f"and every probe is a request to your own endpoint, on your own bill")
 
     # A BUDGET TOO SMALL FOR THE RUN IS KNOWN BEFORE THE FIRST REQUEST, so it is said then
     # rather than discovered two thirds of the way through as a wall of BudgetExhausted errors.
@@ -1378,7 +1413,13 @@ def main():
     _need = _requests_for_run(attacks, trials)
     _rate = getattr(target, "rate", None)
     _cap = getattr(_rate, "max_requests", None) if _rate else None
-    if _cap and _need > _cap:
+    # AND THE REQUESTS THAT ARE NOT ATTACKS: the honeytoken check already spent from this
+    # budget, and a target that reports tool calls gets a baseline probe before the first
+    # attack. Priced without them, a run needing exactly the budget printed no warning and
+    # its last trial was never sent.
+    _overhead = int(getattr(_rate, "used", 0) or 0) + (
+        1 if "tool_visibility" in (getattr(target, "capabilities", set()) or set()) else 0)
+    if _cap and _need + _overhead > _cap:
         pct = 100.0 * _cap / _need
         print(f"  ! THIS RUN CANNOT FINISH INSIDE ITS BUDGET: {len(attacks)} attack(s) at "
               f"{trials} trial(s) need {_need} requests and `rate.max_requests` is {_cap}.")
@@ -1472,7 +1513,7 @@ def main():
     # to protect. Two mutations survived on it, which is how it was found.
     from runner import GiveUpWall as _Wall
     _wall, _rl_stopped = _Wall(), ""
-    for a in attacks:
+    for _ai, a in enumerate(attacks):
         if _rl_stopped:
             break
         recs = run_attack(target, a, ctx, trials=trials)
@@ -1526,7 +1567,10 @@ def main():
         _retried += _r_n
         results.append({"attack": a, "headline": head, "rate": rate,
                         "fired": fired_list, "locks": locks, "trials": trials_ser})
-        if _wall.saw([r.get("probe") for r in recs]):
+        # AND ONLY WHERE THERE IS A REST: on the last attack the wall stops nothing, and it
+        # was recorded as a run cut short -- "the rest of the arsenal was NOT sent",
+        # `meta.stopped`, `state: stopped` -- over a sweep that sent every attack.
+        if _wall.saw([r.get("probe") for r in recs]) and _ai + 1 < len(attacks):
             _rl_stopped = _wall.reason.replace("of the last", "of the last").replace(
                 "the rest was", "the rest of the arsenal was")
             # THE ADVICE COMES FROM THE WALL, because there are two ways to hit it and
@@ -1574,9 +1618,16 @@ def main():
     # written by `signing` and read by nobody.
     from signing import credential_note as _cred_note
     _why_err = _cred_note(results)
+    from signing import NEVER_SENT as _NS_cut
+    _cut_rows = sum(1 for r in results
+                    if (r.get("attack") or {}).get("category") != "control"
+                    and r.get("headline") != "ERROR"
+                    and any(str(((t.get("probe") or {}).get("error")) or "").startswith(_NS_cut)
+                            for t in (r.get("trials") or [])))
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials, why_errored=_why_err,
-                              never_sent=_never_sent_rows, wall=_rl_stopped))
+                              never_sent=_never_sent_rows, wall=_rl_stopped,
+                              short=_cut_rows))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
@@ -1835,8 +1886,13 @@ def main():
     # `_close_open_run` skips a record that is no longer `started`. Found by an independent
     # review.
     _runs.finish(OUT_DIR, _rec, "stopped" if _stopped else "finished", spent=_spent,
-                 note=((f"budget spent ({_budget_note}); the remaining attacks were never "
-                        f"sent") if _budget_note else
+                 # WHAT WAS ACTUALLY LOST: "the remaining attacks were never sent" was
+                 # recorded over a run whose every attack went out and whose last row was
+                 # cut to fewer trials.
+                 note=((f"budget spent ({_budget_note}); " + (
+                        "the remaining attacks were never sent" if _never_sent_rows else
+                        "%d attack(s) were sent on fewer trials than asked" % _cut_rows))
+                       if _budget_note else
                        "%s; the remaining attacks were never sent" % _rl_stopped)
                  if _stopped else None)
 
@@ -1910,8 +1966,8 @@ def main():
     # named neither the errors nor the attacks nobody sent.
     _abs_code, _abs_lines = absolute_verdict(
         gate, exploited_n, broke, attacks_n, _errored_rows,
-        skipped=skipped, stopped=_budget_note or _rl_stopped,
-        never_sent=_never_sent_rows)
+        skipped=skipped, stopped=_budget_note, wall=_rl_stopped,
+        never_sent=_budget_rows, unreached=_never_sent_rows - _budget_rows)
     if _abs_lines:
         print("")
         for _l in _abs_lines:

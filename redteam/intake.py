@@ -96,8 +96,12 @@ ID_RE = re.compile(r"\A[0-9A-Za-z][0-9A-Za-z_.\-]{0,63}\Z")
 from workspace import SCOPES
 
 
-class _NoAliasLoader(yaml.SafeLoader):
-    """SafeLoader that refuses YAML aliases: a stranger's document is never expanded here."""
+from workspace import _unique_key_loader
+
+
+class _NoAliasLoader(_unique_key_loader()):
+    """SafeLoader that refuses YAML aliases: a stranger's document is never expanded here.
+    And a key written twice, like every config this package loads."""
 
     def compose_node(self, parent, index):
         if self.check_event(yaml.AliasEvent):

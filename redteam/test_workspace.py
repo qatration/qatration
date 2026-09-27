@@ -311,6 +311,82 @@ def check_every_command_refuses():
                 _dropped.append("%s: %s" % (os.path.basename(_fp), _k))
     check("every key a practice config states reaches the adapter it builds", _dropped, [])
 
+    # --- FOUND BY AN INDEPENDENT REVIEW OF THE SHARED RULES --------------------------------
+    import tempfile as _tf_sr, json as _js_sr, io
+    from workspace import refuse_unusable_config as _ruc_sr
+
+    def _refused_ctx(ctx):
+        try:
+            _ruc_sr({"adapter": "http", "name": "t", "url": "http://127.0.0.1:9/x",
+                     "request": {"message": "{prompt}"}, "response": {"reply": "reply"},
+                     "oracle_context": ctx},
+                    "test")
+            return ""
+        except SystemExit as _e:
+            return str(_e)
+    # A QUOTED "false" ON A KEY READ AS TRUE/FALSE switched the phone rule on.
+    check("pii_expect_phone written as a quoted false is refused",
+          "pii_expect_phone" in _refused_ctx({"pii_expect_phone": "false"}), True)
+    # A NUMBER CHECKED AS THE READER CONVERTS IT, and finite.
+    check("a threshold the oracle would read with int() and cannot is refused",
+          "max_output_chars" in _refused_ctx({"max_output_chars": "1e4"}), True)
+    check("...and so are an infinite and a NaN threshold",
+          ["max_output_chars" in _refused_ctx({"max_output_chars": float("inf")}),
+           "degenerate_ratio" in _refused_ctx({"degenerate_ratio": float("nan")})],
+          [True, True])
+    check("...while a whole number written plainly is still accepted",
+          _refused_ctx({"max_output_chars": 10000}), "")
+    # A RUN TIMELINE AND A JOB RECORD ARE EVIDENCE: `coverage --json` replaced a timeline.
+    from workspace import _evidence_kind as _ek_sr, writable_path as _wp_sr
+    _d_sr = _tf_sr.mkdtemp()
+    _tl = os.path.join(_d_sr, "mybot.jsonl")
+    io.open(_tl, "w", encoding="utf-8").write(
+        _js_sr.dumps({"run": "2026-09-01 10:00", "target": "mybot", "rows": {}}) + chr(10)
+        + _js_sr.dumps({"run": "2026-09-02 10:00", "target": "mybot", "rows": {}}) + chr(10))
+    _jr = os.path.join(_d_sr, "job.json")
+    io.open(_jr, "w", encoding="utf-8").write(_js_sr.dumps(
+        {"job_id": "2026-09-27T1200-abc123", "state": "queued",
+         "submitted_at": "2026-09-27 12:00:00"}))
+    check("a run timeline and a job record are recognised as records",
+          [_ek_sr(_tl), _ek_sr(_jr)], ["a run timeline", "a job record"])
+    try:
+        _wp_sr(_tl, "coverage buckets", "coverage")
+        _wp_said = ""
+    except SystemExit as _e_wp:
+        _wp_said = str(_e_wp)
+    check("...so a command pointed at a timeline refuses to write over it",
+          "run timeline" in _wp_said, True)
+    # A CONFIG'S NAME IS TEXT: `name: 2024` was an int key the fleet pages dropped.
+    from workspace import config_name as _cn_sr
+    check("a numeric name is read as the text it is",
+          _cn_sr("targets_x.yaml", {"name": 2024}), "2024")
+    # A LOCK MAP WITH NO TARGET FIELD IS JUDGED BY ITS FILE NAME: another target's map was
+    # put on this target's page.
+    from workspace import side_artifact as _sa_sr
+    _iso = os.path.join(_d_sr, "isolation_secretbot.json")
+    io.open(_iso, "w", encoding="utf-8").write(_js_sr.dumps(
+        [{"objective": "o", "verdict": "HARDENED", "properties": []}]))
+    _warned = []
+    check("a bare-list lock map named for another target is not folded in",
+          (_sa_sr(_iso, "isolation_mybot.json", "maps", warn=lambda *a: _warned.append(a),
+                  target="mybot"), bool(_warned)), (None, True))
+    check("...while the same map for its own target still is",
+          bool(_sa_sr(_iso, "isolation_secretbot.json", "maps", target="secretbot")), True)
+    # A KEY WRITTEN TWICE IS REFUSED: the second `oracle_context:` dropped the canary.
+    from workspace import load_yaml_or_refuse as _ly_sr
+    _dup = os.path.join(_d_sr, "dup.yaml")
+    io.open(_dup, "w", encoding="utf-8").write(chr(10).join([
+        "adapter: http", 'url: "http://127.0.0.1:9/x"', "oracle_context:",
+        '  canaries: ["QAT-CANARY-AAAA1111BBBB2222"]', "oracle_context:",
+        '  allowed_domains: ["example.com"]', ""]))
+    try:
+        _ly_sr(_dup)
+        _dup_said = ""
+    except SystemExit as _e_d:
+        _dup_said = str(_e_d)
+    check("a config holding one key twice is refused, naming the key",
+          "oracle_context" in _dup_said and "twice" in _dup_said, True)
+
     # A FAILED REPLACE LEAVES NOTHING BEHIND EITHER: the body finished, the replace onto a
     # directory failed, and the `.tmp` stayed.
     import tempfile as _tf_aw
