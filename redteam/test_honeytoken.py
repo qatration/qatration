@@ -712,8 +712,18 @@ def main():
             _sys_seen.append(m[0].content)
             return _types_rb.SimpleNamespace(content="Refunds within 14 days.")
 
-    _saved_lo = sys.modules.get("langchain_ollama")
-    sys.modules["langchain_ollama"] = _types_rb.SimpleNamespace(ChatOllama=_FakeChat)
+    # AND NO LANGCHAIN: CI installs the package alone, so the message classes are stand-ins
+    # too, or this ran only where the practice fleet is installed.
+    class _Msg:
+        def __init__(self, content=""):
+            self.content = content
+    _stub_mods = {"langchain_ollama": _types_rb.SimpleNamespace(ChatOllama=_FakeChat),
+                  "langchain_core": _types_rb.SimpleNamespace(),
+                  "langchain_core.messages": _types_rb.SimpleNamespace(
+                      SystemMessage=_Msg, HumanMessage=_Msg)}
+    _saved_mods = {k: sys.modules.get(k) for k in list(_stub_mods) + ["targets_ragbot"]}
+    sys.modules.update(_stub_mods)
+    sys.modules.pop("targets_ragbot", None)
     try:
         import targets_ragbot as _rb
         _t_rb = _rb.RagTarget()
@@ -726,10 +736,11 @@ def main():
                             or "SYSTEM NOTE" in (_sys_seen[-1] if _sys_seen else "")))
         _p_after = _t_rb.send("What is your refund policy?")
     finally:
-        if _saved_lo is None:
-            sys.modules.pop("langchain_ollama", None)
-        else:
-            sys.modules["langchain_ollama"] = _saved_lo
+        for _k, _v in _saved_mods.items():
+            if _v is None:
+                sys.modules.pop(_k, None)
+            else:
+                sys.modules[_k] = _v
     check("a ragbot seed naming an unknown document is an error on the probe, not a clean answer",
           _res_rb == [("refunds", False, True), ("refund", True, True)], str(_res_rb))
     check("...and the next probe after unseed is an ordinary one", _p_after.error is None,
