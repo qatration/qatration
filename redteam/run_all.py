@@ -174,10 +174,11 @@ def main():
                                   timeout=TOOL_DEADLINE).returncode
     except subprocess.TimeoutExpired:
         # Not zero. This exit code IS the credibility gate, and an audit that did not run is
-        # the one thing it must never be read as passing.
-        print("  ! the discrimination self-audit did not finish in %ds; treating it as failed, "
-              "because an audit that did not run has not cleared anything" % TOOL_DEADLINE)
-        audit_rc = 1
+        # the one thing it must never be read as passing -- nor as a control that fired: 3,
+        # the question could not be answered.
+        print("  ! the discrimination self-audit did not finish in %ds; it has not cleared "
+              "anything, and it has not found anything either" % TOOL_DEADLINE)
+        audit_rc = 3
 
     print("\n" + "=" * 60)
     print(f"  sweep done — ran {len(ran)}, skipped {len(skipped)}, failed {len(failed)}")
@@ -209,10 +210,24 @@ def main():
     if failed:
         print(f"\nEXIT 1 — {len(failed)} target(s) failed to run.")
         sys.exit(1)
-    if audit_rc:
+    # THE AUDIT'S OWN CODE, READ. Every non-zero code printed "EXIT 1 -- a control fired on a
+    # target whose benign traffic does not explain it": an audit that crashed exited 2 under
+    # that sentence, one that found no results exited 3 under "EXIT 1", and one that timed out
+    # became that finding outright.
+    if audit_rc == 1:
         print("\nEXIT 1 — the discrimination self-audit failed: a control fired on a target "
-              "whose benign traffic does not explain it.")
-        sys.exit(audit_rc)
+              "whose benign traffic does not explain it, or no control was measured.")
+        sys.exit(1)
+    if audit_rc == 3:
+        print("\nEXIT 3 — the discrimination self-audit could not answer (it found nothing to "
+              "audit, or did not finish), so these pages have not been checked for false "
+              "alarms.")
+        sys.exit(3)
+    if audit_rc:
+        print("\nEXIT %d — the discrimination self-audit did not run to a verdict (it refused "
+              "or crashed; its output is above), so these pages have not been checked for "
+              "false alarms." % (2 if audit_rc not in (2, 4, 5) else audit_rc))
+        sys.exit(2 if audit_rc not in (2, 4, 5) else audit_rc)
 
 
 if __name__ == "__main__":

@@ -146,7 +146,11 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         # `Probe.silent`), and a workspace whose every stored probe is one has measured nothing.
         if silent_out is not None and pr.silent():
             silent_out[0] += 1
-        if scanned_out is not None and target:
+        # A TARGET IS SCANNED WHEN SOMETHING CAME BACK FROM IT. An empty probe added it too,
+        # so a fleet whose one canary-configured target answered nothing filed
+        # `canary_in_output` under "no target in the fleet exhibits this behaviour" -- the
+        # evidence bucket, over five empty replies.
+        if scanned_out is not None and target and not pr.silent():
             scanned_out.add(target)
         for name, fn in DETECTORS.items():
             try:
@@ -183,13 +187,16 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         ctx = ctx_for(tgt, os.path.basename(fp))
         before = n
         for r in d.get("results", []):
-            if attacks is not None:
-                _a = r.get("attack") or {}
-                attacks.add(_a.get("id") if isinstance(_a, dict) else _a)
             for t in r.get("trials", []):
                 pd = t.get("probe") or {}
                 if not pd:
                     continue
+                # AN ATTACK WITH A STORED TRIAL, which is what this set is documented as: it
+                # was added before the check above, so a SKIP row with no probe counted as
+                # sent -- "2 with a stored trial" beside "replayed 1 stored probes".
+                if attacks is not None:
+                    _a = r.get("attack") or {}
+                    attacks.add(_a.get("id") if isinstance(_a, dict) else _a)
                 # The whole attacker side, not just `text`: a chain or session attack
                 # keeps its turns in `steps`, so reading `text` left the prompt EMPTY and
                 # echo subtraction switched off — the same defect rejudge had, in a second
@@ -382,7 +389,7 @@ def buckets(declared, broke=(), scanned=None):
 
 def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
                untried, unevidenced, unconfigured, broke, unresolved, unreadable,
-               model_only=()):
+               model_only=(), silent=0):
     """The same four answers the console gives, in the form a pipeline can act on.
 
     THE FILE COLLAPSED WHAT THE PAGE SPLITS. This command's whole argument, printed in its
@@ -411,7 +418,11 @@ def _emit_json(where_to, n, hits, demo, benign_only, declared, where,
     from workspace import atomic_write as _atomic
     with _atomic(path) as f:
         json.dump({"probes": n,
-                   "measured": bool(n),
+                   # THE CONSOLE'S RULE: a workspace whose every probe came back empty
+                   # measured nothing. `bool(n)` wrote `measured: true` beside the console's
+                   # NOTHING MEASURED and exit 3.
+                   "measured": n > silent,
+                   "empty_probes": silent,
                    "demonstrated": {k: hits[k] for k in demo},
                    "demonstrated_on_benign_traffic_only": list(benign_only),
                    # A CI step reading this file has to be able to tell which of the
@@ -665,18 +676,23 @@ def main():
         # workspace is not a coverage measurement, it is the absence of one -- and it read
         # as the worst possible result while exiting 0, which is the combination a pipeline
         # cannot act on. `docs/ci.md` gives an unanswerable question code 3.
-        print("\n" + (no_results_note(OUT) if not n else
+        # AND A WORKSPACE WHOSE RESULTS COULD NOT BE READ IS NOT ONE WITH NONE: "run a sweep
+        # first" was printed right under the torn file it had just named.
+        print("\n" + (no_results_note(OUT) if not n and not _unreadable_seen else
+                      "NOTHING MEASURED - no stored probe could be read: %d artifact(s) "
+                      "named above are unreadable, and nothing else holds a run."
+                      % len(_unreadable_seen) if not n else
                       "NOTHING MEASURED - every one of the %d stored probes came back empty, "
                       "so no detector here could have fired on anything. Check the target is "
                       "answering, and run again." % n))
         _emit_json(args.json, n, hits, demo, benign_only, declared, where,
                    untried, unevidenced, unconfigured, broke, unresolved,
-                   _unreadable_seen, model_only)
+                   _unreadable_seen, model_only, _silent[0])
         return 3
 
     _emit_json(args.json, n, hits, demo, benign_only, declared, where,
                untried, unevidenced, unconfigured, broke, unresolved,
-               _unreadable_seen, model_only)
+               _unreadable_seen, model_only, _silent[0])
 
 
 if __name__ == "__main__":

@@ -1285,7 +1285,53 @@ def main():
     ra = open(os.path.join(HERE, "run_all.py"), encoding="utf-8").read()
     check("the self-audit's exit code is captured, not discarded",
           "audit_rc = subprocess.run" in ra)
-    check("...and reaches the sweep's own exit code", "sys.exit(audit_rc)" in ra)
+    # AND READ FOR WHAT IT SAYS, driven over a stub fleet: the real `run_all`, every child
+    # it starts replaced by a script that exits with a chosen code. Every non-zero audit code
+    # printed "EXIT 1 -- a control fired", and a timed-out audit became that finding.
+    import shutil as _sh_ra, tempfile as _tf_ra
+
+    def _stub_fleet(audit):
+        _d = _tf_ra.mkdtemp()
+        for _f in os.listdir(HERE):
+            if _f.endswith(".py") and not _f.startswith("test_"):
+                _sh_ra.copy(os.path.join(HERE, _f), _d)
+        _stub = lambda body: "import sys, time" + chr(10) + body + chr(10)
+        open(os.path.join(_d, "lint_arsenal.py"), "w").write(_stub("sys.exit(0)"))
+        open(os.path.join(_d, "run_redteam.py"), "w").write(_stub("sys.exit(0)"))
+        for _s in ("defense_report.py", "compare_targets.py", "build_index.py"):
+            open(os.path.join(_d, _s), "w").write(_stub("sys.exit(0)"))
+        open(os.path.join(_d, "discrimination.py"), "w").write(_stub(audit))
+        open(os.path.join(_d, "targets_stubbot.yaml"), "w").write(
+            "adapter: http" + chr(10) + "name: stubbot" + chr(10))
+        return _d
+
+    def _sweep(audit, extra=None):
+        _d = _stub_fleet(audit)
+        try:
+            _p = subprocess.run([sys.executable, os.path.join(_d, "run_all.py"), "--only",
+                                 "stubbot"], capture_output=True, text=True, timeout=600,
+                                errors="replace",
+                                env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                         PYTHONIOENCODING="utf-8",
+                                         QATRATION_OUT=os.path.join(_d, "out"), **(extra or {})))
+            return _p.returncode, _p.stdout or ""
+        finally:
+            _sh_ra.rmtree(_d, ignore_errors=True)
+
+    _codes_ra = {_k: _sweep(_a) for _k, _a in (("fired", "sys.exit(1)"),
+                                                ("crashed", "sys.exit(2)"),
+                                                ("empty", "sys.exit(3)"))}
+    _codes_ra["timeout"] = _sweep("time.sleep(60)", {"QATRATION_TOOL_TIMEOUT": "3"})
+    check("an audit that found a control firing makes the sweep exit 1, and says so",
+          _codes_ra["fired"][0] == 1 and "a control fired" in _codes_ra["fired"][1],
+          str(_codes_ra["fired"])[-300:])
+    check("...one that crashed exits 2, and is not called a control that fired",
+          _codes_ra["crashed"][0] == 2 and "a control fired" not in _codes_ra["crashed"][1],
+          str(_codes_ra["crashed"])[-300:])
+    check("...one with nothing to audit, or that timed out, exits 3 and is not a finding",
+          [(_codes_ra[k][0], "a control fired" in _codes_ra[k][1]) for k in ("empty", "timeout")]
+          == [(3, False), (3, False)],
+          str([_codes_ra[k] for k in ("empty", "timeout")])[-400:])
     check("a target that failed to run makes the sweep fail",
           "EXIT 1 —" in ra and "target(s) failed to run" in ra)
     check("a skipped target's stale page is named as stale, not left to be inferred",
@@ -4486,6 +4532,75 @@ def main():
     _bhtml = _re_b.build_html(_bmeta, _brows)
     check("...and the scorecard gives them a tile of their own",
           "never sent — the request budget ran out" in _bhtml)
+
+    # --- DISCRIMINATION: FOUND BY AN INDEPENDENT REVIEW --------------------------------------
+    import subprocess as _sp_dr, tempfile as _tf_dr, json as _js_dr
+
+    def _dr_row(aid, head, cat="c", partial=None, rate=True, trials=1):
+        _a = {"id": aid, "text": "attack " + aid, "category": cat,
+              "success": ["canary_in_output"]}
+        if partial:
+            _a["partial"] = partial
+        _r = {"attack": _a, "headline": head, "fired": [],
+              "trials": [{"verdict": head, "fired": [], "probe": {"prompt": "x", "output": "y"}}
+                         for _ in range(trials)]}
+        if rate:
+            _r["rate"] = "%d/%d" % (trials if head == "EXPLOITED" else 0, trials)
+        return _r
+
+    def _dr_run(files):
+        _ws = _tf_dr.mkdtemp()
+        for _name, _tgt, _rows in files:
+            _js_dr.dump({"meta": {"target": _tgt}, "results": _rows},
+                        open(os.path.join(_ws, _name), "w"))
+        _p = _sp_dr.run([sys.executable, os.path.join(HERE, "cli.py"), "discrimination"],
+                        capture_output=True, text=True, errors="replace", timeout=600,
+                        env=dict(os.environ, QATRATION_OUT=_ws, PYTHONIOENCODING="utf-8",
+                                 PYTHONDONTWRITEBYTECODE="1"))
+        return _p.returncode, _p.stdout or "", _p.stderr or ""
+
+    _ctl_dr = _dr_row("ctl", "DEFENDED", cat="control")
+    # THE DIRECTION COMES FROM THE TEST THAT GAVE THE p: six shared attacks all favouring the
+    # defence, with attacks only one arm received pulling the whole-arm rates the other way,
+    # printed INVERTED at McNemar p=0.031.
+    _rc3, _o3, _ = _dr_run([
+        ("results_zbot-naive.json", "zbot-naive",
+         [_dr_row("s%d" % i, "EXPLOITED") for i in range(6)]
+         + [_dr_row("x%d" % i, "DEFENDED") for i in range(10)] + [_ctl_dr]),
+        ("results_zbot.json", "zbot",
+         [_dr_row("s%d" % i, "DEFENDED") for i in range(6)]
+         + [_dr_row("y%d" % i, "EXPLOITED") for i in range(20)] + [_ctl_dr])])
+    _l3 = [l for l in _o3.splitlines() if "zbot-naive" in l and "McNemar" in l]
+    check("a McNemar pair takes its direction from the discordant attacks",
+          bool(_l3) and "[GOOD, McNemar" in _l3[0] and "INVERTED" not in _l3[0], str(_l3))
+    # EVERY SHARED ID A DIFFERENT VERSION: Fisher over the whole arms computed a p across two
+    # scoring rules, under a line saying those attacks are not in the test.
+    _rc4, _o4, _ = _dr_run([
+        ("results_zbot-naive.json", "zbot-naive",
+         [_dr_row("s%d" % i, "EXPLOITED") for i in range(8)] + [_ctl_dr]),
+        ("results_zbot.json", "zbot",
+         [_dr_row("s%d" % i, "DEFENDED", partial=["debug_disclosure"]) for i in range(8)]
+         + [_ctl_dr])])
+    _l4 = [l for l in _o4.splitlines() if "zbot-naive" in l and "vs" in l]
+    check("...and a pair whose every shared attack is a different version is not compared",
+          bool(_l4) and "NOT COMPARABLE" in _l4[0], str(_l4))
+    # TWO FILES FOR ONE TARGET: the second replaced the first in silence, and a fired control
+    # read PASS, exit 0.
+    _fired_ctl = _dr_row("ctl-1", "EXPLOITED", cat="control")
+    _fired_ctl["fired"] = ["canary_in_output"]
+    _rc6, _o6, _e6 = _dr_run([("results_acme.json", "acme", [_fired_ctl]),
+                              ("results_acme~old.json", "acme",
+                               [_dr_row("ctl-1", "DEFENDED", cat="control")])])
+    check("two results files naming one target are refused, both named",
+          (_rc6, "GATE: PASS" in _o6, "results_acme~old.json" in _e6) == (2, False, True),
+          "exit %s: %s %s" % (_rc6, _o6[-200:], _e6[-200:]))
+    # A BREACH ROW WITHOUT `rate` was read as (0, 0): "broke on a single trial" about three
+    # EXPLOITED trials.
+    _rc8, _o8, _ = _dr_run([("results_acme.json", "acme",
+                             [_dr_row("a1", "EXPLOITED", rate=False, trials=3), _ctl_dr])])
+    _s8 = _o8.split("3. BREACH REPRODUCIBILITY")[-1].split(chr(10) + chr(10))[0]
+    check("a breach row with no rate is counted from its trials",
+          "1 reliable" in _s8 and "single" not in _s8.split("reliable")[0], _s8[:300])
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

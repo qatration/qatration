@@ -878,8 +878,13 @@ def main():
         with open(os.path.join(_w10b, "results_probe.json"), "w", encoding="utf-8") as _f10:
             _js9.dump({"meta": {"target": "probe", "model": "m", "trials": 1,
                                   "attacks_n": 1, "broke": 0, "errors": 0},
+                         # WITH ITS TRIAL: a row with no stored probe was once counted as
+                         # sent, which this fixture leaned on.
                          "results": [{"headline": "DEFENDED", "fired": [], "rate": "0/1",
-                                      "attack": {"id": _one, "category": "x"}}]}, _f10)
+                                      "attack": {"id": _one, "category": "x"},
+                                      "trials": [{"verdict": "DEFENDED", "fired": [],
+                                                  "probe": {"prompt": "hi",
+                                                            "output": "hello"}}]}]}, _f10)
         _p10b = _sp9.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"],
                          capture_output=True, text=True, timeout=300,
                          env=dict(os.environ, QATRATION_OUT=_w10b,
@@ -1101,6 +1106,80 @@ def main():
               and 'QATRATION_CONFIGS="' in io.open(os.path.join(HERE, _m),
                                                    encoding="utf-8").read()]
     check("no command types the export line itself", not _typed, str(_typed))
+
+    # --- AN EMPTY PROBE IS NOT EVIDENCE, AND A SKIP IS NOT A STORED TRIAL --------------------
+    #
+    # Found by an independent review. A target whose every reply was empty was added to the
+    # scanned set, so a detector armed only there was filed under "no target in the fleet
+    # exhibits this behaviour"; `--json` wrote `measured: true` over the console's NOTHING
+    # MEASURED; and a SKIP row with no probe counted as an attack "with a stored trial".
+    import subprocess as _sp_rv, io as _io_rv, contextlib as _cl_rv
+
+    def _rv_row(aid, out, cat="c", head=None):
+        _h = head or ("DEFENDED" if out else "ERROR")
+        return {"attack": {"id": aid, "text": "hi", "category": cat}, "headline": _h,
+                "fired": [], "trials": [{"verdict": _h, "fired": [],
+                                         "probe": {"prompt": "hi", "output": out}}]}
+
+    _ws_rv = tempfile.mkdtemp()
+    json.dump({"meta": {"target": "loud"}, "results": [_rv_row("a%d" % i, "a normal answer")
+                                                         for i in range(5)]},
+              open(os.path.join(_ws_rv, "results_loud.json"), "w"))
+    json.dump({"meta": {"target": "quiet"}, "results": [_rv_row("a%d" % i, "")
+                                                          for i in range(5)]},
+              open(os.path.join(_ws_rv, "results_quiet.json"), "w"))
+    _saved_rv = (dc.OUT, dc.contexts, sys.argv)
+    _jp_rv = os.path.join(_ws_rv, "cov.json")
+    try:
+        dc.OUT = _ws_rv
+        dc.contexts = lambda **kw: {"loud": {}, "quiet": {"canaries": ["CANARY-XYZ-123"]}}
+        sys.argv = ["coverage", "--json", _jp_rv]
+        with _cl_rv.redirect_stdout(_io_rv.StringIO()):
+            dc.main()
+    finally:
+        dc.OUT, dc.contexts, sys.argv = _saved_rv
+    _d_rv = json.load(open(_jp_rv))
+    check("a target whose every reply was empty is not evidence that nobody does this",
+          "canary_in_output" not in _d_rv["no_target_exhibits_this"]
+          and "canary_in_output" in _d_rv["no_usable_evidence_either_way"],
+          str(_d_rv["no_usable_evidence_either_way"])[:200])
+
+    def _cov_cli(ws, *extra):
+        return _sp_rv.run([sys.executable, os.path.join(HERE, "cli.py"), "coverage"] + list(extra),
+                          capture_output=True, text=True, errors="replace", timeout=600,
+                          env=dict(os.environ, QATRATION_OUT=ws, PYTHONIOENCODING="utf-8",
+                                   PYTHONDONTWRITEBYTECODE="1"))
+
+    _ws_q = tempfile.mkdtemp()
+    json.dump({"meta": {"target": "quiet"}, "results": [_rv_row("a%d" % i, "")
+                                                          for i in range(3)]},
+              open(os.path.join(_ws_q, "results_quiet.json"), "w"))
+    _jq = os.path.join(_ws_q, "cov.json")
+    _pq = _cov_cli(_ws_q, "--json", _jq)
+    _dq = json.load(open(_jq))
+    check("--json says measured: false where the console says NOTHING MEASURED",
+          (_pq.returncode, "NOTHING MEASURED" in _pq.stdout, _dq["measured"])
+          == (3, True, False), "exit %s measured %s" % (_pq.returncode, _dq["measured"]))
+
+    _ws_s = tempfile.mkdtemp()
+    _skip = {"attack": {"id": "g-contact-embed", "text": "x", "category": "c"},
+             "headline": "SKIP", "fired": [], "trials": [{"verdict": "SKIP", "fired": [],
+                                                           "probe": None}]}
+    json.dump({"meta": {"target": "acme"},
+               "results": [_rv_row("g-control", "hello", cat="control"), _skip]},
+              open(os.path.join(_ws_s, "results_acme.json"), "w"))
+    _ps = _cov_cli(_ws_s)
+    _line_s = [l for l in _ps.stdout.splitlines() if "portable arsenal" in l]
+    check("an attack SKIPped with no probe is not an attack with a stored trial",
+          bool(_line_s) and "1 with a stored trial" in _line_s[0], str(_line_s))
+
+    # AND A WORKSPACE WHOSE ONLY RESULTS FILE IS TORN is not one to "run a sweep first" in.
+    _ws_t = tempfile.mkdtemp()
+    open(os.path.join(_ws_t, "results_acme.json"), "w").write('{"meta": {"target": "acme"')
+    _pt = _cov_cli(_ws_t)
+    check("a torn results file is named as unreadable, not answered with `run a sweep first`",
+          (_pt.returncode, "run a sweep first" in _pt.stdout, "unreadable" in _pt.stdout)
+          == (3, False, True), "exit %s: %s" % (_pt.returncode, _pt.stdout[-300:]))
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

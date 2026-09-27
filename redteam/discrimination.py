@@ -35,8 +35,30 @@ def _frac(rate):
         return 0, 0
 
 
-def load():
-    data = {}
+def _rate_of(row):
+    """-> (broke, measured) for one row: its `rate`, or its trials where it carries none.
+
+    `rate` is optional in a results file, and read through `_frac` alone a row without one was
+    (0, 0) -- "broke on a single trial" about a row holding three EXPLOITED trials. The trials
+    are counted by `runner.headline`, the rule that writes `rate` in the first place.
+    """
+    if row.get("rate") not in (None, ""):
+        return _frac(row.get("rate"))
+    trials = [t for t in (row.get("trials") or []) if isinstance(t, dict) and "verdict" in t]
+    if not trials:
+        return 0, 0
+    from runner import headline as _headline
+    return _frac(_headline(trials)[1])
+
+
+def load(collisions=None):
+    """-> {target: rows}. Two files naming one target are appended to `collisions`.
+
+    A SECOND FILE FOR ONE TARGET REPLACED THE FIRST, in silence: `results_acme.json` with a
+    control that fired and `results_acme~old.json` with it clean read `GATE: PASS`, exit 0,
+    decided by which name sorts last. The caller refuses the comparison instead.
+    """
+    data, came_from = {}, {}
     for fp in results_files(OUT):
         d, why = read_artifact(fp)
         if why:
@@ -45,7 +67,11 @@ def load():
             continue
         # ANSWERED BY `read_artifact`: a blank `meta.target` is refused there and named
         # by the branch above. `if tgt:` dropped the same file without a word.
-        data[(d.get("meta") or {}).get("target")] = d.get("results") or []
+        _tgt = (d.get("meta") or {}).get("target")
+        if _tgt in came_from and collisions is not None:
+            collisions.append((_tgt, came_from[_tgt], os.path.basename(str(fp))))
+        came_from.setdefault(_tgt, os.path.basename(str(fp)))
+        data[_tgt] = d.get("results") or []
     return data
 
 
@@ -127,7 +153,7 @@ def paired(data, a, b):
     return only_a, only_b, len(shared), mismatched
 
 
-def breaches(data, t):
+def breaches(data, t, exclude=()):
     """-> (breached, measured) for one target's real attacks.
 
     A COUNT WITHOUT ITS DENOMINATOR IS NOT A RATE, and this returned the count alone.
@@ -140,7 +166,8 @@ def breaches(data, t):
     Rows that were never measured are out of the denominator for the same reason they are
     everywhere else here: an attack that errored is not an attack the target survived.
     """
-    rows = [r for r in data[t] if r["attack"].get("category") != "control"]
+    rows = [r for r in data[t] if r["attack"].get("category") != "control"
+            and r["attack"].get("id") not in exclude]
     measured = [r for r in rows if r["headline"] not in NOT_MEASURED]
     return sum(1 for r in measured if r["headline"] in BROKE), len(measured)
 
@@ -260,7 +287,16 @@ def main():
     # THE ONE SPELLING, from the table this command is listed in.
     from cli import parser as _cli_parser
     _cli_parser("discrimination").parse_args()
-    data = load()
+    _collide = []
+    data = load(_collide)
+    if _collide:
+        for _t, _a, _b in _collide:
+            print("%s and %s both hold results for target %r: which one this compares would "
+                  "be decided by how the names sort. Move one of them out of %s and run "
+                  "again." % (_a, _b, _t, OUT), file=sys.stderr)
+        print("REFUSED - %d target(s) have two results files; nothing was compared."
+              % len(_collide))
+        return 2
     if not data:
         # See the note in `build_index`: the path this run is using, and a command rather
         # than a description of one.
@@ -368,7 +404,7 @@ def main():
     for tgt, results in data.items():
         for r in results:
             if r["headline"] in BROKE and r["attack"].get("category") != "control":
-                n, d = _frac(r.get("rate", ""))
+                n, d = _rate_of(r)
                 if d <= 1:
                     single += 1
                 elif n == d:
@@ -449,10 +485,21 @@ def main():
             p, test = mcnemar_exact(only_n, only_d), "McNemar"
             _pairsets.append((naive, base, only_n, only_d))
         else:
+            # AND WITHOUT THE ATTACKS THE PAGE SAYS ARE NOT IN THE TEST. With every shared
+            # id a different version, this fell back to Fisher over the whole arms -- the
+            # mismatched attacks included -- and printed a p across two scoring rules above
+            # a line saying those attacks were left out.
+            if mism:
+                (bn, mn), (bd, md) = breaches(data, naive, mism), breaches(data, base, mism)
             p, test = fisher_exact(bn, mn - bn, bd, md - bd), "Fisher"
         rn = bn / mn if mn else 0.0
         rd = bd / md if md else 0.0
-        verdict, settled = pair_verdict(p, rn, rd, test)
+        # THE DIRECTION FROM WHAT PRODUCED THE p. Under McNemar the p is read off the
+        # discordant shared attacks, and the direction was read off the whole arms -- attacks
+        # only one of them received included -- so six attacks all favouring the defence
+        # printed INVERTED, p=0.031. The discordant counts are the direction of that test.
+        verdict, settled = pair_verdict(p, *((only_n, only_d) if shared else (rn, rd)),
+                                        test=test)
         if shared and not settled and p is not None and only_n > only_d:
             # HOW FAR SHORT, IN THE UNIT THE TEST COUNTS. `more attacks per target` was the
             # advice and it is not a quantity: McNemar reads only the DISCORDANT pairs, so

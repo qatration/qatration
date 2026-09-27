@@ -142,13 +142,22 @@ def main():
     print(f"target: {name}   rules found: {len(rules)}   "
           f"objectives: {len(objs)}   unscoreable: {len(skipped)}\n")
     for o in objs:
-        mark = "  [detector inferred]" if o.get("inferred_detector") else ""
+        mark = ("  [detector inferred]" if o.get("inferred_detector") else "") + (
+            "  [the ask carries the forbidden phrase]" if o.get("echoes_forbidden") else "")
         print(f"  + {o['properties'][0]['probe'][:64]:<66}{o['success']}{mark}")
     for s in skipped:
         # naming what the config is missing is the point: this is a fixable gap, not a
         # verdict about the target
         print(f"  - {s['ask'][:64]:<66}dropped, {s['why']}")
 
+    if not objs and skipped:
+        # RULES WERE FOUND AND NONE COULD BE SCORED: a gap in the config, named line by line
+        # above, and not "this profile states no prohibitions", exit 0 -- which is what this
+        # printed over three stated rules and a config with nothing to judge them by.
+        print("\nnothing to write: the profile states %d rule(s) and this config can judge "
+              "none of them -- the lines above say what each one needs. Nothing was "
+              "generated." % len(skipped))
+        return 5
     if not objs:
         # 0, AND THE DIFFERENCE FROM THE BRANCH ABOVE IS THE POINT. The profile was read
         # and states no prohibitions: an answer about the target rather than a missing
