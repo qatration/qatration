@@ -403,7 +403,12 @@ only the third.
   that stopped being readable is the same event one level in and gets its own verdict,
   `blind`: under an unchanged version it has the shape of a rug pull and none of the
   evidence, since nothing was shown to have moved and the place it would have moved could
-  not be read. Its items are not reported as removed either.
+  not be read. Its items are not reported as removed either. The mirror is `first read`: a
+  channel the earlier reading could not list and this one can is not a list of additions,
+  since nothing says those items were not there before, and it exits `0` as well. A channel
+  the server did not declare before was empty by design, so an item appearing there is a
+  change. A comparison in which no server could be re-read at all exits `3`: nothing was
+  measured.
 
 Neither has a better code available: `2` is a refusal, `3` is nothing measured, and either would
 tell a pipeline to ignore it.

@@ -563,13 +563,23 @@ def main():
     honoured = fingerprint(_History(True), CTX)
     check("a target that reads the transcript it is handed is recorded as doing so",
           honoured.get("reads_supplied_history"), True)
-    check("...and raises no warning about it", honoured.get("warnings"), None)
+    # THROUGH `hints`, the one place a profile's warnings are worded: this was a `warnings`
+    # list on the profile that no surface read, so the console, the fleet page and the
+    # report showed a target that discards forged transcripts with no warning at all.
+    from recon import hints as _hints_fh
+
+    def _fh_warned(p):
+        return any("forged_history" in h["text"] for h in _hints_fh(p) if h["level"] == "warn")
+    check("...and raises no warning about it", _fh_warned(honoured), False)
 
     ignored = fingerprint(_History(False), CTX)
     check("a target that DISCARDS the transcript is caught, not assumed",
           ignored.get("reads_supplied_history"), False)
     check("...and the profile says the attacks against it will measure nothing",
-          any("forged_history" in w for w in ignored.get("warnings") or []), True)
+          _fh_warned(ignored), True)
+    from compare_recon import _row as _row_fh
+    check("...on the fleet page too, which reads the same hints",
+          any("forged_history" in w for w in _row_fh(ignored, "h", "t")["warnings"]), True)
 
     # --- FINDINGS OF AN INDEPENDENT REVIEW OF RECON ---------------------------------------
     # AN EMPTY REPLY TO THE FORGED TRANSCRIPT SAYS NOTHING: it read "did not read a transcript".
@@ -579,7 +589,20 @@ def main():
     _hs = fingerprint(_HistSilent(True), CTX)
     check("an empty reply to a forged transcript is unmeasured, and raises no warning",
           (_hs.get("reads_supplied_history"),
-           any("forged_history" in w for w in _hs.get("warnings") or [])), (None, False))
+           _fh_warned(_hs)), (None, False))
+
+    # A REFUSAL PROBE THAT DID NOT LAND proposed no pattern, so the fleet row read
+    # `unlabelled 0`, no warning -- the same row as a target whose every refusal was heard.
+    _vocab_ok = [{"probe": _pid, "class": "refusal"} for _pid in ("identity", "content")]
+    _vocab_dead = [{"probe": "identity", "class": "error"},
+                   {"probe": "content", "class": "silent"}]
+    _dead_w = [h["text"] for h in _hints_fh({"refusal_vocab": _vocab_dead})
+               if h["level"] == "warn"]
+    check("refusal probes that errored or came back silent are named in a warning",
+          any("identity, content refusal probe(s) did not land" in w for w in _dead_w), True)
+    check("...and ones that landed raise none",
+          [h for h in _hints_fh({"refusal_vocab": _vocab_ok, "baseline_reply": "hi"})
+           if h["level"] == "warn"], [])
 
     # A RESET THAT WAS NOT MEASURED IS NOT "RESET DOES NOT CLEAR".
     from recon import memory_phrase as _mp

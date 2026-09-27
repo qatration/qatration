@@ -231,15 +231,82 @@ except SystemExit as e:
 # measured — and the only place it went was the `error` field of each affected probe.
 # The run's closing line counted those rows under `%d more errored and were not scored`:
 # true, and silent about the one thing that decides whether the rest is evidence at all.
-from signing import credential_note as _cn, REJECTED as _REJ
+from signing import credential_note as _cn, REJECTED as _REJ, EXPIRED as _EXP
+
+
+def _rows(*per_row, head="ERROR", cat="x"):
+    return [{"headline": head, "attack": {"category": cat},
+             "trials": [{"probe": {"error": e}} for e in errs]} for errs in per_row]
+
+
 check("a run with no credential trouble says nothing about credentials",
-      _cn(["Timeout: x", None, ""]) == "", _cn(["Timeout: x"]))
-check("...and one that had it says so, with how many rows it cost",
+      _cn(_rows(["Timeout: x", None, ""])) == "", _cn(_rows(["Timeout: x"])))
+check("...and one that had it says so, with how many ROWS it cost",
       "2 of them stopped at the credential" in _cn(
-          ["%s: gone" % _REJ, "Timeout", "%s: gone" % _REJ]),
-      _cn(["%s: gone" % _REJ]))
+          _rows(["%s: gone" % _EXP, "%s: gone" % _EXP], ["Timeout"], ["%s: gone" % _EXP])),
+      _cn(_rows(["%s: gone" % _EXP])))
 check("...and tells the reader not to read the rest as a defence",
-      "as a defence" in _cn(["%s: gone" % _REJ]), _cn(["%s: gone" % _REJ]))
+      "as a defence" in _cn(_rows(["%s: gone" % _EXP])), _cn(_rows(["%s: gone" % _EXP])))
+# COUNTED OVER THE ROWS THE CLOSING LINE COUNTS, not over every trial of every row: it said
+# `1 more errored and were not scored. 4 of them stopped at the credential`.
+check("...counting neither a control nor a scored row, only what error_split counts",
+      _cn(_rows(["%s: gone" % _EXP], cat="control") + _rows(["%s: gone" % _EXP],
+                                                          head="DEFENDED")) == "")
+# AND A KEY REFUSED FROM ITS FIRST REQUEST IS NOT A KEY THAT EXPIRED: both were written under
+# one prefix, and the note said `accepted earlier in this run` about a misconfiguration.
+_first = _cn(_rows(["%s: first" % _REJ]))
+check("a credential refused from the first request is told as configuration, not expiry",
+      "configuration problem" in _first and "accepted earlier" not in _first, _first)
+check("...and the prefix a 401/403 gets follows whether anything was accepted before",
+      (signing.rejection(403, False).startswith(_REJ + ":"),
+       signing.rejection(401, True).startswith(_EXP + ":"), signing.rejection(500, True))
+      == (True, True, ""))
+
+# AND THE ADAPTER PICKS THE PREFIX FROM WHAT IT SAW, driven over loopback: an endpoint that
+# refuses from the first request, and one that answers once and then refuses.
+import http.server as _hs_c, threading as _th_c
+
+
+def _cred_server(ok_first):
+    state = {"n": 0}
+
+    class _H(_hs_c.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            state["n"] += 1
+            if ok_first and state["n"] == 1:
+                body = b'{"reply": "hello"}'
+                self.send_response(200)
+            else:
+                body = b'{"error": "forbidden"}'
+                self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _hs_c.HTTPServer(("127.0.0.1", 0), _H)
+    _th_c.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+_errs_c = {}
+for _okf in (False, True):
+    _srv_c = _cred_server(_okf)
+    try:
+        _t_c = targets_http.HttpConfiguredTarget(
+            url="http://127.0.0.1:%d/chat" % _srv_c.server_address[1],
+            request={"message": "{prompt}"}, response={"reply": "reply"})
+        _errs_c[_okf] = [str(_t_c.send("hi").error or "") for _ in range(2)]
+    finally:
+        _srv_c.shutdown()
+check("the adapter writes a first-request refusal as rejected, a later one as expired",
+      (_errs_c[False][0].startswith(_REJ + ":"), _errs_c[False][1].startswith(_REJ + ":"),
+       _errs_c[True][0], _errs_c[True][1].startswith(_EXP + ":"))
+      == (True, True, "", True), str(_errs_c))
 
 # THE PREFIX IS A CONTRACT BETWEEN TWO MODULES. `targets_http` writes it and `runner` and
 # `run_redteam` read it, and it was spelled separately in each — a reader that stops
@@ -248,7 +315,8 @@ import targets_http as _th_s, runner as _rn_s, io as _io_s
 _src = (_io_s.open(_th_s.__file__, encoding="utf-8").read()
         + _io_s.open(_rn_s.__file__, encoding="utf-8").read())
 check("neither side spells the credential prefix for itself",
-      '"CredentialRejected' not in _src, "CredentialRejected")
+      '"CredentialRejected' not in _src and '"CredentialExpired' not in _src,
+      "CredentialRejected")
 check("...nor the rate-limit one",
       '"RateLimited' not in _src, "RateLimited")
 

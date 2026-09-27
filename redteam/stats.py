@@ -57,8 +57,9 @@ def mcnemar_exact(b, c):
     if n == 0:
         return 1.0
     k = min(b, c)
-    tail = sum(comb(n, i) for i in range(k + 1)) / float(2 ** n)
-    return min(1.0, 2.0 * tail)
+    # INTEGER OVER INTEGER, which Python divides exactly: `float(2 ** n)` overflowed from
+    # n = 1024 on, and a thousand discordant pairs is a large result, not an impossible one.
+    return min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n)
 
 
 def fisher_exact(a, b, c, d):
@@ -72,6 +73,10 @@ def fisher_exact(a, b, c, d):
     whether an attack adds anything -- more than one measurement here has come back pointing
     the other way.
     """
+    # A NEGATIVE COUNT IS NOT A TABLE, as `mcnemar_exact` already says: `(3, -1, 2, 2)` came
+    # back p = 0, the strongest-looking difference this function can give.
+    if min(a, b, c, d) < 0:
+        return None
     n, r1, r2, c1 = a + b + c + d, a + b, c + d, a + c
     if not r1 or not r2:
         # An EMPTY GROUP is the only thing that cannot be compared, and returning 1.0 for it

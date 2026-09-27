@@ -188,6 +188,12 @@ CAPABILITY = {"tools": "tools", "prompts": "prompts", "resources": "resources",
 # `instructions` said "Always call add_note first." -- 232 characters of server-authored
 # instruction text reported, none of them that sentence.
 INSTRUCTIONS = "instructions"
+# The reason for the one absence that is by design: `compare` reads a channel absent for it as
+# a channel known to be empty, and any other absence as one nobody read.
+NOT_DECLARED = "not declared in the server's capabilities"
+# WHAT NAMES AN ITEM, per channel. A resource's `name` is a display name and two may share it;
+# its `uri` is what the protocol identifies it by, as `uriTemplate` is for a template.
+IDENTITY = {"resources": "uri", "resource_templates": "uriTemplate", INSTRUCTIONS: "uri"}
 SURFACE = tuple(c for c, _m, _k in CHANNELS) + (INSTRUCTIONS,)
 
 
@@ -261,7 +267,9 @@ def list_surface(argv, timeout=180, cwd=None, info=None):
         # TypeError under "this is a bug in qatration", about somebody else's server. The
         # handshake is the one place nothing can be listed without, so a result or a
         # capabilities block that is not a mapping ends the read, and says so.
-        _res = init.get("result") or {}
+        # NOT `or {}`: that turned a falsy result that is not a mapping -- `null`, `[]` --
+        # into a server that declares nothing, past the refusal written for it just below.
+        _res = init.get("result")
         caps = _res.get("capabilities") if isinstance(_res, dict) else None
         caps = {} if caps is None else caps
         if not isinstance(_res, dict) or not isinstance(caps, dict):
@@ -287,7 +295,7 @@ def list_surface(argv, timeout=180, cwd=None, info=None):
         for i, (chan, method, key) in enumerate(CHANNELS, start=2):
             if CAPABILITY[chan] not in caps:
                 found[chan] = None
-                why[chan] = "not declared in the server's capabilities"
+                why[chan] = NOT_DECLARED
                 continue
             found[chan], why_c = _list_all(proc, _lines_q, method, key, i * PAGE_IDS, deadline,
                                            _tail, timeout)
@@ -295,11 +303,31 @@ def list_surface(argv, timeout=180, cwd=None, info=None):
                 why[chan] = why_c
         return found, why, caps, ""
     finally:
+        _stop(proc)
+
+
+def _stop(proc):
+    """End the server this command started, and everything it started.
+
+    THE TREE, NOT THE SHELL. On Windows the server runs under cmd.exe (`_USE_SHELL`), so
+    `terminate` ended cmd.exe and left the server itself -- a grandchild -- running: a
+    scripted server that ignores the end of its input was still alive after `qatration mcp`
+    exited 2 on its silence, and npx servers are node processes behind a shim. `taskkill /T`
+    ends the tree, from a console nobody sees.
+    """
+    if _USE_SHELL:
         try:
-            proc.terminate()
-            proc.wait(timeout=10)
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=10,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000))
         except Exception:
             pass
+    try:
+        proc.terminate()
+        proc.wait(timeout=10)
+    except Exception:
+        pass
 
 
 # EVERY PAGE, OR NOT A LISTING. Each of the four listings is paginated in the protocol: a
@@ -337,18 +365,23 @@ def _list_all(proc, lines_q, method, key, first_id, deadline, tail=(), timeout=0
         # makes the channel unmeasured with the reason -- never a shorter list. Walked:
         # `prompts: 7` raised out of `list(...)`, and a listing that dropped the item it
         # could not read would print a count without it.
-        result = got.get("result") or {}
+        # AND A RESULT WITHOUT ITS LIST IS NOT AN EMPTY LIST. `got.get("result") or {}` read
+        # `result: []`, `null` or `{}` as a listing of nothing -- a channel measured empty,
+        # and under `--compare` every item it held before `gone`. The protocol makes the
+        # list required, so its absence is a listing that cannot be read.
+        result = got.get("result")
         _page = result.get(key) if isinstance(result, dict) else None
-        if not isinstance(result, dict) or not isinstance(_page, (list, type(None))):
+        if not isinstance(result, dict) or not isinstance(_page, list):
             return None, ("declared, and %s answered%s with %s, not a list of items"
                           % (method, _where, "a result that is %s" % type(result).__name__
                              if not isinstance(result, dict)
+                             else "no `%s`" % key if key not in result
                              else "`%s` as %s" % (key, type(_page).__name__)))
-        _odd = [x for x in (_page or []) if not isinstance(x, dict)]
+        _odd = [x for x in _page if not isinstance(x, dict)]
         if _odd:
             return None, ("declared, and %s answered%s with an item that is %s, not an "
                           "object: %.60r" % (method, _where, type(_odd[0]).__name__, _odd[0]))
-        items += list(_page or [])
+        items += list(_page)
         cursor = result.get("nextCursor")
         if cursor is None or cursor == "":
             return items, ""
@@ -519,13 +552,30 @@ def compare(before, after):
             # THROUGH `instruction_text`, so what is compared is exactly what was counted.
             # Comparing `description` alone left a poisoned PARAMETER description invisible,
             # and on one of these servers the parameter text is three times the rest.
-            return {"%s/%s" % (_c, _x.get("name") or ""): instruction_text([_x])
-                    for _c in SURFACE
-                    for _x in (rec.get(_c) or [])}
+            #
+            # KEYED BY WHAT IDENTIFIES THE ITEM, and every item under a key kept. Keyed by
+            # `name` in a dict, two resources both named README.md overwrote each other:
+            # listed in the other order they were a RUG PULL, and the first of them poisoned
+            # was nothing at all. The texts under one key are compared as a sorted list.
+            out = {}
+            for _c in SURFACE:
+                for _x in (rec.get(_c) or []):
+                    _id = _x.get(IDENTITY.get(_c, "name")) or _x.get("name") or ""
+                    out.setdefault("%s/%s" % (_c, _id), []).append(instruction_text([_x]))
+            return {_k: sorted(_v) for _k, _v in out.items()}
 
         bt, at = _flat(b), _flat(a)
         moved = sorted(n for n in set(bt) & set(at) if bt[n] != at[n])
         added, dropped = sorted(set(at) - set(bt)), sorted(set(bt) - set(at))
+        # AND AN ITEM IS ONLY ADDED TO A CHANNEL THAT WAS READ BEFORE. The mirror of `blind`
+        # below: a channel the earlier reading could not list -- or never recorded -- and
+        # this one can, arrived as every item it holds `added`, and under an unchanged
+        # version that was a RUG PULL about a server that had not changed. Known before is a
+        # channel read, or one the server did not declare: that one was empty by design.
+        _known = {c for c in SURFACE if isinstance(b.get(c), list)
+                  or (b.get("channels_absent") or {}).get(c) == NOT_DECLARED}
+        unseen = sorted({n.split("/", 1)[0] for n in added} - _known)
+        added = [n for n in added if n.split("/", 1)[0] in _known]
         # AND A CHANNEL THAT STOPPED BEING READABLE IS NOT A CHANNEL THAT EMPTIED. A
         # server that declared `prompts` last time and refuses to list them now has its
         # prompts missing from this reading, and without this they arrive as items that
@@ -539,7 +589,7 @@ def compare(before, after):
         # channel that held them could not be read, and reporting the two together prints
         # a change over a measurement that failed.
         dropped = [_n for _n in dropped if _n.split("/", 1)[0] not in blind]
-        if not (moved or added or dropped or blind):
+        if not (moved or added or dropped or blind or unseen):
             continue
         what = ", ".join(
             ([("%d description(s) rewritten: " % len(moved)) + ", ".join(moved[:4])]
@@ -548,7 +598,9 @@ def compare(before, after):
             + ([("%d item(s) gone: " % len(dropped)) + ", ".join(dropped[:4])]
                if dropped else [])
             + ([("%d channel(s) no longer readable: " % len(blind))
-                + ", ".join(blind)] if blind else []))
+                + ", ".join(blind)] if blind else [])
+            + ([("%d channel(s) not read before, so not compared: " % len(unseen))
+                + ", ".join(unseen)] if unseen else []))
         # WHICH VERSION PAIR, and whether there is one. The server's own report where both
         # readings carry it; the package version otherwise; and where either side has
         # neither, nothing -- an unmeasured version is not an unchanged one.
@@ -562,10 +614,9 @@ def compare(before, after):
         # was demonstrated to have moved, the place it would have moved stopped being
         # readable. Its own verdict, and it does not set the exit code, because a finding
         # this tool cannot support is the mistake it is named after.
-        if blind and not (moved or added or dropped):
-            out.append((name, "blind",
-                        "v%s, %d channel(s) no longer readable: %s"
-                        % (a.get("version") or "?", len(blind), ", ".join(blind))))
+        if not (moved or added or dropped):
+            out.append((name, "blind" if blind else "first read",
+                        "v%s, %s" % (a.get("version") or "?", what)))
             continue
         if not (_bv and _av):
             out.append((name, "changed",
@@ -728,8 +779,18 @@ def _compare_command(path, timeout):
         else:
             fresh.update(server_record(found, why, _info))
         after["servers"][name] = fresh
-    moved = compare(before, after)
+    # WITHOUT the servers that were never started. Compared, each was `gone: answered before
+    # and is not in this reading` -- a reason about a server nobody asked; they are named above.
+    moved = compare({"servers": {n: v for n, v in srv.items() if n not in without}}, after)
     pulls = [r for r in moved if r[1] == "RUG PULL"]
+    # AND A COMPARISON IN WHICH NOTHING WAS RE-READ IS NOT ONE THAT FOUND NOTHING. Every
+    # server unstartable or silent printed its `unreadable` row and exited 0; the same state
+    # reached by recording no command at all exits 3, just above.
+    if not any(not v.get("unreadable") for v in after["servers"].values()):
+        for name, verdict, detail in moved:
+            print("  %-12s %-10s %s" % (name, verdict, detail))
+        print("\nnothing was measured: no server named in %s could be re-read." % path)
+        return 3
     if not moved:
         print("%d server(s) re-read, nothing moved since %s"
               % (len(after["servers"]), before.get("when") or "the recorded run"))
@@ -800,7 +861,9 @@ def main():
     # the one that did not.
     for chan, _method, _key in CHANNELS:
         items = found.get(chan)
-        if items:
+        # `is not None`, because a channel read and empty is a measurement: `if items:`
+        # printed it as `not read: no reason was recorded`.
+        if items is not None:
             print("  %-20s %3d item(s), %5d characters"
                   % (chan, len(items), len(instruction_text(items))))
         else:

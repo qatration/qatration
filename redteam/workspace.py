@@ -2228,8 +2228,15 @@ def error_split(results):
     endpoint once and ran out of budget on the second trial was sent, and what happened to it
     is the target's answer.
     """
+    errored, never = error_split_rows(results)
+    return len(errored), len(never)
+
+
+def error_split_rows(results):
+    """-> ([errored rows], [never-sent rows]): `error_split`, keeping the rows themselves, for
+    a reader that has to say something about the same rows it counts."""
     from signing import NEVER_SENT
-    errored = never = 0
+    errored, never = [], []
     for r in results or []:
         if r.get("headline") != "ERROR":
             continue
@@ -2238,9 +2245,9 @@ def error_split(results):
         errs = [str((_t.get("probe") or {}).get("error") or "")
                 for _t in (r.get("trials") or [])]
         if errs and all(e.startswith(NEVER_SENT) for e in errs):
-            never += 1
+            never.append(r)
         else:
-            errored += 1
+            errored.append(r)
     return errored, never
 
 

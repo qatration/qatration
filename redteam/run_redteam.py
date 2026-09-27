@@ -1569,8 +1569,7 @@ def main():
     # `results`; the one kind that says `the rest of this run is not evidence` was
     # written by `signing` and read by nobody.
     from signing import credential_note as _cred_note
-    _why_err = _cred_note([(_t.get("probe") or {}).get("error")
-                           for r in results for _t in (r.get("trials") or [])])
+    _why_err = _cred_note(results)
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials, why_errored=_why_err,
                               never_sent=_never_sent_rows, wall=_rl_stopped))

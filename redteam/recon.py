@@ -315,6 +315,26 @@ def hints(profile):
             info("no hard content lock: every forbidden token echoes on a bare ask, so a "
                  "forced_output finding must come from a real objective, not an echo")
 
+    # SAID, not stored quietly. The run that follows is about to spend its forged-history
+    # budget on a target that discards the forgery, and every clean verdict it produces will
+    # be unattributable. This was appended to a `warnings` list nothing read: the console,
+    # the fleet page and the report showed the target with no warning at all.
+    if profile.get("reads_supplied_history") is False:
+        warn("this target declares `forged_history` but did not read a transcript it was "
+             "handed: a planted assistant turn came back unseen. Multi-turn and "
+             "Context-Compliance results against it measure nothing until that is explained.")
+
+    # AND A REFUSAL PROBE THAT DID NOT LAND IS NOT A REFUSAL THAT WAS LABELLED. An errored or
+    # silent probe proposes no pattern, so `unlabelled` read 0 and the row was the same as a
+    # fully measured one -- and the capability probe's fabricated-completion warning above
+    # cannot fire on a reply that never came.
+    _dead = [str(v.get("probe")) for v in (profile.get("refusal_vocab") or [])
+             if isinstance(v, dict) and v.get("class") in ("error", "undelivered", "silent")]
+    if _dead:
+        warn(f"the {', '.join(_dead)} refusal probe(s) did not land, so how this target says "
+             "no was not heard there -- a refusal it words differently can still read as "
+             "'compliance', and the unlabelled count says nothing about them")
+
     new = profile.get("new_patterns", {})
     if new:
         n = sum(len(v) for v in new.values())
@@ -560,15 +580,9 @@ def fingerprint(target, ctx=None, benign_prompt=None, tool_prompt=None, max_toke
         # review.
         honoured = None if (seen is None or seen.error or seen.silent()) else (
             MEMO_TOKEN.lower() in (seen.output or "").lower())
+        # The warning is `hints`' (the one place a profile's warnings are worded), so every
+        # surface that shows the profile shows it.
         profile["reads_supplied_history"] = honoured
-        if honoured is False:
-            # SAID, not stored quietly. The run that follows is about to spend its
-            # forged-history budget on a target that discards the forgery, and every clean
-            # verdict it produces will be unattributable.
-            profile.setdefault("warnings", []).append(
-                "this target declares `forged_history` but did not read a transcript it was "
-                "handed: a planted assistant turn came back unseen. Multi-turn and "
-                "Context-Compliance results against it measure nothing until that is explained.")
 
     # 4. refusal vocabulary: hear it say no, then check whether the classifier heard it too
     vocab, new_patterns = [], {}

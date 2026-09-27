@@ -217,8 +217,40 @@ def _placeholder_checks():
           "YOUR" in _ic.DEFAULT_MODEL.upper(), _ic.DEFAULT_MODEL)
 
 
+def _value_checks():
+    # EVERY VALUE COMES BACK AS WHAT WAS TYPED. `name: {name}` was bare, so `--name null`
+    # wrote a nameless config every later command refused, and `0x10`, `yes`, `010` named the
+    # target 16, True and 8; inside hand-written quotes a backslash in a model or url was an
+    # escape and a `"` ended the scalar.
+    _odd = [("null", "http://localhost:8000/chat", "llama" + chr(92) + "tv2"),
+            ("0x10", "http://localhost:8000/a" + chr(92) + "b", 'my"model'),
+            ("yes", "http://localhost:8000/chat", "C:" + chr(92) + "x"),
+            ("010", "http://localhost:8000/chat", ".inf")]
+    _back = []
+    for _n, _u, _m in _odd:
+        try:
+            _c = yaml.safe_load(init_config.render(out="x.yaml", url=_u, name=_n, model=_m))
+            _back.append((_c["name"], _c["url"], _c["request"]["model"]))
+        except Exception as e:
+            _back.append("%s: %s" % (type(e).__name__, e))
+    check("name, url and model read back exactly as given, whatever YAML would make of them",
+          _back == _odd, str([b for b, o in zip(_back, _odd) if b != o]))
+    # AND THE BLOCK TO UNCOMMENT IS THE BLOCK `init` AND `mint` PRINT, not a copy that had
+    # already lost a sentence of the defence.
+    import honeytoken as _ht_v
+    _t = init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X")
+    _plant = " ".join(_l.strip().lstrip("#").strip() for _l in _t.splitlines()
+                      if _l.strip().startswith("#") and ("dispatch key" in _l
+                                                         or "confidential" in _l
+                                                         or "deployment reference" in _l))
+    check("the commented system message carries the whole planted block",
+          " ".join(_ht_v.snippet("QAT-CANARY-AAAA1111BBBB2222", "QAT-VERIFY-X").split())
+          in " ".join(_plant.split()), _plant)
+
+
 def main():
     _placeholder_checks()
+    _value_checks()
     text = init_config.render(out="mybot.yaml", url="https://bot.example.com/chat",
                               name="mybot")
 

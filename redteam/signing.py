@@ -132,6 +132,10 @@ def authorization(method, url, headers, payload, service, region,
 # what the writer writes. `RateLimited` next to it is the same shape and already spelled
 # in two files, so it moves here with this one.
 REJECTED = "CredentialRejected"
+# AND THE ONE THAT WORKED FIRST. Both were written under `REJECTED`, so the closing line's
+# `it was accepted earlier in this run and rejected later` was printed over a key refused
+# from its first request -- a misconfiguration, told as an expiry. Two facts, two prefixes.
+EXPIRED = "CredentialExpired"
 RATE_LIMITED = "RateLimited"
 # AND THE THIRD ONE, which was spelled in `targets_http` and read by NOBODY. The budget
 # writes `it was never sent` onto a probe, and with no reader for it the only signal
@@ -141,7 +145,7 @@ RATE_LIMITED = "RateLimited"
 NEVER_SENT = "BudgetExhausted"
 
 
-def credential_note(errors):
+def credential_note(results):
     """-> what a run has to say once, at the end, when its credential stopped working.
 
     THE CAVEAT WAS WRITTEN AND NEVER DELIVERED. `expired_credential` composes the
@@ -159,14 +163,40 @@ def credential_note(errors):
 
     Counted, not merely detected: how many rows were lost is the difference between a
     token that died on the last probe and one that died a third of the way in.
+
+    COUNTED IN ROWS, the rows the sentence it follows counts. It was handed every TRIAL of
+    every row -- controls and scored rows too -- and closed `1 more errored and were not
+    scored. 4 of them stopped at the credential`. The rows are `workspace.error_split`'s own:
+    an errored, non-control row the budget did not stop.
     """
-    n = sum(1 for e in errors if str(e or "").startswith(REJECTED))
-    if not n:
+    from workspace import error_split_rows
+    later = first = 0
+    for r in error_split_rows(results)[0]:
+        errs = [str((_t.get("probe") or {}).get("error") or "") for _t in (r.get("trials") or [])]
+        if any(e.startswith(EXPIRED) for e in errs):
+            later += 1
+        elif any(e.startswith(REJECTED) for e in errs):
+            first += 1
+    said = []
+    if later:
+        said.append("%d of them stopped at the credential, not at the target: it was accepted "
+                    "earlier in this run and rejected later, so those attacks were never "
+                    "delivered and nothing here says the target refused them. Mint a fresh "
+                    "one and re-run before reading any of this as a defence." % later)
+    if first:
+        said.append("%d of them were refused the credential with nothing accepted before: a "
+                    "configuration problem, not a finding -- nothing here says the target "
+                    "refused those attacks. Check the header, the environment variable and "
+                    "the key's permissions before reading any of this as a defence." % first)
+    return " ".join(said)
+
+
+def rejection(status, seen_success):
+    """-> the `error` a probe carries for a 401/403, under the prefix its cause takes, or ""."""
+    note = expired_credential(status, seen_success)
+    if not note:
         return ""
-    return ("%d of them stopped at the credential, not at the target: it was accepted "
-            "earlier in this run and rejected later, so those attacks were never "
-            "delivered and nothing here says the target refused them. Mint a fresh one "
-            "and re-run before reading any of this as a defence." % n)
+    return "%s: %s" % (EXPIRED if seen_success else REJECTED, note)
 
 
 def expired_credential(status, seen_success):

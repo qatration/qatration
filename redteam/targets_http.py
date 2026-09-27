@@ -1158,10 +1158,9 @@ class HttpConfiguredTarget(Target):
                         pass
                     return _p
                 import signing
-                note = signing.expired_credential(e.code, self._seen_success)
+                note = signing.rejection(e.code, self._seen_success)
                 if note:
-                    return Probe(prompt=prompt, output="",
-                                 error="%s: %s" % (signing.REJECTED, note),
+                    return Probe(prompt=prompt, output="", error=note,
                                  seconds=round(time.time() - t0, 1))
             return Probe(prompt=prompt, output="", error=f"{type(e).__name__}{detail}: {e}",
                          seconds=round(time.time() - t0, 1))

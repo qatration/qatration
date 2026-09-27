@@ -1537,6 +1537,11 @@ def test_the_paired_statistic():
     assert not _off, ("two McNemar implementations disagree at %s" % _off[:4])
     assert _stats.mcnemar_exact(0, 0) == 1.0, _stats.mcnemar_exact(0, 0)
     assert ps.mcnemar(0, 0) is None, ps.mcnemar(0, 0)
+    # A THOUSAND DISCORDANT PAIRS IS A LARGE RESULT: `float(2 ** n)` overflowed from n = 1024.
+    assert 0 < _stats.mcnemar_exact(600, 500) < 0.01, "mcnemar over 1100 pairs"
+    assert _stats.mcnemar_exact(5000, 5000) == 1.0, _stats.mcnemar_exact(5000, 5000)
+    # AND A NEGATIVE CELL IS NOT A TABLE, in either test: Fisher answered p = 0.
+    assert _stats.fisher_exact(3, -1, 2, 2) is None, _stats.fisher_exact(3, -1, 2, 2)
     # AND THE SHARING IS BY IMPORT RATHER THAN BY HAVING THE SAME NUMBERS TODAY.
     _ps_src = io.open(os.path.join(ROOT_DIR, "tools", "paired_score.py"),
                       encoding="utf-8").read()
