@@ -207,9 +207,11 @@ def _unreadable_panel(kind, art):
                esc(art["unreadable"])))
 
 
-def _recon_panel(recon):
+def _recon_panel(recon, model=None):
     """The target's fingerprint, and above all the warnings that say the numbers below
-    cannot be trusted yet (a reset() that does not reset, a tool channel that only prints)."""
+    cannot be trusted yet (a reset() that does not reset, a tool channel that only prints).
+
+    `model` is the sweep's: a profile measured on another model is said to be one."""
     if not recon:
         return ""
     if isinstance(recon, dict) and recon.get("unreadable"):
@@ -221,12 +223,11 @@ def _recon_panel(recon):
                         clears="yes — reset clears",
                         sticks="yes — <b>reset does NOT clear</b>",
                         chain_only="not across single sends — <b>this target carries chains</b>")
-    s = p.get("style", {})
-    shapes = ", ".join(k for k in ("headers", "bullets", "numbered", "code_fence", "json",
-                                   "emoji") if s.get(k)) or "plain prose"
+    from recon import style_phrase as _style_phrase
+    shapes = _style_phrase(p, ", ")
     kv = [("tool channel", esc(p.get("tool_channel", "?"))
            + (f" — {esc(', '.join(p.get('tools_seen', [])))}" if p.get("tools_seen") else "")),
-          ("memory", mem), ("house style", esc(shapes))]
+          ("memory", mem), ("house style", esc(shapes) if shapes else "not measured")]
     if p.get("disclosure_open") is not None:
         kv.append(("plain disclosure ask",
                    "<b>leaks</b>" if p["disclosure_open"] else "held"))
@@ -243,6 +244,14 @@ def _recon_panel(recon):
     hs = _current_hints(p)
     warns = "".join(f'<div class="warn">{esc(h["text"])}</div>'
                     for h in hs if h["level"] == "warn")
+    # A PROFILE OF ANOTHER MODEL. `recon --model B` and `run` on model A write and read the
+    # same `recon_<target>.json`, and every warning in it was measured on whichever ran
+    # last. A profile from before this field existed says nothing, as it always did.
+    if p.get("model") and model and str(p.get("model")) != str(model):
+        warns = ('<div class="warn">%s</div>' % esc(
+            "this profile was measured on model %s and this sweep ran %s: what it says "
+            "about memory, tools and refusals may not hold for this model -- re-run recon "
+            "with --model %s" % (p.get("model"), model, model))) + warns
     infos = "".join(f'<li>{esc(h["text"])}</li>' for h in hs if h["level"] != "warn")
     # A ROW WHOSE CLASS IS `compliance` IS THE TARGET NOT REFUSING, and it rendered
     # exactly like one that did: same column, same dim mono cell, under a heading that
@@ -672,7 +681,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 {inert_html}
 {deadpath_html}
 {auth_html}
-{_recon_panel(recon)}
+{_recon_panel(recon, meta.get("model"))}
 <table>
 <thead><tr><th>ID</th><th>Technique</th><th>Delivery</th><th>Verdict</th><th>Rate</th><th>Blocked by</th><th>Detectors</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>

@@ -100,6 +100,10 @@ def main():
     profile = fingerprint(target, ctx,
                           tool_prompt=args.tool_prompt or tcfg.get("baseline_prompt"),
                           max_tokens=args.max_tokens)
+    # THE MODEL IT WAS MEASURED ON, which the profile did not carry: `--model` writes the
+    # same file a sweep of another model reads. Found by an independent review.
+    if tcfg.get("model"):
+        profile["model"] = str(tcfg.get("model"))
     print(format_profile(profile))
 
     # NOTHING LANDED IS NOT A PROFILE. Every field above already refuses to guess from an

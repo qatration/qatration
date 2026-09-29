@@ -107,7 +107,10 @@ def main():
     # every target, so refuse to sweep on a broken arsenal.
     print("pre-flight: linting arsenal…")
     try:
-        _lint_rc = subprocess.run([PY, os.path.join(ROOT, "lint_arsenal.py")], env=env,
+        # THE ARSENAL THIS SWEEP SENDS, not the one beside the linter: `--attacks mine.yaml`
+        # was swept after a pre-flight that linted the shipped corpus. Found by review.
+        _lint_rc = subprocess.run([PY, os.path.join(ROOT, "lint_arsenal.py"),
+                                   "--attacks", args.attacks], env=env,
                                   timeout=TOOL_DEADLINE).returncode
     except subprocess.TimeoutExpired:
         print("ABORT — the arsenal lint did not finish in %ds. It reads files and calls no "

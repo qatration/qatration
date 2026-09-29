@@ -1117,6 +1117,20 @@ def main():
     from honeytoken import weak_canaries as _weak_canaries
     for _c, _why in _weak_canaries(ctx):
         print("  ! canary %r %s" % (_c, _why))
+    # AND NONE THE ATTACKER TYPES. See `lint_arsenal.sent_canaries`: a canary the attack sends
+    # itself comes back from any echoing target as a "leak", so the run refuses rather than
+    # score the attacker's own string. Before anything is sent, like the rules above.
+    from lint_arsenal import sent_canaries as _sent_canaries
+    _typed = [(a.get("id"), c) for a in all_attacks for c in _sent_canaries(a, ctx)]
+    if _typed:
+        print("run: %d attack(s) in %s send this target's own canary, so an echo of the "
+              "attacker's text would score as a leak of its secret. Nothing was sent."
+              % (len(_typed), args.attacks), file=sys.stderr)
+        for _aid, _c in _typed[:8]:
+            print("    %s sends %r -- plant a marker the attack owns (`plants:`) instead"
+                  % (_aid, _c), file=sys.stderr)
+        _refuse(2, "%d attack(s) send the target's own canary; nothing was sent and nothing "
+                   "was written" % len(_typed))
     # AND THE TEMPLATE'S OWN WORDS, IF THEY ARE STILL THERE. `onboard` says this too and a
     # reader can skip `onboard`; this is the command that writes the artifact, and
     # `config_model` reads `request.model` straight into `meta["model"]`, from where the

@@ -263,6 +263,7 @@ def main():
                 _f.write(chr(10).join([
                     "adapter: http",
                     "name: alivebot",
+                    "model: probe-model-7",
                     'url: "http://127.0.0.1:%d/chat"' % _srv3.server_address[1],
                     "request:",
                     '  message: "{prompt}"',
@@ -297,6 +298,8 @@ def main():
             _prof = _json4.load(io.open(
                 os.path.join(_out2, [f for f in os.listdir(_out2)
                                      if f.startswith("recon_")][0]), encoding="utf-8"))
+            check("a recon profile records the model it was measured on",
+                  (_prof.get("profile") or _prof).get("model"), "probe-model-7")
             check("a recon profile records when it was measured",
                   bool(_prof.get("when")), True)
             check("...in a shape `measured_when` reads as the run's own",
@@ -587,9 +590,12 @@ def main():
         def send_forged(self, prompt, history):
             return Probe(prompt, "")
     _hs = fingerprint(_HistSilent(True), CTX)
-    check("an empty reply to a forged transcript is unmeasured, and raises no warning",
-          (_hs.get("reads_supplied_history"),
-           _fh_warned(_hs)), (None, False))
+    # UNMEASURED, AND SAID TO BE: not "did not read a transcript", which claims a finding
+    # about the target, and not silence either, which was the next review's finding.
+    _hs_said = " ".join(h["text"] for h in _hints_fh(_hs))
+    check("an empty reply to a forged transcript is unmeasured, not a discarded transcript",
+          (_hs.get("reads_supplied_history"), "did not read a transcript" in _hs_said,
+           "forged-history probe did not land" in _hs_said), (None, False, True))
 
     # A REFUSAL PROBE THAT DID NOT LAND proposed no pattern, so the fleet row read
     # `unlabelled 0`, no warning -- the same row as a target whose every refusal was heard.
@@ -927,6 +933,50 @@ def main():
                _io_d.open(_atk_d, encoding="utf-8").read() == _atk_body), (2, 0, True))
     finally:
         _srv_d.shutdown()
+
+    # --- the second review: what recon did not measure is said, on every surface ---------
+    from recon import hints as _h2, style_phrase as _sp_r
+    import report_engine as _re2
+
+    def _said_h(p, level=None):
+        return " ".join(h["text"] for h in _h2(p) if level is None or h["level"] == level)
+
+    class _HistDown(_History):
+        def send_forged(self, prompt, history):
+            return Probe(prompt, "", error="connection refused")
+
+    _up, _down = fingerprint(_History(True), CTX), fingerprint(_HistDown(True), CTX)
+    check("a forged-history probe that errored is counted among the probes",
+          _down["probes"], _up["probes"])
+    check("...and among the errors", _down["errors"], _up["errors"] + 1)
+    check("...and is said, not left as a silent None",
+          "forged-history probe did not land" in _said_h(_down, "warn"), True)
+    check("...while one that landed says nothing of the kind",
+          "forged-history probe did not land" in _said_h(_up), False)
+
+    # One token tried (the one this bot echoes), three not.
+    _many = {"forbidden_tokens": ["guaranteed returns", "fuck", "scam", "wire it now"]}
+    _few = fingerprint(Bot(), _many, max_tokens=1)
+    check("a content lock that tried 1 of 4 tokens says 3 were not tried",
+          "3 more were not tried" in _said_h(_few), True)
+    check("...and does not speak for every forbidden token",
+          "every forbidden token echoes" in _said_h(_few), False)
+    check("a reset re-check that did not land is said beside `stateful`",
+          "not measured" in _said_h({"statefulness": {"remembers": True,
+                                                      "reset_clears": None}}), True)
+    check("a self-description probe that did not land is a warning",
+          "self-description probe did not land" in _said_h(
+              {"unmeasured": ["self_description"]}, "warn"), True)
+    check("house style from a control that never answered is not `plain prose`",
+          _sp_r({"baseline_reply": "", "style": {}}), None)
+    _pan = _re2._recon_panel({"profile": {"baseline_reply": "", "style": {}}})
+    check("...and the report says `not measured` for it, as the console does",
+          "not measured" in _pan and "plain prose" not in _pan, True)
+    _pm = {"profile": {"model": "model-a", "baseline_reply": "Hi.", "style": {}}}
+    check("a profile of another model is said to be one on the report",
+          "measured on model model-a" in _re2._recon_panel(_pm, "model-b"), True)
+    check("...and not when the models match",
+          "measured on model" in _re2._recon_panel(_pm, "model-a"), False)
 
     # Counted as they run, not declared, and taken HERE rather than partway up. A hardcoded
     # total is a coverage claim nothing keeps true — five of these suites had drifted below

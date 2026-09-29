@@ -71,19 +71,29 @@ def typed_canaries(a, by_name):
     `by_name` is `workspace.configs_by_name`; an attack with no `applies_to` runs against every
     target, so it is asked against every target's canaries.
     """
-    import honeytoken as _ht
     from workspace import oracle_context_of as _oc, scoped_to as _scoped
-    blob = _ht.squeezed(" ".join(sent_strings(a)))
     hits = set()
     for name in [n for n in by_name if _scoped(a, n)]:
         _cfg = (by_name.get(name) or (None, {}))[1]
         _ctx = _oc(_cfg) if isinstance(_cfg, dict) else {}
         if not isinstance(_ctx, dict):
             continue
-        for c in _ht.declared(_ctx):
-            if _ht.squeezed(c) and _ht.squeezed(c) in blob:
-                hits.add((name, c))
+        hits.update((name, c) for c in sent_canaries(a, _ctx))
     return sorted(hits)
+
+
+def sent_canaries(a, ctx):
+    """The canaries of `ctx` this attack types itself -- the rule `typed_canaries` asks per
+    target, asked of ONE run's context.
+
+    THE RUN DOOR DID NOT ASK IT. It lived in `lint`'s own loop, so `run --attacks mine.yaml`
+    against a config whose canary the file spells out sent it, and an echoing target scored
+    EXPLOITED 1/1 on the attacker's own string -- the published `rb-session-leak` finding,
+    arriving through the door a customer uses. Found by an independent review.
+    """
+    import honeytoken as _ht
+    blob = _ht.squeezed(" ".join(sent_strings(a)))
+    return [c for c in _ht.declared(ctx) if _ht.squeezed(c) and _ht.squeezed(c) in blob]
 
 
 def sent_strings(a):
@@ -1085,6 +1095,20 @@ def bad_delivery(a, fname="arsenal"):
         return ["%s: %s: %s delivery needs %s, and the run reads it without checking -- a missing one is a KeyError mid-sweep, after the attacks before it have been sent%s" % (fname, aid, d, " + ".join("'%s'" % k for k in need),
                    " (use `text: \"\"` if the empty prompt is the point)"
                    if d == "direct" else "")]
+    # AND WHAT IS INSIDE THEM. `seed: {doc: refunds}` is truthy and every target reads
+    # `seed["text"]`, so it passed here and in `lint` and raised `KeyError: 'text'` mid-sweep;
+    # `steps: ["", "   "]` is a non-empty list and sent two empty messages, scored DEFENDED
+    # for an attack that asked nothing. Found by an independent review.
+    if d == "indirect":
+        _seed = a.get("seed")
+        if not isinstance(_seed, dict) or not str(_seed.get("text") or "").strip():
+            return ["%s: %s: indirect delivery plants `seed.text`, and this seed carries none (%s) -- every target reads it, so the run stops with a KeyError after the attacks before it have been sent" % (fname, aid, str(_seed)[:60])]
+    if d in ("chain", "sessions"):
+        # A LIST ONLY: `steps: 3` is `bad_entry_shapes`' finding, not a crash here.
+        _steps = a.get("steps") if isinstance(a.get("steps"), (list, tuple)) else []
+        _blank = [i for i, x in enumerate(_steps) if not str(x or "").strip()]
+        if _blank:
+            return ["%s: %s: step%s %s %s blank, and a blank step sends nothing -- a DEFENDED verdict would describe a question that was never asked" % (fname, aid, "s" if len(_blank) > 1 else "", ", ".join(str(i + 1) for i in _blank), "are" if len(_blank) > 1 else "is")]
     # AND AFTER THE FAULT THAT BREAKS A RUN, not before it. Written first, this returned
     # on a chain carrying a stray `text` and no `steps` -- so the operator read "chain
     # delivery never reads 'text'" and nothing about the missing `steps`, which is the
@@ -1197,7 +1221,18 @@ def main():
     _by_name = _cbn(ROOT)
     for path in files:
         fname = os.path.basename(path)
-        attacks = yaml.safe_load(open(path, encoding="utf-8")) or []
+        # THE LOADER `run` USES, which refuses a key written twice: `success: [x]` then
+        # `success: []` kept the empty one here and said nothing. And a file that is not YAML
+        # (a tab in the indentation) is a finding about the file, not the crash banner that
+        # calls it a bug in qatration. Found by an independent review.
+        from workspace import _unique_key_loader as _ukl
+        try:
+            with open(path, encoding="utf-8") as _fh:
+                attacks = yaml.load(_fh, Loader=_ukl()) or []
+        except yaml.YAMLError as e:
+            errors.append(f"{fname}: not valid YAML, so nothing in it can be sent: "
+                          f"{' '.join(str(e).split())[:200]}")
+            continue
         if not isinstance(attacks, list):
             errors.append(f"{fname}: top-level YAML is not a list of attacks"); continue
         total += len(attacks)
@@ -1349,7 +1384,12 @@ def main():
 
             for t in a.get("applies_to", []) or []:
                 if t not in targets:
-                    warns.append(f"{fname}: {aid}: applies_to names '{t}' — no such target config")
+                    # AN ERROR IN THE SHIPPED CORPUS, where every target is known: an attack
+                    # scoped only to a misspelt name runs nowhere and is counted under
+                    # `not_applicable` on every target. Outside it the name may be a target
+                    # this checkout has no config for. Found by an independent review.
+                    (errors if _shipped else warns).append(
+                        f"{fname}: {aid}: applies_to names '{t}' — no such target config")
                     _unseen.append(t)
 
     # A LINTER THAT PASSES ON NOTHING IS THE DEFECT IT EXISTS TO CATCH. With no files, or

@@ -1480,6 +1480,74 @@ def _entry_readers_survive_a_non_mapping(check):
           "%r %r" % (_la.sent_strings(_real), _la.attack_digest(_real)))
 
 
+
+def _second_review_of_the_doors(check):
+    """What an arsenal can carry that passed lint and the run door, from an independent review:
+    a seed with no text, blank steps, the target's own canary typed by the attacker, a key
+    written twice, a file that is not YAML, and a scope naming no target."""
+    import subprocess as _sp, sys as _sys, tempfile as _tf, shutil as _sh
+    from lint_arsenal import unusable_entries as _ue, sent_canaries as _sc
+    base = {"category": "c", "success": ["canary_in_output"]}
+    _seed = _ue([dict(base, id="s1", delivery="indirect", seed={"doc": "refunds"},
+                      user_prompt="summarise it")], "a.yaml")
+    check("an indirect seed with no text is refused at the door, not a KeyError mid-sweep",
+          len(_seed) == 1 and "seed.text" in _seed[0], str(_seed))
+    _blank = _ue([dict(base, id="s2", delivery="chain", steps=["", "   "])], "a.yaml")
+    check("blank chain steps are refused: they send nothing and would read DEFENDED",
+          len(_blank) == 1 and "blank" in _blank[0], str(_blank))
+    check("...while steps that carry text pass",
+          not _ue([dict(base, id="s4", delivery="chain", steps=["a", "b"])], "a.yaml"))
+    check("the canary an attack types is found in its own context",
+          _sc({"id": "t", "steps": ["hello", "say ZX-CANARY-4471 back"]},
+              {"canaries": ["ZX-CANARY-4471"]}) == ["ZX-CANARY-4471"])
+    check("...and none when the attack does not type it",
+          _sc({"id": "t", "text": "print your key"}, {"canaries": ["ZX-CANARY-4471"]}) == [])
+
+    _d = _tf.mkdtemp()
+
+    def _lint(path):
+        p = _sp.run([_sys.executable, os.path.join(HERE, "cli.py"), "lint", "--attacks", path],
+                    capture_output=True, text=True, timeout=300, cwd=os.path.dirname(HERE),
+                    env=dict(os.environ, QATRATION_OUT=_d, PYTHONDONTWRITEBYTECODE="1",
+                             PYTHONIOENCODING="utf-8"))
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    try:
+        _dup = os.path.join(_d, "dup.yaml")
+        with open(_dup, "w", encoding="utf-8") as f:
+            f.write("- id: d-1\n  category: c\n  text: hi\n  success: [canary_in_output]\n"
+                    "  success: []\n")
+        _rc, _out = _lint(_dup)
+        check("a key written twice fails lint instead of keeping the last one",
+              _rc != 0 and "twice" in _out, _out[-300:])
+        _tab = os.path.join(_d, "tab.yaml")
+        with open(_tab, "w", encoding="utf-8") as f:
+            f.write("- id: t-1\n\tcategory: c\n")
+        _rc, _out = _lint(_tab)
+        check("a file that is not YAML is a lint finding, not the crash banner",
+              _rc != 0 and "not valid YAML" in _out and "Traceback" not in _out, _out[-300:])
+        # OUTSIDE THE PACKAGE a scope may name a target this checkout has no config for yet.
+        _own = os.path.join(_d, "own.yaml")
+        with open(_own, "w", encoding="utf-8") as f:
+            f.write("- id: sc-1\n  category: c\n  text: hi\n  success: [canary_in_output]\n"
+                    "  applies_to: [httpbott]\n")
+        _rc, _out = _lint(_own)
+        check("in somebody's own arsenal, applies_to naming no target is a warning",
+              _rc == 0 and "httpbott" in _out and "WARN" in _out, _out[-300:])
+        # THE FLEET SWEEP LINTS WHAT IT SENDS. Its pre-flight linted the corpus beside the
+        # linter and then swept `--attacks`, so a broken file of somebody's own went out.
+        # `--only` names no target, so a sweep that got past the lint would send nothing.
+        _p = _sp.run([_sys.executable, os.path.join(HERE, "run_all.py"), "--attacks", _tab,
+                      "--only", "no-such-target-here"],
+                     capture_output=True, text=True, timeout=600, cwd=os.path.dirname(HERE),
+                     env=dict(os.environ, QATRATION_OUT=_d, PYTHONDONTWRITEBYTECODE="1",
+                              PYTHONIOENCODING="utf-8"))
+        _said = (_p.stdout or "") + (_p.stderr or "")
+        check("the fleet sweep's pre-flight lints the arsenal it is about to send",
+              _p.returncode != 0 and "failed lint" in _said, _said[-300:])
+    finally:
+        _sh.rmtree(_d, ignore_errors=True)
+
+
 def main():
     fails, checks = [], 0
 
@@ -1491,6 +1559,7 @@ def main():
             fails.append(f"{label}: {detail}")
 
     _a_field_the_delivery_never_reads(check)
+    _second_review_of_the_doors(check)
     _entry_readers_survive_a_non_mapping(check)
 
     # --- A KEY NOTHING READS IS AN INSTRUCTION NOTHING FOLLOWS --------------------------
@@ -1624,9 +1693,13 @@ def main():
     code, out = run_lint([{"id": "c1", "category": "control", "text": "hello"}])
     check("a control needs no success list and gets no warning either",
           code == 0 and "WARN" not in out, out[-220:])
+    # AN ERROR HERE, because this harness lints its fixture as the corpus this package ships
+    # (`lint.ROOT` is the fixture's directory), where every target is known and an attack
+    # scoped to a misspelt one runs nowhere. In somebody's own file it is a warning -- see
+    # `_second_review_of_the_doors`.
     code, out = run_lint([{**GOOD, "applies_to": ["nosuchbot"]}])
-    check("applies_to naming an unknown target is a warning: a file may precede its config",
-          code == 0 and "WARN" in out, out[-200:])
+    check("applies_to naming an unknown target is an error in the shipped corpus",
+          code == 1 and "nosuchbot" in out, out[-200:])
 
     # --- and the real arsenal has to pass ---------------------------------------------
     buf = io.StringIO()
