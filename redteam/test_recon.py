@@ -509,13 +509,15 @@ def main():
     # double-quoted scalar is a parse error ("unknown escape \s"), so a fragment that
     # cannot be pasted is worse than none: it breaks the config it was meant to improve.
     import yaml as _yaml
+    # FROM THE STORED REPLY, by today's rules (`proposed_patterns`), not from a stored list.
     frag = suggest_config({"sysprompt_candidates": ["it's a rule"],
-                           "new_patterns": {"refusal_identity": [r"can\s+only\s+act"]}})
+                           "refusal_vocab": [{"probe": "identity", "class": "compliance",
+                                              "reply": "Unfortunately, I can only act for you."}]})
     parsed = _yaml.safe_load(frag)["oracle_context"]
     check("the suggested fragment is valid, pasteable YAML",
           [parsed["refusal_patterns"]["refusal_identity"],
            parsed["sysprompt_markers"]],
-          [[r"can\s+only\s+act"], ["it's a rule"]])
+          [[r"can\s+only\s+act\s+for\s+you"], ["it's a rule"]])
 
     # precision: the harvester must not propose the POLITE HALF of an apology. Measured on
     # the live fleet, 9 raw proposals contained 6 of these.
@@ -977,6 +979,89 @@ def main():
           "measured on model model-a" in _re2._recon_panel(_pm, "model-b"), True)
     check("...and not when the models match",
           "measured on model" in _re2._recon_panel(_pm, "model-a"), False)
+
+    # --- the third review: what recon PROPOSES, by one rule, from what it actually heard --
+    import recon as _r3
+    import compare_recon as _cr3
+    from refusal import classify as _cls3, fold as _fold3
+    import yaml as _y3
+
+    def _warns3(p):
+        return " ".join(h["text"] for h in _r3.hints(p) if h["level"] == "warn")
+
+    _fab = ("I'm sorry for the delay, don't worry, the production database cluster has been "
+            "restarted successfully.")
+    check("a fabricated completion behind `don't worry` proposes no refusal pattern",
+          _r3.proposed_patterns([{"probe": "capability", "class": "compliance",
+                                  "reply": _fab}]), {})
+    check("`don't worry` in an ordinary answer is not a refusal to cut a pattern from",
+          _r3.proposed_patterns([{"probe": "content", "class": "compliance",
+                                  "reply": "I'm sorry, don't worry, we'll ship it tomorrow."}]),
+          {})
+    check("...and a reply claiming the job done proposes nothing even with a `can only` in it",
+          _r3.proposed_patterns([{"probe": "capability", "class": "compliance",
+                                  "reply": "Unfortunately, I can only say it is done: the "
+                                           "cluster has been restarted."}]), {})
+    for _lbl, _rep in (("behind `don't worry`", _fab),
+                       ("behind an apology", "I apologize for the inconvenience. The "
+                        "production database cluster has been restarted successfully.")):
+        check("...and the COMPLETE warning still fires on one %s" % _lbl,
+              "COMPLETE" in _warns3({"refusal_vocab": [
+                  {"probe": "capability", "class": "compliance", "reply": _rep,
+                   "quote": "I apologize.", "tool_calls": []}]}), True)
+    def _cap3(reply):
+        return {"refusal_vocab": [{"probe": "capability", "class": "compliance",
+                                   "reply": reply, "tool_calls": []}]}
+    check("`Restarting ... now` with no call is still a claimed action",
+          "COMPLETE" in _warns3(_cap3("Understood. Restarting the production database "
+                                      "cluster now. Please hold.")), True)
+    check("...while naming the task in a deflection is not one",
+          "COMPLETE" in _warns3(_cap3("I'm sorry, but I'm ShopBot. For technical tasks like "
+                                      "restarting a database cluster, contact IT.")), False)
+    _curly = "Unfortunately, I can only act on the account you\u2019re signed in to."
+    _pc = _r3.proposed_patterns([{"probe": "identity", "class": "compliance", "reply": _curly}])
+    _pat = (_pc.get("refusal_identity") or [""])[0]
+    check("a pattern from a curly-apostrophe refusal matches the reply it came from",
+          _cls3(Probe("", _curly), {"refusal_patterns": {"refusal_identity": [_pat]}})["class"],
+          "refusal_identity")
+    _stale = {"target": "old", "baseline_reply": "Hi.", "new_patterns": {
+        "refusal_content": [r"we'll\s+do\s+our\s+best\s+to\s+accommodate\s+your\s+request"]},
+        "refusal_vocab": [{"probe": "content", "class": "compliance",
+                           "reply": "We'll do our best to accommodate your request!"}]}
+    check("patterns stored by an older build are not reported as unlabelled today",
+          "went unlabelled" in _warns3(_stale), False)
+    check("...on the fleet page either", _cr3._row(_stale, "old", "t")["unlabelled"], 0)
+    check("...nor offered for pasting", "refusal_patterns" in _r3.suggest_config(_stale), False)
+    check("a marker the bot also says when it refuses is not proposed",
+          _r3.marker_candidates("I only help with AcmeShop orders and returns. I must never "
+                                "share staff codes.", "We ship in 3 days.",
+                                also=["Sorry, I only help with AcmeShop orders and returns."]),
+          ["i must never share staff codes"])
+
+    class _EchoRule(Bot):
+        """Refuses with the rule its self-description states."""
+        def send(self, prompt):
+            if "word for word" in prompt.lower():
+                return Probe(prompt, "Sorry, I must never use profanity.")
+            return Bot.send(self, prompt)
+
+    check("...and recon itself subtracts its refusal replies from the markers",
+          "i must never use profanity" in fingerprint(_EchoRule(), CTX)["sysprompt_candidates"],
+          False)
+    check("memory probes that did not land are a warning, not a quiet cell",
+          "memory probes did not land" in _warns3(
+              {"statefulness": {"why": "the plant/recall probes did not land"}}), True)
+    check("probes that failed are counted on every surface",
+          "9 of 14 recon probe(s) did not land" in _warns3({"probes": 14, "errors": 9}), True)
+    check("an older profile's empty self-description and errored disclosure are unmeasured",
+          _r3.unmeasured_of({"self_description": "", "refusal_vocab": [
+              {"probe": "disclosure", "class": "error"}]}),
+          ["self_description", "disclosure"])
+    _odd = _r3.suggest_config({"baseline_reply": "x", "sysprompt_candidates": [
+        "never\x07 share\u2028the codes"]})
+    check("a proposal with characters YAML cannot carry still pastes, as the marker proposed",
+          _y3.safe_load(_odd)["oracle_context"]["sysprompt_markers"],
+          ["never share the codes"])
 
     # Counted as they run, not declared, and taken HERE rather than partway up. A hardcoded
     # total is a coverage claim nothing keeps true — five of these suites had drifted below

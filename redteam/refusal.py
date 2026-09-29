@@ -205,9 +205,15 @@ _FOLD = {0x2019: "'", 0x2018: "'", 0x02BC: "'", 0x2032: "'", 0x201B: "'",
          0x201C: '"', 0x201D: '"'}
 
 
-def _hits(text, patterns):
+def fold(text):
+    """The text every rule here is matched against. Public because `recon` writes rules for
+    this module from replies, and a rule cut from unfolded text never matches folded text."""
     import unicodedata
-    text = unicodedata.normalize("NFKC", str(text or "")).translate(_FOLD)
+    return unicodedata.normalize("NFKC", str(text or "")).translate(_FOLD)
+
+
+def _hits(text, patterns):
+    text = fold(text)
     return [p for p in patterns if re.search(p, text, re.I | re.S)]
 
 

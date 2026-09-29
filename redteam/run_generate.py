@@ -127,8 +127,8 @@ def main():
     # self-description and disclosure probes both errored holds no rules because nothing was
     # asked, and this said "states no prohibitions ... an answer about the target", exit 0.
     # Found by an independent review.
-    _unm = [x for x in (profile.get("unmeasured") or [])
-            if x in ("self_description", "disclosure")]
+    from recon import unmeasured_of as _unmeasured_of
+    _unm = [x for x in _unmeasured_of(profile) if x in ("self_description", "disclosure")]
     if len(_unm) == 2:
         print(f"generate: {prof_path}: the two probes this command reads a target's rules "
               f"from (its self-description and the disclosure ask) did not land, so there "

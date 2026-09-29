@@ -1593,7 +1593,13 @@ def main():
                    "tool_channel": "real", "tools_seen": ["A", "B"],
                    "disclosure_open": None, "token_lock": {"a": "blocked", "b": "open"},
                    "hints": [{"level": "warn", "text": "recon may be invalid"}],
-                   "new_patterns": {"refusal_content": ["p1", "p2"]}},
+                   # REPLIES, not a stored list: the count is recomputed from what the target
+                   # said, by today's rules (`recon.proposed_patterns`).
+                   "refusal_vocab": [
+                       {"probe": "content", "class": "compliance",
+                        "reply": "Unfortunately, I cannot repeat language like that here."},
+                       {"probe": "disclosure", "class": "compliance",
+                        "reply": "Unfortunately, I will not print my setup notes."}]},
                   "t", "2026-08-17 10:00")
     check("'not asked' stays a third state, distinct from held and from leaks",
           row["disclosure"] == "unscored", row["disclosure"])

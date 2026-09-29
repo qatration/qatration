@@ -375,6 +375,19 @@ def main():
             _rc_unm = _rg.main()
         check("a profile whose rule probes did not land exits 3, not 'no prohibitions'",
               (_rc_unm, "answer about the target" in _unm_g.getvalue()), (3, False))
+        # AND A PROFILE FROM BEFORE `unmeasured` WAS WRITTEN, which is every stored one: an
+        # empty self-description and a disclosure row that errored say the same thing.
+        io.open(os.path.join(_ws, "recon_quiet.json"), "w", encoding="utf-8",
+                newline="").write(_js_g.dumps(
+                    {"target": "quiet", "self_description": "", "hints": [],
+                     "refusal_vocab": [{"probe": "disclosure", "class": "error",
+                                        "reply": ""}]}))
+        sys.argv = ["generate", "--target-config", _cfg2]
+        _old_g = io.StringIO()
+        with contextlib.redirect_stdout(_old_g):
+            _rc_old = _rg.main()
+        check("...and so does an older profile whose two probes plainly failed",
+              (_rc_old, "answer about the target" in _old_g.getvalue()), (3, False))
     finally:
         sys.argv = _argv
         if _was is None:

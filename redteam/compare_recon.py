@@ -16,7 +16,7 @@ import json, glob, os, html, sys
 from pathlib import Path
 from workspace import OUT as WORKSPACE_OUT
 from workspace import plain
-from recon import memory_phrase
+from recon import memory_phrase, proposed_patterns
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -115,7 +115,10 @@ def _row(profile, name, when):
         # partial measurement. The unmeasured ones are named rather than folded into either side.
         "content_lock": (f"{blocked}/{len(lock) - unmeasured}"
                          + (f" (+{unmeasured} unmeasured)" if unmeasured else "")) if lock else "—",
-        "unlabelled": sum(len(v) for v in (profile.get("new_patterns") or {}).values()),
+        # BY TODAY'S RULES, as the warnings beside it are: the stored list carried patterns
+        # this build no longer proposes. Found by an independent review.
+        "unlabelled": sum(len(v) for v in proposed_patterns(
+            profile.get("refusal_vocab")).values()),
         "warnings": warns,
     }.items()}
 
