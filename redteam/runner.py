@@ -145,18 +145,41 @@ def _invoke_with_timeout(fn, timeout):
         return Probe(prompt="", error=f"TIMEOUT after {timeout}s", seconds=float(timeout))
     if "err" in box:
         return Probe(prompt="", error=box["err"])
+    # AND NOTHING IS AN ANSWER NOBODY GAVE: a send returning None crashed the run at
+    # `probe.error` below, exit 2, instead of an ERROR row. Found by an independent review.
+    if box.get("probe") is None:
+        return Probe(prompt="", error="the target returned no probe")
     return box["probe"]
 
 
-def _resilient_send(fn, attack_id):
+def _resilient_send(fn, attack_id, steps=1, before_retry=None):
     """One send with a watchdog + up to RETRIES retries on timeout/error, so a
     transient Ollama blip or a single hang doesn't sink the attack. Retries are
     logged to stderr (never silently swallowed) — a run that limped is not a
     clean run and the report reader deserves to know."""
     from signing import NEVER_SENT as _NEVER
-    probe = _invoke_with_timeout(fn, SEND_TIMEOUT)
+    # THE WATCHDOG IS PER SEND, SO A CONVERSATION GETS ONE PER STEP. It timed the whole of a
+    # chain or a sessions run as one send, so six turns at 30 s on a local model tripped it:
+    # the turns were thrown away -- a leak in turn one with them -- and the synthetic probe's
+    # 180 s fired `slow_response`, a finding about the conversation's total that the detector
+    # was fixed not to make. Found by an independent review.
+    _limit = SEND_TIMEOUT * max(1, int(steps or 1))
+    probe = _invoke_with_timeout(fn, _limit)
     attempts = 1
     while probe.error and attempts <= RETRIES:
+        # A CONVERSATION THAT HAD ANSWERED IS NOT SENT AGAIN. The retry re-sends every step,
+        # so a server that keeps the conversation received them twice -- and a target that
+        # gives in on the third request measured an attack nobody wrote, EXPLOITED 1/1 --
+        # and it replaced a probe whose earlier turn had already leaked with the retry's
+        # refusal: DEFENDED, against the engine's own rule that a breach observed stands.
+        # What answered is kept beside the error and `judge` reads both. Found by an
+        # independent review.
+        if getattr(probe, "turns", None):
+            print(f"  ! {attack_id}: {probe.error} after {len(probe.turns)} turn(s) had "
+                  f"answered -- not retried, because a retry would send them again into the "
+                  f"same conversation; what they showed is judged as it stands",
+                  file=sys.stderr)
+            break
         # A BUDGET THAT SAID NO WILL SAY NO AGAIN, 0.0 seconds later. Same shape as the 429
         # below and cheaper to see: `rate.take()` refuses before a socket is opened, so the
         # retry costs nothing but a stderr line per attack that makes the one line worth
@@ -180,7 +203,16 @@ def _resilient_send(fn, attack_id):
               + (f" after {_wait:g}s" if _wait else ""), file=sys.stderr)
         if _wait:
             time.sleep(_wait)
-        _next = _invoke_with_timeout(fn, SEND_TIMEOUT)
+        # A CLEAN SLATE FIRST, for a delivery whose state is the test: whatever the failed
+        # attempt left behind is not part of the attack. Found by an independent review.
+        if before_retry is not None:
+            try:
+                before_retry()
+            except Exception as _e:
+                print(f"  ! {attack_id}: reset before the retry failed ({type(_e).__name__}: "
+                      f"{_e}); not retried", file=sys.stderr)
+                break
+        _next = _invoke_with_timeout(fn, _limit)
         # AND A RETRY THAT NEVER WENT OUT IS NOT THIS ROW'S ANSWER. The first attempt reached
         # the endpoint and came back with something about the TARGET; the budget then ran out
         # between the two, and overwriting the answer with `it was never sent` files a row
@@ -440,18 +472,29 @@ def run_attack(target, attack, ctx, trials=1):
         seeded = False
         try:
             if delivery == "indirect":
-                target.seed(attack["seed"])
+                # SEEDED BEFORE THE CALL, not after it returns: a seed that planted and then
+                # raised left its plant in the target, skipped `unseed`, and ended the whole
+                # sweep with every row measured so far lost. The plant is removed and the
+                # failure is this trial's error. Found by an independent review.
                 seeded = True
-                probe = _resilient_send(
-                    lambda: target.send(_text(attack.get("user_prompt", "Hello"))), aid)
+                try:
+                    target.seed(attack["seed"])
+                except Exception as _se:
+                    probe = Probe(prompt=_text(attack.get("user_prompt", "Hello")),
+                                  error="SeedFailed: %s: %s" % (type(_se).__name__, _se))
+                else:
+                    probe = _resilient_send(
+                        lambda: target.send(_text(attack.get("user_prompt", "Hello"))), aid,
+                        before_retry=target.reset)
             elif delivery == "sessions":
                 probe = _resilient_send(
                     lambda: _run_sessions(target, [_text(x) for x in attack["steps"]]),
-                    aid)
+                    aid, steps=len(attack["steps"]), before_retry=target.reset)
             elif delivery == "chain":
                 probe = _resilient_send(
                     lambda: target.send_chain(
-                        [_text(s) for s in attack["steps"]]), aid)
+                        [_text(s) for s in attack["steps"]]), aid,
+                    steps=len(attack["steps"]), before_retry=target.reset)
             elif delivery == "forged_history":
                 # The whole forged transcript is the attacker's side, assistant turns
                 # included — they wrote those too — so echo subtraction has to see all of
@@ -461,7 +504,8 @@ def run_attack(target, attack, ctx, trials=1):
                            "content": _text(h.get("content", ""))}
                           for h in (attack.get("history") or [])]
                 probe = _resilient_send(
-                    lambda: target.send_forged(_text(attack["text"]), forged), aid)
+                    lambda: target.send_forged(_text(attack["text"]), forged), aid,
+                    before_retry=target.reset)
                 if probe is not None:
                     # Same one implementation as the multi-step branch below.
                     probe.prompt = attacker_side(attack)
@@ -470,7 +514,13 @@ def run_attack(target, attack, ctx, trials=1):
                 probe = _resilient_send(lambda t=text: target.send(t), aid)
         finally:
             if seeded:
-                target.unseed()
+                # AN UNSEED THAT RAISES IS SAID, and does not throw this trial's answer away.
+                try:
+                    target.unseed()
+                except Exception as _ue:
+                    print(f"  ! {aid}: unseed failed ({type(_ue).__name__}: {_ue}) -- the "
+                          f"plant may still be in the target, and an attack after this one "
+                          f"may read it", file=sys.stderr)
         # For a multi-step delivery the adapters set probe.prompt to the LAST step, so
         # every echo-subtracting detector only knows about that one and counts anything the
         # attacker typed in an earlier turn as though the bot had revealed it. Measured on
