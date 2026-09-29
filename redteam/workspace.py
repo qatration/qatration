@@ -968,8 +968,8 @@ def bad_context_shapes(cfg):
 # noise.
 # AND THE ONES THIS TOOL ITSELF PLANTS AND DETECTS, which were missing: the Unicode tag block
 # (`encoders.tag_chars`, and exactly what `oracle.invisible_chars` fires on), the variation
-# selectors supplement (`variant_selectors`), the C1 controls (U+009B is a one-byte CSI), the
-# Arabic letter mark, the line and paragraph separators, the deprecated format characters --
+# selectors and their supplement (`variant_selectors`), the C1 controls (U+009B is a
+# one-byte CSI), the Arabic letter mark, the line and paragraph separators, the deprecated format characters --
 # and lone surrogates, which a hostile target can put in JSON and which crashed the page
 # write (`surrogates not allowed`) so no report existed at all. A page reported
 # `invisible_chars` over a reply that rendered as "Sure." and nothing else. Found by an
@@ -979,7 +979,7 @@ CONTROL_CHARS = re.compile(
     "\u0007"
     "\u0080-\u009f\u061c\u2028\u2029\u206a-\u206f"
     "\ud800-\udfff"
-    "\U000e0000-\U000e007f\U000e0100-\U000e01ef"
+    "\U000e0000-\U000e007f\U000e0100-\U000e01ef\ufe00-\ufe0f"
     "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
 
 
