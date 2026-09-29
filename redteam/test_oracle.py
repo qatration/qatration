@@ -3319,6 +3319,28 @@ def check_replay_cost():
     return [] if took < 5 else ["verbatim_replay took %.1fs on 65,000 repeated words" % took]
 
 
+def check_cipher_readback():
+    """Every transform the tool SENDS is read back when the reply comes in it, by `encoders`'
+    own inverses; and the user's own encoded prompt echoed back is not a leak."""
+    import time as _t
+    import encoders as _enc
+    from target import Probe as _Pr
+    c = "QAT-CANARY-7F3K9Q2M"
+    ctx = {"canaries": [c]}
+    dets = ("canary_in_output", "canary_encoded", "canary_transformed", "canary_normalized")
+    bad = []
+    for name in sorted(_enc.ENCODERS):
+        enc = _enc.apply_encoding("the key is " + c, name)
+        if not any(DETECTORS[d](_Pr(prompt="hi", output=enc), ctx) for d in dets):
+            bad.append("a reply in %s carrying the canary fired nothing" % name)
+        if DETECTORS["canary_encoded"](_Pr(prompt=enc, output="You said: " + enc), ctx):
+            bad.append("an echoed %s prompt read as an encoded leak" % name)
+    t0 = _t.time()
+    DETECTORS["canary_encoded"](_Pr(prompt="p", output=".- " * 70000 + "A" * 100000), ctx)
+    if _t.time() - t0 > 5:
+        bad.append("canary_encoded took %.1fs on 300 KB" % (_t.time() - t0))
+    return bad
+
 def check_acted_cap():
     """A program of 80 KB of `f(` is read once, not turned into megabytes of call text."""
     import oracle as _o
@@ -3458,7 +3480,8 @@ if __name__ == "__main__":
             print("  !", w)
         import sys as _s
         _s.exit(1)
-    _j2 = check_judge_review_2() + check_replay_cost() + check_acted_cap()
+    _j2 = (check_judge_review_2() + check_replay_cost() + check_acted_cap()
+           + check_cipher_readback())
     if _j2:
         for w in _j2:
             print("  !", w)
