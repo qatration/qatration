@@ -135,7 +135,7 @@ def unread_context_keys(cfg):
 
 
 def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
-          verified=None):
+          verified=None, probe_ceiling=None):
     """Returns (ok, report dict). Sends one request, and a second when the config declares
     a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
@@ -295,6 +295,15 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     except SystemExit as e:
         rep["problems"].append(str(e))
         return False, rep
+    # A CEILING THAT IS THE CALLER'S, where the caller is somebody else's door: the hosted
+    # intake runs this probe inside its request handler, and the config's `timeout_s:
+    # 2000000` or `min_interval_s: 2000000` held that thread for as long as the submitter
+    # liked. Only these probes are bounded; the queued run keeps the config's own values.
+    if probe_ceiling:
+        target.timeout = min(float(target.timeout), float(probe_ceiling))
+        _r_c = getattr(target, "rate", None)
+        if _r_c is not None:
+            _r_c.min_interval = min(float(_r_c.min_interval or 0), float(probe_ceiling))
 
     t0 = time.time()
     # ASK FOR THE BODY. It is needed to tell a mapping that resolved to an identifier

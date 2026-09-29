@@ -109,6 +109,12 @@ class _NoAliasLoader(_unique_key_loader()):
         return super().compose_node(parent, index)
 
 
+# SECONDS THE INTAKE WAITS on one onboarding probe, and on a body's arrival. Both waits run
+# on the request handler's thread, so both are the service's to bound, not the submitter's.
+PROBE_CEILING = 15
+BODY_SECONDS = 30
+
+
 def _problem(status, detail):
     return status, {"error": detail}
 
@@ -249,7 +255,7 @@ def submit(root, body, policy=None, wake=None):
         except OSError:
             pass
     try:
-        ok, rep = onboard_check(cfg_path, scope=scope)
+        ok, rep = onboard_check(cfg_path, scope=scope, probe_ceiling=PROBE_CEILING)
     except SystemExit as e:
         # NOT EVERY REFUSAL IS "NOT AUTHORISED": a `trials: 0` raised here came back 403, and
         # the refused config stayed on disk. 403 is the gate's; anything else is the config.
@@ -473,8 +479,38 @@ def make_handler(root):
                 return self._refuse_unread(413, f"a target config is under {MAX_BODY} bytes")
             # `read(n)` can return less if the connection ends early; that is the submitter's
             # problem to see as a parse error, not this loop's to wait out.
-            code, obj = submit(root, self.rfile.read(n))
+            # AGAINST ONE DEADLINE, not a timeout per receive: `Handler.timeout` bounds each
+            # recv, so a body sent one byte every five seconds held this thread for days --
+            # the drip `authorization._http_get` was already fixed for.
+            body = self._read_by_deadline(n)
+            if body is None:
+                return self._send(*_problem(408, "the body did not arrive within %ds"
+                                                 % BODY_SECONDS))
+            code, obj = submit(root, body)
             self._send(code, obj)
+
+        def _read_by_deadline(self, n):
+            """-> the n bytes of the body, or None if they did not arrive by BODY_SECONDS."""
+            import time as _time
+            deadline = _time.monotonic() + BODY_SECONDS
+            got = []
+            left = n
+            try:
+                while left > 0:
+                    wait = deadline - _time.monotonic()
+                    if wait <= 0:
+                        return None
+                    _conn = getattr(self, "connection", None)
+                    if _conn is not None:
+                        _conn.settimeout(wait)
+                    chunk = self.rfile.read1(min(65536, left))
+                    if not chunk:
+                        break
+                    got.append(chunk)
+                    left -= len(chunk)
+            except OSError:
+                return None         # the deadline passed mid-body, or the peer went away
+            return b"".join(got)
 
         def _refuse_unread(self, code, why):
             """Refuse on the header alone, and let the refusal survive the body still coming.
@@ -528,10 +564,7 @@ def make_handler(root):
             except ValueError:
                 n = 0
             if 0 < n <= MAX_BODY:
-                try:
-                    self.rfile.read(n)
-                except OSError:
-                    pass
+                self._read_by_deadline(n)
 
         def do_GET(self):
             parts = [p for p in self.path.split("?")[0].strip("/").split("/") if p]

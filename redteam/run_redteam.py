@@ -457,12 +457,17 @@ def _build_mismatch(tcfg):
     if not want or not url:
         return ""
     import json as _json
-    import urllib.request
     from urllib.parse import urlparse
     u = urlparse(url)
     probe = f"{u.scheme}://{u.netloc}/"
+    # THROUGH THE ADAPTER'S OPENER: guarded redirects and no proxy inherited from the
+    # environment. `urlopen` followed a 302 from the authorised origin to 169.254.169.254 or
+    # loopback with no policy check -- from inside a hosted worker -- and printed the values
+    # it read there in the mismatch line, and the job's state answered yes/no about them.
+    # Found by an independent review.
+    from targets_http import _opener_for as _open_for
     try:
-        with urllib.request.urlopen(probe, timeout=5) as r:
+        with _open_for(tcfg.get("proxy")).open(probe, timeout=5) as r:
             # CAPPED, and this one is not even a reply: it is a build banner read from the
             # target's own root before a sweep, parsed as JSON. Uncapped it let the system
             # under test choose this process's memory in the one place that runs BEFORE any
@@ -930,6 +935,10 @@ def main():
     _writable_dir(OUT_DIR, "run record and results", "run")
     _run_id = _runs.new_id()
     _budgets = dict((tcfg.get("rate") or {}))
+    # AND HOW LONG ONE REQUEST MAY TAKE: the budget is checked before each send, so a run can
+    # legitimately be open one request timeout past `max_seconds`. `runs` needs it to tell a
+    # run finishing its last request from one that died.
+    _budgets.setdefault("timeout_s", getattr(target, "timeout", None))
     _rec = _runs.start(OUT_DIR, _run_id, target.name, scope=args.scope,
                        authorization=_auth, budgets=_budgets,
                        engine=engine_version(), arsenal=os.path.basename(args.attacks),
@@ -1212,12 +1221,29 @@ def main():
     # cannot fire for at least one attack that declares it.
     from runner import judged_ctx as _jctx
 
+    # AND A DETECTOR THAT READS ONLY TOOL CALLS, ON A TARGET THAT CANNOT REPORT ONE. That was
+    # added to `meta.inert` after the run, and nothing re-checked the rows against it: an http
+    # config mapping no `response.tool_calls` sent `ca-sandbox-probe` (only `path_traversal`)
+    # and seven more, and they came back DEFENDED -- measured, hardened, `executionSuccessful`
+    # -- about a channel that was never connected. Asked here, before a request is spent.
+    from oracle import tool_only as _tool_only_pre
+    _no_tool_pre = "tool_visibility" not in (getattr(target, "capabilities", set()) or set())
+    # THE SAME WORDS `meta.inert` records after the run for the same fact.
+    _tool_key = ("a tool call, and this config maps none: response.tool_calls"
+                 if (tcfg.get("adapter") or "") == "http"
+                 else "a tool call, and this adapter reports none")
+
     def _dead_for(a):
         _decl = set(a.get("success") or []) | set(a.get("partial") or [])
         _c = dict(_jctx(a, ctx))
         if a.get("expects_refusal"):
             _c["expects_refusal"] = True
-        return inert_for(_c, _decl)
+        _d = dict(inert_for(_c, _decl))
+        if _no_tool_pre:
+            for _n in _decl:
+                if _tool_only_pre(_n) and _n not in _d:
+                    _d[_n] = [_tool_key]
+        return _d
 
     _per_attack_dead = [(a, _dead_for(a)) for a in attacks]
     dead = {}

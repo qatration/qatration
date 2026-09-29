@@ -714,6 +714,27 @@ def main():
     finally:
         shutil.rmtree(_kw, ignore_errors=True)
 
+    # A TARGET THAT CANNOT REPORT A TOOL CALL is not sent an attack only a tool call can score.
+    from oracle import tool_only as _to_tc
+    _sent_blind = [r["attack"]["id"] for r in (_res_tc.get("results") or [])
+                   if (r["attack"].get("category") != "control")
+                   and (set(r["attack"].get("success") or []) | set(r["attack"].get("partial") or []))
+                   and all(_to_tc(d) for d in (set(r["attack"].get("success") or [])
+                                              | set(r["attack"].get("partial") or [])))]
+    check("an attack only a tool call could score is not sent to a target with no tool channel",
+          _sent_blind == [], str(_sent_blind))
+
+    # --- FOUND BY A SECOND REVIEW OF THE RUN RECORD -----------------------------------------
+    import datetime as _dt_ov
+    _t0 = _dt_ov.datetime(2026, 9, 1, 12, 0, 0)
+    _rec_ov = {"started_at": _t0.isoformat(" ", "seconds"),
+               "budgets": {"max_seconds": 3, "timeout_s": 60}}
+    _v_live = runs.open_verdict(_rec_ov, now=_t0 + _dt_ov.timedelta(seconds=12))
+    _v_dead = runs.open_verdict(_rec_ov, now=_t0 + _dt_ov.timedelta(hours=2))
+    check("a run past its budget by less than a request timeout may still be finishing",
+          "may still be finishing" in _v_live and "did not end cleanly" not in _v_live, _v_live)
+    check("...and one long past it wrote no results, rather than pointing at an old file",
+          "wrote no results" in _v_dead and "is in its results file" not in _v_dead, _v_dead)
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

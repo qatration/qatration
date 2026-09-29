@@ -98,11 +98,16 @@ def _uri(path):
     invocation produced it, and a POSIX-only helper misses exactly that case.
     """
     text = str(path).replace("\\", "/")
-    if re.match(r"^[A-Za-z]:/", text):
-        return "file:///" + text
+    # PERCENT-ENCODED, and a UNC path keeps its host: `bot#2.yaml` parsed as a fragment, a
+    # space went out raw, and `\\\\server\\share` lost its server. `as_uri` is the standard
+    # library's answer to exactly this. Found by an independent review.
+    import pathlib as _pl
+    from urllib.parse import quote as _quote
+    if re.match(r"^[A-Za-z]:/", text) or text.startswith("//"):
+        return _pl.PureWindowsPath(str(path)).as_uri()
     if text.startswith("/"):
-        return "file://" + text
-    return text
+        return _pl.PurePosixPath(text).as_uri()
+    return _quote(text, safe="/")
 
 
 def _message(row, verdict, noisy, baseline_why=""):

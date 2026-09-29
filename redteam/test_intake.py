@@ -819,6 +819,41 @@ def main():
         _isrv.shutdown()
         _sh2.rmtree(_iroot, ignore_errors=True)
 
+    # --- FOUND BY A SECOND REVIEW OF THE HOSTED DOOR -----------------------------------------
+    import socket as _so_h, threading as _th_h, time as _tm_h
+    from http.server import ThreadingHTTPServer as _TS_h
+    # A BODY SENT A BYTE AT A TIME held the handler for days: one deadline for the whole read.
+    _saved_bs = intake.BODY_SECONDS
+    intake.BODY_SECONDS = 1
+    _root_h = tempfile.mkdtemp()
+    _srv_h = _TS_h(("127.0.0.1", 0), intake.make_handler(_root_h))
+    _th_h.Thread(target=_srv_h.serve_forever, daemon=True).start()
+    try:
+        _c_h = _so_h.create_connection(("127.0.0.1", _srv_h.server_address[1]), timeout=10)
+        _c_h.sendall(b"POST /runs HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\n"
+                     b"Content-Length: 200\r\n\r\n{")
+        _t_h = _tm_h.time()
+        _ans_h = b""
+        try:
+            while b"\r\n" not in _ans_h:
+                _part = _c_h.recv(4096)
+                if not _part:
+                    break
+                _ans_h += _part
+        except OSError:
+            pass
+        _waited = _tm_h.time() - _t_h
+        _c_h.close()
+        check("a body that does not arrive in time is answered 408, not waited for",
+              _ans_h.startswith(b"HTTP/1.") and b" 408 " in _ans_h.split(b"\r\n")[0]
+              and _waited < 8, "%r after %.1fs" % (_ans_h[:60], _waited))
+    finally:
+        intake.BODY_SECONDS = _saved_bs
+        _srv_h.shutdown()
+    # THE ONBOARDING PROBE WAITS FOR THE SERVICE'S CEILING, not the submitter's `timeout_s`.
+    import inspect as _insp_h
+    check("the intake hands its own ceiling to the onboarding probe",
+          "probe_ceiling=PROBE_CEILING" in _insp_h.getsource(intake.submit), "")
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

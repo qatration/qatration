@@ -184,10 +184,14 @@ def try_frame(target, frame, task, success, ctx, trials=3, frame_vars=None,
         # SEE compose._run: an errored trial is not the target holding. A dead endpoint
         # used to come back LOCKED, "nothing in the library moved it", which is the one
         # verdict `isolation._status` grew an `unmeasured` state to prevent.
-        if probe is None or probe.error:
+        # AND AN ERROR AFTER EVIDENCE IS STILL EVIDENCE, `oracle.judge`'s rule and now
+        # `isolation._trial`'s: a frame whose chain leaked and then failed was an error here.
+        if probe is None or (probe.error and probe.silent()):
             errors += 1
         elif _achieved(probe, success, ctx, require_all):  # locks describe the MISSES only
             hits += 1
+        elif probe.error:
+            errors += 1
         else:
             locks.append(classify(probe, ctx)["class"])
     return {

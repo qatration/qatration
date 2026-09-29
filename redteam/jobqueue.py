@@ -33,7 +33,14 @@ MAX_ATTEMPTS = 3            # after which the job is dead and says why, rather t
 
 
 def _now():
-    return datetime.datetime.now()
+    """The queue's clock: UTC, naive, so a lease compares against the time it was written in.
+
+    LOCAL WALL TIME JUMPS. A lease written as `datetime.now()` at 02:59 and read back after a
+    daylight-saving step forward looked an hour expired, so a live job was reclaimed and a
+    second worker swept one endpoint in one run directory beside the first. Found by an
+    independent review. Every stamp this module writes (`submitted_at`, `lease`, `since`) is
+    on this clock."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def _path(root, job_id):

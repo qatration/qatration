@@ -885,6 +885,13 @@ def main():
     finally:
         shutil.rmtree(_jw, ignore_errors=True)
 
+    # THE QUEUE'S CLOCK IS UTC: a lease written in local wall time read as expired an hour
+    # early across a daylight-saving step, and a live job was reclaimed.
+    import datetime as _dt_q
+    _q_now = q._now()
+    _utc = _dt_q.datetime.now(_dt_q.timezone.utc).replace(tzinfo=None)
+    check("the queue stamps and compares in UTC", _q_now.tzinfo is None
+          and abs((_q_now - _utc).total_seconds()) < 5, "%s vs %s" % (_q_now, _utc))
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

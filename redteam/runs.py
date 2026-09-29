@@ -228,9 +228,22 @@ def open_verdict(rec, now=None):
     if open_s <= budget:
         return ("open %s, inside the %s this run was given, so it may still be running"
                 % (how_long, _duration(budget)))
-    return ("open %s, past the %s this run was given: it did not end cleanly, whatever it "
-            "reached is in its results file, and nothing closed the record"
-            % (how_long, _duration(budget)))
+    # AND ONE REQUEST MORE. The budget is checked before each send and its clock starts at
+    # the first probe, after this record was written, so a live run is open for up to one
+    # request timeout past it -- and was declared dead twelve seconds in. Twice that, plus a
+    # minute, before saying so.
+    _t = ((rec or {}).get("budgets") or {}).get("timeout_s")
+    _grace = (float(_t) if isinstance(_t, (int, float)) and not isinstance(_t, bool)
+              and _t > 0 else 300.0) * 2 + 60
+    if open_s <= budget + _grace:
+        return ("open %s, past the %s this run was given but within one request of it, so it "
+                "may still be finishing its last request" % (how_long, _duration(budget)))
+    # AND IT WROTE NOTHING: results are written once, at the end, so any results file for
+    # the target is an EARLIER run's -- "whatever it reached is in its results file" sent
+    # the reader to a stale artifact as if it were this run's.
+    return ("open %s, past the %s this run was given: it did not end cleanly and nothing "
+            "closed the record. It wrote no results; any results file for the target is an "
+            "earlier run's" % (how_long, _duration(budget)))
 
 
 def _duration(seconds):

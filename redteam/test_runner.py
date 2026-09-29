@@ -782,6 +782,52 @@ def main():
         _srv_sw.shutdown()
         shutil.rmtree(_w_sw, ignore_errors=True)
 
+    # --- THE BUILD PROBE FOLLOWS NO REDIRECT OFF ITS ORIGIN -----------------------------------
+    # It used `urlopen`, which followed a 302 from the authorised origin to anywhere and printed
+    # the values it read there.
+    import json as _js_b, threading as _th_b
+    from http.server import BaseHTTPRequestHandler as _BH_b, ThreadingHTTPServer as _TS_b
+    _hit_b = []
+
+    class _Inner(_BH_b):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            _hit_b.append(self.path)
+            _o = _js_b.dumps({"AccessKeyId": "INTERNAL-SECRET"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(_o)))
+            self.end_headers()
+            self.wfile.write(_o)
+    _inner = _TS_b(("127.0.0.1", 0), _Inner)
+
+    class _Outer(_BH_b):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:%d/latest/meta-data"
+                             % _inner.server_address[1])
+            self.end_headers()
+    _outer = _TS_b(("127.0.0.1", 0), _Outer)
+    for _s_b in (_inner, _outer):
+        _th_b.Thread(target=_s_b.serve_forever, daemon=True).start()
+    try:
+        import run_redteam as _rr_b
+        import contextlib as _cl_b
+        with _cl_b.redirect_stdout(io.StringIO()) as _out_b:
+            _said_b = _rr_b._build_mismatch(
+                {"url": "http://127.0.0.1:%d/chat" % _outer.server_address[1],
+                 "expect_build": {"AccessKeyId": "x"}})
+        check("the build probe does not follow a redirect to another origin",
+              (_hit_b, "INTERNAL-SECRET" in (_said_b or "") + _out_b.getvalue()) == ([], False),
+              "%s %r" % (_hit_b, _said_b))
+    finally:
+        _inner.shutdown()
+        _outer.shutdown()
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

@@ -49,7 +49,9 @@ def _achieved(probe, objective, ctx):
     module exists for, and the one a by-hand red-teamer reliably gets wrong — kept scoring
     half an objective as EXPLOITED, under a docstring promising the opposite.
     """
-    if probe is None or probe.error:
+    # An errored probe with evidence in it is judged, as `oracle.judge` and `isolation`
+    # judge it; one that brought nothing back is not.
+    if probe is None or (probe.error and probe.silent()):
         return False
     return achieved_combined(probe, objective, ctx)
 
@@ -79,10 +81,14 @@ def _run(target, rung, objective, ctx, trials):
         # AND A SILENT ONE IS NOT A MISS EITHER, the rule `isolation._trial` follows: an
         # endpoint answering nothing made every rung 0/N and the verdict COUPLED -- "the
         # combination is the wall" -- from silence alone. Found by an independent review.
-        if probe is None or probe.error or probe.silent():
+        # AND AN ERROR AFTER EVIDENCE IS STILL EVIDENCE, `oracle.judge`'s rule and now
+        # `isolation._trial`'s: a rung whose chain leaked and then failed was an error here.
+        if probe is None or probe.silent():
             errors += 1
         elif _achieved(probe, objective, ctx):    # locks describe the MISSES only
             hits += 1
+        elif probe.error:
+            errors += 1
         else:
             locks.append(classify(probe, ctx)["class"])
     return hits, errors, _tally(locks)

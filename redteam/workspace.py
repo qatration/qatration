@@ -1951,6 +1951,18 @@ def configs_by_name(directory=None, collisions=None):
             raise SystemExit("ABORT -- " + bad + " Nothing was read.")
         name = config_name(fp, cfg)
         if name in out:
+            # THE OPERATOR'S OWN CONFIG WINS over one this package ships under the same name.
+            # `target_configs` lists the package first and `QATRATION_CONFIGS` after, and the
+            # first won: a user whose bot is called `ragbot` had SARIF anchored to the shipped
+            # `targets_ragbot.yaml` and graded with the shipped canary, and a real finding
+            # demoted to a note. The collision is still returned, naming the one that lost.
+            _pkg = _os.path.normcase(_os.path.abspath(directory))
+            _here = lambda _p: _os.path.normcase(_os.path.dirname(_os.path.abspath(_p))) == _pkg
+            if _here(out[name][0]) and not _here(fp):
+                if collisions is not None:
+                    collisions.append((name, _os.path.basename(out[name][0])))
+                out[name] = (fp, cfg)
+                continue
             if collisions is not None:
                 collisions.append((name, _os.path.basename(fp)))
             continue

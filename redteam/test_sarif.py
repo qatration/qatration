@@ -809,6 +809,35 @@ check("an artifact naming a run whose record is gone is not a successful executi
       and "run/record-unreadable" in json.dumps(notifications(_log_g)),
       json.dumps(_log_g["runs"][0]["invocations"][0])[:300])
 
+# A PATH IS A URI: percent-encoded, and a UNC path keeps its host.
+check("an absolute path is percent-encoded and a UNC path keeps its server",
+      [sarif._uri("/home/me/bot#2.yaml"), sarif._uri(r"C:\Users\Jo Doe\bot.yaml"),
+       sarif._uri(r"\\fileserver\share\bot.yaml"), sarif._uri("my bots/x#1.yaml")]
+      == ["file:///home/me/bot%232.yaml", "file:///C:/Users/Jo%20Doe/bot.yaml",
+          "file://fileserver/share/bot.yaml", "my%20bots/x%231.yaml"],
+      str([sarif._uri("/home/me/bot#2.yaml"), sarif._uri(r"\\fileserver\share\bot.yaml")]))
+# THE OPERATOR'S CONFIG WINS a name it shares with a shipped one: the findings of a user's
+# `ragbot` were anchored to the package's config and graded with its canary.
+import workspace as _ws_s
+_d_own = tempfile.mkdtemp()
+_own = os.path.join(_d_own, "ragbot.yaml")
+io.open(_own, "w", encoding="utf-8").write(
+    "name: ragbot\nadapter: http\nurl: http://127.0.0.1:9/x\noracle_context:\n"
+    "  canaries: [MY-OWN-CANARY-1]\n")
+_keep_c = os.environ.get("QATRATION_CONFIGS")
+_coll = []
+try:
+    os.environ["QATRATION_CONFIGS"] = _own
+    _by = _ws_s.configs_by_name(collisions=_coll)
+finally:
+    if _keep_c is None:
+        os.environ.pop("QATRATION_CONFIGS", None)
+    else:
+        os.environ["QATRATION_CONFIGS"] = _keep_c
+check("a config the operator names wins over a shipped one of the same name, and says so",
+      os.path.abspath(_by["ragbot"][0]) == os.path.abspath(_own)
+      and ("ragbot", "targets_ragbot.yaml") in _coll, str((_by["ragbot"][0], _coll)))
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)
