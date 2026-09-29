@@ -232,6 +232,10 @@ def main():
     check("a frame whose requirement is unmet is skipped, not scored",
           [r["frame"] for r in out["results"]], [])
     check("...and the reason is reported", out["skipped"][0]["frame"], "needs-self")
+    # AND A SEARCH THAT SENT NO FRAME TRIED NOTHING: it fell through to LOCKED, "nothing in
+    # the library moved it", about a library of which nothing was sent.
+    check("...and a search whose every frame was skipped is UNMEASURED, not LOCKED",
+          out["verdict"], "UNMEASURED")
     check("...and it shows up in the rendered block",
           "n/a: needs-self" in format_search("p", out), True)
 

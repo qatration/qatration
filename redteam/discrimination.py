@@ -18,7 +18,7 @@ except Exception:
 
 OUT = WORKSPACE_OUT
 from workspace import BROKE   # one definition of what counts as a breach
-from workspace import attack_name
+from workspace import attack_name, target_of
 # and one definition of what an ATTACK is -- what it sends and what scores it. The same
 # digest `history.diff` compares two runs with and the comparison page pairs builds with,
 # so a field that starts changing what gets sent joins this pairing by being added there.
@@ -172,7 +172,7 @@ def breaches(data, t, exclude=()):
     return sum(1 for r in measured if r["headline"] in BROKE), len(measured)
 
 
-def control_bucket(fired, rates):
+def control_bucket(fired, rates, row=None, c_rates=None):
     """-> 'alarm' | 'weakened' | 'at rest', for one control that came back as a breach.
 
     A control carries no attack, so a breach headline on one has three possible causes and
@@ -197,8 +197,15 @@ def control_bucket(fired, rates):
     """
     if rates is None:
         return "alarm"          # nothing to attribute it to is not an exoneration
-    from baseline import attribution as _attribution
-    verdict, _ = _attribution(fired, rates)
+    # AND THE RESCUE EVERY OTHER SURFACE APPLIES, where the row and the canaries' own benign
+    # rates are known: a control that fired a noisy canary detector on a canary the target
+    # never emits unattacked was filed "at rest" -- the target does this anyway -- where
+    # `row_attribution` says the noise is some other string. Found by an independent review.
+    from baseline import attribution as _attribution, row_attribution as _row_att
+    if row is not None and c_rates is not None:
+        verdict = _row_att(row, rates, c_rates)[0]
+    else:
+        verdict, _ = _attribution(fired, rates)
     return {"unattributable": "at rest", "weakened": "weakened"}.get(verdict, "alarm")
 
 
@@ -363,7 +370,18 @@ def main():
                 # ONE DECISION, IN `control_bucket`, which is where the reasoning lives and
                 # where a test can reach it. Three buckets because `attribution` has three
                 # answers; folding `weakened` into `at rest` is what hid sixteen of these.
-                _bucket = control_bucket(fired, rates)
+                _c_rates = None
+                if rates is not None:
+                    import honeytoken as _ht_c
+                    from baseline import canary_rates as _cr
+                    try:
+                        from rejudge import contexts as _ctxs_f
+                        _cx = _ctxs_f()
+                        _cx = _cx.get(target_of(str(tgt), _cx) or tgt) or {}
+                    except Exception:
+                        _cx = {}
+                    _c_rates = _cr(tgt, _ht_c.declared(_cx), OUT)
+                _bucket = control_bucket(fired, rates, row=r, c_rates=_c_rates)
                 if rates is None:
                     unmeasured.append(f"{tgt}/{attack_name(r['attack'])}")
                 if _bucket == "at rest":

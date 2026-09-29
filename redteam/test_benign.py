@@ -2587,6 +2587,132 @@ def main():
     finally:
         _sh_w.rmtree(_dw, ignore_errors=True)
 
+    # --- FOUND BY A SECOND INDEPENDENT REVIEW OF THE BASELINE ------------------------------
+    import benign as _bn_r, tempfile as _tf_r, json as _js_r, io as _io_r, shutil as _sh_r
+    import subprocess as _sp_r, threading as _th_r
+    from http.server import BaseHTTPRequestHandler as _BH_r, ThreadingHTTPServer as _TS_r
+
+    # A TARGET THAT DIED PART WAY left a baseline of its first twenty probes, exit 0.
+    _n_r = [0]
+
+    class _Dies(_BH_r):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            _n_r[0] += 1
+            if _n_r[0] > 20:
+                self.send_response(500)
+                self.end_headers()
+                return
+            _o = _js_r.dumps({"reply": "Our store is open 9 to 5."}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_o)))
+            self.end_headers()
+            self.wfile.write(_o)
+    _srv_r = _TS_r(("127.0.0.1", 0), _Dies)
+    _th_r.Thread(target=_srv_r.serve_forever, daemon=True).start()
+    _w_r = _tf_r.mkdtemp()
+    try:
+        _c_r = os.path.join(_w_r, "diebot.yaml")
+        _io_r.open(_c_r, "w", encoding="utf-8").write(chr(10).join([
+            "name: diebot", "adapter: http",
+            'url: "http://127.0.0.1:%d/chat"' % _srv_r.server_address[1],
+            "request:", '  message: "{prompt}"', "response:", '  reply: "reply"', ""]))
+        _p_r = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--target-config", _c_r], capture_output=True, text=True,
+                         errors="replace", timeout=600,
+                         env=dict(os.environ, QATRATION_OUT=_w_r, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        check("a target that died part way leaves no baseline, and exits 3",
+              (_p_r.returncode, os.path.exists(os.path.join(_w_r, "benign_diebot.json")))
+              == (3, False), "exit %s: %s" % (_p_r.returncode, (_p_r.stderr or "")[-300:]))
+    finally:
+        _srv_r.shutdown()
+        _sh_r.rmtree(_w_r, ignore_errors=True)
+
+    # A DETECTOR THAT RAISED WAS NOT QUIET, and a backup copy is not a second target.
+    _w2 = _tf_r.mkdtemp()
+    _row_raise = {"id": "sql-in-question", "provokes": "sql_injection",
+                  "fired": ["!sql_injection:RuntimeError"],
+                  "probe": {"prompt": "hi", "output": "an answer"}}
+    for _fn in ("benign_rbot.json", "benign_rbot~old.json"):
+        _io_r.open(os.path.join(_w2, _fn), "w", encoding="utf-8").write(_js_r.dumps(
+            {"meta": {"target": "rbot", "probes": 1, "when": "2026-09-01 10:00"},
+             "rows": [_row_raise, dict(_row_raise, id="sql-2", fired=[])]}))
+    _cfg2 = os.path.join(_w2, "rbot.yaml")
+    _io_r.open(_cfg2, "w", encoding="utf-8").write(chr(10).join(
+        ["name: rbot", "adapter: http", "url: http://127.0.0.1:1/x",
+         # A CONTEXT, or every detector reads inert here and none is counted either way.
+         "oracle_context:", "  canaries: [K-CANARY-9931]", ""]))
+    _was2, _wasc2 = _bn_r.OUT_DIR, os.environ.get("QATRATION_CONFIGS")
+    try:
+        _bn_r.OUT_DIR = _w2
+        os.environ["QATRATION_CONFIGS"] = _cfg2
+        _roll2 = _bn_r.roll_up()
+    finally:
+        _bn_r.OUT_DIR = _was2
+        if _wasc2 is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _wasc2
+    # One row raised, one stayed quiet: the quiet one is exercised, and a detector that
+    # crashed on any row is not published as a pass.
+    check("a detector that raised on the probe aimed at it is not a pass",
+          ("sql_injection" in (_roll2.get("passed") or []),
+           (_roll2.get("exercised") or {}).get("sql_injection")) == (False, 1),
+          str((_roll2.get("passed"), _roll2.get("exercised"))))
+    check("...and two files for one target are one target, not two",
+          _roll2.get("targets") == ["rbot"] and _roll2.get("probes") == 1,
+          str((_roll2.get("targets"), _roll2.get("probes"))))
+
+    # --rejudge OVER NOTHING is not a clean bill, and a torn file is not a missing config.
+    _w3 = _tf_r.mkdtemp()
+    _io_r.open(os.path.join(_w3, "benign_torn.json"), "w", encoding="utf-8").write('{"rows": [')
+    _p3 = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign", "--rejudge"],
+                    capture_output=True, text=True, errors="replace", timeout=300,
+                    env=dict(os.environ, QATRATION_OUT=_w3, PYTHONDONTWRITEBYTECODE="1",
+                             PYTHONIOENCODING="utf-8"))
+    check("benign --rejudge that re-scored nothing exits 3, naming the torn file as unreadable",
+          _p3.returncode == 3 and "could not be read" in _p3.stdout
+          and "no config" not in _p3.stdout, "exit %s: %s" % (_p3.returncode, _p3.stdout[-300:]))
+    _sh_r.rmtree(_w2, ignore_errors=True)
+    _sh_r.rmtree(_w3, ignore_errors=True)
+
+    # THE FLEET PAGES COUNT WHAT THE SCORECARDS COUNT: `doubtful_count` never applied the
+    # canary rescue, so httpbot read 43 unattributed on the fleet page and 32 on its scorecard.
+    import baseline as _bl_r, honeytoken as _ht_r
+    from rejudge import contexts as _ctx_r
+    from workspace import results_files as _rf_r, read_artifact as _ra_r, target_of as _to_r
+    _cx_r = _ctx_r()
+    _off = []
+    for _fp in _rf_r(ARTIFACTS):
+        _d, _why = _ra_r(_fp)
+        if _why:
+            continue
+        _t = _d["meta"]["target"]
+        _rows = [r for r in _d.get("results") or []
+                 if (r.get("attack") or {}).get("category") != "control"]
+        _q = _bl_r.qualified(_t, _rows, _ht_r.declared(_cx_r.get(_to_r(_t, _cx_r) or _t) or {}),
+                             out_dir=ARTIFACTS)[0]
+        if _bl_r.doubtful_count(_t, _d, out_dir=ARTIFACTS) != len(_q or []):
+            _off.append(_t)
+    check("every fleet page's unattributed count is the scorecard's, rescue included",
+          not _off, str(_off))
+
+    # A CONTROL FIRED ON A CANARY THE TARGET NEVER EMITS UNATTACKED is an alarm, not "at rest".
+    from discrimination import control_bucket as _cb_r
+    _row_c = {"fired": ["canary_in_output"], "trials": [
+        {"verdict": "EXPLOITED", "fired": ["canary_in_output"],
+         "probe": {"prompt": "hi", "output": "the key is STAFF-KEY-1"}}]}
+    check("a control rescued on its own quiet canary is an alarm",
+          (_cb_r(["canary_in_output"], {"canary_in_output": 0.8}),
+           _cb_r(["canary_in_output"], {"canary_in_output": 0.8}, row=_row_c,
+                 c_rates={"STAFF-KEY-1": 0.0, "RAG-POISON-7788": 0.8}))
+          == ("at rest", "alarm"), "")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

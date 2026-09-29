@@ -678,7 +678,9 @@ def roll_up():
     per_target = {}
     reached = collections.Counter()
     exercised = collections.Counter()   # aimed at, armed, and it stayed quiet
+    raised = set()                      # detectors that raised on some row
     ages = {}
+    _from = {}
     for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
         d, why = read_artifact(fp)
         if why:
@@ -690,6 +692,14 @@ def roll_up():
         # own docstring forbids, in the roll-up that publishes this project's false-alarm
         # rates. `_unusable_benign` refuses it now and the `why` branch above names the file.
         t = (d.get("meta") or {}).get("target")
+        # ONE FILE PER TARGET: a backup `benign_diebot~old.json` was a second target, "across 2
+        # targets: diebot, diebot", its stale rows counted beside the current ones.
+        if t in _from:
+            print(f"  ! {os.path.basename(fp)} and {_from[t]} both hold the benign run of "
+                  f"{t!r}; only {_from[t]} is counted. Move the other out of {OUT_DIR}.",
+                  file=sys.stderr)
+            continue
+        _from[t] = os.path.basename(fp)
         targets.append(t)
         # A roll-up with no age reads as "this is how things are", and it is not: these
         # files are written hours apart and an oracle fix lands between them. dvla's run
@@ -732,8 +742,14 @@ def roll_up():
             # AND NOT AN EMPTY REPLY. A probe that came back with nothing (`silent`) never
             # gave the detector anything to be quiet about, and counting it filed the detector
             # under "aimed at and quiet ... a pass, not a gap". Found by an independent review.
+            # AND NOT ONE THAT RAISED: it is recorded as `!name:Error`, so `_aim not in fired`
+            # held and a detector that crashed on every probe was filed "aimed at and quiet
+            # ... a pass". `baseline.attribution` already reads `!name:` as unmeasured.
+            _raised_here = {str(f)[1:].split(":", 1)[0] for f in (r.get("fired") or [])
+                            if str(f).startswith("!")}
+            raised |= _raised_here
             if (_aim and r.get("probe") and not r.get("silent") and _aim not in _dead
-                    and _aim not in (r.get("fired") or [])):
+                    and _aim not in (r.get("fired") or []) and _aim not in _raised_here):
                 exercised[_aim] += 1
             for f in r.get("fired", []):
                 reached[f] += 1
@@ -776,7 +792,7 @@ def roll_up():
             # read. `passed` is aimed at, armed, and never fired anywhere; `untested` is the
             # remainder, which is the only half that is a gap.
             "passed": sorted(d for d in DETECTORS
-                             if d not in reached and exercised.get(d)),
+                             if d not in reached and d not in raised and exercised.get(d)),
             "untested": sorted(d for d in DETECTORS
                                if d not in reached and not exercised.get(d)),
             "per_target": {k: dict(v) for k, v in per_target.items()},
@@ -857,6 +873,12 @@ def main():
     if args.rejudge:
         total, replayable, skipped_rows, seen = 0, 0, 0, []
         for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
+            # A FILE THAT DOES NOT READ IS NOT A FILE WITH NO CONFIG: both were "no config,
+            # left alone", because `rejudge` raises the same way for either.
+            _d0, _why0 = read_artifact(fp)
+            if _why0:
+                print(f"  ! {os.path.basename(fp)} could not be read ({_why0}); left alone")
+                continue
             try:
                 d, changed = rejudge(fp)
             except SystemExit:
@@ -889,6 +911,10 @@ def main():
             print(f"  {skipped_rows} row(s) carry no probe and were skipped: written "
                   f"before probes were stored, or an error with nothing to judge.\n"
                   f"  One re-run makes a target replayable for good.")
+        # NOTHING RE-SCORED IS NOT NOTHING CHANGED: exit 3, as `qatration rejudge` answers the
+        # same state. This exited 0 over an empty workspace.
+        if not seen:
+            return 3
         return
 
     if args.summary:
@@ -1287,6 +1313,28 @@ def main():
               "have reached have nothing on this\n  target, and a roll-up reports those as "
               "silent on clean traffic."
               % (s["probes"], _corpus_n, _wall_m.reason, _wall_m.advice), file=sys.stderr)
+        sys.exit(3)
+
+    # AND A TARGET THAT DIED PART WAY IS THE SAME CUT, reached without a wall: the dead-endpoint
+    # wall trips only on an endpoint that never answered, so one that answered twenty probes
+    # and returned 500 to the other thirty wrote a baseline of its first twenty, exit 0 -- the
+    # tail of the ordered corpus gone, and its detectors reported quiet on clean traffic.
+    from runner import GIVE_UP_AFTER as _give_up
+    _tail = 0
+    for _r in reversed(rows):
+        if _r.get("skipped"):
+            continue            # never sent for want of a delivery: neither end of the cut
+        if not _r.get("error"):
+            break
+        _tail += 1
+        _first_err = _r.get("error")
+    if _tail >= _give_up:
+        print("\nNOT A BASELINE — the last %d probe(s) of the corpus all errored (the first: "
+              "%s), so the run measured its head and lost its tail.\n"
+              "  Nothing was written. This corpus is an ordered list, so a tail that did not "
+              "answer is a BIASED\n  sample rather than a smaller one. Check the target is "
+              "still up, and run again."
+              % (_tail, str(_first_err)[:120]), file=sys.stderr)
         sys.exit(3)
 
     # THROUGH `workspace.artifact`, which makes the directory. See its docstring: this line

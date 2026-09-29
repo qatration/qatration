@@ -444,8 +444,18 @@ def doubtful_count(target, artifact, out_dir=None):
     try:
         rows = [r for r in ((artifact or {}).get("results") or [])
                 if (r.get("attack") or {}).get("category") != "control"]
-        ctx = ((artifact or {}).get("meta") or {}).get("oracle_context") or {}
-        doubtful, _ = qualified(target, rows, ctx.get("canaries") or (), out_dir=out_dir)
+        # THE CANARIES THE CONFIG DECLARES, as every other reader of this rule finds them. A
+        # results file carries no `oracle_context` -- not one of the 45 stored here does -- so
+        # the rescue never ran on the two fleet pages: httpbot read 43 unattributed where its
+        # scorecard, the console and the SARIF all say 32.
+        import honeytoken as _ht
+        ctx = ((artifact or {}).get("meta") or {}).get("oracle_context") or None
+        if not ctx:
+            from rejudge import contexts as _contexts
+            from workspace import target_of as _target_of
+            _ctxs = _contexts()
+            ctx = _ctxs.get(_target_of(str(target), _ctxs) or target) or {}
+        doubtful, _ = qualified(target, rows, _ht.declared(ctx), out_dir=out_dir)
         return len(doubtful or [])
     except Exception:
         return 0

@@ -302,6 +302,11 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
         verdict = "KEYED"         # a frame opens what the bare ask cannot
     elif any(r["hits"] for r in results):
         verdict = "FLAKY"         # something landed but no better than the control
+    elif not results:
+        # NO FRAME WAS SENT -- every one skipped, a family named that holds none this property
+        # can fill -- so nothing in the library was tried, which is not "nothing in the
+        # library moved it". `run_isolation` names this very case as a defect.
+        verdict = "UNMEASURED"
     elif results and all((r.get("errors") or 0) >= (r.get("trials") or 1) for r in results):
         # EVERY FRAMED TRIAL ERRORED: nothing in the library was measured, which is not
         # "nothing in the library moved it". `try_frame` counts the errors and this read
