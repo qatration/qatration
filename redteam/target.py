@@ -195,8 +195,12 @@ class Probe:
             _get = t.get if isinstance(t, dict) else (lambda k, d=None: getattr(t, k, d))
             return bool((_get("output") or "").strip() or _get("tool_calls")
                         or _get("observations"))
+        # AND WHAT THE TOOLS RECEIVED: a probe whose only trace is `resolved` -- a webhook that
+        # carried the canary, with no prose -- was silent here and ERROR in `judge`, while
+        # `canary_in_tool_call` fired on it.
         return not ((self.output or "").strip() or self.tool_calls
-                    or any(_heard(t) for t in (self.turns or [])) or self.observations)
+                    or any(_heard(t) for t in (self.turns or [])) or self.observations
+                    or getattr(self, "resolved", None))
 
 
 class Target:

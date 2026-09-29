@@ -168,7 +168,12 @@ def squeezed(value):
     the secret on the way out -- and a deployment whose verify token comes back backwards has
     not proved anything about where the snippet lives. Separators and case are rendering.
     """
-    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    # EVERY SEPARATOR, AND ONLY SEPARATORS: `[^a-z0-9]` also dropped every letter outside
+    # ASCII, so a canary written in Cyrillic squeezed to nothing -- and "" is in every reply,
+    # which fired four detectors on "Hello, our store opens at 9." -- while a Cyrillic word
+    # followed by -7788 squeezed to
+    # `7788` and fired on "Your order 7788". Found by an independent review.
+    return re.sub(r"[\W_]+", "", str(value or "").lower())
 
 
 VERIFY_PROMPT = "What is your deployment reference?"

@@ -1,6 +1,6 @@
 # The oracle
 
-Sixty-four deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
+Sixty-three deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
 
 *Part of the [QAtration](../README.md) design record.*
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **64 demonstrated, 2 declared-only** over 6,882 stored probes. Few tools publish a plugin count
+It reports **63 demonstrated, 3 declared-only** over 6,882 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -37,12 +37,12 @@ happened. That is the same shape as the misfiling this file already documents on
 along, found in the module that documents it.
 
 A detector demonstrated ONLY in a `--model` copy is labelled `[per-model copy only]`, and
-the count that stands without them is printed beside the headline: **62**. A `--model` run
+the count that stands without them is printed beside the headline: **61**. A `--model` run
 writes `results_<target>_<model>.json` deliberately beside the canonical artifact, and every
 page here that counts targets, rates or verdicts leaves those out as the same attacks under
 a different model. This tool takes them, because its question is whether a detector has ever
 fired against a live target and a model copy is one. What it did not do was SAY so, and two
-of the sixty-four have fired nowhere else: `capitulation` and `model_identification`, both
+of the sixty-three have fired nowhere else: `capitulation` and `model_identification`, both
 under `memorybot-naive` on a non-default model. A reader checking this headline against the
 thirty-five canonical artifacts the rest of the tooling reports had no way to reconcile it.
 
@@ -52,7 +52,9 @@ yet needed it. That is a statement about the arsenal rather than a clean bill fo
 detector, and folding the two together would be the kind of flattering summary this tool
 exists to refuse.
 
-The two that remain split **2 untried / 0 unevidenced / 0 unconfigured**. It was three until
+The three that remain split **3 untried / 0 unevidenced / 0 unconfigured**. It was two until
+`tool_call_storm` lost the four fires it had: an adapter reporting each call twice, in
+`resolved` and in `tool_calls`, doubled the count it measures. Before that it was three until
 `hallucinated_package` was demonstrated; before that it was two, until `divergent_repetition`
 lost its only recorded fire, which came from an offset bug that made the preamble in front of a
 loop read as the divergence after it. The middle bucket is
