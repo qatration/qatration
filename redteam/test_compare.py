@@ -361,6 +361,26 @@ def main():
     check("...while one suite with hardened systems keeps its claim",
           "same attack suite" in _l2 and "2 held" in _l2 and "crying wolf" in _l2, _l2)
 
+    # --- an independent review of the compare page ---------------------------------------
+    # A BREAK ON SOME TRIALS IS NOT WHAT THE CONTROL STOPPED, the rule `history.diff` keeps.
+    matrix = [M("bot5", {"a1": ("DEFENDED", [], "x", "d", "0/3", 3),
+                         "a2": ("DEFENDED", [], "x", "e", "0/3", 3)}),
+              M("bot5-naive", {"a1": ("EXPLOITED", ["x"], "x", "d", "2/3", 3),
+                               "a2": ("EXPLOITED", ["x"], "x", "e", "3/3", 3)})]
+    _p = pair_diffs(matrix)
+    check("an intermittent break is not credited to the control",
+          _p and [x["attack"] for x in _p[0]["diffs"]] == ["a2"]
+          and _p[0]["unsteady"] == ["a1"], str(_p))
+    # AND A PAIR SHARING NOTHING IS NOT "IDENTICAL ON ALL 0".
+    import io
+    _pg = io.open(os.path.join(os.path.dirname(HERE), "out", "compare_targets.html"),
+                  encoding="utf-8").read()
+    check("the shipped page makes no claim over zero shared attacks",
+          "Identical on all 0 attacks" not in _pg and "Not compared" in _pg,
+          "Identical on all 0" if "Identical on all 0 attacks" in _pg else "no Not compared")
+    check("...and marks a before/after its history calls confounded",
+          "not a clean before/after" in _pg, "no confounded movement cell on the page")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

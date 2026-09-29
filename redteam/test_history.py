@@ -529,9 +529,9 @@ def main():
         # a change nobody had measured, on a timeline whose only fault was being
         # recorded without a repository to ask.
         H.record({"target": "cf8", "model": "m", "trials": 3, "engine": "unknown"},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-03 10:00")
         H.record({"target": "cf8", "model": "m", "trials": 3, "engine": "bbb222"},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-04 10:00")
         check("...and a run that could not name its build raises nothing either",
               not any("engine" in c for c in H.diff("cf8")["confounds"]),
               str(H.diff("cf8")))
@@ -539,9 +539,9 @@ def main():
         # AND TWO OF THEM ARE NOT AGREEMENT. This one is silent either way, so it is
         # here to say which silence it is: nothing was compared, not nothing changed.
         H.record({"target": "cf9", "model": "m", "trials": 3, "engine": "unknown"},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-03 10:00")
         H.record({"target": "cf9", "model": "m", "trials": 3, "engine": "unknown"},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-04 10:00")
         check("...and two unknowns are not two matching builds",
               not any("unknown" in c for c in H.diff("cf9")["confounds"]),
               str(H.diff("cf9")))
@@ -553,10 +553,10 @@ def main():
         H.record({"target": "cf8", "model": "m", "trials": 3,
                   "inert": {"sysprompt_leak": ["sysprompt_markers"]},
                   "inert_config": ["sysprompt_leak"]},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-05 10:00")
         H.record({"target": "cf8", "model": "m", "trials": 3, "inert": {},
                   "inert_config": []},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-06 10:00")
         _di = H.diff("cf8")
         check("a detector armed between two runs is flagged as a confound",
               any("armed a different set" in c for c in _di["confounds"]), str(_di))
@@ -566,11 +566,11 @@ def main():
         # AND THE OTHER DIRECTION, which hides findings rather than adding them.
         H.record({"target": "cf9", "model": "m", "trials": 3, "inert": {},
                   "inert_config": []},
-                 R(a1="EXPLOITED"), when="2026-08-01 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-05 10:00")
         H.record({"target": "cf9", "model": "m", "trials": 3,
                   "inert": {"sysprompt_leak": ["sysprompt_markers"]},
                   "inert_config": ["sysprompt_leak"]},
-                 R(a1="DEFENDED"), when="2026-08-02 10:00")
+                 R(a1="DEFENDED"), when="2026-08-06 10:00")
         check("...and a detector silenced between them is too",
               any("cannot speak now" in c for c in H.diff("cf9")["confounds"]),
               str(H.diff("cf9")))
@@ -583,10 +583,10 @@ def main():
         H.record({"target": "cfc", "model": "m", "trials": 3,
                   "inert": {"forced_output": ["forbidden_tokens"]},
                   "inert_config": ["forced_output"]},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-03 10:00")
         H.record({"target": "cfc", "model": "m", "trials": 3, "inert": {},
                   "inert_config": ["forced_output"]},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-04 10:00")
         _dc = H.diff("cfc")["confounds"]
         check("an inert set that moved under an unchanged config is not blamed on the config",
               not any("the config armed" in c for c in _dc), str(_dc))
@@ -599,9 +599,9 @@ def main():
         # guessing the config.
         H.record({"target": "cfd", "model": "m", "trials": 3,
                   "inert": {"forced_output": ["forbidden_tokens"]}},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-03 10:00")
         H.record({"target": "cfd", "model": "m", "trials": 3, "inert": {}},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-04 10:00")
         _dd = H.diff("cfd")["confounds"]
         check("...while two older runs say they cannot tell config from arsenal",
               any("cannot say which" in c for c in _dd)
@@ -622,9 +622,9 @@ def main():
         # EMPTY IS NOT ABSENT. `{}` is a run that looked and found nothing inert, which is
         # a measurement; `None` is a run that never recorded it, which is not.
         H.record({"target": "cfa", "model": "m", "trials": 3, "inert": {}},
-                 R(a1="DEFENDED"), when="2026-08-01 10:00")
+                 R(a1="DEFENDED"), when="2026-08-03 10:00")
         H.record({"target": "cfa", "model": "m", "trials": 3, "inert": {}},
-                 R(a1="EXPLOITED"), when="2026-08-02 10:00")
+                 R(a1="EXPLOITED"), when="2026-08-04 10:00")
         check("...while two runs arming the same set raise nothing",
               H.diff("cfa")["confounds"] == [], str(H.diff("cfa")))
         H.record({"target": "cfb", "model": "m", "trials": 3},
@@ -667,9 +667,9 @@ def main():
         _r3d, _r3e = R(a1="DEFENDED"), R(a1="EXPLOITED")
         _r3d[0]["rate"], _r3e[0]["rate"] = "0/3", "3/3"
         H.record({"target": "cf5", "model": "m", "trials": 3}, _r3d,
-                 when="2026-08-01 10:00")
+                 when="2026-08-03 10:00")
         H.record({"target": "cf5", "model": "m", "trials": 3}, _r3e,
-                 when="2026-08-02 10:00")
+                 when="2026-08-04 10:00")
         _d3 = H.diff("cf5")
         check("three trials a side carries no such caveat",
               not any("one attempt" in c for c in _d3["confounds"]), str(_d3["confounds"]))
@@ -683,8 +683,8 @@ def main():
         # 3/3 then 0/1, was called `fixed`. Found by an independent review.
         _t1d, _t1e = R(a1="DEFENDED"), R(a1="EXPLOITED")
         _t1d[0]["rate"], _t1e[0]["rate"] = "0/3", "1/1"
-        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1d, when="2026-08-01 10:00")
-        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1e, when="2026-08-02 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1d, when="2026-08-07 10:00")
+        H.record({"target": "cf9", "model": "m", "trials": 3}, _t1e, when="2026-08-08 10:00")
         _d9 = H.diff("cf9")
         check("a breach measured on 1 of 3 asked trials is unstable, not new",
               (_d9["new"], _d9["regressed"], "a1" in _d9.get("unstable", [])) == ([], [], True),
@@ -860,6 +860,42 @@ def main():
         _page = _listing("bf")
         check("...and one without a date says where its date came from",
               "dated by the file" in _page, _page[:300])
+
+        # --- an independent review of history: what the listing and the diff leave out ---
+        # ROWS THE LATEST RUN DID NOT MEASURE ARE LISTED: computed as `unmeasured_now` and
+        # never printed, so a run whose rows errored read as a stable target.
+        H.record({"target": "um1", "model": "m", "trials": 1},
+                 R(a1="DEFENDED", a2="DEFENDED"), when="2026-08-01 10:00")
+        H.record({"target": "um1", "model": "m", "trials": 1},
+                 R(a1="ERROR", a2="DEFENDED"), when="2026-08-02 10:00")
+        _pu = _listing("um1")
+        check("rows measured clean before and not measured now are listed",
+              "unmeasured" in _pu and "a1" in _pu, _pu[-400:])
+        # THE SAME RUN, RE-SCORED, IS THE SAME RUN: `rejudge --write` keeps the run's date.
+        _sa = H.snapshot({"target": "sr", "model": "m", "trials": 3},
+                         R(a1="EXPLOITED"), when="2026-09-29 22:04", dated_by_run=True)
+        _sb = H.snapshot({"target": "sr", "model": "m", "trials": 3},
+                         R(a1="DEFENDED"), when="2026-09-29 22:04", dated_by_run=True)
+        check("a re-scored copy of one dated run is that run, not a second one",
+              H.same_run(_sa, _sb) is True, str((_sa, _sb)))
+        _sc = dict(_sb, dated_by_run=False)
+        check("...while a date read off the filesystem proves nothing about identity",
+              H.same_run(_sa, _sc) is False, str((_sa, _sc)))
+
+        # AN EARLIER BREAK OF A DIFFERENT QUESTION IS NOT A FIX THAT DID NOT HOLD.
+        def _rx(text, v):
+            return [{"attack": {"id": "x", "category": "x", "text": text}, "headline": v,
+                     "rate": "1/1" if v in H.BROKE else "0/1",
+                     "fired": ["canary_in_output"] if v in H.BROKE else []}]
+        H.record({"target": "dq", "model": "m", "trials": 1}, _rx("ask one", "EXPLOITED"),
+                 when="2026-08-01 10:00")
+        H.record({"target": "dq", "model": "m", "trials": 1}, _rx("ask two", "DEFENDED"),
+                 when="2026-08-02 10:00")
+        H.record({"target": "dq", "model": "m", "trials": 1}, _rx("ask two", "EXPLOITED"),
+                 when="2026-08-03 10:00")
+        _dq = H.diff("dq")
+        check("a break after a rewrite is new, not REGRESSED against the old question",
+              (_dq["regressed"], _dq["new"]) == ([], ["x"]), str(_dq))
 
         # A ROW THAT WAS NOT MEASURED IS NOT IN THE DENOMINATOR. A breach answered with
         # silence the next time is an ERROR row, and the line read "6/7 broken" -- one held --
@@ -1466,16 +1502,14 @@ def main():
         check("...and the run that last measured it clean is remembered",
               (H.reopened("ordered").get("a1") or ("", ""))[1] == "2026-02-01",
               str(H.reopened("ordered")))
-        # THE SAME THREE SNAPSHOTS, OUT OF ORDER. Nothing in `load` sorts, so this is the
-        # answer a merged or replayed timeline would publish: open nine weeks longer than
-        # the engine's own evidence says.
+        # THE SAME THREE SNAPSHOTS, OUT OF ORDER, as a backfill of an older results file
+        # writes them. `load` orders by when each run was made, so the answer is the one the
+        # evidence gives, not the one the file order gives -- which was open nine weeks longer.
         with open(_p_o, "w", encoding="utf-8") as _f_o:
             for _s in (_lines[1], _lines[0], _lines[2]):
                 _f_o.write(json.dumps(_s) + chr(10))
-        check("...and out of order the same evidence dates it differently",
-              H.first_seen("ordered").get("a1") == "2026-01-01",
-              "%s -- if this changed, `load` now sorts and the check above it is stale"
-              % str(H.first_seen("ordered")))
+        check("...and out of order the same evidence dates it the same way",
+              H.first_seen("ordered").get("a1") == "2026-03-01", str(H.first_seen("ordered")))
     finally:
         H.HIST = _old_hist_h
         _sh_o.rmtree(_od, ignore_errors=True)

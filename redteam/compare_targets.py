@@ -198,6 +198,9 @@ def row_version_tags(matrix, aid):
     return letters, note
 
 
+from history import broke_every_trial
+
+
 def pair_diffs(matrix):
     """For every declared or `-naive` pair, the attacks where the two disagree.
 
@@ -221,7 +224,7 @@ def pair_diffs(matrix):
         if base not in by_name:
             continue
         guarded, naive = by_name[base], by_name[name]
-        diffs, unpaired, mismatched, unmeasured_p = [], [], [], []
+        diffs, unpaired, mismatched, unmeasured_p, unsteady_p = [], [], [], [], []
         for aid in sorted(set(guarded) | set(naive)):
             g, n = guarded.get(aid), naive.get(aid)
             if not g or not n:
@@ -265,6 +268,15 @@ def pair_diffs(matrix):
             nb = n[0] in BROKE
             if gb == nb:
                 continue
+            # THE BROKEN SIDE HAS TO HAVE BROKEN EVERY TIME, the rule `history.diff` keeps for
+            # a move: EXPLOITED 2/3 against DEFENDED 0/3 read "stopped by the control", and a
+            # coin the naive build was flipping is not what the guard bought. Listed, not
+            # counted. A row that cannot say (no rate) is left as it was.
+            _b = n if nb else g
+            if len(_b) > 4 and broke_every_trial({"rate": _b[4]}, _b[5] if len(_b) > 5
+                                                 else None) is False:
+                unsteady_p.append(aid)
+                continue
             diffs.append({"attack": aid, "guarded": g[0], "naive": n[0],
                           "fired": ", ".join(n[1] if nb else g[1]) or "-",
                           # the only direction that is evidence FOR the control
@@ -280,12 +292,14 @@ def pair_diffs(matrix):
         # neither this count nor the diffs, and is reported on its own line -- counting it
         # as shared is what would make `identical on all N` a claim about attacks nobody
         # asked the same way.
-        shared = sorted((set(guarded) & set(naive)) - set(mismatched) - set(unmeasured_p))
+        shared = sorted((set(guarded) & set(naive)) - set(mismatched) - set(unmeasured_p)
+                        - set(unsteady_p))
         if diffs or name in declared:
             out.append({"base": base, "naive": name, "label": label, "diffs": diffs,
                         "identical": len(shared) if not diffs else 0,
                         "shared": len(shared), "unpaired": unpaired,
-                        "mismatched": mismatched, "unmeasured": unmeasured_p})
+                        "mismatched": mismatched, "unmeasured": unmeasured_p,
+                        "unsteady": unsteady_p})
     return out
 
 
@@ -481,8 +495,10 @@ def main():
             # side and absent on the other, and had nothing to say about one PRESENT ON
             # BOTH IN TWO DIFFERENT VERSIONS -- which is the worse case, because it looks
             # like a comparison.
+            # AND THE RATE, fifth, with the run's trial count: an intermittent break is not
+            # the control failing, nor the control holding. Found by an independent review.
             by_id[aid] = (r["headline"], r["fired"], r["attack"].get("category"),
-                          attack_digest(r["attack"]))
+                          attack_digest(r["attack"]), r.get("rate"), meta.get("trials"))
             if aid not in seen:
                 seen.add(aid); all_attacks_order.append(aid)
             if r["headline"] in BROKE and r["attack"].get("category") != "control":
@@ -605,6 +621,16 @@ def main():
             if m["not_run"]:
                 parts.append(f"<span class='dim' title='was broken, this run did not "
                              f"re-test it'>{len(m['not_run'])} untested</span>")
+            # AND WHAT THE DIFF SAID BESIDE IT. A run whose rows errored was "no change",
+            # and a before/after `history` calls confounded (trials 3 -> 1, every attack
+            # rewritten) was a green `-5` with the word nowhere on the page. Found by an
+            # independent review.
+            if m.get("unmeasured_now"):
+                parts.append(f"<span class='dim' title='measured clean before, not measured "
+                             f"now'>{len(m['unmeasured_now'])} not measured</span>")
+            if m.get("confounds"):
+                parts.append("<span style='color:#9a6700' title='%s'>not a clean "
+                             "before/after</span>" % esc("; ".join(m["confounds"])))
             move_html = " ".join(parts) or "<span class='dim'>no change</span>"
         tbody += f"""<tr>
           <td class="tname">{esc(r['target'])}<div class="dim when">{esc(r['measured'])}</div></td>
@@ -687,6 +713,22 @@ def main():
                 f'one build or both</b> (ERROR or SKIP), so they say nothing about the control '
                 f'and are left out of the counts below: '
                 f'{esc(named_or_more(p_["unmeasured"], 6))}.</p>')
+        if p_.get("unsteady"):
+            pair_html += (
+                f'<p class="dim pn"><b>{len(p_["unsteady"])} attack(s) broke one build on '
+                f'only some of its trials</b>, so the difference is a coin that side was '
+                f'already flipping rather than what the control did, and they are left out '
+                f'of the counts below: {esc(named_or_more(p_["unsteady"], 6))}.</p>')
+        if not p_["diffs"] and not p_.get("shared"):
+            # NOTHING WAS COMPARED, which is not "identical": two builds sharing no attack
+            # measured the same way on both said "Identical on all 0 attacks ... The change
+            # bought nothing measurable" -- a finding made over zero comparisons, twice on
+            # the shipped page. Found by an independent review.
+            pair_html += (
+                '<p class="dim pn">Not compared: the two builds share no attack that was '
+                'measured the same way on both, so nothing here says what the change '
+                'bought. Run both against one arsenal.</p>')
+            continue
         if not p_["diffs"]:
             # "no difference" is a result, and it is the one this pair was declared to find
             pair_html += (

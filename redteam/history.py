@@ -156,9 +156,16 @@ def same_run(a, b):
     Two snapshots agreeing on all three say the same thing about the same target, and a
     timeline holding both learns nothing from the second.
     """
+    # AND THE SAME RUN RE-SCORED. `rejudge --write` rewrites the verdicts in place and keeps
+    # the run's own date, so the rows differ and this said "a different run": backfilled
+    # beside the original, dated the same minute, an oracle change printed as `fixed 3`.
+    # Two snapshots that both carry the sweep's own date and agree on it are one sweep.
+    # Found by an independent review.
+    _same_moment = bool(a.get("dated_by_run") and b.get("dated_by_run")
+                        and a.get("run") and a.get("run") == b.get("run"))
     return (a.get("model") == b.get("model")
             and a.get("trials") == b.get("trials")
-            and a.get("rows") == b.get("rows"))
+            and (a.get("rows") == b.get("rows") or _same_moment))
 
 
 # WHAT A SNAPSHOT HOLDS, by kind, asked by the walker the artifact tables use. The checks in
@@ -307,7 +314,19 @@ def load(target, unreadable=None):
                 unreadable.append((n, why))
             continue
         out.append(rec)
+    # IN THE ORDER THE RUNS WERE MADE. `backfill` appends a results file whenever it is
+    # read, so an August run backfilled after a September one became "latest", and three
+    # findings the September run had fixed were printed as `new`. A stable sort: entries
+    # with one date keep the order they were written in. Found by an independent review.
+    out.sort(key=lambda r: str(r.get("run") or ""))
     return out
+
+
+def _same_question(a, b, aid):
+    """Did runs `a` and `b` ask attack `aid` the same way -- or can they not say?"""
+    ha = ((a.get("rows") or {}).get(aid) or {}).get("h")
+    hb = ((b.get("rows") or {}).get(aid) or {}).get("h")
+    return not (ha and hb and ha != hb)
 
 
 def broke_every_trial(row, asked=None):
@@ -458,7 +477,10 @@ def diff(target):
                 # with nothing said about the 44. Found by an independent review.
                 dropped.append(aid)
             continue
-        earlier = any(state(r, aid) for r in runs[:-2])
+        # AGAINST THE SAME QUESTION: x(h1) broke, x was rewritten to h2 and held, then h2
+        # broke -- that is h2's first break, not "a fix that did not hold". Both sides or
+        # nothing, as the rewritten-attack confound below. Found by an independent review.
+        earlier = any(state(r, aid) for r in runs[:-2] if _same_question(r, cur, aid))
         # A FLIP THE TRIALS DO NOT AGREE ON IS NOT A CHANGE IN THE TARGET. Every branch below
         # decides whether somebody's build goes red, and 0/3 -> 1/3 says only that a coin the
         # target was already flipping came up the other way. So a counted move has to break on
@@ -912,8 +934,12 @@ def main():
         answered += 1
         for label, key in (("REGRESSED", "regressed"), ("new", "new"),
                            ("fixed", "fixed"), ("still open", "open"),
-                           ("NOT RUN", "not_run"), ("unsteady", "unstable")):
-            if d[key]:
+                           ("NOT RUN", "not_run"),
+                           # MEASURED CLEAN BEFORE, NOT MEASURED NOW: computed and never
+                           # printed, so a run whose rows errored read as a stable target.
+                           ("unmeasured", "unmeasured_now"),
+                           ("unsteady", "unstable")):
+            if d.get(key):
                 shown = named_or_more(d[key], 6)
                 print(f"  {label:<11}{len(d[key]):>3}  {shown}")
         if d.get("confounds"):
