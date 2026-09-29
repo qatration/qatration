@@ -231,7 +231,17 @@ def _observations(raw):
 # contract shape. A text-only reply there is a bot that called no tool, and counting its
 # `{"type": "text", ...}` block as an unreadable call printed "never gave this run anything it
 # could read" over an ordinary, well-defended run.
-_CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input"))
+_CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input",
+                        # AND THE SPELLINGS OF THE OTHER APIS: Gemini's part
+                        # `{"functionCall": {...}}`, Bedrock Converse's `{"toolUse": {...}}`,
+                        # and a custom `{"tool_name": ..., "parameters": ...}`. A call in any
+                        # of them came out as no call at all -- `tool_calls=[]`, counted as
+                        # neither readable nor unreadable, so nothing was said and a canary
+                        # sent in the arguments read DEFENDED. Found by an independent review.
+                        "tool_name", "parameters", "functionCall", "function_call",
+                        "toolUse", "toolCall"))
+# The keys that WRAP one call rather than name it: the call is the mapping inside.
+_CALL_WRAPPERS = ("functionCall", "function_call", "toolUse", "toolCall")
 _CALL_TYPES = frozenset(("tool_use", "function", "function_call", "tool_call"))
 
 
@@ -287,8 +297,14 @@ def _pairs(raw):
         if isinstance(item, (list, tuple)) and len(item) >= 2:
             out.append((str(item[0]), str(item[1])))
         elif isinstance(item, dict):
-            name = item.get("name") or item.get("tool") or item.get("function") or ""
-            args = item.get("arguments", item.get("args", item.get("input", "")))
+            for _w in _CALL_WRAPPERS:
+                if isinstance(item.get(_w), dict):
+                    item = item[_w]
+                    break
+            name = (item.get("name") or item.get("tool") or item.get("tool_name")
+                    or item.get("function") or "")
+            args = item.get("arguments", item.get("args", item.get("input",
+                                                                    item.get("parameters", ""))))
             # THE ARGUMENTS LIVE WHERE THE NAME DOES. OpenAI's shape is
             # {"type": "function", "function": {"name": ..., "arguments": "{...}"}} — this read
             # the name out of the nested dict and the arguments off the top level, where there
@@ -393,7 +409,24 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
                         f"redirect refused by network policy: {why}", headers, fp)
         except ImportError:
             pass
+        # THE ATTACK HAS TO ARRIVE. urllib re-issues a 301 or 302 POST as a GET with no body --
+        # what browsers do -- so `/chat` -> `/chat/` delivered nothing, the endpoint answered
+        # the empty GET with its greeting, and that greeting was judged as the reply to the
+        # attack: DEFENDED for an attack never sent. 307 and 308 were refused outright. Same
+        # origin is already established above, so the request goes again, whole. A 303 is
+        # "see the result over there": the POST was delivered and the answer is fetched, which
+        # is what it means. Found by an independent review.
+        if req.get_method() == "POST" and code in (301, 302, 307, 308):
+            _hdrs = {k: v for k, v in req.header_items()
+                     if k.lower() not in ("content-length", "host")}
+            return urllib.request.Request(newurl.replace(" ", "%20"), data=req.data,
+                                          headers=_hdrs, origin_req_host=req.origin_req_host,
+                                          unverifiable=True, method="POST")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    # AND 308 ON THE OLDEST PYTHON THIS SUPPORTS, whose handler has no entry for it (3.11
+    # added one). 307 is listed with it so the pair reads as one rule.
+    http_error_307 = http_error_308 = urllib.request.HTTPRedirectHandler.http_error_302
 
 
 # NO PROXY FROM THE ENVIRONMENT, the rule `authorization` already follows: `build_opener`
@@ -428,7 +461,10 @@ def _retry_after(headers):
     if raw is None:
         return None
     try:
-        return max(0.0, float(str(raw).strip()))
+        _v = float(str(raw).strip())
+        # NOT A WAIT: `nan` and `-5` became 0.0, "retry at once", which is ruder than a header
+        # that says nothing (1 s). Found by an independent review.
+        return _v if _v >= 0 and _v == _v else None
     except ValueError:
         pass
     try:
@@ -439,6 +475,22 @@ def _retry_after(headers):
         return max(0.0, (when - now).total_seconds())
     except Exception:
         return None
+
+
+def _charset_of(response):
+    """The charset a response declares and Python knows, or None."""
+    import codecs as _cd
+    try:
+        cs = response.headers.get_content_charset()
+    except Exception:
+        return None
+    if not cs:
+        return None
+    try:
+        name = _cd.lookup(cs).name
+    except LookupError:
+        return None
+    return "utf-8-sig" if name == "utf-8" else cs
 
 
 class RateLimit:
@@ -985,7 +1037,10 @@ class HttpConfiguredTarget(Target):
                                  seconds=round(time.time() - t0, 1))
                 # `utf-8-sig`: a body that opens with a byte-order mark is valid JSON to every
                 # client but this one, and every probe against it was a JSONDecodeError.
-                raw = json.loads(_body.decode("utf-8-sig", "replace"))
+                # AND THE CHARSET IT DECLARES, when it declares one: a `windows-1251` body
+                # read as UTF-8 became a reply of replacement characters, judged as text
+                # and said nowhere. Found by an independent review.
+                raw = json.loads(_body.decode(_charset_of(r) or "utf-8-sig", "replace"))
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
             # would send the operator to re-map a path that is correct.
@@ -1026,9 +1081,14 @@ class HttpConfiguredTarget(Target):
             # and the error below already knows how to say which path holds the text.
             if isinstance(reply, list) and reply and all(isinstance(x, str) for x in reply):
                 reply = "\n".join(reply)
-            elif isinstance(reply, (dict, list)):
+            # AND A FLAG OR A NUMBER: a path mapped to `ok` or `status` read `True` or `0` as
+            # the bot's reply, and every attack against it scored DEFENDED on that. Found by
+            # an independent review.
+            elif isinstance(reply, (dict, list, bool, int, float)):
                 _shape = ("a mapping with keys %s" % sorted(reply)[:6]
-                          if isinstance(reply, dict) else "a list of %d item(s)" % len(reply))
+                          if isinstance(reply, dict) else
+                          "a list of %d item(s)" % len(reply) if isinstance(reply, list) else
+                          "the %s %s" % (type(reply).__name__, json.dumps(reply)))
                 _bad2 = Probe(
                     prompt=prompt, output="",
                     error=("ExtractionFailed: response.reply=%r holds %s, not text. Reading it as a reply would hand the oracle a Python repr of that whole branch -- tool arguments and metadata included -- and a canary anywhere inside it would be scored as the target having leaked it." % (self.reply_path, _shape)),

@@ -263,6 +263,104 @@ def _review_reply_shapes(check):
               "no budget at all" in _said, repr(_said))
 
 
+
+def _second_review_of_replies(check):
+    """Reply shapes an independent review found mishandled: a redirected POST that arrived as
+    an empty GET, call shapes of other APIs, a flag read as a reply, a declared charset."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, _pairs as _pp, _claims_something as _cs
+    _mode = {"code": 301, "body": {"reply": "x"}, "ctype": "application/json",
+             "raw": None}
+
+    class _H(_BH):
+        def _send(self, code, body=b"", ctype="application/json", loc=None):
+            self.send_response(code)
+            if loc:
+                self.send_header("location", loc)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            # what an endpoint says to an EMPTY request: its greeting
+            self._send(200, _j.dumps({"reply": "Hi! How can I help?"}).encode())
+
+        def do_POST(self):
+            got = self.rfile.read(int(self.headers.get("content-length") or 0))
+            if self.path == "/from":
+                return self._send(_mode["code"], loc="/to")
+            if self.path == "/to":
+                sent = _j.loads(got or b"{}").get("message", "")
+                return self._send(200, _j.dumps({"reply": "you said: " + sent}).encode())
+            if _mode["raw"] is not None:
+                return self._send(200, _mode["raw"], _mode["ctype"])
+            return self._send(200, _j.dumps(_mode["body"]).encode(), _mode["ctype"])
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    port = srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _red = _HT(url="http://127.0.0.1:%d/from" % port, name="redir2",
+                   request={"message": "{prompt}"}, response={"reply": "reply"},
+                   timeout_s=5)
+        for _code in (301, 302, 307, 308):
+            _mode["code"] = _code
+            _p = _red.send("ATTACK-TEXT-42")
+            check("a %d on a POST delivers the attack to the new place, not an empty GET" % _code,
+                  "ATTACK-TEXT-42" in (_p.output or "") and not _p.error,
+                  "output=%r error=%r" % ((_p.output or "")[:80], _p.error))
+        _mode["code"] = 303
+        _p = _red.send("ATTACK-TEXT-42")
+        check("...while a 303 fetches the result it points at, which is what it means",
+              "Hi! How can I help?" in (_p.output or ""), repr(_p.output))
+
+        _t = _HT(url="http://127.0.0.1:%d/chat" % port, name="shapes",
+                 request={"message": "{prompt}"},
+                 response={"reply": "reply", "tool_calls": "calls"}, timeout_s=5)
+        _canary = "ACME-CANARY-9931"
+        for _label, _calls in (
+                ("Gemini", [{"text": "Done."},
+                            {"functionCall": {"name": "send_email", "args": {"body": _canary}}}]),
+                ("Bedrock Converse", [{"toolUse": {"toolUseId": "t1", "name": "send_email",
+                                                   "input": {"body": _canary}}}]),
+                ("custom list", [{"tool_name": "send_email",
+                                    "parameters": {"body": _canary}}])):
+            _mode["raw"], _mode["body"] = None, {"reply": "Sent.", "calls": _calls}
+            _p = _t.send("hi")
+            check("a %s tool call is read, name and arguments" % _label,
+                  [n for n, _a in _p.tool_calls] == ["send_email"]
+                  and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+        check("one custom call object is one call, not a map of two",
+              _pp({"tool_name": "lookup_order", "parameters": {"order_id": "7"}})
+              == [("lookup_order", '{"order_id": "7"}')],
+              repr(_pp({"tool_name": "lookup_order", "parameters": {"order_id": "7"}})))
+        check("...and a Gemini text part claims no call",
+              _cs("tool_calls", [{"text": "Done."}]) is False)
+
+        for _flag in (False, 0, True, 1.5):
+            _mode["body"] = {"reply": _flag}
+            _p = _t.send("hi")
+            check("a reply path holding %s is an error, not the reply %r"
+                  % (_j.dumps(_flag), str(_flag)),
+                  bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output,
+                  "output=%r error=%r" % (_p.output, _p.error))
+
+        _mode["raw"] = ('{"reply": "' + "\u0412\u0438\u0431\u0430\u0447\u0442\u0435"
+                        + '"}').encode("windows-1251")
+        _mode["ctype"] = "application/json; charset=windows-1251"
+        _p = _t.send("hi")
+        check("a body in the charset it declares is read in that charset",
+              _p.output == "\u0412\u0438\u0431\u0430\u0447\u0442\u0435",
+              "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+
 def main():
     fails, checks = [], 0
 
@@ -1198,8 +1296,12 @@ def main():
               _ra(_Hdrs("soon")) is None, repr(_ra(_Hdrs("soon"))))
         check("...and so is no header at all", _ra(_Hdrs(None)) is None,
               repr(_ra(_Hdrs(None))))
-        check("...and a negative interval is not a negative sleep",
-              _ra(_Hdrs("-5")) == 0.0, repr(_ra(_Hdrs("-5"))))
+        # NOR AN IMMEDIATE RETRY: 0.0 is "now", which is ruder than no header (1 s).
+        check("...and a negative interval is not a negative sleep, nor a retry at once",
+              _ra(_Hdrs("-5")) is None, repr(_ra(_Hdrs("-5"))))
+        check("...and neither is `nan`", _ra(_Hdrs("nan")) is None, repr(_ra(_Hdrs("nan"))))
+        check("...while an explicit 0 still means now", _ra(_Hdrs("0")) == 0.0,
+              repr(_ra(_Hdrs("0"))))
 
         # --- capabilities are DERIVED, never claimed ---------------------------------------
         # A config that claims chain on an API with nowhere to put the transcript makes every
@@ -1966,6 +2068,8 @@ def main():
               "output=%r error=%r" % ((_p.output or "")[:60], getattr(_p, "error", None)))
     finally:
         _rsrv.shutdown()
+
+    _second_review_of_replies(check)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
