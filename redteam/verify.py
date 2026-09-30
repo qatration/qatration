@@ -104,7 +104,17 @@ def tally(recs, verdict_of):
 
 
 def claimed(results):
-    """-> [(attack, hits, trials)] for the rows a stored run reports as breaches.
+    """-> [(attack, hits, trials)] for the rows a stored run reports as breaches."""
+    return [c[:3] for c in claim_rows(results)]
+
+
+def claim_rows(results):
+    """-> [(attack, hits, trials, fired, row)] for the rows a stored run reports as breaches.
+
+    AND WHICH DETECTORS MADE THE CLAIM, because "does it still reproduce" is a question about
+    that finding: a claim of `canary_in_output` came back "holds" on a fixed bot whose reply
+    was a traceback (`debug_disclosure`) or sixty repeated words (`degenerate_output`).
+    Found by an independent review.
 
     The rate travels with the claim because it decides what a failure to reproduce means. A
     row recorded 3 of 3 and a row recorded 1 of 3 are different claims, and a spot check that
@@ -119,7 +129,8 @@ def claimed(results):
             hits, trials = (int(x) for x in rate.split("/"))
         except (ValueError, TypeError):
             hits, trials = 0, 0
-        out.append((r.get("attack") or {}, hits, trials))
+        out.append((r.get("attack") or {}, hits, trials,
+                    [str(f) for f in (r.get("fired") or []) if f], r))
     return out
 
 
@@ -215,6 +226,32 @@ def age_note(meta, now=None, path=None):
             "measurement is AT LEAST that old and may be older" % (when, ago))
 
 
+def _incomparable(fired, row, ctx, inert, oracle_mod):
+    """Why this build and config cannot measure the claim, or "" when they can."""
+    if not fired:
+        return ""
+    _gone = [f for f in fired if f not in oracle_mod.DETECTORS]
+    if _gone:
+        return "its detector %s is not in this build" % ", ".join(_gone)
+    _dead = [f for f in fired if f in inert]
+    if len(_dead) == len(fired):
+        return "%s cannot fire under this config (missing %s)" % (
+            ", ".join(_dead), ", ".join(sorted({str(m) for f in _dead
+                                                for m in (inert.get(f) or [])})) or "a key")
+    # THE DETECTORS THAT READ A CANARY, from the one table of what each detector needs
+    _can_dets = {d for d, need in oracle_mod.NEEDS_CONFIG.items() if "canaries" in need}
+    if set(fired) <= _can_dets:
+        import honeytoken as _ht
+        cans = [_ht.squeezed(c) for c in _ht.declared(ctx) if _ht.squeezed(c)]
+        blob = _ht.squeezed(__import__("json").dumps(
+            [t.get("probe") for t in (row.get("trials") or []) if isinstance(t, dict)]
+            or row.get("probe") or "", ensure_ascii=False))
+        if cans and blob and not any(c in blob for c in cans):
+            return ("its evidence carries none of the canaries this config plants now, so a "
+                    "leak of the one it recorded could not reproduce here")
+    return ""
+
+
 def check_row(hits, trials, send, first_trials, confirm_trials):
     """-> (verdict, sentence, breaches, delivered, probes spent) for one claimed row.
 
@@ -229,6 +266,11 @@ def check_row(hits, trials, send, first_trials, confirm_trials):
     now_hits, now_n = send(first_trials)
     spent = now_n
     v, why = verdict(hits, trials, now_hits, now_n)
+    # ON EVERY SEND, or it is not a sample: a target answering empty on six of eight requests
+    # was called stale on "0 of 1 and 0 of 1 again". Found by an independent review.
+    if v == "candidate" and now_n < first_trials:
+        return ("unconfirmed", "reproduced 0 of %d, but only %d of %d sends measured anything"
+                % (now_n, now_n, first_trials), now_hits, now_n, spent)
     if v != "candidate":
         return v, why, now_hits, now_n, spent
     if confirm_trials <= 0:
@@ -239,10 +281,13 @@ def check_row(hits, trials, send, first_trials, confirm_trials):
     again_hits, again_n = send(confirm_trials)
     spent += again_n
     v, why = verdict(hits, trials, now_hits, now_n, again_hits, again_n)
+    if v == "stale" and again_n < confirm_trials:
+        return ("unconfirmed", "%s, but only %d of %d second-pass sends measured anything"
+                % (why, again_n, confirm_trials), now_hits, now_n, spent)
     return v, why, now_hits, now_n, spent
 
 
-def note_verdict(note):
+def note_verdict(note, code=None):
     """-> (exit code, one line) for a target that was not verified. "" means it was.
 
     THE DEFAULT IS THE REFUSAL, and it was the reassurance. `main` handled four notes by name
@@ -272,7 +317,11 @@ def note_verdict(note):
     if note.startswith("precondition: "):
         # 5, as `run` refuses on it: the canary cannot be confirmed present, so a claim that
         # does not reproduce says nothing about the target.
-        return 5, ("NOT VERIFIED - %s. No claim was re-sent." % note[len("precondition: "):])
+        # WITH THE PRECONDITION'S OWN CODE where it gave one: a honeytoken config at a closed
+        # port is NO ANSWER (3) and a wrong reply mapping is BAD MAPPING (2), and every one of
+        # them read 5, "your precondition". Found by an independent review.
+        return (code or 5), ("NOT VERIFIED - %s. No claim was re-sent."
+                             % note[len("precondition: "):])
     return 2, ("NOT VERIFIED - %s. The artifact is untouched and nothing was measured." % note)
 
 
@@ -294,7 +343,7 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
            # WHY IT STOPPED AND WHAT IT DID NOT REACH. Both are empty on a run that
            # finished, and a reader of this dict must not have to infer either from a
            # count that happens to be short.
-           "why": "", "advice": "", "unchecked": 0}
+           "why": "", "advice": "", "unchecked": 0, "incomparable": []}
     # IS THERE A CLAIM TO VERIFY, before anything is built. This sat below the loader, so
     # a workspace with no artifact for this target still constructed one — and where
     # the adapter could not be imported the answer came back as `not loaded`, which is a
@@ -378,7 +427,17 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         out["note"] = ("the artifact belongs to target %r, and this config is %r"
                        % (_art_target, target.name))
         return out
-    rows = claimed(stored.get("results") or [])
+    # AND ANOTHER MODEL'S CLAIMS ARE NOT THIS MODEL'S, by the same rule: a `model-A` artifact
+    # re-sent to a config running `model-B` called a leak that still happens on A "stale",
+    # exit 1. Both sides named, or nothing is said. Found by an independent review.
+    _art_model = str((stored.get("meta") or {}).get("model") or "")
+    from workspace import config_model as _config_model   # the rule `run` stamps meta by
+    _cfg_model = str(_config_model(tcfg) or "")
+    if _art_model and _cfg_model and _art_model != _cfg_model:
+        out["note"] = ("the artifact's claims were measured on model %r, and this config runs "
+                       "%r" % (_art_model, _cfg_model))
+        return out
+    rows = claim_rows(stored.get("results") or [])
     # THE PRECONDITIONS `run` REFUSES ON, before a claim is re-sent: with the honeytoken
     # snippet reverted -- the step the docs tell a user to take afterwards -- every canary
     # claim came back "stale", exit 1, "the artifact overstates what this target does
@@ -414,20 +473,41 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
     # rather than written a third time.
     from runner import GiveUpWall as _Wall
     _wall = _Wall()
-    _checked = 0
-    for attack, hits, was in rows:
+    _checked, _attempted = 0, 0
+    import oracle as _or_v
+    _inert_v = _or_v.inert_for(ctx, sorted({f for r in rows for f in r[3]}))
+    for attack, hits, was, fired, _row in rows:
         if _wall.reason:
             break
+        # A CLAIM THIS BUILD AND CONFIG CANNOT MEASURE IS NOT RE-SENT: a detector renamed
+        # since, one this config leaves inert (its `canaries` key removed), or a canary claim
+        # whose evidence carries none of the canaries this config plants now -- rotated, so a
+        # leak of the old one could never reproduce and was called stale. Found by an
+        # independent review.
+        _why_not = _incomparable(fired, _row, ctx, _inert_v, _or_v)
+        if _why_not:
+            out["incomparable"].append((attack.get("id"), _why_not))
+            _checked += 1
+            if not quiet:
+                print("  %-28s %-10s %-10s %s" % (str(attack.get("id"))[:28],
+                                                  "%d/%d" % (hits, was), "-",
+                                                  "not comparable"), flush=True)
+            continue
         _probes = []
+        _fset = set(fired)
+        _attempted += 1
 
-        def send(n, _a=attack, _p=_probes):
+        def send(n, _a=attack, _p=_probes, _f=_fset):
             # `headline` returns (verdict, rate); the verdict is what decides a breach, and
             # reading the tuple as a string here would have made every row look clean.
             # THE PROBES ARE KEPT as well as scored: `tally` answers how many landed and the
             # wall has to know WHY the ones that did not failed, which only the probe says.
             _recs = run_attack(target, _a, judged_ctx(_a, ctx), trials=n)
             _p.extend(r.get("probe") for r in _recs)
-            return tally(_recs, lambda r: headline([r])[0])
+            # THE SAME FINDING, where the claim names its detectors: a breach by another
+            # detector is another finding, not this one reproducing.
+            return tally(_recs, lambda r: headline([r])[0]
+                         if (not _f or set(r.get("fired") or []) & _f) else "DEFENDED")
 
         # A TARGET THAT THROWS IS A ROW, NOT A TRACEBACK, which is the whole reason this
         # function was split out and was not honoured for the sending half: the first fleet
@@ -435,9 +515,15 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         try:
             v, why, now_hits, now_n, spent = check_row(hits, was, send, trials, confirm_trials)
         except Exception as e:
-            out["note"] = "failed on %s: %s: %s" % (attack.get("id"), type(e).__name__,
-                                                    str(e)[:60])
-            return out
+            _fail = "failed on %s: %s: %s" % (attack.get("id"), type(e).__name__, str(e)[:60])
+            if not _checked:
+                out["note"] = _fail
+                return out
+            # AFTER ROWS WERE DECIDED, they stand: this said "nothing was measured" over a
+            # claim already called stale, and the fleet page printed both. The run stops here
+            # and says where. Found by an independent review.
+            out["why"] = _fail
+            break
         out["sent"] += spent
         # THREE STATES AND A DEFAULT, rather than two and everything else. `not sent` is
         # the one that was missing: a row nobody delivered is not a row that could not be
@@ -455,11 +541,23 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
                      "%d/%d" % (now_hits, now_n), v), flush=True)
         _checked += 1
         _wall.saw(_probes)
+        # A PLANT THAT COULD NOT BE REMOVED makes every row after it a question about the
+        # plant: `direct-2` came back "holds" off `indirect-1`'s document. The decided rows
+        # stand; the rest are not re-sent. Found by an independent review.
+        _dirty = getattr(target, "unseed_failed", None)
+        if _dirty:
+            out["why"] = ("stopped after %s: its plant could not be removed (%s), so anything "
+                          "re-sent after it would read that plant" % (attack.get("id"), _dirty))
+            break
 
-    out["why"], out["advice"] = _wall.reason, _wall.advice
+    # THE WALL'S REASON WHERE IT HAS ONE; a stop this loop made itself keeps its own.
+    out["why"] = _wall.reason or out["why"]
+    out["advice"] = _wall.advice or out["advice"]
     # A CLAIM NOBODY RE-SENT IS NOT A CLAIM THAT HELD, and it leaves no row to say so.
     out["unchecked"] = max(0, len(rows) - _checked)
-    if not out["sent"]:
+    # WHERE A ROW WAS SENT FOR AT ALL: rows that were not comparable were never sent, and
+    # "every claimed row errored" is not what happened to them.
+    if _attempted and not out["sent"]:
         # NOTHING SENT IS NOT A PASS, and it is the failure this command is most likely to
         # meet: it exists because a target changed, and a target that is simply down changes
         # nothing. Counted as unreachable, never as a page of stale claims.
@@ -686,7 +784,7 @@ def main():
     path = args.results or os.path.join(OUT_DIR, "results_%s.json" % tcfg["name"])
     r = verify_target(tcfg, path, args.trials, args.confirm_trials)
 
-    code, line = note_verdict(r["note"])
+    code, line = note_verdict(r["note"], r.get("precondition_exit"))
     if r["note"]:
         where = sys.stderr if code else sys.stdout
         print()
@@ -710,6 +808,9 @@ def main():
               "checking that nothing changed here.")
     elif r["holds"] == r["claims"]:
         print("every claimed breach still reproduces.")
+    elif r.get("incomparable") and not (r["holds"] or r["unclear"] or r.get("unconfirmed")
+                                        or r.get("not_sent")):
+        print("no claim could be compared with this target as it is configured now.")
     else:
         # NOT `every claimed breach still reproduces`, which was printed whenever no row was
         # called STALE -- over an artifact of two claims, neither of which reproduced and
@@ -735,6 +836,8 @@ def main():
                                                                     "the run stopped"))):
         if _n:
             print("   %d %s." % (_n, _why_row))
+    for _aid, _why_i in r.get("incomparable") or []:
+        print("   %-28s not comparable: %s" % (_aid, _why_i))
     if r.get("unchecked") and r.get("advice"):
         print("   %s" % r["advice"])
     print("\nNot checked: the rows this artifact records as defended. A target that got worse "
@@ -746,7 +849,8 @@ def main():
     # `the published findings still hold`. `unclear` is not one of these: it is a row that WAS
     # re-sent and whose recorded rate cannot decide, which is a designed outcome rather than a
     # gap, and a command that goes amber on it goes amber forever.
-    return 3 if (r.get("unchecked") or r.get("not_sent") or r.get("unconfirmed")) else 0
+    return 3 if (r.get("unchecked") or r.get("not_sent") or r.get("unconfirmed")
+                 or r.get("incomparable")) else 0
 
 
 if __name__ == "__main__":

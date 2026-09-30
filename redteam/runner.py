@@ -518,6 +518,11 @@ def run_attack(target, attack, ctx, trials=1):
                 try:
                     target.unseed()
                 except Exception as _ue:
+                    # MARKED ON THE TARGET too, so a caller re-sending more attacks can stop.
+                    try:
+                        target.unseed_failed = f"{aid}: {type(_ue).__name__}: {_ue}"
+                    except Exception:
+                        pass
                     print(f"  ! {aid}: unseed failed ({type(_ue).__name__}: {_ue}) -- the "
                           f"plant may still be in the target, and an attack after this one "
                           f"may read it", file=sys.stderr)
