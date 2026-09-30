@@ -1068,6 +1068,10 @@ def arsenal_ran():
         sent, skipped = m.get("attacks_n"), m.get("skipped")
         if sent is None or not skipped:
             continue
+        # MEASURED, NOT ATTEMPTED: `attacks_n` counts rows the budget never sent and rows that
+        # errored, so "sent 10" stood over a run that sent 2. Found by an independent review.
+        from workspace import measured as _measured_hr
+        sent = _measured_hr(m, (read_artifact(fp)[0] or {}).get("results"))[0]
         # THE SUM ANSWERS A QUESTION NOBODY ASKED. Of 333 rows outside one walked run, 319
         # were held by `--scope quick` and 14 were beyond what the deployment can take. This
         # page called all of them "scoped out" and explained them as written for other
@@ -1132,9 +1136,20 @@ def controls_fired():
             continue
         for r in rows:
             aid = str(r.get("attack", {}).get("id", ""))
-            if not aid.startswith("ctrl-"):
+            # BY CATEGORY, the rule `load_all` drops them by: selecting on a `ctrl-` prefix
+            # left every control named otherwise -- `gp-06-plain`, `lr-refund-question`,
+            # `g-control` -- in neither place, so the page said three controls fired where the
+            # stored runs hold sixty-two. Found by an independent review.
+            if (r.get("attack") or {}).get("category") != "control" and \
+                    not aid.startswith("ctrl-"):
                 continue
             if (r.get("headline") or "") not in BROKE:
+                continue
+            # AND A BENIGN QUESTION REFUSED IS OVER-REFUSAL, not a breach signal with nobody
+            # attacking: `ctrl-benign` PARTIAL on `over_refusal` alone was shown as CRITICAL
+            # "FIRED WITHOUT AN ATTACK". Found by an independent review.
+            _f = [str(x) for x in (r.get("fired") or [])]
+            if _f and all(x == "over_refusal" for x in _f):
                 continue
             probe = ((r.get("trials") or [{}])[0].get("probe") or {})
             out.append((stem, aid, r.get("rate") or "", r.get("fired") or [],
@@ -1391,6 +1406,12 @@ def coverage(why=None, split=None):
                 _v = meta.get(_k)
                 split[_k] = (split[_k] + _v if isinstance(_v, int) and split[_k] is not None
                              else None)
+            # AND WHAT THE RUN NEVER REACHED OR THE BUDGET NEVER SENT, which `measured` already
+            # subtracts and the page never named: it said "Every attack that applies was sent"
+            # over a run its budget stopped at two of ten. Found by an independent review.
+            from workspace import never_sent as _never_sent
+            split["unsent"] = (split.get("unsent") or 0) + int(meta.get("unreached") or 0) \
+                + _never_sent(meta, _art.get("results"))
     return (sent, skipped, errored) if sent or skipped or errored else None
 
 
@@ -1451,6 +1472,26 @@ def main():
     #
     # ON `all_targets`, NOT ON `findings`. Zero findings across four measured targets is a
     # result and the page should say so. Zero targets is the absence of the measurement.
+    # AND NOTHING MEASURED ON ANY OF THEM IS THE SAME ABSENCE: one target whose rows all
+    # errored printed "0 systems tested · 1 not measured" and "found 0 distinct
+    # weaknesses", exit 0. Found by an independent review.
+    # NOT MEASURED BY `verdict_for`'s bar, which is stricter than "nothing": five attacks
+    # measured beside nineteen errors is "not measured" there and still a page worth reading.
+    # Refused only where no attack was measured at all.
+    # BY THE ROWS, not by `coverage()`, which answers None for every artifact older than the
+    # counters it reads, and those rows answered.
+    from workspace import NOT_MEASURED as _NOT_MEASURED
+    _answered = False
+    for _fp0 in _fleet_files():
+        _rows0 = ((read_artifact(_fp0)[0] or {}).get("results") or [])
+        if any(isinstance(r, dict) and r.get("headline") not in _NOT_MEASURED for r in _rows0):
+            _answered = True
+            break
+    if all_targets and not (all_targets - _unrun) and not _answered:
+        print("nothing in %s was measured: every run here errored or sent nothing, so there "
+              "is nothing to fix and nothing to say is fixed. Re-run the sweep once the "
+              "target answers." % OUT_DIR)
+        return 3
     if not all_targets:
         from workspace import queued_elsewhere as _queued_elsewhere
         print("no results in %s — nothing has been measured, so there is nothing to fix:\n"
@@ -1887,11 +1928,15 @@ def main():
                 ([f"{_na} attack(s) in the arsenal do not apply to these targets"] if _na else [])
                 + ([f"{_ns} were not sent because the run was scoped to send one attack from "
                     f"each category rather than all of them"] if _ns else []))
+        _unsent = _cov_split.get("unsent") or 0
         _rerun = ("A category that was covered once was covered once. Re-run at "
                   "<span class=\"mono\">--scope full</span> before reading a quiet category as "
                   "a closed one." if (_ns is None or _ns) else
                   "Every attack that applies was sent; what is absent was written for other "
-                  "systems.")
+                  "systems." if not _unsent else "")
+        if _unsent:
+            _rerun = (f"{_unsent} attack(s) were never sent: the run stopped before them or its "
+                      f"request budget ran out, so they measured nothing. " + _rerun)
         held_html = f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>

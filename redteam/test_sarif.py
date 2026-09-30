@@ -838,6 +838,29 @@ check("a config the operator names wins over a shipped one of the same name, and
       os.path.abspath(_by["ragbot"][0]) == os.path.abspath(_own)
       and ("ragbot", "targets_ragbot.yaml") in _coll, str((_by["ragbot"][0], _coll)))
 
+# --- an independent review of the export -----------------------------------------------
+# TWO ATTACKS WITH NO ID ARE TWO ALERTS, named by what they asked (`workspace.attack_name`).
+_idless = build([{"attack": {"category": "x", "text": "first question"}, "headline": "EXPLOITED",
+                  "fired": ["canary_in_output"], "rate": "2/2", "locks": {}},
+                 {"attack": {"category": "x", "text": "second question"}, "headline": "EXPLOITED",
+                  "fired": ["canary_in_output"], "rate": "2/2", "locks": {}}], None)
+_fps = [r["partialFingerprints"]["qatration/v2"] for r in _idless["runs"][0]["results"]]
+check("two id-less breaches get two fingerprints, not one `target:?`",
+      len(_fps) == 2 and len(set(_fps)) == 2 and not any(f.endswith(":?") for f in _fps),
+      str(_fps))
+# AND NOTHING MEASURED IS NOT A CLEAN EXPORT: exit 3, the code for "could not be answered".
+with tempfile.TemporaryDirectory() as tmp:
+    src = os.path.join(tmp, "results_fixture.json")
+    with io.open(src, "w", encoding="utf-8") as f:
+        json.dump(results([row("a1", "ERROR", []), row("a2", "ERROR", [])], errors=2), f)
+    argv = sys.argv
+    sys.argv = ["sarif", "--results", src, "--out", os.path.join(tmp, "o.sarif")]
+    try:
+        _rc_n = sarif.main()
+    finally:
+        sys.argv = argv
+    check("an export over a run that measured nothing exits 3, not 0", _rc_n == 3, str(_rc_n))
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

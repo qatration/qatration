@@ -1942,6 +1942,65 @@ def main():
     check("...and renders the coverage section on errors alone, with nothing skipped",
           "COVERAGE" in _page and "19 errored" in _page, _page[:200] or "no page written")
 
+    # --- an independent review of the fixes page -------------------------------------------
+    import defense_report as _dr3, pathlib as _pl3, tempfile as _tf3
+    _t3 = _tf3.mkdtemp()
+    _real3 = _dr3.OUT_DIR
+    try:
+        _ok3 = [{"verdict": "DEFENDED", "fired": [], "probe": {"prompt": "q", "output": "no"}}]
+
+        def _w3(name, meta, rows):
+            with open(os.path.join(_t3, "results_%s.json" % name), "w", encoding="utf-8") as f:
+                json.dump({"meta": dict({"target": name, "trials": 1, "model": "m"}, **meta),
+                           "results": rows}, f)
+        # a control named without `ctrl-`, and one that only refused
+        _w3("cbot", {"attacks_n": 2, "skipped": 0, "errors": 0}, [
+            {"attack": {"id": "gp-06-plain", "category": "control", "text": "hi"},
+             "headline": "EXPLOITED", "rate": "1/1", "fired": ["canary_in_output"],
+             "locks": {}, "trials": _ok3},
+            {"attack": {"id": "ctrl-benign", "category": "control", "text": "hi"},
+             "headline": "PARTIAL", "rate": "1/1", "fired": ["over_refusal"],
+             "locks": {}, "trials": _ok3}])
+        _dr3.OUT_DIR = _pl3.Path(_t3)
+        _cf = [c[1] for c in _dr3.controls_fired()]
+        check("a control that fired is found by its category, whatever it is called",
+              "gp-06-plain" in _cf, str(_cf))
+        check("...and a benign question refused is not a breach with nobody attacking",
+              "ctrl-benign" not in _cf, str(_cf))
+        # the budget never sent eight of ten
+        _split3 = {"not_applicable": 0, "not_sent": 0}
+        _w3("budbot", {"attacks_n": 10, "skipped": 2, "errors": 0, "never_sent": 8,
+                       "not_applicable": 2, "not_sent": 0},
+            [{"attack": {"id": "b1", "category": "x", "text": "x"}, "headline": "DEFENDED",
+              "rate": "0/1", "fired": [], "locks": {}, "trials": _ok3}])
+        _dr3.coverage(split=_split3)
+        check("coverage counts what the budget never sent, to name it",
+              (_split3.get("unsent") or 0) >= 8, str(_split3))
+        _ran3 = _dr3.arsenal_ran().get("budbot")
+        check("the how-much-ran table's `sent` is what was measured, not what was attempted",
+              _ran3 is not None and _ran3[0] < 10, str(_ran3))
+    finally:
+        _dr3.OUT_DIR = _real3
+        shutil.rmtree(_t3, ignore_errors=True)
+    # and a workspace where nothing at all was measured is not a page
+    _t4 = _tf3.mkdtemp()
+    try:
+        with open(os.path.join(_t4, "results_deadbot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "deadbot", "trials": 1, "attacks_n": 2, "skipped": 0,
+                                "errors": 2},
+                       "results": [{"attack": {"id": "e%d" % i, "category": "x", "text": "x"},
+                                    "headline": "ERROR", "rate": "0/1", "fired": [],
+                                    "locks": {}, "trials": []} for i in (1, 2)]}, f)
+        _p4 = subprocess.run([sys.executable, os.path.join(HERE, "defense_report.py")],
+                             env=dict(os.environ, QATRATION_OUT=_t4, PYTHONIOENCODING="utf-8"),
+                             capture_output=True, text=True, timeout=120,
+                             cwd=os.path.dirname(HERE))
+        check("a workspace where no attack was measured exits 3 and writes no page",
+              _p4.returncode == 3 and not os.path.exists(os.path.join(_t4, "defense_report.html")),
+              "exit %d: %s" % (_p4.returncode, (_p4.stdout + _p4.stderr)[-200:]))
+    finally:
+        shutil.rmtree(_t4, ignore_errors=True)
+
     # --- the false-alarm gate may not pass on an empty denominator ----------------------
     # Two halves of one rule, both missing. `ERROR` was named as "did not land" and `SKIP`
     # was not — and skip is the commoner of the two here: seven controls in the shipped

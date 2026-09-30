@@ -112,8 +112,9 @@ def _uri(path):
 
 def _message(row, verdict, noisy, baseline_why=""):
     a = row.get("attack") or {}
+    import workspace as _ws_m
     parts = ["%s: %s (%s)" % (row.get("headline", "?"),
-                              a.get("id", "?"), a.get("category", "uncategorised"))]
+                              _ws_m.attack_name(a), a.get("category", "uncategorised"))]
     if row.get("rate"):
         parts.append("fired on %s trials" % row["rate"])
         # AND WHAT ONE TRIAL CANNOT SAY. Every other surface qualifies this: `run` prints
@@ -291,8 +292,11 @@ def build(results, target_config=None, out_dir=None):
             # one trial also echoed a canary closed the alert as fixed and opened a second
             # one for the same breach. Found by an independent review. A new key, so a
             # consumer holding v1 alerts sees the change as a change of scheme.
+            # BY `attack_name`, the one name for a row, which gives an attack with no `id` a
+            # digest of what it asked: two id-less breaches were one fingerprint, `mybot:?`,
+            # and a consumer merged them into one alert. Found by an independent review.
             "partialFingerprints": {
-                "qatration/v2": "%s:%s" % (target, attack.get("id", "?"))},
+                "qatration/v2": "%s:%s" % (target, workspace.attack_name(attack))},
             "properties": {"attribution": verdict,
                            "headline": head,
                            "category": attack.get("category", ""),
@@ -618,7 +622,7 @@ def main():
         dest, len(run["results"]),
         (" [" + ", ".join("%d %s" % (n, l) for l, n in sorted(levels.items())) + "]")
         if levels else "",
-        ", %d notification(s) about what could not be measured" % notes if notes else ""))
+        ", %d notification(s) in the file" % notes if notes else ""))
     # ON STDOUT AS WELL AS IN THE FILE, because the person running this command is not the
     # person who opens the SARIF. A CI step writes it and uploads it; the anchor being missing
     # is discovered days later by a reviewer clicking a finding that goes nowhere, if at all.
@@ -627,6 +631,17 @@ def main():
         print("  ! every finding above is anchored to no file. Pass --target-config, or point "
               "QATRATION_CONFIGS\n    at the config `qatration init` wrote, and re-run: the "
               "findings are the same, the link is not.")
+    # 3 WHEN NOTHING WAS MEASURED, the code the table gives "the question could not be
+    # answered": a file whose every row errored exported `executionSuccessful: false` and
+    # exited 0, which a CI step reads as a clean scan. Found by an independent review.
+    # BY THE ROWS, not by `attacks_n`: a file written before that counter existed reads as
+    # zero measured through it, and every row in it answered.
+    import workspace as _ws_x
+    if not any(isinstance(r, dict) and r.get("headline") not in _ws_x.NOT_MEASURED
+               for r in (results.get("results") or [])):
+        print("  ! nothing in %s was measured, so this export says nothing about the target."
+              % args.results)
+        return 3
     return 0
 
 
