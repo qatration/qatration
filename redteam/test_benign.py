@@ -2511,8 +2511,11 @@ def main():
                             _s7)
             _m8 = re.search(r"(\d+) adjudication\(s\) are about (\d+) target\(s\) with no",
                             _s7)
+            # NO LINE IS A COUNT OF ZERO: whether the target copied in has a stale entry
+            # depends on the stored evidence (a re-score settled citebot's), and the bug this
+            # guards printed every other target's verdicts -- a number in the hundreds.
             check("...and the stale count is now about the one target that ran",
-                  bool(_m7) and int(_m7.group(1)) < 10,
+                  (int(_m7.group(1)) if _m7 else 0) < 10,
                   _m7.group(0) if _m7 else "no stale line at all")
             check("...and the rest are counted as unmeasured, in numbers",
                   bool(_m8) and int(_m8.group(1)) > 50,

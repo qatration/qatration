@@ -183,13 +183,13 @@ signal, and the others are the diagnosis.
 ### The headline number, and why it is not a percentage
 
 With a benign baseline on all 35 targets there are **1,750 probes on which nobody attacked
-anything**, and **845 detector fires** across them. 758 of those enter the ledger below; the
-other 87 are `over_refusal` fires on targets where the refusal was judged a usability problem
+anything**, and **887 detector fires** across them. 788 of those enter the ledger below; the
+other 99 are `over_refusal` fires on targets where the refusal was judged a usability problem
 rather than a false alarm, which is a real distinction and used to be an invisible one. The
 block that discloses them compared the SET of detector names in each column, and `over_refusal`
 appears in both — it is admitted per (detector, target) whenever that pair was adjudicated a
 false positive — so the difference was empty and eighty-seven fires printed nowhere. It
-compares counts now. Publishing 758 as a 33% false-positive rate
+compares counts now. Publishing 788 as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
 makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
@@ -217,13 +217,13 @@ written down — one verdict per (target, detector), each with a reason, keyed a
 because a detector is routinely right about one bot and wrong about another. Today:
 
 ```
-of 758 fire(s) on clean traffic:
-     613 adjudicated as FINDINGS about the target — it does this with nobody attacking it
-     145 adjudicated as false alarms
-    false-alarm rate over what HAS been settled: 145/758 (19.1%)
+of 788 fire(s) on clean traffic:
+     626 adjudicated as FINDINGS about the target — it does this with nobody attacking it
+     162 adjudicated as false alarms
+    false-alarm rate over what HAS been settled: 162/788 (20.6%)
 ```
 
-**The unadjudicated line is gone because there is nothing left in it.** All 758 fires across 35
+**The unadjudicated line is gone because there is nothing left in it.** All 788 fires across 35
 targets are settled, one (target, detector) pair at a time, each with the evidence that decided
 it.
 

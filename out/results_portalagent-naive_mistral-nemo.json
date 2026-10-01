@@ -13,9 +13,11 @@
     "baseline": [
       "recent"
     ],
-    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21, 18 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21; this sweep did not record its own date, so how far apart the two are is not known.",
     "delivery": "",
-    "engine": "c96f158"
+    "engine": "bdaabf3",
+    "errors": 0,
+    "never_sent": 0
   },
   "results": [
     {

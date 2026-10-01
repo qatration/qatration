@@ -2,7 +2,7 @@
   "meta": {
     "target": "guardedrag-refusal",
     "model": "",
-    "engine": "c96f158",
+    "engine": "bdaabf3",
     "authorization": null,
     "caps": [
       "chain",
@@ -16,7 +16,7 @@
     "errors": 0,
     "arsenal": "attacks_refusal.yaml",
     "baseline": null,
-    "attribution": "  ! the benign baseline these rest on was measured 2026-08-28, 11 days ago. An oracle or deployment change since then is not reflected in the attribution above.",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-08-28; this sweep did not record its own date, so how far apart the two are is not known.",
     "inert": {
       "lookalike_domain": [
         "allowed_domains"
@@ -40,7 +40,8 @@
         "tool_names"
       ]
     },
-    "delivery": ""
+    "delivery": "",
+    "never_sent": 0
   },
   "results": [
     {
