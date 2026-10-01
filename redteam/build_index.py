@@ -107,7 +107,15 @@ def load(known=None, unreadable=None):
         # `errors` as of `broke`: this page recounted one of them and handed the pair to
         # `verdict_for`, where a stale or absent `errors` turns a run that measured nothing
         # into HARDENED. `errors` is absent from 34 of the 45 artifacts stored here.
-        m["_errored"] = _rows_with(d.get("results"), ("ERROR",))
+        # ERRORED AND NEVER SENT APART, the split `measured` reads: the ERROR recount held the
+        # budget's rows too, and `measured` subtracted them again from `never_sent` -- 5 of
+        # 10 measured read as "not measured, no attacks sent". Found by an independent review.
+        from workspace import error_split as _error_split, NOT_MEASURED as _NM_i
+        m["_errored"], m["never_sent"] = _error_split(d.get("results"))
+        # AND WHETHER ANY ROW ANSWERED, asked of the rows: the counters are absent from files
+        # older than them, and those rows answered.
+        m["_answered"] = any(isinstance(r, dict) and r.get("headline") not in _NM_i
+                             for r in (d.get("results") or []))
         # AND HOW MANY OF THOSE BREACHES THE BENIGN BASELINE CANNOT ATTRIBUTE. This page
         # publishes a fleet total of findings and said nothing about attribution, the same
         # gap `compare_targets` had: one shared reader in `baseline` now, so the index, the
@@ -313,9 +321,14 @@ def main():
             col = SEV["none"] if broke == 0 else (SEV["critical"] if rate >= .5 else SEV["high"])
             headline = f'<b style="color:{col}">{broke}</b> / {atk} breached'
             bar = 100 * rate
-        pct = ("no attacks sent" if not atk else f"{100*rate:.0f}%")
+        # NOT "NO ATTACKS SENT" OVER A RUN WHOSE ATTACKS WERE SENT AND ERRORED: the card said
+        # both clauses at once. Errored and never-sent are named apart.
+        _ns_i = m.get("never_sent") or 0
+        pct = ("nothing measured" if not atk else f"{100*rate:.0f}%")
         if errs:
-            pct += f" \u00b7 {errs} never landed"
+            pct += f" \u00b7 {errs} errored"
+        if _ns_i:
+            pct += f" \u00b7 {_ns_i} never sent"
         # A RATE FROM ONE TRIAL IS NOT THE SAME KIND OF NUMBER, and this page ranks it
         # beside rates from ten. The scorecard's own footer and the SARIF message both say
         # so in as many words -- `sent ONCE, so this cannot be told from a lucky break` --
@@ -328,7 +341,7 @@ def main():
           <div class="ct"><span class="dot" style="background:{col}"></span>{esc(tgt)}</div>
           <div class="cs" style="color:{col}">{headline}</div>
           <div class="bar"><span style="width:{bar:.0f}%;background:{col}"></span></div>
-          <div class="cm">{esc(m.get('model') or 'hosted')} · {m.get('trials',1)} trials · {pct}</div>
+          <div class="cm">{esc(m.get('model') or 'model not recorded')} · {m.get('trials',1)} trials · {pct}</div>
         </a>"""
 
     adaptive_html = ""
@@ -380,7 +393,16 @@ def main():
                   "there describes whatever it held." % (_an, _aw))
         unread_bar = _unread_html(_unreadable, "this index")
 
-    today = datetime.date.today().isoformat()
+    # THE RUNS' DATES, not the day the page was built: "Adversarial test of AI features ·
+    # 2026-10-01" stood over runs from August and September. Found by an independent review.
+    from workspace import measured_when as _mw_i
+    _days = sorted(_mw_i(m)[0][:10] for m in rows if _mw_i(m)[1])
+    _span = (_days[0] if _days and _days[0] == _days[-1]
+             else "%s to %s" % (_days[0], _days[-1]) if _days else "")
+    # AND HOW MANY OF THEM SAID: one dated run of thirty-five is not "the runs' date".
+    today = ("runs " + _span if _days and len(_days) == len(rows)
+             else "%d of %d runs dated, %s" % (len(_days), len(rows), _span) if _days
+             else "run dates not recorded, built " + datetime.date.today().isoformat())
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Dashboard</title><style>
@@ -456,6 +478,11 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
         print(f"  ! {len(moved)} target(s) whose stored breach count predates a re-score: "
               + named_or_more([f"{m['target']} {m['broke_at_run']}->{m['broke']}"
                                for m in moved], 6))
+    # 3 WHEN NOTHING ON THE PAGE WAS MEASURED, the code the table gives "could not be
+    # answered"; a fleet whose every run errored exited 0. Found by an independent review.
+    if rows and not any(m.get("_answered") for m in rows):
+        print("  ! no target on this page measured anything, so the page answers nothing")
+        return 3
 
 
 if __name__ == "__main__":

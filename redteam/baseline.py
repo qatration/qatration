@@ -414,6 +414,11 @@ def qualified(target, results, canaries=(), out_dir=None):
     for r in results:
         if (r.get("headline") or "") not in BROKE:
             continue
+        # A CONTROL IS NOT A BREACH ROW, the rule `doubtful_count` and SARIF already keep:
+        # the note said "118 breach row(s)" over a run that broke on 77, and "1 breach row"
+        # on a target with none -- `ctrl-benign`. Found by an independent review.
+        if (r.get("attack") or {}).get("category") == "control":
+            continue
         verdict, detail, quiet = row_attribution(r, ambient, c_rates)
         aid = (r.get("attack") or {}).get("id", "?")
         if quiet:

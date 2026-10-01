@@ -1982,6 +1982,73 @@ def main():
     finally:
         _dr3.OUT_DIR = _real3
         shutil.rmtree(_t3, ignore_errors=True)
+    # --- an independent review of the scorecard, the index and the attribution note --------
+    import report_engine as _re4, baseline as _bl4, build_index as _bi4
+    from signing import NEVER_SENT as _NS4
+    check("a rate measured on fewer trials than asked says so, not `one trial`",
+          "1 of 3 trials measured" in _re4._reliability("1/1", "EXPLOITED", 3),
+          _re4._reliability("1/1", "EXPLOITED", 3))
+    _ctl4 = {"attack": {"id": "gp-06-plain", "category": "control", "text": "hi"},
+             "headline": "EXPLOITED", "rate": "2/2", "fired": ["canary_in_output"],
+             "locks": {}, "trials": []}
+    _page4 = _re4.build_html({"target": "ctlbot", "trials": 2, "attacks_n": 0, "broke": 0},
+                             [_ctl4])
+    _row4 = _page4[_page4.find(">gp-06-plain<"):]
+    _row4 = _row4[:_row4.find("</tr>")]
+    check("a control that fired is shown as one, not as a reliable vulnerability",
+          "CONTROL FIRED" in _row4 and "rel reliable" not in _row4, _row4[:300])
+    _real_rates4, _real_c4 = _bl4.rates, _bl4.canary_rates
+    try:
+        _bl4.rates = lambda target, out_dir=None: {"canary_in_output": 0.5}
+        _bl4.canary_rates = lambda target, canaries, out_dir=None: {}
+        _dq4, _ = _bl4.qualified("t", [_ctl4], [])
+    finally:
+        _bl4.rates, _bl4.canary_rates = _real_rates4, _real_c4
+    check("the attribution note does not count a control as a breach row",
+          not [d for d in (_dq4 or []) if d[0] == "gp-06-plain"], str(_dq4))
+    _t5 = _tf3.mkdtemp()
+    try:
+        _ok5 = [{"verdict": "DEFENDED", "fired": [], "probe": {"prompt": "q", "output": "no"}}]
+        _ns5 = [{"verdict": "ERROR", "fired": [], "probe": {"prompt": "q", "output": "",
+                                                            "error": _NS4 + ": budget"}}]
+        _rows5 = ([{"attack": {"id": "x%d" % i, "category": "x", "text": "x"},
+                    "headline": "EXPLOITED", "rate": "1/1", "fired": ["canary_in_output"],
+                    "locks": {}, "trials": _ok5} for i in range(3)]
+                  + [{"attack": {"id": "d%d" % i, "category": "x", "text": "x"},
+                      "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                      "trials": _ok5} for i in range(2)]
+                  + [{"attack": {"id": "n%d" % i, "category": "x", "text": "x"},
+                      "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {},
+                      "trials": _ns5} for i in range(5)])
+        with open(os.path.join(_t5, "results_budgetbot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "budgetbot", "trials": 1, "attacks_n": 10,
+                                "broke": 3, "errors": 0, "never_sent": 5, "skipped": 0,
+                                "when": "2026-08-03 10:00"},
+                       "results": _rows5}, f)
+        _p5 = subprocess.run([sys.executable, os.path.join(HERE, "build_index.py")],
+                             env=dict(os.environ, QATRATION_OUT=_t5, PYTHONIOENCODING="utf-8"),
+                             capture_output=True, text=True, timeout=120,
+                             cwd=os.path.dirname(HERE))
+        _ix5 = open(os.path.join(_t5, "index.html"), encoding="utf-8").read() \
+            if os.path.exists(os.path.join(_t5, "index.html")) else ""
+        check("the index subtracts the never-sent rows once: 3 of 5 measured broke",
+              "/ 5 breached" in _ix5 and "5 never sent" in _ix5, _ix5[_ix5.find('class="cs"'):][:300])
+        check("...and is dated by the run it shows, not by the day it was built",
+              "runs 2026-08-03" in _ix5, _ix5[_ix5.find('class="sub"'):][:160])
+        with open(os.path.join(_t5, "results_budgetbot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "budgetbot", "trials": 1, "attacks_n": 2, "errors": 2},
+                       "results": [{"attack": {"id": "e%d" % i, "category": "x", "text": "x"},
+                                    "headline": "ERROR", "rate": "0/1", "fired": [],
+                                    "locks": {}, "trials": []} for i in (1, 2)]}, f)
+        _p6 = subprocess.run([sys.executable, os.path.join(HERE, "build_index.py")],
+                             env=dict(os.environ, QATRATION_OUT=_t5, PYTHONIOENCODING="utf-8"),
+                             capture_output=True, text=True, timeout=120,
+                             cwd=os.path.dirname(HERE))
+        check("an index over a fleet that measured nothing exits 3", _p6.returncode == 3,
+              "exit %d" % _p6.returncode)
+    finally:
+        shutil.rmtree(_t5, ignore_errors=True)
+
     # and a workspace where nothing at all was measured is not a page
     _t4 = _tf3.mkdtemp()
     try:

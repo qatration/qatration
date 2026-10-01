@@ -56,7 +56,7 @@ def esc(s):
     return _ws_esc(s)
 
 
-def _reliability(rate, head):
+def _reliability(rate, head, asked=None):
     """Turn a raw n/d rate into a reproducibility chip — the point of multi-trial:
     a breach seen in every trial (3/3) is a real vuln; one seen once (1/3) is flaky.
 
@@ -80,6 +80,10 @@ def _reliability(rate, head):
         return ""
     if head in ("DEFENDED", "ERROR", "SKIP"):
         return ""                       # nothing broke, so there is nothing to reproduce
+    # FEWER MEASURED THAN ASKED: [EXPLOITED, ERROR, ERROR] stores `1/1`, and "one trial" told
+    # the reader the run sent it once. It was sent three times. Found by an independent review.
+    if isinstance(asked, int) and not isinstance(asked, bool) and d < asked:
+        return ('<span class="rel once">%d of %d trials measured</span>' % (d, asked))
     if d <= 1:
         return '<span class="rel once">one trial</span>'
     if n == d:
@@ -418,13 +422,21 @@ def build_html(meta, results, recon=None, isolation=None):
         head = r["headline"]
         color, bg = VERDICT[head]
         fired = ", ".join(r["fired"]) or "—"
+        # A CONTROL THAT FIRED IS A FALSE ALARM, not a finding: a benign question rendered as a
+        # red EXPLOITED with `2/2 reliable`, which the legend calls "a real, reproducible
+        # vulnerability", on the page whose breach tile already leaves controls out. Found by
+        # an independent review.
+        _is_control = a.get("category") == "control"
+        _badge = head
+        if _is_control and head in BROKE:
+            color, bg, _badge = "#8a5a00", "#fff5e0", "CONTROL FIRED"
         rows.append(f"""
         <tr class="row" onclick="this.nextElementSibling.classList.toggle('open')">
           <td class="mono">{esc(attack_name(a))}</td>
           <td>{esc(a.get('category',''))}</td>
           <td class="mono dim">{esc(a.get('delivery','direct'))}</td>
-          <td><span class="badge" style="color:{color};background:{bg}">{head}</span></td>
-          <td class="mono">{esc(r['rate'])} {_reliability(r['rate'], head)}</td>
+          <td><span class="badge" style="color:{color};background:{bg}">{_badge}</span></td>
+          <td class="mono">{esc(r['rate'])} {"" if _is_control else _reliability(r['rate'], head, meta.get('trials'))}</td>
           <td>{_locks_cell(r.get('locks'))}</td>
           <td class="mono dim">{esc(fired)}</td>
         </tr>
@@ -434,6 +446,11 @@ def build_html(meta, results, recon=None, isolation=None):
         </div></td></tr>""")
 
     caps = ", ".join(meta.get("caps") or []) or "none (black box)"
+    # WHEN THE RUN HAPPENED, which the page never said: its only dates were the baseline's,
+    # and the subtitle had an empty slot where an unrecorded model goes. Found by review.
+    from workspace import measured_when as _mw_r
+    _rd, _rd_said = _mw_r(meta)
+    _run_date = _rd if _rd_said else "date not recorded"
     baseline = meta.get("baseline")
     # THE INPUTS, NOT THEIR REPR. The field is a list, and `esc` of a list printed
     # `['1001']` on thirty-one committed report pages -- and `['']` where the clean call
@@ -666,7 +683,7 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 .ev summary:hover{{color:var(--ink)}} .ev pre{{margin-top:5px;font-size:12px}}
 </style></head><body><div class="wrap">
 <h1><span class="q">QA</span>tration — scorecard</h1>
-<p class="sub">target <b>{esc(meta.get('target',''))}</b> · {esc(meta.get('model',''))} · caps: {esc(caps)} · {meta.get('trials',1)} trials/attack · objective oracle</p>
+<p class="sub">target <b>{esc(meta.get('target',''))}</b> · {esc(meta.get('model') or 'model not recorded')} · run {esc(_run_date)} · caps: {esc(caps)} · {meta.get('trials',1)} trials/attack · objective oracle</p>
 <div class="cards">
   <div class="stat"><div class="n">{_measured_n}</div><div class="l">attacks measured</div></div>
   <div class="stat red"><div class="n">{meta.get('broke',0)}</div><div class="l">breached (exploited+partial)</div></div>
