@@ -156,7 +156,7 @@ def _message(row, verdict, noisy, baseline_why=""):
     return " · ".join(parts)
 
 
-def build(results, target_config=None, out_dir=None):
+def build(results, target_config=None, out_dir=None, source=None):
     """A SARIF log for one results file. `results` is the parsed JSON, not a path."""
     meta = results.get("meta") or {}
     rows = results.get("results") or []
@@ -535,24 +535,57 @@ def build(results, target_config=None, out_dir=None):
                         + ". The findings below are what it reached, not what it looked for."},
             "descriptor": {"id": "run/unfinished"}})
 
-    invocation = {"executionSuccessful": not unrun and not unmeasured and not _unfinished}
+    # AND A NEWER RUN OF THIS TARGET THAT DID NOT FINISH: this artifact's own record was
+    # consulted and nothing later, so an old, finished results file exported as a successful
+    # scan while the run meant to replace it had failed. Found by an independent review.
+    _newer_bad = None
+    _mine = (_rec or {}).get("started_at") or ""
+    for _r in runs.listing(out_dir or workspace.OUT):
+        if _r.get("target") != meta.get("target") or not _mine:
+            continue
+        if (_r.get("started_at") or "") > _mine and _r.get("state") != "finished":
+            _newer_bad = _r
+            break
+    if _newer_bad:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": "A newer run of this target (%s, %s) did not finish, so the "
+                                "findings below are from an earlier run and may not describe "
+                                "the target now." % (_newer_bad.get("run_id") or "?",
+                                                     _newer_bad.get("state") or "?")},
+            "descriptor": {"id": "run/superseded"}})
+    invocation = {"executionSuccessful": not unrun and not unmeasured and not _unfinished
+                  and not _newer_bad}
     if notifications:
         invocation["toolExecutionNotifications"] = notifications
 
+    _run = {
+        "tool": {"driver": {"name": "QAtration",
+                            "informationUri": INFO_URI,
+                            "version": meta.get("engine") or "unknown",
+                            "rules": rules}},
+        "results": sarif_results,
+        "invocations": [invocation],
+        "properties": {"target": target,
+                       "attacks": meta.get("attacks_n"),
+                       "breached": meta.get("broke")},
+    }
+    # A PER-MODEL COPY IS ANOTHER ANALYSIS, said the way code scanning expects: its own
+    # category (`automationDetails.id`, "category/"), not other fingerprints. GitHub matches
+    # alerts by fingerprint WITHIN a category, so `results_mybot.json` and
+    # `results_mybot_gpt-4o.json` uploaded under one category closed each other's alerts.
+    # The plain export keeps no category, as before, so its existing alerts stay matched.
+    # Found by an independent review.
+    _stem = os.path.basename(str(source or ""))
+    if _stem.startswith("results_") and _stem.endswith(".json"):
+        _stem = _stem[len("results_"):-len(".json")]
+        if "_" in _stem:
+            _run["automationDetails"] = {"id": "qatration/%s/%s/" % (target,
+                                                                   _stem.split("_", 1)[1])}
     return {
         "$schema": SCHEMA,
         "version": "2.1.0",
-        "runs": [{
-            "tool": {"driver": {"name": "QAtration",
-                                "informationUri": INFO_URI,
-                                "version": meta.get("engine") or "unknown",
-                                "rules": rules}},
-            "results": sarif_results,
-            "invocations": [invocation],
-            "properties": {"target": target,
-                           "attacks": meta.get("attacks_n"),
-                           "breached": meta.get("broke")},
-        }],
+        "runs": [_run],
     }
 
 
@@ -602,7 +635,7 @@ def main():
                   "exported." % (args.results, _res_target, args.target_config, _cfg_target))
             return 2
     log = build(results, target_config=args.target_config,
-                out_dir=os.path.dirname(os.path.abspath(args.results)))
+                out_dir=os.path.dirname(os.path.abspath(args.results)), source=args.results)
     # THROUGH THE ONE RULE. This opened `dest` directly, so a `--out` naming a directory
     # that does not exist, or naming a directory, came back as a traceback about a path the
     # reader typed. `workspace.writable_path` makes the parent and refuses the rest.

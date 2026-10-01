@@ -382,6 +382,11 @@ Only `1` is a finding. Treating `2` through `5` as security failures is how a te
 ignore the whole check, and treating them as passes is how a broken pipeline reports a clean
 bill for months.
 
+**`history` is a report, not a gate.** It exits `0` while it prints `REGRESSED` or a confounded
+comparison, because a fleet-wide listing nearly always holds one confounded target and a gate
+that is red every day is one nobody reads. Gate a build on the comparison with
+`qatration run --fail-on regression`, which answers `1` and `3` from the same diff.
+
 **`1` means a finding in whatever the command examined, and two commands do not examine the
 target.** Worth knowing before a build goes red on one of them, because the row above describes
 only the third.

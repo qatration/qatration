@@ -91,7 +91,7 @@ def rates(target, out_dir=None):
     if data is None:
         return None
     rows = data.get("rows") or []
-    scored = [r for r in rows if r.get("probe")]
+    scored = [r for r in rows if _answered(r)]
     if not scored:
         return None
     counts = {}
@@ -99,6 +99,22 @@ def rates(target, out_dir=None):
         for d in (r.get("fired") or []):
             counts[d] = counts.get(d, 0) + 1
     return {d: n / len(scored) for d, n in counts.items()}
+
+
+def _answered(r):
+    """Did the target answer this benign probe? A row carrying a probe that came back empty is
+    not traffic: `benign` itself counts it as nothing, and in a denominator it dilutes every
+    rate, so a detector firing on all of the answered traffic read as `weakened`. Rows written
+    before `silent` existed are asked of the probe itself. Found by an independent review."""
+    p = r.get("probe")
+    if not p:
+        return False
+    if "silent" in r:
+        return not r.get("silent")
+    if not isinstance(p, dict):
+        return True
+    return bool(str(p.get("output") or "").strip() or p.get("tool_calls")
+                or p.get("observations") or p.get("turns"))
 
 
 def days_between(then, now):
@@ -208,7 +224,7 @@ def refusal_rate(target, out_dir=None):
     if data is None:
         return None
     rows = data.get("rows") or []
-    sent = [r for r in rows if r.get("probe")]
+    sent = [r for r in rows if _answered(r)]
     if not sent:
         return None
     return sum(1 for r in sent if r.get("refused")), len(sent)
@@ -233,7 +249,7 @@ def benign_seen(target, out_dir=None):
     if data is None:
         return None
     rows = data.get("rows") or []
-    sent = [r for r in rows if r.get("probe")]
+    sent = [r for r in rows if _answered(r)]
     if not sent:
         return None
     return sum(1 for r in sent if not (r.get("fired") or [])), len(sent)
@@ -466,7 +482,28 @@ def doubtful_count(target, artifact, out_dir=None):
         return 0
 
 
-def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=None):
+def model_caveat(target, sweep_model, config_model=None, out_dir=None):
+    """A line when the sweep's model is not the one its benign baseline was measured on, or "".
+
+    `benign` has no `--model`: a baseline is measured on the config's model, and every `run
+    --model X` copy was attributed against it -- 49 breach rows in six reports judged by
+    another model's unattacked traffic, and no surface said so. The baseline's own `model` is
+    the answer where it recorded one; before it did, the config's model is what it ran on.
+    Found by an independent review.
+    """
+    data, _why = _load(target, out_dir)
+    if data is None or not sweep_model:
+        return ""
+    base_model = str((data.get("meta") or {}).get("model") or config_model or "")
+    if not base_model or str(sweep_model) == base_model:
+        return ""
+    return (f"  ! the benign baseline was measured on model {base_model!r} and this run used "
+            f"{str(sweep_model)!r}: every attribution below is against another model's "
+            f"unattacked traffic, so read it as unmeasured for this model.")
+
+
+def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=None,
+         sweep_model=None, config_model=None):
     """A short human-readable block for the run output, or '' when there is nothing to say.
 
     `as_of` is the date of the sweep the note qualifies (default: today, which is the date of a
@@ -505,6 +542,7 @@ def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=Non
                 f"nothing has measured what this target does when nobody attacks it.\n"
                 f"      qatration benign {how}")
     _doubtful, _rescued = qualified(target, results, canaries, out_dir)
+    _model_line = model_caveat(target, sweep_model, config_model, out_dir)
     # Sized from the ids that will be printed. `{id:<28}` ran four shipped attack names into
     # the verdict beside them, and the note this builds is the one that tells a reader a
     # finding is not attributable -- the last line that should be hard to read.
@@ -552,8 +590,8 @@ def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=Non
                      % (_bdate[:10], _age, _ref))
 
     if not lines and not rescued:
-        return stale
-    out = []
+        return "\n".join(x for x in (_model_line, stale) if x)
+    out = [_model_line] if _model_line else []
     if lines:
         out.append(f"  ! {len(lines)} breach row(s) share a detector this target also trips "
                    f"WITHOUT an attack, or one the baseline could not measure — the finding "

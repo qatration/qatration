@@ -872,6 +872,7 @@ def main():
     # into `request.model`, or the run is refused. Through `workspace.apply_model_override`,
     # which `isolation` and `recon` now share -- they set a key the http adapter never reads.
     from workspace import apply_model_override as _amo
+    _own_model = config_model(tcfg)        # what `benign` measures on; see model_caveat
     _amo(tcfg, args.model, "run")
     # trials precedence: explicit --trials > target config's 'trials' > default 3
     # THE CONFIG DOOR TOO. `--trials` is floored by argparse; `trials:` in a target file
@@ -1692,7 +1693,8 @@ def main():
     attribution_note = _baseline_note(target.name, results, _ht.declared(ctx),
                                       config_path=(os.path.realpath(args.target_config)
                                                    if getattr(args, "target_config", None)
-                                                   else None))
+                                                   else None),
+                                      sweep_model=config_model(tcfg), config_model=_own_model)
     if attribution_note:
         print()
         print(attribution_note)

@@ -861,6 +861,42 @@ with tempfile.TemporaryDirectory() as tmp:
         sys.argv = argv
     check("an export over a run that measured nothing exits 3, not 0", _rc_n == 3, str(_rc_n))
 
+# --- a newer run that failed, and per-model copies -----------------------------------------
+import runs as _runs_s
+with tempfile.TemporaryDirectory() as tmp:
+    import datetime as _dt_s
+    _old = _runs_s.start(tmp, "2026-09-01T1000-aaaaaa", "fixture",
+                         when=_dt_s.datetime(2026, 9, 1, 10, 0))
+    _runs_s.finish(tmp, _old, "finished")
+    _new = _runs_s.start(tmp, "2026-09-02T1000-bbbbbb", "fixture",
+                         when=_dt_s.datetime(2026, 9, 2, 10, 0))
+    _runs_s.finish(tmp, _new, "aborted")
+    _res_s = results([row("a1", "EXPLOITED", ["canary_in_output"])],
+                     run_id="2026-09-01T1000-aaaaaa")
+    _real_r = baseline.rates
+    baseline.rates = lambda target, out_dir=None: {}
+    try:
+        _log_s = sarif.build(_res_s, target_config="cfg.yaml", out_dir=tmp)
+        _log_m = sarif.build(results([row("a1", "EXPLOITED", ["canary_in_output"])]),
+                             target_config="cfg.yaml", out_dir=tmp,
+                             source=os.path.join(tmp, "results_fixture_gpt-4o.json"))
+        _log_p = sarif.build(results([row("a1", "EXPLOITED", ["canary_in_output"])]),
+                             target_config="cfg.yaml", out_dir=tmp,
+                             source=os.path.join(tmp, "results_fixture.json"))
+    finally:
+        baseline.rates = _real_r
+    _inv_s = _log_s["runs"][0]["invocations"][0]
+    check("an export whose target has a newer run that did not finish is not a successful scan",
+          _inv_s["executionSuccessful"] is False
+          and any(n["descriptor"]["id"] == "run/superseded"
+                  for n in _inv_s.get("toolExecutionNotifications", [])),
+          str(_inv_s))
+    check("a per-model copy is its own code-scanning category",
+          _log_m["runs"][0].get("automationDetails", {}).get("id") == "qatration/fixture/gpt-4o/",
+          str(_log_m["runs"][0].get("automationDetails")))
+    check("...while the plain export keeps no category, so its alerts stay matched",
+          "automationDetails" not in _log_p["runs"][0], str(_log_p["runs"][0].keys()))
+
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:
     sys.exit(1)

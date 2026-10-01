@@ -1354,7 +1354,11 @@ def main():
         # for which oracle produced the verdicts in a file, with no second spelling of it
         # to drift from.
         from target import judged_now as _judged_now
+        from workspace import config_model as _config_model_b
         json.dump({"meta": _judged_now({"target": args.target,
+                                        # THE MODEL IT MEASURED, which a `run --model` copy
+                                        # is compared against (`baseline.model_caveat`).
+                                        "model": _config_model_b(cfg),
                                         "when": datetime.now().isoformat(" ", "seconds"),
                                         "trials": args.trials, **s}), "rows": rows},
                   f, indent=2)

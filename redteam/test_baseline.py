@@ -53,7 +53,9 @@ def _benign(tmp, target, rows, meta=None):
         json.dump({"meta": _meta, "rows": rows}, f)
 
 
-def _row(fired=(), output="", probe=True):
+def _row(fired=(), output="Sure, here is how that works.", probe=True):
+    """One benign row. An ANSWER by default: an empty reply is not traffic the target answered
+    (`baseline._answered`), so a fixture meaning "it answered and nothing fired" says something."""
     return {"fired": list(fired),
             "probe": {"output": output, "observations": []} if probe else None}
 
@@ -77,6 +79,62 @@ def main():
     check("a target with no benign run is None, not an empty dict",
           rates("never-run", tmp) is None, str(rates("never-run", tmp)))
     _benign(tmp, "silent", [_row() for _ in range(6)])
+    # A BASELINE MEASURED ON ANOTHER MODEL IS SAID TO BE ONE, through the note every surface
+    # carries: `run --model X` copies were attributed against the config model's traffic.
+    from baseline import model_caveat as _mc
+    _benign(tmp, "modelbot", [_row(["canary_in_output"], "KEY-1"), _row()],
+            meta={"model": "model-a"})
+    check("a sweep on another model than its baseline's is told so",
+          "measured on model 'model-a'" in _mc("modelbot", "model-b", None, tmp),
+          _mc("modelbot", "model-b", None, tmp))
+    check("...and the note carries it",
+          "measured on model 'model-a'" in note("modelbot", [], (), tmp, sweep_model="model-b"),
+          note("modelbot", [], (), tmp, sweep_model="model-b"))
+    check("...while the same model says nothing", _mc("modelbot", "model-a", None, tmp) == "")
+    _benign(tmp, "oldbot", [_row()])
+    check("a baseline that recorded no model is the config's model",
+          "measured on model 'cfg-model'" in _mc("oldbot", "other", "cfg-model", tmp),
+          _mc("oldbot", "other", "cfg-model", tmp))
+    # A ROW THE BENIGN RUN ITSELF CALLED SILENT is silent whatever text rode along with it.
+    _benign(tmp, "flagsilent", [_row(["canary_in_output"], "KEY-1"),
+                                dict(_row(output="..."), silent=True)])
+    check("a row recorded as silent is not counted, by its own flag",
+          rates("flagsilent", tmp) == {"canary_in_output": 1.0}, str(rates("flagsilent", tmp)))
+    # AND THE THREE CALLERS PASS THE MODELS, read from the source: a caller that drops them
+    # leaves `model_caveat` with nothing to compare, and no fixture run of it would notice.
+    import ast as _ast_m
+
+    def _kw(module, func_name):
+        tree = _ast_m.parse(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              module), encoding="utf-8").read())
+        return [{k.arg: k.value for k in n.keywords} for n in _ast_m.walk(tree)
+                if isinstance(n, _ast_m.Call) and isinstance(n.func, _ast_m.Name)
+                and n.func.id == func_name]
+    for _mod in ("run_redteam.py", "rejudge.py"):
+        _calls = _kw(_mod, "_baseline_note")
+        check("%s hands the note both models" % _mod,
+              bool(_calls) and all(not isinstance(c.get("sweep_model"), (_ast_m.Constant,
+                                                                          type(None)))
+                                   and "config_model" in c for c in _calls),
+              str([sorted(c) for c in _calls]))
+    _bsrc = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "benign.py"),
+                 encoding="utf-8").read()
+    _dumps = [n for n in _ast_m.walk(_ast_m.parse(_bsrc)) if isinstance(n, _ast_m.Dict)
+              and any(isinstance(k, _ast_m.Constant) and k.value == "when" for k in n.keys)
+              and any(isinstance(k, _ast_m.Constant) and k.value == "trials" for k in n.keys)]
+    check("benign records the model it measured beside the date",
+          any(any(isinstance(k, _ast_m.Constant) and k.value == "model" for k in d.keys)
+              for d in _dumps), str(len(_dumps)))
+    from baseline import refusal_rate as _refusal_rate_s
+    # AN EMPTY REPLY IS NOT TRAFFIC: nine silent rows beside one answered row that fired made
+    # the detector's rate 10% -- `weakened` -- where it fires on all of the answered traffic.
+    _benign(tmp, "mostlysilent", [_row(["canary_in_output"], "KEY-1")]
+            + [_row(output="") for _ in range(9)])
+    check("empty replies are not counted in a rate's denominator",
+          rates("mostlysilent", tmp) == {"canary_in_output": 1.0},
+          str(rates("mostlysilent", tmp)))
+    check("...nor in the refusal rate's", _refusal_rate_s("mostlysilent", tmp) == (0, 1),
+          str(_refusal_rate_s("mostlysilent", tmp)))
     check("a measured target that fired nothing is {}, not None",
           rates("silent", tmp) == {}, str(rates("silent", tmp)))
     check("measured and silent attributes; unmeasured does not",

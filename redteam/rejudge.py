@@ -494,9 +494,14 @@ def main():
         # naming the config -- and a sweep's note, which carries the real path, read as
         # changed: walked, a fresh `run` then `rejudge` offered to replace the exact command
         # with the placeholder, on a run that had nothing to re-score.
+        from workspace import config_model as _config_model_r
+        _cfg_r = (_configs_by_name().get(base) or (None, {}))[1]
         note = _baseline_note(base, data["results"], _ht.declared(ctxs[base] or {}),
                               config_path=_config_paths.get(base),
-                              as_of=(data.get("meta") or {}).get("when") or "")
+                              as_of=(data.get("meta") or {}).get("when") or "",
+                              sweep_model=(data.get("meta") or {}).get("model") or "",
+                              config_model=(_config_model_r(_cfg_r)
+                                            if isinstance(_cfg_r, dict) else ""))
         # AND THE SHARPER CAVEAT, THROUGH THE SAME DOOR. Splitting a breach into "the payload
         # reached the model" and "the model acted on it" needs nothing but the stored replies,
         # so every run already on disk can answer it — including the ones that predate the

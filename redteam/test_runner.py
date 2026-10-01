@@ -935,6 +935,32 @@ def main():
         _gn = "raised %s" % type(_e).__name__
     check("a send that returns nothing is an ERROR row, not a crash", _gn == "ERROR", _gn)
 
+    # A SEND THE WATCHDOG ABANDONED STOPS THE ROW: its thread can still change the target.
+    class _Hang(_Tg2):
+        name, capabilities = "hang2", set()
+
+        def __init__(self):
+            self.calls = 0
+
+        def reset(self):
+            pass
+
+        def send(self, p):
+            self.calls += 1
+            time.sleep(0.6)
+            return _Pb2(prompt=p, output="ok")
+    _old_to2 = _rn2.SEND_TIMEOUT
+    _old_rt2 = _rn2.RETRIES
+    try:
+        _rn2.SEND_TIMEOUT, _rn2.RETRIES = 0.2, 0
+        _th = _Hang()
+        _rh = _rn2.run_attack(_th, {"id": "h1", "category": "x", "text": "hi", "success": []},
+                              _ctx2, trials=3)
+        check("after a timed-out send the row sends no more trials",
+              len(_rh) == 1 and _th.calls == 1, "records=%d calls=%d" % (len(_rh), _th.calls))
+    finally:
+        _rn2.SEND_TIMEOUT, _rn2.RETRIES = _old_to2, _old_rt2
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

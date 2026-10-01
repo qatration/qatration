@@ -462,6 +462,15 @@ def run_attack(target, attack, ctx, trials=1):
     def _text(s):
         return sent_form(s, _enc)
     for _ in range(trials):
+        # AFTER A SEND THE WATCHDOG ABANDONED, NO MORE TRIALS OF THIS ROW: the abandoned call
+        # keeps running on its thread and can still change the target after the next trial's
+        # reset, so a later trial would measure a target the earlier one is still talking to.
+        # The row keeps the trials it measured. Found by an independent review.
+        if records and str(getattr(records[-1].get("probe"), "error", "") or "").startswith(
+                "TIMEOUT"):
+            print(f"  ! {aid}: a send timed out and may still be running against the target; "
+                  f"the remaining trials of this attack were not sent", file=sys.stderr)
+            break
         # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
         # under test: rangebot's shared notes outlived every trial and every attack, so
         # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
