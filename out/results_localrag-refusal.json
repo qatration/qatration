@@ -2,7 +2,7 @@
   "meta": {
     "target": "localrag-refusal",
     "model": "",
-    "engine": "bdaabf3",
+    "engine": "068ea5c",
     "authorization": null,
     "caps": [],
     "trials": 10,
@@ -37,7 +37,7 @@
         "tool_names"
       ]
     },
-    "delivery": "  ! the planted payload reached the model on 0 of 0 probes under attack and 27 of 48 without one \u2014 too few to separate delivery from effect.",
+    "delivery": "  ! the planted payload reached the model on 0 of 0 probes under attack \u2014 nothing to separate delivery from effect on.",
     "never_sent": 0
   },
   "results": [
