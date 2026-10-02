@@ -67,30 +67,18 @@ def _run(target, rung, objective, ctx, trials):
     NOT NAMED `payload`, which is what it was called: this module imports `target.payload`
     now, and a parameter of that name shadows the rule for the whole function. Nothing here
     called it, which is exactly how that kind of trap waits."""
-    hits, errors, locks = 0, 0, []
+    # THROUGH `isolation.run_trials`, the loop every lock-map trial goes through. An
+    # errored or silent trial is not a miss: counting either as the target holding is how a
+    # dead endpoint produced COUPLED, "the combination is the wall", about a run in which
+    # nothing was reachable at all.
+    from isolation import run_trials as _run_trials, UNMEASURED_TRIALS as _UNM
     turns = isinstance(rung, list)
-    for _ in range(trials):
-        target.reset()
-        probe = _resilient_send(
-            (lambda p=rung: target.send_chain(p)) if turns
-            else (lambda p=rung: target.send(p)), "compose")
-        # AN ERRORED TRIAL IS NOT A MISS. `_achieved` returns False for it, correctly,
-        # and counting that as the target holding is how a dead endpoint produced
-        # COUPLED — "every property was reachable on its own; the combination is the
-        # wall" — about a run in which nothing was reachable at all.
-        # AND A SILENT ONE IS NOT A MISS EITHER, the rule `isolation._trial` follows: an
-        # endpoint answering nothing made every rung 0/N and the verdict COUPLED -- "the
-        # combination is the wall" -- from silence alone. Found by an independent review.
-        # AND AN ERROR AFTER EVIDENCE IS STILL EVIDENCE, `oracle.judge`'s rule and now
-        # `isolation._trial`'s: a rung whose chain leaked and then failed was an error here.
-        if probe is None or probe.silent():
-            errors += 1
-        elif _achieved(probe, objective, ctx):    # locks describe the MISSES only
-            hits += 1
-        elif probe.error:
-            errors += 1
-        else:
-            locks.append(classify(probe, ctx)["class"])
+    hits, errors, locks, _probes = _run_trials(
+        target, (lambda p=rung: target.send_chain(p)) if turns
+        else (lambda p=rung: target.send(p)),
+        lambda p: _achieved(p, objective, ctx), ctx, trials, "compose",
+        steps=len(rung) if turns else None)
+    locks = [x for x in locks if x not in _UNM]
     return hits, errors, _tally(locks)
 
 

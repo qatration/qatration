@@ -177,23 +177,21 @@ def try_frame(target, frame, task, success, ctx, trials=3, frame_vars=None,
     # sixth". This was the second spelling of it and `compose` was the third, each with a
     # comment pointing at the other; the site with neither is the one that goes wrong.
     text = payload(text)
-    hits, errors, locks = 0, 0, []
-    for _ in range(trials):
-        target.reset()
-        probe = _resilient_send(lambda t=text: target.send(t), frame["id"])
-        # SEE compose._run: an errored trial is not the target holding. A dead endpoint
-        # used to come back LOCKED, "nothing in the library moved it", which is the one
-        # verdict `isolation._status` grew an `unmeasured` state to prevent.
-        # AND AN ERROR AFTER EVIDENCE IS STILL EVIDENCE, `oracle.judge`'s rule and now
-        # `isolation._trial`'s: a frame whose chain leaked and then failed was an error here.
-        if probe is None or (probe.error and probe.silent()):
-            errors += 1
-        elif _achieved(probe, success, ctx, require_all):  # locks describe the MISSES only
-            hits += 1
-        elif probe.error:
-            errors += 1
-        else:
-            locks.append(classify(probe, ctx)["class"])
+    # THROUGH `isolation.run_trials`, the loop every lock-map trial goes through. This was
+    # its own copy, and it counted a silent reply as a lock held -- LOCKED, "nothing in the
+    # library moved it", from an endpoint that answered nothing. Found by a review.
+    from isolation import run_trials as _run_trials, UNMEASURED_TRIALS as _UNM
+    hits, errors, locks, _probes = _run_trials(
+        target, lambda t=text: target.send(t),
+        lambda p: _achieved(p, success, ctx, require_all), ctx, trials, frame["id"])
+    # SILENCE IS COUNTED APART FROM ERRORS, because the two mean different things here. On
+    # the bare control an empty reply is the guard's answer -- the ask got nothing, which is
+    # the subtrahend a key is measured against (`searchable` sends exactly those properties
+    # here). On a frame it is no measurement of the frame, so a library answered only with
+    # silence is UNMEASURED in `search`, not LOCKED.
+    silent = locks.count("silent")
+    errors -= silent
+    locks = [x for x in locks if x not in _UNM]       # locks describe the walls, not silence
     return {
         "frame": frame["id"],
         "family": frame.get("family", "?"),
@@ -206,6 +204,7 @@ def try_frame(target, frame, task, success, ctx, trials=3, frame_vars=None,
         "hits": hits,
         "trials": trials,
         "errors": errors,
+        "silent": silent,
         "rate": f"{hits}/{trials}",
         "locks": _tally(locks),
         "prompt": text,
@@ -311,7 +310,8 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
         # can fill -- so nothing in the library was tried, which is not "nothing in the
         # library moved it". `run_isolation` names this very case as a defect.
         verdict = "UNMEASURED"
-    elif results and all((r.get("errors") or 0) >= (r.get("trials") or 1) for r in results):
+    elif results and all((r.get("errors") or 0) + (r.get("silent") or 0)
+                         >= (r.get("trials") or 1) for r in results):
         # EVERY FRAMED TRIAL ERRORED: nothing in the library was measured, which is not
         # "nothing in the library moved it". `try_frame` counts the errors and this read
         # only the hits, so a target that fell over after the control answered LOCKED.

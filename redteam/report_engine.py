@@ -287,7 +287,7 @@ def _iso_row(p, indent=False):
     cls = {"open": "st-open", "locked": "st-locked", "noisy": "st-noisy"}.get(st, "")
     key = ((p.get("keysearch") or {}).get("keys") or [])
     key_html = (f'<span class="keyhit">{esc(key[0]["frame"])}</span> '
-                f'<span class="dim">{esc(key[0]["why"].splitlines()[0][:70])}</span>'
+                f'<span class="dim">{esc(((key[0].get("why") or "").splitlines() or [""])[0][:70])}</span>'
                 if key else '<span class="dim">—</span>')
     name = esc(("↳ " if indent else "") + p.get("name", ""))
 
@@ -331,7 +331,8 @@ def _isolation_panel(iso):
         if comb:
             rows += _iso_row(dict(comb, name="combined (all properties)"), indent=True)
         note = ""
-        if m.get("coupling"):
+        # ONLY WHILE IT IS THE VERDICT: a composed attack that landed walked through it.
+        if m.get("coupling") and v == "COUPLED":
             note = ('<div class="note2">every property opens alone — the combination is '
                     f'the wall ({esc(", ".join(m["coupling"]))}). Suspicion, not capability: '
                     'each extra unusual claim in one message raises the guard.</div>')
@@ -353,9 +354,13 @@ def _isolation_panel(iso):
                          'the same as defended</div>')
             comp_html = (f'<div class="ph">Composition ladder — {esc(comp.get("verdict",""))}'
                          f'</div><table class="mini">{crows}</table>{extra}')
+        # AN OBJECTIVE KEPT FROM AN EARLIER RUN says when it was measured; the panel's date is
+        # the latest run's (`isolation.merge_stored`).
+        _mwhen = (f' <span class="dim">measured {esc(m["when"])}</span>'
+                  if m.get("when") and m.get("when") != iso.get("when") else "")
         blocks.append(f"""<div class="obj">
   <div class="objhead"><span class="mono">{esc(m.get('objective',''))}</span>
-    <span class="badge" style="color:{color};background:{bg}">{esc(v)}</span></div>
+    <span class="badge" style="color:{color};background:{bg}">{esc(v)}</span>{_mwhen}</div>
   <table class="mini"><thead><tr><th>property</th><th>alone</th><th>rate</th>
     <th>blocked by</th><th>key found</th></tr></thead><tbody>{rows}</tbody></table>
   {note}{comp_html}

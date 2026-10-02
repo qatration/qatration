@@ -152,6 +152,34 @@ def _invoke_with_timeout(fn, timeout):
     return box["probe"]
 
 
+def start_trial(target, last_probe, label):
+    """Open the next trial of a row. -> False when the row must stop here.
+
+    ONE DOOR, BECAUSE THERE WERE FIVE LOOPS. `run_attack` cleared `begin_trial` state and
+    stopped a row after an abandoned send; the four trial loops in `isolation`, `keysearch`
+    and `compose` did neither, so a target whose shared notes outlive `reset` scored a lock
+    map PARTIAL where the sweep scored the same probe DEFENDED three times, and a send the
+    watchdog gave up on kept talking to the target through the trials after it. Found by
+    an independent review.
+    """
+    # AFTER A SEND THE WATCHDOG ABANDONED, NO MORE TRIALS OF THIS ROW: the abandoned call
+    # keeps running on its thread and can still change the target after the next trial's
+    # reset, so a later trial would measure a target the earlier one is still talking to.
+    # The row keeps the trials it measured. Found by an independent review.
+    if str(getattr(last_probe, "error", "") or "").startswith("TIMEOUT"):
+        print(f"  ! {label}: a send timed out and may still be running against the target; "
+              f"the remaining trials were not sent", file=sys.stderr)
+        return False
+    # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
+    # under test: rangebot's shared notes outlived every trial and every attack, so
+    # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
+    _bt = getattr(target, "begin_trial", None)
+    if callable(_bt):
+        _bt()
+    target.reset()
+    return True
+
+
 def _resilient_send(fn, attack_id, steps=1, before_retry=None):
     """One send with a watchdog + up to RETRIES retries on timeout/error, so a
     transient Ollama blip or a single hang doesn't sink the attack. Retries are
@@ -167,6 +195,12 @@ def _resilient_send(fn, attack_id, steps=1, before_retry=None):
     probe = _invoke_with_timeout(fn, _limit)
     attempts = 1
     while probe.error and attempts <= RETRIES:
+        # A SEND THE WATCHDOG ABANDONED IS STILL RUNNING, so a retry is a second request into
+        # the conversation the first one is still having: it answered, the row read it, and
+        # the abandoned call landed in the next trial. Not retried, and the row stops at
+        # `start_trial`. Found by an independent review.
+        if str(probe.error or "").startswith("TIMEOUT"):
+            break
         # A CONVERSATION THAT HAD ANSWERED IS NOT SENT AGAIN. The retry re-sends every step,
         # so a server that keeps the conversation received them twice -- and a target that
         # gives in on the third request measured an attack nobody wrote, EXPLOITED 1/1 --
@@ -462,22 +496,8 @@ def run_attack(target, attack, ctx, trials=1):
     def _text(s):
         return sent_form(s, _enc)
     for _ in range(trials):
-        # AFTER A SEND THE WATCHDOG ABANDONED, NO MORE TRIALS OF THIS ROW: the abandoned call
-        # keeps running on its thread and can still change the target after the next trial's
-        # reset, so a later trial would measure a target the earlier one is still talking to.
-        # The row keeps the trials it measured. Found by an independent review.
-        if records and str(getattr(records[-1].get("probe"), "error", "") or "").startswith(
-                "TIMEOUT"):
-            print(f"  ! {aid}: a send timed out and may still be running against the target; "
-                  f"the remaining trials of this attack were not sent", file=sys.stderr)
+        if not start_trial(target, records[-1].get("probe") if records else None, aid):
             break
-        # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
-        # under test: rangebot's shared notes outlived every trial and every attack, so
-        # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
-        _bt = getattr(target, "begin_trial", None)
-        if callable(_bt):
-            _bt()
-        target.reset()
         seeded = False
         try:
             if delivery == "indirect":

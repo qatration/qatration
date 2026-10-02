@@ -2752,6 +2752,7 @@ _LOCKMAP_REQUIRE = {
     "maps[].properties[].name": (str, False, "the report names the defence by it"),
     "maps[].properties[].keysearch": (dict, False, "the report reads the key search off it"),
     "maps[].compose": (dict, False, "the report reads the composed attempt off it"),
+    "maps[].when": (str, False, "the report dates an objective kept from an earlier run by it"),
 }
 for _where in ("maps[].combined.", "maps[].properties[]."):
     _LOCKMAP_REQUIRE.update((_where + _k, _v) for _k, _v in _TRIAL_ROWS.items())

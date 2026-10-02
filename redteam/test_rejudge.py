@@ -707,6 +707,12 @@ def main():
             # satisfy a substring check and say nothing.
             check("...carrying the background this run measured, not a quoted one",
                   "27/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
+            # AND THE ATTRIBUTION NOTE WHOLE, not its first three lines: rows added at the
+            # bottom of it printed nothing that changed.
+            _attr_last = [l.strip() for l in (_meta.get("attribution") or "").splitlines()
+                          if l.strip()]
+            check("the preview prints the whole attribution note, down to its last line",
+                  len(_attr_last) > 3 and _attr_last[-1][:96] in _said, _said[-600:])
 
             # AND THE PREVIEW SHOWS THE LINE THAT MOVED. It printed the first four lines of
             # the note, which are the table, so a verdict changing under a stored file showed
@@ -728,6 +734,33 @@ def main():
             check("a preview prints the delivery verdict that moved, not only the table",
                   bool(_verdict) and _verdict[0].strip()[:90] in _saidp
                   and "(the note moved)" in _saidp, _saidp[-600:])
+
+    # --- THE COMMITTED CORPUS IS WHAT THE ENGINE SAYS TODAY ------------------------------
+    #
+    # A re-score of the published runs went out with six attribution notes stale: the
+    # results were re-scored BEFORE the benign runs they are judged against, and the benign
+    # re-score added `refusal_then_comply` fires the notes never saw. Every page check
+    # passed, because a page is built from the note and agreed with it. The only thing that
+    # says the note is current is this command, so the corpus is held to it: a preview over
+    # the committed artifacts has nothing to change. Found re-reading the corpus by hand.
+    if _have:
+        _rc = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "rejudge"],
+                             capture_output=True, text=True, timeout=900,
+                             env=dict(os.environ, QATRATION_OUT=_real,
+                                      PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        _said_c = _rc.stdout + _rc.stderr
+        check("a re-score of the committed runs has nothing left to change",
+              "would change 0 attack row(s) across 0 file(s)" in _said_c,
+              _said_c[-1500:])
+        # AND THE BENIGN RUNS THOSE NOTES ARE JUDGED AGAINST, through their own door.
+        _rb = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                              "--rejudge"],
+                             capture_output=True, text=True, timeout=900,
+                             env=dict(os.environ, QATRATION_OUT=_real,
+                                      PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8"))
+        _said_b = _rb.stdout + _rb.stderr
+        check("...and neither has a re-score of the committed benign runs",
+              "would change 0 row(s)" in _said_b, _said_b[-1500:])
 
     # --- A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES -------------------------------
     #

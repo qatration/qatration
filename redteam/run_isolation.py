@@ -22,7 +22,7 @@ except Exception:
 
 import yaml
 from isolation import (run_isolation, format_map, apply_keysearch, prop_ctx, write_maps,
-                       would_lose_a_measurement)
+                       merge_stored)
 from keysearch import search, format_search, load_frames
 from compose import compose, format_compose
 
@@ -320,6 +320,11 @@ def main():
                 result["compose"] = {k: v for k, v in cout.items() if k != "best"}
                 print(format_compose(cout))
                 print()
+                # what the composition found moves the verdict, as a key does
+                apply_keysearch(result)
+                if result["verdict"] == "EXPLOITED":
+                    print(f"  verdict now EXPLOITED: the composed attack achieved "
+                          f"{result['objective']}\n")
 
     counts = {}
     for m in maps:
@@ -332,23 +337,20 @@ def main():
 
     # (`out` and both refusals of it are settled above, before the probes.)
     if out:
-        # AND A RUN THAT MEASURED NOTHING DOES NOT REPLACE ONE THAT DID. `run` refuses the
-        # same trade in as many words, `benign` refuses it, `recon` refuses it; this wrote.
-        # The rule lives in `isolation` beside the writer it guards.
-        _lost = would_lose_a_measurement(out, maps)
-        if _lost:
-            print("\n" + _lost, file=sys.stderr)
-        else:
-        # through write_maps, so the artifact carries the build that produced it — lock maps
-        # were a bare list with no meta and could not be stamped even in principle
+        # THROUGH `merge_stored`: a run that measured nothing on an objective does not
+        # replace one that did, and an objective not run this time is not erased.
         # THE MOMENT THIS MEASURED, said here because this is what knows it. `write_maps`
         # will not invent one: `rejudge --write` rewrites these files for probes recorded
         # weeks earlier, and a default would stamp today onto that evidence.
-            import datetime as _dt_i
-            write_maps(out, maps,
-                       {"target": target.name, "objectives": os.path.basename(path)},
-                       when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
-            print(f"\nwrote {out}")
+        import datetime as _dt_i
+        _merged, _kept = merge_stored(out, maps)
+        if _kept:
+            print("\nKept from %s, each with its own date: %s."
+                  % (os.path.basename(out), "; ".join(_kept)), file=sys.stderr)
+        write_maps(out, _merged,
+                   {"target": target.name, "objectives": os.path.basename(path)},
+                   when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
+        print(f"\nwrote {out}")
 
     # 3 WHEN NOTHING WAS MEASURED, WHICH THE VERDICT ALREADY KNEW. `_verdict` learned to
     # answer UNMEASURED after a dead target came back HARDENED, and the exit code was left

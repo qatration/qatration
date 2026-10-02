@@ -526,7 +526,9 @@ def main():
             print(f"  {'attribution':<26}{len(was)} line(s) -> {len(now)} line(s)"
                   + ("  (a caveat appears)" if now and not was else
                      "  (a caveat is withdrawn)" if was and not now else ""))
-            for l in now[:3]:
+            # THE WHOLE NOTE, as for delivery below: the first three lines are its header and
+            # two rows, so two rows added at the bottom printed nothing that changed.
+            for l in now:
                 print(f"      {l.strip()[:96]}")
         # THE WHOLE NOTE, AND A WITHDRAWN ONE: the first four lines are the table, so a verdict
         # moving from "lift" to "no lift" printed nothing that changed. Found by a review.
