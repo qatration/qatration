@@ -708,6 +708,27 @@ def main():
             check("...carrying the background this run measured, not a quoted one",
                   "27/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
 
+            # AND THE PREVIEW SHOWS THE LINE THAT MOVED. It printed the first four lines of
+            # the note, which are the table, so a verdict changing under a stored file showed
+            # an unchanged table and nothing else. The stored verdict is turned around here and
+            # the preview has to print the one the code draws today. Found by a review.
+            _full = json.load(io.open(_stripped, encoding="utf-8"))
+            _full["meta"] = _meta
+            _now = _meta.get("delivery") or ""
+            _verdict = [l for l in _now.splitlines() if l.strip().startswith("->")]
+            _full["meta"]["delivery"] = "".join(
+                l + chr(10) for l in _now.splitlines()
+                if not l.strip().startswith("->")) + "      -> the verdict as it once was."
+            io.open(_stripped, "w", encoding="utf-8", newline="").write(
+                json.dumps(_full, indent=2, default=str))
+            _rp = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                  "rejudge", "--target", "localrag"],
+                                 capture_output=True, text=True, env=_env, timeout=300)
+            _saidp = _rp.stdout + _rp.stderr
+            check("a preview prints the delivery verdict that moved, not only the table",
+                  bool(_verdict) and _verdict[0].strip()[:90] in _saidp
+                  and "(the note moved)" in _saidp, _saidp[-600:])
+
     # --- A LOCK MAP IS AN ARTIFACT THIS COMMAND RE-SCORES -------------------------------
     #
     # `examined` counted results files. `qatration isolation --target-config x.yaml` leaves a lock map

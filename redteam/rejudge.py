@@ -528,8 +528,14 @@ def main():
                      "  (a caveat is withdrawn)" if was and not now else ""))
             for l in now[:3]:
                 print(f"      {l.strip()[:96]}")
-        if delivery and delivery != (data["meta"].get("delivery") or ""):
-            for l in delivery.strip().splitlines()[:4]:
+        # THE WHOLE NOTE, AND A WITHDRAWN ONE: the first four lines are the table, so a verdict
+        # moving from "lift" to "no lift" printed nothing that changed. Found by a review.
+        _was_d = data["meta"].get("delivery") or ""
+        if (delivery or "") != _was_d:
+            print(f"  {'delivery and effect':<26}"
+                  + ("(a note is withdrawn)" if _was_d and not delivery else
+                     "(a note appears)" if delivery and not _was_d else "(the note moved)"))
+            for l in (delivery or "").strip().splitlines():
                 print(f"      {l.strip()[:96]}")
         if args.write:
             data["meta"]["attribution"] = note

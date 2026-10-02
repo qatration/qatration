@@ -516,7 +516,7 @@ def build(results, target_config=None, out_dir=None, source=None):
     _delivery = (meta.get("delivery") or "").strip()
     if _delivery:
         notifications.append({
-            "level": "warning" if _delivery.lstrip().startswith("!") else "note",
+            "level": baseline.delivery_level(_delivery),
             "message": {"text": " ".join(l.strip() for l in _delivery.splitlines() if l.strip())},
             "descriptor": {"id": "attribution/delivery-and-effect"}})
 

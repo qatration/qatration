@@ -567,7 +567,8 @@ def build_html(meta, results, recon=None, isolation=None):
                          for l in dnote.splitlines() if l.strip())
         # The `!` form is the one that says the two could NOT be separated; the table form is
         # a measurement. Same rule the attribution panel uses, on the sentence this one has.
-        dcls = "warn" if dnote.lstrip().startswith("!") else "note"
+        from baseline import delivery_level as _dl
+        dcls = "warn" if _dl(dnote) == "warning" else "note"
         delivery_html = (f'<div class="panel"><div class="ptitle">delivery and effect, '
                          f'separately</div><div class="{dcls}">{dlines}</div></div>')
 
