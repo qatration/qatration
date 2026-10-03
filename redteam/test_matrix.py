@@ -474,6 +474,26 @@ def main():
     check("empty arms and a row without a rate are reported, not crashed on",
           _e_sh is None, repr(_e_sh))
 
+    # NOT AUTHORISED ON EVERY ARM IS 4, as on every other door for the same config.
+    _wa = tempfile.mkdtemp()
+    try:
+        _cfg_a = os.path.join(_wa, "targets_remotebot.yaml")
+        with open(_cfg_a, "w", encoding="utf-8") as _f_a:
+            _f_a.write(chr(10).join(["name: remotebot", "adapter: http",
+                                     "url: https://api.acmeshop.example/v1/chat",
+                                     'request: {model: m0, message: "{prompt}"}',
+                                     "response: {reply: reply}", ""]))
+        _env_a = {k: v for k, v in os.environ.items()
+                  if k not in ("QATRATION_AUTH_SECRET", "QATRATION_HOSTED")}
+        _env_a.update(QATRATION_OUT=_wa, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+        _pa = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "matrix",
+                              "--target-config", _cfg_a, "--models", "m1,m2"],
+                             capture_output=True, text=True, timeout=600, env=_env_a)
+        check("a matrix whose every arm was refused for want of proof exits 4",
+              _pa.returncode == 4, "exit %s: %s" % (_pa.returncode, (_pa.stdout + _pa.stderr)[-400:]))
+    finally:
+        shutil.rmtree(_wa, ignore_errors=True)
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

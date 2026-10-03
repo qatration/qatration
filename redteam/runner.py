@@ -254,6 +254,14 @@ def _resilient_send(fn, attack_id, steps=1, before_retry=None):
         # run sits on that boundary, and it is the row that decides whether a reader is sent
         # to their network or to their config.
         if str(_next.error or "").startswith(_NEVER):
+            # ...UNLESS PART OF IT WENT. A conversation whose later turn the budget refused
+            # had its earlier turns delivered and answered, and a canary in one of them was
+            # thrown away with the rest: the row read ERROR on the first attempt's 500.
+            # What answered stands, the rule `judge` applies to an error after evidence.
+            # Found by an independent review.
+            if getattr(_next, "turns", None):
+                probe = _next
+                attempts += 1
             break
         probe = _next
         attempts += 1

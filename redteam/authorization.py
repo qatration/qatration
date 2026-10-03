@@ -504,7 +504,7 @@ def _as_address(host):
     if "." not in h:
         for base, ok in ((16, h[:2].lower() == "0x"),
                          (8, h[:1] == "0" and len(h) > 1),
-                         (10, h.isdigit())):
+                         (10, h.isascii() and h.isdigit())):
             if not ok:
                 continue
             try:
@@ -514,6 +514,13 @@ def _as_address(host):
 
     # Dotted quad with octal or hex parts: 0177.0.0.1, 0x7f.0.0.1, and mixtures.
     parts = h.split(".")
+    # ONLY THE DIGITS A RESOLVER READS. `int()` also takes `_`, a sign and any Unicode
+    # digit, so `12_7.0.0.1` and an Arabic-Indic `127.0.0.1` were loopback here -- no proof
+    # asked -- while the OS refuses them as addresses and asks DNS for the NAME, which can
+    # answer anywhere. Found by an independent review.
+    import re as _re_a
+    if not all(_re_a.fullmatch(r"0[xX][0-9a-fA-F]+|[0-9]+", p) for p in parts):
+        return None
     if 2 <= len(parts) <= 4 and all(parts):
         try:
             nums = [int(p, 16) if p.lower().startswith("0x")
@@ -725,10 +732,21 @@ def gate(cfg, where):
     """
     import sys
     url = cfg.get("url") or ""
+    # THE PROXY IS WHERE THE TRAFFIC GOES. `targets_http` sends every probe through
+    # `proxy:`, and the proxy resolves `localhost` on ITS machine: a url naming this host
+    # behind a remote proxy waived the proof for somebody else's localhost. Found by an
+    # independent review.
+    _proxy = str(cfg.get("proxy") or "").strip()
+    # A MALFORMED URL IS A CONFIG PROBLEM ON EVERY DOOR. Hosted, `localhost:8000/chat` came
+    # back "not authorised" (4, a 403 through intake) while a workstation said 2 and named
+    # the url; one rule, one answer. Found by an independent review.
+    if url and url_problem(url) and hosted():
+        raise SystemExit(f"ABORT — {where}: url {url!r} is not a URL a target can be "
+                         f"reached at: {url_problem(url)}. Nothing was sent.")
     # Hosted first, because here the local case is the DANGEROUS one rather than the exempt
     # one, and a waiver evaluated before the refusal would let it through.
     if hosted():
-        why = unreachable_by_policy(url)
+        why = unreachable_by_policy(url) or (_proxy and unreachable_by_policy(_proxy))
         if why:
             _said = f"{where}: refusing {url!r}: {why}. Nothing was sent."
             print(f"ABORT — {_said}", file=sys.stderr)
@@ -738,7 +756,7 @@ def gate(cfg, where):
         # and the sentence names the URL rather than the secret. See `url_problem`.
         raise SystemExit(f"ABORT — {where}: url {url!r} is not a URL a target can be "
                          f"reached at: {url_problem(url)}. Nothing was sent.")
-    elif not url or is_local(url):
+    elif not url or (is_local(url) and (not _proxy or is_local(_proxy))):
         return None
     # THERE WAS A SECOND `if not url: return None` HERE and nothing could reach it. Off the
     # hosted path the `elif` above has already returned; on it, `unreachable_by_policy("")`

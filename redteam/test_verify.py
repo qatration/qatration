@@ -975,6 +975,12 @@ def main():
     check("...and is not counted among the targets that were reached",
           any("1 of 2 targets reachable" in _l for _l in _l_d), str(_l_d))
 
+    # NOT AUTHORISED IS NOT UNREACHABLE: the operator's config, and 4 on every other door.
+    _unauth = {"target": "e", "note": "not authorised: no QATRATION_AUTH_SECRET", "claims": 5}
+    _c_u, _l_u = audit_close([_full, _unauth], [])
+    check("a fleet with a target refused for want of proof exits 4, not 0", _c_u == 4,
+          "%s %s" % (_c_u, _l_u))
+
     # AND THE SINGLE-TARGET PATH ANSWERS THE SAME WAY, driven rather than read.
     check("a verification stopped part way does not exit 0", _vr.returncode == 3,
           "exit %s: %s" % (_vr.returncode, _vo[-300:]))

@@ -1256,6 +1256,47 @@ def main():
         check("a port that is not a port is refused by the policy (%s)" % _pu.split(":")[-1][:5],
               _pr is None and bool(_pw), repr(_pr or _pw))
 
+    # --- an independent review of the gate ------------------------------------------------
+    # THE PROXY IS WHERE THE TRAFFIC GOES: a local url behind a remote proxy is remote.
+    _prev_px = os.environ.pop("QATRATION_AUTH_SECRET", None)
+    try:
+        try:
+            az.gate({"name": "px", "url": "http://localhost:8080/admin/chat",
+                     "proxy": "http://203.0.113.50:3128"}, "test")
+            _gpx = None
+        except az.NotAuthorised as _e_px:
+            _gpx = _e_px
+        check("a local url behind a remote proxy needs proof", _gpx is not None, "waived")
+        check("...while one behind a local proxy does not",
+              az.gate({"name": "px", "url": "http://localhost:8080/chat",
+                       "proxy": "http://127.0.0.1:8081"}, "test") is None, "refused")
+    finally:
+        if _prev_px is not None:
+            os.environ["QATRATION_AUTH_SECRET"] = _prev_px
+    # ONLY THE DIGITS A RESOLVER READS.
+    for _sp in ("12_7.0.0.1", "+127.0.0.1", chr(0x661) + chr(0x662) + chr(0x667) + ".0.0.1",
+                chr(0x661) + chr(0x662) + chr(0x667)):
+        check("a host the OS would look up as a name is not loopback (%r)" % _sp,
+              az._as_address(_sp) is None and not az.is_local("http://%s:1/" % _sp),
+              str(az._as_address(_sp)))
+    # A MALFORMED URL IS A CONFIG PROBLEM ON THE HOSTED DOOR TOO.
+    _prev_h2 = os.environ.get("QATRATION_HOSTED")
+    os.environ["QATRATION_HOSTED"] = "1"
+    try:
+        try:
+            az.gate({"name": "typo", "url": "localhost:8000/chat"}, "test")
+            _gh2 = None
+        except SystemExit as _e_h2:
+            _gh2 = _e_h2
+    finally:
+        if _prev_h2 is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _prev_h2
+    check("hosted, a malformed url is a config problem, not 'not authorised'",
+          _gh2 is not None and not isinstance(_gh2, az.NotAuthorised)
+          and "not a URL a target can be reached at" in str(_gh2), repr(_gh2))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

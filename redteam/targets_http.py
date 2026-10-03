@@ -1199,7 +1199,10 @@ class HttpConfiguredTarget(Target):
                 # ON THE PROBE, because the retry loop lives in `runner` and can only
                 # see the error STRING. A number travels better than prose: attached
                 # here rather than parsed back out of a message there.
-                if e.code in (429, 503):
+                # A 503 ONLY WHEN IT NAMES A PAUSE: any 503 was filed as a rate limit, so an
+                # upstream that was down ended the run advising a higher limit instead of a
+                # check that the deployment is up. Found by an independent review.
+                if e.code == 429 or (e.code == 503 and _retry_after(e.headers) is not None):
                     # Local, like the `signing` import below: this module is loaded
                     # by the worker before the package is set up.
                     import signing as _signing

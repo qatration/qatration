@@ -649,6 +649,12 @@ def audit_close(rows, total_stale):
                                           for r in missed[:8]))]
     if total_stale:
         return 1, out
+    # NOT AUTHORISED IS NOT UNREACHABLE. An unreachable target does not decide a fleet's code,
+    # by design; a target refused for want of proof is the operator's config, the code every
+    # single-target door gives it is 4, and the fleet said "every claim on every reachable
+    # target still reproduces", exit 0. Found by an independent review.
+    if any(note_verdict(r["note"], r.get("precondition_exit"))[0] == 4 for r in missed):
+        return 4, out
     # `unclear` is not one of these: a row that WAS re-sent and whose recorded rate cannot
     # decide is a designed outcome rather than a gap, and a fleet job that goes amber on one
     # goes amber forever.

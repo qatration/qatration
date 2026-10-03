@@ -2346,7 +2346,14 @@ def error_split_rows(results):
             continue
         errs = [str((_t.get("probe") or {}).get("error") or "")
                 for _t in (r.get("trials") or [])]
-        if errs and all(e.startswith(NEVER_SENT) for e in errs):
+        # AND NOTHING OF IT ANSWERED: a chain whose first turn was delivered and answered and
+        # whose second the budget refused WAS sent, and filing it under "the budget stopped
+        # before sending" blamed the operator's limit for what the target did. Found by an
+        # independent review.
+        _went = any((_t.get("probe") or {}).get("turns")
+                    or str((_t.get("probe") or {}).get("output") or "").strip()
+                    for _t in (r.get("trials") or []))
+        if errs and not _went and all(e.startswith(NEVER_SENT) for e in errs):
             never.append(r)
         else:
             errored.append(r)

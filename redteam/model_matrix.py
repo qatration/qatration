@@ -194,7 +194,7 @@ def main():
         return report(tname, per_model, short)
 
     # run the target once per model (writes results_<target>_<modeltag>.json each)
-    per_model, stale, short = {}, [], {}
+    per_model, stale, short, _rcs = {}, [], {}, []
     for m in models:
         print(f"\n===== {tname} on {m} =====")
         started = time.time()
@@ -225,6 +225,7 @@ def main():
         # and did not join `stale`, so it was missing from the summary whose stated job is
         # that the exclusions are named rather than silently thinning the comparison —
         # two of the three exclusions reached the line a reader scans.
+        _rcs.append(rc)
         _ok, _why_x = comparable(rc, fp, started)
         if not _ok:
             print(f"  ({m} {_why_x}, skipped)")
@@ -241,6 +242,12 @@ def main():
     if stale:
         print(f"\nnot in the matrix: {', '.join(stale)} — comparing a fresh run against a "
               f"stored one measures the calendar, not the model.")
+    # NOT AUTHORISED ON EVERY ARM IS 4, the code every other door gives the same config: it
+    # read "comparing a fresh run against a stored one measures the calendar" and exited 3.
+    # Found by an independent review.
+    if _rcs and all(_rc == 4 for _rc in _rcs):
+        print("\nnot authorised: every model's run was refused before anything was sent.")
+        sys.exit(4)
     if len(per_model) < 2:
         # NOT ZERO. This command exists to compare, and a run that compared nothing has not
         # answered its question: the same event `run` reports as 3, "nothing was measured".
