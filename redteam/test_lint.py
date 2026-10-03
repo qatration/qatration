@@ -1040,7 +1040,7 @@ def check_refusal(check):
 
     # NOT THE ONES THAT ARE FINE, or a door that refuses everything passes all of that.
     for _ok in ({"delivery": "chain", "steps": ["a"]},
-                {"delivery": "sessions", "steps": ["a"]},
+                {"delivery": "sessions", "steps": ["a", "b"]},
                 {"delivery": "direct", "text": "x"},
                 {"text": "x"},
                 {"delivery": "indirect", "seed": {"text": "s"}, "user_prompt": "u"},
@@ -1674,6 +1674,22 @@ def main():
     code, out = run_lint([{"id": "s1", "category": "x", "delivery": "sessions",
                            "steps": ["one", "two"], "success": ["session_leak"]}])
     check("a well-formed sessions attack passes", code == 0, out[-200:])
+    # AND ONE OF A SINGLE STEP IS REFUSED: a persistence test across a session boundary
+    # with no boundary in it, which every target passes.
+    code, out = run_lint([{"id": "s1", "category": "x", "delivery": "sessions",
+                           "steps": ["one"], "success": ["session_leak"]}])
+    check("a sessions attack of one step is refused, saying why",
+          code == 1 and "crosses none" in out, out[-300:])
+    # AN EMPTY SCOPE IS REFUSED, and runs nowhere if it gets past.
+    code, out = run_lint([dict(GOOD, applies_to=[])])
+    check("an empty applies_to is an error, not a silent everywhere",
+          code == 1 and "applies_to is empty" in out, out[-300:])
+    import workspace as _ws_sc
+    check("...and the scope rule runs it against no target",
+          _ws_sc.scoped_to({"applies_to": []}, "httpbot") is False
+          and _ws_sc.scoped_to({}, "httpbot") is True
+          and _ws_sc.scoped_to({"applies_to": ["httpbot"]}, "httpbot") is True,
+          "")
 
     # --- structure ---------------------------------------------------------------------
     code, out = run_lint([GOOD, {**GOOD}])

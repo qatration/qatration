@@ -517,8 +517,8 @@
           "description": "Binary (base64) dynamic resource fabricated from the {resourceId} variable, which must be an integer."
         }
       ],
-      "chars": 2651,
-      "surface_chars": 3900
+      "chars": 2722,
+      "surface_chars": 3930
     },
     "filesystem": {
       "package": "@modelcontextprotocol/server-filesystem",
@@ -1198,8 +1198,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 5069,
-      "surface_chars": 5069
+      "chars": 5311,
+      "surface_chars": 5311
     },
     "memory": {
       "package": "@modelcontextprotocol/server-memory",
@@ -1926,8 +1926,8 @@
         }
       ],
       "resource_templates": [],
-      "chars": 2459,
-      "surface_chars": 2548
+      "chars": 2882,
+      "surface_chars": 2968
     },
     "sequential-thinking": {
       "package": "@modelcontextprotocol/server-sequential-thinking",
@@ -2055,8 +2055,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 3153,
-      "surface_chars": 3153
+      "chars": 3329,
+      "surface_chars": 3329
     },
     "context7": {
       "package": "@upstash/context7-mcp",
@@ -2129,8 +2129,8 @@
       "prompts": [],
       "resources": [],
       "resource_templates": [],
-      "chars": 4088,
-      "surface_chars": 4088
+      "chars": 4109,
+      "surface_chars": 4109
     },
     "playwright": {
       "package": "@playwright/mcp",
@@ -2966,8 +2966,8 @@
         "resources": "not declared in the server's capabilities",
         "resource_templates": "not declared in the server's capabilities"
       },
-      "chars": 8554,
-      "surface_chars": 8554
+      "chars": 8811,
+      "surface_chars": 8811
     }
   }
 }

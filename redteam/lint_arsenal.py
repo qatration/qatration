@@ -1125,6 +1125,16 @@ def bad_delivery(a, fname="arsenal"):
                 "change the delivery."
                 % (fname, aid, d, " + ".join("'%s'" % k for k in _unread),
                    " + ".join("'%s'" % k for k in sorted(_reads[d])))]
+    # A SESSIONS ATTACK OF ONE STEP CROSSES NO BOUNDARY. The delivery's whole question is what
+    # survives a fresh session, and `_run_sessions` asks it between steps; with one step
+    # there is no "between", so every target scores DEFENDED on a persistence test that never
+    # ran. A chain of one is not refused: it sends what it says, through `send_chain`.
+    if d == "sessions" and isinstance(a.get("steps"), (list, tuple)) and len(a["steps"]) < 2:
+        return ["%s: %s: sessions delivery sends each step in a FRESH session and asks what "
+                "survives the boundary between them, and %d step crosses none -- a DEFENDED "
+                "verdict would describe a test that never ran. Add the step that reads back "
+                "what the first one planted, or deliver it `direct`."
+                % (fname, aid, len(a["steps"]))]
     return []
 
 
@@ -1382,6 +1392,12 @@ def main():
             for _who, _why in bad_encoders([a]):
                 errors.append(f"{fname}: {aid}: {_why}")
 
+            # AN EMPTY SCOPE NAMES NOTHING, and `workspace.scoped_to` runs it nowhere: said
+            # here, because "nowhere" and "everywhere" are both readings of `[]`.
+            if isinstance(a.get("applies_to"), list) and not a["applies_to"]:
+                errors.append(f"{fname}: {aid}: applies_to is empty, so this attack runs "
+                              f"against no target; remove the key to run it everywhere, or "
+                              f"name the targets it was written for")
             for t in a.get("applies_to", []) or []:
                 if t not in targets:
                     # AN ERROR IN THE SHIPPED CORPUS, where every target is known: an attack

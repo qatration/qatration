@@ -2237,7 +2237,11 @@ def scoped_to(entry, name):
     caller that grows later and forgets, in the direction that cannot invent a finding.
     """
     scope = (entry or {}).get("applies_to")
-    if not scope:
+    # ABSENT IS GENERIC; EMPTY IS NOT. `applies_to: []` names no target, and `not scope` read
+    # it as no key at all, so an attack its author had scoped down to nothing -- the way one
+    # parks an entry -- ran against every bot and filed rows there. Scoped to nothing now, the
+    # direction that cannot invent a finding, and `lint` refuses the file. Found by a review.
+    if scope is None:
         return True
     if isinstance(scope, str):
         return False
