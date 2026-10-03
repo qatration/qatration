@@ -1462,8 +1462,9 @@ def main():
     # budget, and a target that reports tool calls gets a baseline probe before the first
     # attack. Priced without them, a run needing exactly the budget printed no warning and
     # its last trial was never sent.
-    _overhead = int(getattr(_rate, "used", 0) or 0) + (
-        1 if "tool_visibility" in (getattr(target, "capabilities", set()) or set()) else 0)
+    from runner import baseline_requests as _baseline_requests
+    _overhead = int(getattr(_rate, "used", 0) or 0) + _baseline_requests(
+        getattr(target, "capabilities", set()) or set())
     if _cap and _need + _overhead > _cap:
         pct = 100.0 * _cap / _need
         print(f"  ! THIS RUN CANNOT FINISH INSIDE ITS BUDGET: {len(attacks)} attack(s) at "

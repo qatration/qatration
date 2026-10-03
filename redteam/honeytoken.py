@@ -296,7 +296,12 @@ def planted(reply, verify):
     """
     # Compared in the form `oracle.canary_transformed` compares in, which is the whole point:
     # see `squeezed`. Upper-casing alone was not enough and the difference cost a whole run.
-    return bool(verify) and squeezed(verify) in squeezed(reply)
+    # NOT EMPTY ONCE SQUEEZED, AND NOT THE QUESTION'S OWN WORDS: `honeytoken_verify: "--"`
+    # squeezes to nothing, which is in every reply, and `reference` is in the question --
+    # a bot that never saw the snippet echoed it and the precondition passed. Found by an
+    # independent review.
+    _v = squeezed(verify or "")
+    return bool(_v) and _v not in squeezed(VERIFY_PROMPT) and _v in squeezed(reply)
 
 
 def unreachable_note(error):
@@ -405,7 +410,7 @@ def precondition(target, ctx, answered=None):
                 "%s declares a honeytoken (%s) but no `honeytoken_verify`, so nothing can "
                 "confirm it was ever pasted in. Mint a pair with `qatration mint` and declare "
                 "both." % (getattr(target, "name", "this target"), ours[0]), None)
-    if ours and verify:
+    if verify_requests(ctx):
         if answered is not None:
             probe = answered
         else:
@@ -418,6 +423,14 @@ def precondition(target, ctx, answered=None):
         if why:
             return (VERIFY_EXIT.get(why[0], 5), why[0], why[1], probe)
     return None
+
+
+def verify_requests(ctx):
+    """-> how many requests `precondition` sends before a sweep: 1 where it asks a minted
+    honeytoken's verifier, else 0. ONE rule for the probe and for the budget `onboard` prices,
+    which left it out and called a run that could not finish "ready"."""
+    verify = (ctx.get("honeytoken_verify") or "").strip() if isinstance(ctx, dict) else ""
+    return 1 if (verify and [c for c in declared(ctx) if looks_like_ours(c)]) else 0
 
 
 def verify_refusal(probe, verify):

@@ -106,12 +106,13 @@ def _arsenal(path=None):
     a number that was true of a simpler arsenal and stopped being true when chains arrived.
     `runner.requests_for` is the arithmetic `docs/ci.md` is priced with.
     """
-    import yaml as _yaml
+    # THROUGH THE READER `run` USES. A missing file came back `[]` -- no budget note, "ready to
+    # queue", and the run refused it; a file that did not parse or held a mapping crashed
+    # this command AFTER its probe had gone out. It raises the refusal `run` would give, and
+    # `check` asks it before sending anything. Found by an independent review.
     p = path or DEFAULT_ARSENAL
-    try:
-        return list(_yaml.safe_load(open(p, encoding="utf-8")) or [])
-    except (OSError, ValueError):
-        return []
+    return [a for a in (_load_yaml_or_refuse(p, "arsenal", "onboard") or [])
+            if isinstance(a, dict)]
 
 
 def unread_context_keys(cfg):
@@ -139,10 +140,16 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     """Returns (ok, report dict). Sends one request, and a second when the config declares
     a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
+    # THROUGH THE READER `run` USES, which refuses a key written twice: a second
+    # `oracle_context:` replacing the one holding the canary was "ready to queue" here and
+    # refused by the run it queued. Collected as a problem rather than raised, because
+    # refusing a config IS this command. Found by an independent review.
     try:
-        cfg = yaml.safe_load(open(cfg_path, encoding="utf-8"))
-    except Exception as e:
-        rep["problems"].append(f"the config file could not be read: {type(e).__name__}: {e}")
+        cfg = _load_yaml_or_refuse(cfg_path, "target config", "onboard")
+    except SystemExit as e:
+        rep["problems"].append(str(e.code if isinstance(e.code, str) else e)
+                               .replace("onboard: ABORT \u2014 ", "")
+                               .replace(" Nothing was sent.", ""))
         return False, rep
     # AND A FILE THAT READ FINE IS NOT YET A CONFIG. This command is exempt from the shared
     # `refuse_unusable_config` on purpose -- refusing a config IS the command, so it collects
@@ -165,6 +172,13 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     # and this command does not accept them: it onboards `adapter: http` configs. Their guard
     # is a check over the shipped configs, in `test_http_adapter`, where it can run without a
     # target at all.
+    # THE ARSENAL BEFORE THE PROBE, so a run that cannot start is refused with nothing sent.
+    try:
+        _pre_atk = _arsenal(attacks)
+    except SystemExit as e:
+        rep["problems"].append(str(e.code if isinstance(e.code, str) else e)
+                               .replace("onboard: ABORT \u2014 ", ""))
+        return False, rep
     rep["unread_keys"] = unread_context_keys(cfg)
     # AND THE MIRROR, which nothing asked before the run. `unread_context_keys` says a key
     # nothing reads is a detector nobody armed; the other direction is a DETECTOR nothing
@@ -317,6 +331,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         probe = target.send(probe_text)
     except Exception as e:
         rep["problems"].append(f"the endpoint could not be reached: {type(e).__name__}: {e}")
+        # 3, "the endpoint did not answer" in `docs/ci.md`, and what `--verify-honeytoken`
+        # gives the same dead endpoint. Found by an independent review.
+        rep["exit"] = 3
         return False, rep
     rep["seconds"] = round(time.time() - t0, 1)
 
@@ -352,6 +369,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         rep["answered"] = False
         rep["problems"].append(f"the endpoint returned an error: "
                                f"{(probe.error if probe else 'no reply')}")
+        rep["exit"] = 3
         return False, rep
 
     reply = (probe.output or "").strip()
@@ -464,7 +482,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # needing 3,100 requests against a budget of 1,000 was "ready to queue" with no note,
         # because this counted the default arsenal at three trials. Found by an independent
         # review.
-        _all_atk = _arsenal(attacks)
+        _all_atk = list(_pre_atk)
         _ex = cfg.get("exclude_attacks")
         if isinstance(_ex, list):
             _all_atk = [a for a in _all_atk
@@ -487,7 +505,12 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         need_att = len(_atk)
         from workspace import trial_count as _tc_c
         _t = trials or _tc_c(cfg.get("trials", 3), "trials: in the target config")
-        need_req = _requests_for(_atk, _t)
+        # AND THE REQUESTS THAT ARE NOT ATTACKS, which `run` counts against the same budget: the
+        # honeytoken check and a tool-call baseline. Priced without them, a run needing exactly
+        # the budget was "ready" and stopped with its last trial unsent. Found by a review.
+        from runner import baseline_requests as _baseline_requests
+        need_req = (_requests_for(_atk, _t) + _ht.verify_requests(cfg.get("oracle_context") or {})
+                    + _baseline_requests(rep.get("capabilities") or ()))
         if rate.max_requests and rate.max_requests < need_req:
             rep["notes"].append(
                 f"this run sends about {need_req} requests ({need_att} attacks x {_t} trials, "
@@ -716,8 +739,13 @@ def main():
         probe = target.send(_ht.VERIFY_PROMPT)
         _why = _ht.verify_refusal(probe, args.verify_honeytoken)
         if _why is None:
-            print(f"planted: the deployment returned {args.verify_honeytoken}. Canary "
-                  f"detectors can speak here.\n")
+            # ONLY WHERE A CANARY IS DECLARED: on a config with none, no canary detector is
+            # armed by anything, and "can speak here" said the opposite. Found by a review.
+            print(f"planted: the deployment returned {args.verify_honeytoken}. "
+                  + ("Canary detectors can speak here.\n"
+                     if _ht.declared(cfg.get("oracle_context") or {}) else
+                     "This config declares no canary, so no canary detector is armed by "
+                     "it.\n"))
             # FALL THROUGH TO THE REAL REPORT. This used to `return` here, which made the flag
             # a REPLACEMENT rather than an addition: one line instead of the mapping check, the
             # delivery notes and the budget arithmetic. `qatration init` prints this exact
@@ -768,7 +796,14 @@ def main():
                     "was" if len(_shaping) == 1 else "were") if _shaping else "") + ".")
         return
 
-    cfg = yaml.safe_load(open(args.config, encoding="utf-8")) or {}
+    cfg = _load_yaml_or_refuse(args.config, "target config", "onboard") or {}
+    # ABSOLUTE, because the worker runs from the package's directory, not this one: a relative
+    # `--attacks` or `--root` was recorded as typed and the job died on a file the worker
+    # could not find, or waited forever in a queue the worker was not looking at. Found by
+    # an independent review.
+    args.root = os.path.abspath(args.root)
+    if args.attacks:
+        args.attacks = os.path.abspath(args.attacks)
     # A COPY, NOT THE LIVE FILE, which is what the intake already does: the job stored the
     # operator's path and the worker read it at run time, so an edit to `url` after submitting
     # ran against the new endpoint while the lock was still keyed to the old one. Found by an

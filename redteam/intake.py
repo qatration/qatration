@@ -326,6 +326,9 @@ def wake_worker(root, python=None):
     from workspace import env_flag as _env_flag
     if _env_flag("QATRATION_NO_WORKER"):
         return False
+    # ABSOLUTE: the worker runs from the package's directory, so a relative root names a
+    # queue it is not looking at. Found by an independent review.
+    root = os.path.abspath(str(root))
     try:
         kwargs = {"cwd": os.path.dirname(HERE),
                   "env": dict(os.environ, QATRATION_OUT=str(root), PYTHONIOENCODING="utf-8"),

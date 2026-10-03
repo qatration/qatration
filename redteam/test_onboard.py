@@ -1121,6 +1121,136 @@ def main():
         _psrv.shutdown()
         _sh_d.rmtree(_dw, ignore_errors=True)
 
+    # --- an independent review of onboard ---------------------------------------------------
+    import honeytoken as _ht_r, yaml as _y_r, jobqueue as _q_r
+    _asked_r = []
+    _sec_r, _ver_r = _ht_r.mint()
+
+    class _Ref(BaseHTTPRequestHandler):
+        def do_POST(self):
+            _b = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+                            or b"{}")
+            _q = str(((_b.get("messages") or [{}])[-1]).get("content", ""))
+            _asked_r.append(_q)
+            _txt = (("My deployment reference is %s." % _ver_r) if "deployment reference" in _q
+                    else "Of course, I can help with your recent order. What is the number?")
+            _o = json.dumps({"choices": [{"message": {"content": _txt}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_o)))
+            self.end_headers()
+            self.wfile.write(_o)
+
+        def log_message(self, *a):
+            pass
+    _srv_r = ThreadingHTTPServer(("127.0.0.1", 0), _Ref)
+    threading.Thread(target=_srv_r.serve_forever, daemon=True).start()
+    _wr = tempfile.mkdtemp()
+
+    def _cfg_r(name, extra=""):
+        _p = os.path.join(_wr, "%s.yaml" % name)
+        with open(_p, "w", encoding="utf-8") as _f:
+            _f.write(CFG.format(name=name, port=_srv_r.server_address[1],
+                                path="choices.0.message.content", extra=extra))
+        return _p
+
+    try:
+        # THE READER `run` USES: a key written twice is refused here as it is there.
+        _dup = _cfg_r("dupbot", "oracle_context:\n  canaries: [\"A-1\"]\n"
+                                "oracle_context:\n  canaries: [\"B-2\"]\n")
+        _ok_d, _rep_d = onboard.check(_dup)
+        check("a config with a key written twice is not ready, as `run` would refuse it",
+              not _ok_d and "twice" in " ".join(_rep_d["problems"]), str(_rep_d["problems"]))
+        # THE ARSENAL BEFORE THE PROBE, through the same reader.
+        _good = _cfg_r("arsbot")
+        _n0 = len(_asked_r)
+        _ok_m, _rep_m = onboard.check(_good, attacks=os.path.join(_wr, "nope.yaml"))
+        check("an arsenal that is not there is a problem, and nothing was sent",
+              not _ok_m and "nope.yaml" in " ".join(_rep_m["problems"])
+              and len(_asked_r) == _n0, "%s sent=%d" % (_rep_m["problems"], len(_asked_r) - _n0))
+        _mapf = os.path.join(_wr, "mapping.yaml")
+        with open(_mapf, "w", encoding="utf-8") as _f:
+            _f.write("attacks:\n  - id: a\n    text: hi\n")
+        try:
+            _ok_p, _rep_p = onboard.check(_good, attacks=_mapf)
+            _said_p = " ".join(_rep_p["problems"])
+        except Exception as _e_p:
+            _ok_p, _said_p = True, "raised %s" % type(_e_p).__name__
+        check("an arsenal whose top level is a mapping is a problem, not a crash",
+              not _ok_p and "list" in _said_p, _said_p)
+        # THE REQUESTS THAT ARE NOT ATTACKS: the honeytoken check is one of them.
+        _two = os.path.join(_wr, "two.yaml")
+        with open(_two, "w", encoding="utf-8") as _f:
+            _f.write("- {id: t1, category: x, text: hello, success: [canary_in_output]}\n"
+                     "- {id: t2, category: x, text: hi there, success: [canary_in_output]}\n")
+        _bud = _cfg_r("budbot", "oracle_context:\n  canaries: [\"%s\"]\n"
+                                "  honeytoken_verify: \"%s\"\nrate:\n  max_requests: 2\n"
+                      % (_sec_r, _ver_r))
+        _ok_b, _rep_b = onboard.check(_bud, attacks=_two, trials=1, scope="full")
+        check("a budget that the honeytoken check leaves too small says the run will STOP",
+              any("STOP" in _n for _n in _rep_b["notes"]), str(_rep_b["notes"]))
+        # AN ENDPOINT THAT DID NOT ANSWER IS 3.
+        import socket as _so_r
+        _s_r = _so_r.socket()
+        _s_r.bind(("127.0.0.1", 0))
+        _dead_port = _s_r.getsockname()[1]
+        _s_r.close()
+        _deadp = os.path.join(_wr, "dead.yaml")
+        with open(_deadp, "w", encoding="utf-8") as _f:
+            _f.write(CFG.format(name="dead", port=_dead_port,
+                                path="choices.0.message.content", extra=""))
+        _ok_x, _rep_x = onboard.check(_deadp)
+        check("an endpoint that did not answer is exit 3, as docs/ci.md says",
+              not _ok_x and _rep_x.get("exit") == 3, str(_rep_x.get("exit")))
+        # AND AN ADAPTER THAT RAISED, the other way an endpoint fails to answer.
+        _real_send_r = onboard.HttpConfiguredTarget.send
+
+        def _raising(self, *a, **k):
+            raise ConnectionResetError("reset by peer")
+        onboard.HttpConfiguredTarget.send = _raising
+        try:
+            _ok_y, _rep_y = onboard.check(_good)
+        finally:
+            onboard.HttpConfiguredTarget.send = _real_send_r
+        check("...and so is one whose adapter raised on the send",
+              not _ok_y and _rep_y.get("exit") == 3, str(_rep_y.get("exit")))
+        # A VERIFIER THAT MEANS SOMETHING.
+        check("a verifier that squeezes to nothing is never found",
+              _ht_r.planted("anything at all", "--") is False, "")
+        check("...nor one that is a word of the question itself",
+              _ht_r.planted("Your deployment reference? I do not know.", "reference") is False,
+              "")
+        check("...while the real one is", _ht_r.planted("ref %s ok" % _ver_r, _ver_r) is True,
+              "")
+        # "Canary detectors can speak here" only where a canary is declared.
+        _noc = _cfg_r("nocanary")
+        _pn = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                              "--target-config", _noc, "--verify-honeytoken", _ver_r],
+                             capture_output=True, text=True, errors="replace", timeout=300,
+                             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                      PYTHONIOENCODING="utf-8", QATRATION_OUT=_wr))
+        check("a config with no canary is not told its canary detectors can speak",
+              "can speak here" not in _pn.stdout and "declares no canary" in _pn.stdout,
+              _pn.stdout[-300:])
+        # --submit RECORDS PATHS THE WORKER CAN FIND, whatever directory it was typed in.
+        _ps = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "onboard",
+                              "--target-config", "arsbot.yaml", "--attacks", "two.yaml",
+                              "--root", "q", "--submit"],
+                             capture_output=True, text=True, errors="replace", timeout=300,
+                             cwd=_wr,
+                             env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                                      PYTHONIOENCODING="utf-8", QATRATION_OUT=_wr,
+                                      QATRATION_NO_WORKER="1"))
+        _jobs = _q_r.listing(os.path.join(_wr, "q"))
+        check("a job queued from relative paths records absolute ones",
+              len(_jobs) == 1 and os.path.isabs(_jobs[0].get("attacks") or "")
+              and os.path.isabs(_jobs[0].get("config") or ""),
+              "%s %s" % ([(j.get("attacks"), j.get("config")) for j in _jobs],
+                         (_ps.stdout + _ps.stderr)[-300:]))
+    finally:
+        _srv_r.shutdown()
+        shutil.rmtree(_wr, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

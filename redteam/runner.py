@@ -152,6 +152,12 @@ def _invoke_with_timeout(fn, timeout):
     return box["probe"]
 
 
+def baseline_requests(capabilities):
+    """-> requests a sweep spends before its first attack on a tool baseline: one probe where
+    the target reports its tool calls. ONE rule for `run`'s budget check and `onboard`'s."""
+    return 1 if "tool_visibility" in set(capabilities or ()) else 0
+
+
 def start_trial(target, last_probe, label):
     """Open the next trial of a row. -> False when the row must stop here.
 
