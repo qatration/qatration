@@ -1499,6 +1499,31 @@ def near_miss_keys(mapping, known, cutoff=None, suspects=None):
     return out
 
 
+def bad_run_keys(cfg):
+    """-> [(key, why)] for top-level keys a sweep reads in a shape it cannot use.
+
+    ONE RULE FOR THE DOORS THAT ACCEPT A CONFIG AND THE RUN THAT USES IT. The intake answered
+    202 for `exclude_attacks: "control"` and `expect_build: "v1"`, the job was queued and
+    sent its benign baseline, and the sweep then refused one and crashed on the other: an
+    acceptance is not a delivery, the intake says of its own scope list. Found by an
+    independent review.
+    """
+    cfg = cfg if isinstance(cfg, dict) else {}
+    out = []
+    _ex = cfg.get("exclude_attacks")
+    if isinstance(_ex, str):
+        out.append(("exclude_attacks", "is a single string (%r); it is read as a list of "
+                                       "attack ids. Write it as [%r]." % (_ex, _ex)))
+    elif _ex is not None and not isinstance(_ex, list):
+        out.append(("exclude_attacks", "is %s; it is read as a list of attack ids."
+                    % type(_ex).__name__))
+    _eb = cfg.get("expect_build")
+    if _eb is not None and not isinstance(_eb, dict):
+        out.append(("expect_build", "is %s; it is read as a mapping of key -> the value the "
+                                    "target reports for it." % type(_eb).__name__))
+    return out
+
+
 def refuse_unusable_config(cfg, where):
     """Refuse a target config the engine cannot use, wherever it was loaded.
 
@@ -1563,6 +1588,7 @@ def refuse_unusable_config(cfg, where):
                                     "how every later command finds this config again -- "
                                     "without it the run was filed as `http-target`, under the "
                                     "adapter's default, where no config answers to it."))
+    problems += bad_run_keys(cfg)
     from refusal import bad_patterns
     # A CONTEXT THAT IS NOT A MAPPING is `bad_context_shapes`' finding, two lines up; asking
     # its refusal vocabulary as well handed a list to `.get` and crashed the one function whose

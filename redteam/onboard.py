@@ -221,6 +221,10 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         rep["problems"].append("%s %s" % (_where, _why))
     # AND THE SHAPE OF WHAT IS THERE. A string is iterable, so a scalar where a list belongs
     # raises nothing and empties nothing — it just gets used one character at a time.
+    # AND THE TOP-LEVEL KEYS THE SWEEP REFUSES, through the same rule it refuses them with.
+    from workspace import bad_run_keys as _bad_run_keys
+    for _k_r, _why_r in _bad_run_keys(cfg):
+        rep["problems"].append("%s %s" % (_k_r, _why_r))
     from workspace import bad_context_shapes as _bad_shapes
     _shapes = _bad_shapes(cfg)
     for _where, _why in _shapes:

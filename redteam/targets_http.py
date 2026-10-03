@@ -909,6 +909,13 @@ class HttpConfiguredTarget(Target):
         if self.timeout <= 0:
             raise SystemExit(f"targets_http: timeout_s={timeout_s!r} for {name!r} must be "
                              f"positive; every request would fail on contact.")
+        # AND ONE A SOCKET CAN HOLD: 1e308 passed here and every request then failed on it,
+        # while `onboard`'s probe -- which caps the timeout -- had called the config ready.
+        # A day is past any reply worth waiting for. Found by an independent review.
+        if not self.timeout < 86400:
+            raise SystemExit(f"targets_http: timeout_s={timeout_s!r} for {name!r} is longer "
+                             f"than a day (or not a number a socket can hold); every request "
+                             f"would fail on it.")
 
         # A CREDENTIAL COMPUTED PER REQUEST, for the two endpoints a fixed header cannot reach.
         # AWS signs each request from its own body and the clock, so `headers:` is structurally

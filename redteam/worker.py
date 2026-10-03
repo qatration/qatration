@@ -226,6 +226,20 @@ def execute(job, root, python=None):
         state = "failed"
         note = ("the sweep began and then stopped: %s"
                 % (rec.get("note") or rec.get("state") or "no reason recorded"))
+    # 1 IS A FINDING ONLY WHERE A GATE ASKED FOR ONE, and this worker passes no `--fail-on`, so
+    # the sweep it starts never exits 1 on purpose. Windows' TerminateProcess -- Task Manager,
+    # `taskkill /F` -- ends a process with 1, and so does a crash before `run_command` can
+    # translate it: both were closed `done` under "this target has findings", with a report
+    # link that answered 404. A run whose own record says it finished is the only 1 believed.
+    # Found by an independent review.
+    if (not isinstance(proc, _Timeout) and proc.returncode == 1 and "--fail-on" not in cmd
+            and not (rec and rec.get("state") == "finished")):
+        tail = " ".join((proc.stderr or "").split())[-300:]
+        state = "failed"
+        note = ("the sweep exited 1, which it gives only for findings under --fail-on and "
+                "this worker asks for none: it was killed or crashed before it finished"
+                + (" -- %s" % (rec.get("note") or rec.get("state")) if rec else "")
+                + (" -- it last said: %s" % tail if tail else ""))
     if rec and rec.get("state") == "stopped" and state == "done":
         note = stopped_note(rec)
     if state != "done" and not note:

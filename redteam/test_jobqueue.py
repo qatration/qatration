@@ -831,6 +831,41 @@ def main():
         check("a sweep that crashed after it began is failed with its own reason, not dead",
               (_st2, _rid2) == ("failed", "RUN-CRASHED") and "crashed: KeyError" in (_note2 or ""),
               str((_st2, _note2, _rid2)))
+        # AN EXIT 1 THIS WORKER NEVER ASKED FOR IS NOT A FINDING: no --fail-on is passed, so a
+        # 1 is a kill (TerminateProcess) or a crash before the run could say so.
+        class _One:
+            returncode, stdout, stderr = 1, "", "Terminated"
+
+        def _killed(cmd, out, python=None, deadline=None, hosted=False):
+            if cmd and cmd[0].endswith("run_redteam.py"):
+                json.dump({"run_id": "RUN-KILLED", "state": "started", "target": "t",
+                           "started_at": "2026-09-03 10:00:00"},
+                          open(os.path.join(out, "run_RUN-KILLED.json"), "w", encoding="utf-8"))
+                return _One()
+            return _Done()
+        _wk._run = _killed
+        try:
+            _st3, _note3, _rid3 = _wk.execute(dict(_job, job_id="jz"), _sw)
+        finally:
+            _wk._run = _real_run
+        check("a sweep killed mid-run is failed, not 'done, this target has findings'",
+              _st3 == "failed" and "this target has findings" not in (_note3 or ""),
+              str((_st3, _note3)))
+
+        def _finished_one(cmd, out, python=None, deadline=None, hosted=False):
+            if cmd and cmd[0].endswith("run_redteam.py"):
+                json.dump({"run_id": "RUN-GATED", "state": "finished", "target": "t",
+                           "started_at": "2026-09-04 10:00:00"},
+                          open(os.path.join(out, "run_RUN-GATED.json"), "w", encoding="utf-8"))
+                return _One()
+            return _Done()
+        _wk._run = _finished_one
+        try:
+            _st4, _note4, _rid4 = _wk.execute(dict(_job, job_id="jw"), _sw)
+        finally:
+            _wk._run = _real_run
+        check("...while one whose own record says it finished is believed", _st4 == "done",
+              str((_st4, _note4)))
     finally:
         shutil.rmtree(_sw, ignore_errors=True)
 
@@ -892,6 +927,105 @@ def main():
     _utc = _dt_q.datetime.now(_dt_q.timezone.utc).replace(tzinfo=None)
     check("the queue stamps and compares in UTC", _q_now.tzinfo is None
           and abs((_q_now - _utc).total_seconds()) < 5, "%s vs %s" % (_q_now, _utc))
+    # --- an independent review of the queue -------------------------------------------------
+    import tempfile as _tf_r, time as _time_r
+    _rr = _tf_r.mkdtemp()
+    try:
+        _cdir = os.path.join(_rr, "configs")
+        os.makedirs(_cdir)
+        _cp = os.path.join(_cdir, "c.yaml")
+        open(_cp, "w", encoding="utf-8").write(
+            "adapter: http\nname: acme\nurl: https://api.example.com/chat\n")
+        _j1 = q.submit(_rr, "acme", _cp, when=q._now())
+        _j2 = q.submit(_rr, "acme", _cp, when=q._now() + datetime.timedelta(seconds=2))
+        # A CLAIM THAT LANDS BETWEEN ANOTHER WORKER'S FIRST LISTING AND ITS TAKE.
+        _real_l = q.listing
+        _calls = {"n": 0}
+
+        def _listing_b(r, state=None):
+            _calls["n"] += 1
+            if _calls["n"] == 2:
+                q.listing = _real_l
+                q.claim(r, "worker-A")
+                q.listing = _listing_b
+            return _real_l(r, state)
+        q.listing = _listing_b
+        try:
+            q.claim(_rr, "worker-B")
+        finally:
+            q.listing = _real_l
+        _running = [j for j in q.listing(_rr) if j.get("state") == "running"]
+        check("two workers racing for one endpoint start one sweep, not two",
+              len(_running) == 1, str([(j["job_id"], j.get("lease")) for j in _running]))
+        # TWO CLAIMS TAKEN AT ONCE: the one later in submit order stands down.
+        _rt = _tf_r.mkdtemp()
+        try:
+            _k1 = q.submit(_rt, "acme", _cp, when=q._now())
+            _k2 = q.submit(_rt, "acme", _cp, when=q._now() + datetime.timedelta(seconds=2))
+            q._take(_rt, _k1["job_id"], "worker-A", q._now())
+            q._take(_rt, _k2["job_id"], "worker-B", q._now())
+            check("of two claims taken at once on one endpoint, the later one stands down",
+                  (q._endpoint_taken(_rt, q.load(_rt, _k2["job_id"]), q._now()),
+                   q._endpoint_taken(_rt, q.load(_rt, _k1["job_id"]), q._now()))
+                  == (_k1["job_id"], None), "")
+        finally:
+            shutil.rmtree(_rt, ignore_errors=True)
+        # ONE ENDPOINT SPELLED THREE WAYS IS ONE ENDPOINT TO THE QUEUE.
+        _ress = set()
+        for _u in ("https://api.example.com/chat", "https://api.example.com./chat",
+                   "https://x@api.example.com/chat"):
+            open(_cp, "w", encoding="utf-8").write("adapter: http\nname: acme\nurl: %s\n" % _u)
+            _ress.add(q.contended_resource(_cp, "acme"))
+        check("an endpoint spelled with a root dot or a user is still one endpoint",
+              len(_ress) == 1, str(_ress))
+        # CANCEL HOLDS THE CLAIM: a job a worker is taking cannot be cancelled under it.
+        _rc = _tf_r.mkdtemp()
+        try:
+            _jc = q.submit(_rc, "acme", _cp)
+            q._take(_rc, _jc["job_id"], "worker-C", q._now())
+            _cj, _cw = q.cancel(_rc, _jc["job_id"])
+            check("a job being claimed is not cancelled under the worker taking it",
+                  (q.load(_rc, _jc["job_id"]) or {}).get("state") == "queued"
+                  and "claimed" in (_cw or ""), "%s %s" % (_cw, q.load(_rc, _jc["job_id"])))
+            q._drop(_rc, _jc["job_id"])
+            _cj2, _cw2 = q.cancel(_rc, _jc["job_id"])
+            check("...while one nobody holds is cancelled",
+                  (q.load(_rc, _jc["job_id"]) or {}).get("state") == "cancelled", str(_cw2))
+        finally:
+            shutil.rmtree(_rc, ignore_errors=True)
+    finally:
+        shutil.rmtree(_rr, ignore_errors=True)
+    # WHAT THE SWEEP REFUSES, THE CONFIG RULE REFUSES: one list for every door.
+    from workspace import bad_run_keys as _brk
+    check("exclude_attacks as a string, expect_build as a string are refused",
+          sorted(k for k, _w in _brk({"exclude_attacks": "control", "expect_build": "v1"}))
+          == ["exclude_attacks", "expect_build"], str(_brk({"exclude_attacks": "control"})))
+    check("...and a string is named as one, with the list it should have been",
+          any("single string" in _w for _k, _w in _brk({"exclude_attacks": "control"})), "")
+    check("...and their right shapes are not",
+          _brk({"exclude_attacks": ["control"], "expect_build": {"v": "1"}}) == [], "")
+    import onboard as _ob_r
+    _rb = _tf_r.mkdtemp()
+    try:
+        _bcfg = os.path.join(_rb, "b.yaml")
+        open(_bcfg, "w", encoding="utf-8").write(
+            "adapter: http\nname: b\nurl: http://127.0.0.1:9/chat\n"
+            "request: {message: \"{prompt}\"}\nresponse: {reply: reply}\n"
+            "exclude_attacks: control\n")
+        _okb, _repb = _ob_r.check(_bcfg)
+        check("the onboarding gate the intake answers through refuses it too",
+              not _okb and any("exclude_attacks" in p for p in _repb["problems"]),
+              str(_repb["problems"]))
+        open(_bcfg, "w", encoding="utf-8").write(
+            "adapter: http\nname: b\nurl: http://127.0.0.1:9/chat\n"
+            "request: {message: \"{prompt}\"}\nresponse: {reply: reply}\ntimeout_s: 1e308\n")
+        _okt, _rept = _ob_r.check(_bcfg)
+        check("a timeout no socket can hold is refused before anything is queued",
+              not _okt and any("timeout_s" in p for p in _rept["problems"]),
+              str(_rept["problems"]))
+    finally:
+        shutil.rmtree(_rb, ignore_errors=True)
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

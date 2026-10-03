@@ -170,6 +170,20 @@ def contended_resource(config_path, target):
     url = cfg.get("url")
     if not url:
         return None
+    # WITHOUT THE USERINFO AND THE ROOT DOT: `https://x@api.example.com` and
+    # `https://api.example.com.` reach the same host as `https://api.example.com`, and three
+    # spellings were three endpoints, swept at once. The authorization origin keeps both on
+    # purpose -- it refuses more, which is its safe direction; contention is the other way
+    # round. Found by an independent review.
+    try:
+        from urllib.parse import urlparse as _up, urlunparse as _uu
+        _u = _up(str(url))
+        _h = (_u.hostname or "").rstrip(".")
+        if _h:
+            url = _uu((_u.scheme, ("[%s]" % _h if ":" in _h else _h)
+                       + (":%d" % _u.port if _u.port else ""), "", "", "", ""))
+    except ValueError:
+        pass
     try:
         from authorization import origin_of
         return origin_of(url)
@@ -443,6 +457,17 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
         _mine = _marker_holder(root, job["job_id"])
         return None, (f"busy: {job['job_id']} was taken and then reclaimed by "
                       f"{(_mine or ('another worker',))[0]} while this worker was stopped")
+    # AND NOTHING ELSE HOLDS ITS ENDPOINT NOW. `busy` above came from the first listing, and the
+    # marker makes taking ONE JOB atomic, not the per-endpoint rule: a worker that claimed J1
+    # between this worker's first listing and its take left J2, same endpoint, looking free --
+    # two sweeps against one bot, 3 rounds in 60 with real processes. Asked again with the
+    # marker held, against running jobs and against claims made ahead of this one in submit
+    # order, so of two racing claims exactly the later one stands down. Found by a review.
+    _rival = _endpoint_taken(root, job, now)
+    if _rival:
+        _drop(root, job["job_id"])
+        return None, (f"busy: {_rival} holds {job.get('resource') or 'the local model'}, "
+                      f"so {job['job_id']} waits")
     job["state"] = "running"
     job["attempts"] = int(job.get("attempts") or 0) + 1
     job["lease"] = {"worker": worker,
@@ -453,6 +478,25 @@ def claim(root, worker="worker", now=None, lease_seconds=LEASE_SECONDS):
         {"at": now.isoformat(" ", "seconds"), "event": "claimed", "worker": worker}]
     _write(root, job)
     return job, f"claimed by {worker} (attempt {job['attempts']})"
+
+
+def _endpoint_taken(root, job, now):
+    """-> the id of another job holding `job`'s endpoint right now, or None: one running on a
+    live lease, or one claimed (its marker taken) ahead of it in submit order. An unnamed
+    endpoint -- the local model -- contends with everything, as in `claim`."""
+    res = job.get("resource")
+    key = (job.get("submitted_at") or "", job["job_id"])
+    for j in listing(root):
+        if j.get("job_id") == job["job_id"]:
+            continue
+        if res is not None and j.get("resource") is not None and j.get("resource") != res:
+            continue
+        if j.get("state") == "running" and not _lease_expired(j, now):
+            return j["job_id"]
+        if (j.get("state") == "queued" and _marker_holder(root, j["job_id"])
+                and (j.get("submitted_at") or "", j["job_id"]) < key):
+            return j["job_id"]
+    return None
 
 
 def release(root, job, state="done", run_id=None, note=None, when=None):
@@ -531,7 +575,18 @@ def cancel(root, job_id, note=None, when=None):
                      "and killing it mid-sweep leaves a partial run that reads as a defence")
     if job.get("state") != "queued":
         return job, f"already {job.get('state')}"
-    closed, why = release(root, job, "cancelled", note=note, when=when)
+    # THROUGH THE CLAIM MARKER, as a worker takes a job: `release` with a snapshot carrying no
+    # lease checks nothing, so a claim landing between this `load` and the write was turned
+    # `cancelled` under a sweep already running, and the worker's close was then refused for
+    # a reason that was not true. Holding the marker makes the two exclusive. Found by a
+    # review.
+    if not _take(root, job_id, "cancel", when or _now()):
+        return job, "being claimed by a worker right now: cancel it again once it has started"
+    _cur = load(root, job_id) or {}
+    if _cur.get("state") != "queued":
+        _drop(root, job_id)
+        return _cur, f"already {_cur.get('state')}"
+    closed, why = release(root, _cur, "cancelled", note=note, when=when)
     return closed, why or "cancelled"
 
 
