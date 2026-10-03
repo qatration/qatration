@@ -381,6 +381,104 @@ def main():
     check("...and marks a before/after its history calls confounded",
           "not a clean before/after" in _pg, "no confounded movement cell on the page")
 
+    # --- a second independent review of the compare page ------------------------------
+    # MEASURED THE SAME WAY, OR NOT CREDITED: two builds on different models, trials, engines.
+    _mm = [({"target": "bot6", "model": "big", "trials": 3, "engine": "aaaaaaa"},
+            {"a1": ("DEFENDED", [], "x", "d", "0/3", 3)}),
+           ({"target": "bot6-naive", "model": "small", "trials": 3, "engine": "aaaaaaa"},
+            {"a1": ("EXPLOITED", ["x"], "x", "d", "3/3", 3)})]
+    _pm = pair_diffs(_mm)
+    check("two builds on different models are named as not measured the same way",
+          _pm and any("model" in c for c in _pm[0].get("confounds") or []), str(_pm))
+    _mt = [({"target": "bot7", "trials": 3}, {"a1": ("DEFENDED", [], "x", "d", "0/3", 3)}),
+           ({"target": "bot7-naive", "trials": 1}, {"a1": ("EXPLOITED", ["x"], "x", "d", "1/1", 1)})]
+    check("...and on different trial counts",
+          any("trials" in c for c in (pair_diffs(_mt)[0].get("confounds") or [])),
+          str(pair_diffs(_mt)))
+    _ms = [({"target": "bot8", "trials": 3, "model": "m"},
+            {"a1": ("DEFENDED", [], "x", "d", "0/3", 3)}),
+           ({"target": "bot8-naive", "trials": 3, "model": "m"},
+            {"a1": ("EXPLOITED", ["x"], "x", "d", "3/3", 3)})]
+    check("...while two measured the same way carry no such line",
+          pair_diffs(_ms)[0].get("confounds") == [], str(pair_diffs(_ms)))
+    # FEWER TRIALS THAN ASKED IS NOT A STEADY BREAK, AND ONE CLEAN TRIAL IS NOT A HOLD.
+    _thin = [M("bot9", {"a1": ("DEFENDED", [], "x", "d", "0/1", 3),
+                        "a2": ("DEFENDED", [], "x", "e", "0/3", 3)}),
+             M("bot9-naive", {"a1": ("EXPLOITED", ["x"], "x", "d", "3/3", 3),
+                              "a2": ("EXPLOITED", ["x"], "x", "e", "1/1", 3)})]
+    # (an undeclared pair with no difference left is not listed at all)
+    _pt = pair_diffs(_thin)
+    check("a break on one trial of three, or a hold on one, is not what the control bought",
+          _pt == [] or (_pt[0]["diffs"] == [] and sorted(_pt[0]["unsteady"]) == ["a1", "a2"]),
+          str(_pt))
+    # A CONTROL IS NOT A SHARED ATTACK.
+    # A DECLARED pair, which is listed whatever it finds: "Identical on all 1" was the claim.
+    _pc = pair_diffs([M("rangebot", {"ctrl": ("DEFENDED", [], "control", "d", "0/1", 1)}),
+                      M("rangebot-sources",
+                        {"ctrl": ("EXPLOITED", ["x"], "control", "d", "1/1", 1)})])
+    check("a pair sharing only a control shares no attack",
+          len(_pc) == 1 and _pc[0]["shared"] == 0 and _pc[0]["identical"] == 0, str(_pc))
+    # THE ARSENAL: a partial sweep of the same file, and an absent stamp.
+    from compare_targets import arsenal_claim as _ac, fleet_lead as _fl2
+    _phr, _odd = _ac([{"target": "a", "arsenal": "g.yaml", "not_sent": 0},
+                      {"target": "b", "arsenal": "g.yaml", "not_sent": 8}])
+    check("the same file swept in part is not called the same arsenal",
+          _phr != "Same arsenal" and "b: 8 not sent" in _phr
+          and [r["target"] for r in _odd] == ["b"], "%s %s" % (_phr, _odd))
+    _phr2, _ = _ac([{"target": "a"}, {"target": "b"}])
+    check("...and nothing stamped is not 'same arsenal where it is recorded'",
+          "not recorded" in _phr2, _phr2)
+
+    # THROUGH THE PAGE: the absent count, the kept copy, the target swept only per model.
+    import compare_targets as _ct9, tempfile as _tf9, json as _js9, pathlib as _pl9
+    import contextlib as _cx9, io as _io9
+    _w9 = _tf9.mkdtemp()
+
+    def _art9(name, rows, **meta):
+        return {"meta": dict({"target": name, "model": "m", "trials": 1,
+                              "attacks_n": len(rows), "errors": 0, "arsenal": "g.yaml"},
+                             **meta),
+                "results": [{"attack": {"id": aid, "category": "x"}, "headline": h,
+                             "rate": "1/1" if h == "EXPLOITED" else "0/1",
+                             "fired": ["canary_in_output"] if h == "EXPLOITED" else [],
+                             "trials": [{"verdict": h, "fired": [],
+                                         "probe": {"prompt": "p", "output": "o"}}]}
+                            for aid, h in rows]}
+
+    for _fn, _doc in (("results_citebot.json",
+                       _art9("citebot", [("a1", "EXPLOITED"), ("a2", "EXPLOITED")],
+                             arsenal=None)),
+                      ("results_ragbot.json",
+                       _art9("ragbot", [("a1", "EXPLOITED"), ("a2", "DEFENDED")], broke=1)),
+                      ("results_ragbot.v1.json",
+                       _art9("ragbot", [("a1", "DEFENDED"), ("a2", "DEFENDED")], broke=0)),
+                      ("results_httpbot_qwen2.5-14b.json",
+                       _art9("httpbot", [("a1", "EXPLOITED")], broke=1))):
+        _io9.open(os.path.join(_w9, _fn), "w", encoding="utf-8").write(_js9.dumps(_doc))
+    del _doc
+    _r9 = _ct9.OUT_DIR
+    _ct9.OUT_DIR = _pl9.Path(_w9)
+    _o9, _e9 = _io9.StringIO(), _io9.StringIO()
+    try:
+        with _cx9.redirect_stdout(_o9), _cx9.redirect_stderr(_e9):
+            _ct9.main()
+        _pg9 = _io9.open(os.path.join(_w9, "compare_targets.html"), encoding="utf-8").read()
+    finally:
+        _ct9.OUT_DIR = _r9
+    import re as _re9
+    _cit = _re9.search(r"citebot.*?</tr>", _pg9, _re9.S)
+    check("a run with no stored breach count is counted from its rows, not read as 0",
+          bool(_cit) and ">2<" in _cit.group(0).replace(" ", ""),
+          _cit.group(0)[:400] if _cit else "no citebot row")
+    check("a kept copy of a target's run is not a second system",
+          "2 systems" in _o9.getvalue() and "results_ragbot.v1.json" in _e9.getvalue(),
+          _o9.getvalue()[-200:] + _e9.getvalue()[-300:])
+    # AN UNSTAMPED RUN IS NOT KNOWN TO BE THE SAME SUITE: citebot records no arsenal.
+    check("the lead does not call a fleet one suite when a run does not say which",
+          "The same attack suite" not in _pg9, "lead claims one suite")
+    check("a target swept only with --model is named, not dropped without a word",
+          "httpbot" in _e9.getvalue() and "--model" in _e9.getvalue(), _e9.getvalue()[-300:])
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

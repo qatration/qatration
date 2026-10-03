@@ -52,6 +52,8 @@ from rejudge import _prompt_of, _probe as _rj_probe, run_ctx as _run_ctx
 from workspace import oracle_contexts as contexts
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more, DEFAULT_ARSENAL
+from signing import NEVER_SENT as _NEVER_SENT
+from lint_arsenal import attack_digest
 
 
 def provenance(engines, engine_now):
@@ -191,12 +193,21 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
                 pd = t.get("probe") or {}
                 if not pd:
                     continue
+                # NOR ONE THE BUDGET NEVER SENT, which `workspace.error_split` calls never sent
+                # and this counted as "with a stored trial" and replayed as a probe. Found by
+                # an independent review.
+                if str(pd.get("error") or "").startswith(_NEVER_SENT):
+                    continue
                 # AN ATTACK WITH A STORED TRIAL, which is what this set is documented as: it
                 # was added before the check above, so a SKIP row with no probe counted as
                 # sent -- "2 with a stored trial" beside "replayed 1 stored probes".
+                # BY ID AND DIGEST: a stored trial of an older version of an attack is not a
+                # trial of today's, the rule `compare` and `history` already apply. Found by
+                # an independent review.
                 if attacks is not None:
                     _a = r.get("attack") or {}
-                    attacks.add(_a.get("id") if isinstance(_a, dict) else _a)
+                    attacks.add((_a.get("id"), attack_digest(_a)) if isinstance(_a, dict)
+                                else (_a, None))
                 # The whole attacker side, not just `text`: a chain or session attack
                 # keeps its turns in `steps`, so reading `text` left the prompt EMPTY and
                 # echo subtraction switched off — the same defect rejudge had, in a second
@@ -518,10 +529,10 @@ def main():
     # Free to compute here: the artifacts are already open and already indexed by attack id.
     try:
         import yaml as _yaml
-        _arsenal = {a["id"] for a in
-                    (_yaml.safe_load(open(DEFAULT_ARSENAL,
-                                          encoding="utf-8")) or [])}
-        _sent = sent & _arsenal
+        _entries = [a for a in (_yaml.safe_load(open(DEFAULT_ARSENAL, encoding="utf-8")) or [])
+                    if isinstance(a, dict) and a.get("id")]
+        _arsenal = {a["id"] for a in _entries}
+        _sent = {a["id"] for a in _entries if (a["id"], attack_digest(a)) in sent}
         _never = sorted(_arsenal - _sent)
         print(f"{len(_arsenal)} attacks in the portable arsenal · {len(_sent)} with a stored "
               f"trial · {len(_never)} never sent against anything")

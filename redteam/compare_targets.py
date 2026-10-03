@@ -108,16 +108,27 @@ def arsenal_claim(rows):
     """
     odd, kinds = odd_on(rows, "arsenal")
     unstamped = [r for r in rows if not r.get("arsenal")]
+    # AND THE SAME FILE SENT IN PART IS NOT THE SAME SUITE. `--scope quick` holds most of the
+    # arsenal back on purpose and records how much as `not_sent`; the file name is the same,
+    # and the page said "Same arsenal" over ten attacks on one system and two on the other.
+    # Found by an independent review.
+    partial = [r for r in rows if (r.get("not_sent") or 0) > 0 and r not in odd]
+    _part = ("; %d swept only part of it (%s)" % (
+        len(partial), named_or_more(["%s: %d not sent" % (r.get("target"), r["not_sent"])
+                                     for r in partial], 3))
+             if partial else "")
+    if not kinds:
+        return "Arsenal not recorded on any of the %d artifacts%s" % (len(rows), _part), partial
     if len(kinds) <= 1 and not unstamped:
-        return "Same arsenal", []
+        return "Same arsenal%s" % _part, partial
     if len(kinds) <= 1:
-        return ("Same arsenal where it is recorded (%d of %d artifacts do not say)"
-                % (len(unstamped), len(rows))), []
-    return ("%d different arsenals, not one" % len(kinds)), odd
+        return ("Same arsenal where it is recorded (%d of %d artifacts do not say)%s"
+                % (len(unstamped), len(rows), _part)), partial
+    return ("%d different arsenals, not one%s" % (len(kinds), _part)), odd + partial
 
 
 from workspace import esc as _ws_esc
-from workspace import attack_name
+from workspace import attack_name, is_per_model_copy
 from workspace import NOT_MEASURED
 # ONE DEFINITION OF WHAT AN ATTACK IS, the same one `history.diff` compares runs with
 # and the same one `lint` reads. A field that starts changing what gets sent joins this
@@ -198,7 +209,7 @@ def row_version_tags(matrix, aid):
     return letters, note
 
 
-from history import broke_every_trial
+from history import broke_every_trial, measured_every_trial, instrument_confounds
 
 
 def pair_diffs(matrix):
@@ -212,6 +223,7 @@ def pair_diffs(matrix):
     swamp the one row that matters. Only the per-attack diff shows which is which.
     """
     by_name = {m["target"]: d for m, d in matrix}
+    meta_of = {m["target"]: m for m, d in matrix}
     declared = _declared_pairs()
     out = []
     for name in sorted(by_name):
@@ -272,9 +284,18 @@ def pair_diffs(matrix):
             # a move: EXPLOITED 2/3 against DEFENDED 0/3 read "stopped by the control", and a
             # coin the naive build was flipping is not what the guard bought. Listed, not
             # counted. A row that cannot say (no rate) is left as it was.
-            _b = n if nb else g
-            if len(_b) > 4 and broke_every_trial({"rate": _b[4]}, _b[5] if len(_b) > 5
-                                                 else None) is False:
+            #
+            # `is not True`, NOT `is False`: `None` is "measured on fewer trials than asked",
+            # which `history.diff` files as unstable and this counted as a steady break. AND
+            # THE SIDE THAT HELD answers the same question: held on one trial of three is not
+            # a hold. Found by an independent review.
+            # A row that carries no rate at all cannot say, and is left as it was.
+            _b, _h = (n, g) if nb else (g, n)
+            _steady = (broke_every_trial({"rate": _b[4]}, _b[5] if len(_b) > 5 else None)
+                       if len(_b) > 4 and _b[4] else True)
+            _held = (measured_every_trial({"rate": _h[4]}, _h[5] if len(_h) > 5 else None)
+                     if len(_h) > 4 and _h[4] else True)
+            if _steady is not True or _held is False:
                 unsteady_p.append(aid)
                 continue
             diffs.append({"attack": aid, "guarded": g[0], "naive": n[0],
@@ -292,14 +313,22 @@ def pair_diffs(matrix):
         # neither this count nor the diffs, and is reported on its own line -- counting it
         # as shared is what would make `identical on all N` a claim about attacks nobody
         # asked the same way.
+        # AND NOT A CONTROL: it is skipped as a difference above, and counted here it made
+        # "Identical on all 1 attacks" out of one benign question and no attack at all.
+        _controls = {aid for aid in set(guarded) | set(naive)
+                     if any(len(x) > 2 and x[2] == "control"
+                            for x in (guarded.get(aid), naive.get(aid)) if x)}
         shared = sorted((set(guarded) & set(naive)) - set(mismatched) - set(unmeasured_p)
-                        - set(unsteady_p))
+                        - set(unsteady_p) - _controls)
+        # MEASURED THE SAME WAY, OR THE DIFFERENCES ARE NOT THE CONTROL'S: the rule the
+        # timeline applies to one target across two runs, applied to two builds.
+        confounds = instrument_confounds(meta_of.get(base) or {}, meta_of.get(name) or {})
         if diffs or name in declared:
             out.append({"base": base, "naive": name, "label": label, "diffs": diffs,
                         "identical": len(shared) if not diffs else 0,
                         "shared": len(shared), "unpaired": unpaired,
                         "mismatched": mismatched, "unmeasured": unmeasured_p,
-                        "unsteady": unsteady_p})
+                        "unsteady": unsteady_p, "confounds": confounds})
     return out
 
 
@@ -446,12 +475,40 @@ def main():
     # with `except Exception: pass` — so a file nobody could read still influenced that answer
     # by its absence, and nothing said it had been dropped.
     _all_metas, _unreadable = [], []
+    # ONE FILE PER SYSTEM. A kept copy (`results_beta.v1.json` -- a dot is legal in a target
+    # name, so it passes as canonical) recording the same `meta.target` was a second system:
+    # "3 systems" for two, the lead's arithmetic with it. The file named after its target is
+    # the one read; the others are named and left out. Found by an independent review.
+    _file_of, _dup_files = {}, []
     for fp in results_files(OUT_DIR):
         _d, _why = read_artifact(fp)
         if _why:
             _unreadable.append((os.path.basename(str(fp)), _why))
             continue
         _all_metas.append(_d.get("meta") or {})
+        _t = (_d.get("meta") or {}).get("target")
+        _prev = _file_of.get(_t)
+        if _prev is None:
+            _file_of[_t] = fp
+        elif os.path.basename(str(fp)) == "results_%s.json" % _t:
+            _dup_files.append((_t, os.path.basename(str(_prev))))
+            _file_of[_t] = fp
+        else:
+            _dup_files.append((_t, os.path.basename(str(fp))))
+    for _t, _name in _dup_files:
+        print(f"  ! {_name} records {_t}, which another file on this page already does; it "
+              f"is left out, so the system is counted once.", file=sys.stderr)
+    # AND A TARGET SWEPT ONLY WITH `--model` IS NAMED, not dropped without a word: this page
+    # reads one canonical run per target, and the per-model copies are `qatration matrix`'s.
+    _canon_targets = {(m or {}).get("target") for m in _all_metas}
+    _model_only = sorted({(read_artifact(fp)[0] or {}).get("meta", {}).get("target")
+                          for fp in results_files(OUT_DIR, include_model_copies=True)
+                          if is_per_model_copy(fp) and read_artifact(fp)[1] is None}
+                         - _canon_targets - {None})
+    if _model_only:
+        print(f"  ! {', '.join(_model_only)}: swept only with --model, so not on this page, "
+              f"which reads one canonical run per target -- `qatration matrix` compares the "
+              f"models.", file=sys.stderr)
     for _name, _why in _unreadable:
         print(f"  ! {_name} could not be read ({_why}). It is not counted on this page, and "
               f"nothing here describes whatever it held.", file=sys.stderr)
@@ -462,6 +519,13 @@ def main():
     unread_bar = _unread_html(_unreadable, "this fleet overview")
     if not _all_metas:
         from workspace import queued_elsewhere as _queued_elsewhere
+        if _model_only:
+            print("no canonical results in %s: %s %s only per-model runs, and this page reads "
+                  "one canonical run per target. `qatration matrix` compares models; a sweep "
+                  "without --model gives this page its row." % (
+                      OUT_DIR, ", ".join(_model_only), "has" if len(_model_only) == 1
+                      else "have"))
+            return 3
         print("no results in %s — run a sweep first, then this page has something to "
               "compare:\n    qatration run --target-config <your-config>.yaml" % OUT_DIR
               + _queued_elsewhere(OUT_DIR))
@@ -477,6 +541,8 @@ def main():
         meta = d["meta"]
         if meta.get("target") not in _keep_names:
             continue
+        if _file_of.get(meta.get("target")) != fp:
+            continue                           # named once, above: one file per system
         by_id, worst = {}, None
         for r in d["results"]:
             # AN UNNAMED ATTACK IS STILL A ROW. This subscript was the only thing between
@@ -506,7 +572,12 @@ def main():
                     s = SEVERITY.get(det)
                     if s and SEV_RANK[s] < SEV_RANK[worst]:
                         worst = s
-        broke = meta.get("broke", 0)
+        # AN ABSENT COUNT IS COUNTED FROM THE ROWS, as `verdict_for` beside it does: read as 0
+        # it put "Breached 0" next to "Vulnerable" and sorted the system below a safer one.
+        broke = meta.get("broke")
+        if not isinstance(broke, int) or isinstance(broke, bool):
+            broke = sum(1 for _r in d["results"] if _r.get("headline") in BROKE
+                        and (_r.get("attack") or {}).get("category") != "control")
         # a matrix mixing today's numbers with last week's reads as one snapshot, which is
         # how a stale row gets cited as current. The age travels with the row -- and it is the
         # RUN's date where the run recorded one, never the file's, which a clone resets.
@@ -525,6 +596,7 @@ def main():
                          # THE HEADER USED TO ASSERT THIS RATHER THAN READ IT. See
                          # `arsenal_claim` for what the shipped evidence actually holds.
                          arsenal=meta.get("arsenal"), when_said=_when_said,
+                         not_sent=meta.get("not_sent") or 0,
                          trials=meta.get("trials"),
                          # HOW THE RUN BEHIND THIS ROW ENDED. A sweep stopped by hand writes
                          # fewer rows and no errors, so this table shows a small attack count
@@ -680,9 +752,14 @@ def main():
             f'<td style="color:{"var(--accent)" if d["naive"] in BROKE else "var(--dim)"}">{esc(d["naive"])}</td>'
             f'<td style="color:{"var(--accent)" if d["guarded"] in BROKE else "var(--dim)"}">{esc(d["guarded"])}</td>'
             f'<td class="dim">{esc(d["fired"])}</td>'
-            f'<td>{"the control held" if d["guard_helped"] else "drift, not the control"}</td></tr>'
+            f'<td>{"not comparable" if p_.get("confounds") else "the control held" if d["guard_helped"] else "drift, not the control"}</td></tr>'
             for d in p_["diffs"])
         pair_html += f'<h3>{esc(p_.get("label") or p_["base"])}</h3>'
+        if p_.get("confounds"):
+            pair_html += (
+                f'<p class="dim pn"><b>Not measured the same way</b> \u2014 '
+                f'{esc("; ".join(p_["confounds"]))}. Nothing below is credited to the '
+                f'control: run both builds on one model, one build and one trial count.</p>')
         # An attack only one build was run against is not evidence about the control, and
         # dropping it silently narrows a comparison without narrowing the sentence about it.
         if p_.get("unpaired"):
@@ -728,6 +805,19 @@ def main():
                 '<p class="dim pn">Not compared: the two builds share no attack that was '
                 'measured the same way on both, so nothing here says what the change '
                 'bought. Run both against one arsenal.</p>')
+            continue
+        if not p_["diffs"] and p_.get("confounds"):
+            pair_html += (
+                f'<p class="dim pn">No attack differs on the {p_["shared"]} both builds were '
+                f'run against, but the two were not measured the same way, so that is not '
+                f'"the change bought nothing" either.</p>')
+            continue
+        if p_.get("confounds"):
+            pair_html += (
+                f'<p class="dim pn">{len(p_["diffs"])} attack(s) differ between the builds; '
+                f'none is credited to the control, for the reason above.</p>'
+                f'<table class="pair"><thead><tr><th>attack</th><th>naive</th><th>guarded</th>'
+                f'<th>detectors</th><th>reading</th></tr></thead><tbody>{rws}</tbody></table>')
             continue
         if not p_["diffs"]:
             # "no difference" is a result, and it is the one this pair was declared to find
@@ -798,7 +888,10 @@ def main():
 
     lead = fleet_lead(len(rows), n_vuln,
                       sum(1 for r in rows if r["verdict"] == "Hardened"),
-                      same_arsenal=not _odd_arsenal)
+                      # KNOWN to be one suite: not merely not shown to differ. An
+                      # unstamped artifact is an absence, and the lead asserted "the same
+                      # attack suite" over it. Found by an independent review.
+                      same_arsenal=not _odd_arsenal and all(r.get("arsenal") for r in rows))
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Fleet Overview</title><style>

@@ -389,6 +389,54 @@ def _counted_clean(run, aid):
     return measured_every_trial(row, run.get("trials")) is not False
 
 
+def instrument_confounds(prev, cur):
+    """-> the sentences saying two runs were not measured with the same instrument: trials,
+    one trial a side, model, engine. ONE implementation for the timeline of one target and
+    for the pair `compare` sets side by side, which read none of the four and printed "the
+    control held" over two builds run on different models. Found by an independent review.
+
+    Two runs made with different instruments are not comparable, and saying so is the
+    difference between a diff and a story. Caught on the first real use: httpbot's previous
+    run used three trials and the new one two, and seven attacks moved to "fixed" -- nearly
+    all of them the encoded ones, a cluster too tidy to be behaviour.
+    """
+    confounds = []
+    if prev.get("trials") != cur.get("trials"):
+        # IN THE DIRECTION IT MOVED: raising the count was told "fewer attempts give a flaky
+        # attack fewer chances", about more attempts.
+        try:
+            _more = int(cur.get("trials")) > int(prev.get("trials"))
+        except (TypeError, ValueError):
+            _more = None
+        confounds.append(
+            f"trials {prev.get('trials')} \u2192 {cur.get('trials')}: "
+            + ("more attempts give a flaky attack more chances, which reads as a regression"
+               if _more else
+               "fewer attempts give a flaky attack fewer chances, which reads as a fix"
+               if _more is False else
+               "a different number of attempts is a different instrument"))
+    # ONE ATTEMPT IS NOT AGREEMENT. `broke_every_trial` asks whether a row broke on every
+    # trial and answers honestly: at one trial, a single hit IS every trial. The inference
+    # drawn from it -- steady rather than lucky -- is the one that is unavailable. Measured:
+    # four sweeps, same config, model and attacks, and the breach count went 12, 4, 6, 7.
+    _thin = sorted({n for n in (prev.get("trials"), cur.get("trials"))
+                    if isinstance(n, int) and not isinstance(n, bool) and n < 2})
+    if _thin:
+        confounds.append("trials %s: one attempt cannot tell a reliable break from a lucky "
+                         "one, so nothing here separates a move from the sampler \u2014 raise "
+                         "--trials" % ", ".join(str(n) for n in _thin))
+    if (prev.get("model") or "") != (cur.get("model") or ""):
+        confounds.append(f"model {prev.get('model')!r} \u2192 {cur.get('model')!r}")
+    # BOTH SIDES OR NOTHING, through `named_build`: the literal "unknown" is truthy, and an
+    # unknown against a real build is not a change anybody measured.
+    _pe, _ce = named_build(prev.get("engine")), named_build(cur.get("engine"))
+    if _pe and _ce and _pe != _ce:
+        confounds.append(f"engine {_pe} \u2192 {_ce}: the oracle that judged these two runs "
+                         f"is not the same one, so a verdict that moved may be ours rather "
+                         f"than the target's")
+    return confounds
+
+
 def state(run, aid):
     """-> True broken, False MEASURED clean, None nothing measured — for one attack in one run.
 
@@ -525,56 +573,7 @@ def diff(target):
     # A flaky attack that broke once in three has fewer chances in two, so the change was
     # in the measurement rather than the target. The comparison is still worth showing;
     # presenting it as a clean before/after is not.
-    confounds = []
-    if prev.get("trials") != cur.get("trials"):
-        # IN THE DIRECTION IT MOVED: raising the count was told "fewer attempts give a flaky
-        # attack fewer chances", about more attempts.
-        try:
-            _more = int(cur.get("trials")) > int(prev.get("trials"))
-        except (TypeError, ValueError):
-            _more = None
-        confounds.append(
-            f"trials {prev.get('trials')} → {cur.get('trials')}: "
-            + ("more attempts give a flaky attack more chances, which reads as a regression"
-               if _more else
-               "fewer attempts give a flaky attack fewer chances, which reads as a fix"
-               if _more is False else
-               "a different number of attempts is a different instrument"))
-    # ONE ATTEMPT IS NOT AGREEMENT. `broke_every_trial` asks whether a row broke on every
-    # trial and answers honestly: at one trial, a single hit IS every trial. The inference the
-    # callers draw from it -- steady rather than lucky -- is the one that is unavailable, so
-    # every flip of a coin the target was already flipping lands in REGRESSED, and
-    # `--fail-on regression` turns somebody's build red on one sample.
-    #
-    # Measured on this engine, from a fresh install against a local model: four sweeps, same
-    # config, same model, same 45 attacks, nothing changed between them but the sampler, and
-    # the breach count went 12, 4, 6, 7. `history` reported REGRESSED 3 / new 2 / fixed 4 off
-    # that, with no caveat, because the only trials confound fires when the COUNT CHANGES and
-    # here it was 1 both times.
-    #
-    # A confound rather than a re-bucketing: the rows still show, under a line saying the
-    # comparison cannot separate them from the sampling. `docs/ci.md` spells exit 0 as "no
-    # finding THE TRIALS AGREE ON", and at one trial a side there is no agreement to have.
-    # The remedy is `--trials`, and the sentence says so.
-    _thin = sorted({n for n in (prev.get("trials"), cur.get("trials"))
-                    if isinstance(n, int) and not isinstance(n, bool) and n < 2})
-    if _thin:
-        confounds.append("trials %s: one attempt cannot tell a reliable break from a lucky "
-                         "one, so nothing here separates a move from the sampler — raise "
-                         "--trials" % ", ".join(str(n) for n in _thin))
-    if (prev.get("model") or "") != (cur.get("model") or ""):
-        confounds.append(f"model {prev.get('model')!r} → {cur.get('model')!r}")
-    # BOTH SIDES OR NOTHING. Runs recorded before the build travelled with them cannot
-    # answer this, and a confound raised on every old timeline is one nobody reads. A
-    # missing stamp is not a matching stamp, so it says nothing rather than agreeing.
-    # THROUGH `named_build`, because the rule above has a hole the size of the
-    # sentinel: `engine_version` stamps the literal "unknown" where neither git nor an
-    # installed release can answer, and that string is truthy. Two unknowns compared
-    # equal and agreed; an unknown against a real build compared unequal and printed
-    # `engine unknown -> a1b2c3`, a confound naming a change nobody had measured.
-    _pe, _ce = named_build(prev.get("engine")), named_build(cur.get("engine"))
-    if _pe and _ce and _pe != _ce:
-        confounds.append(f"engine {_pe} → {_ce}: the oracle that judged these two runs is not the same one, so a verdict that moved may be ours rather than the target's")
+    confounds = instrument_confounds(prev, cur)
 
     # THE THIRD INPUT, on the same both-sides-or-nothing rule. A detector that was inert
     # in one run and armed in the other did not change because the target did.

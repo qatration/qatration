@@ -347,8 +347,12 @@ def main():
     arsenal = {a["id"] for a in
                _y.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
                                  encoding="utf-8"))}
+    # (id, digest) PAIRS: a stored trial of an older version of an attack is not a trial of
+    # today's. Found by an independent review.
+    _sent_ids = {_i for _i, _h in sent}
     check("...and they are real ids from the arsenal, not strings from somewhere else",
-          len(sent & arsenal) > 50, f"{len(sent & arsenal)} of {len(sent)} are in the arsenal")
+          len(_sent_ids & arsenal) > 50,
+          f"{len(_sent_ids & arsenal)} of {len(_sent_ids)} are in the arsenal")
     # WHAT THE COMMAND PRINTS, NOT WHAT ITS SOURCE CONTAINS. This asked whether the string
     # `never sent against anything` appears in `detector_coverage.py`, which a comment
     # mentioning the line satisfies as well as the line does. Driven below, over a workspace
@@ -881,7 +885,11 @@ def main():
                          # WITH ITS TRIAL: a row with no stored probe was once counted as
                          # sent, which this fixture leaned on.
                          "results": [{"headline": "DEFENDED", "fired": [], "rate": "0/1",
-                                      "attack": {"id": _one, "category": "x"},
+                                      # THE ARSENAL'S OWN ENTRY: a stored trial counts
+                                      # for today's attack only if it is today's version.
+                                      "attack": next(a for a in _y.safe_load(open(
+                                          os.path.join(HERE, "attacks_generic.yaml"),
+                                          encoding="utf-8")) if a.get("id") == _one),
                                       "trials": [{"verdict": "DEFENDED", "fired": [],
                                                   "probe": {"prompt": "hi",
                                                             "output": "hello"}}]}]}, _f10)
@@ -1165,13 +1173,46 @@ def main():
     _skip = {"attack": {"id": "g-contact-embed", "text": "x", "category": "c"},
              "headline": "SKIP", "fired": [], "trials": [{"verdict": "SKIP", "fired": [],
                                                            "probe": None}]}
+    # THE ARSENAL'S OWN g-control, so the stored trial is a trial of TODAY'S attack: the
+    # count matches by digest as well as by id.
+    _gc = next(a for a in _y.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
+                                            encoding="utf-8")) if a.get("id") == "g-control")
     json.dump({"meta": {"target": "acme"},
-               "results": [_rv_row("g-control", "hello", cat="control"), _skip]},
+               "results": [dict(_rv_row("g-control", "hello", cat="control"), attack=_gc),
+                           _skip]},
               open(os.path.join(_ws_s, "results_acme.json"), "w"))
     _ps = _cov_cli(_ws_s)
     _line_s = [l for l in _ps.stdout.splitlines() if "portable arsenal" in l]
     check("an attack SKIPped with no probe is not an attack with a stored trial",
           bool(_line_s) and "1 with a stored trial" in _line_s[0], str(_line_s))
+
+    # NOR ONE THE BUDGET NEVER SENT, nor a stored trial of an older version of the attack.
+    from signing import NEVER_SENT as _NS_c
+    _ws_b = tempfile.mkdtemp()
+    _budget = {"attack": next(a for a in _y.safe_load(open(os.path.join(HERE, "attacks_generic.yaml"),
+                                                 encoding="utf-8"))
+                    if a.get("id") == "g-contact-embed"),
+               "headline": "ERROR", "fired": [],
+               "trials": [{"verdict": "ERROR", "fired": [],
+                           "probe": {"prompt": "x", "output": "",
+                                     "error": _NS_c + ": max_requests reached"}}]}
+    _older = dict(_rv_row("g-control", "hello", cat="control"),
+                  attack=dict(_gc, text="an older wording of this control"))
+    json.dump({"meta": {"target": "acme"},
+               "results": [dict(_rv_row("g-control", "hello", cat="control"), attack=_gc),
+                           _budget]},
+              open(os.path.join(_ws_b, "results_acme.json"), "w"))
+    _pb = _cov_cli(_ws_b)
+    _line_b = [l for l in _pb.stdout.splitlines() if "portable arsenal" in l]
+    check("a trial the budget never sent is not an attack with a stored trial",
+          bool(_line_b) and "1 with a stored trial" in _line_b[0], str(_line_b))
+    _ws_o = tempfile.mkdtemp()
+    json.dump({"meta": {"target": "acme"}, "results": [_older]},
+              open(os.path.join(_ws_o, "results_acme.json"), "w"))
+    _po = _cov_cli(_ws_o)
+    _line_o = [l for l in _po.stdout.splitlines() if "portable arsenal" in l]
+    check("a stored trial of an older version of an attack is not a trial of today's",
+          bool(_line_o) and "0 with a stored trial" in _line_o[0], str(_line_o))
 
     # THE REPLAY READS A STORED PROBE THE WAY `rejudge` DOES: through `rejudge._probe` and with
     # the baseline the run learned. A second, hand-written rebuild here dropped `resolved`, so
