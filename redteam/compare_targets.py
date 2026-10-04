@@ -209,7 +209,7 @@ def row_version_tags(matrix, aid):
     return letters, note
 
 
-from history import broke_every_trial, measured_every_trial, instrument_confounds
+from history import steady, instrument_confounds
 
 
 def pair_diffs(matrix):
@@ -290,12 +290,12 @@ def pair_diffs(matrix):
             # THE SIDE THAT HELD answers the same question: held on one trial of three is not
             # a hold. Found by an independent review.
             # A row that carries no rate at all cannot say, and is left as it was.
+            # Through `history.steady`, the one rule for both sides of a pair.
             _b, _h = (n, g) if nb else (g, n)
-            _steady = (broke_every_trial({"rate": _b[4]}, _b[5] if len(_b) > 5 else None)
-                       if len(_b) > 4 and _b[4] else True)
-            _held = (measured_every_trial({"rate": _h[4]}, _h[5] if len(_h) > 5 else None)
-                     if len(_h) > 4 and _h[4] else True)
-            if _steady is not True or _held is False:
+            if (steady(True, _b[4] if len(_b) > 4 else None, _b[5] if len(_b) > 5 else None)
+                    is None
+                    or steady(False, _h[4] if len(_h) > 4 else None,
+                              _h[5] if len(_h) > 5 else None) is None):
                 unsteady_p.append(aid)
                 continue
             diffs.append({"attack": aid, "guarded": g[0], "naive": n[0],

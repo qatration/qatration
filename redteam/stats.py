@@ -91,6 +91,9 @@ def fisher_exact(a, b, c, d):
     def pr(x):
         return comb(r1, x) * comb(r2, c1 - x) / comb(n, c1)
     p0 = pr(a)
-    # The 1e-12 is float slack, not a threshold: tables of exactly equal probability must be
-    # counted, and two ways of reaching the same value differ in the last bit.
-    return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1) if pr(x) <= p0 + 1e-12)
+    # The slack is for float error, not a threshold: tables of exactly equal probability must
+    # be counted, and two ways of reaching the same value differ in the last bit. RELATIVE,
+    # as scipy's is: an absolute 1e-12 summed every table under 1e-12 into a p far below it,
+    # so (30,0,0,30) read 1.5e-14 against an exact 1.7e-17. Found by an independent review.
+    return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1)
+               if pr(x) <= p0 * (1 + 1e-7))

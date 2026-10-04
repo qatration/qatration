@@ -363,6 +363,23 @@ def broke_every_trial(row, asked=None):
     return hits >= trials
 
 
+def steady(broke, rate, asked=None):
+    """-> True (broke on every trial), False (held, measured on every trial asked), or None
+    when the row cannot carry either word: a break on some trials, or a hold measured on
+    fewer than were asked. A row with no `rate` cannot say and keeps its headline.
+
+    ONE RULE FOR EVERY PAIR, because there were two and they had drifted: `compare_targets`
+    applied the timeline's rule to a guarded/naive pair and `discrimination` -- the self-audit
+    whose p-values are published -- fed McNemar every row that broke once in three, so six
+    coin flips read GOOD at p = 0.031. Found by an independent review.
+    """
+    if not rate:
+        return bool(broke)
+    if broke:
+        return True if broke_every_trial({"rate": rate}, asked) is True else None
+    return None if measured_every_trial({"rate": rate}, asked) is False else False
+
+
 def measured_every_trial(row, asked=None):
     """Was this row measured on as many trials as the run asked for? None when it cannot say.
 

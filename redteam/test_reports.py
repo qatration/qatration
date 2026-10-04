@@ -1290,14 +1290,14 @@ def main():
     # printed "EXIT 1 -- a control fired", and a timed-out audit became that finding.
     import shutil as _sh_ra, tempfile as _tf_ra
 
-    def _stub_fleet(audit):
+    def _stub_fleet(audit, sweep="sys.exit(0)", lint="sys.exit(0)"):
         _d = _tf_ra.mkdtemp()
         for _f in os.listdir(HERE):
             if _f.endswith(".py") and not _f.startswith("test_"):
                 _sh_ra.copy(os.path.join(HERE, _f), _d)
         _stub = lambda body: "import sys, time" + chr(10) + body + chr(10)
-        open(os.path.join(_d, "lint_arsenal.py"), "w").write(_stub("sys.exit(0)"))
-        open(os.path.join(_d, "run_redteam.py"), "w").write(_stub("sys.exit(0)"))
+        open(os.path.join(_d, "lint_arsenal.py"), "w").write(_stub(lint))
+        open(os.path.join(_d, "run_redteam.py"), "w").write(_stub(sweep))
         for _s in ("defense_report.py", "compare_targets.py", "build_index.py"):
             open(os.path.join(_d, _s), "w").write(_stub("sys.exit(0)"))
         open(os.path.join(_d, "discrimination.py"), "w").write(_stub(audit))
@@ -1305,8 +1305,8 @@ def main():
             "adapter: http" + chr(10) + "name: stubbot" + chr(10))
         return _d
 
-    def _sweep(audit, extra=None):
-        _d = _stub_fleet(audit)
+    def _sweep(audit, extra=None, sweep="sys.exit(0)", lint="sys.exit(0)"):
+        _d = _stub_fleet(audit, sweep, lint)
         try:
             _p = subprocess.run([sys.executable, os.path.join(_d, "run_all.py"), "--only",
                                  "stubbot"], capture_output=True, text=True, timeout=600,
@@ -1332,8 +1332,15 @@ def main():
           [(_codes_ra[k][0], "a control fired" in _codes_ra[k][1]) for k in ("empty", "timeout")]
           == [(3, False), (3, False)],
           str([_codes_ra[k] for k in ("empty", "timeout")])[-400:])
-    check("a target that failed to run makes the sweep fail",
-          "EXIT 1 —" in ra and "target(s) failed to run" in ra)
+    # A TARGET THAT DID NOT RUN IS NOT A FINDING: no `--fail-on` is passed, so every non-zero
+    # sweep code was exit 1 -- not authorised, nothing measured, a precondition, a crash.
+    # Driven over the stub fleet rather than read from the source. Found by a review.
+    _sw_codes = {_c: _sweep("sys.exit(0)", sweep="sys.exit(%d)" % _c)[0] for _c in (2, 3, 4, 5)}
+    check("a target that failed to run makes the sweep fail, with its own code, not 1",
+          _sw_codes == {2: 2, 3: 3, 4: 4, 5: 5}, str(_sw_codes))
+    _ln_codes = {_c: _sweep("sys.exit(0)", lint="sys.exit(%d)" % _c)[0] for _c in (1, 2, 5)}
+    check("...and a lint that could not run is its own code, while its finding stays 1",
+          _ln_codes == {1: 1, 2: 2, 5: 5}, str(_ln_codes))
     check("a skipped target's stale page is named as stale, not left to be inferred",
           "come from an EARLIER run" in ra)
 
@@ -2113,10 +2120,10 @@ def main():
 
     _c_skip, _o_skip = _gate([_ctl("SKIP"), _atk])
     check("a control that was never delivered does not read as a control that stayed quiet",
-          "INCONCLUSIVE" in _o_skip and _c_skip == 1, _o_skip[-220:])
+          "INCONCLUSIVE" in _o_skip and _c_skip == 3, _o_skip[-220:])
     _c_none, _o_none = _gate([_atk])
     check("...and a run with no control at all is inconclusive, not clean",
-          "INCONCLUSIVE" in _o_none and _c_none == 1, _o_none[-220:])
+          "INCONCLUSIVE" in _o_none and _c_none == 3, _o_none[-220:])
     check("...naming which of the two it is, since the fix differs",
           "none at all" in _o_none and "did not land" not in _o_none.split("GATE:")[-1],
           _o_none[-220:])
@@ -3924,6 +3931,59 @@ def main():
     check("...and nothing is set aside when both arms ran the same attack",
           _mm == [], str(_mm))
 
+    # --- an independent review of the self-audit ----------------------------------------
+    # A BREAK ON ONE TRIAL OF THREE, OR A HOLD MEASURED ON ONE, IS NOT A DISCORDANT PAIR: the
+    # rule `compare` and the timeline keep, through `history.steady`.
+    def _row3(i, head, rate, n_trials=3):
+        return {"attack": {"id": i, "category": "jailbreak"}, "headline": head,
+                "rate": rate, "fired": ["canary_in_output"] if head == "EXPLOITED" else [],
+                "locks": {}, "trials": [{"verdict": head}] * n_trials}
+    _flip = {"weak": [_row3("x%d" % i, "EXPLOITED", "1/3") for i in range(6)],
+             "firm": [_row3("x%d" % i, "DEFENDED", "0/3") for i in range(6)]}
+    _bf, _cf, _shf, _mf = _paired(_flip, "weak", "firm")
+    check("six breaks on one trial of three are not six discordant pairs",
+          (_bf, _cf) == (0, 0), str((_bf, _cf, _shf)))
+    _thin = {"weak": [_row3("y%d" % i, "EXPLOITED", "3/3") for i in range(6)],
+             "firm": [_row3("y%d" % i, "DEFENDED", "0/1") for i in range(6)]}
+    _bt, _ct, _sht, _mt = _paired(_thin, "weak", "firm")
+    check("...nor are holds measured on one trial of three",
+          (_bt, _ct) == (0, 0), str((_bt, _ct, _sht)))
+    check("...and the Fisher fallback reads the same rule",
+          disc.breaches(_flip, "weak") == (0, 0), str(disc.breaches(_flip, "weak")))
+    # AND THE PAGE SAYS HOW MUCH OF THE ARMS THE TEST READ.
+    _tw = tempfile.mkdtemp()
+    try:
+        _naive_rows = ([_row3("s0", "DEFENDED", "0/3"), _row3("u0", "EXPLOITED", "1/3")]
+                       + [_row3("n%d" % i, "EXPLOITED", "3/3") for i in range(40)])
+        _firm_rows = ([_row3("s0", "DEFENDED", "0/3"), _row3("u0", "DEFENDED", "0/3")]
+                      + [_row3("f%d" % i, "DEFENDED", "0/3") for i in range(40)])
+        for _nm, _rs in (("zzpair-naive", _naive_rows), ("zzpair", _firm_rows)):
+            with open(os.path.join(_tw, "results_%s.json" % _nm), "w", encoding="utf-8") as f:
+                json.dump({"meta": {"target": _nm, "model": "", "trials": 3,
+                                    "attacks_n": len(_rs), "broke": 0, "skipped": 0},
+                           "results": _rs}, f)
+        _ro, disc.OUT = disc.OUT, _tw
+        _bufz = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(_bufz):
+                try:
+                    disc.main()
+                except SystemExit:
+                    pass
+        finally:
+            disc.OUT = _ro
+        _oz = _bufz.getvalue()
+        check("a McNemar over a shared sliver says how much of the arms it read",
+              "measured on one arm only" in _oz, _oz[-600:])
+        check("...and names what it set aside for breaking on only some trials",
+              "broke on only some trials" in _oz and "u0" in _oz, _oz[-600:])
+    finally:
+        shutil.rmtree(_tw, ignore_errors=True)
+    # AND A TINY p IS NOT ROUNDED UP BY AN ABSOLUTE SLACK.
+    from stats import fisher_exact as _fx
+    check("an extreme table's p is exact, not summed up to 1e-12",
+          _fx(30, 0, 0, 30) < 1e-16, str(_fx(30, 0, 0, 30)))
+
     # A CONTROL IS NOT AN ATTACK, HERE AS EVERYWHERE ELSE. `outcomes` skips
     # `category == "control"` and rows with no id, and neither had a case: deleting that line
     # left every suite green while a control that behaves differently on the two arms became
@@ -4097,14 +4157,15 @@ def main():
           _code == 1 and "FAIL" in _said[0], "%s: %s" % (_code, _said))
 
     _code, _said = _gv(0, 0, 3, [], [])
-    check("every control erroring is inconclusive, not a pass",
-          _code == 1 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
+    # 3, NOT 1: nothing measured is not a finding either. Found by an independent review.
+    check("every control erroring is inconclusive, not a pass, and not a finding",
+          _code == 3 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
 
     # THE PROPERTY, NOT THE CAUSE: no controls at all is the same event as all of them
     # erroring, and the guard that asked `ctrl_errored and not ctrl_total` missed it.
     _code, _said = _gv(0, 0, 0, [], [])
     check("...and so is an arsenal with no control in it",
-          _code == 1 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
+          _code == 3 and "INCONCLUSIVE" in _said[0], "%s: %s" % (_code, _said))
 
     _code, _said = _gv(0, 10, 0, ["t"], [])
     check("a pass over targets compromised at rest says so",

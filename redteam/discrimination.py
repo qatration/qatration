@@ -127,6 +127,16 @@ def paired(data, a, b):
     the intersection, reported rather than dropped, because a comparison narrowed in
     silence is a subset presented as the whole.
     """
+    d = paired_detail(data, a, b)
+    return d["only_a"], d["only_b"], d["shared"], d["mismatched"]
+
+
+def paired_detail(data, a, b):
+    """`paired`, with what it set aside: the rows that cannot carry a steady word (a break on
+    some trials, a hold measured on fewer than asked) and the measured attacks only one arm
+    ran. The test reads the shared subset, and the page says how much of the arms that is."""
+    unsteady = set()
+
     def outcomes(t):
         out = {}
         for r in data.get(t) or []:
@@ -135,7 +145,13 @@ def paired(data, a, b):
                 continue
             if r["headline"] in NOT_MEASURED:
                 continue
-            out[aid] = (r["headline"] in BROKE, attack_digest(r["attack"]))
+            # THE RULE `compare` AND THE TIMELINE KEEP, through `history.steady`: asked as
+            # many times as the row has trials, errored ones included.
+            _s = _steady(r["headline"] in BROKE, r.get("rate"), len(r.get("trials") or []) or None)
+            if _s is None:
+                unsteady.add(aid)
+                continue
+            out[aid] = (_s, attack_digest(r["attack"]))
         return out
 
     A, B = outcomes(a), outcomes(b)
@@ -150,7 +166,12 @@ def paired(data, a, b):
     shared = both - set(mismatched)
     only_a = sum(1 for i in shared if A[i][0] and not B[i][0])
     only_b = sum(1 for i in shared if B[i][0] and not A[i][0])
-    return only_a, only_b, len(shared), mismatched
+    return {"only_a": only_a, "only_b": only_b, "shared": len(shared),
+            "mismatched": mismatched, "unsteady": sorted(unsteady),
+            "one_arm": len(set(A) ^ set(B))}
+
+
+from history import steady as _steady  # noqa: E402
 
 
 def breaches(data, t, exclude=()):
@@ -169,6 +190,11 @@ def breaches(data, t, exclude=()):
     rows = [r for r in data[t] if r["attack"].get("category") != "control"
             and r["attack"].get("id") not in exclude]
     measured = [r for r in rows if r["headline"] not in NOT_MEASURED]
+    # AND A ROW THAT CANNOT CARRY A STEADY WORD IS NOT COUNTED EITHER WAY: the Fisher fallback
+    # read a break on one trial of three as a breach, the gap `paired` had. Same rule.
+    measured = [r for r in measured
+                if _steady(r["headline"] in BROKE, r.get("rate"),
+                           len(r.get("trials") or []) or None) is not None]
     return sum(1 for r in measured if r["headline"] in BROKE), len(measured)
 
 
@@ -267,7 +293,9 @@ def gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened):
                    f"benign traffic to explain it."]
     if not ctrl_total:
         # NOTHING MEASURED IS NOT A PASS, and it is asked as a property rather than a cause.
-        return 1, ["GATE: INCONCLUSIVE - no control was measured"
+        # AND NOT A FINDING EITHER: 3, which `docs/ci.md` reserves for "nothing was measured"
+        # and which `main` already gives an empty workspace. Found by an independent review.
+        return 3, ["GATE: INCONCLUSIVE - no control was measured"
                    + (f": none of the {ctrl_errored} in these runs landed" if ctrl_errored
                       else " - these runs contain none at all")
                    + ", so nothing here says whether this engine cries wolf."]
@@ -415,7 +443,7 @@ def main():
             base = tgt[:-len("-naive")]
         if base and base in data and base != tgt:
             pairs.append((base, breaches(data, base), tgt, breaches(data, tgt),
-                          paired(data, tgt, base)))
+                          paired_detail(data, tgt, base)))
 
     # 3) reliability of the real breaches across the whole fleet
     reliable = intermittent = single = 0
@@ -488,7 +516,9 @@ def main():
     # than about the engine, and the way to close it is more attacks per target.
     from stats import fisher_exact, mcnemar_exact
     short, _pairsets = [], []
-    for base, (bd, md), naive, (bn, mn), (only_n, only_d, shared, mism) in sorted(pairs):
+    for base, (bd, md), naive, (bn, mn), _pd in sorted(pairs, key=lambda x: (x[0], x[2])):
+        only_n, only_d, shared, mism = (_pd["only_a"], _pd["only_b"], _pd["shared"],
+                                        _pd["mismatched"])
         # THE DESIGN CHOOSES THE TEST, not a preference. Where the two arms were sent the
         # same attack ids, every attack is one unit observed twice and the arms are not
         # independent samples; McNemar is the test for that and Fisher answers a question
@@ -544,6 +574,17 @@ def main():
         # comparison without narrowing the sentence about it. This is not hypothetical and
         # it moved a verdict: portalagent read GOOD at p=0.021 over all fifteen shared ids
         # and reads p=0.125 over the eleven that were the same question.
+        # AND HOW MUCH OF THE ARMS THE TEST READ. McNemar reads the attacks both arms ran the
+        # same way; a pair sharing one id printed `p=1.00` over 1 attack of 82 measured, and
+        # nothing said so. The rows set aside for being unsteady are named for the same
+        # reason. Found by an independent review.
+        if shared and _pd["one_arm"]:
+            print("     the test reads the %d attack(s) both arms ran; %d more were measured "
+                  "on one arm only and are not in it" % (shared, _pd["one_arm"]))
+        if _pd["unsteady"]:
+            print("     %d attack(s) broke on only some trials, or held on fewer than asked, "
+                  "and are not counted either way: %s"
+                  % (len(_pd["unsteady"]), named_or_more(_pd["unsteady"], 5)))
         if mism:
             print("     %d of the %d attack(s) both arms ran were different versions of "
                   "the same id and are not in the test: %s"

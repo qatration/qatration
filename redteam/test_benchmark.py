@@ -212,7 +212,7 @@ def main():
         n, r1, r2, c1 = a + b + c + d, a + b, c + d, a + c
         pr = lambda x: comb(r1, x) * comb(r2, c1 - x) / comb(n, c1)
         p0 = pr(a)
-        return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1) if pr(x) <= p0 + 1e-12)
+        return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1) if pr(x) <= p0 * (1 + 1e-7))
 
     pooled = fisher(150, 8, 23, 4)
     plain_only = fisher(150, 8, 15, 1)

@@ -102,6 +102,7 @@ def main():
     configs = target_configs(ROOT)   # counted for the banner; read through the map below
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     ran, skipped, failed = [], [], []
+    failed_rc = {}
 
     # pre-flight: lint the arsenal FIRST — a bad detector ref would silently under-test
     # every target, so refuse to sweep on a broken arsenal.
@@ -116,9 +117,16 @@ def main():
         print("ABORT — the arsenal lint did not finish in %ds. It reads files and calls no "
               "model, so this is a wedge rather than slow work." % TOOL_DEADLINE)
         sys.exit(1)
-    if _lint_rc != 0:
+    if _lint_rc == 1:
         print("ABORT — arsenal failed lint (see errors above); fix before sweeping.")
         sys.exit(1)
+    if _lint_rc != 0:
+        # NOT THE LINT'S FINDING: 5 is an `--attacks` path that is not there and 2 a lint that
+        # could not run, and both were exit 1 -- a finding in the arsenal. Its own code goes
+        # through. Found by an independent review.
+        print("ABORT — the arsenal lint did not run to a verdict (exit %d); nothing was swept."
+              % _lint_rc)
+        sys.exit(_lint_rc if _lint_rc in (2, 3, 5) else 2)
 
     print("=" * 60)
     print(f"  QAtration fleet sweep — {len(configs)} target configs found")
@@ -147,6 +155,8 @@ def main():
                   f"whatever the last completed run left, and the rest of the fleet follows.")
             rc = None
         (ran if rc == 0 else failed).append(name)
+        if rc != 0:
+            failed_rc[name] = rc
 
     print("\n" + "=" * 60)
     print("  regenerating aggregate reports")
@@ -211,20 +221,28 @@ def main():
               f"shows is from before this sweep.")
         sys.exit(1)
     if failed:
-        print(f"\nEXIT 1 — {len(failed)} target(s) failed to run.")
-        sys.exit(1)
+        # NOT A FINDING: this sweep passes no `--fail-on`, so no child exits 1 on purpose, and
+        # every non-zero code -- 4 not authorised, 3 nothing measured, 5 a precondition, 2 a
+        # refusal or a crash -- was exit 1 here. One code for all of them where they agree,
+        # 2 where they do not, and a stopped sweep is nothing measured. Found by a review.
+        _codes = {(3 if failed_rc.get(n) is None else failed_rc[n]) for n in failed}
+        _code = _codes.pop() if len(_codes) == 1 else 2
+        _code = _code if _code in (2, 3, 4, 5) else 2
+        print(f"\nEXIT {_code} — {len(failed)} target(s) did not run to a measurement: "
+              + ", ".join("%s (exit %s)" % (n, failed_rc.get(n)) for n in failed) + ".")
+        sys.exit(_code)
     # THE AUDIT'S OWN CODE, READ. Every non-zero code printed "EXIT 1 -- a control fired on a
     # target whose benign traffic does not explain it": an audit that crashed exited 2 under
     # that sentence, one that found no results exited 3 under "EXIT 1", and one that timed out
     # became that finding outright.
     if audit_rc == 1:
         print("\nEXIT 1 — the discrimination self-audit failed: a control fired on a target "
-              "whose benign traffic does not explain it, or no control was measured.")
+              "whose benign traffic does not explain it.")
         sys.exit(1)
     if audit_rc == 3:
         print("\nEXIT 3 — the discrimination self-audit could not answer (it found nothing to "
-              "audit, or did not finish), so these pages have not been checked for false "
-              "alarms.")
+              "audit, no control was measured, or it did not finish), so these pages have "
+              "not been checked for false alarms.")
         sys.exit(3)
     if audit_rc:
         print("\nEXIT %d — the discrimination self-audit did not run to a verdict (it refused "
