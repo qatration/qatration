@@ -52,7 +52,7 @@ QUALIFIERS_NOT_CARRIED = {
 
 
 
-def load(known=None, unreadable=None):
+def load(known=None, unreadable=None, left_out=None):
     """One row per canonical run, with its breach count RECOUNTED from the rows.
 
     `meta["broke"]` is written at sweep time and never re-derived, so it is a declared count
@@ -114,8 +114,16 @@ def load(known=None, unreadable=None):
         m["_errored"], m["never_sent"] = _error_split(d.get("results"))
         # AND WHETHER ANY ROW ANSWERED, asked of the rows: the counters are absent from files
         # older than them, and those rows answered.
+        # NOT A CONTROL: it is no attack, and one DEFENDED control beside five errored attacks
+        # made a page whose every card said "not measured" exit 0. Found by a review.
         m["_answered"] = any(isinstance(r, dict) and r.get("headline") not in _NM_i
+                             and (r.get("attack") or {}).get("category") != "control"
                              for r in (d.get("results") or []))
+        # AND THE MEASURED COUNT FROM THE ROWS, where the file predates `attacks_n`: two
+        # breaches on such a file printed a grey "not measured" card under a tile counting
+        # them. Found by an independent review.
+        from workspace import measured as _measured_i
+        m["_measured"] = _measured_i(m, d.get("results"))
         # AND HOW MANY OF THOSE BREACHES THE BENIGN BASELINE CANNOT ATTRIBUTE. This page
         # publishes a fleet total of findings and said nothing about attribution, the same
         # gap `compare_targets` had: one shared reader in `baseline` now, so the index, the
@@ -126,6 +134,11 @@ def load(known=None, unreadable=None):
 
     kept, dropped = fleet_filter(metas, known)
     orphans = [(m.get("_file"), m.get("target")) for m in dropped]
+    # HANDED BACK, as `unreadable` is: a stranger whose own bot shares a workspace with a
+    # bundled config's run lost it from this page with one console line, and the page read
+    # as the whole fleet. The page names them now. Found by an independent review.
+    if left_out is not None:
+        left_out.extend(orphans)
     for m in kept:
         m["broke_at_run"], m["broke"] = m.get("broke"), m.pop("_counted")
         m["errors_at_run"], m["errors"] = m.get("errors"), m.pop("_errored")
@@ -207,10 +220,27 @@ def main():
     # The fleet's own configs, passed IN rather than read inside `load()`. The first version
     # looked them up itself and every suite driving this builder over a temp fixture — where
     # the target names are invented — lost all of its rows to the orphan filter.
-    _unreadable = []
-    rows = load(known=set(provenance()), unreadable=_unreadable)
+    _unreadable, _left_out = [], []
+    rows = load(known=set(provenance()), unreadable=_unreadable, left_out=_left_out)
+    # AND A TARGET SWEPT ONLY WITH `--model` IS NAMED, as `compare_targets` names it: the
+    # index reads one canonical run per target and dropped it without a word.
+    from workspace import is_per_model_copy as _ipmc
+    _have = {m.get("target") for m in rows} | {t for _f, t in _left_out}
+    _model_only = sorted({(read_artifact(fp)[0] or {}).get("meta", {}).get("target")
+                          for fp in results_files(OUT, include_model_copies=True)
+                          if _ipmc(fp) and read_artifact(fp)[1] is None} - _have - {None})
     from workspace import unreadable_html as _unread_html
     unread_bar = _unread_html(_unreadable, "this index")
+    if not rows and (_unreadable or _model_only):
+        # NOT "RUN A SWEEP FIRST" OVER FILES THAT ARE THERE: every one torn, or only per-model
+        # runs, is a different sentence and a different fix. Found by an independent review.
+        print("no results this page can read in %s: %s." % (OUT, "; ".join(
+            (["%d could not be read (%s)" % (len(_unreadable), _unreadable[0][0])]
+             if _unreadable else [])
+            + (["%s %s only per-model runs; the index reads one canonical run per target"
+                % (", ".join(_model_only), "has" if len(_model_only) == 1 else "have")]
+               if _model_only else []))))
+        return 3
     if not rows:
         # THE DIRECTORY THIS RUN IS ACTUALLY USING, and the command that fills it. `out/` is
         # what a checkout has; a stranger who installed the package has `qatration-out/`, or
@@ -221,7 +251,10 @@ def main():
         # NOT A PASS. `docs/ci.md` reserves 3 for "the question could not be
         # answered", and a page built from no runs is the plainest case of it.
         return 3
-    rows.sort(key=lambda m: (-(m.get("broke", 0) / max(1, m.get("attacks_n", 1))), m["target"]))
+    # OVER WHAT WAS MEASURED, from the rows: `attacks_n: null` passed the shape check and
+    # crashed `max(1, None)` here. Found by an independent review.
+    rows.sort(key=lambda m: (-(m.get("broke", 0) / max(1, (m.get("_measured") or (0, 0))[0])),
+                             m["target"]))
     n_targets = len(rows)
     n_find = sum(m.get("broke", 0) for m in rows)
     n_doubt = sum(m.get("doubtful", 0) for m in rows)
@@ -308,7 +341,7 @@ def main():
         tgt, broke = m["target"], m.get("broke", 0)
         # AGAINST WHAT WAS MEASURED, not against what was attempted — the rule now lives in
         # `workspace.measured`, because this was the only one of four readers that had it.
-        atk, errs = measured(m)
+        atk, errs = m.get("_measured") or measured(m)
         rate = broke / max(1, atk)
         # Grey, and the words rather than the numbers: "0 / 0 breached" reads as a score, and
         # the reader has no way to tell it from a score that was earned.
@@ -345,6 +378,7 @@ def main():
         </a>"""
 
     adaptive_html = ""
+    _adaptive_measured = False
     if adaptive:
         items = ""
         for fp in adaptive:
@@ -359,7 +393,13 @@ def main():
             # SHAPE FIRST, as `compare_recon.collect` does: `r['iterations']` and
             # `d["target"]` on an artifact of the wrong shape ended the index with no page.
             r = d.get("result") if isinstance(d, dict) else None
-            if not isinstance(r, dict) or not d.get("target"):
+            # AND THE FIELDS THE SENTENCE READS: `iterations: "4"` and `attribution: 5` passed
+            # the two checks above and took the page down. Found by an independent review.
+            _it = r.get("iterations") if isinstance(r, dict) else None
+            _at = r.get("attribution") if isinstance(r, dict) else None
+            if (not isinstance(r, dict) or not d.get("target")
+                    or (_it is not None and (not isinstance(_it, int) or isinstance(_it, bool)))
+                    or (_at is not None and not isinstance(_at, (list, tuple)))):
                 _unreadable.append((os.path.basename(str(fp)),
                                     "not the shape an adaptive transcript has"))
                 continue
@@ -369,6 +409,8 @@ def main():
             # explains was an unqualified red BROKEN.
             from run_adaptive import outcome_line as _outcome
             _line, _code = _outcome(r)
+            if _code != 3:
+                _adaptive_measured = True
             if _code == 3:
                 col, verdict = SEV.get("unknown", "#6b6b6b"), "not measured"
             elif r.get("success"):
@@ -378,6 +420,9 @@ def main():
                 verdict = f"BROKEN in {r.get('iterations')} iters" + (
                     " \u2014 not attributable: the target does this unattacked"
                     if _att == "unattributable" else "") + (
+                    # AND WHEN NOTHING WAS THERE TO ATTRIBUTE AGAINST, as `outcome_line` says.
+                    " \u2014 no benign baseline, so an ambient false positive is not ruled out"
+                    if _att == "unmeasured" else "") + (
                     " \u2014 not the goal it was aimed at" if not r.get("aimed", True) else "")
             else:
                 col, verdict = SEV["none"], f"held ({r.get('iterations')} iters)"
@@ -393,6 +438,35 @@ def main():
                   "there describes whatever it held." % (_an, _aw))
         unread_bar = _unread_html(_unreadable, "this index")
 
+    # ONLY PAGES THAT EXIST: `run` and `index` alone build neither of these, and both links were
+    # dead. Found by an independent review.
+    _links = [(_p, _w) for _p, _w in (("defense_report.html", "Defense report (fixes)"),
+                                      ("compare_targets.html", "Fleet overview"))
+              if (OUT / _p).exists()]
+    links_html = ('<div class="links">' + "".join('<a href="%s">→ %s</a>' % _l for _l in _links)
+                  + '</div>') if _links else ""
+    # AND WHAT IS NOT ON IT, said on the page: results with no config here, and targets swept
+    # only per model.
+    _absent = (["%d results file(s) whose target has no config here: %s. Point "
+                "QATRATION_CONFIGS at its config to put it on this page"
+                % (len(_left_out), named_or_more(["%s (%s)" % (t, f) for f, t in _left_out], 4))]
+               if _left_out else []) + (
+               ["%s swept only with --model, which this page does not read: %s"
+                % ("a target" if len(_model_only) == 1 else "%d targets" % len(_model_only),
+                   named_or_more(_model_only, 4))] if _model_only else [])
+    for _a in _absent:
+        print("  ! " + _a)
+    unread_bar += "".join('<div class="stalebar">%s.</div>' % esc(_a) for _a in _absent)
+    # AND A BREACH ON A TARGET WITH NO BENIGN BASELINE IS NOT ATTRIBUTED, said beside the count:
+    # `doubtful` is 0 both for "all attributed" and for "nothing to attribute against".
+    _no_bl = [m["target"] for m in rows
+              if m.get("broke") and baseline.rates(m["target"], str(OUT)) is None]
+    if _no_bl:
+        unread_bar += ('<div class="stalebar">%d breach(es) on %s with no benign baseline: '
+                       'nothing measured what those targets do unattacked, so they are not '
+                       'attributed. Run `qatration benign` against them.</div>'
+                       % (sum(m["broke"] for m in rows if m["target"] in _no_bl),
+                          esc(named_or_more(_no_bl, 4))))
     # THE RUNS' DATES, not the day the page was built: "Adversarial test of AI features ·
     # 2026-10-01" stood over runs from August and September. Found by an independent review.
     from workspace import measured_when as _mw_i
@@ -441,10 +515,7 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
   <div class="tile"><div class="n" style="color:var(--accent)">{n_find}</div><div class="l">attacks breached</div>{f'<div class="l" style="color:var(--dim)">{n_doubt} the benign baseline cannot attribute</div>' if n_doubt else ""}</div>
   <div class="tile"><div class="n" style="color:{SEV['none']}">{len(hardened)}</div><div class="l">hardened (0 breaches)</div></div>
 </div>
-<div class="links">
-  <a href="defense_report.html">→ Defense report (fixes)</a>
-  <a href="compare_targets.html">→ Fleet overview</a>
-</div>
+{links_html}
 {adaptive_html}
 <h2>Targets</h2>
 <div class="grid">{cards}</div>
@@ -480,7 +551,9 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
                                for m in moved], 6))
     # 3 WHEN NOTHING ON THE PAGE WAS MEASURED, the code the table gives "could not be
     # answered"; a fleet whose every run errored exited 0. Found by an independent review.
-    if rows and not any(m.get("_answered") for m in rows):
+    # AND NOT WHILE THE PAGE SHOWS AN ADAPTIVE RUN THAT MEASURED: a red BROKEN above an
+    # exit 3. Found by an independent review.
+    if rows and not any(m.get("_answered") for m in rows) and not _adaptive_measured:
         print("  ! no target on this page measured anything, so the page answers nothing")
         return 3
 

@@ -2442,7 +2442,15 @@ def measured(meta, rows=None):
     # subtracted them anywhere else: four budget rows and one DEFENDED read "5 attacks
     # measured · 0 breached" and HARDENED, while the index recounted the rows and said "not
     # measured" about the same file. Found by an independent review.
-    return max(0, (meta.get("attacks_n") or 0) - errs - unreached - never_sent(meta, rows)), errs
+    # AND THE ATTACK COUNT TOO, by the same sentence: a file older than `attacks_n` (or one
+    # holding `null`) measured nothing here, so two breaches printed a grey "not measured"
+    # card under a tile counting them. The rows say how many attacks there were; controls
+    # are not attacks. Found by an independent review.
+    n = meta.get("attacks_n")
+    if n is None and rows is not None:
+        n = sum(1 for r in rows if isinstance(r, dict)
+                and (r.get("attack") or {}).get("category") != "control")
+    return max(0, (n or 0) - errs - unreached - never_sent(meta, rows)), errs
 
 
 def measured_when(meta, path=None):

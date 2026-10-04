@@ -4287,6 +4287,96 @@ def main():
     # artifact from one printing it to a reader, which is exactly the difference between
     # the two surfaces that still exempt it and this one.
     import build_index as _bi_q, pathlib as _pl_q, tempfile as _tf_q, contextlib as _cx_q
+
+    # --- an independent review of the index ------------------------------------------------
+    def _idx_run(files, extra=None):
+        """-> (exit, page, console) for the index over a workspace of these files."""
+        _w = _tf_q.mkdtemp()
+        for _fn, _doc in files.items():
+            with open(os.path.join(_w, _fn), "w", encoding="utf-8") as _f:
+                _f.write(_doc if isinstance(_doc, str) else json.dumps(_doc))
+        _r = _bi_q.OUT
+        _buf = io.StringIO()
+        try:
+            _bi_q.OUT = _pl_q.Path(_w)
+            with _cx_q.redirect_stdout(_buf):
+                _code = _bi_q.main()
+            _pg = (io.open(os.path.join(_w, "index.html"), encoding="utf-8").read()
+                   if os.path.exists(os.path.join(_w, "index.html")) else "")
+        finally:
+            _bi_q.OUT = _r
+            shutil.rmtree(_w, ignore_errors=True)
+        return _code, _pg, _buf.getvalue()
+
+    def _res(target, heads, **meta):
+        _rows = [{"attack": {"id": "a%d" % i, "category": cat}, "headline": h,
+                  "rate": "1/1" if h == "EXPLOITED" else "0/1",
+                  "fired": ["canary_in_output"] if h == "EXPLOITED" else [], "locks": {},
+                  "trials": [{"verdict": h, "fired": [], "probe": {"output": "x"}}]}
+                 for i, (h, cat) in enumerate(heads)]
+        _m = dict({"target": target, "model": "m", "trials": 1, "attacks_n": len(heads),
+                   "caps": []}, **meta)
+        return {"meta": _m, "results": _rows}
+
+    _A = ("EXPLOITED", "x")
+    _D = ("DEFENDED", "x")
+    _E = ("ERROR", "x")
+    # A RUN WHOSE TARGET HAS NO CONFIG HERE IS NAMED ON THE PAGE, not only on the console.
+    _c1, _p1, _o1 = _idx_run({"results_citebot.json": _res("citebot", [_D]),
+                              "results_mybot.json": _res("mybot", [_A, _A, _A])})
+    check("a run whose target has no config here is named on the page, with the way back",
+          "mybot" in _p1 and "QATRATION_CONFIGS" in _p1, _p1[:400])
+    # A TARGET SWEPT ONLY PER MODEL IS NAMED.
+    _c2, _p2, _o2 = _idx_run({"results_alpha.json": _res("alpha", [_D]),
+                              "results_beta_gpt4o.json": _res("beta", [_A, _A])})
+    check("a target swept only with --model is named, not dropped without a word",
+          "beta" in _p2 and "--model" in _p2, _o2[-300:])
+    _c2b, _p2b, _o2b = _idx_run({"results_beta_gpt4o.json": _res("beta", [_A, _A])})
+    check("...and a workspace of only per-model runs is not told to run a sweep",
+          _c2b == 3 and "per-model" in _o2b and "run a sweep first" not in _o2b, _o2b[-300:])
+    # A CONTROL IS NOT A MEASUREMENT OF THE TARGET.
+    _c3, _p3, _o3 = _idx_run({"results_alpha.json": _res(
+        "alpha", [_E, _E, _E, _E, _E, ("DEFENDED", "control")])})
+    check("five errored attacks beside one quiet control measured nothing: exit 3",
+          _c3 == 3, "exit %s: %s" % (_c3, _o3[-200:]))
+    # A PAGE SHOWING AN ADAPTIVE BREAK DID ANSWER SOMETHING.
+    _c4, _p4, _o4 = _idx_run({
+        "results_alpha.json": _res("alpha", [_E, _E]),
+        "adaptive_alpha.json": {"target": "alpha", "goal": "g", "attacker": "m",
+                                "result": {"success": True, "iterations": 3, "seconds": 1,
+                                           "fired": ["canary_in_output"], "aimed": True,
+                                           "attribution": ["attributed", []]}}})
+    check("a page carrying an adaptive break does not exit as though it answered nothing",
+          _c4 != 3 and "BROKEN" in _p4, "exit %s" % _c4)
+    # A NULL COUNT IS NOT A CRASH, AND AN OLD FILE'S BREACHES ARE NOT "NOT MEASURED".
+    _c5, _p5, _o5 = _idx_run({"results_alpha.json": _res("alpha", [_A], attacks_n=None)})
+    check("attacks_n: null builds the page", bool(_p5), _o5[-200:])
+    _old = _res("alpha", [_A, _A, _D])
+    del _old["meta"]["attacks_n"]
+    _c7, _p7, _o7 = _idx_run({"results_alpha.json": _old})
+    check("a file older than attacks_n shows its breaches out of what it measured",
+          "2</b> / 3 breached" in _p7, _p7[_p7.find("alpha"):][:300])
+    # A BREACH WITH NO BENIGN BASELINE SAYS SO.
+    check("a breach on a target with no benign baseline is said to be unattributed",
+          "no benign baseline" in _p7, "")
+    # A TRANSCRIPT WHOSE FIELDS ARE THE WRONG KIND IS NAMED, NOT A CRASH.
+    _c9, _p9, _o9 = _idx_run({
+        "results_alpha.json": _res("alpha", [_D]),
+        "adaptive_alpha.json": {"target": "alpha", "result": {"success": True,
+                                                              "iterations": "4"}}})
+    check("an adaptive transcript with a string iteration count is named, not a crash",
+          "adaptive_alpha.json" in _p9, _o9[-200:])
+    # ONLY LINKS TO PAGES THAT EXIST.
+    check("the index links no page this workspace does not have",
+          'href="defense_report.html"' not in _p5 and 'href="compare_targets.html"' not in _p5,
+          "")
+    # AND THE RECON FLEET COUNTS THE TOKENS IT NEVER TRIED.
+    import compare_recon as _cr_q
+    _rw = _cr_q._row({"token_lock": {"a": "blocked", "b": "blocked"}, "token_lock_untried": 8},
+                     "rbot", "2026-10-01")
+    check("a token lock over two of ten tokens says eight were not tried",
+          "8 not tried" in str(_rw.get("content_lock")), str(_rw.get("content_lock")))
+
     _qw = _tf_q.mkdtemp()
     with open(os.path.join(_qw, "results_qbot.json"), "w", encoding="utf-8") as _f:
         json.dump({"meta": {"target": "qbot", "model": "m", "trials": 7, "attacks_n": 1,

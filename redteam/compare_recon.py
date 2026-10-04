@@ -83,6 +83,8 @@ def _row(profile, name, when):
     # arrive here as "blocked" and inflate the column that reads as the target's defence.
     blocked = sum(1 for v in lock.values() if v == "blocked")
     unmeasured = sum(1 for v in lock.values() if v == "unmeasured")
+    _untried = profile.get("token_lock_untried")
+    _untried = _untried if isinstance(_untried, int) and not isinstance(_untried, bool) else 0
     disc = profile.get("disclosure_open")
     # AT THE BOUNDARY, so both surfaces get it and the column widths are computed on what
     # is actually printed. Every string below is the target describing itself -- the tool
@@ -114,7 +116,12 @@ def _row(profile, name, when):
         # landed as part of the total, so a half-dead run read as a partial lock instead of a
         # partial measurement. The unmeasured ones are named rather than folded into either side.
         "content_lock": (f"{blocked}/{len(lock) - unmeasured}"
-                         + (f" (+{unmeasured} unmeasured)" if unmeasured else "")) if lock else "—",
+                         + (f" (+{unmeasured} unmeasured)" if unmeasured else "")
+                         # AND THE TOKENS NEVER ASKED ABOUT, which `recon` records as
+                         # `token_lock_untried`: "2/2" over ten forbidden tokens read as a
+                         # full lock. Found by an independent review.
+                         + (f" (+{_untried} not tried)" if _untried else ""))
+                        if lock else "—",
         # BY TODAY'S RULES, as the warnings beside it are: the stored list carried patterns
         # this build no longer proposes. Found by an independent review.
         "unlabelled": sum(len(v) for v in proposed_patterns(
