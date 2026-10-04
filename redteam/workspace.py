@@ -2391,7 +2391,8 @@ QUALIFIERS = {
                  ("qualified", "doubtful_count", "benign_seen", "rates")),
     "arsenal": ("which attacks produced this number, and whether two rows share them", ()),
     "trials": ("how many attempts each attack got, which decides what a count means", ()),
-    "when": ("when the run happened, not when the file was last touched", ("measured_when",)),
+    "when": ("when the run happened, not when the file was last touched",
+             ("measured_when", "dated(")),
     "run_id": ("which run produced this, and therefore how it ended",
                ("unfinished_note", "record_for")),
     # THE TWO CAVEATS THAT CAN INVERT A COUNT, added after the second of them was found by a

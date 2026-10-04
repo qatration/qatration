@@ -34,7 +34,9 @@ jobs:
     # deadline and names it; this catches what that cannot reach — a wedged runner, an
     # install that never returns — instead of the job sitting for the six hours GitHub
     # allows by default and reporting as 'cancelled', which names nothing at all.
-    timeout-minutes: 30
+    # 45, not 30: the healthy windows and 3.9 jobs had grown to 27 minutes, and two of them
+    # crossed 30 on a green run and were cancelled with every suite still passing.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

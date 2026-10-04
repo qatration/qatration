@@ -449,7 +449,8 @@ def main():
                        _art9("citebot", [("a1", "EXPLOITED"), ("a2", "EXPLOITED")],
                              arsenal=None)),
                       ("results_ragbot.json",
-                       _art9("ragbot", [("a1", "EXPLOITED"), ("a2", "DEFENDED")], broke=1)),
+                       _art9("ragbot", [("a1", "EXPLOITED"), ("a2", "DEFENDED")], broke=1,
+                             when="2026-05-06 07:08")),
                       ("results_ragbot.v1.json",
                        _art9("ragbot", [("a1", "DEFENDED"), ("a2", "DEFENDED")], broke=0)),
                       ("results_httpbot_qwen2.5-14b.json",
@@ -470,6 +471,13 @@ def main():
     check("a run with no stored breach count is counted from its rows, not read as 0",
           bool(_cit) and ">2<" in _cit.group(0).replace(" ", ""),
           _cit.group(0)[:400] if _cit else "no citebot row")
+    # A FILE'S DATE IS MARKED AS ONE: citebot recorded no `when`, ragbot did.
+    _rag = _re9.search(r"ragbot<div[^>]*>([^<]*)<", _pg9)
+    _cdt = _re9.search(r"citebot<div[^>]*>([^<]*)<", _pg9)
+    check("a run that recorded its date is dated by it on the fleet page",
+          bool(_rag) and _rag.group(1) == "2026-05-06 07:08", _rag.group(1) if _rag else "none")
+    check("...and one that did not says the date is the file's",
+          bool(_cdt) and _cdt.group(1).endswith("(file)"), _cdt.group(1) if _cdt else "none")
     check("a kept copy of a target's run is not a second system",
           "2 systems" in _o9.getvalue() and "results_ragbot.v1.json" in _e9.getvalue(),
           _o9.getvalue()[-200:] + _e9.getvalue()[-300:])

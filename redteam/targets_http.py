@@ -322,7 +322,10 @@ def _pairs(raw):
                 name = nested.get("name", "")
                 if not args:
                     args = nested.get("arguments", nested.get("args", nested.get("input", "")))
-            out.append((str(name), args if isinstance(args, str) else json.dumps(args)))
+            # `ensure_ascii=False`, as `target._arg_text` writes it: an accented name escaped here
+            # and spelled out in the prompt defeated echo subtraction. Found by a review.
+            out.append((str(name), args if isinstance(args, str)
+                        else json.dumps(args, ensure_ascii=False)))
     return out
 
 

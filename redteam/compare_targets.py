@@ -11,7 +11,7 @@ from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, verdict_for,
                        fleet_names, fleet_filter, read_artifact,
                        # aliased: `measured` is already a local here, and it holds the
                        # timestamp of the run rather than a count of it
-                       measured as measured_counts, measured_when,
+                       measured as measured_counts, dated,
                        # ONE SPELLING OF `and N more`, and four places it was simply
                        # missing; see `named_or_more`'s docstring for both halves
                        named_or_more)
@@ -581,7 +581,10 @@ def main():
         # a matrix mixing today's numbers with last week's reads as one snapshot, which is
         # how a stale row gets cited as current. The age travels with the row -- and it is the
         # RUN's date where the run recorded one, never the file's, which a clone resets.
-        measured, _when_said = measured_when(meta, fp)
+        # AND A FILE'S DATE SAYS SO, through the one reader the other surfaces use: this
+        # printed the mtime bare, so a `rejudge --write` moved a 1 October run to the day it
+        # was re-scored, unmarked. Found by reading the page diff after a re-score.
+        measured, _when_said = dated(meta, fp)
         rows.append(dict(measured=measured,
                          target=meta["target"], caps=meta.get("caps") or [],
                          # WHAT WAS MEASURED, not what was attempted — the same rule the
