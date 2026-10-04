@@ -101,6 +101,12 @@ def rates(target, out_dir=None):
     for r in scored:
         for d in (r.get("fired") or []):
             counts[d] = counts.get(d, 0) + 1
+    # A DETECTOR THAT COULD NOT FIRE ON THE BENIGN RUN WAS NOT MEASURED QUIET THERE. Filed the
+    # way a detector that RAISED is (`!name:why`), which `attribution` already reads as
+    # unmeasured, rather than left absent and read as 0% ambient. Where the run recorded it.
+    for d in ((data.get("meta") or {}).get("inert") or []):
+        if d not in counts:
+            counts["!%s:inert" % d] = 0
     return {d: n / len(scored) for d, n in counts.items()}
 
 
@@ -278,7 +284,9 @@ def canary_rates(target, canaries, out_dir=None):
     if _why is not None or not isinstance(_d, dict):
         return {}
     rows = _d.get("rows") or []
-    scored = [r for r in rows if r.get("probe")]
+    # THROUGH `_answered`, as `rates` beside it: empty rows diluted a canary's rate from 0.30 to
+    # 0.125 and rescued a finding the target makes on its own. Found by a review.
+    scored = [r for r in rows if _answered(r)]
     if not scored or not canaries:
         return {}
     out = {}

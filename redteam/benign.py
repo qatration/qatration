@@ -130,6 +130,11 @@ def fires_for_row(probe, ctx, cid):
     same verdict about the same stored probe or a `--rejudge` silently restores whatever the
     live path was written to remove.
     """
+    # A PROBE THAT CAME BACK EMPTY IS NOT TRAFFIC, as `oracle.judge` reads it: a seventy-second
+    # empty reply fired `slow_response` here, and the roll-up published it as a false-alarm
+    # candidate on clean traffic. Found by an independent review.
+    if probe.silent():
+        return []
     fired = fires_on(probe, ctx)
     if cid in EXPECTS_REFUSAL:
         fired = [f for f in fired if f != "over_refusal"]
@@ -493,7 +498,7 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
 def summary(rows):
     per = collections.Counter()
     for r in rows:
-        for f in r.get("fired", []):
+        for f in (r.get("fired") or []):
             if f != "over_refusal":
                 per[f] += 1
     # clean means the target simply answered: nothing fired at all, refusal included, and
@@ -522,6 +527,15 @@ def summary(rows):
             "per_detector": dict(per.most_common())}
 
 
+def _seconds_of(pd):
+    """A stored probe's `seconds` as a number, or 0: through `rejudge._probe`'s own rule for
+    the field, so `"fast"` costs the field and not the command."""
+    try:
+        return float(pd.get("seconds") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def rejudge(path):
     """Re-score one stored benign run with the current oracle. No model, no GPU.
 
@@ -536,6 +550,9 @@ def rejudge(path):
         # of the json module tells them nothing about which file or what to do.
         raise SystemExit(f"{path} could not be read ({why}). Nothing was re-judged.")
     _, ctx = _ctx_for(d["meta"]["target"])
+    # WITH WHAT THE RUN LEARNED, as `rejudge` replays a sweep.
+    from rejudge import run_ctx as _run_ctx_b
+    ctx = _run_ctx_b(ctx, d.get("meta"))
     changed = []
     for r in d["rows"]:
         pd = r.get("probe")
@@ -545,11 +562,13 @@ def rejudge(path):
                   tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
                   observations=pd.get("observations") or [],
                   resolved=[tuple(x) for x in (pd.get("resolved") or [])],
-                  seconds=float(pd.get("seconds") or 0), turns=pd.get("turns") or [])
+                  seconds=_seconds_of(pd), turns=pd.get("turns") or [])
         before = sorted(r.get("fired") or [])
-        after = sorted(fires_for_row(p, ctx, r["id"]))
+        # `.get`: a row with no id is a row, and one bad file ended `--rejudge` for every
+        # other file. Found by an independent review.
+        after = sorted(fires_for_row(p, ctx, r.get("id")))
         if before != after:
-            changed.append((r["id"], before, after))
+            changed.append((r.get("id"), before, after))
         r["fired"], r["refused"] = after, "over_refusal" in after
         noisy = [f for f in after if f != "over_refusal"]
         r["evidence"] = excerpt(p) if noisy else ""
@@ -637,17 +656,10 @@ def adjudication_gaps(rows_by_target=None, path=None):
     adjudged = load_adjudication(path)
     fired = set()
     if rows_by_target is None:
-        rows_by_target = {}
-        for fp in glob.glob(os.path.join(OUT_DIR, "benign_*.json")):
-            # THROUGH `read_artifact`, the one reader for this directory.
-            d, _why_b = read_artifact(fp)
-            if _why_b is not None:
-                # An unreadable baseline is `roll_up`'s business to report; skipping it here
-                # understates both gaps, which keeps this quiet rather than wrong.
-                continue
-            tgt = (d.get("meta") or {}).get("target")
-            if tgt:
-                rows_by_target[tgt] = d.get("rows") or []
+        # THE FILE `roll_up` COUNTS, not another: this kept the LAST file per target in glob
+        # order and `roll_up` the first in sorted order, so one page called a detector silent
+        # and also unsettled on the same target. Found by an independent review.
+        rows_by_target = {t: (d.get("rows") or []) for t, (_fp, d) in _benign_by_target().items()}
     for tgt, rows in rows_by_target.items():
         for r in rows:
             for det in (r.get("fired") or []):
@@ -659,6 +671,20 @@ def adjudication_gaps(rows_by_target=None, path=None):
     return (sorted(fired - set(adjudged)),
             sorted(p for p in settled_quiet if p[0] in measured),
             sorted(p for p in settled_quiet if p[0] not in measured))
+
+
+def _benign_by_target():
+    """target -> (path, document) for the stored benign runs: the FIRST readable file per
+    target in sorted order, the rule `roll_up` counts by and names its exclusions under."""
+    out = {}
+    for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
+        d, why = read_artifact(fp)
+        if why:
+            continue
+        t = (d.get("meta") or {}).get("target")
+        if t and t not in out:
+            out[t] = (fp, d)
+    return out
 
 
 def roll_up():
@@ -716,8 +742,13 @@ def roll_up():
         # compared, and recovering that by looking for the marker in the string this
         # line just built is reading a boolean back out of prose.
         _when, _said = measured_when(d.get("meta") or {}, fp)
-        ages[t] = (_when[5:16] + ("" if _said else FILE_DATED), _said)
-        probes += d["meta"]["probes"]
+        # WITH ITS YEAR: `MM-DD` compared 2025-12-30 as newer than 2026-01-02, and a run a
+        # year old as current. Found by an independent review.
+        ages[t] = (_when[:16] + ("" if _said else FILE_DATED), _said)
+        # WHAT WAS ANSWERED, the denominator every rate here uses: `meta.probes` is the row
+        # count, skipped, errored and empty rows with it. Found by an independent review.
+        from baseline import _answered as _answered_b
+        probes += sum(1 for _r in (d.get("rows") or []) if _answered_b(_r))
         # WHAT THE CORPUS AIMED AT, which is not the same as what fired. Every clean prompt
         # carries `provokes`: the detector it was written to tempt. `sql-in-question` is
         # aimed at `sql_injection`, `path-in-question` at `path_traversal`. The suite checks
@@ -751,7 +782,7 @@ def roll_up():
             if (_aim and r.get("probe") and not r.get("silent") and _aim not in _dead
                     and _aim not in (r.get("fired") or []) and _aim not in _raised_here):
                 exercised[_aim] += 1
-            for f in r.get("fired", []):
+            for f in (r.get("fired") or []):
                 reached[f] += 1
                 # An over-refusal on clean traffic is USUALLY a usability finding rather than a
                 # false alarm: the detector is right, the guard just cost a real answer. But
@@ -948,7 +979,7 @@ def main():
         # after a copy or a restore two files differ by a month that no run measured.
         _dated = {t: a for t, (a, said) in s["ages"].items() if said}
         newest = max(_dated.values(), default="")
-        stale = sorted(t for t, a in _dated.items() if a[:5] != newest[:5])
+        stale = sorted(t for t, a in _dated.items() if a[:10] != newest[:10])
         _undated = sorted(t for t, (a, said) in s["ages"].items() if not said)
         print(f"{s['probes']} benign probes across {len(s['targets'])} targets: "
               f"{', '.join(s['targets'])}")
@@ -1200,8 +1231,14 @@ def main():
                 bad.append((cid, f))
         n = len(CORPUS) + len(CONVERSATIONS)
         from oracle import DETECTORS as _ALL_DETS
-        print(f"\n{n - len(bad)}/{n} clean: no detector reads the question, over all "
-              f"{len(_ALL_DETS)} of them")
+        # OVER THE ONES THAT COULD FIRE: "over all 66" was printed for a config on which 32
+        # could not, which is a check that never ran stated as one that passed. Found by an
+        # independent review.
+        _deaf_d = inert_for(ctx, _ALL_DETS)
+        print(f"\n{n - len(bad)}/{n} clean: no detector reads the question, over the "
+              f"{len(_ALL_DETS) - len(_deaf_d)} of {len(_ALL_DETS)} that can fire on this config"
+              + (f" ({len(_deaf_d)} cannot: {named_or_more(sorted(_deaf_d), 6)})"
+                 if _deaf_d else ""))
         sys.exit(1 if bad else 0)
 
     sys.path.insert(0, HERE)
@@ -1223,6 +1260,14 @@ def main():
         # refused, not a precondition about the target, and 5 is documented as the canary one.
         print(_refusal, file=sys.stderr)
         sys.exit(2)
+    # THE TOOL BASELINE THE SWEEP LEARNS, LEARNED HERE TOO, through the one function. The sweep
+    # arms `rogue_tool_call` with the tool inputs it sees unattacked; this judged with the
+    # config alone, where that detector cannot fire, so its ambient rate read 0% and every
+    # sweep row firing it was "attributed" -- against traffic that fires it 47 times in 47.
+    # Recorded as `meta.baseline`, the field a results file keeps it in, so a replay judges
+    # with it as `rejudge.run_ctx` does. Found by an independent review.
+    from run_redteam import baseline_tool_context as _btc
+    ctx = _btc(target, cfg, ctx)
 
     print(f"benign corpus -> {args.target}  ({len(CORPUS)} prompts + "
           f"{len(CONVERSATIONS)} conversations x{args.trials})\n")
@@ -1324,12 +1369,16 @@ def main():
     for _r in reversed(rows):
         if _r.get("skipped"):
             continue            # never sent for want of a delivery: neither end of the cut
-        if not _r.get("error"):
+        # AND EMPTY IS THE SAME CUT: a bot that answered twenty probes and then returned
+        # `{"reply": ""}` to the rest wrote a baseline of its head, exit 0, over a complete
+        # one. Found by an independent review.
+        if not _r.get("error") and not _r.get("silent"):
             break
         _tail += 1
-        _first_err = _r.get("error")
+        _first_err = _r.get("error") or "an empty reply"
     if _tail >= _give_up:
-        print("\nNOT A BASELINE — the last %d probe(s) of the corpus all errored (the first: "
+        print("\nNOT A BASELINE — the last %d probe(s) of the corpus all errored or came back "
+              "empty (the first: "
               "%s), so the run measured its head and lost its tail.\n"
               "  Nothing was written. This corpus is an ordered list, so a tail that did not "
               "answer is a BIASED\n  sample rather than a smaller one. Check the target is "
@@ -1360,6 +1409,13 @@ def main():
                                         # is compared against (`baseline.model_caveat`).
                                         "model": _config_model_b(cfg),
                                         "when": datetime.now().isoformat(" ", "seconds"),
+                                        "baseline": [str(_x) for _x in
+                                                     (ctx.get("baseline_tool_inputs") or [])
+                                                     if _x is not None] or None,
+                                        # AND WHAT COULD NOT FIRE, so a detector that was
+                                        # deaf here reads as unmeasured, not as 0% ambient
+                                        # (`baseline.rates`).
+                                        "inert": sorted(inert_for(ctx, DETECTORS)),
                                         "trials": args.trials, **s}), "rows": rows},
                   f, indent=2)
     print(f"\nwrote {path}")

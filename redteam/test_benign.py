@@ -2765,6 +2765,138 @@ def main():
         _srv_r.shutdown()
         _sh_r.rmtree(_w_r, ignore_errors=True)
 
+    # --- an independent review of the baseline -----------------------------------------
+    # A TAIL THAT CAME BACK EMPTY IS THE SAME CUT AS ONE THAT ERRORED.
+    _n_s = [0]
+
+    class _Hushes(_BH_r):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            _n_s[0] += 1
+            _o = _js_r.dumps({"reply": "Our store is open 9 to 5." if _n_s[0] <= 20
+                              else ""}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_o)))
+            self.end_headers()
+            self.wfile.write(_o)
+    _srv_s = _TS_r(("127.0.0.1", 0), _Hushes)
+    _th_r.Thread(target=_srv_s.serve_forever, daemon=True).start()
+    _w_s = _tf_r.mkdtemp()
+    try:
+        _c_s = os.path.join(_w_s, "hushbot.yaml")
+        _io_r.open(_c_s, "w", encoding="utf-8").write(chr(10).join([
+            "name: hushbot", "adapter: http",
+            'url: "http://127.0.0.1:%d/chat"' % _srv_s.server_address[1],
+            "request:", '  message: "{prompt}"', "response:", '  reply: "reply"', ""]))
+        _p_s = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--target-config", _c_s], capture_output=True, text=True,
+                         errors="replace", timeout=600,
+                         env=dict(os.environ, QATRATION_OUT=_w_s, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        check("a target that went silent part way leaves no baseline, and exits 3",
+              (_p_s.returncode, os.path.exists(os.path.join(_w_s, "benign_hushbot.json")))
+              == (3, False), "exit %s: %s" % (_p_s.returncode, (_p_s.stderr or "")[-300:]))
+        # --dry-run SAYS HOW MANY DETECTORS COULD SPEAK.
+        _p_d = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--target-config", _c_s, "--dry-run"], capture_output=True,
+                         text=True, errors="replace", timeout=600,
+                         env=dict(os.environ, QATRATION_OUT=_w_s, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        check("a dry run over a config with no context says how few detectors could fire",
+              "that can fire on this config" in _p_d.stdout and "cannot:" in _p_d.stdout
+              and "over all" not in _p_d.stdout, _p_d.stdout[-300:])
+    finally:
+        _srv_s.shutdown()
+        _sh_r.rmtree(_w_s, ignore_errors=True)
+    # AN EMPTY REPLY FIRES NOTHING, HOWEVER LONG IT TOOK.
+    from target import Probe as _P_s
+    check("a seventy-second empty reply is not a slow_response fire on clean traffic",
+          _bn_r.fires_for_row(_P_s(prompt="hi", output="", seconds=70.0), {}, "x") == [],
+          str(_bn_r.fires_for_row(_P_s(prompt="hi", output="", seconds=70.0), {}, "x")))
+    # A CANARY'S RATE IS OVER WHAT WAS ANSWERED.
+    import baseline as _bl_s
+    _w_c = _tf_r.mkdtemp()
+    try:
+        _rows_c = ([{"id": "a%d" % i, "silent": False, "fired": [],
+                     "probe": {"output": ("ok K-CAN-1" if i < 6 else "ok")}} for i in range(20)]
+                   + [{"id": "s%d" % i, "silent": True, "fired": [], "probe": {"output": ""}}
+                      for i in range(28)])
+        _io_r.open(os.path.join(_w_c, "benign_cbot.json"), "w", encoding="utf-8").write(
+            _js_r.dumps({"meta": {"target": "cbot", "probes": 48,
+                                  "inert": ["rogue_tool_call"]}, "rows": _rows_c}))
+        _cr = _bl_s.canary_rates("cbot", ["K-CAN-1"], _w_c)
+        check("a canary's ambient rate is over the answered rows, not the empty ones",
+              abs((_cr or {}).get("K-CAN-1", 0) - 0.30) < 1e-9, str(_cr))
+        # AND A DETECTOR THE RUN COULD NOT ARM WAS NOT MEASURED QUIET.
+        _rt = _bl_s.rates("cbot", _w_c)
+        check("a detector inert on the benign run is unmeasured, not 0% ambient",
+              _bl_s.attribution(["rogue_tool_call"], _rt)[0] == "unmeasured", str(_rt))
+    finally:
+        _sh_r.rmtree(_w_c, ignore_errors=True)
+    # A STORED ROW WITH ODD FIELDS COSTS THE ROW, NOT THE COMMAND.
+    _w_o = _tf_r.mkdtemp()
+    try:
+        _po = os.path.join(_w_o, "benign_odd.json")
+        _io_r.open(_po, "w", encoding="utf-8").write(_js_r.dumps(
+            {"meta": {"target": "dvla", "probes": 2},
+             "rows": [{"fired": [], "probe": {"prompt": "hi", "output": "an answer",
+                                              "seconds": "fast"}},
+                      {"id": "x", "fired": None, "probe": {"prompt": "hi", "output": "ok"}}]}))
+        try:
+            _bn_r.rejudge(_po)
+            _ok_o = True
+        except Exception as _e_o:
+            _ok_o = "raised %s" % type(_e_o).__name__
+        check("a row with no id or a seconds that is not a number is re-judged, not a crash",
+              _ok_o is True, str(_ok_o))
+    finally:
+        _sh_r.rmtree(_w_o, ignore_errors=True)
+    # A DATE KEEPS ITS YEAR, and two files for one target are one file to every reader.
+    _w_y = _tf_r.mkdtemp()
+    try:
+        for _fn, _tg, _when, _det in (("benign_oldbot.json", "oldbot", "2025-12-30 10:00", []),
+                                      ("benign_newbot.json", "newbot", "2026-01-02 10:00", []),
+                                      # THE SAME DAY A YEAR EARLIER: only the year tells.
+                                      ("benign_yearbot.json", "yearbot", "2025-01-02 10:00", []),
+                                      ("benign_rbot.json", "rbot", "2026-01-02 10:00",
+                                       ["pii_in_output"]),
+                                      ("benign_rbot~old.json", "rbot", "2026-01-02 10:00",
+                                       ["sql_injection"])):
+            _io_r.open(os.path.join(_w_y, _fn), "w", encoding="utf-8").write(_js_r.dumps(
+                {"meta": {"target": _tg, "probes": 1, "when": _when},
+                 "rows": [{"id": "q", "silent": False, "fired": _det,
+                           "probe": {"prompt": "hi", "output": "an answer"}}]}))
+        _p_y = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign", "--summary"],
+                         capture_output=True, text=True, errors="replace", timeout=600,
+                         env=dict(os.environ, QATRATION_OUT=_w_y, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        _stale_y = [l for l in _p_y.stdout.splitlines() if "not one snapshot" in l]
+        check("a run from last December is the stale one, not the one from January",
+              bool(_stale_y) and "oldbot" in _stale_y[0] and "yearbot" in _stale_y[0]
+              and "newbot" not in _stale_y[0],
+              _p_y.stdout[-400:])
+        _was_y = _bn_r.OUT_DIR
+        _bn_r.OUT_DIR = _w_y
+        try:
+            _gaps_y = _bn_r.adjudication_gaps()
+        finally:
+            _bn_r.OUT_DIR = _was_y
+        check("the adjudication gaps read the same file of a target the roll-up counts",
+              ("rbot", "sql_injection") not in _gaps_y[0], str(_gaps_y[0]))
+    finally:
+        _sh_r.rmtree(_w_y, ignore_errors=True)
+    # THE SWEEP'S TOOL BASELINE IS LEARNED BY THE BASELINE TOO, and replayed with it.
+    import ast as _ast_s
+    _src_s = _io_r.open(os.path.join(HERE, "benign.py"), encoding="utf-8").read()
+    _calls_s = {getattr(_c.func, "id", "") for _c in _ast_s.walk(_ast_s.parse(_src_s))
+                if isinstance(_c, _ast_s.Call)}
+    check("benign learns the tool baseline the sweep learns, and replays with it",
+          {"_btc", "_run_ctx_b"} <= _calls_s, str(sorted(_calls_s & {"_btc", "_run_ctx_b"})))
+
     # A DETECTOR THAT RAISED WAS NOT QUIET, and a backup copy is not a second target.
     _w2 = _tf_r.mkdtemp()
     _row_raise = {"id": "sql-in-question", "provokes": "sql_injection",
@@ -2797,7 +2929,8 @@ def main():
            (_roll2.get("exercised") or {}).get("sql_injection")) == (False, 1),
           str((_roll2.get("passed"), _roll2.get("exercised"))))
     check("...and two files for one target are one target, not two",
-          _roll2.get("targets") == ["rbot"] and _roll2.get("probes") == 1,
+          # 2: the ANSWERED rows of one file, as the headline counts now; 4 would be both.
+          _roll2.get("targets") == ["rbot"] and _roll2.get("probes") == 2,
           str((_roll2.get("targets"), _roll2.get("probes"))))
 
     # --rejudge OVER NOTHING is not a clean bill, and a torn file is not a missing config.

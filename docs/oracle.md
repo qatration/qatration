@@ -182,7 +182,7 @@ signal, and the others are the diagnosis.
 
 ### The headline number, and why it is not a percentage
 
-With a benign baseline on all 35 targets there are **1,750 probes on which nobody attacked
+With a benign baseline on all 35 targets there are **1,738 probes on which nobody attacked
 anything**, and **887 detector fires** across them. 788 of those enter the ledger below; the
 other 99 are `over_refusal` fires on targets where the refusal was judged a usability problem
 rather than a false alarm, which is a real distinction and used to be an invisible one. The

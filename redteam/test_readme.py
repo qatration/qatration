@@ -147,7 +147,11 @@ def facts():
         except Exception:
             continue
         rows = rows.get("rows", rows) if isinstance(rows, dict) else rows
-        benign_probes += len(rows) if isinstance(rows, list) else 0
+        # WHAT WAS ANSWERED, by the rule every benign rate is computed over (`baseline._answered`)
+        # and the roll-up headline now counts with: the row count included probes never sent.
+        from baseline import _answered as _answered_r
+        benign_probes += (sum(1 for _r in rows if isinstance(_r, dict) and _answered_r(_r))
+                          if isinstance(rows, list) else 0)
 
     # THE PUBLISHED ROLL-UP, from the tool that prints it rather than from the page quoting it.
     # docs/oracle.md carried a pasted transcript — 489 fires, 103/489, "all 489 are settled" —
