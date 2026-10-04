@@ -813,7 +813,11 @@ def load_all(known=None):
         # event: git does not preserve mtimes, so a fresh clone stamps every artifact with
         # the clone day and this report dated three weeks of evidence as today. One reader
         # in `workspace` now, shared with the fleet page.
-        dates[tgt] = measured_when((d.get("meta") or {}), fp)[0][:10]
+        # AND ONLY WHERE THE RUN SAID IT: a file date is what a clone or a copy wrote, and the
+        # bar below flagged the run that DID record its date as the stale one. A file-dated
+        # run is listed as such, not compared. Found by an independent review.
+        _mw_d = measured_when((d.get("meta") or {}), fp)
+        dates[tgt] = _mw_d[0][:10] if _mw_d[1] else None
         for r in d["results"]:
             if r["headline"] in BROKE and r["attack"].get("category") != "control":
                 # THE ROW, NOT THE FILE. `workspace._unusable_results` types every key the
@@ -875,6 +879,12 @@ def _timeline():
             torn.append((os.path.join("history", os.path.basename(fp)),
                          "%d line(s) unreadable, so this target's history is incomplete"
                          % d["torn"]))
+        # NOT ACROSS TWO INSTRUMENTS: "RETURNED after a fix" and "closed once" were drawn from
+        # runs on another model and engine, the confounds `diff` names and this dropped. A
+        # comparison that is not clean says nothing returned. Found by an independent review.
+        if d.get("instrument"):
+            again[t] = {}
+            continue
         if "reason" not in d:
             back[t] = set(d.get("regressed") or [])
     return ages, back, again, torn
@@ -916,9 +926,6 @@ def _unresolved_paths():
         # did not: the same event for fewer replies.
         if m.get("partly_read_paths"):
             partly[tgt] = list(m["partly_read_paths"])
-        if "unresolved_paths" in m:
-            asked.append(tgt)
-            continue
         # NOT ASKED IS NOT THE SAME AS NOTHING TO ASK. Read from the config rather than
         # assumed: a built-in practice bot declares no response mapping, so no path of
         # its could be dead and saying `cannot tell` about it would be its own small lie.
@@ -926,8 +933,15 @@ def _unresolved_paths():
             from workspace import configs_by_name as _cbn
             _declared = {n for n, (_fp, c) in _cbn().items()
                          if isinstance(c, dict) and c.get("response")}
-        if tgt in _declared:
-            unasked.append(tgt)
+        # AND NOTHING TO ANSWER IS NOT AN ANSWER: every run writes `unresolved_paths: []`, so
+        # nine targets "resolved every declared path" of which eight declare none. The
+        # docstring puts them in neither list; now the code does. Found by a review.
+        if tgt not in _declared:
+            continue
+        if "unresolved_paths" in m:
+            asked.append(tgt)
+            continue
+        unasked.append(tgt)
     return out, sorted(asked), sorted(unasked), partly
 
 
@@ -973,7 +987,7 @@ def _unobservable():
         tgt = (d.get("meta") or {}).get("target")
         cfg = CTXS.get(tgt, {})
         for r in d["results"]:
-            for tr in r.get("trials", []):
+            for tr in (r.get("trials") or []):
                 pd = tr.get("probe") or {}
                 if not pd:
                     continue
@@ -1066,7 +1080,11 @@ def arsenal_ran():
         except Exception:
             continue
         sent, skipped = m.get("attacks_n"), m.get("skipped")
-        if sent is None or not skipped:
+        # EVERY RUN, not only one that skipped something: the mute-detector sentence and the
+        # smallest-run figure read this, and `memorybot` -- zero breaches, thirty detectors
+        # unable to speak, nothing skipped -- was the case the comment below cites and the
+        # one this filter hid. The table chooses its own rows. Found by an independent review.
+        if sent is None:
             continue
         # MEASURED, NOT ATTEMPTED: `attacks_n` counts rows the budget never sent and rows that
         # errored, so "sent 10" stood over a run that sent 2. Found by an independent review.
@@ -1140,8 +1158,11 @@ def controls_fired():
             # left every control named otherwise -- `gp-06-plain`, `lr-refund-question`,
             # `g-control` -- in neither place, so the page said three controls fired where the
             # stored runs hold sixty-two. Found by an independent review.
-            if (r.get("attack") or {}).get("category") != "control" and \
-                    not aid.startswith("ctrl-"):
+            # AND BY CATEGORY ONLY, the rule every other reader keeps: `ctrl-social-audit` is a
+            # social-engineering ATTACK whose id happens to start `ctrl-`, and it was published
+            # as a control "FIRED WITHOUT AN ATTACK" and counted again as a finding. Found by an
+            # independent review.
+            if (r.get("attack") or {}).get("category") != "control":
                 continue
             if (r.get("headline") or "") not in BROKE:
                 continue
@@ -1151,11 +1172,31 @@ def controls_fired():
             _f = [str(x) for x in (r.get("fired") or [])]
             if _f and all(x == "over_refusal" for x in _f):
                 continue
-            probe = ((r.get("trials") or [{}])[0].get("probe") or {})
+            # THE TRIAL THAT BROKE, as `load_all` quotes for a finding: trial 0 of an EXPLOITED
+            # 1/3 is a reply that did nothing. Found by an independent review.
+            _trs = [t for t in (r.get("trials") or []) if isinstance(t, dict)]
+            _hit = next((t for t in _trs if t.get("verdict") in BROKE), (_trs or [{}])[0])
+            probe = (_hit.get("probe") or {})
             out.append((stem, aid, r.get("rate") or "", r.get("fired") or [],
                         (probe.get("output") or "").strip()[:300],
                         str(r.get("attack", {}).get("text", ""))[:200]))
     return sorted(out)
+
+
+# Filled by `attribution_index`: the runs whose benign baseline was measured on another model.
+_OTHER_MODEL = set()
+
+
+def _torn_benign(targets):
+    """-> [(benign file, why)] for the targets whose benign baseline is there and unreadable."""
+    import baseline as _bl_t
+    out = []
+    for t in sorted(targets):
+        _d, _why = _bl_t._load(t, str(OUT_DIR))
+        if _why:
+            out.append(("benign_%s.json" % t, "%s; every finding on %s is unattributed until "
+                                              "it can be read" % (_why, t)))
+    return out
 
 
 def attribution_index():
@@ -1180,6 +1221,7 @@ def attribution_index():
     except Exception:
         ctxs = {}
     out, unmeasured = {}, set()
+    other_model = set()
     # results_files(), not a raw glob: a `--model` copy sits deliberately beside the canonical
     # run, and reading them here would compute caveats for rows the page never renders — the
     # aggregate and its caveats have to be drawn from the same set of files or the difference
@@ -1188,6 +1230,23 @@ def attribution_index():
         stem = os.path.basename(fp)[len("results_"):-len(".json")]
         tgt = target_of(stem, ctxs) or stem
         ambient = _bl.rates(tgt, str(OUT_DIR))
+        # A TORN BASELINE IS NOT AN ABSENT ONE: named in the unreadable bar (`_torn_benign`),
+        # not filed under "nothing has measured that yet". Found by an independent review.
+        if ambient is None and _bl._load(tgt, str(OUT_DIR))[1]:
+            continue
+        # AND ONE MEASURED ON ANOTHER MODEL ATTRIBUTES NOTHING HERE, the caveat the console,
+        # the scorecard and `rejudge` print and this page did not. Found by a review.
+        if ambient is not None:
+            try:
+                _mm = ((read_artifact(fp)[0] or {}).get("meta") or {}).get("model") or ""
+            except Exception:
+                _mm = ""
+            from workspace import configs_by_name as _cbn_m, config_model as _cm_m
+            _cfg_m = (_cbn_m().get(tgt) or (None, {}))[1]
+            if _bl.model_caveat(tgt, _mm, _cm_m(_cfg_m) if isinstance(_cfg_m, dict) else "",
+                                str(OUT_DIR)):
+                other_model.add(stem)
+                continue
         if ambient is None:
             # NOT "said elsewhere". It was said NOWHERE: with no benign run this loop simply
             # produced no caveats for the target, and a page carrying no caveats reads as a
@@ -1219,6 +1278,8 @@ def attribution_index():
             # BY `attack_name`, the name the page looks it up by: `str(id)` made every id-less
             # attack `None`, so two of them collided and the badge fell off both.
             out[(stem, attack_name(r["attack"]))] = (verdict, detail)
+    _OTHER_MODEL.clear()
+    _OTHER_MODEL.update(other_model)
     return out, unmeasured
 
 
@@ -1484,7 +1545,10 @@ def main():
     _answered = False
     for _fp0 in _fleet_files():
         _rows0 = ((read_artifact(_fp0)[0] or {}).get("results") or [])
-        if any(isinstance(r, dict) and r.get("headline") not in _NOT_MEASURED for r in _rows0):
+        # NOT A CONTROL: one quiet control beside ten errored attacks exited 0 over "0 systems
+        # tested". Found by an independent review.
+        if any(isinstance(r, dict) and r.get("headline") not in _NOT_MEASURED
+               and (r.get("attack") or {}).get("category") != "control" for r in _rows0):
             _answered = True
             break
     if all_targets and not (all_targets - _unrun) and not _answered:
@@ -1501,21 +1565,29 @@ def main():
     # Ordered at every scope, truncated at none. See rank_for_reader.
     findings = rank_for_reader(findings, ambient_rates())
     ages, regressed, came_back, _torn_hist = _timeline()
-    if _torn_hist:
-        unread_bar = _unread_html(list(unreadable) + _torn_hist, "this report")
+    _torn_b = _torn_benign(all_targets)
+    if _torn_hist or _torn_b:
+        unread_bar = _unread_html(list(unreadable) + _torn_hist + _torn_b, "this report")
     unseen, _seen_n, _blind_n = _unobservable()
     # A DECLARED CHANNEL THAT NEVER CARRIED ANYTHING. Kept separate from `unseen`, which is
     # about calls whose CONTENTS no detector could read; this is about a channel that was
     # configured and never once produced a value, which is a mapping error rather than a
     # visibility limit — and the report is the only place the operator would find out.
     dead_paths, _paths_asked, _paths_unasked, _paths_partly = _unresolved_paths()
-    newest = max(measured.values(), default="")
-    stale = sorted({f"{t} ({d})" for t, d in measured.items() if d < newest})
+    newest = max((d for d in measured.values() if d), default="")
+    stale = sorted({f"{t} ({d})" for t, d in measured.items() if d and d < newest})
+    _filedated = sorted(t for t, d in measured.items() if d is None)
     staleness = ("" if not stale else
                  '<div class="stalebar"><b>Mixed measurement dates.</b> Newest run '
                  f'{esc(newest)}; measured earlier: {esc(", ".join(stale))}. '
                  "Findings from an earlier run were produced by an earlier engine and may "
-                 "already be fixed, or may be wrong — re-run before acting on them.</div>")
+                 "already be fixed, or may be wrong — re-run before acting on them.</div>") + (
+                 "" if not _filedated else
+                 '<div class="stalebar">%s did not record when %s ran, so %s date is a '
+                 'file date, which a clone or a copy rewrites, and is not compared.</div>'
+                 % (esc(named_or_more(_filedated, 4)),
+                    "it" if len(_filedated) == 1 else "they",
+                    "its" if len(_filedated) == 1 else "their"))
     # A BREACH WITH NO WRITTEN FIX IS STILL A BREACH. This used to `continue` on a row whose
     # fired detectors were all absent from REMEDIATION — sixteen entries against an oracle of
     # fifty-six — and every number on the page was then computed from the survivors. On the
@@ -1698,9 +1770,20 @@ def main():
     shown_targets = {t for t, *_ in findings}
     blind = sorted(t for t in unmeasured if t in shown_targets)
     unattributed_html = ""
+    _other = sorted(t for t in _OTHER_MODEL if t in shown_targets)
+    if _other:
+        unattributed_html += f"""
+        <section class="finding unseen">
+          <div class="fhead"><span class="sev" style="color:#92400e;background:#fef3c7">UNMEASURED FOR THIS MODEL</span></div>
+          <h2>{sum(1 for t, *_ in findings if t in set(_other))} finding(s) were judged against another model's ordinary traffic</h2>
+          <div class="fix"><span class="fixlabel">What is missing</span>the benign baseline for
+            {esc(", ".join(_other))} was measured on a different model from the run, so
+            nothing here says what that model does unattacked. Run `qatration benign` on the
+            model these findings came from.</div>
+        </section>"""
     if blind:
         n_rows = sum(1 for t, *_ in findings if t in set(blind))
-        unattributed_html = f"""
+        unattributed_html += f"""
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#92400e;background:#fef3c7">NOT ATTRIBUTED</span></div>
           <h2>{n_rows} finding(s) here have not been compared against ordinary traffic</h2>
@@ -1715,8 +1798,17 @@ def main():
         </section>"""
 
     # HOW MUCH OF THE ARSENAL RAN, said before the findings, because it sets what they mean.
-    ran = {t: v for t, v in arsenal_ran().items() if t in {x for x, *_ in findings}}
+    _ran_all = arsenal_ran()
+    ran = {t: v for t, v in _ran_all.items() if t in {x for x, *_ in findings} and v[1]}
     arsenal_html = ""
+    # WHAT COULD NOT SPEAK, OVER EVERY RUN: a target with no finding is the one whose silence
+    # most needs it said.
+    _mute = {t: v[5] for t, v in _ran_all.items() if isinstance(v[5], int) and v[5]}
+    _mutetext_all = ("" if not _mute else
+                     " Detectors that could not speak here at all, for want of a config key: "
+                     + named_or_more(["%s on %s" % (n, t) for t, n in sorted(_mute.items())], 4)
+                     + ". Their silence is a gap in the instrument, not a defence by the "
+                       "target, and nothing below rules out what they look for.")
     if ran:
         # A DASH, NOT A ZERO, when the artifact predates the split: it did not record which
         # of the two this was, and printing 0 under one of them would answer for it.
@@ -1732,13 +1824,7 @@ def main():
         # the ORACLE could answer. A detector with no config key to arm it is silent on every
         # probe, and silence from something that could not speak is the one thing this
         # project refuses to read as a defence.
-        _mute = {t: v[5] for t, v in ran.items() if isinstance(v[5], int) and v[5]}
-        _mutetext = ("" if not _mute else
-                     " Detectors that could not speak here at all, for want of a config key: "
-                     + named_or_more(["%s on %s" % (n, t)
-                                     for t, n in sorted(_mute.items())], 4)
-                     + ". Their silence is a gap in the instrument, not a defence by the "
-                       "target, and nothing below rules out what they look for.")
+        _mutetext = _mutetext_all
         _held = sum(v[4] for v in ran.values() if isinstance(v[4], int))
         _short = (f" A further {_held} were not sent because the run was asked to be a short "
                   f"one: <code>--scope quick</code> sends one attack per category, and a "
@@ -1759,6 +1845,15 @@ def main():
           <table class="pair"><thead><tr><th>system</th><th>sent</th>
             <th>not applicable</th><th>not sent</th><th>total absent</th>
             <th>arsenal</th></tr></thead><tbody>{rows}</tbody></table>
+        </section>"""
+    elif _mutetext_all:
+        # WITH NO TABLE TO HANG IT ON, still said: nothing skipped is not every detector able
+        # to speak.
+        arsenal_html = f"""
+        <section class="finding unseen">
+          <div class="fhead"><span class="sev" style="color:#92400e;background:#fef3c7">HOW MUCH COULD SPEAK</span></div>
+          <h2>Detectors that could not fire on these systems</h2>
+          <div class="fix"><span class="fixlabel">Read this before the counts</span>{_mutetext_all.strip()}</div>
         </section>"""
 
     unmapped_html = ""

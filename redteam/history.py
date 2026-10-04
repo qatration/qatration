@@ -591,6 +591,9 @@ def diff(target):
     # in the measurement rather than the target. The comparison is still worth showing;
     # presenting it as a clean before/after is not.
     confounds = instrument_confounds(prev, cur)
+    # THE INSTRUMENT ON ITS OWN, for a reader that must not compare across it -- the report's
+    # "RETURNED after a fix" -- without refusing over a torn line elsewhere in the timeline.
+    _instrument = list(confounds)
 
     # THE THIRD INPUT, on the same both-sides-or-nothing rule. A detector that was inert
     # in one run and armed in the other did not change because the target did.
@@ -687,7 +690,7 @@ def diff(target):
             "unmeasured_now": dropped,
             "torn": len(torn),
             "torn_why": [f"line {n}: {w}" for n, w in torn[:3]],
-            "confounds": confounds}
+            "confounds": confounds, "instrument": _instrument}
 
 
 def _streaks(target):
