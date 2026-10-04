@@ -517,6 +517,50 @@ def bad_entry_shapes(entries):
     return out
 
 
+def _cannot_encode(e, enc):
+    """-> why `enc` raises on this attack's payload, or "". A lone surrogate passed lint and
+    then raised `UnicodeEncodeError` out of the sweep. Found by an independent review."""
+    from encoders import apply_encoding
+    for s in sent_strings(e):
+        if not isinstance(s, str) or not s.strip():
+            continue
+        try:
+            s.encode("utf-8")
+        except UnicodeEncodeError as _ue:
+            return "it holds a character UTF-8 cannot carry at position %d" % _ue.start
+        try:
+            apply_encoding(s, enc)
+        except KeyError:
+            return ""                     # an unknown name is the branch above's finding
+        except Exception as _e:
+            return "%s: %s" % (type(_e).__name__, str(_e)[:80])
+    return ""
+
+
+# Ciphers that map a table of characters and pass anything outside it through unchanged.
+_TABLE_CIPHERS = frozenset(("morse", "rot13", "atbash", "braille"))
+
+
+def _in_clear(e, enc):
+    """-> the letters a table cipher leaves as they were: `morse` sends Cyrillic as Cyrillic.
+    The no-op rule below needs the whole payload unchanged, so a mixed one passed. Found by an
+    independent review."""
+    if enc not in _TABLE_CIPHERS:
+        return []
+    from encoders import apply_encoding
+    from encoders import _plain as _body
+    out = []
+    for s in sent_strings(e):
+        if not isinstance(s, str) or not s.strip():
+            continue
+        try:
+            sent = _body(apply_encoding(s, enc))
+        except Exception:
+            return []
+        out += [c for c in dict.fromkeys(s) if c.isalpha() and not c.isascii() and c in sent]
+    return out
+
+
 def _unchanged(e, enc):
     """True when applying `enc` to this attack's payload gives the payload back.
 
@@ -593,6 +637,14 @@ def bad_encoders(entries):
         # under a header announcing it was encoded. Whether a transform no-ops is a property
         # of the encoder AND the payload together, which is why it has to be asked here,
         # about this attack's own text, rather than once about the encoder.
+        elif _cannot_encode(e, enc):
+            out.append((who, "encode: %s cannot encode this payload (%s), so the sweep would "
+                             "stop on it mid-run with the attacks before it already sent"
+                        % (enc, _cannot_encode(e, enc))))
+        elif _in_clear(e, enc):
+            out.append((who, "encode: %s has no mapping for %s, so those letters go to the "
+                             "target in the clear under an encoded name"
+                        % (enc, ", ".join(repr(c) for c in _in_clear(e, enc)[:6]))))
         elif _unchanged(e, enc):
             out.append((who, "encode: %s leaves this payload byte for byte unchanged, so the attack "
                              "goes to the target in the clear under an encoded name. A "

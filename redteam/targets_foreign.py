@@ -74,7 +74,10 @@ class ForeignAgentTarget(Target):
             # THROUGH `target._pair` (in `Probe`), not by hand: `(str(c[0]), str(c[1]))` made
             # a bare name `GetUser` the call ('G', 'e'), and raised on `{name, arguments}`.
             calls = _as_list(d.get("tool_calls"))
-            obs = [str(o) for o in (d.get("observations") or [])]
+            # THROUGH `targets_http._observations`, the rule for this shape: a string was split
+            # into characters here and a mapping kept only its keys. Found by a review.
+            from targets_http import _observations as _obs_f
+            obs = _obs_f(d.get("observations"))
             # What the tools actually received, when the deployment reports it. On a code
             # agent this is the only way the oracle can see what crossed the boundary: the
             # step log holds a variable name, this holds its value.

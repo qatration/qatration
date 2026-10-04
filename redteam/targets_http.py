@@ -217,7 +217,9 @@ def _observations(raw):
         # the string, and `_pairs` keeps the same pairing for the call side.
         return ["%s: %s" % (k, v) for k, v in raw.items()]
     if isinstance(raw, (list, tuple)):
-        return [str(o) for o in raw]
+        # NOT A NULL: `str(None)` is the four letters `None`, which the Probe docstring says
+        # must never become evidence, and it made an empty probe read as answered.
+        return [str(o) for o in raw if o is not None]
     # EVERYTHING ELSE IS ONE OBSERVATION, and that includes a bare string: the point is that
     # a string is never ITERATED. An explicit branch for it above this line would be a line
     # that cannot fail -- deleting it changes nothing, because this is what catches it -- so

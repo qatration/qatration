@@ -291,6 +291,87 @@ def main():
     check("...so the judge sees the values rather than the variable names",
           any("CUSTOMER-1" in a for _, a in real_calls(agg, {})), True)
 
+    # --- an independent review of the Probe contract ------------------------------------
+    from target import Probe as _Pr
+    # A MAPPING ARGUMENT IS JSON, as `targets_http` writes it.
+    check("a dict argument is recorded as JSON, not a Python repr",
+          _Pr(prompt="p", tool_calls=[{"name": "GetOrder",
+                                       "arguments": {"order_id": "2002"}}]).tool_calls,
+          [("GetOrder", '{"order_id": "2002"}')])
+    check("...and the dialects targets_http reads arrive through this door too",
+          _Pr(prompt="p", tool_calls=[{"toolUse": {"name": "Lookup", "input": {"a": 1}}},
+                                      {"tool_name": "Ping", "parameters": {"h": "x"}}]).tool_calls,
+          [("Lookup", '{"a": 1}'), ("Ping", '{"h": "x"}')])
+    import ast as _ast_p
+    import io as _io_p, os
+    _tsrc = _io_p.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "target.py"), encoding="utf-8").read()
+    _exec = next(_n for _n in _ast_p.walk(_ast_p.parse(_tsrc))
+                 if isinstance(_n, _ast_p.FunctionDef) and _n.name == "executor_turn")
+    check("the LangChain executor writes its tool inputs through the same rule",
+          any(isinstance(_c, _ast_p.Call) and getattr(_c.func, "id", "") == "_arg_text"
+              for _c in _ast_p.walk(_exec)), True)
+    # A STRING OR A MAPPING WHERE A LIST BELONGS IS ONE ITEM.
+    check("an observation given as a string is one observation, not one per letter",
+          _Pr(prompt="p", observations="db row: key=K-1").observations, ["db row: key=K-1"])
+    check("...and a tool call given as a bare name is one call",
+          _Pr(prompt="p", tool_calls="SendEmail").tool_calls, [("SendEmail", "")])
+    # AN EMPTY OBSERVATION IS NOT AN ANSWER.
+    check("a probe whose only observations are empty is silent",
+          (_Pr(prompt="p", output="", observations=[""]).silent(),
+           _Pr(prompt="p", output="", observations=["  "]).silent(),
+           _Pr(prompt="p", output="", observations=["row"]).silent()), (True, True, False))
+    from targets_http import _observations as _obs_p
+    check("a null observation is dropped, not written as the word None",
+          _obs_p([None, "x"]), ["x"])
+    # THE FOREIGN ADAPTER READS OBSERVATIONS THROUGH THE SAME RULE: one string is one.
+    import http.server as _hs_f, threading as _th_f, json as _js_f
+    _bodies = []
+
+    class _FA(_hs_f.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _b = _js_f.dumps(_bodies.pop(0)).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+    _sf = _hs_f.HTTPServer(("127.0.0.1", 0), _FA)
+    _th_f.Thread(target=_sf.serve_forever, daemon=True).start()
+    try:
+        from targets_foreign import ForeignAgentTarget as _FAT
+        _ft = _FAT(url="http://127.0.0.1:%d/chat" % _sf.server_port, timeout=10)
+        _bodies.extend([{"reply": "ok", "observations": "db row K-1"},
+                        {"reply": "ok", "observations": {"Lookup": "K-1"}}])
+        check("the foreign adapter keeps a string observation whole, and a mapping's values",
+              (_ft.send("hi").observations, _ft.send("hi").observations),
+              (["db row K-1"], ["Lookup: K-1"]))
+    finally:
+        _sf.shutdown()
+    # THE COMMIT STAMPED IS THE ENGINE'S OWN: a copy inside somebody else's repository does not
+    # take that repository's HEAD.
+    import tempfile as _tf_p2, shutil as _sh_p2, subprocess as _sp_p2
+    _gr = _tf_p2.mkdtemp()
+    try:
+        _git = lambda *a: _sp_p2.run(["git"] + list(a), cwd=_gr, capture_output=True, text=True)
+        _git("init", "-q")
+        _git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty",
+             "-m", "theirs")
+        _theirs = _git("rev-parse", "--short", "HEAD").stdout.strip()
+        os.makedirs(os.path.join(_gr, "venv_pkg"))
+        _sh_p2.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "target.py"),
+                    os.path.join(_gr, "venv_pkg", "target.py"))
+        _st = _sp_p2.run([sys.executable, "-c", "import target; print(target.engine_version())"],
+                         cwd=os.path.join(_gr, "venv_pkg"), capture_output=True, text=True,
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        check("a copy inside another repository does not stamp that repository's commit",
+              bool(_theirs) and _theirs not in _st.stdout, True)
+    finally:
+        _sh_p2.rmtree(_gr, ignore_errors=True)
+
     total = checks
     print(f"\n{total - len(fails)}/{total} passed")
     if fails:

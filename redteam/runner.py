@@ -480,7 +480,11 @@ def sent_form(s, enc=None):
     by an independent review.
     """
     s = payload(s)
-    return payload(apply_encoding(s, enc)) if enc else s
+    # NOT `payload` ON THE ENCODED FORM: it strips both ends, and the first row of ASCII art
+    # opening the text is indented -- `'     ___'` went out as `'___'` and the drawing was
+    # misaligned. The edges `payload` exists for are newlines and trailing space; those go.
+    # Found by an independent review.
+    return apply_encoding(s, enc).lstrip("\r\n").rstrip() if enc else s
 
 
 def run_attack(target, attack, ctx, trials=1):

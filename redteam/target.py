@@ -44,9 +44,17 @@ def _pair(entry):
     if entry is None:
         return None
     if isinstance(entry, dict):
-        inner = entry.get("function") if isinstance(entry.get("function"), dict) else entry
-        name = inner.get("name") or entry.get("tool") or ""
-        arg = inner.get("arguments", inner.get("args", inner.get("input", "")))
+        # THE WRAPPERS `targets_http._pairs` READS, the dialects a call arrives in: Bedrock's
+        # `toolUse`, Gemini's `functionCall`, OpenAI's `function`. Without them such a call
+        # through this door was dropped. Found by an independent review.
+        inner = entry
+        for _w in ("function", "toolUse", "functionCall", "tool_use"):
+            if isinstance(entry.get(_w), dict):
+                inner = entry[_w]
+                break
+        name = inner.get("name") or entry.get("tool") or entry.get("tool_name") or ""
+        arg = inner.get("arguments", inner.get("args", inner.get(
+            "input", inner.get("parameters", entry.get("parameters", "")))))
     elif isinstance(entry, str):
         name, arg = entry, ""
     elif isinstance(entry, (list, tuple)):
@@ -58,8 +66,30 @@ def _pair(entry):
     else:
         name, arg = entry, ""
     name = "" if name is None else (name if isinstance(name, str) else str(name))
-    arg = "" if arg is None else (arg if isinstance(arg, str) else str(arg))
+    arg = _arg_text(arg)
     return (name, arg) if name.strip() else None
+
+
+def _arg_text(arg):
+    """A tool argument as the text the detectors read: a mapping or a list as JSON, the way
+    `targets_http._pairs` writes it.
+
+    `str()` WROTE A PYTHON REPR. LangChain parses `"action_input": {"order_id": "2002"}` as a
+    dict, and the probe recorded `{'order_id': '2002'}`: `bola_access` missed a real cross-
+    tenant read that the same call as JSON shows, and `command_injection` and
+    `rogue_tool_call` fired on a benign in-baseline call. Found by an independent review.
+    """
+    if arg is None:
+        return ""
+    if isinstance(arg, str):
+        return arg
+    if isinstance(arg, (dict, list, tuple)):
+        try:
+            import json as _json_a
+            return _json_a.dumps(arg, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(arg)
+    return str(arg)
 
 
 @dataclass
@@ -146,6 +176,18 @@ class Probe:
         for _f in ("tool_calls", "observations", "turns", "resolved"):
             if getattr(self, _f) is None:
                 object.__setattr__(self, _f, [])
+        # A STRING OR A MAPPING WHERE A LIST BELONGS IS ONE ITEM, not one per character or one
+        # per key: `observations="db row: key=ACME-..."` became 28 one-letter observations and
+        # `canary_in_context` could not match; `tool_calls="SendEmail"` became calls named
+        # `S`, `e`, ... and `unknown_tool_call` fired on a declared tool. Found by a review.
+        for _f in ("tool_calls", "resolved"):
+            if isinstance(getattr(self, _f), (str, dict)):
+                object.__setattr__(self, _f, [getattr(self, _f)])
+        if isinstance(self.observations, str):
+            object.__setattr__(self, "observations", [self.observations])
+        elif isinstance(self.observations, dict):
+            object.__setattr__(self, "observations",
+                               ["%s: %s" % (_k, _v) for _k, _v in self.observations.items()])
         # `tool_calls: List[Tuple[str, str]]` is what sixteen detectors unpack, and it was true
         # of one adapter. The rest build the list from their own source, so a bare name, a
         # one-tuple or a None in the list reached detectors that had every right to expect a
@@ -194,12 +236,15 @@ class Probe:
         def _heard(t):
             _get = t.get if isinstance(t, dict) else (lambda k, d=None: getattr(t, k, d))
             return bool((_get("output") or "").strip() or _get("tool_calls")
-                        or _get("observations"))
+                        or any(str(_o or "").strip() for _o in (_get("observations") or [])))
         # AND WHAT THE TOOLS RECEIVED: a probe whose only trace is `resolved` -- a webhook that
         # carried the canary, with no prose -- was silent here and ERROR in `judge`, while
         # `canary_in_tool_call` fired on it.
         return not ((self.output or "").strip() or self.tool_calls
-                    or any(_heard(t) for t in (self.turns or [])) or self.observations
+                    or any(_heard(t) for t in (self.turns or []))
+                    # AN EMPTY OBSERVATION CAME BACK EMPTY: `[""]` read as an answer, and a
+                    # probe with nothing in it was DEFENDED. Found by an independent review.
+                    or any(str(_o or "").strip() for _o in (self.observations or []))
                     or getattr(self, "resolved", None))
 
 
@@ -302,7 +347,14 @@ def engine_version():
         here = os.path.dirname(os.path.abspath(__file__))
         rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=here,
                              capture_output=True, text=True, timeout=5)
-        if rev.returncode == 0 and rev.stdout.strip():
+        # AND THE REPOSITORY IS THIS ENGINE'S: installed into a `.venv` inside somebody's own
+        # project, `git` answered with THEIR commit, and a stale `build/lib` copy stamped the
+        # checkout's HEAD over older source. Only a repository that tracks this very file is
+        # its history. Found by an independent review.
+        _own = subprocess.run(["git", "ls-files", "--error-unmatch",
+                               os.path.basename(os.path.abspath(__file__))], cwd=here,
+                              capture_output=True, text=True, timeout=5)
+        if rev.returncode == 0 and rev.stdout.strip() and _own.returncode == 0:
             _ENGINE_VERSION = rev.stdout.strip()
             dirty = subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=here,
                                    capture_output=True, text=True, timeout=5)
@@ -417,7 +469,7 @@ def executor_turn(ex, prompt):
             err = ("AgentStopped: the agent hit its iteration limit with no final answer, no "
                    "readable reply and no tool call")
     return Probe(prompt=prompt, output=out,
-                 tool_calls=[(a.tool, str(a.tool_input)) for a, _ in real],
+                 tool_calls=[(a.tool, _arg_text(a.tool_input)) for a, _ in real],
                  observations=[str(o) for _, o in real], error=err,
                  seconds=round(_t.time() - t0, 1))
 
