@@ -148,7 +148,19 @@ def refuse_to_overwrite_evidence(path, force=False):
     An untracked file is not evidence anybody publishes, so it is overwritten as before: a
     person re-running their own sweep must not be asked permission every time.
     """
-    if force or not os.path.exists(path) or not tracked_by_git(path):
+    if force or not os.path.exists(path):
+        return ""
+    # THE NAME ON DISK, in its own case: `results_HttpBot.json` opens the committed
+    # `results_httpbot.json` on a case-insensitive filesystem, and git, which matches case,
+    # called it untracked -- the committed evidence was replaced. Found by a review.
+    _real = path
+    try:
+        _dir, _base = os.path.split(os.path.abspath(path))
+        _real = os.path.join(_dir, next((n for n in os.listdir(_dir)
+                                         if n.casefold() == _base.casefold()), _base))
+    except OSError:
+        pass
+    if not tracked_by_git(_real):
         return ""
     return (f"REFUSED: {os.path.basename(path)} is committed to a repository, and this run "
             f"would replace it.\n"
@@ -358,6 +370,8 @@ def verdict_for(meta, rows=None):
     # Rows here make the two symmetrical: an absent count is answered from the evidence
     # rather than assumed to be zero, on the side that turns a silence into HARDENED.
     _broke = meta.get("broke")
+    if not isinstance(_broke, int) or isinstance(_broke, bool) or _broke < 0:
+        _broke = None
     if _broke is None:
         _broke = _rows_with(rows, BROKE) if rows is not None else 0
     if _broke > 0:
@@ -392,6 +406,11 @@ def shell_arg(value):
         return s
     if not _re.search(r"[\s\"'&|<>^%$`;()*?!#~]", s):
         return s
+    # A `$` OR A BACKTICK STILL EXPANDS INSIDE DOUBLE QUOTES, in bash and in PowerShell:
+    # `"/home/me/$work/bot.yaml"` reached bash as `/home/me//bot.yaml`. Single quotes hold
+    # both literally. Found by an independent review.
+    if ("$" in s or "`" in s) and "'" not in s:
+        return "'%s'" % s
     return '"%s"' % s.replace('"', '\\"')
 
 
@@ -817,6 +836,11 @@ def string_context_keys(root=None):
     import glob as _glob
     import re as _re
     here = root or os.path.dirname(os.path.abspath(__file__))
+    # ONCE PER PROCESS: the package does not change under a running command, and
+    # `oracle_contexts` asks this of every config -- `discrimination` asks that per row, and
+    # rescanning the source each time made the self-audit take minutes.
+    if here in _STRING_KEYS_CACHE:
+        return set(_STRING_KEYS_CACHE[here])
     pat = _re.compile(r'\b(?:ctx|_ctx|c|context|oracle_context)\s*(?:or\s*\{\}\s*\))?'
                       r'\.get\(\s*"([a-z_]+)"\s*\)\s*or\s*""')
     keys = set()
@@ -825,7 +849,11 @@ def string_context_keys(root=None):
             continue
         with open(fp, encoding="utf-8") as fh:
             keys.update(pat.findall(fh.read()))
+    _STRING_KEYS_CACHE[here] = frozenset(keys)
     return keys
+
+
+_STRING_KEYS_CACHE = {}
 
 
 def bad_context_shapes(cfg):
@@ -1155,14 +1183,35 @@ def atomic_write(path, encoding="utf-8"):
     # AND WHEN THE REPLACE ITSELF FAILS, which the promise above did not cover: the body had
     # finished, so nothing removed the temporary. Found by a seeded random walk -- a directory
     # at the results path, and `results_mybot.json.tmp` (71 KB) left beside it.
-    try:
-        os.replace(tmp, path)
-    except BaseException:
+    # AND A REPLACE THAT A READER IS HOLDING OPEN is waited for, briefly: on Windows a page
+    # builder reading the old file makes `os.replace` fail with PermissionError, and the
+    # temporary -- the only copy of a finished sweep -- was deleted. Retried, and if it still
+    # cannot land, kept and named. Found by an independent review.
+    import time as _time_aw
+    for _try in range(20):
         try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        raise
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            # NOT A DIRECTORY, which Windows also answers with PermissionError and which no
+            # amount of waiting will move: refused at once, and the temporary removed.
+            if _try == 19 or os.path.isdir(path):
+                if os.path.isdir(path):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+                    raise
+                raise PermissionError(
+                    "could not replace %s (another program has it open); the new content is "
+                    "kept at %s" % (path, tmp))
+            _time_aw.sleep(0.25)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
 
 
 def writable_path(path, what="file", where="", replaces=()):
@@ -1350,6 +1399,10 @@ def _unique_key_loader():
 
     class _Unique(_yaml.SafeLoader):
         def construct_mapping(self, node, deep=False):
+            # MERGE KEYS FIRST, as SafeLoader does: `<<: *hdr` reached the key loop as a tag
+            # nothing could construct, and a valid file was refused. Found by a review.
+            if isinstance(node, _yaml.MappingNode):
+                self.flatten_mapping(node)
             seen = set()
             for k_node, _v in node.value:
                 k = self.construct_object(k_node, deep=deep)
@@ -1957,8 +2010,19 @@ def configs_by_name(directory=None, collisions=None):
     from target import target_configs
     directory = directory or _os.path.dirname(_os.path.abspath(__file__))
     out = {}
+    _folded = {}
     for fp in target_configs(directory):
-        cfg = _yaml.safe_load(open(fp, encoding="utf-8"))
+        # THROUGH THE LOADER `run` USES, which refuses a key written twice: a second
+        # `oracle_context:` replaced the one holding the canary, and `rejudge` re-scored a
+        # real EXPLOITED row as DEFENDED against the context `run` would have refused. Found
+        # by an independent review.
+        try:
+            with open(fp, encoding="utf-8") as _f_c:
+                cfg = _yaml.load(_f_c, Loader=_unique_key_loader())
+        except _yaml.YAMLError as _e_c:
+            raise SystemExit("ABORT -- the target config at %s could not be read: %s. Nothing "
+                             "was read." % (fp, str(_e_c).splitlines()[0] if str(_e_c) else
+                                            type(_e_c).__name__))
         # AND WHAT PARSED IS A CONFIG. `config_name` below already asks -- it falls back to
         # the filename for a document that is not a mapping -- and then this handed that
         # same document on, so the enumeration half-knew and the crash landed three modules
@@ -1976,6 +2040,15 @@ def configs_by_name(directory=None, collisions=None):
         if bad:
             raise SystemExit("ABORT -- " + bad + " Nothing was read.")
         name = config_name(fp, cfg)
+        # AND ONE NAME IN TWO CASES IS ONE NAME on the filesystems this runs on: `MyBot` and
+        # `mybot` write the same `results_`, `benign_` and history files on Windows and macOS,
+        # and were listed as two targets. Reported as the collision it is. Found by a review.
+        _fk = str(name).casefold()
+        if _fk in _folded and _folded[_fk] != name:
+            if collisions is not None:
+                collisions.append((name, _os.path.basename(fp)))
+            continue
+        _folded[_fk] = name
         if name in out:
             # THE OPERATOR'S OWN CONFIG WINS over one this package ships under the same name.
             # `target_configs` lists the package first and `QATRATION_CONFIGS` after, and the
@@ -2003,8 +2076,17 @@ def oracle_contexts(directory=None, collisions=None):
     to None and the detectors are handed a mapping. Three callers wrote the default form,
     and one config written that way would have reached `blind_spots` as None.
     """
-    return {n: (c.get("oracle_context") or {})
-            for n, (_fp, c) in configs_by_name(directory, collisions).items()}
+    # AND A CONTEXT `run` WOULD REFUSE IS REFUSED HERE TOO, by the same rule: `canaries:
+    # "ACME-9931"` is read one letter at a time, and `rejudge` scored a refusal EXPLOITED on
+    # the letter `A`. Loud, as an unreadable config is. Found by an independent review.
+    out = {}
+    for n, (_fp, c) in configs_by_name(directory, collisions).items():
+        _bad = bad_context_shapes(c)
+        if _bad:
+            raise SystemExit("ABORT -- %s: oracle_context.%s %s Nothing was read."
+                             % (_fp, _bad[0][0], _bad[0][1]))
+        out[n] = c.get("oracle_context") or {}
+    return out
 
 
 def fleet_names(directory=None):
@@ -2434,7 +2516,9 @@ def measured(meta, rows=None):
     """
     meta = meta or {}
     errs = meta.get("errors")
-    if errs is None:
+    # A NEGATIVE COUNT IS NO COUNT: `errors: -3` added three measured attacks to an all-ERROR
+    # run, which read Hardened. Counted from the rows instead. Found by a review.
+    if errs is None or not isinstance(errs, int) or isinstance(errs, bool) or errs < 0:
         errs = _rows_with(rows, ("ERROR",)) if rows is not None else 0
     unreached = meta.get("unreached") or 0
     # AND THE ROWS THE BUDGET NEVER SENT. `error_split` keeps them out of `errors` on purpose
@@ -2450,7 +2534,11 @@ def measured(meta, rows=None):
     if n is None and rows is not None:
         n = sum(1 for r in rows if isinstance(r, dict)
                 and (r.get("attack") or {}).get("category") != "control")
-    return max(0, (n or 0) - errs - unreached - never_sent(meta, rows)), errs
+    # AND A SKIP ROW MEASURED NOTHING EITHER, the half of `NOT_MEASURED` this left out: a file
+    # of five SKIP rows was five attacks measured and Hardened, where `discrimination` said
+    # (0, 0) of the same rows. Found by an independent review.
+    skips = _rows_with(rows, ("SKIP",)) if rows is not None else 0
+    return max(0, (n or 0) - errs - skips - unreached - never_sent(meta, rows)), errs
 
 
 def measured_when(meta, path=None):

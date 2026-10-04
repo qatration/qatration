@@ -1425,6 +1425,120 @@ def check_every_command_refuses():
     return fails
 
 
+def check_shared_rules_review():
+    """An independent review of the shared rules: what `run` refuses, every replay refuses;
+    a SKIP row measured nothing; one name in two cases is one name; a held file is waited
+    for; a negative counter is no counter; a merge key is YAML; a `$` stays literal."""
+    import tempfile as _tf_s, shutil as _sh_s, io
+    import workspace as _w_s
+    bad = []
+
+    def check(label, got, want):
+        ok = got == want
+        print("%s  %s -> %r" % ("PASS" if ok else "FAIL", label, got))
+        if not ok:
+            bad.append("%s: expected %r, got %r" % (label, want, got))
+
+    _d = _tf_s.mkdtemp()
+    try:
+        def _cfg(name, body):
+            _pc = os.path.join(_d, name)
+            io.open(_pc, "w", encoding="utf-8").write(body)
+            return _pc
+
+        # A CONTEXT `run` REFUSES IS REFUSED BY THE ENUMERATION EVERY REPLAY READS.
+        _scal = os.path.join(_d, "scal")
+        os.makedirs(_scal)
+        io.open(os.path.join(_scal, "targets_scalbot.yaml"), "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: scalbot" + chr(10)
+            + "oracle_context:" + chr(10) + '  canaries: "ACME-9931"' + chr(10))
+        try:
+            _w_s.oracle_contexts(_scal)
+            _r1 = "read"
+        except SystemExit as _e1:
+            _r1 = "refused" if "canaries" in str(_e1) else str(_e1)[:80]
+        check("a canary written as one string is refused by the replay's enumeration",
+              _r1, "refused")
+        _dup = os.path.join(_d, "dup")
+        os.makedirs(_dup)
+        io.open(os.path.join(_dup, "targets_dupbot.yaml"), "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: dupbot" + chr(10)
+            + "oracle_context:" + chr(10) + '  canaries: ["A-1"]' + chr(10)
+            + "oracle_context:" + chr(10) + '  canaries: ["B-2"]' + chr(10))
+        try:
+            _w_s.configs_by_name(_dup)
+            _r2 = "read"
+        except SystemExit as _e2:
+            _r2 = "refused" if "twice" in str(_e2) else str(_e2)[:80]
+        check("...and a config with a key written twice is refused there too", _r2, "refused")
+        # ONE NAME IN TWO CASES IS ONE NAME.
+        _case = os.path.join(_d, "case")
+        os.makedirs(_case)
+        for _fn, _nm in (("targets_a.yaml", "MyBot"), ("targets_b.yaml", "mybot")):
+            io.open(os.path.join(_case, _fn), "w", encoding="utf-8").write(
+                "adapter: http" + chr(10) + "name: %s" % _nm + chr(10))
+        _coll = []
+        _names = sorted(_w_s.configs_by_name(_case, _coll))
+        check("two configs whose names differ only in case are one target and a collision",
+              (len(_names), len(_coll)), (1, 1))
+        # A MERGE KEY IS YAML.
+        _mk = _cfg("merge.yaml", "base: &hdr" + chr(10) + "  adapter: http" + chr(10)
+                   + "  name: mergebot" + chr(10) + "<<: *hdr" + chr(10))
+        try:
+            _doc = _w_s.load_yaml_or_refuse(_mk)
+            _r4 = _doc.get("name")
+        except SystemExit as _e4:
+            _r4 = "refused: %s" % str(_e4)[:80]
+        check("a config using a YAML merge key is read", _r4, "mergebot")
+        # A SKIP ROW MEASURED NOTHING; A NEGATIVE COUNTER IS NO COUNTER.
+        _skips = [{"attack": {"id": "s%d" % i, "category": "x"}, "headline": "SKIP"}
+                  for i in range(5)]
+        check("five SKIP rows measured nothing", _w_s.measured({}, _skips)[0], 0)
+        check("...and are not Hardened", _w_s.verdict_for({}, _skips), "Not measured")
+        _errs = [{"attack": {"id": "e%d" % i, "category": "x"}, "headline": "ERROR"}
+                 for i in range(3)]
+        check("a negative errors count does not add measured attacks",
+              _w_s.measured({"attacks_n": 3, "errors": -3}, _errs)[0], 0)
+        _brk = [{"attack": {"id": "b", "category": "x"}, "headline": "EXPLOITED"}]
+        check("...nor does a negative breach count make a breach Hardened",
+              _w_s.verdict_for({"attacks_n": 1, "errors": 0, "broke": -1}, _brk), "Vulnerable")
+        # A REPLACE THAT A READER HOLDS IS WAITED FOR, NOT THROWN AWAY.
+        _held = os.path.join(_d, "results_held.json")
+        io.open(_held, "w", encoding="utf-8").write("old")
+        import threading as _thr_s, time as _tm_s
+        _fh = open(_held, "rb")
+        _thr_s.Timer(0.6, _fh.close).start()
+        try:
+            with _w_s.atomic_write(_held) as _f_h:
+                _f_h.write("new")
+            _r6 = io.open(_held, encoding="utf-8").read()
+        except Exception as _e6:
+            _r6 = "raised %s" % type(_e6).__name__
+        check("a file a reader holds for a moment is still replaced, not lost", _r6, "new")
+        # THE EVIDENCE GUARD ASKS GIT ABOUT THE FILE ON DISK, in its own case.
+        import subprocess as _sp_g
+        _gr = os.path.join(_d, "repo")
+        os.makedirs(_gr)
+        _git = lambda *a: _sp_g.run(["git"] + list(a), cwd=_gr, capture_output=True, text=True)
+        _git("init", "-q")
+        io.open(os.path.join(_gr, "results_httpbot.json"), "w", encoding="utf-8").write("{}")
+        _git("add", "results_httpbot.json")
+        _git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "evidence")
+        _other_case = os.path.join(_gr, "results_HttpBot.json")
+        if os.path.exists(_other_case):            # a case-insensitive filesystem
+            check("a committed results file is guarded under any spelling of its case",
+                  bool(_w_s.refuse_to_overwrite_evidence(_other_case)), True)
+        else:
+            print("SKIP  the case-insensitive evidence guard: this filesystem tells the two "
+                  "spellings apart, so it was NOT exercised")
+        # A `$` STAYS LITERAL.
+        check("a path with a dollar sign is quoted where it does not expand",
+              _w_s.shell_arg("/home/me/$work/bot.yaml"), "'/home/me/$work/bot.yaml'")
+    finally:
+        _sh_s.rmtree(_d, ignore_errors=True)
+    return bad
+
+
 def check_esc():
     """One escaper, and a control set that covers what this arsenal attacks with.
 
@@ -2642,8 +2756,11 @@ def main():
             if not isinstance(_fn_p, (_ast9.FunctionDef, _ast9.AsyncFunctionDef)):
                 continue
             _names_p = _asks(_fn_p)
+            # AND THROUGH THE DUPLICATE-KEY LOADER, which is a parse too: `configs_by_name`
+            # moved onto it and the scan stopped seeing the one loop it exists to point at.
             if "target_configs" in _names_p and ("safe_load" in _names_p
-                                                 or "load_yaml_or_refuse" in _names_p):
+                                                 or "load_yaml_or_refuse" in _names_p
+                                                 or "_unique_key_loader" in _names_p):
                 _own_loops.append((_f_p, _fn_p.name))
     def _unexcused_loops(found, excused):
         """The private loops nobody wrote a reason for. The gate's whole decision.
@@ -3366,7 +3483,7 @@ if __name__ == "__main__":
     check_config_model()
     _f = (check_one_name_rule() + check_ctx_read_forms() + check_one_breach_rule()
           + check_unread_context_keys() + check_context_shapes() + check_esc()
-          + check_every_command_refuses())
+          + check_every_command_refuses() + check_shared_rules_review())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()
