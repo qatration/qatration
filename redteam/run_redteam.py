@@ -682,15 +682,25 @@ def nothing_measured(results):
         p = t.get("probe") or {}
         if p.get("error") or t.get("verdict") == "ERROR":
             return True
-        return not ((p.get("output") or "").strip() or p.get("tool_calls")
-                    or p.get("turns") or p.get("observations"))
+        # THROUGH `Probe.silent`, the one rule for "nothing came back": this copy ignored
+        # `resolved`, so a run whose every trial the oracle judged DEFENDED on what the tools
+        # received was thrown away as NOTHING MEASURED. Found by an independent review.
+        if not isinstance(p, dict):
+            return not p
+        from target import Probe as _P_nm
+        return _P_nm(prompt="", output=p.get("output") or "",
+                     tool_calls=p.get("tool_calls") or [], observations=p.get("observations") or [],
+                     turns=p.get("turns") or [], resolved=p.get("resolved") or []).silent()
 
     # AND A CONTROL IS NOT THE MEASUREMENT. A control that answered while every attack came
     # back `HTTP 403 blocked by WAF` made this False, so the run exited 0 -- `--fail-on any`
     # said PASS over zero scored attacks -- and the ERROR-only results overwrote the last
     # good file. Found by an independent review.
     _attacks = [r for r in results if (r.get("attack") or {}).get("category") != "control"]
-    return bool(_attacks) and all(blank(t) for r in _attacks for t in r.get("trials", []))
+    # AND NO ATTACK ROW AT ALL IS NOTHING MEASURED: controls sent first tripped the wall, no
+    # attack was ever reached, and `bool(_attacks)` answered False -- the good file was
+    # replaced by control rows and `--fail-on any` passed, exit 0. Found by a review.
+    return all(blank(t) for r in _attacks for t in (r.get("trials") or []))
 
 
 def cell(value, width):
@@ -730,6 +740,7 @@ def is_unmeasurable(attack, dead):
 
 # THE RECORD THIS PROCESS OPENED, so the one door out can close it. See `_closes_open_run`.
 _OPEN_RUN = None
+_OPEN_TARGET = None
 
 
 def _close_open_run(exc):
@@ -752,8 +763,11 @@ def _close_open_run(exc):
                 else "exited with code %s before the run finished" % code)
     else:
         note = "crashed: %s: %s" % (type(exc).__name__, str(exc)[:200])
+    # WITH WHAT IT SPENT: the interrupted run is the one whose cost a reader most needs, and
+    # it was recorded as `spent: {}`. Found by an independent review.
     try:
-        _runs.finish(OUT_DIR, rec, "aborted", note=note)
+        _runs.finish(OUT_DIR, rec, "aborted", note=note,
+                     spent=_spend(_OPEN_TARGET) if _OPEN_TARGET is not None else None)
     except Exception:
         pass
 
@@ -944,8 +958,8 @@ def main():
                        authorization=_auth, budgets=_budgets,
                        engine=engine_version(), arsenal=os.path.basename(args.attacks),
                        trials=trials)
-    global _OPEN_RUN
-    _OPEN_RUN = _rec
+    global _OPEN_RUN, _OPEN_TARGET
+    _OPEN_RUN, _OPEN_TARGET = _rec, target
 
     def _refuse(code, note):
         """Close the record, then exit. THE RECORD IS OPEN FROM HERE ON.
@@ -1017,28 +1031,6 @@ def main():
         # clears it is a flag or QATRATION_OUT rather than anything about the target.
         print(_refusal, file=sys.stderr)
         _refuse(2, "refused to replace committed evidence; nothing was sent and nothing was written")
-
-    # THROUGH `honeytoken.precondition`, the one statement of what a sweep is refused for
-    # before its first attack -- `onboard.check` asks the same function, so a config it calls
-    # ready is one this will start.
-    _verify = (ctx.get("honeytoken_verify") or "").strip()
-    _pre = _ht.precondition(target, ctx)
-    if _pre is not None:
-        _code, _label, _sentence, _p = _pre
-        # The reply is quoted only when there WAS one. On a refused connection the old line
-        # printed `it said instead: ''`, which reads as a bot that answered with nothing
-        # rather than as an endpoint that was never reached.
-        _said = (f"  it said instead: {((_p.output if _p else '') or '')[:160]!r}\n"
-                 if _label == "NOT PLANTED" else "")
-        # AND WHAT WAS SENT, which is one ordinary question where the verifier was asked for:
-        # "nothing was sent" was printed over the request that found it missing.
-        _sent_what = ("no attack was sent (only the question asking for the verifier)"
-                      if _p is not None else "nothing was sent")
-        print(f"ABORT — {_sentence}\n{_said}"
-              f"  {_sent_what} and nothing was written.", file=sys.stderr)
-        _refuse(_code, f"{_sentence}; {_sent_what} and nothing was written")
-    if [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)] and _verify:
-        print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
 
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
@@ -1127,6 +1119,30 @@ def main():
                   % (_aid, _c), file=sys.stderr)
         _refuse(2, "%d attack(s) send the target's own canary; nothing was sent and nothing "
                    "was written" % len(_typed))
+    # AFTER THE CHECKS THAT NEED NO NETWORK: the verifier probe below is a request, and a bad
+    # arsenal refused after it said "Nothing was sent" over that request. Found by a review.
+    # THROUGH `honeytoken.precondition`, the one statement of what a sweep is refused for
+    # before its first attack -- `onboard.check` asks the same function, so a config it calls
+    # ready is one this will start.
+    _verify = (ctx.get("honeytoken_verify") or "").strip()
+    _pre = _ht.precondition(target, ctx)
+    if _pre is not None:
+        _code, _label, _sentence, _p = _pre
+        # The reply is quoted only when there WAS one. On a refused connection the old line
+        # printed `it said instead: ''`, which reads as a bot that answered with nothing
+        # rather than as an endpoint that was never reached.
+        _said = (f"  it said instead: {((_p.output if _p else '') or '')[:160]!r}\n"
+                 if _label == "NOT PLANTED" else "")
+        # AND WHAT WAS SENT, which is one ordinary question where the verifier was asked for:
+        # "nothing was sent" was printed over the request that found it missing.
+        _sent_what = ("no attack was sent (only the question asking for the verifier)"
+                      if _p is not None else "nothing was sent")
+        print(f"ABORT — {_sentence}\n{_said}"
+              f"  {_sent_what} and nothing was written.", file=sys.stderr)
+        _refuse(_code, f"{_sentence}; {_sent_what} and nothing was written")
+    if [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)] and _verify:
+        print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
+
     # AND THE TEMPLATE'S OWN WORDS, IF THEY ARE STILL THERE. `onboard` says this too and a
     # reader can skip `onboard`; this is the command that writes the artifact, and
     # `config_model` reads `request.model` straight into `meta["model"]`, from where the
@@ -1431,7 +1447,9 @@ def main():
         attacks, held = breadth_slice(attacks)
         not_sent += len(held)
         skipped = not_applicable + not_sent
-        print(f"  · limited run: one attack from each of {len(attacks)} categories, "
+        # CATEGORIES OF ATTACKS: the controls kept beside them are not categories tested.
+        _cats_q = {a.get("category") for a in attacks if a.get("category") != "control"}
+        print(f"  · limited run: one attack from each of {len(_cats_q)} categories, "
               f"{len(held)} more not sent — a short run is a BROAD run rather than a deep one, "
               f"and every probe is a request to your own endpoint, on your own bill")
 
@@ -1665,6 +1683,13 @@ def main():
                     and r.get("headline") != "ERROR"
                     and any(str(((t.get("probe") or {}).get("error")) or "").startswith(_NS_cut)
                             for t in (r.get("trials") or [])))
+    # A BUDGET THAT LOST NOTHING DID NOT STOP THE RUN. `exhausted` means "spent", and a run
+    # sized exactly to its budget sent every probe: it was recorded `stopped`, and every
+    # `--fail-on regression` against it answered CANNOT ANSWER, exit 3. `closing_line` keeps
+    # this rule already; the record, the meta and history read the same answer now. Found
+    # by an independent review.
+    if not (_never_sent_rows or _cut_rows):
+        _budget_note = ""
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials, why_errored=_why_err,
                               never_sent=_never_sent_rows, wall=_rl_stopped,

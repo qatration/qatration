@@ -1276,8 +1276,11 @@ def main():
           not nothing_measured(_trials({"error": "TIMEOUT"}, {"output": "an answer"})))
     check("...and an agent that called a tool and said nothing has told us something",
           not nothing_measured(_trials({"output": "", "tool_calls": [["lookup", "x"]]})))
-    check("...and no results at all is not a sweep that measured nothing",
-          not nothing_measured([]))
+    # NO ATTACK ROW AT ALL IS NOTHING MEASURED: the sweep calls this after the loop, where an
+    # empty list means nothing was sent -- controls first tripped the wall, and the good file
+    # was replaced by control rows under CI GATE: PASS. Found by an independent review.
+    check("...and a sweep that left no attack row measured nothing",
+          nothing_measured([]) is True)
 
     # --- the sweep's exit code has to carry what happened -------------------------------
     # run_all regenerated the aggregates and printed "sweep done" regardless. The
