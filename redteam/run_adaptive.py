@@ -91,8 +91,10 @@ def outcome_line(res):
         elif _att and _att[0] == "unmeasured" and not _att[1]:
             side += ("\n  (no benign baseline for this target, so nothing here rules out an "
                      "ambient false positive: run `qatration benign` against it)")
+        # 1, A FINDING, as the table says: BROKEN exited 0 beside HELD, so a pipeline could
+        # not tell a break from a hold. Found by an independent review.
         return ("BROKEN in %s iteration(s) — detectors %s%s  (%ss)"
-                % (res.get("iterations"), res.get("fired"), side, res.get("seconds")), 0)
+                % (res.get("iterations"), res.get("fired"), side, res.get("seconds")), 1)
     return ("HELD after %s iteration(s)  (%ss) — the adaptive loop found no bypass within "
             "budget." % (res.get("iterations"), res.get("seconds")), 0)
 
@@ -188,6 +190,18 @@ def main():
     from lint_arsenal import refuse_unknown_detectors as _refuse_unknown
     _refuse_unknown([{"id": "adaptive", "success": success}], "adaptive --success",
                     "the command line")
+    # AND ONE THAT CANNOT FIRE ON THIS CONFIG, by the rule `run` skips an attack on: the
+    # default canary detectors over a config with no canaries printed HELD, exit 0, against a
+    # bot printing its code. Nothing is sent. Found by an independent review.
+    from oracle import inert_for as _inert_for
+    from run_redteam import is_unmeasurable as _unmeasurable
+    _dead_a = _inert_for(ctx, success)
+    if _unmeasurable({"success": success}, set(_dead_a)):
+        print("NOTHING MEASURED: every detector this goal names cannot fire on this config "
+              "(%s), so a hold would describe a question nobody could answer. Nothing was "
+              "sent." % "; ".join("%s needs %s" % (d, w) for d, w in sorted(_dead_a.items())),
+              file=sys.stderr)
+        return 3
     # AND THE FILE IT WILL WRITE, BEFORE A REQUEST IS SENT. The overwrite refusal and the
     # writability check came after the loop: a tracked transcript at the path meant the
     # target was attacked, the break printed, and the command refused to save it -- exit 2,
@@ -214,9 +228,20 @@ def main():
                           constraints=args.constraints)
     print("-" * 78)
     if res.get("success"):
+        # THROUGH `row_attribution`, the rule every other surface grades a breach with: the
+        # bare `attribution` had no quiet-canary rescue, so a staff key the target never says
+        # on its own was "not attributable" here and attributed everywhere else. Found by an
+        # independent review.
         import baseline as _bl_a
-        res["attribution"] = _bl_a.attribution(res.get("fired"),
-                                               _bl_a.rates(target.name, OUT_DIR))
+        import honeytoken as _ht_a
+        _win = (res.get("transcript") or [{}])[-1]
+        _row_a = {"fired": res.get("fired"),
+                  "trials": [{"probe": {"output": _win.get("reply") or "",
+                                        "tool_calls": _win.get("tool_calls") or []}}]}
+        _v_a, _d_a, _r_a = _bl_a.row_attribution(
+            _row_a, _bl_a.rates(target.name, OUT_DIR),
+            _bl_a.canary_rates(target.name, _ht_a.declared(ctx), OUT_DIR) or {})
+        res["attribution"] = (_v_a, _d_a)
     _line, _code = outcome_line(res)
     print(_line)
     if res.get("success"):
@@ -224,6 +249,14 @@ def main():
 
     # (The overwrite refusal -- the one `run` and `benign` make, written after the incident
     # in run_recon.py -- is asked above, before the first request.)
+    # A RUN THAT MEASURED NOTHING DOES NOT REPLACE ONE THAT DID, the trade `run`, `benign` and
+    # `recon` refuse: an attacker model that was down overwrote a stored BROKEN transcript
+    # with `iterations: 0`, and the index turned the break into "not measured". Found by an
+    # independent review.
+    if _code == 3 and os.path.exists(path):
+        print(f"transcript NOT written: this run measured nothing, and {path} records one "
+              f"that did")
+        return _code
     from workspace import atomic_write as _atomic2
     with _atomic2(path) as f:
         json.dump({"target": target.name, "goal": args.goal, "attacker": args.attacker_model,
