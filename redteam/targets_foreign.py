@@ -17,7 +17,7 @@ adapter degrades to output-only when it does not.
 """
 import json, time, urllib.request
 from target import Probe, Target
-from targets_http import read_capped as _read_capped
+from targets_http import read_capped as _read_capped, _OPENER
 
 
 def _as_list(v):
@@ -43,7 +43,11 @@ class ForeignAgentTarget(Target):
         t0 = time.time()
         calls, obs, res, reply, err = [], [], [], "", None
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            # THROUGH THE GUARDED OPENER, as `targets_http` sends: plain `urlopen` followed a
+            # redirect to any host or port and took a proxy from the environment, so a 302 to
+            # the service next door came back as this target's reply -- an attack never
+            # delivered, scored as a defence. Found by an independent review.
+            with _OPENER.open(req, timeout=self.timeout) as r:
                 # CAPPED, like every other read of a target's answer in this repo. `r.read()`
                 # with no argument reads to EOF, which lets the system under test choose this
                 # process's memory -- the sentence `MAX_REPLY` was written for, applied to one

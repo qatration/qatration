@@ -28,6 +28,66 @@ URL = "https://api.acmeshop.example/v1/chat"
 OTHER = "https://api.someone-else.example/v1/chat"
 
 
+def _review_gate_66(check, az):
+    """An independent review of the gate: a refused proxy is named as the proxy; an empty
+    url is a config problem hosted too; a proof file with a byte-order mark holds its
+    token; site-local IPv6 is private."""
+    import contextlib as _cl6, io as _io6
+    _saved = os.environ.get("QATRATION_HOSTED")
+    os.environ["QATRATION_HOSTED"] = "1"
+    _err = _io6.StringIO()
+    try:
+        try:
+            with _cl6.redirect_stderr(_err):
+                az.gate({"name": "px", "url": "https://93.184.216.34/chat",
+                         "proxy": "http://10.0.0.5:3128"}, "test")
+            _why = "passed"
+        except az.NotAuthorised as _e:
+            _why = str(getattr(_e, "why", "") or _e)
+        check("hosted, a private proxy is refused under its own name",
+              "proxy http://10.0.0.5:3128" in _why and "93.184.216.34" not in _why, _why)
+        try:
+            az.gate({"name": "nourl"}, "test")
+            _kind = "passed"
+        except az.NotAuthorised:
+            _kind = "not authorised"
+        except SystemExit:
+            _kind = "config"
+        check("hosted, a config with no url is a config problem, not an authorisation one",
+              _kind == "config", _kind)
+    finally:
+        if _saved is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _saved
+    check("a site-local IPv6 address is refused by the hosted policy",
+          az.unreachable_by_policy("http://[fec0::1]/chat") is not None,
+          str(az.unreachable_by_policy("http://[fec0::1]/chat")))
+    # A PROOF FILE SAVED WITH A BYTE-ORDER MARK.
+    import threading as _th6
+    from http.server import BaseHTTPRequestHandler as _BH6, ThreadingHTTPServer as _TS6
+
+    class _W(_BH6):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            _b = chr(0xFEFF).encode("utf-8") + b"qatration-proof-token" + bytes([10])
+            self.send_response(200)
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+    _s6 = _TS6(("127.0.0.1", 0), _W)
+    _th6.Thread(target=_s6.serve_forever, daemon=True).start()
+    try:
+        _got = az._http_get("http://127.0.0.1:%d/x" % _s6.server_address[1])
+    finally:
+        _s6.shutdown()
+    check("a proof file that opens with a byte-order mark starts with its token",
+          _got.startswith("qatration-proof-token"), repr(_got[:30]))
+
+
 def main():
     fails, checks = [], 0
 
@@ -1297,6 +1357,7 @@ def main():
           _gh2 is not None and not isinstance(_gh2, az.NotAuthorised)
           and "not a URL a target can be reached at" in str(_gh2), repr(_gh2))
 
+    _review_gate_66(check, az)
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -361,6 +361,102 @@ def _second_review_of_replies(check):
         srv.shutdown()
 
 
+def _third_review_of_replies(check):
+    """An independent review of the HTTP adapters: every adapter refuses a redirect to the
+    service next door; valid UTF-8 is UTF-8 whatever the label; a 403 after a success keeps
+    its words; a header is one header in any case; `insert_before` is read when loaded."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    from targets_httpbot import HttpTarget as _HB
+    from targets_foreign import ForeignAgentTarget as _FA
+    from targets_localrag import LocalRagTarget as _LR
+    _st = {"n": 0, "mode": "redirect", "to": ""}
+
+    class _H(_BH):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, body, ctype="application/json", loc=None):
+            self.send_response(code)
+            if loc:
+                self.send_header("location", loc)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            self._send(200, _j.dumps({"reply": "Hi! How can I help?"}).encode(),
+                       "text/plain")
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _st["n"] += 1
+            if _st["mode"] == "redirect":
+                self._send(302, b"", loc=_st["to"])
+            elif _st["mode"] == "latin1":
+                self._send(200, _j.dumps({"reply": "I can\u2019t help with that."},
+                                         ensure_ascii=False).encode("utf-8"),
+                           "application/json; charset=ISO-8859-1")
+            elif _st["mode"] == "waf":
+                if _st["n"] == 1:
+                    self._send(200, _j.dumps({"reply": "fine"}).encode())
+                else:
+                    self._send(403, b"Request blocked by WAF rule 942100", "text/html")
+
+    _a, _b = _TS(("127.0.0.1", 0), _H), _TS(("127.0.0.1", 0), _H)
+    for _s in (_a, _b):
+        _th.Thread(target=_s.serve_forever, daemon=True).start()
+    _ua = "http://127.0.0.1:%d/chat" % _a.server_address[1]
+    _st["to"] = "http://127.0.0.1:%d/" % _b.server_address[1]
+    try:
+        # A REDIRECT TO THE SERVICE NEXT DOOR, through every adapter.
+        for _nm, _mk in (("httpbot", lambda: _HB(url=_ua)), ("foreign", lambda: _FA(url=_ua, timeout=10)),
+                         ("localrag", lambda: _LR(url=_ua))):
+            _p = _mk().send("hi")
+            check("the %s adapter does not take the service next door's greeting as a reply"
+                  % _nm, "Hi! How" not in (_p.output or "") and bool(_p.error),
+                  "output=%r error=%r" % ((_p.output or "")[:60], _p.error))
+        # VALID UTF-8 IS UTF-8 WHATEVER THE LABEL.
+        _st["mode"] = "latin1"
+        _p = _HT(url=_ua, name="cs", request={"message": "{prompt}"},
+                 response={"reply": "reply"}).send("hi")
+        check("a UTF-8 body labelled ISO-8859-1 is read as UTF-8",
+              (_p.output or "") == "I can\u2019t help with that.", repr(_p.output))
+        # A 403 AFTER A SUCCESS KEEPS ITS WORDS.
+        _st["mode"], _st["n"] = "waf", 0
+        _t = _HT(url=_ua, name="waf", request={"message": "{prompt}"},
+                 response={"reply": "reply"})
+        _t.send("one")
+        _p = _t.send("two")
+        check("a 403 after a success carries the endpoint's own words",
+              "WAF rule 942100" in (_p.error or ""), repr(_p.error))
+        check("...and does not only say the credential expired",
+              "firewall" in (_p.error or ""), repr(_p.error))
+    finally:
+        _a.shutdown()
+        _b.shutdown()
+    # A HEADER IS ONE HEADER IN ANY CASE.
+    _t = _HT(url=_ua, name="ct", request={"message": "{prompt}"}, response={"reply": "reply"},
+             headers={"content-type": "text/plain"})
+    check("a config's lowercase content-type is kept, not joined by a default",
+          sorted(k for k in _t.headers if k.lower() == "content-type") == ["content-type"],
+          repr(_t.headers))
+    # `insert_before` IS READ WHEN THE CONFIG IS.
+    _msgs = {"messages": [{"role": "system", "content": "s"},
+                          {"role": "user", "content": "{prompt}"}]}
+    for _ib, _ok in (("two", False), (0, False), (3, False), (True, False), (1, True), (2, True)):
+        try:
+            _HT(url=_ua, name="ib", request=_msgs, response={"reply": "reply"},
+                history={"field": "messages", "mode": "splice", "insert_before": _ib})
+            _got = True
+        except SystemExit:
+            _got = False
+        check("history.insert_before %r is %s when the config is read"
+              % (_ib, "accepted" if _ok else "refused"), _got == _ok, repr(_got))
+
+
 def main():
     fails, checks = [], 0
 
@@ -2070,6 +2166,7 @@ def main():
         _rsrv.shutdown()
 
     _second_review_of_replies(check)
+    _third_review_of_replies(check)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

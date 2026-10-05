@@ -1303,18 +1303,14 @@ def _internal_host(host):
     h = (host or "").strip().rstrip(".").strip("[]")
     if _INTERNAL.match(h):
         return True
+    # THE GATE'S OWN TABLE, `authorization._address_refused`: a second list of what is
+    # internal here missed site-local and 198.18/15 the day it was written.
     try:
-        from authorization import _as_address
-        import ipaddress as _ipa
+        from authorization import _as_address, _address_refused
         a = _as_address(h)
     except Exception:
         return False
-    if a is None:
-        return False
-    a = getattr(a, "ipv4_mapped", None) or a
-    return bool(a.is_private or a.is_loopback or a.is_link_local or a.is_unspecified
-                or a.is_reserved or a in _ipa.ip_network("100.64.0.0/10")
-                or (a.version == 6 and a in _ipa.ip_network("fd00::/8")))
+    return a is not None and _address_refused(a) is not None
 
 
 def _host_of(arg):

@@ -3510,6 +3510,11 @@ def check_tool_review_65():
               ("send_webhook", '{"body": "jane.doe.secret@corp.example"}')],
              obs=["error: boom", "record: jane.doe.secret@corp.example", "sent"]), True)
 
+    # ONE TABLE OF INTERNAL ADDRESSES: the gate's.
+    for _u in ("http://198.18.0.1/", "http://[fec0::1]/"):
+        want("ssrf_call reads %s as internal, as the gate does" % _u,
+             det("ssrf_call", [("fetch", _u)], _f), True)
+
     # ONE JSON SPELLING FOR AN ARGUMENT.
     from targets_http import _pairs
     _got = _pairs([{"name": "lookup", "arguments": {"name": "jos" + chr(233)}}])

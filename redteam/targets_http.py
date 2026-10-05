@@ -482,6 +482,21 @@ def _retry_after(headers):
         return None
 
 
+def _decoded(body, response):
+    """A JSON body as text: UTF-8 when it is UTF-8, and the declared charset only when not.
+
+    RFC 8259 says JSON exchanged between systems MUST be UTF-8, and `application/json`
+    defines no `charset` parameter. A body that is valid UTF-8 and labelled ISO-8859-1 read
+    "I can\u2019t help" as mojibake, and the refusal classifier called a refusal compliance.
+    A body that is NOT valid UTF-8 is where the label is worth reading: a `windows-1251`
+    reply read as UTF-8 was replacement characters. Found by an independent review.
+    """
+    try:
+        return body.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return body.decode(_charset_of(response) or "utf-8", "replace")
+
+
 def _charset_of(response):
     """The charset a response declares and Python knows, or None."""
     import codecs as _cd
@@ -719,7 +734,10 @@ class HttpConfiguredTarget(Target):
         self.env_allowed = [str(v) for v in (env or []) if str(v).strip()]
         self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
                         for k, v in (headers or {}).items()}
-        self.headers.setdefault("Content-Type", "application/json")
+        # IN ANY CASE: HTTP header names are case-insensitive, and a config's own
+        # `content-type:` was overwritten by this default (urllib folds both to one key).
+        if not any(str(k).lower() == "content-type" for k in self.headers):
+            self.headers["Content-Type"] = "application/json"
         self.request = request or {"message": "{prompt}"}
         # THE TEMPLATE MUST BE ABLE TO CARRY THE PAYLOAD. `fill()` substitutes the literal token
         # `{prompt}` and nothing else, so a template without it sends one constant body for every
@@ -860,6 +878,21 @@ class HttpConfiguredTarget(Target):
                     f"Splicing iterates that field, so the prompt would go out as a list of "
                     f"single characters. Use `mode: replace` for a field of its own, or point "
                     f"`history.field` at the messages LIST.")
+            # `insert_before` COUNTS TRAILING MESSAGES KEPT AFTER THE TRANSCRIPT, read when
+            # the first conversation is sent: a word raised there on every multi-turn probe,
+            # and 0 or more than the list holds put the history AFTER the attack turn or
+            # ahead of the system prompt, silently. Found by an independent review.
+            if _mode == "splice" and "insert_before" in self.history:
+                _ib = self.history["insert_before"]
+                _n_t = len(_tmpl) if isinstance(_tmpl, list) else None
+                if (not isinstance(_ib, int) or isinstance(_ib, bool) or _ib < 1
+                        or (_n_t is not None and _ib > _n_t)):
+                    raise SystemExit(
+                        f"targets_http: history.insert_before is {_ib!r} for {name!r}; it "
+                        f"must be a whole number from 1 to the length of `{_field}`"
+                        f"{f' ({_n_t})' if _n_t is not None else ''}: how many of its "
+                        f"last messages come after the transcript. 1 keeps the attack turn "
+                        f"last, which is what a chat API answers.")
             if _mode not in ("splice", "replace"):
                 raise SystemExit(
                     f"targets_http: history.mode is {_mode!r} for {name!r}; it must be "
@@ -1052,7 +1085,7 @@ class HttpConfiguredTarget(Target):
                 # AND THE CHARSET IT DECLARES, when it declares one: a `windows-1251` body
                 # read as UTF-8 became a reply of replacement characters, judged as text
                 # and said nowhere. Found by an independent review.
-                raw = json.loads(_body.decode(_charset_of(r) or "utf-8-sig", "replace"))
+                raw = json.loads(_decoded(_body, r))
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
             # would send the operator to re-map a path that is correct.
@@ -1235,6 +1268,10 @@ class HttpConfiguredTarget(Target):
                 import signing
                 note = signing.rejection(e.code, self._seen_success)
                 if note:
+                    # AND ITS OWN WORDS, which say whether it was a key or a block: they were
+                    # read above and dropped on this branch alone.
+                    if detail.strip():
+                        note += " The endpoint said:%s" % detail
                     return Probe(prompt=prompt, output="", error=note,
                                  seconds=round(time.time() - t0, 1))
             return Probe(prompt=prompt, output="", error=f"{type(e).__name__}{detail}: {e}",

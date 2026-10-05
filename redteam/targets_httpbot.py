@@ -7,7 +7,7 @@ attacks are skipped. Proof that the Target contract isn't DVLA-shaped.
 """
 import json, time, urllib.request
 from target import Probe, Target
-from targets_http import read_capped as _read_capped
+from targets_http import read_capped as _read_capped, _OPENER
 
 
 class HttpTarget(Target):
@@ -73,7 +73,11 @@ class HttpTarget(Target):
             # — an attacker who can make a support bot spend two minutes per request has
             # found something worth reporting. The ceiling is still there, generously, so a
             # genuinely hung target cannot stall a sweep for ever.
-            with urllib.request.urlopen(req, timeout=300) as r:
+            # THROUGH THE GUARDED OPENER, as `targets_http` sends: plain `urlopen` followed a
+            # redirect to any host or port and took a proxy from the environment, so a 302 to
+            # the service next door came back as this target's reply -- an attack never
+            # delivered, scored as a defence. Found by an independent review.
+            with _OPENER.open(req, timeout=300) as r:
                 # CAPPED. This bot is the system under test -- it is written here to be
                 # broken, and a practice target that can end the run by answering with a
                 # gigabyte is a practice target teaching the wrong lesson.

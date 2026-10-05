@@ -218,6 +218,17 @@ def expired_credential(status, seen_success):
         return ("the endpoint rejected the credential on the first request (HTTP %d). This is a "
                 "configuration problem, not a finding: check the header, the environment "
                 "variable, and that the key has permission for this model." % status)
+    # A 403 IS NOT ONLY A CREDENTIAL. A firewall or content filter in front of the model
+    # answers 403 to the one request it blocks and lets the next one through on the same
+    # key, and this told the operator to rotate a key that works. 401 is about who is
+    # asking; 403 can be about what was asked. Found by an independent review.
+    if status == 403:
+        return ("the endpoint accepted earlier requests and now returns HTTP 403: either the "
+                "credential expired mid-run, or a rule in front of the model (a firewall or "
+                "content filter) blocked this request -- if later requests on the same key "
+                "succeed, it was a block. This request was NOT measured, and a block is not "
+                "the model refusing. Mint a fresh credential if it expired; do not read the "
+                "rest of this run as a defence.")
     return ("the endpoint accepted earlier requests and now returns HTTP %d, so the credential "
             "expired mid-run. Everything after this point was NOT measured — an expiring token "
             "produces a wall of refusals that reads exactly like a hardened deployment. Mint a "

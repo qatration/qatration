@@ -10,7 +10,7 @@ benign-looking queries whose retrieval pulls the poisoned doc; the canary detect
 judges whether the document's injected instruction propagated into the answer.
 """
 import json, re, time, urllib.request
-from targets_http import read_capped as _read_capped
+from targets_http import read_capped as _read_capped, _OPENER
 from target import Probe, Target
 
 # THE APP REPORTS ITS OWN FAILURES INSIDE A 200. FastAPI catches the exception, the endpoint
@@ -46,7 +46,11 @@ class LocalRagTarget(Target):
                                      headers={"Content-Type": "application/json"})
         t0 = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=180) as r:
+            # THROUGH THE GUARDED OPENER, as `targets_http` sends: plain `urlopen` followed a
+            # redirect to any host or port and took a proxy from the environment, so a 302 to
+            # the service next door came back as this target's reply -- an attack never
+            # delivered, scored as a defence. Found by an independent review.
+            with _OPENER.open(req, timeout=180) as r:
                 # /rag returns a StreamingResponse (text/html), so there is no length to
                 # trust and nothing to parse -- which made "read it all" look harmless. It is
                 # the same sentence as everywhere else: with no argument the target chooses

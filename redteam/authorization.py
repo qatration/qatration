@@ -301,7 +301,9 @@ def _http_get(url, timeout=10):
             if not chunk:
                 break
             buf += chunk
-        return buf[:_MAX_WELL_KNOWN].decode("utf-8", "replace")
+        # `utf-8-sig`: Notepad saves a byte-order mark, and the token on the first line
+        # then read as `\ufeffqatration-...` and "does not hold the token".
+        return buf[:_MAX_WELL_KNOWN].decode("utf-8-sig", "replace")
 
 
 # Which proofs this build OBSERVES, as opposed to reads back out of the config it was handed.
@@ -566,7 +568,10 @@ def _address_refused(ip):
     for _net in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"):
         if ip.version == 4 and ip in _ip0.ip_network(_net):
             return ("documentation space (RFC 5737): %s is one of the addresses reserved for examples, so nothing is listening there. If it came from a sample config, replace it with your own endpoint" % ip)
-    if ip.is_private or ip.is_reserved or ip.is_multicast:
+    # AND SITE-LOCAL (fec0::/10): deprecated, so `ipaddress` does not call it private, and
+    # still routed inside the networks that never renumbered. Found by an independent review.
+    if (ip.is_private or ip.is_reserved or ip.is_multicast
+            or getattr(ip, "is_site_local", False)):
         return "a private address is inside somebody's network, not on it"
     # Two ranges `ipaddress` does not call private and a scanner still must not reach:
     # 100.64.0.0/10 is carrier-grade NAT, where the neighbours are other customers of the same
@@ -740,15 +745,23 @@ def gate(cfg, where):
     # A MALFORMED URL IS A CONFIG PROBLEM ON EVERY DOOR. Hosted, `localhost:8000/chat` came
     # back "not authorised" (4, a 403 through intake) while a workstation said 2 and named
     # the url; one rule, one answer. Found by an independent review.
-    if url and url_problem(url) and hosted():
+    # AND AN EMPTY ONE: hosted, a config naming no url was refused as "not authorised"
+    # (4) while it is the same config problem. Found by an independent review.
+    if hosted() and (not url or url_problem(url)):
         raise SystemExit(f"ABORT — {where}: url {url!r} is not a URL a target can be "
-                         f"reached at: {url_problem(url)}. Nothing was sent.")
+                         f"reached at: {url_problem(url) if url else 'there is none'}. "
+                         f"Nothing was sent.")
     # Hosted first, because here the local case is the DANGEROUS one rather than the exempt
     # one, and a waiver evaluated before the refusal would let it through.
     if hosted():
-        why = unreachable_by_policy(url) or (_proxy and unreachable_by_policy(_proxy))
+        why = unreachable_by_policy(url)
+        # THE PROXY BY ITS OWN NAME: a private `proxy:` was refused with the target url
+        # named as the problem, which sends the operator to fix a url that is fine.
+        _what = url
+        if not why and _proxy:
+            why, _what = unreachable_by_policy(_proxy), f"proxy {_proxy}"
         if why:
-            _said = f"{where}: refusing {url!r}: {why}. Nothing was sent."
+            _said = f"{where}: refusing {_what!r}: {why}. Nothing was sent."
             print(f"ABORT — {_said}", file=sys.stderr)
             raise NotAuthorised(_said)
     elif url and url_problem(url):
