@@ -4779,8 +4779,23 @@ def main():
              _re_d.findall(r"(\d+) discordant, (\d+) reversed", _dout)]
     check("every paired stand prints the discordant counts behind its p",
           len(_rows) >= 5, str(len(_rows)))
-    check("...and there is a stand where they disagree, so `reversed` is not always 0",
-          any(_c for _b, _c in _rows), str(_rows))
+    # A PROPERTY OF THE CODE, NOT OF THE CORPUS. This asked that some stored stand had a
+    # reversed attack, which held until 96212b1 took the silent sysprompt rows out of the
+    # memorybot pairs -- they were the only reversals, and they were never measurements.
+    # What the check exists for is that `reversed` is read from the rows, not printed as a
+    # constant: so it is recounted from the stand's own discordant pairs.
+    from discrimination import paired_detail as _pd_d
+    check("...and each stand's reversed count is a part of its discordant count",
+          all(0 <= _c <= _b for _b, _c in _rows), str(_rows))
+    def _row_d(aid, broke):
+        return {"attack": {"id": aid, "category": "x", "text": aid},
+                "headline": "EXPLOITED" if broke else "DEFENDED",
+                "rate": "3/3" if broke else "0/3", "trials": [{}, {}, {}]}
+    _probe_d = _pd_d({"naive": [_row_d("a", True), _row_d("b", False), _row_d("c", True)],
+                      "hard": [_row_d("a", False), _row_d("b", True), _row_d("c", True)]},
+                     "naive", "hard")
+    check("...and a reversal is counted when one exists, so 0 is a count and not a constant",
+          (_probe_d.get("only_a"), _probe_d.get("only_b")) == (1, 1), str(_probe_d))
 
     _fav = sum(1 for _b, _c in _rows if _b > _c)
     _rev = sum(1 for _b, _c in _rows if _c > _b)
