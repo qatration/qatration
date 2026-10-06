@@ -225,6 +225,8 @@ def build(results, target_config=None, out_dir=None, source=None):
                               if isinstance(_cfg_c, dict) else {}) or {})
     _c_rates = (baseline.canary_rates(target, _canaries, out_dir or workspace.OUT)
                 if ambient is not None and _canaries else {})
+    _canned = (baseline.canned_replies(target, rows, out_dir or workspace.OUT)
+               if ambient is not None else set())
 
     rules, seen, sarif_results = [], set(), []
     unrun = []
@@ -253,7 +255,7 @@ def build(results, target_config=None, out_dir=None, source=None):
         level = BASE_LEVEL.get(head)
         if not level:                       # DEFENDED, and anything the engine may add later
             continue
-        verdict, noisy, _rescued = baseline.row_attribution(row, ambient, _c_rates)
+        verdict, noisy, _rescued = baseline.row_attribution(row, ambient, _c_rates, _canned)
         level = _cap(level, verdict)
 
         fired = row.get("fired") or []

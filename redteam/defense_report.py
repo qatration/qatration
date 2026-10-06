@@ -1264,12 +1264,13 @@ def attribution_index():
             rows = ((read_artifact(fp)[0] or {}).get("results") or [])
         except Exception:
             continue
+        _canned_d = _bl.canned_replies(tgt, rows, str(OUT_DIR))
         for r in rows:
             if (r.get("headline") or "") not in BROKE:
                 continue
             # THROUGH `baseline.row_attribution`, the one rule the console and the SARIF use:
             # a quiet canary this row produced keeps it standing however noisy its detector.
-            verdict, detail, _quiet = _bl.row_attribution(r, ambient, c_rates)
+            verdict, detail, _quiet = _bl.row_attribution(r, ambient, c_rates, _canned_d)
             # AND A ROW WHOSE DETECTOR THE BASELINE COULD NOT MEASURE, which is `unmeasured`
             # with the detector named -- not the page-wide "no baseline", said elsewhere.
             if verdict not in ("unattributable", "weakened") and not (

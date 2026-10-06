@@ -233,8 +233,8 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.77 / $2.31 / $3.85 | $2.08 / $6.25 / $10.42 |
-| `full` x1 | $0.26 / $0.77 / $1.28 | $0.69 / $2.08 / $3.47 |
+| `full` x3 (the default) | $0.77 / $2.31 / $3.85 | $2.09 / $6.26 / $10.43 |
+| `full` x1 | $0.26 / $0.77 / $1.28 | $0.70 / $2.09 / $3.48 |
 | `quick` x3 | $0.12 / $0.35 / $0.58 | $0.31 / $0.93 / $1.56 |
 | `quick` x1 | $0.04 / $0.12 / $0.19 | $0.10 / $0.31 / $0.52 |
 
@@ -246,7 +246,7 @@ single request. At 1,470 requests that is 1.5M input tokens of your own instruct
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.25 to
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.26 to
   around $2.28. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on
