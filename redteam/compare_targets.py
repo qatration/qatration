@@ -974,6 +974,8 @@ table.pair td{{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-s
     with _atomic(out) as _f:
         _f.write(doc)
     print(f"wrote {out} — {len(rows)} systems, {n_vuln} vulnerable")
+    from workspace import partial_exit as _pex
+    return _pex(0, _unreadable, "this fleet overview")
 
 
 if __name__ == "__main__":

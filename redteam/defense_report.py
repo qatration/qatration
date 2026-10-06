@@ -2376,6 +2376,8 @@ weakness{'' if n_roots == 1 else 'es'}, seen {n_breaches} time{'' if n_breaches 
               + plain(named_or_more(
                   sorted({d for *_, fired in unmapped for d in fired}), 8),
                   oneline=True))
+    from workspace import partial_exit as _pex
+    return _pex(0, unreadable, "this report")
 
 
 if __name__ == "__main__":

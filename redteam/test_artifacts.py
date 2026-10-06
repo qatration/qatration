@@ -755,6 +755,8 @@ def main():
           _refused == {}, str(_refused))
 
     # --- and every tool that reads the directory --------------------------------------------
+    # SURVIVING IS NOT PASSING: no traceback, and 3 rather than the 0 the rest would give
+    # (`workspace.partial_exit`) -- the page is built over what could be read.
     # BOTH KINDS, over the same drivers. `corrupt="truncated"` is the file that will not
     # parse; `corrupt="shape"` is the one that parses and is missing a key the pages
     # subscript. The consumers cannot tell them apart and must not need to.
@@ -765,7 +767,7 @@ def main():
                 code, out = _run(script, work)
                 name = script[:-3]
                 check("%s survives one %s artifact" % (name, _kind),
-                      code == 0 and "Traceback" not in out,
+                      code == 3 and "Traceback" not in out,
                       "exit %s%s" % (code, " with a traceback" if "Traceback" in out
                                      else ""))
                 check("...and names the file it could not read (%s)" % _kind,
@@ -780,7 +782,7 @@ def main():
             code, out = _run(script, work)
             name = script[:-3]
             check(f"{name} survives one unreadable artifact",
-                  code == 0 and "Traceback" not in out,
+                  code == 3 and "Traceback" not in out,
                   f"exit {code}" + (" with a traceback" if "Traceback" in out else ""))
             check(f"...and names the file it could not read",
                   "results_opsbot.json" in out,

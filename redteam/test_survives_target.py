@@ -76,16 +76,13 @@ def main():
         targets_http.MAX_REPLY = real_max
         srv.shutdown()
 
+    # THE REPLY, READ THROUGH ITS PATH AS FAR AS THE CUT REACHED (`parse_capped`): not the
+    # raw envelope, which handed every detector fields the bot never showed anyone.
     check("a reply past the cap is held at the cap, not to EOF",
-          len(probe.output) == 50_000, f"{len(probe.output):,} characters")
-    # THE RAW BODY, envelope included. A truncated JSON document cannot be parsed, so the
-    # `response.reply` path cannot be walked and there is no field to extract — but the bytes
-    # that arrived are still the target's own output, and every content detector reads
-    # `probe.output`. Handing them the whole body is strictly more than the reply would have
-    # been, at the cost of a `{"reply": ` prefix; handing them nothing was the earlier
-    # behaviour, and it is what made the finding disappear.
-    check("...and the body is readable text, not an error and not empty",
-          "a.a.a" in probe.output and not probe.error, repr(probe.output[:24]))
+          len(probe.output) < 50_000, f"{len(probe.output):,} characters")
+    check("...and it is the reply's own text, not an error, not empty, not the envelope",
+          probe.output.startswith("a.a.a") and not probe.error
+          and '{"reply"' not in probe.output, repr(probe.output[:24]))
     # THE SIZE IS THE FINDING. Truncating without recording it would hide the one number the
     # detector below exists to report.
     check("...and the true size travels with the probe",

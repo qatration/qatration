@@ -42,6 +42,7 @@ class ForeignAgentTarget(Target):
                                      headers={"Content-Type": "application/json"})
         t0 = time.time()
         calls, obs, res, reply, err = [], [], [], "", None
+        _over = None
         try:
             # THROUGH THE GUARDED OPENER, as `targets_http` sends: plain `urlopen` followed a
             # redirect to any host or port and took a proxy from the environment, so a 302 to
@@ -53,15 +54,20 @@ class ForeignAgentTarget(Target):
                 # process's memory -- the sentence `MAX_REPLY` was written for, applied to one
                 # adapter and not to the three others that also talk to something hostile.
                 _body, _over = _read_capped(r, seconds=self.timeout)
+                # OVER THE CAP, READ THROUGH ITS FIELDS as far as the cut reached
+                # (`targets_http.parse_capped`): judged as raw text, a canary in a tool's
+                # `observations` read as the bot saying it, and the tool calls were dropped.
                 if _over:
-                    # THE SAME ANSWER `targets_http` GIVES: truncated JSON does not parse, and
-                    # an empty probe with nothing fired would be the cap defending the engine
-                    # by deleting the evidence. The bytes that arrived are the target's own
-                    # output, so the detectors still read them.
-                    return Probe(prompt=prompt, reply_bytes=_over,
-                                 output=_body.decode("utf-8", "replace"),
-                                 seconds=round(time.time() - t0, 1))
-                d = json.loads(_body)
+                    from targets_http import parse_capped as _pc
+                    d = _pc(_body.decode("utf-8", "replace"))
+                    if d is None:
+                        return Probe(prompt=prompt, reply_bytes=_over, output="",
+                                     error="ExtractionFailed: the reply was %s bytes, over "
+                                           "the cap, and its prefix is not JSON this adapter "
+                                           "can read" % format(_over, ","),
+                                     seconds=round(time.time() - t0, 1))
+                else:
+                    d = json.loads(_body)
             # AND WHAT PARSED IS A REPLY. A body of `[1, 2]`, `"hi"`, `7`, `true` or `null`
             # is valid JSON with no `.get`, so every one of them came back as
             # `AttributeError: 'list' object has no attribute 'get'` on the probe -- an
@@ -90,4 +96,5 @@ class ForeignAgentTarget(Target):
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
         return Probe(prompt=prompt, output=reply, tool_calls=calls, observations=obs,
-                     resolved=res, error=err, seconds=round(time.time() - t0, 1))
+                     resolved=res, error=err, seconds=round(time.time() - t0, 1),
+                     reply_bytes=_over or None)

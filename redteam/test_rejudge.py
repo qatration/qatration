@@ -1123,8 +1123,11 @@ def main():
                                           PYTHONIOENCODING="utf-8",
                                           PYTHONDONTWRITEBYTECODE="1"))
             _st = _rt.stdout + _rt.stderr
+            # AND THE ANSWER OVER THE REST IS NOT A PASS: 3, after the rest was re-scored
+            # (`workspace.partial_exit`).
             check("a torn results file does not end the replay of the others",
-                  _rt.returncode == 0 and "Traceback" not in _st,
+                  _rt.returncode == 3 and "Traceback" not in _st
+                  and "CANNOT ANSWER IN FULL" in _st,
                   "exit %d: %s" % (_rt.returncode, _st[-300:]))
             check("...the torn one is named, with what stopped it",
                   "results_httpbot.json could not be read" in _st, _st[-300:])
@@ -1133,6 +1136,66 @@ def main():
             check("...while the good one is still re-scored, and the closing line says which "
                   "were not", "across 1 file(s)" in _st and "NOT RE-SCORED" in _st,
                   _st[-300:])
+
+            # ONE RULE FOR EVERY COMMAND THAT ANSWERS OVER A PARTLY TORN WORKSPACE
+            # (`workspace.partial_exit`): the page is built over what could be read, and the
+            # code is 3, not the pass the rest would give.
+            def _cmd_t(*argv):
+                return subprocess.run([sys.executable, os.path.join(HERE, "cli.py")] + list(argv),
+                                      capture_output=True, text=True, timeout=600,
+                                      env=dict(os.environ, QATRATION_OUT=_dt,
+                                               PYTHONIOENCODING="utf-8",
+                                               PYTHONDONTWRITEBYTECODE="1"))
+            for _c in ("coverage", "index"):
+                _rc = _cmd_t(_c)
+                check("`%s` over a workspace with a torn record cannot answer in full" % _c,
+                      _rc.returncode == 3 and "Traceback" not in _rc.stdout + _rc.stderr,
+                      "exit %d: %s" % (_rc.returncode, (_rc.stdout + _rc.stderr)[-300:]))
+            _rl = _cmd_t("rejudge", "--target", "localrag")
+            check("...while a torn record of ANOTHER target does not make this one's answer 3",
+                  _rl.returncode == 0, "exit %d: %s" % (_rl.returncode, _rl.stdout[-300:]))
+        # AND THE A/B COMPARISON, over a workspace it would otherwise pass (secretbot's
+        # controls are clean), so the 3 is the gap's and not a control alarm's.
+        if os.path.exists(os.path.join(_real_t, "results_secretbot.json")):
+            with tempfile.TemporaryDirectory() as _dd:
+                shutil.copy(os.path.join(_real_t, "results_secretbot.json"), _dd)
+                io.open(os.path.join(_dd, "results_httpbot.json"), "w", encoding="utf-8",
+                        newline="").write('{"meta": {"target": "httpbot"}, "results": [')
+                _rd = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                      "discrimination"],
+                                     capture_output=True, text=True, timeout=600,
+                                     env=dict(os.environ, QATRATION_OUT=_dd,
+                                              PYTHONIOENCODING="utf-8",
+                                              PYTHONDONTWRITEBYTECODE="1"))
+                check("`discrimination` over a workspace with a torn record cannot answer in "
+                      "full", _rd.returncode == 3 and "CANNOT ANSWER IN FULL" in _rd.stdout,
+                      "exit %d: %s" % (_rd.returncode, (_rd.stdout + _rd.stderr)[-300:]))
+        else:
+            print("SKIP  discrimination over a torn record: results_secretbot.json is not here")
+
+        # AND THE RECON TABLE, by the same rule.
+        _recon = sorted(_f for _f in os.listdir(_real_t)
+                        if _f.startswith("recon_") and _f.endswith(".json"))
+        if _recon:
+            with tempfile.TemporaryDirectory() as _dr:
+                shutil.copy(os.path.join(_real_t, _recon[0]), _dr)
+                io.open(os.path.join(_dr, "recon_tornbot.json"), "w", encoding="utf-8",
+                        newline="").write('{"target": "tornbot", ')
+                _rp = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "profiles"],
+                                     capture_output=True, text=True, timeout=300,
+                                     env=dict(os.environ, QATRATION_OUT=_dr,
+                                              PYTHONIOENCODING="utf-8",
+                                              PYTHONDONTWRITEBYTECODE="1"))
+                check("`profiles` over a fleet with a torn profile cannot answer in full",
+                      _rp.returncode == 3 and "recon_tornbot.json" in _rp.stdout + _rp.stderr,
+                      "exit %d: %s" % (_rp.returncode, (_rp.stdout + _rp.stderr)[-300:]))
+        else:
+            print("SKIP  the recon table over a torn profile: no recon_*.json here, so it was "
+                  "NOT exercised")
+        from workspace import partial_exit as _pex_t
+        check("a finding stands over a gap, and a clean answer over one does not",
+              (_pex_t(1, ["a.json"]), _pex_t(0, ["a.json"]), _pex_t(0, [])) == (1, 3, 0))
+
         # AND A WORKSPACE WHOSE ONLY RECORD IS TORN IS NOT AN EMPTY ONE: "run a sweep first"
         # would be the wrong advice, and exit 3 is still right -- nothing was re-scored.
         with tempfile.TemporaryDirectory() as _do:

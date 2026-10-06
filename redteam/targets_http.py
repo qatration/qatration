@@ -482,6 +482,54 @@ def _retry_after(headers):
         return None
 
 
+def parse_capped(text, limit=64):
+    """-> the JSON value a body cut at the reply cap held up to the cut, or None.
+
+    A TOLERANT PREFIX PARSE, for the one body that cannot be parsed whole. A string the cut
+    fell inside is closed where it stopped, open containers are closed, and a member the cut
+    left without a value is dropped by backing off to the separator before it. What comes
+    back is exactly what the target sent, minus what it never got to: every path read off it
+    reads the bytes that arrived, and a path the cut did not reach reads as absent.
+    """
+    import re as _re_c
+    s = text or ""
+    for _ in range(limit):
+        stack, in_str, esc = [], False, False
+        for ch in s:
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            elif ch == '"':
+                in_str = True
+            elif ch in "{[":
+                stack.append(ch)
+            elif ch in "}]" and stack:
+                stack.pop()
+        tail = s
+        if in_str:
+            if esc:
+                tail = tail[:-1]
+            _m = _re_c.search(r"\\u[0-9a-fA-F]{0,3}$", tail)
+            if _m:
+                tail = tail[:_m.start()]
+            tail += '"'
+        cand = tail.rstrip().rstrip(",") + "".join(
+            "}" if c == "{" else "]" for c in reversed(stack))
+        try:
+            return json.loads(cand)
+        except ValueError:
+            pass
+        cut = max(s.rfind(","), s.rfind("{"), s.rfind("["))
+        if cut < 0:
+            return None
+        s = s[:cut] if s[cut] == "," else s[:cut + 1]
+    return None
+
+
 def _decoded(body, response):
     """A JSON body as text: UTF-8 when it is UTF-8, and the declared charset only when not.
 
@@ -1071,21 +1119,37 @@ class HttpConfiguredTarget(Target):
                     # `unbounded_output` fires because the cap is far above any threshold a
                     # config sets. The true size travels on the probe so the report can say how
                     # much more there was.
+                    #
+                    # READ THROUGH THE PATHS, AS FAR AS THE CUT REACHED. The bytes were judged
+                    # as raw text, so the whole envelope became "the bot's reply": a canary in
+                    # an echoed request or a debug field fired as a leak, an Azure filter block
+                    # ahead of `message` made the opening a bypass, and the tool calls and
+                    # the error path were never read at all -- a finding manufactured and one
+                    # hidden, from one response. The prefix is parsed (`parse_capped`), every
+                    # mapped path is read off it, a channel the cut never reached counts as
+                    # unreadable rather than as no call, and `unbounded_output` reads the
+                    # true size from `reply_bytes`. Found by an independent review.
                     print(f"  ! {self.name}: the reply was {_over:,} bytes; the first "
-                          f"{MAX_REPLY:,} were read and judged as text.", file=sys.stderr)
-                    _text = _body.decode("utf-8", "replace")
-                    # A FIELD, not an attribute hung on the instance. It was the second
-                    # form for as long as the cap has existed, and `test_rejudge` derives
-                    # the round-trip gate from `dataclasses.fields`, so the size was the
-                    # one thing that gate could not see -- and it reached no file.
-                    return Probe(prompt=prompt, output=_text, reply_bytes=_over,
-                                 seconds=round(time.time() - t0, 1))
+                          f"{MAX_REPLY:,} were read through the response paths.",
+                          file=sys.stderr)
+                    raw = parse_capped(_decoded(_body, r))
+                    if raw is None:
+                        return Probe(prompt=prompt, output="", reply_bytes=_over,
+                                     error=("ExtractionFailed: the reply was %s bytes, over "
+                                            "the %s-byte cap, and its first %s bytes are "
+                                            "not JSON this adapter can read a path from"
+                                            % (format(_over, ","), format(MAX_REPLY, ","),
+                                               format(MAX_REPLY, ","))),
+                                     seconds=round(time.time() - t0, 1))
+                else:
+                    raw = None
                 # `utf-8-sig`: a body that opens with a byte-order mark is valid JSON to every
                 # client but this one, and every probe against it was a JSONDecodeError.
                 # AND THE CHARSET IT DECLARES, when it declares one: a `windows-1251` body
                 # read as UTF-8 became a reply of replacement characters, judged as text
                 # and said nowhere. Found by an independent review.
-                raw = json.loads(_decoded(_body, r))
+                if raw is None:
+                    raw = json.loads(_decoded(_body, r))
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
             # would send the operator to re-map a path that is correct.
@@ -1159,7 +1223,11 @@ class HttpConfiguredTarget(Target):
                 # possible misreading of the target.
                 err = (f"ExtractionFailed: nothing at response.reply={self.reply_path!r}; "
                        f"the reply had keys {sorted(raw)[:8] if isinstance(raw, dict) else type(raw).__name__}")
-                bad = Probe(prompt=prompt, output="", error=err,
+                if _over:
+                    err = (f"ExtractionFailed: the reply was {_over:,} bytes, over the cap, and "
+                           f"response.reply={self.reply_path!r} is not inside its first "
+                           f"{MAX_REPLY:,}")
+                bad = Probe(prompt=prompt, output="", error=err, reply_bytes=_over or None,
                             seconds=round(time.time() - t0, 1))
                 # The body travels with the failure so onboarding can say WHICH path holds the
                 # text, instead of asking the operator to guess a second time. Attached rather
@@ -1203,8 +1271,14 @@ class HttpConfiguredTarget(Target):
                 elif _raw and _claims_something(_k, _raw):
                     self.unreadable[_k] += 1
                     self.unreadable_kind.setdefault(_k, type(_raw).__name__)
+                elif _over and _raw is None and getattr(self, {
+                        "tool_calls": "calls_path", "resolved": "resolved_path",
+                        "observations": "observations_path"}[_k], None):
+                    # NOT REACHED IS NOT EMPTY: the cut came before this channel's path.
+                    self.unreadable[_k] += 1
+                    self.unreadable_kind.setdefault(_k, "cut at %s bytes" % format(MAX_REPLY, ","))
             return Probe(prompt=prompt, output=str(reply), tool_calls=calls,
-                         observations=obs, resolved=resolved,
+                         observations=obs, resolved=resolved, reply_bytes=_over or None,
                          seconds=round(time.time() - t0, 1))
         except Exception as e:
             detail = ""

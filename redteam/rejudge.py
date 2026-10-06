@@ -568,6 +568,10 @@ def main():
         try:
             maps, changed = rescore_map(path)
         except ValueError as _e_m:
+            # ANOTHER TARGET'S TORN MAP IS NOT THIS TARGET'S GAP: unread, its stamp cannot
+            # be asked, so the filename decides whether `--target` wanted it.
+            if args.target and target_of(stem, ctxs) != args.target:
+                continue
             print(f"\n  ! {os.path.basename(path)} could not be read ({_e_m}); it is NOT "
                   f"re-scored and its page is left as it stands")
             unreadable.append(os.path.basename(path))
@@ -681,7 +685,8 @@ def main():
               % maps_examined)
         if not skipped:
             print(no_results_note(OUT_DIR))
-    return 0
+    from workspace import partial_exit as _pex
+    return _pex(0, unreadable, "this re-score")
 
 
 if __name__ == "__main__":

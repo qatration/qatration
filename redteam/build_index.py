@@ -556,6 +556,8 @@ h2{{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim
     if rows and not any(m.get("_answered") for m in rows) and not _adaptive_measured:
         print("  ! no target on this page measured anything, so the page answers nothing")
         return 3
+    from workspace import partial_exit as _pex
+    return _pex(0, _unreadable, "this page")
 
 
 if __name__ == "__main__":

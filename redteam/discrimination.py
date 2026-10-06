@@ -51,7 +51,7 @@ def _rate_of(row):
     return _frac(_headline(trials)[1])
 
 
-def load(collisions=None):
+def load(collisions=None, unreadable=None):
     """-> {target: rows}. Two files naming one target are appended to `collisions`.
 
     A SECOND FILE FOR ONE TARGET REPLACED THE FIRST, in silence: `results_acme.json` with a
@@ -64,6 +64,8 @@ def load(collisions=None):
         if why:
             print(f"  ! {os.path.basename(str(fp))} could not be read ({why}); this target is "
                   f"not in the comparison below.", file=sys.stderr)
+            if unreadable is not None:
+                unreadable.append((str(fp), why))
             continue
         # ANSWERED BY `read_artifact`: a blank `meta.target` is refused there and named
         # by the branch above. `if tgt:` dropped the same file without a word.
@@ -322,8 +324,8 @@ def main():
     # THE ONE SPELLING, from the table this command is listed in.
     from cli import parser as _cli_parser
     _cli_parser("discrimination").parse_args()
-    _collide = []
-    data = load(_collide)
+    _collide, _unread_d = [], []
+    data = load(_collide, _unread_d)
     if _collide:
         for _t, _a, _b in _collide:
             print("%s and %s both hold results for target %r: which one this compares would "
@@ -677,6 +679,8 @@ def main():
 
     print()
     _code, _lines = gate_verdict(ctrl_fired, ctrl_total, ctrl_errored, at_rest, weakened)
+    from workspace import partial_exit as _pex
+    _code = _pex(_code, _unread_d, "this comparison")
     for _l in _lines:
         print(_l)
     if _code:

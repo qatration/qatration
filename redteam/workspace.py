@@ -3678,6 +3678,26 @@ def named_or_more(names, cap=6, sep=", "):
     return "%s … and %d more" % (shown, len(names) - cap)
 
 
+def partial_exit(code, unreadable, what="this answer"):
+    """-> the exit code for an answer built over a workspace part of which could not be read.
+
+    ONE RULE for every command that reads many artifacts and answers over the ones it could:
+    `rejudge`, `coverage`, `index`, `profiles` and `discrimination` named a torn file and then
+    exited 0 over the rest -- a pass, about a set that was not all read. A finding (1) or a
+    refusal (2) stands; a 0 becomes 3, "could not be answered", after the page is written.
+    Found by an independent review.
+    """
+    _bad = list(unreadable or [])
+    if code or not _bad:
+        return code
+    import os as _os
+    _names = [_os.path.basename(b[0] if isinstance(b, (list, tuple)) else str(b))
+              for b in _bad]
+    print("\nCANNOT ANSWER IN FULL \u2014 %d artifact(s) could not be read (%s), so %s covers "
+          "only the rest. Exit 3." % (len(_names), named_or_more(_names, 4), what))
+    return 3
+
+
 def say_unreadable(bad, where="", stream=None):
     """One sentence per unreadable artifact, in the one wording every caller should use.
 

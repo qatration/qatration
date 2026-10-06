@@ -703,6 +703,8 @@ def main():
     _emit_json(args.json, n, hits, demo, benign_only, declared, where,
                untried, unevidenced, unconfigured, broke, unresolved,
                _unreadable_seen, model_only, _silent[0])
+    from workspace import partial_exit as _pex
+    return _pex(0, _unreadable_seen, "this coverage table")
 
 
 if __name__ == "__main__":

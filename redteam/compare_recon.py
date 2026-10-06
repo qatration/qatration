@@ -293,6 +293,8 @@ def main():
     with _atomic(out) as _f:
         _f.write(render(rows, _unreadable))
     print(f"\nreport → {out}")
+    from workspace import partial_exit as _pex
+    return _pex(0, _unreadable, "this table")
 
 
 if __name__ == "__main__":

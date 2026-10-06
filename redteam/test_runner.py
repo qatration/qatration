@@ -1125,6 +1125,23 @@ def main():
           not _errs_503[0].startswith(_RL_b) and _errs_503[1].startswith(_RL_b),
           str(_errs_503))
 
+    # THE BASELINE PROBE COMES BEFORE THE WITHHOLDING IT DECIDES: `rogue_tool_call` is armed by
+    # what that one request learns, and asked first it withheld attacks it would have scored.
+    import ast as _ast_z
+    _rr_src = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_redteam.py"),
+                      encoding="utf-8").read()
+    _main_z = next(n for n in _ast_z.parse(_rr_src).body
+                   if isinstance(n, _ast_z.FunctionDef) and n.name == "main")
+
+    def _first_call(name):
+        return min((n.lineno for n in _ast_z.walk(_main_z) if isinstance(n, _ast_z.Call)
+                    and getattr(n.func, "id", getattr(n.func, "attr", None)) == name),
+                   default=None)
+    _bl, _wh = _first_call("baseline_tool_context"), _first_call("is_unmeasurable")
+    check("the baseline probe is sent before attacks are withheld for want of it",
+          _bl is not None and _wh is not None and _bl < _wh, "baseline %s, withhold %s"
+          % (_bl, _wh))
+
     # --- an independent review of the trial loop ----------------------------------------
     class _Both(_Tg2):
         """A single send that ran a tool and then failed, then a clean refusal."""

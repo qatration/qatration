@@ -1248,6 +1248,17 @@ def main():
     print(f"engine → target='{target.name}'  caps={sorted(target.capabilities)}  "
           f"attacks={len(attacks)}{scoped}  trials={trials}")
 
+    # baseline-diff: learn the target's CLEAN tool-call inputs from a benign probe
+    # so 'rogue_tool_call' flags deviation from real behavior, not a model quirk
+    # (fixes the qwen false alarm where the model calls a tool with empty input).
+    # BEFORE THE WITHHOLDING BELOW, which asks whether `rogue_tool_call` can fire: asked
+    # first, it withheld about eleven generic attacks per tool target as "needs
+    # baseline_tool_inputs" -- the input this one request supplies. The gate and the budget
+    # already count it (`runner.baseline_requests`). Found by an independent review.
+    ctx = baseline_tool_context(target, tcfg, ctx)
+    if "baseline_tool_inputs" in ctx and "tool_visibility" in target.capabilities:
+        print(f"baseline probe → clean tool inputs = {ctx['baseline_tool_inputs']}")
+
     # Say out loud which always-on detectors cannot fire here. They run on every probe and
     # find nothing, which reads in the report as a clean target rather than as a check that
     # was never able to speak — and that is how sysprompt_paraphrase sat inert through a
@@ -1553,12 +1564,6 @@ def main():
                   f"one retry that is up to {_worst / 60:.0f} min of a "
                   f"{_secs / 60:.0f} min budget, before the rest of the arsenal is reached.")
 
-    # baseline-diff: learn the target's CLEAN tool-call inputs from a benign probe
-    # so 'rogue_tool_call' flags deviation from real behavior, not a model quirk
-    # (fixes the qwen false alarm where the model calls a tool with empty input).
-    ctx = baseline_tool_context(target, tcfg, ctx)
-    if "baseline_tool_inputs" in ctx and "tool_visibility" in target.capabilities:
-        print(f"baseline probe → clean tool inputs = {ctx['baseline_tool_inputs']}")
     print()
     # COLUMN WIDTHS FROM THE DATA. `{id:<22}` ran the id straight into the delivery on any
     # attack named longer than 21 characters — 74 of 362 rows in a full generic sweep, so a

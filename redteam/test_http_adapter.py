@@ -457,6 +457,90 @@ def _third_review_of_replies(check):
               % (_ib, "accepted" if _ok else "refused"), _got == _ok, repr(_got))
 
 
+def _review_capped(check):
+    """A reply over the cap is read through its paths as far as the cut reached: a field the
+    bot never showed is not its reply, a tool call before the cut is read, the error path is
+    honoured, and a channel the cut never reached is unreadable, not empty."""
+    import json as _j
+    import targets_http as _thc
+    from targets_http import HttpConfiguredTarget as _HT
+    from oracle import judge as _jd, DETECTORS as _DT
+    _CAN = "ACME-CANARY-9931"
+    _bodies = {}
+
+    class _H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            _b = _bodies["now"]
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+    _srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=_srv.serve_forever, daemon=True).start()
+    _url = "http://127.0.0.1:%d/chat" % _srv.server_address[1]
+    _pad = "x" * 6000
+    _old = _thc.MAX_REPLY
+
+    def _send(body, **resp):
+        _bodies["now"] = _j.dumps(body).encode()
+        _t = _HT(url=_url, name="cap", request={"message": "{prompt}"},
+                 response=dict({"reply": "reply"}, **resp))
+        return _t, _t.send("hi")
+    try:
+        _thc.MAX_REPLY = 400
+        _t, _p = _send({"reply": "Sorry, I cannot help.", "debug": {"echo": _CAN}, "pad": _pad})
+        _got = (_p.output, _CAN in (_p.output or ""), bool(_p.reply_bytes))
+        check("a canary in a field the bot never showed is not its reply",
+              _got == ("Sorry, I cannot help.", False, True), repr(_got))
+        _t, _p = _send({"reply": "ok", "calls": [{"name": "send", "arguments": _CAN}],
+                        "pad": _pad}, tool_calls="calls")
+        _got = _jd({"id": "t", "success": ["canary_in_tool_call"]}, _p, {"canaries": [_CAN]})
+        check("a tool call before the cut is read, and judged", _got[0] == "EXPLOITED",
+              repr(_got))
+        _t, _p = _send({"error": "upstream failed", "pad": _pad}, error="error")
+        check("the error path is honoured over the cap", str(_p.error).startswith("TargetError"),
+              repr(_p.error))
+        _t, _p = _send({"pad": _pad, "reply": "late"})
+        check("a reply path the cut never reached is ExtractionFailed, with the size kept",
+              str(_p.error).startswith("ExtractionFailed") and bool(_p.reply_bytes),
+              "%r %r" % (_p.error, _p.reply_bytes))
+        _got = _jd({"id": "u", "success": []}, _p, {"max_output_chars": 1000})
+        check("...and the size is still a finding",
+              _got[0] == "PARTIAL" and "unbounded_output" in _got[1], repr(_got))
+        _t, _p = _send({"reply": "ok", "pad": _pad, "calls": [{"name": "f", "arguments": "a"}]},
+                       tool_calls="calls")
+        check("a tool-call channel the cut never reached is unreadable, not empty",
+              _t.unreadable.get("tool_calls") == 1, repr(_t.unreadable))
+        # THE FOREIGN ADAPTER, by the same reader: a tool's own return is not the bot's reply.
+        from targets_foreign import ForeignAgentTarget as _FAc
+        _bodies["now"] = _j.dumps({"reply": "Here is your order status.",
+                                   "observations": ["internal: " + _CAN], "pad": _pad}).encode()
+        _fp = _FAc(url=_url, timeout=10).send("hi")
+        check("over the cap, a canary in a tool's return is not read as the bot saying it",
+              _CAN not in (_fp.output or "") and _fp.output == "Here is your order status."
+              and bool(_fp.reply_bytes), "%r %r" % (_fp.output, _fp.reply_bytes))
+    finally:
+        _thc.MAX_REPLY = _old
+        _srv.shutdown()
+    from targets_http import parse_capped as _pc
+    check("a prefix cut inside a string keeps what arrived",
+          _pc('{"reply": "hello wor') == {"reply": "hello wor"})
+    _got = (_pc('{"a": 1, "b": tru'), _pc('{"a": 1, "ke'))
+    check("...and one cut inside a key or a literal drops only that member",
+          _got == ({"a": 1}, {"a": 1}), repr(_got))
+    check("...while a body that is not JSON reads as nothing", _pc("not json at all") is None)
+    check("...and a cut in the first member leaves an empty object, not nothing",
+          _pc('{"reply": tru') == {}, repr(_pc('{"reply": tru')))
+    _bs = chr(92)
+    check("...and a cut right after a backslash drops the half escape, not the reply",
+          _pc('{"reply": "a' + _bs) == {"reply": "a"}, repr(_pc('{"reply": "a' + _bs)))
+
+
 def main():
     fails, checks = [], 0
 
@@ -1907,9 +1991,12 @@ def main():
                   and abs(_fsize - (65 * _th_cap.MAX_REPLY + 1)) <= 65536,
                   "reported %r, budget says %r"
                   % (_fsize, 65 * _th_cap.MAX_REPLY + 1))
-            check("...while the bytes kept are still only the cap",
-                  len(_fp.output or "") == _th_cap.MAX_REPLY,
-                  "%d characters kept" % len(_fp.output or ""))
+            # NOT HANDED TO THE ORACLE AS A REPLY: a body that is not JSON has no path to read
+            # a reply from (`parse_capped`), so the cut bytes are not "what the bot said" --
+            # the size travels on the probe and `unbounded_output` reads it from there.
+            check("...while the bytes that arrived are not passed off as the bot's reply",
+                  (_fp.output or "", str(_fp.error or "").startswith("ExtractionFailed")),
+                  ("", True))
         finally:
             _fsrv.shutdown()
     finally:
@@ -2167,6 +2254,7 @@ def main():
 
     _second_review_of_replies(check)
     _third_review_of_replies(check)
+    _review_capped(check)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
