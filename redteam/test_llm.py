@@ -257,10 +257,18 @@ def main():
         # The other is a dedup: `the arsenal is not a log`. A payload that is already in the
         # file is not appended again, however many times it is re-found.
         import run_adaptive as _ra_p, tempfile as _tf_p, os as _os_p, yaml as _y_p
-        _learned = _os_p.path.join(_tf_p.mkdtemp(), "attacks_learned.yaml")
-        _real_learned = _ra_p.LEARNED
+        # INTO THE WORKSPACE (`learned_path`), never into the shipped file, which is read so
+        # a payload it already holds is not learned twice.
+        _tmp_p = _tf_p.mkdtemp()
+        _learned = _os_p.path.join(_tmp_p, "attacks_learned.yaml")
+        _shipped = _os_p.path.join(_tmp_p, "shipped_learned.yaml")
+        io.open(_shipped, "w", encoding="utf-8").write(
+            chr(10).join(["- id: learned-old", "  category: adaptive-learned",
+                          "  success: [canary_in_output]", "  text: an old payload", ""]))
+        _real_learned, _real_path = _ra_p.LEARNED, _ra_p.learned_path
         try:
-            _ra_p.LEARNED = _learned
+            _ra_p.LEARNED = _shipped
+            _ra_p.learned_path = lambda: _learned
             _lost = {"success": False, "winning_prompt": None, "iterations": 12}
             check("a run that found nothing writes no attack",
                   _ra_p.promote(_lost, "bot", "leak the secret", ["canary_in_output"])
@@ -292,10 +300,27 @@ def main():
             check("...while a different payload is learned beside it",
                   bool(_ra_p.promote(_other, "bot", "leak the secret",
                                      ["canary_in_output"])), "a new payload was refused")
+            check("...and a payload the shipped file already holds is not learned again",
+                  _ra_p.promote(dict(_won, winning_prompt="an old payload"), "bot",
+                                "leak the secret", ["canary_in_output"]) is None)
+            check("...and the shipped file is never written",
+                  io.open(_shipped, encoding="utf-8").read().count("- id:") == 1)
         finally:
-            _ra_p.LEARNED = _real_learned
+            _ra_p.LEARNED, _ra_p.learned_path = _real_learned, _real_path
 
         from run_adaptive import outcome_line as _outcome
+        # ROUNDS THAT WERE MEASURED WERE ASKED.
+        _l_h, _c_h = _outcome({"success": False, "iterations": 3, "seconds": 0.1,
+                               "error": "ConnectionResetError",
+                               "transcript": [{"verdict": "DEFENDED"}, {"verdict": "PARTIAL"}]})
+        check("a loop that held twice and then stopped says so, and is still 3",
+              _c_h == 3 and "2 round(s) held" in _l_h and "never asked" not in _l_h, _l_h)
+        # A TORN BASELINE IS NOT A MISSING ONE.
+        _l_t, _ = _outcome({"success": True, "iterations": 1, "fired": ["canary_in_output"],
+                            "seconds": 0.1, "attribution": ("unmeasured", []),
+                            "baseline_unread": "JSONDecodeError"})
+        check("an unreadable baseline is named, not reported missing",
+              "could not be read" in _l_t and "run `qatration benign`" not in _l_t, _l_t)
         _l, _c = _outcome({"success": False, "iterations": 1, "seconds": 0.1,
                            "error": "ConnectionRefusedError: [Errno 111]"})
         check("an errored loop is not called HELD", "HELD" not in _l, _l[:90])
@@ -492,6 +517,7 @@ def main():
               and "attribution" in _insp2.getsource(_ra.main), "")
         _learned_u = _os_p.path.join(_tf_p.mkdtemp(), "attacks_learned.yaml")
         _ra_p.LEARNED = _learned_u
+        _ra_p.learned_path = lambda: _learned_u
         try:
             check("...and is not promoted into the arsenal",
                   _ra_p.promote({"success": True, "winning_prompt": "opening hours?",
@@ -511,7 +537,7 @@ def main():
             check("promoted ids never collide, and a non-ASCII goal still names its attack",
                   len(set(_ids)) == 4 and not _ids[3].endswith("learned-"), str(_ids))
         finally:
-            _ra_p.LEARNED = _real_learned
+            _ra_p.LEARNED, _ra_p.learned_path = _real_learned, _real_path
 
         check("a target that never breaks costs exactly the budget and no more",
               r["iterations"] == 4 and len(sent) == 4, f"{r['iterations']} iters, {len(sent)} calls")

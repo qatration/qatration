@@ -36,6 +36,14 @@ NO_CLI_DOOR = ("needs an LLM attacker through the [fleet] extra, so a base insta
 
 
 LEARNED = os.path.join(ROOT, "attacks_learned.yaml")
+
+
+def learned_path():
+    """-> where `--promote` writes: the WORKSPACE, never the package. Written into the
+    package it edited a tracked, shipped file in a checkout and site-packages on an install,
+    where an upgrade loses it and every workspace's arsenal changes with it. The shipped
+    file is read, so a payload already learned is not learned twice. Found by a review."""
+    return os.path.join(str(OUT_DIR), "attacks_learned.yaml")
 HEADER = """# Payloads DISCOVERED by the adaptive attacker, not written by hand.
 #
 # This file is the loop closing. The adaptive attacker is the only mechanism here that can
@@ -69,6 +77,13 @@ def outcome_line(res):
     Pure, so the sentence can be checked without a dead socket to produce on demand.
     """
     if res.get("error"):
+        # ROUNDS THAT WERE MEASURED WERE ASKED: "a question that was never asked" over two
+        # rounds the target answered and held is false. Still 3 -- the budget was not spent.
+        _held = sum(1 for _r in (res.get("transcript") or [])
+                    if isinstance(_r, dict) and _r.get("verdict") in ("DEFENDED", "PARTIAL"))
+        if _held:
+            return ("STOPPED: %d round(s) held, then the loop stopped — %s. The budget was "
+                    "not spent, so this is not a hold either." % (_held, res["error"]), 3)
         return ("NOTHING MEASURED: the loop stopped after %s iteration(s) — %s. This is not a "
                 "bot that held, it is a question that was never asked."
                 % (res.get("iterations"), res["error"]), 3)
@@ -88,6 +103,12 @@ def outcome_line(res):
         if _att and _att[0] == "unattributable":
             side += ("\n  NOT ATTRIBUTABLE: %s, so this cannot be told from the target's own "
                      "noise" % ", ".join(rate_phrase(d, r) for d, r in _att[1]))
+        elif _att and _att[0] == "unmeasured" and not _att[1] and res.get("baseline_unread"):
+            # A TORN BASELINE IS NOT A MISSING ONE: "run `qatration benign`" would replace
+            # the file the reader should look at first.
+            side += ("\n  (the benign baseline for this target could not be read (%s): read "
+                     "or replace it before ruling out an ambient false positive)"
+                     % res["baseline_unread"])
         elif _att and _att[0] == "unmeasured" and not _att[1]:
             side += ("\n  (no benign baseline for this target, so nothing here rules out an "
                      "ambient false positive: run `qatration benign` against it)")
@@ -112,8 +133,13 @@ def promote(res, target_name, goal, success):
     # the payload as proving something it did not.
     fired = res.get("fired") or success
     slug = "learned-" + re.sub(r"[^a-z0-9]+", "-", goal.lower())[:28].strip("-")
-    existing = yaml.safe_load(open(LEARNED, encoding="utf-8")) or [] if os.path.exists(LEARNED) else []
-    if any(a.get("text", "").strip() == res["winning_prompt"].strip() for a in existing):
+    _dest = learned_path()
+    existing = (yaml.safe_load(open(_dest, encoding="utf-8")) or []
+                if os.path.exists(_dest) else [])
+    shipped = (yaml.safe_load(open(LEARNED, encoding="utf-8")) or []
+               if os.path.exists(LEARNED) else [])
+    if any(a.get("text", "").strip() == res["winning_prompt"].strip()
+           for a in list(existing) + list(shipped)):
         return None                       # already learned; the arsenal is not a log
     # AN ID NOBODY HOLDS, not a count of ids that share a prefix: `leak secret 2` then
     # `leak secret` both came out `learned-leak-secret-2`, and a duplicate id makes `run`
@@ -122,7 +148,7 @@ def promote(res, target_name, goal, success):
     if slug == "learned-":
         import hashlib as _hl
         slug += _hl.sha256(res["winning_prompt"].encode("utf-8")).hexdigest()[:8]
-    _taken = {str(a.get("id", "")) for a in existing}
+    _taken = {str(a.get("id", "")) for a in list(existing) + list(shipped)}
     _id, n = slug, 1
     while _id in _taken:
         n += 1
@@ -139,7 +165,7 @@ def promote(res, target_name, goal, success):
              "confirmed_on": []}
     existing.append(entry)
     from workspace import atomic_write as _atomic
-    with _atomic(LEARNED) as f:
+    with _atomic(_dest) as f:
         f.write(HEADER)
         yaml.safe_dump(existing, f, sort_keys=False, allow_unicode=True, width=88)
     return entry
@@ -217,6 +243,11 @@ def main():
     from workspace import writable_path as _writable
     path = _writable(path, "adaptive transcript", "adaptive",
                      replaces=("an adaptive transcript",))
+    # AND WHERE A PROMOTION GOES, asked before the first request: on a read-only place the
+    # target was attacked, BROKEN printed, and the write then raised -- exit 2 over a finding.
+    if args.promote:
+        _writable(learned_path(), "learned attacks", "adaptive --promote",
+                  replaces=("the learned attacks",))
 
     print("=" * 78)
     print(f"  QAtration — ADAPTIVE attacker vs '{target.name}'  (attacker={args.attacker_model})")
@@ -242,6 +273,9 @@ def main():
             _row_a, _bl_a.rates(target.name, OUT_DIR),
             _bl_a.canary_rates(target.name, _ht_a.declared(ctx), OUT_DIR) or {})
         res["attribution"] = (_v_a, _d_a)
+        _bl_why = _bl_a._load(target.name, OUT_DIR)[1]
+        if _bl_why and "no benign" not in str(_bl_why).lower():
+            res["baseline_unread"] = _bl_why
     _line, _code = outcome_line(res)
     print(_line)
     if res.get("success"):
@@ -265,9 +299,10 @@ def main():
     if args.promote:
         e = promote(res, target.name, args.goal, success)
         if e:
-            print(f"learned → {os.path.basename(LEARNED)}: {e['id']}\n"
+            from workspace import shell_arg
+            print(f"learned → {learned_path()}: {e['id']}\n"
                   f"  a win on one system is a CANDIDATE generic attack; it earns that "
-                  f"status by working on another")
+                  f"status by working on another: run --attacks {shell_arg(learned_path())}")
         elif (res.get("attribution") or ("",))[0] == "unattributable":
             print("not promoted: the break is not attributable to the attack")
         elif res.get("success"):

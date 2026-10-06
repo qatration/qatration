@@ -68,7 +68,7 @@ def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
     t0 = time.time()
     last = None
     sent = 0
-    from refusal import declined as _declined
+    from refusal import attacker_refused as _attacker_refused
     from target import Probe as _Probe
     from runner import start_trial as _start_trial
     from lint_arsenal import sent_canaries as _sent_canaries
@@ -92,7 +92,7 @@ def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
         # rounds of "I can't help with creating messages designed to extract secrets" against
         # a bot that gives its code to anyone who asks, and the run printed HELD. The rule that
         # reads a refusal anywhere in this engine reads it here. Found by a review.
-        if _declined(_Probe(prompt="", output=atk), ctx):
+        if _attacker_refused(atk):
             return {"success": False, "iterations": i - 1,
                     "error": "the attacker model refused to write the attack (%r)" % atk[:80],
                     "transcript": transcript, "seconds": round(time.time() - t0, 1)}
@@ -118,7 +118,13 @@ def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
             return {"success": False, "iterations": i - 1,
                     "error": "a send timed out and may still be running against the target",
                     "transcript": transcript, "seconds": round(time.time() - t0, 1)}
-        probe = target.send(atk)
+        # THROUGH THE SWEEP'S OWN SEND (`runner._resilient_send`): a watchdog, and the
+        # retry rules every other send keeps. Sent bare, one reset socket in round three
+        # ended the loop as NOTHING MEASURED over two rounds that had been measured, and a
+        # hung adapter had no bound at all. Found by an independent review.
+        from runner import _resilient_send as _rs
+        probe = _rs(lambda a=atk: target.send(a), "adaptive-%d" % i,
+                    before_retry=getattr(target, "reset", None))
         last = probe
         sent += 1
         # Through `judge`, which is the same call the sweep makes, rather than the goal's own
