@@ -408,7 +408,15 @@ def chain_probe(prompts, step, turn_extra=None):
     big = None
     for i, p in enumerate(prompts):
         t0 = _t.time()
-        pr = step(p)
+        # A STEP THAT RAISES IS A STEP THAT ERRORED: the exception went past this loop, the
+        # turns that had answered went with it, and the retry guard -- which keeps a
+        # conversation that answered -- saw none and sent it all again. Found by a review.
+        try:
+            pr = step(p)
+        except Exception as _e:
+            pr = Probe(prompt=p, error=f"{type(_e).__name__}: {_e}")
+        if pr is None:
+            pr = Probe(prompt=p, error="the target returned no probe")
         s = float(getattr(pr, "seconds", 0) or 0) or round(_t.time() - t0, 3)
         _rb = getattr(pr, "reply_bytes", None)
         if _rb is not None:

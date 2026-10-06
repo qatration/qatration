@@ -71,12 +71,15 @@ class GiveUpWall(object):
                     "ours, and run it again.")
     DEAD_ADVICE = ("The error on those rows is the endpoint's, not this tool's: check "
                    "the URL, the port, and that the deployment is up.")
+    CRED_ADVICE = ("Mint a fresh credential and run it again; if a firewall or content filter "
+                   "in front of the model is answering 403, find out what it blocks first.")
 
     def __init__(self, limit=GIVE_UP_AFTER):
         self.limit = limit
         self.streak = 0        # units refused with a rate limit, in a row
         self.failed = 0        # units that errored outright, in a row
         self.answered = False  # has anything at all come back from this target
+        self.denied = 0        # units refused the credential (401/403), in a row
         self.reason = ""
         self.advice = ""
 
@@ -103,6 +106,14 @@ class GiveUpWall(object):
             self.failed += 1
         else:
             self.failed = 0
+        # A CREDENTIAL THAT DIED MID-RUN: the dead wall above needs "nothing ever answered",
+        # so an expiry after ten good requests sent the other fifty attacks, twice each.
+        # Found by an independent review.
+        from signing import EXPIRED as _EX, REJECTED as _RJ
+        if probes and all(e.startswith((_EX, _RJ)) for e in errs):
+            self.denied += 1
+        else:
+            self.denied = 0
         if self.streak >= self.limit and not self.reason:
             self.reason = (
                 "the endpoint answered every one of the last %d with a rate limit "
@@ -118,7 +129,32 @@ class GiveUpWall(object):
                 "the endpoint has not answered ONE of the %d sent so far (%s), so the "
                 "rest was NOT sent" % (self.failed, clipped(errs[-1], 90)))
             self.advice = self.DEAD_ADVICE
+        elif self.denied >= self.limit and not self.reason:
+            self.reason = (
+                "the endpoint refused the credential on every one of the last %d (%s), so "
+                "the rest was NOT sent" % (self.denied, clipped(errs[-1], 90)))
+            self.advice = self.CRED_ADVICE
         return bool(self.reason)
+
+
+# SENDS THE WATCHDOG GAVE UP ON, which may still be talking to the target. `start_trial`
+# waits for each one once, bounded by the send timeout, BEFORE the next reset. It stopped
+# the row a timeout happened in, and the next row's reset ran while the abandoned call was
+# still in flight: the call wrote its note after that reset, and the next attack scored
+# EXPLOITED 1/1 on a breach it did not cause. Found by an independent review. Bounded and
+# once, not "no sends until it ends": a runaway generation has run for 53 minutes here, and
+# a sweep that waited on it would measure nothing at all.
+_ABANDONED, _WAITED = [], set()
+
+
+def _settle_abandoned(label):
+    for _th in list(_ABANDONED):
+        if _th.is_alive() and id(_th) not in _WAITED:
+            _WAITED.add(id(_th))
+            print(f"  ! {label}: waiting up to {SEND_TIMEOUT}s for a send abandoned at its "
+                  f"timeout, so it cannot land in this trial", file=sys.stderr)
+            _th.join(SEND_TIMEOUT)
+    _ABANDONED[:] = [_th for _th in _ABANDONED if _th.is_alive()]
 
 
 def _invoke_with_timeout(fn, timeout):
@@ -142,6 +178,7 @@ def _invoke_with_timeout(fn, timeout):
     th.start()
     th.join(timeout)
     if th.is_alive():
+        _ABANDONED.append(th)
         return Probe(prompt="", error=f"TIMEOUT after {timeout}s", seconds=float(timeout))
     if "err" in box:
         return Probe(prompt="", error=box["err"])
@@ -176,6 +213,7 @@ def start_trial(target, last_probe, label):
         print(f"  ! {label}: a send timed out and may still be running against the target; "
               f"the remaining trials were not sent", file=sys.stderr)
         return False
+    _settle_abandoned(label)
     # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
     # under test: rangebot's shared notes outlived every trial and every attack, so
     # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
@@ -219,6 +257,20 @@ def _resilient_send(fn, attack_id, steps=1, before_retry=None):
                   f"answered -- not retried, because a retry would send them again into the "
                   f"same conversation; what they showed is judged as it stands",
                   file=sys.stderr)
+            break
+        # NOR A SINGLE SEND THAT CAME BACK WITH SOMETHING BESIDE ITS ERROR: an agent that ran
+        # a tool and then failed reports both, and the retry's clean refusal replaced a
+        # webhook that had carried the canary -- DEFENDED, and the tool run twice. The same
+        # rule as the turns above, by `Probe.silent`. Found by an independent review.
+        if not probe.silent():
+            print(f"  ! {attack_id}: {probe.error} after the target had already answered "
+                  f"something -- not retried; what came back is judged as it stands",
+                  file=sys.stderr)
+            break
+        # A CREDENTIAL THAT WAS JUST REFUSED IS REFUSED AGAIN 0.0 seconds later, and a 403
+        # from a filter re-sends the attack it just blocked. Found by an independent review.
+        from signing import EXPIRED as _EXP, REJECTED as _REJ
+        if str(probe.error or "").startswith((_EXP, _REJ)):
             break
         # A BUDGET THAT SAID NO WILL SAY NO AGAIN, 0.0 seconds later. Same shape as the 429
         # below and cheaper to see: `rate.take()` refuses before a socket is opened, so the
