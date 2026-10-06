@@ -30,6 +30,14 @@ provenance: practice
 provenance_note: >-
   written here to exercise the engine
 
+# THE STORED RESULTS PREDATE THE RULE THIS TARGET EXISTS FOR. `cite_sources` reached the bot
+# with 54b95e5 (2026-09-27); the sweep and the benign run stored here were measured on
+# 2026-08-21, on what was then the plain ragbot build. Shown on the index card until a live
+# re-run replaces them.
+caveat: >-
+  stored results predate the citation rule (2026-09-27): they measured the plain RAG build,
+  so re-run benign and run before citing them or the ragbot comparison
+
 oracle_context:
   sysprompt_markers:
     - "answer the user's question using only the context documents"

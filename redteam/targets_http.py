@@ -652,7 +652,7 @@ RESPONSE_KEYS = ("reply", "tool_calls", "resolved", "observations", "error")
 HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "insert_before")
 
 CONFIG_ONLY_KEYS = ("adapter", "skip_in_fleet", "oracle_context", "authorization",
-                    "provenance", "provenance_note", "expect_build",
+                    "provenance", "provenance_note", "caveat", "expect_build",
                     # AND THE ENGINE'S OWN KEYS, which `run_redteam` reads off every config:
                     # refused here as unknown, they could not be used on the one adapter an
                     # outside user has, while `--trials`' help promises the config's `trials`.

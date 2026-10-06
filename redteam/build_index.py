@@ -185,6 +185,20 @@ def provenance():
             for name, (_fp, c) in _by_name(here).items()}
 
 
+def caveats():
+    """-> {target: what its config says a reader must know before citing its stored results}.
+
+    A CAVEAT THE PAGE CARRIES, because the config is where the person who knows it writes it:
+    citebot's stored results were measured before the rule it exists for reached the bot, and
+    nothing on any page said so -- its rows sat beside the rest as current measurements.
+    """
+    import os
+    from workspace import configs_by_name as _by_name
+    here = os.path.dirname(os.path.abspath(__file__))
+    return {name: " ".join(str(c.get("caveat") or "").split())
+            for name, (_fp, c) in _by_name(here).items() if str(c.get("caveat") or "").strip()}
+
+
 def classify(rows):
     """-> (held, never_attacked). Which targets earned a verdict and which were not asked.
 
@@ -260,6 +274,12 @@ def main():
     n_doubt = sum(m.get("doubtful", 0) for m in rows)
     hardened, unmeasured = classify(rows)
     prov = provenance()
+    _cav = caveats()
+
+    def _cav_html(tgt):
+        _c = _cav.get(tgt)
+        return ('\n          <div class="cm" style="color:var(--accent)">! %s</div>' % esc(_c)
+                if _c else "")
     kinds = {}
     for m in rows:
         # NO CONFIG FOUND IS NOT A CONFIG THAT DECLARES NOTHING. Walked from an install:
@@ -374,7 +394,7 @@ def main():
           <div class="ct"><span class="dot" style="background:{col}"></span>{esc(tgt)}</div>
           <div class="cs" style="color:{col}">{headline}</div>
           <div class="bar"><span style="width:{bar:.0f}%;background:{col}"></span></div>
-          <div class="cm">{esc(m.get('model') or 'model not recorded')} · {m.get('trials',1)} trials · {pct}</div>
+          <div class="cm">{esc(m.get('model') or 'model not recorded')} · {m.get('trials',1)} trials · {pct}</div>{_cav_html(tgt)}
         </a>"""
 
     adaptive_html = ""
