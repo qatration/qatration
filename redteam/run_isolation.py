@@ -296,7 +296,10 @@ def main():
                 found = search(target, task, spec.get("success", []), prop_ctx(spec, ctx),
                                frames=frames, trials=args.trials,
                                stop_on_hit=args.stop_on_hit, tasks=alts,
-                               require_all=bool(spec.get("require_all")))
+                               require_all=bool(spec.get("require_all")),
+                               # searched BECAUSE its solo probe was all silence: the
+                               # control's silence is then the guard's answer
+                               silent_held=p.get("status") == "unmeasured")
                 p["keysearch"] = {k: v for k, v in found.items() if k != "results"}
                 print(format_search(p["name"], found))
                 print()
