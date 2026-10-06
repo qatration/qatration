@@ -771,10 +771,10 @@ def main():
         # THE THREE STEPS SHARE ONE LEASE, and a retry is joined only to its OWN run record.
         class _Done:
             returncode, stdout, stderr = 0, "", ""
-        _deadlines = []
+        _deadlines, _cfgs = [], []
         _real_run = _wk._run
-        _wk._run = lambda cmd, out, python=None, deadline=None, hosted=False: (
-            _deadlines.append(deadline), _Done())[1]
+        _wk._run = lambda cmd, out, python=None, deadline=None, hosted=False, configs=None: (
+            _deadlines.append(deadline), _cfgs.append(configs), _Done())[2]
         try:
             _job = {"job_id": "jx", "config": os.path.join(_sw, "t.yaml"), "scope": "quick"}
             _out = _wk.run_dir(_sw, _job)
@@ -790,6 +790,39 @@ def main():
                                            for d in _deadlines), str(_deadlines))
         check("...and an attempt that wrote no run record is not joined to the last one's",
               _rid is None, str(_rid))
+        # THE JOB'S OWN CONFIG REACHES EVERY STEP, the report included.
+        check("every step of a job is handed the job's own config",
+              len(_cfgs) >= 2 and all(c == _job["config"] for c in _cfgs), str(_cfgs))
+
+        # AN ID IS CLAIMED EXCLUSIVELY: two submits in one minute are two jobs.
+        _ids = {q.submit(_sw, "dup%d" % _i, os.path.join(_sw, "d.yaml"))["job_id"]
+                for _i in range(20)}
+        check("twenty submits in one minute are twenty jobs, each with its own file",
+              len(_ids) == 20 and all(os.path.exists(os.path.join(_sw, "job_%s.json" % _i))
+                                      for _i in _ids), str(len(_ids)))
+        check("...with an id that carries at least 64 random bits",
+              all(len(_i.rsplit("-", 1)[-1]) >= 16 for _i in _ids), str(sorted(_ids)[:2]))
+        # AND A CLASH IS RETRIED, NOT WRITTEN OVER: the same random draw twice.
+        import secrets as _sec_t
+        _draws = iter(["a" * 16, "a" * 16, "b" * 16])
+        _real_tok = _sec_t.token_hex
+        _sec_t.token_hex = lambda n=None: next(_draws)
+        try:
+            _j1 = q.submit(_sw, "clash1", os.path.join(_sw, "c.yaml"))
+            _j2 = q.submit(_sw, "clash2", os.path.join(_sw, "c.yaml"))
+        finally:
+            _sec_t.token_hex = _real_tok
+        check("a second submit that draws the same id gets another, and both jobs survive",
+              _j1["job_id"] != _j2["job_id"]
+              and (q.load(_sw, _j1["job_id"]) or {}).get("target") == "clash1",
+              "%s %s" % (_j1["job_id"], _j2["job_id"]))
+        # AND THE CONFIG REALLY REACHES THE CHILD'S ENVIRONMENT.
+        _probe_py = os.path.join(_sw, "print_env.py")
+        open(_probe_py, "w", encoding="utf-8").write(
+            "import os; print(os.environ.get('QATRATION_CONFIGS'))")
+        _pr = _wk._run([_probe_py], _sw, configs=os.path.join(_sw, "job.yaml"))
+        check("a step's child process sees the job's config in QATRATION_CONFIGS",
+              os.path.join(_sw, "job.yaml") in (_pr.stdout or ""), repr(_pr.stdout))
         # A STRANGER'S JOB RUNS UNDER THE HOSTED RULES WHOEVER STARTS THE WORKER: the job
         # carries the mode, and each step's child gets QATRATION_HOSTED from it.
         _hj = q.submit(_sw, "h", os.path.join(_sw, "h.yaml"), hosted=True)
@@ -814,7 +847,7 @@ def main():
         class _Crashed:
             returncode, stdout, stderr = 2, "", "KeyError: 'x'"
 
-        def _crash(cmd, out, python=None, deadline=None, hosted=False):
+        def _crash(cmd, out, python=None, deadline=None, hosted=False, configs=None):
             if cmd and cmd[0].endswith("run_redteam.py"):
                 json.dump({"run_id": "RUN-CRASHED", "state": "aborted", "target": "t",
                            "started_at": "2026-09-02 10:00:00",
@@ -836,7 +869,7 @@ def main():
         class _One:
             returncode, stdout, stderr = 1, "", "Terminated"
 
-        def _killed(cmd, out, python=None, deadline=None, hosted=False):
+        def _killed(cmd, out, python=None, deadline=None, hosted=False, configs=None):
             if cmd and cmd[0].endswith("run_redteam.py"):
                 json.dump({"run_id": "RUN-KILLED", "state": "started", "target": "t",
                            "started_at": "2026-09-03 10:00:00"},
@@ -852,7 +885,7 @@ def main():
               _st3 == "failed" and "this target has findings" not in (_note3 or ""),
               str((_st3, _note3)))
 
-        def _finished_one(cmd, out, python=None, deadline=None, hosted=False):
+        def _finished_one(cmd, out, python=None, deadline=None, hosted=False, configs=None):
             if cmd and cmd[0].endswith("run_redteam.py"):
                 json.dump({"run_id": "RUN-GATED", "state": "finished", "target": "t",
                            "started_at": "2026-09-04 10:00:00"},

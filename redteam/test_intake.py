@@ -214,6 +214,13 @@ def main():
                                                   "url": "https://api.acme.example/c"}),
                                   policy=allow_loopback)
         check("a name that is a path is refused", code == 400, f"{code} {obj}")
+        # NOT A NAME THE SERVICE SHIPS, in any case: under it every page reads the shipped
+        # config instead of the submitter's.
+        code, obj = intake.submit(root, body(cfg={"name": "RagBot",
+                                                  "url": "http://127.0.0.1:9/c"}),
+                                  policy=allow_loopback)
+        check("a name the service ships is refused, whatever its case",
+              code == 400 and "ships" in json.dumps(obj), f"{code} {obj}")
         for bad in ("..", ".", "-rf", ".hidden", "a:b", "x" * 65, ""):
             code, obj = intake.submit(root, body(cfg={"name": bad,
                                                       "url": "http://127.0.0.1:9/c"}),

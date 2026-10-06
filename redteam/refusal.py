@@ -283,6 +283,27 @@ def bad_patterns(ctx):
     return out
 
 
+def hosted_pattern_problem(ctx):
+    """-> [(where, why)] when a hosted job carries its own refusal regexes.
+
+    A SUBMITTED PATTERN IS RUN AGAINST REPLIES THE SAME SUBMITTER CONTROLS, and Python's
+    matcher holds the interpreter with no time limit: `(a+)+$` over a 40-character reply is
+    hours, and one job can hold a worker until its lease runs out. Refused rather than
+    heuristically screened -- no list of "dangerous shapes" is complete. Local operators keep
+    the feature. Found by an independent review.
+    """
+    try:
+        from authorization import hosted as _hosted
+    except Exception:
+        return []
+    if _hosted() and (ctx or {}).get("refusal_patterns"):
+        return [("oracle_context.refusal_patterns",
+                 "is not accepted by the hosted service: a submitted regular expression runs "
+                 "against replies the submitter controls, with no time limit. Run locally to "
+                 "use your own refusal vocabulary.")]
+    return []
+
+
 def _extra(ctx, cls):
     return list((ctx.get("refusal_patterns") or {}).get(cls, []))
 

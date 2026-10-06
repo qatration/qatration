@@ -94,7 +94,7 @@ class _Timeout:
                        f"the queue would refuse.")
 
 
-def _run(cmd, out, python=None, deadline=None, hosted=False):
+def _run(cmd, out, python=None, deadline=None, hosted=False, configs=None):
     """Run one step of a job, with a ceiling.
 
     WITHOUT THE CEILING A HUNG STEP TAKES THE WORKER WITH IT. The queue recovers — a lease
@@ -109,6 +109,13 @@ def _run(cmd, out, python=None, deadline=None, hosted=False):
     env = dict(os.environ, QATRATION_OUT=out, PYTHONIOENCODING="utf-8")
     if hosted:
         env["QATRATION_HOSTED"] = "1"
+    # THE JOB'S OWN CONFIG, TO EVERY STEP. benign and run were handed it as `--target-config`
+    # and the report step was not, so the report read the package's config under the job's
+    # name: a stranger's `name: ragbot` was graded with the shipped ragbot's context and
+    # counted as "written here to exercise the engine". Through `QATRATION_CONFIGS`, where the
+    # operator's config wins (`configs_by_name`). Found by an independent review.
+    if configs:
+        env["QATRATION_CONFIGS"] = str(configs)
     secs = int(deadline or q.LEASE_SECONDS)
     try:
         return subprocess.run([python or sys.executable] + cmd, env=env,
@@ -172,7 +179,7 @@ def execute(job, root, python=None):
     # answer rather than none.
     _hosted = bool(job.get("hosted"))
     base = _run([os.path.join(HERE, "benign.py"), "--target-config", job["config"]],
-                out, python, deadline=_left(), hosted=_hosted)
+                out, python, deadline=_left(), hosted=_hosted, configs=job.get("config"))
     baseline_note = None
     if base.returncode != 0:
         baseline_note = ("the benign baseline did not complete, so nothing has measured what "
@@ -183,7 +190,7 @@ def execute(job, root, python=None):
            "--trials", str(job.get("trials") or 3)]
     if job.get("attacks"):
         cmd += ["--attacks", job["attacks"]]
-    proc = _run(cmd, out, python, deadline=_left(), hosted=_hosted)
+    proc = _run(cmd, out, python, deadline=_left(), hosted=_hosted, configs=job.get("config"))
     if isinstance(proc, _Timeout):
         # Named, not filed under an exit code it never produced. "the sweep exited -9" would
         # read as a crash and send somebody looking for a traceback that does not exist.
@@ -250,7 +257,8 @@ def execute(job, root, python=None):
     # that produced results: a report rendered over an aborted sweep is a page describing
     # nothing, and an empty page is the most flattering possible answer.
     if state == "done":
-        rep = _run([os.path.join(HERE, "defense_report.py")], out, python, deadline=_left(),
+        rep = _run([os.path.join(HERE, "defense_report.py")], out, python, configs=job.get("config"),
+                   deadline=_left(),
                    hosted=_hosted)
         if rep.returncode != 0:
             note = ((note + "; ") if note else "") + "the report could not be rendered"

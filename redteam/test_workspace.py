@@ -1425,6 +1425,71 @@ def check_every_command_refuses():
     return fails
 
 
+def check_case_clash_operator_wins():
+    """`name: RagBot` from the operator beside the shipped `ragbot`: the operator's config is
+    the one the name reads, as it is for an exact clash."""
+    import tempfile as _tf_c, shutil as _sh_c, io as _io_c
+    import workspace as _w_c
+    bad = []
+    _d = _tf_c.mkdtemp()
+    _saved = os.environ.get("QATRATION_CONFIGS")
+    try:
+        _mine = os.path.join(_d, "mine.yaml")
+        _io_c.open(_mine, "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: RagBot" + chr(10)
+            + "oracle_context:" + chr(10) + '  canaries: ["MINE-3333"]' + chr(10))
+        os.environ["QATRATION_CONFIGS"] = _mine
+        _coll = []
+        _m = _w_c.configs_by_name(None, _coll)
+        _hit = [(n, fp) for n, (fp, _c) in _m.items() if n.casefold() == "ragbot"]
+        if len(_hit) != 1 or os.path.abspath(_hit[0][1]) != os.path.abspath(_mine):
+            bad.append("a case-only clash with a shipped config read the shipped one: %r" % _hit)
+        else:
+            print("PASS  a case-only clash with a shipped config reads the operator's own")
+    finally:
+        if _saved is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _saved
+        _sh_c.rmtree(_d, ignore_errors=True)
+    # AND ON THE HOSTED SERVICE, A SUBMITTED REGEX IS REFUSED.
+    from refusal import hosted_pattern_problem as _hpp
+    _sh = os.environ.get("QATRATION_HOSTED")
+    os.environ["QATRATION_HOSTED"] = "1"
+    try:
+        _p = _hpp({"refusal_patterns": {"refusal_content": ["(a+)+$"]}})
+    finally:
+        if _sh is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _sh
+    # THROUGH THE DOOR THE INTAKE AND EVERY HOSTED STEP USE.
+    os.environ["QATRATION_HOSTED"] = "1"
+    try:
+        try:
+            _w_c.refuse_unusable_config(
+                {"adapter": "http", "name": "rx", "url": "https://x.example/c",
+                 "oracle_context": {"refusal_patterns": {"refusal_content": ["(a+)+$"]}}},
+                "test")
+            _door = "accepted"
+        except SystemExit as _e_d:
+            _door = "refused" if "hosted service" in str(_e_d) else str(_e_d)[:80]
+    finally:
+        if _sh is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _sh
+    if _door != "refused":
+        bad.append("the hosted config door accepted a submitted regex: %s" % _door)
+    if not _p:
+        bad.append("a hosted job's own regex was accepted")
+    elif _hpp({"refusal_patterns": {"refusal_content": ["x"]}}):
+        bad.append("a local operator's regex was refused")
+    else:
+        print("PASS  a hosted job's own regex is refused, a local operator's is not")
+    return bad
+
+
 def check_benign_named_by_name():
     """A file named benign_* is checked as a baseline whatever else it carries."""
     import workspace as _w_b
@@ -3496,7 +3561,7 @@ if __name__ == "__main__":
     _f = (check_one_name_rule() + check_ctx_read_forms() + check_one_breach_rule()
           + check_unread_context_keys() + check_context_shapes() + check_esc()
           + check_every_command_refuses() + check_shared_rules_review()
-          + check_benign_named_by_name())
+          + check_benign_named_by_name() + check_case_clash_operator_wins())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()

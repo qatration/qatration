@@ -220,6 +220,12 @@ def submit(root, body, policy=None, wake=None):
     if not ID_RE.match(name):
         return _problem(400, f"`name` must match {ID_RE.pattern} — it becomes a filename, in "
                              f"results_<name>.json and history/<name>.jsonl")
+    # NOT A NAME THIS SERVICE SHIPS, in any case: under it every page reads the shipped
+    # config's context, canaries and provenance instead of the submitter's. Found by a review.
+    from workspace import fleet_names as _shipped_names
+    if name.casefold() in {str(n).casefold() for n in _shipped_names(HERE)}:
+        return _problem(400, f"`name` {name!r} is the name of a target this service ships; "
+                             f"pick another, so your results are read with your own config")
 
     # THE SCOPE BEFORE ANYTHING IS WRITTEN OR SENT: it was checked after the probe, so a
     # `scope: bogus` submission had already reached the submitter's endpoint and left its

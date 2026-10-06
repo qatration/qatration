@@ -210,7 +210,7 @@ def submit(root, target, config_path, scope="quick", authorization=None, budgets
     build by the time the job runs.
     """
     job = {
-        "job_id": f"{(when or _now()).strftime('%Y-%m-%dT%H%M')}-{uuid.uuid4().hex[:6]}",
+        "job_id": None,
         "state": "queued",
         "target": target,
         "config": config_path,
@@ -237,6 +237,23 @@ def submit(root, target, config_path, scope="quick", authorization=None, budgets
         "history": [],
         "note": None,
     }
+    # CLAIMED EXCLUSIVELY, THEN FILLED. 24 random bits per minute and an `os.replace` write let
+    # a second submit with the same id overwrite the first in silence: one requester holding a
+    # 202 for a job that now described somebody else's. 64 bits, and the file created with
+    # O_EXCL so a clash retries instead of replacing. Found by an independent review.
+    import secrets as _sec
+    os.makedirs(str(root), exist_ok=True)
+    for _ in range(8):
+        _id = f"{(when or _now()).strftime('%Y-%m-%dT%H%M')}-{_sec.token_hex(8)}"
+        try:
+            _fd = os.open(_path(root, _id), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            continue
+        os.close(_fd)
+        job["job_id"] = _id
+        break
+    else:
+        raise RuntimeError("could not claim a unique job id in %s" % root)
     _write(root, job)
     return job
 

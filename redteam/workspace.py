@@ -1648,6 +1648,8 @@ def refuse_unusable_config(cfg, where):
     # job is to refuse this config. Found by a seeded config fuzzer.
     _oc = (cfg or {}).get("oracle_context") or {}
     problems += bad_patterns(_oc if isinstance(_oc, dict) else {})
+    from refusal import hosted_pattern_problem as _hosted_patterns
+    problems += _hosted_patterns(_oc if isinstance(_oc, dict) else {})
     if not problems:
         return
     raise SystemExit(
@@ -2044,7 +2046,21 @@ def configs_by_name(directory=None, collisions=None):
         # `mybot` write the same `results_`, `benign_` and history files on Windows and macOS,
         # and were listed as two targets. Reported as the collision it is. Found by a review.
         _fk = str(name).casefold()
+        _pkg = _os.path.normcase(_os.path.abspath(directory))
+        _here = lambda _p: _os.path.normcase(_os.path.dirname(_os.path.abspath(_p))) == _pkg
         if _fk in _folded and _folded[_fk] != name:
+            # THE OPERATOR WINS HERE TOO: `name: RagBot` beside the shipped `ragbot` was
+            # folded away before the operator-wins rule below was asked, so the SHIPPED
+            # config won the case-only clash -- its canaries graded the operator's run.
+            # Found by an independent review.
+            _old = _folded[_fk]
+            if _old in out and _here(out[_old][0]) and not _here(fp):
+                if collisions is not None:
+                    collisions.append((_old, _os.path.basename(out[_old][0])))
+                del out[_old]
+                _folded[_fk] = name
+                out[name] = (fp, cfg)
+                continue
             if collisions is not None:
                 collisions.append((name, _os.path.basename(fp)))
             continue
@@ -2055,8 +2071,6 @@ def configs_by_name(directory=None, collisions=None):
             # first won: a user whose bot is called `ragbot` had SARIF anchored to the shipped
             # `targets_ragbot.yaml` and graded with the shipped canary, and a real finding
             # demoted to a note. The collision is still returned, naming the one that lost.
-            _pkg = _os.path.normcase(_os.path.abspath(directory))
-            _here = lambda _p: _os.path.normcase(_os.path.dirname(_os.path.abspath(_p))) == _pkg
             if _here(out[name][0]) and not _here(fp):
                 if collisions is not None:
                     collisions.append((name, _os.path.basename(out[name][0])))
