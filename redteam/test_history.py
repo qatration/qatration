@@ -1149,6 +1149,46 @@ def main():
         # does with it. Imported here rather than at the top: `run_redteam` pulls in the
         # engine, and this suite is otherwise about one small module.
         from run_redteam import regression_verdict
+        import history as _hh
+
+        # ONE NAMED BUILD AGAINST NONE IS NOT AGREEMENT.
+        check("a stamped run after an unstamped one is a confound naming the earlier run",
+              any("the earlier run recorded no build" in c for c in _hh.instrument_confounds(
+                  {"trials": 3, "model": "m"}, {"trials": 3, "model": "m",
+                                                "engine": "abc1234"})), "none")
+        check("...and the other way round names this run",
+              any("this run recorded no build" in c for c in _hh.instrument_confounds(
+                  {"trials": 3, "model": "m", "engine": "abc1234"},
+                  {"trials": 3, "model": "m"})), "none")
+        check("...while two unstamped runs say nothing about the build",
+              not any("build" in c for c in _hh.instrument_confounds(
+                  {"trials": 3, "model": "m"}, {"trials": 3, "model": "m"})), "said")
+
+        # A GATE OVER A GAP: 44 of 45 measured rows unmeasured now is not a pass.
+        _gap = {"prev": "p", "cur": "c", "new": [], "regressed": [], "fixed": [],
+                "unmeasured_now": ["r%d" % i for i in range(44)], "not_run": [],
+                "measured_before": 45}
+        code, said = regression_verdict(_gap)
+        check("the regression gate cannot answer over 44 of 45 rows unmeasured",
+              code == 3 and "44 of 45" in said[0], "exit %s: %s" % (code, said[:1]))
+        code, said = regression_verdict(dict(_gap, unmeasured_now=["r0"]))
+        check("...while one of 45 is under the default share and passes", code == 0,
+              "exit %s" % code)
+        code, said = regression_verdict(dict(_gap, unmeasured_now=["r0"]), max_unmeasured=0)
+        check("...unless the operator allows none", code == 3, "exit %s" % code)
+        code, said = regression_verdict(dict(_gap, new=["x"]))
+        check("...and a measured regression still fails the build over the gap", code == 1,
+              "exit %s" % code)
+        from run_redteam import absolute_verdict as _av
+        code, said = _av("any", 0, 0, 45, 40)
+        check("an absolute gate cannot answer over 40 errored of 45", code == 3,
+              "exit %s: %s" % (code, said))
+        check("...while a finding still fails it", _av("any", 0, 1, 45, 40)[0] == 1)
+        check("...and 2 errored of 45 still passes", _av("any", 0, 0, 45, 2)[0] == 0)
+        check("the diff counts the rows the earlier run measured",
+              rate_diff([{"a": (D, "0/3"), "b": (D, "0/3")},
+                         {"a": (D, "0/3"), "b": (D, "0/3")}]).get("measured_before") == 2,
+              "missing")
 
         code, said = regression_verdict(rate_diff([{"a": (D, "0/3")}, {"a": (X, "1/3")}]))
         check("the CI gate does not fail a build on a flip within the trials",
@@ -1183,8 +1223,10 @@ def main():
         check("a run that measured everything and found nothing passes, unchanged",
               _c == 0 and _s == ["CI GATE: PASS (any)."], "%s %s" % (_c, _s))
         _c, _s = _av("any", 0, 0, 45, 40)
-        check("a pass over five of forty-five says so",
-              _c == 0 and "Scored 5 attack(s)" in _s[0] and "40 errored" in _s[0],
+        # NOT A PASS AT ALL NOW: forty of forty-five unmeasured is past the share a gate
+        # allows (`--max-unmeasured`), so it cannot answer -- and still says what it scored.
+        check("a gate over five of forty-five cannot answer, and says so",
+              _c == 3 and "Scored 5 attack(s)" in _s[0] and "40 errored" in _s[0],
               str(_s))
         check("...and calls the rest a gap rather than a result",
               "not a result" in _s[0], str(_s))

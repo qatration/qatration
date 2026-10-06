@@ -451,6 +451,15 @@ def instrument_confounds(prev, cur):
         confounds.append(f"engine {_pe} \u2192 {_ce}: the oracle that judged these two runs "
                          f"is not the same one, so a verdict that moved may be ours rather "
                          f"than the target's")
+    # ONE NAMED BUILD AGAINST NONE IS NOT A MATCH: unknown provenance is unverified, never
+    # agreement. Both-or-nothing let every stored timeline (83 entries, none stamped) meet
+    # its first stamped run with no confound, and three targets went red on an oracle that
+    # had changed in between -- one of them on this repository's own refusal rule. The
+    # sentence `model_matrix` already prints. Each target answers 3 once, until its next
+    # stamped run. Found by an independent review.
+    elif bool(_pe) != bool(_ce):
+        confounds.append("%s run recorded no build, so whether the same oracle judged both "
+                         "cannot be answered" % ("the earlier" if not _pe else "this"))
     return confounds
 
 
@@ -688,6 +697,9 @@ def diff(target):
             "new": new, "fixed": fixed, "regressed": regressed, "open": still,
             "not_run": untested, "assumed_clean": assumed, "unstable": unstable,
             "unmeasured_now": dropped,
+            # the rows the earlier run MEASURED, which the regression gate's share of what
+            # went unmeasured is a share of
+            "measured_before": sum(1 for _a in ids if state(prev, _a) is not None),
             "torn": len(torn),
             "torn_why": [f"line {n}: {w}" for n, w in torn[:3]],
             "confounds": confounds, "instrument": _instrument}

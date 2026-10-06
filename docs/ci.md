@@ -266,7 +266,10 @@ hitting one endpoint together. That endpoint's rate limit will win, and the run 
 attacks come back rate-limited in a row rather than spending the arsenal on it. Under
 `--fail-on regression` that is exit `3` (the run stopped part way, so it cannot be compared);
 under `--fail-on exploited` or `any` it is judged on what was scored, with the attacks it never
-sent named as a gap — honest, and still a check that told you nothing.
+sent named as a gap. A finding among them still fails the build. A pass does not: once more
+than `--max-unmeasured` of the run went unmeasured (errored, empty, or never sent; default 10%),
+every gate exits `3` instead of passing, because a pass over rows nobody looked at is not one.
+`--max-unmeasured 0` allows none.
 
 If merges are frequent, serialise rather than cancel:
 

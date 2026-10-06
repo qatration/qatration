@@ -226,13 +226,33 @@ def age_note(meta, now=None, path=None):
             "measurement is AT LEAST that old and may be older" % (when, ago))
 
 
-def _incomparable(fired, row, ctx, inert, oracle_mod):
-    """Why this build and config cannot measure the claim, or "" when they can."""
+def _incomparable(fired, row, ctx, inert, oracle_mod, attack=None, meta=None):
+    """Why this build and config cannot measure the claim, or "" when they can.
+
+    ONE RULE DECIDES, AND THE REST EXPLAIN: replay the stored trials through `judge` with this
+    build, in the context the run judged with (`judged_ctx` over `rejudge.run_ctx`). The claim
+    is comparable when a claimed detector still fires on its own evidence. The three
+    heuristics below decided alone and misfired both ways: `inert` was read from the config
+    without what the ATTACK arms (`expects_refusal`, `plants`), and the canary check looked
+    for the plain canary in evidence `canary_encoded` reads base64-encoded -- 16 of 498
+    stored claims called "not comparable" that replay as the finding they claim. And a
+    loosened oracle is caught here before a real breach is called stale. Golden-file practice:
+    regenerate with the new tool, then diff. Found by an independent review.
+    """
     if not fired:
         return ""
     _gone = [f for f in fired if f not in oracle_mod.DETECTORS]
     if _gone:
         return "its detector %s is not in this build" % ", ".join(_gone)
+    _trials = [t for t in (row.get("trials") or []) if isinstance(t, dict) and t.get("probe")]
+    if attack is not None and _trials:
+        from rejudge import run_ctx as _rc, _probe as _rp
+        from runner import judged_ctx as _jc
+        _actx = _jc(attack, _rc(ctx, meta or {}))
+        for _t in _trials:
+            _p = _rp(attack, _t.get("probe"))
+            if _p is not None and set(oracle_mod.judge(attack, _p, _actx)[1]) & set(fired):
+                return ""
     _dead = [f for f in fired if f in inert]
     if len(_dead) == len(fired):
         return "%s cannot fire under this config (missing %s)" % (
@@ -249,6 +269,10 @@ def _incomparable(fired, row, ctx, inert, oracle_mod):
         if cans and blob and not any(c in blob for c in cans):
             return ("its evidence carries none of the canaries this config plants now, so a "
                     "leak of the one it recorded could not reproduce here")
+    if attack is not None and _trials:
+        return ("this build and config do not score the recorded evidence as %s (recorded "
+                "by %s), so a re-send could not reproduce it here"
+                % (", ".join(fired), (meta or {}).get("engine") or "an unrecorded build"))
     return ""
 
 
@@ -484,7 +508,8 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
         # whose evidence carries none of the canaries this config plants now -- rotated, so a
         # leak of the old one could never reproduce and was called stale. Found by an
         # independent review.
-        _why_not = _incomparable(fired, _row, ctx, _inert_v, _or_v)
+        _why_not = _incomparable(fired, _row, ctx, _inert_v, _or_v, attack=attack,
+                                 meta=stored.get("meta"))
         if _why_not:
             out["incomparable"].append((attack.get("id"), _why_not))
             _checked += 1
@@ -502,7 +527,10 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
             # reading the tuple as a string here would have made every row look clean.
             # THE PROBES ARE KEPT as well as scored: `tally` answers how many landed and the
             # wall has to know WHY the ones that did not failed, which only the probe says.
-            _recs = run_attack(target, _a, judged_ctx(_a, ctx), trials=n)
+            # IN THE CONTEXT THE RUN JUDGED WITH, the one `_incomparable` replayed in.
+            from rejudge import run_ctx as _rc_s
+            _recs = run_attack(target, _a, judged_ctx(_a, _rc_s(ctx, stored.get("meta"))),
+                               trials=n)
             _p.extend(r.get("probe") for r in _recs)
             # THE SAME FINDING, where the claim names its detectors: a breach by another
             # detector is another finding, not this one reproducing.

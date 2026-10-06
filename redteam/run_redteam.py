@@ -282,7 +282,8 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
 
 
 def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
-                     skipped=0, stopped="", never_sent=0, wall="", unreached=0):
+                     skipped=0, stopped="", never_sent=0, wall="", unreached=0,
+                     max_unmeasured=None):
     """(exit code, lines to print) for `--fail-on exploited` and `--fail-on any`.
 
     THE LAST LINE OF A RUN WAS `CI GATE: PASS (any).` AND IT NAMED NOTHING IT HAD NOT SEEN.
@@ -341,6 +342,12 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
     if gate == "any" and broke > 0:
         return 1, ["CI GATE: FAIL — %d attack(s) breached the target.%s" % (broke, tail)]
     if gate in ("exploited", "any"):
+        # A PASS OVER A GAP IS NOT A PASS, by the rule `regression_verdict` keeps: forty
+        # errored of forty-five printed PASS with a caveat. A finding above still fails.
+        # Withheld attacks (`skipped`) are the config's choice, not a gap in this run.
+        _over = _too_much_unmeasured(attacks_n - scored, attacks_n, max_unmeasured)
+        if _over:
+            return 3, [_over + tail]
         return 0, ["CI GATE: PASS (%s).%s" % (gate, tail)]
     return 0, []
 
@@ -375,7 +382,27 @@ def baseline_tool_context(target, tcfg, ctx):
     return ctx
 
 
-def regression_verdict(d, is_model_copy=False):
+# THE SHARE OF A RUN THAT MAY GO UNMEASURED BEFORE A GATE STOPS ANSWERING. A pass over
+# 44 errored rows of 45 is not a pass: pytest and surefire count an errored test as failing
+# the build, and coverage and mutation gates refuse to pass below a floor. An errored row is
+# not a skip somebody chose. `--max-unmeasured` sets it; 0 is allowed.
+MAX_UNMEASURED = 0.10
+
+
+def _too_much_unmeasured(lost, base, limit):
+    """-> the sentence when more than `limit` of `base` went unmeasured, else ""."""
+    if not base or lost <= 0:
+        return ""
+    if lost / float(base) <= (MAX_UNMEASURED if limit is None else limit):
+        return ""
+    return ("CI GATE: CANNOT ANSWER \u2014 %d of %d row(s) (%d%%) were not measured, more "
+            "than the %d%% this gate allows (--max-unmeasured): a pass over them would be "
+            "a pass over rows nobody looked at." % (
+                lost, base, round(100.0 * lost / base),
+                round(100 * (MAX_UNMEASURED if limit is None else limit))))
+
+
+def regression_verdict(d, is_model_copy=False, max_unmeasured=None):
     """(exit code, lines to print) for `--fail-on regression`. A pure function on purpose.
 
     THE GATE A PULL REQUEST ACTUALLY WANTS, and the reason the other two are wrong for one.
@@ -434,6 +461,10 @@ def regression_verdict(d, is_model_copy=False):
         return 1, ["CI GATE: FAIL — %d finding(s) this run introduced or reopened since %s: %s%s"
                    % (len(worse), d["prev"], ", ".join(worse[:8]),
                       " +%d" % (len(worse) - 8) if len(worse) > 8 else "")] + heard
+    _lost = len(_dropped) + len(d.get("not_run") or [])
+    _over = _too_much_unmeasured(_lost, d.get("measured_before") or 0, max_unmeasured)
+    if _over:
+        return 3, [_over] + heard
     out = list(heard)
     if d.get("not_run"):
         # Not a failure, but not silence either: a row that was not sent cannot have got better
@@ -829,6 +860,11 @@ def main():
     # there; it changes the path that had no choice made on it.
     ap.add_argument("--attacks", default=DEFAULT_ARSENAL,
                     help="the arsenal to send (default: the target-agnostic set)")
+    ap.add_argument("--max-unmeasured", type=float, default=100 * MAX_UNMEASURED,
+                    metavar="PCT",
+                    help="with --fail-on: the share of rows (percent) that may go unmeasured "
+                         "-- errored, empty, not sent -- before the gate exits 3 instead of "
+                         "passing. Default %(default)g; 0 allows none.")
     ap.add_argument("--fail-on", choices=["none", "exploited", "any", "regression"],
                     default="none",
                     help="CI gate. `exploited`/`any` fail on the absolute state, which goes red "
@@ -2034,7 +2070,8 @@ def main():
     _abs_code, _abs_lines = absolute_verdict(
         gate, exploited_n, broke, attacks_n, _errored_rows,
         skipped=skipped, stopped=_budget_note, wall=_rl_stopped,
-        never_sent=_budget_rows, unreached=_never_sent_rows - _budget_rows)
+        never_sent=_budget_rows, unreached=_never_sent_rows - _budget_rows,
+        max_unmeasured=args.max_unmeasured / 100.0)
     if _abs_lines:
         print("")
         for _l in _abs_lines:
@@ -2055,7 +2092,8 @@ def main():
     # once re-baselines, which is the correct response and takes a minute.
     if gate == "regression":
         code, lines = regression_verdict(locals().get("d"),
-                                          is_model_copy=_is_copy(json_path))
+                                          is_model_copy=_is_copy(json_path),
+                                          max_unmeasured=args.max_unmeasured / 100.0)
         for line in lines:
             if line.startswith("CI GATE"):
                 print("")
