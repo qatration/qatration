@@ -431,8 +431,11 @@ def point_at_configs(path=None, indent="    "):
     not know which file the reader meant.
     """
     p = path or "/path/to/your.yaml"
-    return ['%sexport QATRATION_CONFIGS="%s"' % (indent, p),
-            '%s$env:QATRATION_CONFIGS="%s"      # PowerShell' % (indent, p)]
+    # THROUGH `shell_arg`, the one quoting rule: wrapped raw in double quotes here, a `$` in
+    # the path expanded in both shells. Found by an independent review.
+    _q = shell_arg(p) if shell_arg(p) != p else '"%s"' % p
+    return ['%sexport QATRATION_CONFIGS=%s' % (indent, _q),
+            '%s$env:QATRATION_CONFIGS=%s      # PowerShell' % (indent, _q)]
 
 
 def no_results_note(out_dir=None):
@@ -1168,10 +1171,19 @@ def atomic_write(path, encoding="utf-8"):
     this repository were written with it; changing that would rewrite every file's line
     endings the next time anything touched it, which is a diff about nothing.
     """
-    tmp = "%s.tmp" % path
-    fh = open(tmp, "w", encoding=encoding)
+    # ONE TEMPORARY PER WRITER, AND ON DISK BEFORE THE RENAME. Every writer used `<path>.tmp`,
+    # so two writers of one path truncated each other's half-written body; and with no fsync a
+    # power loss could keep the rename with empty data -- NTFS and ext4 both may. The hidden
+    # prefix keeps a leftover out of every `results_*.json` glob. Found by an independent review.
+    import tempfile as _tf_aw
+    _dir = os.path.dirname(os.path.abspath(path)) or "."
+    _fd, tmp = _tf_aw.mkstemp(dir=_dir, prefix="." + os.path.basename(path) + ".",
+                              suffix=".tmp")
+    fh = os.fdopen(_fd, "w", encoding=encoding)
     try:
         yield fh
+        fh.flush()
+        os.fsync(fh.fileno())
     except BaseException:
         fh.close()
         try:
@@ -1180,6 +1192,13 @@ def atomic_write(path, encoding="utf-8"):
             pass
         raise
     fh.close()
+    # mkstemp makes 0600; a written artifact gets what an ordinary write would have.
+    try:
+        _um = os.umask(0)
+        os.umask(_um)
+        os.chmod(tmp, 0o666 & ~_um)
+    except OSError:
+        pass
     # AND WHEN THE REPLACE ITSELF FAILS, which the promise above did not cover: the body had
     # finished, so nothing removed the temporary. Found by a seeded random walk -- a directory
     # at the results path, and `results_mybot.json.tmp` (71 KB) left beside it.
@@ -1191,6 +1210,16 @@ def atomic_write(path, encoding="utf-8"):
     for _try in range(20):
         try:
             os.replace(tmp, path)
+            # AND THE RENAME ITSELF, where the platform lets a directory be synced.
+            if os.name != "nt":
+                try:
+                    _dfd = os.open(_dir, os.O_RDONLY)
+                    try:
+                        os.fsync(_dfd)
+                    finally:
+                        os.close(_dfd)
+                except OSError:
+                    pass
             return
         except PermissionError:
             # NOT A DIRECTORY, which Windows also answers with PermissionError and which no

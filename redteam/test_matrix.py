@@ -19,6 +19,7 @@ because the caveats are printed by the command and the caveat was the thing miss
 Both are the same shape and it is the one this project keeps finding: an absence rendered
 as a measurement, in the direction that reads as a clean result.
 """
+import io
 import json
 import os
 import subprocess
@@ -493,6 +494,37 @@ def main():
               _pa.returncode == 4, "exit %s: %s" % (_pa.returncode, (_pa.stdout + _pa.stderr)[-400:]))
     finally:
         shutil.rmtree(_wa, ignore_errors=True)
+
+    # ONE FILE, ONE MODEL: two model names that fold to one tag are refused before anything
+    # is sent, and so is a `run --model` over a file another model's sweep wrote.
+    _wt = tempfile.mkdtemp()
+    try:
+        _cfg_t = os.path.join(_wt, "tagbot.yaml")
+        io.open(_cfg_t, "w", encoding="utf-8").write("\n".join([
+            "name: tagbot", "adapter: http", 'url: "http://127.0.0.1:9/chat"',
+            "request:", '  message: "{prompt}"', '  model: "base"', "response:",
+            '  reply: "reply"', ""]))
+        _env_t = dict(os.environ, QATRATION_OUT=_wt, PYTHONIOENCODING="utf-8",
+                      PYTHONDONTWRITEBYTECODE="1")
+        _pm = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "matrix",
+                              "--target-config", _cfg_t, "--models", "llama3:8b,llama3/8b"],
+                             capture_output=True, text=True, timeout=120, env=_env_t)
+        check("a matrix asked for two models that make one file is refused",
+              _pm.returncode == 2 and "one results file" in _pm.stderr,
+              "exit %s: %s" % (_pm.returncode, _pm.stderr[-300:]))
+        import model_matrix as _mm_t
+        _rp = os.path.join(_wt, "results_tagbot_%s.json" % _mm_t.tag("llama3/8b"))
+        io.open(_rp, "w", encoding="utf-8").write(json.dumps(
+            {"meta": {"target": "tagbot", "model": "llama3/8b"}, "results": []}))
+        _pr = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "run",
+                              "--target-config", _cfg_t, "--model", "llama3:8b",
+                              "--scope", "quick"],
+                             capture_output=True, text=True, timeout=300, env=_env_t)
+        check("a run --model over another model's results file is refused before sending",
+              _pr.returncode == 5 and "holds results for model" in (_pr.stdout + _pr.stderr),
+              "exit %s: %s" % (_pr.returncode, (_pr.stdout + _pr.stderr)[-300:]))
+    finally:
+        shutil.rmtree(_wt, ignore_errors=True)
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:

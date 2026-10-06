@@ -104,6 +104,14 @@ def main():
     base = _config_name(args.target_config, {})
     tname = cfg.get("name", base)
     models = [m.strip() for m in (args.models or "").split(",") if m.strip()]
+    # TWO MODELS, ONE FILE: tags that fold to the same name would run into one results file.
+    _tags = {}
+    for _m in models:
+        _tags.setdefault(tag(_m).casefold(), []).append(_m)
+    _dup = [v for v in _tags.values() if len(v) > 1]
+    if _dup:
+        ap.error("--models %s would write to one results file (%s); name each model once"
+                 % (", ".join(_dup[0]), tag(_dup[0][0])))
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
 
     # --- read what is already on disk ---------------------------------------------------

@@ -113,7 +113,7 @@ def unfinished_note(meta, root):
 
 
 def start(root, run_id, target, scope="full", authorization=None, budgets=None, engine=None,
-          arsenal=None, trials=None, when=None):
+          arsenal=None, trials=None, when=None, results=None):
     """Write the record BEFORE the first probe, and return it.
 
     Before, not after, because the runs worth having a record of are disproportionately the
@@ -132,6 +132,9 @@ def start(root, run_id, target, scope="full", authorization=None, budgets=None, 
         # to the findings; this one is the audit trail, and they answer to different people.
         "authorization": authorization,
         "budgets": budgets or {},
+        # THE FILE THIS RUN WOULD WRITE, so a newer run that died is laid only against the
+        # export it would have replaced -- not a `--model` copy beside it.
+        "results": results,
         "started_at": (when or datetime.datetime.now()).isoformat(" ", "seconds"),
         "finished_at": None,
         "spent": {},

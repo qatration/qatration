@@ -423,8 +423,13 @@ def build(results, target_config=None, out_dir=None, source=None):
                 # no `error`, so this always said "no error recorded".
                 err = str(((t or {}).get("probe") or {}).get("error") or "").split(":")[0].strip()
                 if err:
-                    reasons[err] = reasons.get(err, 0) + 1
-        detail = ("; ".join("%s x%d" % (k, v) for k, v in sorted(reasons.items()))
+                    _a = reasons.setdefault(err, [set(), 0])
+                    _a[0].add(str((row.get("attack") or {}).get("id")))
+                    _a[1] += 1
+        # EACH COUNT NAMES ITS UNIT: the sentence counts attacks and this counted trials,
+        # "2 attack(s) ... (TimeoutError x6)". Found by an independent review.
+        detail = ("; ".join("%s on %d attack(s) (%d trial(s))" % (k, len(v[0]), v[1])
+                            for k, v in sorted(reasons.items()))
                   or "no error recorded")
         parts = []
         if unrun:
@@ -546,9 +551,15 @@ def build(results, target_config=None, out_dir=None, source=None):
     # consulted and nothing later, so an old, finished results file exported as a successful
     # scan while the run meant to replace it had failed. Found by an independent review.
     _newer_bad = None
-    _mine = (_rec or {}).get("started_at") or ""
+    # WHEN THIS EVIDENCE WAS MADE: its run record, or the run's own date where an older file
+    # has no record. AND ONLY A RUN THAT WOULD HAVE REPLACED THIS FILE: a newer `--model`
+    # copy that died says nothing about the canonical export. Found by an independent review.
+    _mine = (_rec or {}).get("started_at") or str(meta.get("when") or "")
+    _src = os.path.basename(str(source or ""))
     for _r in runs.listing(out_dir or workspace.OUT):
         if _r.get("target") != meta.get("target") or not _mine:
+            continue
+        if _src and _r.get("results") and _r.get("results") != _src:
             continue
         if (_r.get("started_at") or "") > _mine and _r.get("state") != "finished":
             _newer_bad = _r

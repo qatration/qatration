@@ -990,10 +990,13 @@ def main():
     # legitimately be open one request timeout past `max_seconds`. `runs` needs it to tell a
     # run finishing its last request from one that died.
     _budgets.setdefault("timeout_s", getattr(target, "timeout", None))
+    from workspace import artifact_path as _artifact_path
     _rec = _runs.start(OUT_DIR, _run_id, target.name, scope=args.scope,
                        authorization=_auth, budgets=_budgets,
                        engine=engine_version(), arsenal=os.path.basename(args.attacks),
-                       trials=trials)
+                       trials=trials,
+                       results=os.path.basename(_artifact_path(OUT_DIR, "results", target.name,
+                                                               args.model)))
     global _OPEN_RUN, _OPEN_TARGET
     _OPEN_RUN, _OPEN_TARGET = _rec, target
 
@@ -1055,6 +1058,19 @@ def main():
     from workspace import writable_path as _writable_path
     _writable_path(_json_path, "results", "run", replaces=("a sweep's results",))
     _writable_path(_html_path, "report", "run")
+    # ONE FILE, ONE MODEL: `llama3:8b` and `llama3/8b` make the same tag, and so does a case
+    # change on Windows, so a sweep of one model silently replaced another's results. Asked of
+    # the stored file's own record before the first probe. Found by an independent review.
+    if args.model and os.path.exists(_json_path):
+        from workspace import read_artifact as _ra_m
+        _prev_d, _prev_why = _ra_m(_json_path)
+        _prev_m = str((((_prev_d or {}) if isinstance(_prev_d, dict) else {}).get("meta")
+                       or {}).get("model") or "") if not _prev_why else ""
+        if _prev_m and _prev_m.casefold() != str(args.model).casefold():
+            print(f"ABORT — {_json_path} holds results for model {_prev_m!r}, and --model "
+                  f"{args.model!r} would write to the same file. Nothing was sent.",
+                  file=sys.stderr)
+            _refuse(5, "results file belongs to another model; nothing was sent")
     _refusal = refuse_to_overwrite_evidence(
         _json_path,
         force=getattr(args, "overwrite_evidence", False))

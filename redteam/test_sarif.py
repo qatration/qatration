@@ -817,7 +817,7 @@ _bud = [row("atk-1", "DEFENDED", []),
              trials=[{"verdict": "ERROR", "probe": {"error": "BudgetExhausted: requests"}}])]
 _log_b = build(_bud, None)
 check("the no-measurement notification names the error the probe recorded",
-      "BudgetExhausted x1" in json.dumps(notifications(_log_b)),
+      "BudgetExhausted on 1 attack(s) (1 trial(s))" in json.dumps(notifications(_log_b)),
       json.dumps(notifications(_log_b))[:300])
 # A RUN_ID WHOSE RECORD IS GONE IS NOT A RUN THAT FINISHED.
 _log_g = build([row("atk-1", "DEFENDED", [])], None, run_id="GONE-1")
@@ -902,6 +902,29 @@ with tempfile.TemporaryDirectory() as tmp:
                              source=os.path.join(tmp, "results_fixture.json"))
     finally:
         baseline.rates = _real_r
+    # A NEWER DEAD RUN THAT WOULD HAVE WRITTEN ANOTHER FILE says nothing about this one.
+    with tempfile.TemporaryDirectory() as tmp2:
+        _o2 = _runs_s.start(tmp2, "2026-09-01T1000-cccccc", "fixture",
+                            when=_dt_s.datetime(2026, 9, 1, 10, 0),
+                            results="results_fixture.json")
+        _runs_s.finish(tmp2, _o2, "finished")
+        _n2 = _runs_s.start(tmp2, "2026-09-02T1000-dddddd", "fixture",
+                            when=_dt_s.datetime(2026, 9, 2, 10, 0),
+                            results="results_fixture_gpt-4o.json")
+        _runs_s.finish(tmp2, _n2, "aborted")
+        baseline.rates = lambda target, out_dir=None: {}
+        try:
+            _log_o = sarif.build(results([row("a1", "EXPLOITED", ["canary_in_output"])],
+                                         run_id="2026-09-01T1000-cccccc"),
+                                 target_config="cfg.yaml", out_dir=tmp2,
+                                 source=os.path.join(tmp2, "results_fixture.json"))
+        finally:
+            baseline.rates = _real_r
+        check("a newer --model run that died does not supersede the canonical export",
+              not any(n["descriptor"]["id"] == "run/superseded" for n in
+                      _log_o["runs"][0]["invocations"][0].get("toolExecutionNotifications",
+                                                              [])),
+              str(_log_o["runs"][0]["invocations"][0]))
     _inv_s = _log_s["runs"][0]["invocations"][0]
     check("an export whose target has a newer run that did not finish is not a successful scan",
           _inv_s["executionSuccessful"] is False

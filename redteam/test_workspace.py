@@ -1380,8 +1380,11 @@ def check_every_command_refuses():
     # `check(label, got, want)` in this file. The only truncating write left is the one
     # inside the rule, which is what it makes the temporary file from, so the scan finding
     # exactly it is the proof that the scan still works on the real tree.
-    check("...and the scan can still see a truncating write, the rule's own",
-          [w for w in _writers if w.startswith("workspace.py")] != [], True)
+    # AND NOT EVEN THE RULE TRUNCATES NOW: it writes a fresh `mkstemp` temporary and renames
+    # it, so the scan finds nothing anywhere -- and the planted fixtures above are what show
+    # it can still see one.
+    check("...and the rule itself writes a fresh temporary, truncating nothing",
+          [w for w in _writers if w.startswith("workspace.py")], [])
     # AND THE CALLS THAT REPLACED THEM ARE REAL. A scan that found nothing because every
     # writer vanished would pass the line above.
     _atomic_calls = 0
@@ -1423,6 +1426,46 @@ def check_every_command_refuses():
     check("...and a real path that is simply absent is not",
           "prefix of `--target-config`" in _read("configs/opsbot.yaml"), False)
     return fails
+
+
+def check_atomic_write_temporaries():
+    """Every writer gets its own temporary, and none is left behind."""
+    import tempfile as _tf_a, shutil as _sh_a, threading as _th_a
+    import workspace as _w_a
+    bad = []
+    _d = _tf_a.mkdtemp()
+    try:
+        _p = os.path.join(_d, "results_x.json")
+        _errs = []
+
+        def _writer(n):
+            for _i in range(30):
+                try:
+                    with _w_a.atomic_write(_p) as _f:
+                        _f.write(("%d" % n) * 2000)
+                except Exception as _e:
+                    _errs.append(type(_e).__name__)
+        _ts = [_th_a.Thread(target=_writer, args=(n,)) for n in range(3)]
+        [t.start() for t in _ts]
+        [t.join() for t in _ts]
+        _body = open(_p, encoding="utf-8").read()
+        _left = [f for f in os.listdir(_d) if f != "results_x.json"]
+        _ok = (len(_body) == 2000 and len(set(_body)) == 1 and not _left
+               and not [e for e in _errs if e != "PermissionError"])
+        if not _ok:
+            bad.append("three writers of one path: body %d chars of %r, left %r, errors %r"
+                       % (len(_body), sorted(set(_body)), _left, _errs))
+        else:
+            print("PASS  three writers of one path leave one whole file and no temporary")
+    finally:
+        _sh_a.rmtree(_d, ignore_errors=True)
+    # AND THE CONFIGS POINTER QUOTES THROUGH THE SAME RULE: a `$` in the path stays literal.
+    _lines = _w_a.point_at_configs("/home/me/$work/bot.yaml")
+    if not all("'/home/me/$work/bot.yaml'" in l for l in _lines):
+        bad.append("point_at_configs left a $ to expand: %r" % _lines)
+    else:
+        print("PASS  the configs pointer keeps a $ in the path literal")
+    return bad
 
 
 def check_case_clash_operator_wins():
@@ -3561,7 +3604,8 @@ if __name__ == "__main__":
     _f = (check_one_name_rule() + check_ctx_read_forms() + check_one_breach_rule()
           + check_unread_context_keys() + check_context_shapes() + check_esc()
           + check_every_command_refuses() + check_shared_rules_review()
-          + check_benign_named_by_name() + check_case_clash_operator_wins())
+          + check_benign_named_by_name() + check_case_clash_operator_wins()
+          + check_atomic_write_temporaries())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()
