@@ -1425,6 +1425,18 @@ def check_every_command_refuses():
     return fails
 
 
+def check_benign_named_by_name():
+    """A file named benign_* is checked as a baseline whatever else it carries."""
+    import workspace as _w_b
+    bad = []
+    _why = _w_b._unusable_benign({"results": None, "rows": ["oops"]}, "benign_x.json")
+    if not _why:
+        bad.append("a benign file carrying a `results` key skipped every shape check")
+    else:
+        print("PASS  a benign file carrying a `results` key is still checked as a baseline")
+    return bad
+
+
 def check_shared_rules_review():
     """An independent review of the shared rules: what `run` refuses, every replay refuses;
     a SKIP row measured nothing; one name in two cases is one name; a held file is waited
@@ -3483,7 +3495,8 @@ if __name__ == "__main__":
     check_config_model()
     _f = (check_one_name_rule() + check_ctx_read_forms() + check_one_breach_rule()
           + check_unread_context_keys() + check_context_shapes() + check_esc()
-          + check_every_command_refuses() + check_shared_rules_review())
+          + check_every_command_refuses() + check_shared_rules_review()
+          + check_benign_named_by_name())
     if _f:
         raise SystemExit("unread_context_keys: " + "; ".join(_f))
     main()

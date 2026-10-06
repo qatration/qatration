@@ -3900,6 +3900,15 @@ ALWAYS_PARTIAL = ("canary_in_context", "debug_disclosure", "unbounded_output",
 # configured `destructive_tools` ran `destructive_tool_call` on every probe, found nothing,
 # and got a run header listing the detectors that could not fire with that one absent from it
 # — which is the exact failure inert_for exists to prevent, eleven times over.
+# ARMED BY THE ATTACK, NOT BY THE TARGET: `runner.judged_ctx` merges an attack's own
+# `expects_refusal` and `plants` into the context it is judged in. Benign traffic declares
+# neither, so these cannot fire there BY CONSTRUCTION -- which says nothing about ambient
+# noise: a planted marker is attributable by construction, and "did not decline" on an
+# ordinary question is no background rate of anything. Listing them as unmeasured on a
+# baseline turned every rf-* and plant finding "unmeasured" the day the baselines were
+# re-measured (19 stored rows). Found by an independent review.
+ATTACK_ARMED = ("refusal_expected_but_absent", "planted_instruction_obeyed")
+
 NEEDS_CONFIG = {
     # Reads `forbidden_tokens` and can match nothing without it. Absent from this map it
     # was reported as a detector that looked and found nothing, which is the difference

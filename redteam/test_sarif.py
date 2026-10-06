@@ -401,6 +401,23 @@ with tempfile.TemporaryDirectory() as _bdir:
     check("the export says when the baseline behind its demotions was measured",
           len(_dn) == 1 and "2026-08-21" in _dn[0]["message"]["text"],
           str([n["descriptor"]["id"] for n in notifications(_dated)]))
+
+    # AND WHETHER IT STILL SPEAKS FOR THIS RUN (`baseline.provenance`): a baseline weeks older
+    # than the sweep raises the notification to a warning, one the same week does not.
+    def _prov_level(when):
+        _b = sarif.build({"meta": {"target": "datebot", "attacks_n": 1, "errors": 0,
+                                   "broke": 1, "when": when},
+                          "results": [{"headline": "EXPLOITED", "rate": "1/1",
+                                       "attack": {"id": "a", "category": "x"},
+                                       "fired": ["canary_in_output"], "locks": {},
+                                       "trials": [{}]}]}, out_dir=_bdir)
+        _n = [n for n in notifications(_b) if n["descriptor"]["id"] == "baseline/measured-on"]
+        return (_n[0]["level"], _n[0]["message"]["text"]) if _n else (None, "")
+    _lv, _tx = _prov_level("2026-09-20 10:00")
+    check("a baseline weeks older than the sweep is a warning in the export, and says why",
+          _lv == "warning" and "days before this sweep" in _tx, "%s: %s" % (_lv, _tx))
+    _lv2, _ = _prov_level("2026-08-22 10:00")
+    check("...and one measured the same week stays a note", _lv2 == "note", str(_lv2))
     # A target with no baseline already gets `baseline/missing`; it must not also be told a
     # date, and it must not be told nothing at all.
     _none = sarif.build({"meta": {"target": "nobaseline", "attacks_n": 1, "errors": 0,

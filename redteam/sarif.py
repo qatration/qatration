@@ -505,12 +505,17 @@ def build(results, target_config=None, out_dir=None, source=None):
     _on = baseline.measured_on(target, out_dir=out_dir or workspace.OUT)
     if _on:
         _bdate, _bsaid = _on
+        # AND WHETHER IT STILL SPEAKS FOR THIS RUN: age against the sweep, the build that
+        # judged it, the model it ran on (`baseline.provenance`). Any of them raises this to
+        # `warning`, because a demotion from a rate that no longer applies is a guess.
+        _prov = baseline.provenance(target, meta, out_dir=out_dir or workspace.OUT)
         notifications.append({
-            "level": "note",
+            "level": "warning" if _prov else "note",
             "message": {"text": "The ambient rates that demote findings in this log come from "
-                                "a benign run measured %s%s." %
+                                "a benign run measured %s%s.%s" %
                                 (_bdate, "" if _bsaid else
-                                 " (read from the file's timestamp; the run did not record one)")},
+                                 " (read from the file's timestamp; the run did not record one)",
+                                 (" It was " + "; ".join(_prov) + ".") if _prov else "")},
             "descriptor": {"id": "baseline/measured-on"}})
 
     _delivery = (meta.get("delivery") or "").strip()

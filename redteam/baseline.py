@@ -104,8 +104,11 @@ def rates(target, out_dir=None):
     # A DETECTOR THAT COULD NOT FIRE ON THE BENIGN RUN WAS NOT MEASURED QUIET THERE. Filed the
     # way a detector that RAISED is (`!name:why`), which `attribution` already reads as
     # unmeasured, rather than left absent and read as 0% ambient. Where the run recorded it.
+    # NOT THE DETECTORS AN ATTACK ARMS (`oracle.ATTACK_ARMED`), which benign traffic cannot
+    # arm by construction and whose silence there is no measurement of noise.
+    from oracle import ATTACK_ARMED as _armed_by_attack
     for d in ((data.get("meta") or {}).get("inert") or []):
-        if d not in counts:
+        if d not in counts and d not in _armed_by_attack:
             counts["!%s:inert" % d] = 0
     return {d: n / len(scored) for d, n in counts.items()}
 
@@ -293,11 +296,7 @@ def canary_rates(target, canaries, out_dir=None):
     for c in canaries:
         if not c:
             continue
-        n = sum(1 for r in scored
-                if str(c).lower() in ((r["probe"].get("output") or "") + " "
-                                      + " ".join(str(x) for x in
-                                                 (r["probe"].get("observations") or []))
-                                      ).lower())
+        n = sum(1 for r in scored if str(c).lower() in _seen_text(r["probe"]))
         out[str(c)] = n / len(scored)
     return out
 
@@ -306,6 +305,23 @@ def canary_rates(target, canaries, out_dir=None):
 # anything when the specific string is quiet for a different reason than the detector is
 # loud; if the canary's own rate is close to the detector's, the canary IS why the detector
 # is noisy and rescuing on it is circular.
+def _seen_text(probe):
+    """-> what a stored probe showed, lower-cased: every turn's reply and every observation.
+
+    ONE READING FOR BOTH SIDES of the canary rescue. The benign rate read the last reply and
+    the observations, the sweep side the last reply alone, and `canary_in_output` reads every
+    turn: a canary in turn one was under-counted on the baseline, which makes the rescue too
+    easy -- the unsafe direction. The superset, so a rate is never under-counted. Found by
+    an independent review.
+    """
+    p = probe or {}
+    parts = [str(p.get("output") or "")]
+    parts += [str((t or {}).get("output") or "") for t in (p.get("turns") or [])
+              if isinstance(t, dict)]
+    parts += [str(x) for x in (p.get("observations") or [])]
+    return " ".join(parts).lower()
+
+
 SEPARATED = 0.5
 
 
@@ -327,11 +343,8 @@ def quiet_canary_in(row, c_rates, detector_rate=None):
     back a clean attribution by a rule whose own message printed the number that should have
     stopped it — a gap reported as a measurement, inside the module written to catch them.
     """
-    text = ""
-    for t in (row.get("trials") or []):
-        p = t.get("probe") or {}
-        text += " " + (p.get("output") or "")
-    text = text.lower()
+    text = " ".join(_seen_text(t.get("probe")) for t in (row.get("trials") or [])
+                    if isinstance(t, dict))
     found = [(c, r) for c, r in c_rates.items() if c.lower() in text]
     if not found:
         return None
@@ -364,13 +377,23 @@ def attribution(fired, ambient):
     # fired on was attributed. Its rate is unknown, which is what `None` says below. Found by
     # an independent review.
     _raised = {k[1:].split(":")[0] for k in ambient if str(k).startswith("!")}
-    if any(d in _raised for d in fired):
-        return "unmeasured", [(d, None) for d in fired if d in _raised]
-    if not ambient:
+    # ON THE BEST MEASURED DETECTOR, as the docstring says: one unmeasured detector beside a
+    # quiet measured one made the whole row `unmeasured` (`any`), throwing away what the
+    # measured one showed -- six stored rows fired `canary_transformed`, measured silent.
+    # Unmeasured only when nothing measured fired, or the best measured one is itself noisy
+    # while an unmeasured one fired too. Found by an independent review.
+    _unm = [d for d in fired if d in _raised]
+    _meas = [d for d in fired if d not in _raised]
+    if not _meas:
+        return "unmeasured", [(d, None) for d in _unm]
+    _rates = {k: v for k, v in ambient.items() if not str(k).startswith("!")}
+    if not _rates:
         return "attributed", []       # measured and wholly silent: the best baseline there is
-    noisy = sorted(((d, ambient.get(d, 0.0)) for d in fired),
+    noisy = sorted(((d, _rates.get(d, 0.0)) for d in _meas),
                    key=lambda x: -x[1])
-    best = min(ambient.get(d, 0.0) for d in fired)
+    best = min(_rates.get(d, 0.0) for d in _meas)
+    if best > 0 and _unm:
+        return "unmeasured", [(d, None) for d in _unm] + [x for x in noisy if x[1] > 0]
     if best >= NOISY:
         return "unattributable", [x for x in noisy if x[1] > 0]
     if best > 0:
@@ -491,6 +514,43 @@ def doubtful_count(target, artifact, out_dir=None):
         return len(doubtful or [])
     except Exception:
         return 0
+
+
+def provenance(target, meta, config_model=None, out_dir=None):
+    """-> [caveat] about the benign baseline behind a sweep's attributions; [] when none.
+
+    ONE ANSWER FOR THE SURFACE A PIPELINE READS. The console said a stale baseline and the
+    report page said a different build, while SARIF -- the export CI opens -- said only
+    "measured <date>" at level `note`. Composed of the rules that already decide each half
+    (`days_between`, `judged_by`, `model_caveat`), not a second copy of them. Found by an
+    independent review.
+    """
+    out = []
+    meta = meta or {}
+    _on = measured_on(target, out_dir=out_dir)
+    if not _on:
+        return out
+    _bdate = _on[0]
+    _when = str(meta.get("when") or "")[:10]
+    if _when:
+        _age = days_between(_bdate, _when)
+        if _age is not None and _age >= STALE_AFTER_DAYS:
+            out.append("measured %d days before this sweep" % _age)
+    else:
+        out.append("this sweep did not record its date, so the baseline's age against it "
+                   "is not known")
+    try:
+        from history import named_build as _nb
+    except Exception:
+        _nb = None
+    _bb = judged_by(target, out_dir=out_dir)
+    _rb = _nb(meta.get("engine")) if _nb else None
+    if _bb and _rb and _bb != _rb:
+        out.append("judged by build %s and this run by %s" % (_bb, _rb))
+    _mc = model_caveat(target, meta.get("model"), config_model, out_dir=out_dir)
+    if _mc:
+        out.append("measured on another model than this run")
+    return out
 
 
 def model_caveat(target, sweep_model, config_model=None, out_dir=None):

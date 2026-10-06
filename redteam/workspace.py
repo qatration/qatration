@@ -3168,8 +3168,9 @@ def _unusable_benign(data, name=""):
     if not isinstance(data, dict):
         return ("a benign baseline that is %s, not a mapping: every key the roll-up reads -- "
                 "`meta` and `rows` both -- is looked up on it" % type(data).__name__)
-    if "results" in data:
-        return None
+    # NOT EXCUSED BY A `results` KEY: any value there, `null` included, skipped every check
+    # below, and a `rows: ["oops"]` file reached the roll-up as an AttributeError and a
+    # string `fired` as rates over 100%. The name decides. Found by an independent review.
     # BY NAME ONLY, and that is the lesson of the results rule pointed the other way. A
     # `rows` list is not enough to say "this is a benign baseline": `rejudge` hands this
     # reader a re-scoring input with rows and no `meta.probes`, which is fine for what it is,

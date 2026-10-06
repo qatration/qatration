@@ -1775,6 +1775,15 @@ def main():
         check("...and writes the baseline it measured",
               os.path.exists(os.path.join(_bw, "benign_rlbot.json")),
               str(sorted(os.listdir(_bw))))
+        # AND RECORDS AS DEAF ONLY WHAT THE CONFIG LEAVES DEAF: a detector an ATTACK arms
+        # (`oracle.ATTACK_ARMED`) is not unmeasured on benign traffic.
+        import json as _json_ia
+        from oracle import ATTACK_ARMED as _aa
+        _inert_w = ((_json_ia.load(open(os.path.join(_bw, "benign_rlbot.json"),
+                                        encoding="utf-8")).get("meta") or {}).get("inert")
+                    or [])
+        check("...and does not record the detectors an attack arms as deaf",
+              not (set(_inert_w) & set(_aa)) and bool(_inert_w), str(_inert_w))
 
         # --- AND A RUN THAT ASKED FOR THIS IS TOLD HOW TO SEE IT ---------------------
         #
@@ -2767,11 +2776,17 @@ def main():
 
     # --- an independent review of the baseline -----------------------------------------
     # A TAIL THAT CAME BACK EMPTY IS THE SAME CUT AS ONE THAT ERRORED.
-    _n_s = [0]
+    _n_s, _g_s = [0], [0]
 
     class _Hushes(_BH_r):
         def log_message(self, *a):
             pass
+
+        def do_GET(self):
+            _g_s[0] += 1
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_POST(self):
             self.rfile.read(int(self.headers.get("Content-Length") or 0))
@@ -2809,6 +2824,22 @@ def main():
         check("a dry run over a config with no context says how few detectors could fire",
               "that can fire on this config" in _p_d.stdout and "cannot:" in _p_d.stdout
               and "over all" not in _p_d.stdout, _p_d.stdout[-300:])
+        # AND CONTACTS NOTHING, even where the config asks the server for its build.
+        _c_b = os.path.join(_w_s, "buildbot.yaml")
+        _io_r.open(_c_b, "w", encoding="utf-8").write(chr(10).join([
+            "name: buildbot", "adapter: http",
+            'url: "http://127.0.0.1:%d/chat"' % _srv_s.server_address[1],
+            "request:", '  message: "{prompt}"', "response:", '  reply: "reply"',
+            "expect_build:", '  version: "1"', ""]))
+        _g_s[0], _n0 = 0, _n_s[0]
+        _p_b = _sp_r.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                          "--target-config", _c_b, "--dry-run"], capture_output=True,
+                         text=True, errors="replace", timeout=600,
+                         env=dict(os.environ, QATRATION_OUT=_w_s, PYTHONDONTWRITEBYTECODE="1",
+                                  PYTHONIOENCODING="utf-8"))
+        check("a dry run sends nothing, not even the build check",
+              (_g_s[0], _n_s[0] - _n0) == (0, 0),
+              "GET %d, POST %d: %s" % (_g_s[0], _n_s[0] - _n0, (_p_b.stdout + _p_b.stderr)[-200:]))
     finally:
         _srv_s.shutdown()
         _sh_r.rmtree(_w_s, ignore_errors=True)

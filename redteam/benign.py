@@ -47,7 +47,7 @@ from target import payload, engine_version
 from workspace import measured_when, FILE_DATED
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more
-from oracle import DETECTORS, inert_for, visible_text
+from oracle import DETECTORS, inert_for, visible_text, ATTACK_ARMED
 
 # ---------------------------------------------------------------------------------------
 # The corpus. Each entry names the detector it is built to provoke, so a fire is readable:
@@ -1194,8 +1194,10 @@ def main():
     #
     # After the authorization gate above, and it stays there: asking the server which build it
     # is means sending it a request.
+    # A DRY RUN CONTACTS NOTHING: this GET went out before the dry-run branch below, so
+    # `--dry-run` (no model, no network) opened the target's url. Found by a review.
     from run_redteam import _build_mismatch
-    _mismatch = _build_mismatch(cfg)
+    _mismatch = _build_mismatch(cfg) if not args.dry_run else ""
     if _mismatch:
         print(f"ABORT — {args.target} is not the build this config describes: {_mismatch}",
               file=sys.stderr)
@@ -1415,7 +1417,8 @@ def main():
                                         # AND WHAT COULD NOT FIRE, so a detector that was
                                         # deaf here reads as unmeasured, not as 0% ambient
                                         # (`baseline.rates`).
-                                        "inert": sorted(inert_for(ctx, DETECTORS)),
+                                        "inert": sorted(set(inert_for(ctx, DETECTORS))
+                                                        - set(ATTACK_ARMED)),
                                         "trials": args.trials, **s}), "rows": rows},
                   f, indent=2)
     print(f"\nwrote {path}")
