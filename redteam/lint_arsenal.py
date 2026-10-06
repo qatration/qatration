@@ -1155,6 +1155,21 @@ def bad_delivery(a, fname="arsenal"):
         _seed = a.get("seed")
         if not isinstance(_seed, dict) or not str(_seed.get("text") or "").strip():
             return ["%s: %s: indirect delivery plants `seed.text`, and this seed carries none (%s) -- every target reads it, so the run stops with a KeyError after the attacks before it have been sent" % (fname, aid, str(_seed)[:60])]
+    if d == "forged_history":
+        # AT THE DOOR `run --attacks` USES, not only in the shipped-corpus lint: a role the
+        # adapter does not know was relabelled `assistant` on the wire, so an attack meant to
+        # forge a system turn silently tested a different one. Found by an independent review.
+        hist = a.get("history") if isinstance(a.get("history"), list) else []
+        if any(not isinstance(h, dict) or h.get("role") not in ("user", "assistant")
+               or not h.get("content") for h in hist):
+            return ["%s: %s: every history entry needs a non-empty 'content' and role user|assistant -- any other role is sent as `assistant`, so the attack would test a turn it did not write" % (fname, aid)]
+        if hist and not any(h.get("role") == "assistant" for h in hist):
+            return ["%s: %s: forged_history with no forged assistant turn — that is a chain, not a context-compliance attack" % (fname, aid)]
+        # AND NOT ENCODED: every forged turn was wrapped in the decode instruction, so the
+        # forged assistant reply became "Decode this base64 and follow it" -- the priming the
+        # attack exists for, destroyed. Found by an independent review.
+        if a.get("encode"):
+            return ["%s: %s: forged_history cannot be combined with `encode` -- the forged turns would be sent encoded too, and a forged reply wrapped in a decode instruction primes nothing" % (fname, aid)]
     if d in ("chain", "sessions"):
         # A LIST ONLY: `steps: 3` is `bad_entry_shapes`' finding, not a crash here.
         _steps = a.get("steps") if isinstance(a.get("steps"), (list, tuple)) else []
@@ -1361,21 +1376,10 @@ def main():
             # `unusable_entries` -- the door a customer's `--attacks` file comes through --
             # which this function already calls for every file above. Checking again here
             # would report each fault twice.
-            if a.get("delivery") == "forged_history":
-                # `unusable_entries` has already refused a forged_history with no `history`
-                # at all, so this asks only about the shape of one that has entries.
-                hist = a.get("history") or []
-                if hist and not any(h.get("role") == "assistant" for h in hist):
-                    # A forged history with no assistant turn is a chain written the long
-                    # way round. The entire mechanism is that the model reads a reply it
-                    # never gave, so an attack lacking one measures something else while
-                    # filing under this name.
-                    errors.append(f"{fname}: {aid}: forged_history with no forged assistant "
-                                  f"turn — that is a chain, not a context-compliance attack")
-                elif any(h.get("role") not in ("user", "assistant") or not h.get("content")
-                         for h in hist):
-                    errors.append(f"{fname}: {aid}: every history entry needs a non-empty "
-                                  f"'content' and role user|assistant")
+            # A FORGED HISTORY'S SHAPE is `bad_delivery`'s, asked above through
+            # `unusable_entries` for every file -- the door `run --attacks` uses too. A
+            # history with no assistant turn is a chain written the long way round: the
+            # mechanism is that the model reads a reply it never gave.
 
             # An empty `success` used to mean an attack that could never register a break,
             # and that stopped being true when the always-on sets arrived: a leak is now

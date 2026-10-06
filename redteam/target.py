@@ -422,6 +422,11 @@ def chain_probe(prompts, step, turn_extra=None):
         if _rb is not None:
             big = max(big or 0, _rb)
         if getattr(pr, "error", None):
+            # AND WHAT THE ERRORED STEP ITSELF DID: an agent that ran a tool and then failed
+            # reports both, and the step's calls were dropped with the turn.
+            calls += list(pr.tool_calls or [])
+            obs += list(pr.observations or [])
+            res += list(getattr(pr, "resolved", None) or [])
             return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
                          observations=obs, resolved=res, turns=turns, seconds=secs + s,
                          error=pr.error, reply_bytes=big)

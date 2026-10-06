@@ -141,6 +141,11 @@ def parser(name, description=None, **kw):
                                    description=description or COMMANDS[name][1], **kw)
 
 
+# THE COMMANDS THAT NEVER READ OR WRITE THE WORKSPACE, so a bad QATRATION_OUT does not
+# refuse them (`workspace.run_command`).
+WORKSPACE_FREE = ("init_config", "mint", "lint_arsenal")
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
 
@@ -185,7 +190,8 @@ def main(argv=None):
         # ended both with an `AttributeError` AND EXIT 1, the code this tool documents as a
         # finding. The translation existed and the crash walked past it, which is the same
         # defect as the one the comment above records, one frame earlier.
-        return _run_command(lambda: importlib.import_module(module_name).main())
+        return _run_command(lambda: importlib.import_module(module_name).main(),
+                            workspace=module_name not in WORKSPACE_FREE)
     finally:
         sys.argv = saved
 

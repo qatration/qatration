@@ -3517,7 +3517,7 @@ def read_artifacts(paths):
     return good, bad
 
 
-def run_command(main):
+def run_command(main, workspace=True):
     """Run a command's `main` and turn the two accidents into the code the table reserves.
 
     `raise SystemExit("a message")` exits ONE, and one is the code this tool documents as
@@ -3555,7 +3555,10 @@ def run_command(main):
     except (AttributeError, ValueError):
         pass
     # THE WORKSPACE BEFORE THE COMMAND, and not in front of `--help`, which reads nothing.
-    if not any(_a in ("-h", "--help") for _a in _sys.argv[1:]):
+    # AND NOT IN FRONT OF A COMMAND THAT NEVER READS OR WRITES IT: `init`, `mint` and `lint`
+    # were refused for a QATRATION_OUT pointing at a file, though none of them goes near it.
+    # Found by an independent review.
+    if workspace and not any(_a in ("-h", "--help") for _a in _sys.argv[1:]):
         _why_out = out_problem()
         if _why_out:
             print(_why_out, file=_sys.stderr)

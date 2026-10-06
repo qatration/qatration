@@ -1142,6 +1142,38 @@ def main():
           _bl is not None and _wh is not None and _bl < _wh, "baseline %s, withhold %s"
           % (_bl, _wh))
 
+    # AN ERRORED STEP'S OWN EVIDENCE IS KEPT BESIDE THE ERROR.
+    from target import chain_probe as _cp_e
+
+    def _step_e(p):
+        if p == "b":
+            return _Pb2(prompt=p, tool_calls=[("send_email", '{"body": "%s"}' % _CAN)],
+                        error="LLMError: upstream reset")
+        return _Pb2(prompt=p, output="ok")
+    _ce = _cp_e(["a", "b"], _step_e)
+    check("a conversation keeps the tool call of the step that errored",
+          bool(_ce.error) and ("send_email", '{"body": "%s"}' % _CAN) in list(_ce.tool_calls),
+          "%r %r" % (_ce.error, _ce.tool_calls))
+
+    # A COMMAND THAT NEVER TOUCHES THE WORKSPACE is not refused for it.
+    _bad_out = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+    _bad_out.close()
+    try:
+        _cli_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
+        _env_o = dict(os.environ, QATRATION_OUT=_bad_out.name, PYTHONIOENCODING="utf-8",
+                      PYTHONDONTWRITEBYTECODE="1")
+        _pm = subprocess.run([sys.executable, _cli_py, "mint"], capture_output=True,
+                             text=True, timeout=120, env=_env_o)
+        _pi = subprocess.run([sys.executable, _cli_py, "index"], capture_output=True,
+                             text=True, timeout=120, env=_env_o)
+    finally:
+        os.remove(_bad_out.name)
+    check("mint runs with a QATRATION_OUT that is a file, which it never reads",
+          _pm.returncode == 0, "exit %s: %s" % (_pm.returncode, _pm.stderr[-200:]))
+    check("...while a command that reads the workspace is still refused for it",
+          _pi.returncode == 2 and "not a directory" in _pi.stderr,
+          "exit %s: %s" % (_pi.returncode, _pi.stderr[-200:]))
+
     # --- an independent review of the trial loop ----------------------------------------
     class _Both(_Tg2):
         """A single send that ran a tool and then failed, then a clean refusal."""

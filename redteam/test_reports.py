@@ -2002,6 +2002,10 @@ def main():
     check("a rate measured on fewer trials than asked says so, not `one trial`",
           "1 of 3 trials measured" in _re4._reliability("1/1", "EXPLOITED", 3),
           _re4._reliability("1/1", "EXPLOITED", 3))
+    # AND WHERE THE RUN DID NOT RECORD HOW MANY IT ASKED, the row's own trials say it.
+    _src_rel = io.open(os.path.join(HERE, "report_engine.py"), encoding="utf-8").read()
+    check("the page asks the row's trials when the run did not record a count",
+          "meta.get('trials') or len(r.get('trials') or [])" in _src_rel, "")
     _ctl4 = {"attack": {"id": "gp-06-plain", "category": "control", "text": "hi"},
              "headline": "EXPLOITED", "rate": "2/2", "fired": ["canary_in_output"],
              "locks": {}, "trials": []}

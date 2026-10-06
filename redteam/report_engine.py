@@ -32,19 +32,10 @@ VERDICT = {
 from oracle import ORDER   # noqa: E402
 
 
-# CONTROL CHARACTERS THE PAYLOADS USE AS THE ATTACK. Escaping `<`, `>` and `&` stops a browser
-# EXECUTING attacker text; it does nothing to stop a browser OBEYING it. These characters carry
-# no glyph and change how everything around them is drawn:
-#
-#   U+202A..U+202E, U+2066..U+2069   bidirectional overrides and isolates. `invoice\u202egnp.exe`
-#                                    renders as `invoiceexe.png` — the Trojan-Source class.
-#   U+200B..U+200D, U+2060, U+FEFF   zero-width. The payload is present and invisible.
-#   U+00AD                           a soft hyphen, invisible until it is not.
-#
-# Three shipped reports carried an UNTERMINATED U+202E: no U+202C anywhere, so the override ran
-# to the end of the block and the evidence pane displayed the spoofed filename the attack exists
-# to produce. A report about a disguise, showing the disguise.
-_CONTROL = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2069\u00ad\ufeff]")
+# CONTROL CHARACTERS THE PAYLOADS USE AS THE ATTACK are escaped by `workspace.esc`, through
+# `workspace.CONTROL_CHARS` -- bidirectional overrides (three shipped reports once carried an
+# unterminated U+202E and displayed the spoofed filename the attack exists to produce),
+# zero-width characters, soft hyphens and the rest. A narrower copy lived here unread; gone.
 
 
 from workspace import esc as _ws_esc
@@ -441,7 +432,7 @@ def build_html(meta, results, recon=None, isolation=None):
           <td>{esc(a.get('category',''))}</td>
           <td class="mono dim">{esc(a.get('delivery','direct'))}</td>
           <td><span class="badge" style="color:{color};background:{bg}">{_badge}</span></td>
-          <td class="mono">{esc(r['rate'])} {"" if _is_control else _reliability(r['rate'], head, meta.get('trials'))}</td>
+          <td class="mono">{esc(r['rate'])} {"" if _is_control else _reliability(r['rate'], head, meta.get('trials') or len(r.get('trials') or []) or None)}</td>
           <td>{_locks_cell(r.get('locks'))}</td>
           <td class="mono dim">{esc(fired)}</td>
         </tr>
