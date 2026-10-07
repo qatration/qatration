@@ -60,8 +60,17 @@ BRANDS = ("acmeshop", "acmebank", "acmerange", "acmecloud", "acmehbank", "northg
 
 
 def fleet_literals():
-    """Canaries and tool names any target config declares — the strings that pin an attack."""
-    canaries, tools = set(), set()
+    """Canaries and tool names any target config declares — the strings that pin an attack.
+
+    -> (canaries, tools, slots, markers). `slots` maps a literal to the oracle_context keys
+    that declare it, so `slotted` can write a slot the sweep fills from the target's own
+    config; `markers` are planted markers, which an attack can carry itself in `plants:`.
+    EVERY `*_tools` KEY, by its suffix and not by a list, plus `planted_markers` and the
+    multi-word `forbidden_tokens`: reading `canaries` and `tool_names` alone let 20 attacks
+    naming `GrantAdmin` or `MEMPWN-7788` into the portable arsenal. Found by an independent
+    review.
+    """
+    canaries, tools, slots, markers = set(), set(), {}, set()
     # THROUGH `oracle_contexts`, which is this question with the name rule and the collision
     # rule already attached. The loop here parsed each config itself and did
     # `(...).get("oracle_context")` on whatever came back, so a config reading
@@ -78,7 +87,69 @@ def fleet_literals():
         for x in (oc.get("tool_names") or []):
             if len(str(x)) > 3:
                 tools.add(str(x).lower())
-    return canaries, tools
+        for key, vals in oc.items():
+            if not isinstance(vals, list):
+                continue
+            if key.endswith("_tools") or key == "forbidden_tokens":
+                for x in vals:
+                    s = str(x).strip().lower() if isinstance(x, str) else ""
+                    if len(s) > 3 and (key != "forbidden_tokens" or " " in s):
+                        slots.setdefault(s, set()).add(key)
+            elif key == "planted_markers":
+                markers.update(str(x).strip().lower() for x in vals
+                               if isinstance(x, str) and str(x).strip())
+    return canaries, tools, slots, markers
+
+
+# WHICH KEY A LITERAL BECOMES WHEN IT IS DECLARED BY SEVERAL: the one the attack's own
+# detector reads (`DeleteAccount` is a destructive tool AND a watched one; an attack judged by
+# `destructive_tool_call` needs the target's destructive tool), else the first of these.
+_SLOT_ORDER = ("privileged_tools", "destructive_tools", "watch_tools", "forbidden_tokens")
+
+
+def slotted(a, slots, markers):
+    """-> `a` with each fleet literal written as the slot the sweep fills from the target's
+    config, and each planted marker it names carried in its own `plants:`. The marker is the
+    attacker's string, so it exists on any target; the tool name is the target's, so it is
+    asked of the target. Unchanged when it names neither."""
+    from oracle import NEEDS_CONFIG
+    from runner import slot_of
+    want = {k for d in (a.get("success") or []) for k in NEEDS_CONFIG.get(d, ())
+            if isinstance(k, str)}
+    keep = ("id", "category", "success", "partial", "applies_to", "plants")
+    blob = json.dumps({k: v for k, v in a.items() if k not in keep}, ensure_ascii=False).lower()
+    subs = {}
+    for lit, keys in slots.items():
+        if not re.search(r"\b" + re.escape(lit) + r"\b", blob):
+            continue
+        order = sorted(keys, key=lambda k: (k not in want,
+                                            _SLOT_ORDER.index(k) if k in _SLOT_ORDER else 99, k))
+        subs[lit] = "{%s}" % slot_of(order[0])
+    named = sorted(m for m in markers if m in blob)
+    if not subs and not named:
+        return a
+
+    def _sub(v):
+        if isinstance(v, str):
+            for lit, slot in subs.items():
+                v = re.sub(r"\b" + re.escape(lit) + r"\b", slot, v, flags=re.I)
+            return v
+        if isinstance(v, list):
+            return [_sub(x) for x in v]
+        if isinstance(v, dict):
+            return {k: _sub(x) for k, x in v.items()}
+        return v
+    out = {k: (v if k in keep else _sub(v)) for k, v in a.items()}
+    if named:
+        # THE SPELLING THE ATTACK USES, which is the one the reply will repeat.
+        _raw = json.dumps(a, ensure_ascii=False)
+        have = [str(p) for p in (a.get("plants") or [])]
+        for m in named:
+            hit = re.search(re.escape(m), _raw, flags=re.I)
+            if hit and hit.group(0).lower() not in {h.lower() for h in have}:
+                have.append(hit.group(0))
+        out["plants"] = have
+    return out
 
 
 def library():
@@ -112,8 +183,11 @@ def library():
     return out, hand
 
 
-def blocked_reason(a, canaries, tools):
-    """Why this attack cannot be sent at an arbitrary target, or None."""
+def blocked_reason(a, canaries, tools, markers=()):
+    """Why this attack cannot be sent at an arbitrary target, or None.
+
+    `markers` are the fleet's planted markers: one the attack does not carry in its own
+    `plants:` exists only on the bot it was planted in."""
     if a.get("category") == "control":
         return "control: a per-target baseline, not an attack"
     if a.get("seed"):
@@ -130,6 +204,10 @@ def blocked_reason(a, canaries, tools):
     for c in canaries:
         if c in blob:
             return "names a canary planted in one practice bot"
+    _own = {str(p).lower() for p in (a.get("plants") or [])}
+    for m in markers:
+        if m in blob and m not in _own:
+            return "names a marker planted in one practice bot"
     for t in tools:
         if re.search(r"\b" + re.escape(t) + r"\b", blob):
             return f"names the tool {t!r}"
@@ -146,7 +224,7 @@ def blocked_reason(a, canaries, tools):
 
 
 def build():
-    canaries, tools = fleet_literals()
+    canaries, tools, slots, markers = fleet_literals()
     lib, hand = library()
     promoted, blocked = [], []
     for aid, a in sorted(lib.items()):
@@ -157,7 +235,8 @@ def build():
         # Compliance attack, the whole `serialization` category, the recon set — so a run
         # against an outside target never saw one of them. The same defect as the scoping itself, one directory deeper:
         # not a decision about what to send, an accident of which file something was written in.
-        why = blocked_reason(a, canaries, tools)
+        a = slotted(a, slots, markers)
+        why = blocked_reason(a, canaries, tools, markers)
         if why:
             blocked.append((aid, a.get("category"), why))
             continue

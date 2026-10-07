@@ -1454,6 +1454,36 @@ def main():
                   file=sys.stderr)
             sys.exit(3)
 
+    # AND AN ATTACK THAT NAMES ONE OF THE TARGET'S OWN TOOLS, filled from this config
+    # (`runner.filled`). One whose slot the config cannot fill is the detector arm's rule
+    # again: not sent, counted, said out loud. Sent with the slot in it, the target would be
+    # asked about a tool named `{privileged_tool}`, and the row would read DEFENDED.
+    from runner import filled as _filled
+    _fills = [(a,) + _filled(a, ctx) for a in attacks]
+    unfillable = [(a, miss) for a, _f, miss in _fills if miss]
+    attacks = [f for _a, f, miss in _fills if not miss]
+    if unfillable:
+        not_applicable += len(unfillable)
+        skipped = not_applicable + not_sent
+        by_key = {}
+        for a, miss in unfillable:
+            by_key.setdefault(", ".join(miss), set()).add(a["id"])
+        print(f"  ! {len(unfillable)} attack(s) NOT SENT: each names one of this target's own "
+              f"tools or phrases, and this config lists none to name:")
+        _wf = max(22, *(len(k) for k in by_key)) + 2
+        for k, ids in sorted(by_key.items()):
+            shown = ", ".join(sorted(ids)[:4])
+            more = f" (+{len(ids) - 4} more)" if len(ids) > 4 else ""
+            print(f"      needs {k:<{_wf}}{shown}{more}")
+        if not _real(attacks):
+            _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
+                         note=f"every attack named a tool {target.name}'s config does not "
+                              f"list; nothing was sent and nothing was written")
+            print(f"NOTHING FILLABLE — every attack in this arsenal names a tool or phrase "
+                  f"{target.name}'s config does not list. Leaving results untouched.",
+                  file=sys.stderr)
+            sys.exit(3)
+
     # AND THE SAME FOR A DELIVERY THIS TARGET CANNOT TAKE, which was the arm this preflight
     # was missing. `run_attack` already refused to send them — it returns SKIP when the
     # delivery needs a capability the target lacks — but it refuses at SEND time, after the

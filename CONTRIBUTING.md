@@ -94,12 +94,22 @@ What actually keeps an attack out is what is IN it, which is a property nobody h
 | is a `control` | an ordinary question used as a per-target baseline, not an attack |
 | names a canary planted in one practice bot | tests a string that does not exist anywhere else |
 | names one bot's tool | same |
+| names a marker planted in one practice bot, and does not carry it in its own `plants:` | same: a marker the attack brings itself exists on any target, so it travels |
 | carries a `seed:` block | plants a document, which needs a store a chat endpoint does not expose |
 | carries `paired_with` | one half of an A/B pair, whose measurement is the pair rather than the prompt — the framed halves of `attacks_guardlift.yaml` are sixty variants of one question and mean nothing apart from their twins |
 | names a brand | reads as a different company's bot, which changes what is being tested — promotable with a text edit, and `build_generic.py --blocked` lists these so the work stays visible |
 
 So write the payload so it says what it means without naming our furniture, and it travels. Name
 a canary and it stays home whether or not you scoped it.
+
+**A tool or phrase a config declares travels as a slot.** A name that one bot's config lists under
+a `*_tools` key (`privileged_tools`, `destructive_tools`, ...) or a multi-word `forbidden_tokens`
+phrase is written into the portable copy as `{privileged_tool}`, `{destructive_tool}` or
+`{forbidden_phrase}`, and the sweep fills it from the config of the target it is pointed at. A
+target whose config lists no such tool is not sent that attack, and the run says which key it
+needed: sent with a name the target does not have, it would come back DEFENDED about a request
+nobody really made. A planted marker the attack names is added to its own `plants:` instead,
+because that string is the attacker's and exists wherever the attack is sent.
 
 ### Adding a detector
 

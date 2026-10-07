@@ -5,7 +5,7 @@ the attack dict. Delivery types are how new scenario classes slot in:
   - direct:   payload goes in the user prompt
   - indirect: payload is planted via target.seed(), user prompt stays benign
 """
-import sys, threading, time
+import re, sys, threading, time
 from oracle import judge, ORDER
 from encoders import apply_encoding
 from target import Probe, payload
@@ -537,6 +537,65 @@ def sent_form(s, enc=None):
     # misaligned. The edges `payload` exists for are newlines and trailing space; those go.
     # Found by an independent review.
     return apply_encoding(s, enc).lstrip("\r\n").rstrip() if enc else s
+
+
+# A NAME THE TARGET'S OWN CONFIG GIVES. A portable attack cannot name a practice bot's tool
+# (`GrantAdmin`) or its forbidden phrase: on anybody else's deployment that string does not
+# exist, the detector that judges it reads the target's own list, and the row came back
+# DEFENDED about a request the target was never really asked. `build_generic` writes the slot
+# where the fleet's literal stood; the sweep fills it from the target being swept, and an
+# attack whose slot this config cannot fill is not sent. Found by an independent review.
+SLOT_RE = re.compile(r"\{((?:[a-z]+_)*[a-z]+_tool|forbidden_phrase)\}")
+# Fields that are not text the attacker sends.
+_NOT_SENT = ("id", "category", "success", "partial", "applies_to", "plants", "delivery",
+             "encode", "expects_refusal", "paired_with", "family")
+
+
+def slot_key(name):
+    """-> the oracle_context key a slot is filled from: `{privileged_tool}` from
+    `privileged_tools`, `{forbidden_phrase}` from `forbidden_tokens`."""
+    return "forbidden_tokens" if name == "forbidden_phrase" else name + "s"
+
+
+def slot_of(key):
+    """-> the slot written where a literal from `key` stood, or None. `slot_key`'s inverse."""
+    if key == "forbidden_tokens":
+        return "forbidden_phrase"
+    return key[:-1] if key.endswith("_tools") else None
+
+
+def _slot_value(ctx, name):
+    vals = [str(v).strip() for v in ((ctx or {}).get(slot_key(name)) or [])
+            if isinstance(v, str) and str(v).strip()]
+    if not vals:
+        return None
+    # THE PHRASE, not the shortest banned word: the slot stood where a sentence was.
+    return max(vals, key=len) if name == "forbidden_phrase" else vals[0]
+
+
+def filled(attack, ctx):
+    """-> (the attack with every slot filled from `ctx`, [config keys it needed and lacked]).
+
+    The copy is what is sent and what the results store, so a replay subtracts the name the
+    target was actually asked about. An attack with no slot comes back as it is."""
+    missing = set()
+
+    def _fill(v):
+        if isinstance(v, str):
+            def _one(m):
+                got = _slot_value(ctx, m.group(1))
+                if got is None:
+                    missing.add(slot_key(m.group(1)))
+                    return m.group(0)
+                return got
+            return SLOT_RE.sub(_one, v)
+        if isinstance(v, list):
+            return [_fill(x) for x in v]
+        if isinstance(v, dict):
+            return {k: _fill(x) for k, x in v.items()}
+        return v
+    out = {k: (v if k in _NOT_SENT else _fill(v)) for k, v in attack.items()}
+    return (out if out != attack else attack), sorted(missing)
 
 
 def run_attack(target, attack, ctx, trials=1):
