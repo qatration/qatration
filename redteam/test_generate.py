@@ -253,6 +253,8 @@ def main():
         # AND A FILE WRITTEN OUTSIDE THE WORKSPACE IS NAMED IN FULL: `isolation` looks for a
         # bare name beside the reader and in the workspace, so the basename it used to print
         # for `--out elsewhere/x.yaml` was a next step that failed.
+        # QUOTED FOR THE SHELL OF THE PLATFORM, by the one rule (`workspace.shell_arg`).
+        from workspace import shell_arg as _sa_g
         _else = os.path.join(_work, "else where", "objs.yaml")
         sys.argv = ["generate", "--target-config", _cfg, "--out", _else]
         _buf_else = io.StringIO()
@@ -260,7 +262,8 @@ def main():
             _rg.main()
         _next = [l for l in _buf_else.getvalue().splitlines() if l.startswith("next:")]
         check("an objectives file written elsewhere is named in full, quoted, in the next step",
-              bool(_next) and ('--objectives "%s"' % os.path.abspath(_else)) in _next[0],
+              bool(_next) and ("--objectives " + _sa_g(os.path.abspath(_else))) in _next[0]
+              and _sa_g(os.path.abspath(_else)) != os.path.abspath(_else),
               True)
 
         # AND THE BRANCH WHERE THE INPUT IS NOT THERE. This returned None, so `cli` exited
