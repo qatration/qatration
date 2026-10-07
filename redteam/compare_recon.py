@@ -127,7 +127,27 @@ def _row(profile, name, when):
         "unlabelled": sum(len(v) for v in proposed_patterns(
             profile.get("refusal_vocab")).values()),
         "warnings": warns,
+        "lost": lost_share(profile),
     }.items()}
+
+
+def lost_share(profile):
+    """-> the share of this profile's recon probes that did not land, 0.0 when it says none.
+
+    A MEASUREMENT GAP INVALIDATES EVERY OTHER CELL OF THE ROW, so it is the first thing the
+    fleet is ordered by: counted as warnings, "9 of 10 probes did not land" tied with "one
+    refusal phrasing went unlabelled" and sorted below a fully measured target with two
+    hints. Found by an independent review.
+    """
+    _n, _e = profile.get("probes"), profile.get("errors")
+    if not all(isinstance(x, int) and not isinstance(x, bool) for x in (_n, _e)) or _n <= 0:
+        return 0.0
+    return min(1.0, max(0, _e) / float(_n))
+
+
+def fleet_order(row):
+    """-> the sort key of one fleet row: the least measured first, then the most warned."""
+    return (-row.get("lost", 0.0), -len(row["warnings"]), -row["unlabelled"], row["target"])
 
 
 def collect(unreadable=None):
@@ -172,8 +192,8 @@ def collect(unreadable=None):
             unreadable.append((os.path.basename(fp),
                                "%s: %s" % (type(_e).__name__, _e)))
             continue
-    # worst first: a warning invalidates measurements, so it outranks everything else
-    rows.sort(key=lambda r: (-len(r["warnings"]), -r["unlabelled"], r["target"]))
+    # worst first: what did not land, then warnings, which invalidate the measurements
+    rows.sort(key=fleet_order)
     return rows
 
 

@@ -1083,9 +1083,10 @@ def main():
     import workspace as _ws_cv, subprocess as _sp_cv, tempfile as _tf_cv, shutil as _sh_cv
     _pl_cv = _ws_cv.point_at_configs("C:\\Users\\a b\\my.yaml")
     check("the remedy is given for both shells, the path quoted in each",
-          len(_pl_cv) == 2 and _pl_cv[0].strip().startswith('export QATRATION_CONFIGS="')
-          and "$env:QATRATION_CONFIGS=" in _pl_cv[1]
-          and all('"C:\\Users\\a b\\my.yaml"' in _l for _l in _pl_cv), str(_pl_cv))
+          len(_pl_cv) == 2
+          and __import__("shlex").split(_pl_cv[0].strip()) == [
+              "export", "QATRATION_CONFIGS=C:\\Users\\a b\\my.yaml"]
+          and '$env:QATRATION_CONFIGS="C:\\Users\\a b\\my.yaml"' in _pl_cv[1], str(_pl_cv))
     _wcv = _tf_cv.mkdtemp()
     try:
         io.open(os.path.join(_wcv, "results_nobody.json"), "w", encoding="utf-8").write(

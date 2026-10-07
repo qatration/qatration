@@ -387,8 +387,8 @@ _CTX_KEYS = None
 _CFG_KEYS = None
 
 
-def shell_arg(value):
-    """-> `value` as ONE argument a reader can paste into bash, PowerShell or cmd.
+def shell_arg(value, shell=None):
+    """-> `value` as ONE argument a reader can paste into the shell they are in.
 
     A PRINTED COMMAND IS ONE A READER RUNS. Nine places print `qatration <cmd> --target-config
     <path>` with the path dropped in bare, and a path with a space in it -- a Windows home
@@ -399,19 +399,30 @@ def shell_arg(value):
 
     A placeholder (`<your.yaml>`) is left as it is: it is not a path, and quoting it would
     make it look like one.
+
+    FOR THE SHELL THE READER IS IN, because no one quoting is right in all three: a `$` needs
+    single quotes in bash and PowerShell, cmd does not know single quotes, and the two shells
+    that do escape a `'` inside them differently (`'"'"'` and `''`). `shell` is "posix" or
+    "powershell"; by default the platform this runs on decides, which is where the reader
+    pastes it. Found by an independent review.
     """
     import re as _re
     s = str(value)
     if not s or (s.startswith("<") and s.endswith(">")):
         return s
-    if not _re.search(r"[\s\"'&|<>^%$`;()*?!#~]", s):
+    if (shell or ("powershell" if os.name == "nt" else "posix")) == "posix":
+        import shlex as _shlex
+        return _shlex.quote(s)
+    # PowerShell, and cmd where it can be done: bare when nothing in it is read by either.
+    # Not `,` (an array in PowerShell), not a leading `@` (splatting), not `%` (cmd).
+    if _re.match(r"^[\w+=:./\\-]+$", s):
         return s
-    # A `$` OR A BACKTICK STILL EXPANDS INSIDE DOUBLE QUOTES, in bash and in PowerShell:
-    # `"/home/me/$work/bot.yaml"` reached bash as `/home/me//bot.yaml`. Single quotes hold
-    # both literally. Found by an independent review.
-    if ("$" in s or "`" in s) and "'" not in s:
-        return "'%s'" % s
-    return '"%s"' % s.replace('"', '\\"')
+    # DOUBLE QUOTES WHERE BOTH SHELLS READ THEM ALIKE. A `$` or a backtick expands inside
+    # them in PowerShell -- `"C:\\$work\\bot.yaml"` lost `$work` -- so then single quotes,
+    # which cmd cannot read and nothing can make it read: a `'` doubles.
+    if not _re.search(r"[$`\"]", s):
+        return '"%s"' % s
+    return "'%s'" % s.replace("'", "''")
 
 
 def point_at_configs(path=None, indent="    "):
@@ -431,11 +442,14 @@ def point_at_configs(path=None, indent="    "):
     not know which file the reader meant.
     """
     p = path or "/path/to/your.yaml"
-    # THROUGH `shell_arg`, the one quoting rule: wrapped raw in double quotes here, a `$` in
-    # the path expanded in both shells. Found by an independent review.
-    _q = shell_arg(p) if shell_arg(p) != p else '"%s"' % p
-    return ['%sexport QATRATION_CONFIGS=%s' % (indent, _q),
-            '%s$env:QATRATION_CONFIGS=%s      # PowerShell' % (indent, _q)]
+    # THROUGH `shell_arg`, the one quoting rule, ONCE PER SHELL: each line is typed into its
+    # own shell, and one quoting for both left a `'` in the path broken in one of them.
+    _qs = {}
+    for _sh in ("posix", "powershell"):
+        _q = shell_arg(p, _sh)
+        _qs[_sh] = _q if _q != p else '"%s"' % p
+    return ['%sexport QATRATION_CONFIGS=%s' % (indent, _qs["posix"]),
+            '%s$env:QATRATION_CONFIGS=%s      # PowerShell' % (indent, _qs["powershell"])]
 
 
 def no_results_note(out_dir=None):

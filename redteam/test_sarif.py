@@ -865,6 +865,21 @@ _fps = [r["partialFingerprints"]["qatration/v2"] for r in _idless["runs"][0]["re
 check("two id-less breaches get two fingerprints, not one `target:?`",
       len(_fps) == 2 and len(set(_fps)) == 2 and not any(f.endswith(":?") for f in _fps),
       str(_fps))
+# AND UNDER THE KEY GITHUB READS: two breaches of one rule against one target are two
+# alerts there too, not one hash of the config's first line.
+import re as _re_lh
+_lh = [r["partialFingerprints"].get("primaryLocationLineHash", "")
+       for r in _idless["runs"][0]["results"]]
+check("each breach carries its own primaryLocationLineHash, in the action's shape",
+      len(set(_lh)) == 2 and all(_re_lh.match(r"^[0-9a-f]{16}:1$", h) for h in _lh), str(_lh))
+_lh2 = [r["partialFingerprints"].get("primaryLocationLineHash")
+        for r in build([{"attack": {"category": "x", "text": "first question"},
+                         "headline": "EXPLOITED", "fired": ["canary_in_output"], "rate": "1/3",
+                         "locks": {}}], None)["runs"][0]["results"]]
+check("...and the same breach on the next run, at another rate, keeps it",
+      _lh2 == _lh[:1], "%s vs %s" % (_lh2, _lh[:1]))
+check("...and another target's breach of the same attack does not",
+      sarif.line_hash("other", {"text": "first question"}) != _lh[0], _lh[0])
 # AND NOTHING MEASURED IS NOT A CLEAN EXPORT: exit 3, the code for "could not be answered".
 with tempfile.TemporaryDirectory() as tmp:
     src = os.path.join(tmp, "results_fixture.json")

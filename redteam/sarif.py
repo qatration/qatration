@@ -297,8 +297,17 @@ def build(results, target_config=None, out_dir=None, source=None):
             # BY `attack_name`, the one name for a row, which gives an attack with no `id` a
             # digest of what it asked: two id-less breaches were one fingerprint, `mybot:?`,
             # and a consumer merged them into one alert. Found by an independent review.
+            # AND UNDER THE ONE KEY CODE SCANNING READS. GitHub matches alerts on
+            # `primaryLocationLineHash` only, and with none given `upload-sarif` hashes the
+            # text of the line the result points at -- line 1 of the target's config for
+            # every result here, so every finding of one rule against one target was one
+            # alert, and fixing one attack while another still broke closed nothing. The
+            # action keeps a hash it is given (it warns that the line reads otherwise).
+            # Not per model: a per-model export is its own category below, and GitHub
+            # matches within a category. Found by an independent review.
             "partialFingerprints": {
-                "qatration/v2": "%s:%s" % (target, workspace.attack_name(attack))},
+                "qatration/v2": "%s:%s" % (target, workspace.attack_name(attack)),
+                "primaryLocationLineHash": line_hash(target, attack)},
             "properties": {"attribution": verdict,
                            "headline": head,
                            "category": attack.get("category", ""),
@@ -605,6 +614,14 @@ def build(results, target_config=None, out_dir=None, source=None):
         "version": "2.1.0",
         "runs": [_run],
     }
+
+
+def line_hash(target, attack):
+    """-> the `primaryLocationLineHash` of one attack against one target, in the shape
+    `upload-sarif` writes (`<16 hex>:<occurrence>`), stable across runs and models."""
+    import hashlib
+    return "%s:1" % hashlib.sha256(("%s:%s" % (target, workspace.attack_name(attack)))
+                                   .encode("utf-8")).hexdigest()[:16]
 
 
 def main():

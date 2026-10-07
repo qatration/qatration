@@ -986,6 +986,18 @@ def main():
     from refusal import classify as _cls3, fold as _fold3
     import yaml as _y3
 
+    # THE LEAST MEASURED FIRST: nine probes of ten lost outranks more warnings on a target
+    # that answered every one.
+    _halfdead = _cr3._row({"target": "halfdead", "probes": 10, "errors": 9}, "halfdead", "")
+    _warned = _cr3._row({"target": "warned", "probes": 10, "errors": 0}, "warned", "")
+    _warned["warnings"] = ["w%d" % _i for _i in range(len(_halfdead["warnings"]) + 2)]
+    check("the fleet sorts a profile that lost most of its probes above a warned clean one",
+          [r["target"] for r in sorted([_warned, _halfdead], key=_cr3.fleet_order)],
+          ["halfdead", "warned"])
+    check("...and a profile that does not say how many probes it sent loses none",
+          (_cr3.lost_share({}), _cr3.lost_share({"probes": True, "errors": 1}),
+           _cr3.lost_share({"probes": 4, "errors": 1})), (0.0, 0.0, 0.25))
+
     def _warns3(p):
         return " ".join(h["text"] for h in _r3.hints(p) if h["level"] == "warn")
 

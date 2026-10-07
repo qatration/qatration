@@ -49,6 +49,19 @@ the index card shows beside its target's results.
 **A dirty engine names itself.** An uncommitted build stamps `+dirty.<digest>` of its own
 sources, so two different uncommitted oracles are no longer read as one build.
 
+**One alert per breach in code scanning.** GitHub matches alerts on `primaryLocationLineHash`
+alone, and with none given `upload-sarif` hashes the text of the line a result points at: line 1
+of the target's config, for every result. So every finding of one rule against one target was a
+single alert, and fixing one attack while another still broke closed nothing. Each result now
+carries its own hash of target and attack, stable across runs; a per-model export is its own
+category, so the same attack against two models stays two alerts.
+
+**A printed command is quoted for the shell it will be pasted into**: `shlex` on POSIX, double
+quotes on Windows (read alike by cmd and PowerShell), and PowerShell single quotes with `''`
+when the path holds a `$` or a backtick. The `QATRATION_CONFIGS` hint prints each shell's line
+with that shell's quoting. The recon fleet page puts a profile whose probes mostly did not land
+above one that answered every probe and raised more warnings.
+
 **The hosted queue reads each job's own config**, refuses a submitted config that shadows a
 shipped one, claims job ids exclusively, and refuses a job that brings its own refusal regexes:
 a pattern run over replies the same submitter controls can hold a worker for hours.
@@ -58,7 +71,9 @@ a pattern run over replies the same submitter controls can hold a worker for hou
 Stored results scored by 0.4.x carry verdicts this oracle no longer gives. Re-score them before
 comparing a new run against them: `qatration rejudge --write`. A CI job that passed on a run
 with many errored or empty rows may now exit `3`; that is the run telling you it measured too
-little, and `--max-unmeasured` sets the share it will accept.
+little, and `--max-unmeasured` sets the share it will accept. On the first SARIF upload from
+0.5.0, code scanning closes the old per-rule alerts and opens one per breach: that is the new
+fingerprint, not a change in the target.
 
 ---
 

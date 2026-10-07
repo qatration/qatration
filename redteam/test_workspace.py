@@ -1171,14 +1171,16 @@ def check_every_command_refuses():
                                                   _line.strip()[:70]))
     check("every printed command interpolates a path through shell_arg", _sa_bare, [])
     check("...over the printed commands that interpolate one", _sa_seen >= 8, True)
+    import workspace as _w_sa
     _sa_dir = _os.path.join(_tfp.mkdtemp(), "my folder")
     _os.makedirs(_sa_dir)
     _sa_cfg = _os.path.join(_sa_dir, "my bot.yaml")
     _rc_sa, _out_sa = _cmd_out(["init", "--out", _sa_cfg])
     check("init --out <a path with a space> prints the next command with it quoted",
-          ('--target-config "%s"' % _sa_cfg) in _out_sa, True)
+          ("--target-config " + _w_sa.shell_arg(_sa_cfg)) in _out_sa
+          and _w_sa.shell_arg(_sa_cfg) != _sa_cfg, True)
     check("...and writes it quoted into the file's own header",
-          ('--target-config "%s"' % _sa_cfg)
+          ("--target-config " + _w_sa.shell_arg(_sa_cfg))
           in _io.open(_sa_cfg, encoding="utf-8").read(), True)
 
     # --- A TYPED NUMBER MEANS WHAT IT SAYS OR IS REFUSED ---------------------------------
@@ -1654,6 +1656,27 @@ def check_shared_rules_review():
         # A `$` STAYS LITERAL.
         check("a path with a dollar sign is quoted where it does not expand",
               _w_s.shell_arg("/home/me/$work/bot.yaml"), "'/home/me/$work/bot.yaml'")
+        # ONE QUOTING PER SHELL, and each one survives the characters the other one breaks on.
+        import shlex as _shl_s
+        _hard = "/home/jo's $work/bot.yaml"
+        check("bash gets a quoting it reads back as the same one argument",
+              _shl_s.split(_w_s.shell_arg(_hard, "posix")), [_hard])
+        # AND IN SINGLE QUOTES, where the `$` stays literal: `shlex.split` does not expand a
+        # variable, so a double-quoted `$work` would read back the same and break in bash.
+        check("...with the `$` inside single quotes, not double ones",
+              _w_s.shell_arg(_hard, "posix"), "'/home/jo'\"'\"'s $work/bot.yaml'")
+        check("PowerShell gets single quotes with the apostrophe doubled",
+              _w_s.shell_arg(_hard, "powershell"), "'/home/jo''s $work/bot.yaml'")
+        check("a Windows path with a space gets double quotes, which cmd reads too",
+              _w_s.shell_arg("C:\\Users\\Jo Smith\\bot.yaml", "powershell"),
+              '"C:\\Users\\Jo Smith\\bot.yaml"')
+        check("...and one with a comma is quoted: bare, PowerShell reads it as an array",
+              _w_s.shell_arg("C:\\a,b\\bot.yaml", "powershell"), '"C:\\a,b\\bot.yaml"')
+        _pac = _w_s.point_at_configs(_hard, indent="")
+        check("each shell's line in point_at_configs carries that shell's quoting",
+              _pac[0] == "export QATRATION_CONFIGS=" + _w_s.shell_arg(_hard, "posix")
+              and _pac[1].startswith("$env:QATRATION_CONFIGS='/home/jo''s $work/bot.yaml'"),
+              True)
     finally:
         _sh_s.rmtree(_d, ignore_errors=True)
     return bad
