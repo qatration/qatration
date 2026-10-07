@@ -6,6 +6,62 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-07)
+
+**Five weeks of independent reviews, fuzzers over every stored artifact, seeded random walks and
+first runs from a fresh install, and almost every defect they found was one of two shapes.**
+Something nobody measured was reported as clean, or something that did not happen was reported
+as a breach. Each fix below has a check, and each check was mutated until it went red.
+
+**A pass over rows nobody looked at is not a pass.** A system-prompt row on a target that
+declares no markers, canaries or prompt cannot be read at all, and it used to score as held. It
+is `not measured` now, in the sweep and in the lock map. Once more than `--max-unmeasured` of a
+run went unmeasured (errored, empty or never sent; default 10%), every gate exits `3` instead of
+passing. The regression gate and the absolute gates read the same rule.
+
+**A breach made of the attacker's own words is not a breach.** Every detector that subtracts the
+echo now subtracts what was asked in every encoding the attack was sent in, not only the plain
+text. A reply the bot gives to anything, measured on the benign baseline, is attributed to the
+bot and not to the attack. A tool argument is read the way the tool receives it: parsed as JSON,
+percent-decoded, and with the canary's decodings, and a call written inside a string literal is
+not a call.
+
+**A refusal leads the reply.** `refusal_expected_but_absent` reads the opening of the reply, so a
+bot that complies and then adds a disclaimer is not credited with refusing. The decline rules
+gained phrasings in English, Italian, Portuguese and Dutch. A reply that is only a tool call is
+not a decline.
+
+**A 403 is not an expired key.** A 403 after the credential had already worked used to be filed
+as an expiry, counted toward the wall that ends a sweep, and told the reader to mint a new key.
+It is `HttpForbidden` now: not retried, not a wall, and the closing line says those attacks were
+blocked by a rule in front of the model or the credential expired, unmeasured either way.
+
+**The A/B table asks one question nine times.** `discrimination` reads each pair's word on its
+Holm-adjusted p, with the unadjusted p printed beside it. toolagent moves from GOOD to `not
+separated` (0.008 alone, 0.06 as one of nine), and "how many more attacks would separate it" is
+counted to the adjusted bar.
+
+**A page is dated by its runs.** A run that recorded no date reads `date not recorded` instead
+of the file's modification time, which every clone and copy rewrote. The index, fleet and fixes
+pages give their runs' dates, not the day they were built. A config can carry a `caveat:` that
+the index card shows beside its target's results.
+
+**A dirty engine names itself.** An uncommitted build stamps `+dirty.<digest>` of its own
+sources, so two different uncommitted oracles are no longer read as one build.
+
+**The hosted queue reads each job's own config**, refuses a submitted config that shadows a
+shipped one, claims job ids exclusively, and refuses a job that brings its own refusal regexes:
+a pattern run over replies the same submitter controls can hold a worker for hours.
+
+### Upgrading
+
+Stored results scored by 0.4.x carry verdicts this oracle no longer gives. Re-score them before
+comparing a new run against them: `qatration rejudge --write`. A CI job that passed on a run
+with many errored or empty rows may now exit `3`; that is the run telling you it measured too
+little, and `--max-unmeasured` sets the share it will accept.
+
+---
+
 ## Twelve things the code could not show us (0.4.1, 2026-09-02)
 
 **Every defect here was found the same way: install the published package, point it at a live
