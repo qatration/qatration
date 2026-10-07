@@ -660,6 +660,36 @@ def main():
                              "fired": ["canary_in_output"], "locks": {}, "trials": []}
                             for i in range(n)]}))
 
+    # SENT, AND NOTHING CAME BACK, is its own word -- not "not sent".
+    class _Empty(_BH_v):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            _b = b'{"reply": ""}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+    _es = _TS_v(("127.0.0.1", 0), _Empty)
+    _th_v.Thread(target=_es.serve_forever, daemon=True).start()
+    try:
+        _ep = os.path.join(_bw, "results_emptyclaims.json")
+        _claims(_ep, 1, "emptyclaims")
+        _re = verify_target({"name": "emptyclaims", "adapter": "http",
+                             "url": "http://127.0.0.1:%d/c" % _es.server_address[1],
+                             "request": {"message": "{prompt}"},
+                             "response": {"reply": "reply"},
+                             "oracle_context": {"canaries": ["ACME-CANARY-9931"]}},
+                            _ep, 1, 0, quiet=True)
+    finally:
+        _es.shutdown()
+    check("a claim re-sent and answered with nothing is 'no answer', not 'not sent'",
+          _re.get("no_answer") == 1, str({k: v for k, v in _re.items()
+                                          if k in ("no_answer", "not_sent", "note")}))
+
     _dead_cfg = {"name": "deadclaims", "adapter": "http",
                  "url": "http://127.0.0.1:1/c",
                  "request": {"message": "{prompt}"},

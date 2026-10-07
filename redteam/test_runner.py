@@ -1155,6 +1155,27 @@ def main():
           bool(_ce.error) and ("send_email", '{"body": "%s"}' % _CAN) in list(_ce.tool_calls),
           "%r %r" % (_ce.error, _ce.tool_calls))
 
+    # A DIRTY BUILD NAMES WHAT IT IS: two different uncommitted trees stamp differently, a
+    # test file does not count, and the same tree stamps the same.
+    import target as _tg_d
+    _gd = tempfile.mkdtemp()
+    try:
+        def _git_d(*a):
+            subprocess.run(["git"] + list(a), cwd=_gd, capture_output=True, text=True)
+        _git_d("init", "-q")
+        io.open(os.path.join(_gd, "engine.py"), "w", encoding="utf-8").write("x = 1\n")
+        io.open(os.path.join(_gd, "test_engine.py"), "w", encoding="utf-8").write("t = 1\n")
+        _git_d("add", "-A")
+        _d1 = _tg_d._tree_digest(_gd)
+        io.open(os.path.join(_gd, "test_engine.py"), "w", encoding="utf-8").write("t = 2\n")
+        _d2 = _tg_d._tree_digest(_gd)
+        io.open(os.path.join(_gd, "engine.py"), "w", encoding="utf-8").write("x = 2\n")
+        _d3 = _tg_d._tree_digest(_gd)
+    finally:
+        shutil.rmtree(_gd, ignore_errors=True)
+    check("a dirty stamp tells two engine trees apart and ignores the tests",
+          _d1 == _d2 and _d1 != _d3 and len(_d1) == 8, "%s %s %s" % (_d1, _d2, _d3))
+
     # A COMMAND THAT NEVER TOUCHES THE WORKSPACE is not refused for it.
     _bad_out = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
     _bad_out.close()

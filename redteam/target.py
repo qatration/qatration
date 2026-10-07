@@ -321,6 +321,27 @@ def judged_now(meta):
     return {**(meta or {}), "engine": engine_version()}
 
 
+def _tree_digest(here):
+    """-> 8 hex of sha256 over the engine's tracked sources (not its tests), as on disk."""
+    import hashlib
+    import subprocess
+    h = hashlib.sha256()
+    try:
+        names = subprocess.run(["git", "ls-files", "--", "."], cwd=here, capture_output=True,
+                               text=True, timeout=5).stdout.split()
+    except Exception:
+        return "unknown"
+    for rel in sorted(n for n in names if n.endswith((".py", ".yaml"))
+                      and not os.path.basename(n).startswith("test_")):
+        try:
+            with open(os.path.join(here, rel), "rb") as fh:
+                data = fh.read()
+        except OSError:
+            data = b""
+        h.update(rel.encode("utf-8") + b"\0" + data + b"\0")
+    return h.hexdigest()[:8]
+
+
 def engine_version():
     """Which build of this engine produced an artifact. Cheap, cached, never fatal.
 
@@ -361,7 +382,11 @@ def engine_version():
             # An uncommitted engine is not the commit it claims to be, and a result written
             # from one is not reproducible from that hash. Say so rather than round down.
             if dirty.returncode == 0 and dirty.stdout.strip():
-                _ENGINE_VERSION += "+dirty"
+                # WHICH DIRTY: a constant suffix made two different uncommitted oracles on one
+                # HEAD the same build, and the engine confound was withdrawn between them. A
+                # digest of the engine's tracked sources as they are on disk tells them apart
+                # and lets two equal trees agree. Found by an independent review.
+                _ENGINE_VERSION += "+dirty." + _tree_digest(here)
     except Exception:
         pass
     if _ENGINE_VERSION == "unknown":

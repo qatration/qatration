@@ -552,12 +552,23 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
             # and says where. Found by an independent review.
             out["why"] = _fail
             break
+        # SENT, AND NOTHING CAME BACK TO JUDGE, is not "not sent": the wall saw those probes
+        # go out, and "nothing was delivered" sent the reader to check a budget that was fine.
+        # Same bucket -- nothing was measured -- under its own word. Found by a review.
+        from signing import NEVER_SENT as _NS_v
+        if v == "not sent" and any(
+                _p is not None and not str(getattr(_p, "error", "") or "").startswith(_NS_v)
+                for _p in _probes):
+            _e1 = next((str(_p.error) for _p in _probes if _p is not None and _p.error), "")
+            v, why = "no answer", ("sent %d time(s), and nothing came back to judge (%s)"
+                                   % (len(_probes), _clipped(_e1, 80) or "empty reply"))
+            out["no_answer"] = out.get("no_answer", 0) + 1
         out["sent"] += spent
         # THREE STATES AND A DEFAULT, rather than two and everything else. `not sent` is
         # the one that was missing: a row nobody delivered is not a row that could not be
         # decided, and the sentence this command ends with is built from these counters.
         out[{"holds": "holds", "stale": "stale", "not sent": "not_sent",
-             "unconfirmed": "unconfirmed"}.get(v, "unclear")] += 1
+             "no answer": "not_sent", "unconfirmed": "unconfirmed"}.get(v, "unclear")] += 1
         if v == "stale":
             out["stale_ids"].append((attack.get("id"), why))
         if not quiet:
@@ -656,9 +667,12 @@ def audit_close(rows, total_stale):
         # reproduced and not one could be decided, and over claims nobody re-sent.
         out += ["", "%d of %d claim(s) on reachable targets still reproduce."
                 % (_holds, _claims)]
-        if unsent:
+        _noans = sum(r.get("no_answer") or 0 for r in reached)
+        if unsent - _noans:
             out += ["   %d could not be re-sent at all: nothing was delivered for them."
-                    % unsent]
+                    % (unsent - _noans)]
+        if _noans:
+            out += ["   %d were re-sent and nothing came back to judge." % _noans]
         if unconfirmed:
             out += ["   %d could not be confirmed: they reproduced on no re-send, and the "
                     "second pass that decides it was not made or delivered nothing."

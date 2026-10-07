@@ -136,6 +136,12 @@ REJECTED = "CredentialRejected"
 # `it was accepted earlier in this run and rejected later` was printed over a key refused
 # from its first request -- a misconfiguration, told as an expiry. Two facts, two prefixes.
 EXPIRED = "CredentialExpired"
+# AND A 403 AFTER THE CREDENTIAL WORKED, which is a credential that expired OR a rule in front
+# of the model that blocked one request -- the next may pass on the same key. Filed under
+# EXPIRED it was told to mint a new key and counted toward the wall that ends a sweep, so a
+# firewall blocking five adjacent attacks of one category stopped the run as "refused the
+# credential". Its own prefix: not retried, not a wall. Found by an independent review.
+FORBIDDEN = "HttpForbidden"
 RATE_LIMITED = "RateLimited"
 # AND THE THIRD ONE, which was spelled in `targets_http` and read by NOBODY. The budget
 # writes `it was never sent` onto a probe, and with no reader for it the only signal
@@ -170,14 +176,21 @@ def credential_note(results):
     an errored, non-control row the budget did not stop.
     """
     from workspace import error_split_rows
-    later = first = 0
+    later = first = blocked = 0
     for r in error_split_rows(results)[0]:
         errs = [str((_t.get("probe") or {}).get("error") or "") for _t in (r.get("trials") or [])]
         if any(e.startswith(EXPIRED) for e in errs):
             later += 1
         elif any(e.startswith(REJECTED) for e in errs):
             first += 1
+        elif any(e.startswith(FORBIDDEN) for e in errs):
+            blocked += 1
     said = []
+    if blocked:
+        said.append("%d of them were refused with HTTP 403 after the credential had worked: "
+                    "a rule in front of the model blocked them, or the credential expired -- "
+                    "either way those attacks were not measured, and a block is not the model "
+                    "refusing." % blocked)
     if later:
         said.append("%d of them stopped at the credential, not at the target: it was accepted "
                     "earlier in this run and rejected later, so those attacks were never "
@@ -196,7 +209,8 @@ def rejection(status, seen_success):
     note = expired_credential(status, seen_success)
     if not note:
         return ""
-    return "%s: %s" % (EXPIRED if seen_success else REJECTED, note)
+    return "%s: %s" % ((FORBIDDEN if status == 403 else EXPIRED) if seen_success else REJECTED,
+                       note)
 
 
 def expired_credential(status, seen_success):

@@ -94,6 +94,21 @@ def objectives_path(name):
         % (name, WORKSPACE_OUT))
 
 
+def objectives_named(path, out, kept):
+    """-> the objectives file(s) a written map holds rows from: this run's, and -- where rows
+    were kept from the stored map -- the ones it recorded. It named this run's file only,
+    beside rows kept from another. Found by an independent review."""
+    objs = [os.path.basename(path)]
+    if kept and os.path.exists(out):
+        from workspace import read_artifact as _ra_o
+        _d = _ra_o(out)[0]
+        _po = ((_d if isinstance(_d, dict) else {}).get("meta") or {}).get("objectives")
+        for _o in ([_po] if isinstance(_po, str) else list(_po or [])):
+            if _o and _o not in objs:
+                objs.append(_o)
+    return objs[0] if len(objs) == 1 else sorted(objs)
+
+
 def main():
     # THE ONE SPELLING, from the table this command is listed in. A bare parser
     # here printed the flags and left `--help` silent about the job.
@@ -351,7 +366,8 @@ def main():
             print("\nKept from %s, each with its own date: %s."
                   % (os.path.basename(out), "; ".join(_kept)), file=sys.stderr)
         write_maps(out, _merged,
-                   {"target": target.name, "objectives": os.path.basename(path)},
+                   {"target": target.name,
+                    "objectives": objectives_named(path, out, _kept)},
                    when=_dt_i.datetime.now().isoformat(" ", "seconds")[:16])
         print(f"\nwrote {out}")
 

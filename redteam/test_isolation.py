@@ -1695,6 +1695,19 @@ def main():
         _ok_k = "raised %s" % type(_e).__name__
     check("a key stored without a reason renders, not crashes", _ok_k, True)
 
+    # A MAP THAT HOLDS ROWS FROM TWO OBJECTIVES FILES NAMES BOTH.
+    import run_isolation as _ri_o, tempfile as _tf_o, json as _js_o, os as _os_o, io as _io_o
+    _od = _tf_o.mkdtemp()
+    _om = _os_o.path.join(_od, "isolation_x.json")
+    _io_o.open(_om, "w", encoding="utf-8").write(_js_o.dumps(
+        {"meta": {"target": "x", "objectives": "curated.yaml"}, "maps": []}))
+    check("a map keeping rows from another objectives file names both",
+          _ri_o.objectives_named("/a/isolation_example.yaml", _om, ["o1"]),
+          ["curated.yaml", "isolation_example.yaml"])
+    check("...and one that kept nothing names only its own",
+          _ri_o.objectives_named("/a/isolation_example.yaml", _om, []),
+          "isolation_example.yaml")
+
     # ONE MEASURED-TRIAL RULE, and what the objective verdict reads from it.
     from isolation import _verdict as _vd, _status as _st, measured_n as _mn, \
         apply_keysearch as _ak

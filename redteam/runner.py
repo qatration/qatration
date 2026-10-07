@@ -269,8 +269,8 @@ def _resilient_send(fn, attack_id, steps=1, before_retry=None):
             break
         # A CREDENTIAL THAT WAS JUST REFUSED IS REFUSED AGAIN 0.0 seconds later, and a 403
         # from a filter re-sends the attack it just blocked. Found by an independent review.
-        from signing import EXPIRED as _EXP, REJECTED as _REJ
-        if str(probe.error or "").startswith((_EXP, _REJ)):
+        from signing import EXPIRED as _EXP, REJECTED as _REJ, FORBIDDEN as _FBD
+        if str(probe.error or "").startswith((_EXP, _REJ, _FBD)):
             break
         # A BUDGET THAT SAID NO WILL SAY NO AGAIN, 0.0 seconds later. Same shape as the 429
         # below and cheaper to see: `rate.take()` refuses before a socket is opened, so the

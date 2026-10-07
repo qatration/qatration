@@ -303,10 +303,38 @@ for _okf in (False, True):
         _errs_c[_okf] = [str(_t_c.send("hi").error or "") for _ in range(2)]
     finally:
         _srv_c.shutdown()
-check("the adapter writes a first-request refusal as rejected, a later one as expired",
+# A LATER 403 IS ITS OWN FACT (`signing.FORBIDDEN`): a credential that expired, or a rule in
+# front of the model that blocked one request -- not retried, and not a wall that ends a sweep.
+check("the adapter writes a first-request refusal as rejected, a later 403 as forbidden",
       (_errs_c[False][0].startswith(_REJ + ":"), _errs_c[False][1].startswith(_REJ + ":"),
-       _errs_c[True][0], _errs_c[True][1].startswith(_EXP + ":"))
+       _errs_c[True][0], _errs_c[True][1].startswith(signing.FORBIDDEN + ":"))
       == (True, True, "", True), str(_errs_c))
+
+# A 403 AFTER THE CREDENTIAL WORKED: not a wall, not retried, and said as what it may be.
+from runner import GiveUpWall as _GW_f
+from target import Probe as _Pf
+_wall_f = _GW_f()
+_wall_f.saw([_Pf(prompt="p", output="ok")])
+_stop_f = [_wall_f.saw([_Pf(prompt="p", error=signing.FORBIDDEN + ": HTTP 403")])
+           for _ in range(8)]
+check("a run of 403s after the credential worked does not stop the sweep",
+      not any(_stop_f), str(_wall_f.reason))
+_fb_rows = [{"attack": {"id": "f%d" % i, "category": "x"}, "headline": "ERROR",
+             "trials": [{"probe": {"error": signing.FORBIDDEN + ": HTTP 403"}}]}
+            for i in range(2)]
+check("...and the closing line says they were blocked or expired, not measured",
+      "refused with HTTP 403 after the credential had worked" in _cn(_fb_rows),
+      _cn(_fb_rows))
+import runner as _rn_f
+_sent_f = []
+
+
+def _fb_send():
+    _sent_f.append(1)
+    return _Pf(prompt="p", error=signing.FORBIDDEN + ": HTTP 403")
+_rn_f._resilient_send(_fb_send, "f-retry")
+check("...and the request a rule blocked is not sent again", len(_sent_f) == 1,
+      "%d send(s)" % len(_sent_f))
 
 # THE PREFIX IS A CONTRACT BETWEEN TWO MODULES. `targets_http` writes it and `runner` and
 # `run_redteam` read it, and it was spelled separately in each — a reader that stops
