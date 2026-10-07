@@ -97,3 +97,22 @@ def fisher_exact(a, b, c, d):
     # so (30,0,0,30) read 1.5e-14 against an exact 1.7e-17. Found by an independent review.
     return sum(pr(x) for x in range(max(0, c1 - r2), min(r1, c1) + 1)
                if pr(x) <= p0 * (1 + 1e-7))
+
+
+def holm(ps):
+    """-> Holm-adjusted p-values, in the order given; None stays None.
+
+    THE PER-PAIR WORD IS ONE OF SEVERAL TESTS OF ONE HYPOTHESIS ("does the defence
+    separate"), and reading each row at 0.05 as if it were the only test overstates every
+    row: at nine pairs, one GOOD at p = 0.039 is the chance hit the set expects. Holm is
+    valid under any dependence between the tests (two pairs sharing an arm are dependent)
+    and uniformly more powerful than Bonferroni.
+    """
+    idx = [i for i, p in enumerate(ps) if p is not None]
+    m = len(idx)
+    out = list(ps)
+    running = 0.0
+    for rank, i in enumerate(sorted(idx, key=lambda j: ps[j])):
+        running = max(running, min(1.0, (m - rank) * ps[i]))
+        out[i] = running
+    return out

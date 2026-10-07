@@ -2610,6 +2610,23 @@ def measured_when(meta, path=None):
 
 
 FILE_DATED = " (file)"
+# WHAT A PAGE SAYS where the run recorded no date. Not the file's time: a clone, a copy or a
+# re-score rewrites it, so 66 cells on 13 tracked pages changed on every rebuild and stated
+# a filesystem event beside a measurement. Found by an independent review.
+NOT_RECORDED = "date not recorded"
+
+
+def runs_span(days, total):
+    """-> the dates a page's runs were measured on, said once: one day, a span, or how many
+    of them recorded one. Never the day the page was built -- "built today" stood over runs
+    from August and September. ONE RULE for the index, the fleet page and the fixes page.
+    """
+    days = sorted(d for d in days if d)
+    if not days:
+        return "run dates not recorded"
+    span = days[0] if days[0] == days[-1] else "%s to %s" % (days[0], days[-1])
+    return ("runs " + span if len(days) == total
+            else "%d of %d runs dated, %s" % (len(days), total, span))
 
 
 def dated(meta, path=None):
@@ -2629,7 +2646,7 @@ def dated(meta, path=None):
     file-dated baseline back into the comparison it must stay out of.
     """
     when, said = measured_when(meta, path)
-    return (when if said else when + FILE_DATED), said
+    return (when if said else NOT_RECORDED), said
 
 
 def named_build(engine):

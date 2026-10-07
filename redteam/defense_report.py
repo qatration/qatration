@@ -2264,7 +2264,9 @@ def main():
           </details>
         </section>"""
 
-    today = datetime.date.today().isoformat()
+    # THE RUNS' DATES, not the day this page was built (`workspace.runs_span`).
+    from workspace import runs_span as _rs_d
+    today = _rs_d(list(measured.values()), len(measured))
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Security Report</title><style>

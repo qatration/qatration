@@ -476,8 +476,12 @@ def main():
     _cdt = _re9.search(r"citebot<div[^>]*>([^<]*)<", _pg9)
     check("a run that recorded its date is dated by it on the fleet page",
           bool(_rag) and _rag.group(1) == "2026-05-06 07:08", _rag.group(1) if _rag else "none")
-    check("...and one that did not says the date is the file's",
-          bool(_cdt) and _cdt.group(1).endswith("(file)"), _cdt.group(1) if _cdt else "none")
+    check("...and one that did not says it recorded none",
+          bool(_cdt) and _cdt.group(1) == "date not recorded", _cdt.group(1) if _cdt else "none")
+    # AND THE PAGE IS DATED BY ITS RUNS, not by the day it was built.
+    check("the page's subtitle gives its runs' dates and how many recorded one",
+          "1 of 2 runs dated, 2026-05-06" in _pg9, _re9.search(r'class="sub">[^<]*', _pg9).group(0)
+          if _re9.search(r'class="sub">[^<]*', _pg9) else "no subtitle")
     check("a kept copy of a target's run is not a second system",
           "2 systems" in _o9.getvalue() and "results_ragbot.v1.json" in _e9.getvalue(),
           _o9.getvalue()[-200:] + _e9.getvalue()[-300:])

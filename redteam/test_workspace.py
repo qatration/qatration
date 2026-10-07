@@ -3152,7 +3152,7 @@ def check_dated():
     import re as _re_d
     import glob as _g_d
     import tempfile as _tf_d
-    from workspace import dated, FILE_DATED
+    from workspace import dated, FILE_DATED, NOT_RECORDED, runs_span
     bad = []
 
     def want(label, ok, detail=""):
@@ -3168,14 +3168,19 @@ def check_dated():
     _fp = _os_d.path.join(_d, "results_x.json")
     _io_d.open(_fp, "w", encoding="utf-8").write("{}")
     _shown, _said = dated({}, _fp)
-    want("a run that did not is marked, so the sentence changes meaning",
-         _said is False and _shown.endswith(FILE_DATED), "%r / %r" % (_shown, _said))
-    want("...and the date is still there to read",
-         _re_d.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", _shown), _shown)
+    # NOT THE FILE'S TIME: a clone or a re-score rewrites it, and a page carrying it changed
+    # on every rebuild while stating a filesystem event beside a measurement.
+    want("a run that did not record its date is said to have none, not given the file's",
+         _said is False and _shown == NOT_RECORDED, "%r / %r" % (_shown, _said))
 
     _shown, _said = dated({}, None)
-    want("with neither, it claims nothing but is still marked",
-         _said is False and _shown == FILE_DATED, repr(_shown))
+    want("...and so is one with no file either",
+         _said is False and _shown == NOT_RECORDED, repr(_shown))
+    want("a page's runs are dated by their own dates, and says how many had one",
+         (runs_span(["2026-09-02", "2026-08-21"], 2), runs_span(["2026-08-21"], 3),
+          runs_span([], 4))
+         == ("runs 2026-08-21 to 2026-09-02", "1 of 3 runs dated, 2026-08-21",
+             "run dates not recorded"), "")
 
     # AND THE MARKER IS VISIBLE. An empty one satisfies every `endswith` above and would
     # leave a file's timestamp reading exactly like a measurement -- a check that passes

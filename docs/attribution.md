@@ -679,9 +679,11 @@ along with the reason not to switch to a one-sided test now that the data have b
 
 ### One hypothesis, nine tests of it
 
-The A/B table asks one question nine times: does the defence separate. Five of the seven paired
-stands read `not separated`, so a page carrying only those rows says nothing five times over
-evidence that all points the same way. `qatration discrimination` now prints one sentence about
+The A/B table asks one question nine times: does the defence separate. Six of the seven paired
+stands read `not separated`, so a page carrying only those rows says nothing six times over
+evidence that all points the same way. Each row's word is read on its p Holm-adjusted over the
+nine pairs, with the unadjusted p printed beside it: read at 0.05 alone, nine tests expect a
+chance hit, and toolagent's unadjusted p = 0.008 is 0.06 once it is one of nine. `qatration discrimination` now prints one sentence about
 the set beneath the table: **7 paired stands, 7 favour the undefended arm, none the
 defended, sign test p = 0.0156.**
 

@@ -516,8 +516,12 @@ def main():
     # side. That is the honest state of this evidence: the direction is right in every pair
     # and the sample is too small in most of them, which is a finding about the FLEET rather
     # than about the engine, and the way to close it is more attacks per target.
-    from stats import fisher_exact, mcnemar_exact
+    from stats import fisher_exact, mcnemar_exact, holm as _holm
     short, _pairsets = [], []
+    # TWO PASSES: every pair's p first, then the word each row gets, on the Holm-adjusted p.
+    # A row read at 0.05 as if it were the only test is one of several tests of one
+    # hypothesis; the unadjusted p stays printed beside it. Found by an independent review.
+    _rows_p = []
     for base, (bd, md), naive, (bn, mn), _pd in sorted(pairs, key=lambda x: (x[0], x[2])):
         only_n, only_d, shared, mism = (_pd["only_a"], _pd["only_b"], _pd["shared"],
                                         _pd["mismatched"])
@@ -542,23 +546,33 @@ def main():
             if mism:
                 (bn, mn), (bd, md) = breaches(data, naive, mism), breaches(data, base, mism)
             p, test = fisher_exact(bn, mn - bn, bd, md - bd), "Fisher"
+        _rows_p.append((base, bd, md, naive, bn, mn, _pd, only_n, only_d, shared, mism, p, test))
+    _adj = _holm([_r[11] for _r in _rows_p])
+    for (base, bd, md, naive, bn, mn, _pd, only_n, only_d, shared, mism, p, test), _pa in zip(
+            _rows_p, _adj):
         rn = bn / mn if mn else 0.0
         rd = bd / md if md else 0.0
         # THE DIRECTION FROM WHAT PRODUCED THE p. Under McNemar the p is read off the
         # discordant shared attacks, and the direction was read off the whole arms -- attacks
         # only one of them received included -- so six attacks all favouring the defence
         # printed INVERTED, p=0.031. The discordant counts are the direction of that test.
-        verdict, settled = pair_verdict(p, *((only_n, only_d) if shared else (rn, rd)),
+        verdict, settled = pair_verdict(_pa, *((only_n, only_d) if shared else (rn, rd)),
                                         test=test)
+        if p is not None and _pa is not None and len(_rows_p) > 1:
+            verdict += " (that p is Holm-adjusted over %d pairs; unadjusted %.3f)" % (
+                len(_rows_p), p)
         if shared and not settled and p is not None and only_n > only_d:
             # HOW FAR SHORT, IN THE UNIT THE TEST COUNTS. `more attacks per target` was the
             # advice and it is not a quantity: McNemar reads only the DISCORDANT pairs, so
             # sending fifty more attacks that both arms survive moves nothing. The number
             # below is how many more attacks have to break the naive arm and be held by
             # the defended one before this pair can separate at all.
+            # AT THE ADJUSTED BAR: the row's word is read on the Holm p, so "would separate"
+            # counts to the level that word needs. 0.05 over the number of pairs is the
+            # bound Holm never exceeds, so the count is enough whatever the other rows do.
             _need = None
             for _k in range(1, 40):
-                if (mcnemar_exact(only_n + _k, only_d) or 1.0) < 0.05:
+                if (mcnemar_exact(only_n + _k, only_d) or 1.0) < 0.05 / len(_rows_p):
                     _need = _k
                     break
             if _need:
@@ -619,7 +633,7 @@ def main():
               "direction it fell:\n     %d favour the undefended arm, %d the defended, "
               "sign test p = %s.\n     That is a statement about this SET of "
               "configurations and not about any row above,\n     which is why every row "
-              "above still reads as its own sample says."
+              "above still reads as its own sample says, Holm-adjusted."
               % (len(_pairsets), _fav, _rev,
                  "%.4f" % _pp if _pp is not None else "not testable"))
 

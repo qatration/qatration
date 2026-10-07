@@ -887,7 +887,9 @@ def main():
                     4, sep="; "))
                 + '. Rows from a run that did not finish are not smaller sweeps, they are '
                   'sweeps that stopped.</div>')
-    today = datetime.date.today().isoformat()
+    # THE RUNS' DATES, not the day this page was built (`workspace.runs_span`).
+    from workspace import runs_span as _rs_c
+    today = _rs_c([r["measured"][:10] for r in rows if r.get("when_said")], len(rows))
 
     lead = fleet_lead(len(rows), n_vuln,
                       sum(1 for r in rows if r["verdict"] == "Hardened"),

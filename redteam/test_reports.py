@@ -3461,8 +3461,8 @@ def main():
             check("a lock map that recorded its date is dated by it",
                   _dated == "2026-05-06 07:08", _dated)
             _undated = _panel_date({"meta": {"target": "x"}, "maps": []})
-            check("...and one that did not says the date is the file's",
-                  _undated.endswith("(file)"), _undated)
+            check("...and one that did not says it recorded none",
+                  _undated == "date not recorded", _undated)
             # A RECON PROFILE KEEPS ITS DATE AT THE TOP LEVEL, which is the shape it already
             # had; reading only `meta` here would mark every one of them as file-dated.
             _prof = _panel_date({"target": "x", "when": "2026-05-06 07:08"}, "profile")
@@ -3471,8 +3471,8 @@ def main():
             # AND THE BARE LIST STILL READS. `data.get` on a list raises, and the panel the
             # report did have would vanish with a caught exception and no message.
             _bare = _panel_date([])
-            check("a legacy bare-list lock map is still folded in, and marked",
-                  _bare.endswith("(file)"), _bare)
+            check("a legacy bare-list lock map is still folded in, and says it has no date",
+                  _bare == "date not recorded", _bare)
         finally:
             _sh5.rmtree(_iw, ignore_errors=True)
         _nodate = _dated_panel(None, "2026-09-03 10:00")
@@ -4788,8 +4788,60 @@ def main():
     # memorybot pairs -- they were the only reversals, and they were never measurements.
     # What the check exists for is that `reversed` is read from the rows, not printed as a
     # constant: so it is recounted from the stand's own discordant pairs.
+    # THE FIXES PAGE IS DATED BY ITS RUNS, not by the day it was built.
+    import tempfile as _tf_fx, shutil as _sh_fx
+    _w_fx = _tf_fx.mkdtemp()
+    try:
+        _src_fx = os.path.join(os.path.dirname(HERE), "out", "results_secretbot.json")
+        _d_fx = json.load(io.open(_src_fx, encoding="utf-8"))
+        _d_fx.setdefault("meta", {})["when"] = "2026-05-06 07:08"
+        json.dump(_d_fx, io.open(os.path.join(_w_fx, "results_secretbot.json"), "w",
+                                 encoding="utf-8"))
+        subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "fixes"],
+                       capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, QATRATION_OUT=_w_fx, PYTHONIOENCODING="utf-8",
+                                PYTHONDONTWRITEBYTECODE="1"))
+        _pg_fx = io.open(os.path.join(_w_fx, "defense_report.html"), encoding="utf-8").read()
+    finally:
+        _sh_fx.rmtree(_w_fx, ignore_errors=True)
+    check("the fixes page's subtitle gives its runs' dates",
+          "runs 2026-05-06" in _pg_fx, re.search(r'class="sub">[^<]*', _pg_fx).group(0)
+          if re.search(r'class="sub">[^<]*', _pg_fx) else "no subtitle")
+
     # A CONFIG'S CAVEAT REACHES THE PAGE, where the person reading its rows will see it:
     # rendered here, from a workspace holding one target that carries one.
+    # ONE HYPOTHESIS, SEVERAL TESTS. Each row's word is read on its Holm-adjusted p, the
+    # unadjusted one printed beside it; read at 0.05 alone, nine rows expect a chance GOOD.
+    from stats import holm as _holm_t
+    check("Holm adjusts in the order given, never down, and keeps an untestable row",
+          _holm_t([0.01, 0.04, 0.03, None]) == [0.03, 0.06, 0.06, None]
+          and _holm_t([0.5]) == [0.5] and _holm_t([0.9, 0.9]) == [1.0, 1.0],
+          str(_holm_t([0.01, 0.04, 0.03, None])))
+    _hrows = _re_d.findall(r"\[(GOOD|not separated|INVERTED)[^\]]*? p=([\d.]+) \(that p is "
+                           r"Holm-adjusted over (\d+) pairs; unadjusted ([\d.]+)\)\]", _dout)
+    check("every stand's word is read on its Holm-adjusted p, with the unadjusted one beside it",
+          len(_hrows) >= 5 and all(float(_a) >= float(_u) and
+                                   (_w != "GOOD" or float(_a) < 0.05)
+                                   for _w, _a, _n, _u in _hrows), str(_hrows[:3]))
+    check("...and at least one stand reads not separated although its own p is under 0.05",
+          any(_w != "GOOD" and float(_u) < 0.05 <= float(_a) for _w, _a, _n, _u in _hrows),
+          str(_hrows))
+    # AND THE DOC THAT COUNTS THEM says the count the command prints.
+    _npair = len([1 for _l in _dout.splitlines() if " discordant, " in _l])
+    _nsep = len([1 for _l in _dout.splitlines()
+                 if " discordant, " in _l and "[not separated" in _l])
+    _words = "zero one two three four five six seven eight nine ten".split()
+    _att = io.open(os.path.join(os.path.dirname(HERE), "docs", "attribution.md"),
+                   encoding="utf-8").read()
+    check("docs/attribution.md says how many paired stands read not separated, as printed",
+          _nsep <= 10 and _npair <= 10 and "%s of the %s paired\nstands read `not separated`"
+          % (_words[_nsep].capitalize(), _words[_npair]) in _att, "%d of %d" % (_nsep, _npair))
+    _short = [(int(_b), int(_k)) for _b, _k in _re_d.findall(
+        r"(\d+) attack\(s\) break it and not \S+; (\d+) more such would separate", _dout)]
+    _m_h = int(_hrows[0][2]) if _hrows else 1
+    check("what would separate a pair is counted to the adjusted bar, and is the least such",
+          bool(_short) and all(_mcn_d(_b + _k, 0) < 0.05 / _m_h <= _mcn_d(_b + _k - 1, 0)
+                               for _b, _k in _short), str(_short))
     from build_index import caveats as _cavs
     import tempfile as _tf_cv, shutil as _sh_cv
     _cv = _cavs()

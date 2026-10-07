@@ -489,14 +489,9 @@ def main():
                           esc(named_or_more(_no_bl, 4))))
     # THE RUNS' DATES, not the day the page was built: "Adversarial test of AI features ·
     # 2026-10-01" stood over runs from August and September. Found by an independent review.
-    from workspace import measured_when as _mw_i
-    _days = sorted(_mw_i(m)[0][:10] for m in rows if _mw_i(m)[1])
-    _span = (_days[0] if _days and _days[0] == _days[-1]
-             else "%s to %s" % (_days[0], _days[-1]) if _days else "")
     # AND HOW MANY OF THEM SAID: one dated run of thirty-five is not "the runs' date".
-    today = ("runs " + _span if _days and len(_days) == len(rows)
-             else "%d of %d runs dated, %s" % (len(_days), len(rows), _span) if _days
-             else "run dates not recorded, built " + datetime.date.today().isoformat())
+    from workspace import measured_when as _mw_i, runs_span as _rs_i
+    today = _rs_i([_mw_i(m)[0][:10] for m in rows if _mw_i(m)[1]], len(rows))
     doc = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QAtration — Dashboard</title><style>
