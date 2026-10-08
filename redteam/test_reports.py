@@ -4882,27 +4882,29 @@ def main():
     check("what would separate a pair is counted to the adjusted bar, and is the least such",
           bool(_short) and all(_mcn_d(_b + _k, 0) < 0.05 / _m_h <= _mcn_d(_b + _k - 1, 0)
                                for _b, _k in _short), str(_short))
-    from build_index import caveats as _cavs
+    # A CONFIG'S CAVEAT REACHES THE PAGE. On a FIXTURE config: the fleet's one real caveat
+    # (citebot) went when its live re-run replaced the results it was about, and a check
+    # that needs a shipped caveat to exist would have pushed somebody to keep a stale one.
     import tempfile as _tf_cv, shutil as _sh_cv
-    _cv = _cavs()
     _real_cv = os.path.join(os.path.dirname(HERE), "out")
-    _tgt_cv = next((k for k in sorted(_cv)
-                    if os.path.exists(os.path.join(_real_cv, "results_%s.json" % k))), None)
-    check("there is a target whose config carries a caveat, with results to show it on",
-          _tgt_cv is not None, str(sorted(_cv)))
-    if _tgt_cv:
-        _w_cv = _tf_cv.mkdtemp()
-        try:
-            _sh_cv.copy(os.path.join(_real_cv, "results_%s.json" % _tgt_cv), _w_cv)
-            subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "index"],
-                           capture_output=True, text=True, timeout=300,
-                           env=dict(os.environ, QATRATION_OUT=_w_cv, PYTHONIOENCODING="utf-8",
-                                    PYTHONDONTWRITEBYTECODE="1"))
-            _pg_cv = io.open(os.path.join(_w_cv, "index.html"), encoding="utf-8").read()
-            check("...and the index card of that target carries the caveat",
-                  _cv[_tgt_cv][:60] in _pg_cv, _pg_cv[-300:])
-        finally:
-            _sh_cv.rmtree(_w_cv, ignore_errors=True)
+    _w_cv = _tf_cv.mkdtemp()
+    try:
+        _cfg_cv = os.path.join(_w_cv, "targets_secretbot.yaml")
+        io.open(_cfg_cv, "w", encoding="utf-8").write(
+            io.open(os.path.join(HERE, "targets_secretbot.yaml"), encoding="utf-8").read()
+            + "\ncaveat: FIXTURE-CAVEAT these results predate a rule the reader must know\n")
+        _out_cv = os.path.join(_w_cv, "out")
+        os.makedirs(_out_cv)
+        _sh_cv.copy(os.path.join(_real_cv, "results_secretbot.json"), _out_cv)
+        _env_cv = dict(os.environ, QATRATION_OUT=_out_cv, QATRATION_CONFIGS=_cfg_cv,
+                       PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+        subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "index"],
+                       capture_output=True, text=True, timeout=300, env=_env_cv)
+        _pg_cv = io.open(os.path.join(_out_cv, "index.html"), encoding="utf-8").read()
+        check("a config's caveat is printed on its target's index card",
+              "FIXTURE-CAVEAT" in _pg_cv, _pg_cv[-300:])
+    finally:
+        _sh_cv.rmtree(_w_cv, ignore_errors=True)
     from discrimination import paired_detail as _pd_d
     check("...and each stand's reversed count is a part of its discordant count",
           all(0 <= _c <= _b for _b, _c in _rows), str(_rows))

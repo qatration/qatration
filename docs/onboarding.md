@@ -127,10 +127,10 @@ describes a bot this repo already has an adapter for, and sweeps it with the gen
 `skip_in_fleet: true`, because a template swept as a target would put a second copy of an
 existing bot into every aggregate under a different name.
 
-**"440 findings across 35 targets" invites a reading that is not true, so the front page now
+**"443 findings across 35 targets" invites a reading that is not true, so the front page now
 says which.** Most of those targets are bots written here to exercise the engine. A finding on
 one of them is evidence that the engine works, which is worth having and is not the same claim
-as a finding on somebody else's code. Nine are third-party and carry **62 of the 440**:
+as a finding on somebody else's code. Nine are third-party and carry **62 of the 443**:
 smolagents two ways, LangChain, NeMo Guardrails with and without its output rail, and two
 cloned practice applications this repository does not ship.
 

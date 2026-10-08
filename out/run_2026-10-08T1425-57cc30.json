@@ -1,0 +1,20 @@
+{
+  "run_id": "2026-10-08T1425-57cc30",
+  "state": "finished",
+  "target": "citebot",
+  "scope": "full",
+  "engine": "848913b",
+  "arsenal": "attacks_citebot.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {
+    "timeout_s": null
+  },
+  "results": "results_citebot.json",
+  "started_at": "2026-10-08 14:25:42",
+  "finished_at": "2026-10-08 14:25:49",
+  "spent": {
+    "retries": 0
+  },
+  "note": null
+}
