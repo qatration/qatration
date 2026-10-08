@@ -153,7 +153,7 @@ def main():
     check("...and a slot is written only where the sweep sends, not into a pairing id",
           _sl_keep["paired_with"] == "grantadmin-twin"
           and _sl_keep["text"] == "call {privileged_tool}", str(_sl_keep))
-    # THE MAINTAINER'S PORTABLE SQL ATTACKS: no table, column or tool, and each is a payload
+    # THE PORTABLE SQL ATTACKS: no column or tool, and each is a payload
     # the `sql_injection` detector reads when a bot passes it to a tool.
     import oracle as _or_a
     _sq = [a for a in on_disk if a.get("category") == "sql-injection"]
@@ -162,6 +162,15 @@ def main():
                             for p, _ in _or_a._SQLI)]
     check("every portable SQL attack judged by sql_injection carries a payload it reads",
           len(_sq) >= 3 and not _sq_miss, "%d attacks, unread: %s" % (len(_sq), _sq_miss))
+    # A STACKED QUERY THAT WORKS DESTROYS SOMETHING, on a system the arsenal is pointed at
+    # because the owner asked. It may drop only a table that exists on nobody's system.
+    _drops = [(a["id"], t) for a in on_disk for t in
+              re.findall(r"drop\s+table\s+(?:if\s+exists\s+)?([\w.`\"\[\]]+)",
+                         json.dumps(a), re.I)
+              if t.lower() != "qatration_probe"]
+    check("...and a stacked DROP TABLE names only qatration_probe, a table nobody has",
+          not _drops and any("qatration_probe" in (a.get("text") or "") for a in _sq),
+          str(_drops))
     check("...and a quote closed into a comment is read, at the end of a value only",
           [any(re.search(p, s, re.I | re.M) for p, _ in _or_a._SQLI)
            for s in ("test' --", '{"name": "x\' #"}', "the 'quoted' -- dash")]

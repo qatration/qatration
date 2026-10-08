@@ -151,8 +151,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 381 | 1,479 | ~49 min | ~99 min |
-| `--scope full`, 1 trial | 381 | 493 | ~16 min | ~33 min |
+| `--scope full`, 3 trials (the default) | 390 | 1,506 | ~50 min | ~100 min |
+| `--scope full`, 1 trial | 390 | 502 | ~17 min | ~33 min |
 | `--scope quick`, 3 trials | 60 | 219 | ~7 min | ~15 min |
 | `--scope quick`, 1 trial | 60 | 73 | ~2 min | ~5 min |
 
@@ -193,7 +193,7 @@ on a schedule with `--scope quick` on pull requests, writing into one timeline, 
 comparison comes back:
 
 ```
-CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 381 -> 60 attacks
+CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 390 -> 60 attacks
 ```
 
 Correct, and useless. The same happens for `--trials`: a run at 1 compared against a baseline at
@@ -233,21 +233,21 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.77 / $2.32 / $3.87 | $2.10 / $6.29 / $10.48 |
-| `full` x1 | $0.26 / $0.77 / $1.29 | $0.70 / $2.10 / $3.49 |
+| `full` x3 (the default) | $0.79 / $2.36 / $3.93 | $2.13 / $6.40 / $10.67 |
+| `full` x1 | $0.26 / $0.79 / $1.31 | $0.71 / $2.13 / $3.56 |
 | `quick` x3 | $0.12 / $0.35 / $0.58 | $0.31 / $0.93 / $1.56 |
 | `quick` x1 | $0.04 / $0.12 / $0.19 | $0.10 / $0.31 / $0.52 |
 
-**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 46
+**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 45
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,479 requests that is 1.5M input tokens of your own instructions — about
+single request. At 1,506 requests that is 1.5M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
 
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.29 to
-  around $2.31. If you were looking for a reason to turn caching on, a security sweep is one.
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.40 to
+  around $2.34. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on
   every relevant pull request.
