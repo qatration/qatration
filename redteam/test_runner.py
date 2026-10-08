@@ -1334,6 +1334,24 @@ def main():
           _said_u[-400:])
     check("...and the suite after it still runs", "ok   zz_after" in _said_u, _said_u[-400:])
 
+    # AN ABANDONED SEND IS WAITED FOR EVEN WHEN ITS id() WAS SEEN BEFORE. The registry kept
+    # ids, CPython reuses a freed object's id, and on macOS CI a new abandoned thread inherited
+    # one: it was skipped, the reset ran under it, and its note landed in the next attack. The
+    # reuse is the allocator's choice, so it is forced here: the id is planted where the old
+    # registry looked (a no-op once there is no such registry).
+    _old_to8 = _rn2.SEND_TIMEOUT
+    try:
+        _rn2.SEND_TIMEOUT = 3.0
+        _rn2._invoke_with_timeout(lambda: time.sleep(0.6) or _Pb2(prompt="p", output="late"), 0.05)
+        _th8 = _rn2._ABANDONED[-1]
+        getattr(_rn2, "_WAITED", set()).add(id(_th8))
+        _rn2._settle_abandoned("reuse")
+        _alive8 = _th8.is_alive()
+    finally:
+        _rn2.SEND_TIMEOUT = _old_to8
+    check("an abandoned send is waited for even if another thread once had its id",
+          not _alive8, "the reset would have run while it was still in flight")
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

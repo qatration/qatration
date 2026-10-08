@@ -144,13 +144,18 @@ class GiveUpWall(object):
 # EXPLOITED 1/1 on a breach it did not cause. Found by an independent review. Bounded and
 # once, not "no sends until it ends": a runaway generation has run for 53 minutes here, and
 # a sweep that waited on it would measure nothing at all.
-_ABANDONED, _WAITED = [], set()
+#
+# "WAITED ONCE" IS MARKED ON THE THREAD, not kept as its id(). A set of ids outlives the
+# threads it names, and CPython hands a freed object's id to the next one: a new abandoned
+# send that inherited an earlier thread's id was taken as already waited for, the reset ran
+# under it, and its note landed in the next attack (macOS CI, 2026-10-08, EXPLOITED 1/1).
+_ABANDONED = []
 
 
 def _settle_abandoned(label):
     for _th in list(_ABANDONED):
-        if _th.is_alive() and id(_th) not in _WAITED:
-            _WAITED.add(id(_th))
+        if _th.is_alive() and not getattr(_th, "_qatration_waited", False):
+            _th._qatration_waited = True
             print(f"  ! {label}: waiting up to {SEND_TIMEOUT}s for a send abandoned at its "
                   f"timeout, so it cannot land in this trial", file=sys.stderr)
             _th.join(SEND_TIMEOUT)
