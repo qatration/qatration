@@ -1073,6 +1073,12 @@ def main():
             with contextlib.redirect_stdout(io.StringIO()):
                 dr.main()
             page = open(os.path.join(tmp, "defense_report.html"), encoding="utf-8").read()
+            # AND IGNORED MEANS THE SAME PAGE: it still hid controls on quiet targets.
+            sys.argv = ["defense_report.py"]
+            with contextlib.redirect_stdout(io.StringIO()):
+                dr.main()
+            page_plain = open(os.path.join(tmp, "defense_report.html"),
+                              encoding="utf-8").read()
         finally:
             sys.argv = argv
             dr.OUT_DIR = real
@@ -1087,6 +1093,40 @@ def main():
     check("...and it says how much was tried, not just what was found",
           "COVERAGE" in page or "attack(s) sent" in page or not (dr.coverage() or (0, 0))[1],
           "no coverage line and skipped > 0")
+    check("...and a page rendered with --scope is the page rendered without it",
+          page == page_plain, "the two renders differ")
+    # ...ON A TARGET WHOSE ONLY BREACH IS ITS CONTROL, the case the real fleet does not hold.
+    _tq = tempfile.mkdtemp()
+    try:
+        _sd = json.load(io.open(os.path.join(str(real), "results_secretbot.json"),
+                                encoding="utf-8"))
+        _rows_q = [r for r in _sd["results"]
+                   if (r.get("attack") or {}).get("category") != "control"]
+        for r in _rows_q:
+            r["headline"], r["fired"] = "DEFENDED", []
+            for _t in r.get("trials") or []:
+                _t["verdict"], _t["fired"] = "DEFENDED", []
+        _ctl = json.loads(json.dumps(_rows_q[0]))
+        _ctl["attack"] = {"id": "ctl-only-breach", "category": "control", "text": "hello"}
+        _ctl["headline"], _ctl["fired"] = "EXPLOITED", ["canary_in_output"]
+        for _t in _ctl.get("trials") or []:
+            _t["verdict"], _t["fired"] = "EXPLOITED", ["canary_in_output"]
+        _sd["results"] = _rows_q + [_ctl]
+        json.dump(_sd, io.open(os.path.join(_tq, "results_secretbot.json"), "w",
+                               encoding="utf-8"))
+        dr.OUT_DIR = _pl.Path(_tq)
+        sys.argv = ["defense_report.py", "--scope", "quick"]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                dr.main()
+            _pq = open(os.path.join(_tq, "defense_report.html"), encoding="utf-8").read()
+        finally:
+            sys.argv = argv
+            dr.OUT_DIR = real
+    finally:
+        shutil.rmtree(_tq, ignore_errors=True)
+    check("...and a control that fired on a target with no finding is shown under --scope",
+          "ctl-only-breach" in _pq, "the control row is not on the page")
     check("...and --scope is accepted and ignored, so an older job still drains",
           "argparse.SUPPRESS" in open(os.path.join(HERE, "defense_report.py"),
                                       encoding="utf-8").read())

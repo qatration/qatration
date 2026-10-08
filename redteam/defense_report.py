@@ -1735,10 +1735,10 @@ def main():
     # absence that outlives the absence.
     attrib, unmeasured = attribution_index()
 
+    # NOT NARROWED BY `--scope`, which is accepted for an older queued job and ignored: it
+    # still hid the controls of a target with no finding, the one thing it was said not to
+    # do. Found by an independent review.
     ctrls = controls_fired()
-    if args.scope == "quick":
-        shown_targets = {t for t, *_ in findings}
-        ctrls = [c for c in ctrls if c[0] in shown_targets]
     controls_html = ""
     if ctrls:
         rows = "".join(
