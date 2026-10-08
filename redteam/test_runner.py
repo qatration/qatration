@@ -1308,6 +1308,32 @@ def main():
           _r[0]["verdict"] != "EXPLOITED", "%s %r" % (_r[0]["verdict"],
                                                       _r[0]["probe"].output))
 
+    # A FAILING SUITE'S OUTPUT MUST NOT END THE RUN. check.py printed a failed suite's tail into
+    # a console whose code page had no U+FFFD (windows-1251 on the maintainer's machine, 2026-10-08),
+    # raised UnicodeEncodeError, and every suite after it went unrun with no summary line.
+    _wu = tempfile.mkdtemp(prefix="qatration-runner-enc-")
+    try:
+        os.makedirs(os.path.join(_wu, "tools"))
+        os.makedirs(os.path.join(_wu, "redteam"))
+        shutil.copy(CHECK, os.path.join(_wu, "tools", "check.py"))
+        io.open(os.path.join(_wu, "redteam", "test_aa_fails_wide.py"), "w", encoding="utf-8",
+                newline="\n").write(
+            "import sys\nsys.stdout.reconfigure(encoding='utf-8', errors='replace')\n"
+            "print('FAIL  a reply carried ' + chr(0xFFFD) + chr(0x0416))\n"
+            "print('0/1 passed')\nsys.exit(1)\n")
+        io.open(os.path.join(_wu, "redteam", "test_zz_after.py"), "w", encoding="utf-8",
+                newline="\n").write("print('1/1 passed')\n")
+        _cp = subprocess.run([sys.executable, os.path.join(_wu, "tools", "check.py")],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=_wu,
+                             env=dict(os.environ, PYTHONIOENCODING="cp1252"), timeout=60)
+        _said_u = _cp.stdout.decode("cp1252", errors="replace")
+    finally:
+        shutil.rmtree(_wu, ignore_errors=True)
+    check("a failed suite printing a character the console cannot encode does not crash the run",
+          "UnicodeEncodeError" not in _said_u and "2 suite(s), 1 failed" in _said_u,
+          _said_u[-400:])
+    check("...and the suite after it still runs", "ok   zz_after" in _said_u, _said_u[-400:])
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     if fails:
         for f in fails:

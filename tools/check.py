@@ -243,8 +243,13 @@ def main(argv):
     # naming no suite". It happened to `test_runner`'s own copy of this file on a Windows CI
     # runner (93a0065): stopped at 90 s against a 15 s norm, and its log was empty, so which
     # suite it was waiting on could not be read off anything.
+    #
+    # AND UTF-8 ON THE WAY OUT, as every suite does on its own stdout. The runner reads each
+    # suite as UTF-8 and then prints a failed one's tail, which can carry any character; into a
+    # windows-1251 console that raised UnicodeEncodeError on U+FFFD and ended the run mid-list, with
+    # no summary and every later suite unrun. A placeholder, never a lost run.
     try:
-        sys.stdout.reconfigure(line_buffering=True)
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     except (AttributeError, ValueError):
         pass
     if "--list" in argv:
