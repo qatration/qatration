@@ -548,6 +548,9 @@ def main():
             p, test = fisher_exact(bn, mn - bn, bd, md - bd), "Fisher"
         _rows_p.append((base, bd, md, naive, bn, mn, _pd, only_n, only_d, shared, mism, p, test))
     _adj = _holm([_r[11] for _r in _rows_p])
+    # THE PAIRS HOLM ADJUSTED OVER, which are the ones with a p: a NOT COMPARABLE pair is no
+    # test, and counting it named one test too many. Found by an independent review.
+    _m_holm = sum(1 for _r in _rows_p if _r[11] is not None) or 1
     for (base, bd, md, naive, bn, mn, _pd, only_n, only_d, shared, mism, p, test), _pa in zip(
             _rows_p, _adj):
         rn = bn / mn if mn else 0.0
@@ -558,9 +561,9 @@ def main():
         # printed INVERTED, p=0.031. The discordant counts are the direction of that test.
         verdict, settled = pair_verdict(_pa, *((only_n, only_d) if shared else (rn, rd)),
                                         test=test)
-        if p is not None and _pa is not None and len(_rows_p) > 1:
+        if p is not None and _pa is not None and _m_holm > 1:
             verdict += " (that p is Holm-adjusted over %d pairs; unadjusted %.3f)" % (
-                len(_rows_p), p)
+                _m_holm, p)
         if shared and not settled and p is not None and only_n > only_d:
             # HOW FAR SHORT, IN THE UNIT THE TEST COUNTS. `more attacks per target` was the
             # advice and it is not a quantity: McNemar reads only the DISCORDANT pairs, so
@@ -572,7 +575,7 @@ def main():
             # bound Holm never exceeds, so the count is enough whatever the other rows do.
             _need = None
             for _k in range(1, 40):
-                if (mcnemar_exact(only_n + _k, only_d) or 1.0) < 0.05 / len(_rows_p):
+                if (mcnemar_exact(only_n + _k, only_d) or 1.0) < 0.05 / _m_holm:
                     _need = _k
                     break
             if _need:

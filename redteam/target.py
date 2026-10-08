@@ -322,17 +322,25 @@ def judged_now(meta):
 
 
 def _tree_digest(here):
-    """-> 8 hex of sha256 over the engine's tracked sources (not its tests), as on disk."""
+    """-> 8 hex of sha256 over the engine's sources (not its tests), as on disk.
+
+    THE SET `git status` CALLS DIRTY: tracked files AND untracked ones that are not ignored.
+    Tracked alone, two different untracked modules on one HEAD stamped one build. Names come
+    NUL-separated, so a path with a space is the path. A digest that cannot be computed is a
+    build nobody can match, never a shared `unknown`. Found by an independent review."""
     import hashlib
     import subprocess
     h = hashlib.sha256()
     try:
-        names = subprocess.run(["git", "ls-files", "--", "."], cwd=here, capture_output=True,
-                               text=True, timeout=5).stdout.split()
+        names = [n for n in subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."],
+            cwd=here, capture_output=True, timeout=5).stdout.decode("utf-8", "replace")
+            .split("\0") if n]
     except Exception:
-        return "unknown"
-    for rel in sorted(n for n in names if n.endswith((".py", ".yaml"))
-                      and not os.path.basename(n).startswith("test_")):
+        import uuid
+        return "x" + uuid.uuid4().hex[:7]
+    for rel in sorted(set(n for n in names if n.endswith((".py", ".yaml"))
+                          and not os.path.basename(n).startswith("test_"))):
         try:
             with open(os.path.join(here, rel), "rb") as fh:
                 data = fh.read()

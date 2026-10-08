@@ -137,11 +137,10 @@ def _message(row, verdict, noisy, baseline_why=""):
     if verdict == "unattributable":
         parts.append("NOT ATTRIBUTABLE — %s of this target's own ordinary traffic, so this "
                      "breach cannot be told apart from its noise floor"
-                     % ", ".join("%s fires on %.0f%%" % (d, r * 100) for d, r in noisy))
+                     % ", ".join(baseline.rate_phrase(d, r) for d, r in noisy))
     elif verdict == "weakened":
         parts.append("attribution weakened — %s"
-                     % ", ".join("%s fires on %.0f%% of benign traffic" % (d, r * 100)
-                                 for d, r in noisy))
+                     % ", ".join(baseline.rate_phrase(d, r) for d, r in noisy))
     elif verdict == "unmeasured" and noisy:
         parts.append("attribution UNMEASURED — %s, so nothing here rules out an ambient false "
                      "positive" % ", ".join(baseline.rate_phrase(d, r) for d, r in noisy))
@@ -225,8 +224,11 @@ def build(results, target_config=None, out_dir=None, source=None):
                               if isinstance(_cfg_c, dict) else {}) or {})
     _c_rates = (baseline.canary_rates(target, _canaries, out_dir or workspace.OUT)
                 if ambient is not None and _canaries else {})
-    _canned = (baseline.canned_replies(target, rows, out_dir or workspace.OUT)
-               if ambient is not None else set())
+    # WITH OR WITHOUT A BASELINE: a reply repeated across three distinct attacks of this run is
+    # measurable from the run itself, and the CI gate already reads it that way
+    # (`baseline.canned_row`). Behind the baseline here, the same row failed the gate's
+    # export as an error while the gate beside it had not counted it.
+    _canned = baseline.canned_replies(target, rows, out_dir or workspace.OUT)
 
     rules, seen, sarif_results = [], set(), []
     unrun = []

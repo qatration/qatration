@@ -1424,6 +1424,28 @@ def main():
                     cwd=os.path.dirname(HERE))
                 return _r.returncode, (_r.stdout or "") + (_r.stderr or "")
 
+            # A CORPUS A USER CAN WRITE: recorded from a live reading, then compared against
+            # the same server, which has not moved.
+            _corp = os.path.join(_ws, "my_mcp.json")
+            _env_r = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+            _rr = _sp_s.run([sys.executable, os.path.join(HERE, "cli.py"), "mcp", "--record",
+                             _corp, "--name", "fake", "--timeout", "60", sys.executable, _srv2],
+                            capture_output=True, text=True, timeout=300, env=_env_r,
+                            cwd=os.path.dirname(HERE))
+            import json as _js_r, io as _io_r
+            _cj = (_js_r.load(_io_r.open(_corp, encoding="utf-8"))
+                   if os.path.exists(_corp) else {})
+            check("mcp --record writes the reading into a corpus, under the name given",
+                  _rr.returncode == 0 and "fake" in (_cj.get("servers") or {})
+                  and (_cj["servers"]["fake"].get("command") or [])[-1:] == [_srv2],
+                  "exit %s: %s" % (_rr.returncode, (_rr.stdout + _rr.stderr)[-300:]))
+            _rc_c = _sp_s.run([sys.executable, os.path.join(HERE, "cli.py"), "mcp",
+                               "--compare", _corp, "--timeout", "60"],
+                              capture_output=True, text=True, timeout=300, env=_env_r,
+                              cwd=os.path.dirname(HERE))
+            check("...and --compare reads it back: the same server, nothing moved",
+                  _rc_c.returncode == 0 and "nothing moved" in _rc_c.stdout,
+                  "exit %s: %s" % (_rc_c.returncode, (_rc_c.stdout + _rc_c.stderr)[-300:]))
             _rc_s, _out_s = _run_mcp(_srv2)
             check("the mcp command reads every channel the server declares, not tools alone",
                   _rc_s == 0 and "2 item(s) across 2 channel(s)" in _out_s,

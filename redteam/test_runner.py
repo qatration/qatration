@@ -1171,10 +1171,17 @@ def main():
         _d2 = _tg_d._tree_digest(_gd)
         io.open(os.path.join(_gd, "engine.py"), "w", encoding="utf-8").write("x = 2\n")
         _d3 = _tg_d._tree_digest(_gd)
+        # AN UNTRACKED MODULE IS PART OF THE BUILD `git status` CALLS DIRTY.
+        io.open(os.path.join(_gd, "extra.py"), "w", encoding="utf-8").write("y = 1\n")
+        _d4 = _tg_d._tree_digest(_gd)
+        io.open(os.path.join(_gd, "extra.py"), "w", encoding="utf-8").write("y = 2\n")
+        _d5 = _tg_d._tree_digest(_gd)
     finally:
         shutil.rmtree(_gd, ignore_errors=True)
     check("a dirty stamp tells two engine trees apart and ignores the tests",
           _d1 == _d2 and _d1 != _d3 and len(_d1) == 8, "%s %s %s" % (_d1, _d2, _d3))
+    check("...and two different untracked modules on one HEAD stamp differently",
+          len({_d3, _d4, _d5}) == 3, "%s %s %s" % (_d3, _d4, _d5))
 
     # A COMMAND THAT NEVER TOUCHES THE WORKSPACE is not refused for it.
     _bad_out = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")

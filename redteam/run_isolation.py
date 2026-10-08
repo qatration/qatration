@@ -103,8 +103,12 @@ def objectives_named(path, out, kept):
         from workspace import read_artifact as _ra_o
         _d = _ra_o(out)[0]
         _po = ((_d if isinstance(_d, dict) else {}).get("meta") or {}).get("objectives")
-        for _o in ([_po] if isinstance(_po, str) else list(_po or [])):
-            if _o and _o not in objs:
+        # ONLY NAMES: a stored `meta.objectives` of `5`, `true` or a mixed list crashed this
+        # in `write_maps`, after every live probe of the run had been paid for, and the map
+        # was lost. A value that is not a file name is not one. Found by an independent review.
+        for _o in ([_po] if isinstance(_po, str)
+                   else list(_po) if isinstance(_po, list) else []):
+            if isinstance(_o, str) and _o and _o not in objs:
                 objs.append(_o)
     return objs[0] if len(objs) == 1 else sorted(objs)
 
@@ -124,10 +128,13 @@ def main():
     ap.add_argument("--target-config", required=True, help="the YAML describing the target")
     ap.add_argument("--overwrite-evidence", action="store_true", help=OVERWRITE_HELP)
     ap.add_argument("--objectives", default="isolation_example.yaml",
-                    help="the objectives file naming what to isolate, one defence at a time")
+                    help="the objectives file naming what to isolate, one defence at a time "
+                         "(default: isolation_example.yaml, shipped; `generate` writes one for "
+                         "your target)")
     from workspace import trial_count as _trial_count
     ap.add_argument("--trials", type=_trial_count, default=3,
-                    help="repeats per probe — one trial cannot tell a wall from noise")
+                    help="repeats per probe — one trial cannot tell a wall from noise "
+                         "(default 3)")
     ap.add_argument("--only", default=None, help="run a single objective id")
     ap.add_argument("--model", default=None,
                     help="override the target's model — the way to ask whether a finding "

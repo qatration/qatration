@@ -111,7 +111,10 @@ benign run fires `canary_in_output` on **10 of 48 ordinary questions**: this bot
 key in its system prompt to anyone who talks to it, attack or no attack. So `baseline.py` marks
 ten of those fourteen rows `unattributable` and one `weakened`, and the honest sentence is not
 *fourteen attacks landed* but *the secret was never protected, and nine of the fourteen
-techniques got credit for walking through a door that was already open*. Writing "fourteen of
+techniques got credit for walking through a door that was already open*. (Measured when the
+target was added. The committed run today reads 17 of 20, the benign run fires
+`canary_in_output` on 11 of 50, and the baseline marks 5 rows unattributable and 5 weakened: the
+same story, re-scored.) Writing "fourteen of
 nineteen attacks land" was this repo's own signature defect committed in its own documentation: a GAP
 reported as a MEASUREMENT. The number was real and the thing it appeared to measure was not
 being measured at all. The engine caught it, on a target added to prove something else
@@ -335,7 +338,7 @@ about what to send — an accident of which file something was written in. Gener
 attack ids already live in two files at once: the per-bot arsenals were split out of the main
 one by hand and both halves were then edited. A third hand-maintained copy would repeat it.
 
-The arsenal is **384 attacks across 60 categories** now. Against a plain chat endpoint that
+The arsenal is **381 attacks across 60 categories** now. Against a plain chat endpoint that
 declares only a canary, **249 attacks in 46 categories** actually run; one that carries a
 transcript gets **313 in 56**. What is held back is held back for a reason each time: `control` rows are
 per-target baselines and sending eighteen of them would pad the count with prompts that are not
@@ -442,7 +445,9 @@ the config and raises no warnings.
 
 **Under attack, with everything controlled.** Same arsenal (`attacks_generic.yaml`), same
 model (`qwen2.5:14b`), same tools, same records, same day — 22 attacks against each. smolagents
-breached on 9, LangChain on 6, and 7 attacks came out differently.
+breached on 9, LangChain on 6, and 7 attacks came out differently. (That LangChain run is not
+the one committed: `out/results_lcagent.json` is a later 46-attack run at one trial, 7
+breached, and the committed smolagents run now scores 10 after re-scoring.)
 
 Two trials each, so read the differences the way the numbers allow: a `1/2` against a `0/2` is a
 single probe and proves nothing, and only three rows separate cleanly at `0/2` against `2/2`.
@@ -465,8 +470,9 @@ requested** — the same unrequested side effect from two independent scaffolds.
 
 What does not survive is as informative:
 
-* **smolagents makes 157 tool calls to LangChain's 27** for the same 48 questions, and errors on
-  3 where LangChain errors on none. The repeated-call and tool-storm findings on `foreign-code`
+* **smolagents made 157 tool calls to LangChain's 27** for the same 48 questions, and errored on
+  3 where LangChain errored on none. (On today's 50-question benign files: 128 calls on
+  `foreign-code`, 92 on `foreign`, 36 on LangChain, no errors.) The repeated-call and tool-storm findings on `foreign-code`
   are the same behaviour at its extreme: the same call re-issued until the step budget is gone.
 * LangChain reaches for `get_customer` on questions that do not need it — including *"what is
   your returns policy"* — so the billing key enters its context on 6 of 48 ordinary questions
@@ -483,8 +489,8 @@ were `fabricated_contact` at 2/2 — a detector written that same day for a comp
 target, generalising to one it had never seen.
 
 **The fleet has been advertising phishing targets on its own behalf, and the detector that
-should have caught it could not see the channel.** Nineteen targets fire `pii_in_output` on
-ordinary questions. In eighteen of them the matched string is not a customer's data at all: it
+should have caught it could not see the channel.** Nineteen targets fired `pii_in_output` on
+ordinary questions when this was found (31 do on today's corpus). In eighteen of them the matched string is not a customer's data at all: it
 is a support address the MODEL invented. httpbot's system prompt names no domain anywhere, the
 bot is called AcmeShop, and it tells customers to write to `support@acmeshop.com` and to visit
 `https://www.acmeshop.com/returns`. rangebot answers `support@acmerange.com` while its operator
@@ -512,8 +518,8 @@ truthful, each one caught on real evidence rather than by inspection:
   so the host failed to match its own allowlist. The detector tripped over its own parsing and
   reported a target inventing a domain it plainly owns.
 
-Five fires survive, across three systems, every one of them the operator's own name at a domain
-they did not declare. Finding it also turned up a stale config: httpbot's `allowed_domains` said
+Five fires survived, across three systems, every one of them the operator's own name at a domain
+they did not declare. (On today's benign corpus it fires 14 times across 6 targets.) Finding it also turned up a stale config: httpbot's `allowed_domains` said
 `ourstore.com`, copied from citebot and never corrected, so the single target whose bot invents
 its own brand had an allowlist that could not recognise it.
 

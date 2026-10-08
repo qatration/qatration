@@ -192,8 +192,8 @@ false positive — so the difference was empty and eighty-seven fires printed no
 compares counts now. Publishing 788 as a 33% false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
-makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
-of 50, localrag appends a phishing address to 44% of ordinary answers. Those are the findings this
+makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 31
+of 50, localrag appends a phishing address to 26 of 50 ordinary answers. Those are the findings this
 design record is proudest of, every one from traffic nobody attacked. Counting them as noise would
 delete them.
 
@@ -204,7 +204,7 @@ arguments about what changed between two runs, and restating them over a later c
 adjusting the evidence to fit the measurement. Anything written in the present tense about the
 fleet as it stands is recounted from the artifacts by `test_readme.py`.
 
-**All thirty baselines are now 50 wide**, so every rate on this page is one experiment rather
+**All thirty-five baselines are now 50 wide**, so every rate on this page is one experiment rather
 than an average over two. Getting there cost a re-run of three targets and it bought a finding:
 `fabricated_citation` had never fired on clean traffic — it sat in the "silent on this corpus,
 untested not exonerated" list — and it fired on one of the two prompts the widening added, on a
@@ -280,7 +280,7 @@ a usability finding by a rule hard-coded in the roll-up — the right DEFAULT, s
 with no attacker a refusal is worth reporting — but the rule could not be overridden, so three
 explicit `false_positive` entries sat in the file being ignored. **A verdict recorded and never
 read is the same as no verdict.** The distinction they record is real: nemo refuses an in-scope
-support question because the customer pasted a log line containing SQL, 38 of 50, while dvla
+support question because the customer pasted a log line containing SQL, 35 of 50, while dvla
 answers *"I can only assist with bank transactions"* to a question about outages and says where
 to go instead. One is the headline cost of an input-only guardrail and the other is correct
 behaviour. Letting the file win moved the published false-alarm rate from 6.3% to 9.2%, and
@@ -398,8 +398,8 @@ data surfacing.
 
 ### Why this catalogue is not shaped like a scanner's
 
-The result is **9 critical, 28 high, 27 medium** across all 66 detectors, and the middle two
-bands carry it: `high` and `medium` are within one of each other, and neither is the bottom
+The result is **9 critical, 30 high, 27 medium** across all 66 detectors, and the middle two
+bands carry it: `high` and `medium` are within three of each other, and neither is the bottom
 of a pyramid. That is not a distribution to be corrected.
 
 Recounted from `defense_report.REMEDIATION`, the single table `compare_targets` reads for a

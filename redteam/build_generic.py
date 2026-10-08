@@ -53,6 +53,12 @@ NO_CLI_DOOR = "rebuilds the shipped arsenal; a maintainer tool, not a user comma
 
 OUT_NAME = "attacks_generic.yaml"
 
+# NAMES FROM ONE PRACTICE BOT'S DATA, which no config lists: dvla's other tool, its users.
+# An attack naming `DocBrown` asks a stranger's database about a user it never had, and the
+# row came back DEFENDED. Found by an independent review. Matched as a prefix, so the
+# `GetUserTransaction` an attack misspells is the same name.
+FLEET_DATA = ("getcurrentuser", "getusertransaction", "mad_dog", "docbrown")
+
 # Brand names from the practice fleet's fiction. A prompt saying "AcmeShop" tells an outside
 # bot it is talking about somebody else, which is a different test from the one intended.
 BRANDS = ("acmeshop", "acmebank", "acmerange", "acmecloud", "acmehbank", "northgate",
@@ -91,10 +97,16 @@ def fleet_literals():
             if not isinstance(vals, list):
                 continue
             if key.endswith("_tools") or key == "forbidden_tokens":
+                from runner import slot_of as _slot_of
                 for x in vals:
                     s = str(x).strip().lower() if isinstance(x, str) else ""
-                    if len(s) > 3 and (key != "forbidden_tokens" or " " in s):
+                    if len(s) <= 3 or (key == "forbidden_tokens" and " " not in s):
+                        continue
+                    # A KEY THAT DOES NOT SAY WHAT THE TOOL DOES pins the attack instead.
+                    if _slot_of(key):
                         slots.setdefault(s, set()).add(key)
+                    else:
+                        tools.add(s)
             elif key == "planted_markers":
                 markers.update(str(x).strip().lower() for x in vals
                                if isinstance(x, str) and str(x).strip())
@@ -116,7 +128,10 @@ def slotted(a, slots, markers):
     from runner import slot_of
     want = {k for d in (a.get("success") or []) for k in NEEDS_CONFIG.get(d, ())
             if isinstance(k, str)}
-    keep = ("id", "category", "success", "partial", "applies_to", "plants")
+    # THE FIELDS THE SWEEP SENDS, the ones `runner.filled` fills: a literal rewritten in a
+    # `paired_with` id or a `delivery` would never be filled back.
+    from runner import _NOT_SENT
+    keep = tuple(_NOT_SENT) + ("scored_by", "seed")
     blob = json.dumps({k: v for k, v in a.items() if k not in keep}, ensure_ascii=False).lower()
     subs = {}
     for lit, keys in slots.items():
@@ -142,7 +157,7 @@ def slotted(a, slots, markers):
     out = {k: (v if k in keep else _sub(v)) for k, v in a.items()}
     if named:
         # THE SPELLING THE ATTACK USES, which is the one the reply will repeat.
-        _raw = json.dumps(a, ensure_ascii=False)
+        _raw = json.dumps({k: v for k, v in a.items() if k not in keep}, ensure_ascii=False)
         have = [str(p) for p in (a.get("plants") or [])]
         for m in named:
             hit = re.search(re.escape(m), _raw, flags=re.I)
@@ -204,6 +219,9 @@ def blocked_reason(a, canaries, tools, markers=()):
     for c in canaries:
         if c in blob:
             return "names a canary planted in one practice bot"
+    for d in FLEET_DATA:
+        if d in blob:
+            return "names data from one practice bot"
     _own = {str(p).lower() for p in (a.get("plants") or [])}
     for m in markers:
         if m in blob and m not in _own:

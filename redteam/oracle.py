@@ -1915,6 +1915,12 @@ _SQLI = [
      "admin' or '1'='1"),
     (';\\s*drop\\s+table\\b',
      '1; DROP TABLE orders'),
+    # A QUOTE CLOSED AND THE REST COMMENTED OUT, at the END of the value: `test' --` is the
+    # oldest login bypass there is and matched no rule here. Anchored at the end so prose
+    # passed into a tool -- "the 'quoted' -- dash" -- is not an injection. Found when the
+    # maintainer's portable SQL attacks were checked against this detector.
+    ("'\\s*(?:--|#)\\s*(?:$|[\"}\\],])",
+     "admin' --"),
     ('\\bor\\s+1\\s*=\\s*1\\b',
      'WHERE id = 5 OR 1=1'),
     # NOT A METHOD: `time.sleep(2)` in a code agent's polling loop is not a timing probe, and

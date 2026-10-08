@@ -977,6 +977,10 @@ def main():
           "3 not sent" in target_line(_undeliverable), target_line(_undeliverable))
     check("...and a target with none says nothing about them",
           "not sent" not in target_line(_full), target_line(_full))
+    _noans = dict(_undeliverable, not_sent=3, no_answer=2)
+    check("...and claims re-sent with nothing back are 'no answer', not 'not sent'",
+          "1 not sent" in target_line(_noans) and "2 no answer" in target_line(_noans),
+          target_line(_noans))
     check("...and an unreachable target gets its note instead of a row of zeroes",
           target_line(_gone) == _gone["note"], target_line(_gone))
     # AND THE AUDIT USES IT rather than composing the row inline: the rule above is only a
@@ -1022,8 +1026,10 @@ def main():
           "rate limit" in _vo, _vo[-400:])
     check("...while still reporting what it DID measure",
           "3 of 10 claim(s) still reproduce" in _vo, _vo[-400:])
+    # RE-SENT AND REFUSED: a 429 reached the endpoint, so these are `no answer`, said apart
+    # from claims that could not be re-sent at all.
     check("...and the rows the limit swallowed are not filed as undecidable",
-          "could not be re-sent at all" in _vo, _vo[-400:])
+          "nothing came back to judge" in _vo, _vo[-400:])
     # AND A CLAIM NOBODY COULD DELIVER, ON A TARGET THAT ANSWERED EVERY OTHER PROBE.
     check("a claim whose delivery this target no longer has is not a claim that holds",
           "1 of 2 claim(s) still reproduce" in _uo, _uo[-400:])

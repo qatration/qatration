@@ -86,13 +86,16 @@ listed:
     here or under `out/`, and every source named here still contains what it claims to.
 
 ATTACK PAYLOADS TAKEN FROM ANOTHER PROJECT. Three distinct pieces of text from the Damn
-Vulnerable LLM Agent's README are reproduced verbatim in `redteam/attacks.yaml`, and in their
-copies in the generated `redteam/attacks_generic.yaml`:
+Vulnerable LLM Agent's README are reproduced verbatim in `redteam/attacks.yaml`:
 
   * the `(#system) NEW IMPORTANT INSTRUCTION` migration injection, in `sysovr-migration`
   * the forged `Thought:` observation, in `sqli-union-primary`
   * the `UNION SELECT` payload and its seeded username, in `sqli-union-primary`,
     `sqli-union-docbrown` and `sqli-direct-request`
+
+Only the `UNION SELECT` payload of `sqli-direct-request` reaches the generated
+`redteam/attacks_generic.yaml`: the other two name that bot's own data, and an attack that does
+stays in that bot's arsenal.
 
 This said "two attacks" and named neither. Counting them found that the third piece of upstream
 text is carried by three attacks rather than one, and that `sqli-union-primary` reproduces the

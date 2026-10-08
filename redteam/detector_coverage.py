@@ -50,6 +50,29 @@ from rejudge import _prompt_of, _probe as _rj_probe, run_ctx as _run_ctx
 # that only supplies the default directory is the second implementation it was written
 # to catch, so the import binds the name the four call sites below already use.
 from workspace import oracle_contexts as contexts
+
+
+def sent_ids(entries, sent, ctxs):
+    """-> the ids of arsenal `entries` with a stored trial in `sent` ((id, digest) pairs).
+
+    A SLOTTED ATTACK IS STORED FILLED (`runner.filled`), so its arsenal digest matches no
+    stored row: every attack with a slot read "never sent" however often it was. Filled from
+    each known target's context, the version that target was sent is compared. Found by an
+    independent review."""
+    from runner import filled as _filled_cv, SLOT_RE as _SLOT_CV
+    out = set()
+    for a in entries:
+        if (a["id"], attack_digest(a)) in sent:
+            out.add(a["id"])
+            continue
+        if not _SLOT_CV.search(json.dumps(a, ensure_ascii=False)):
+            continue
+        for _c in (ctxs or {}).values():
+            _f, _miss = _filled_cv(a, _c or {})
+            if not _miss and (a["id"], attack_digest(_f)) in sent:
+                out.add(a["id"])
+                break
+    return out
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more, DEFAULT_ARSENAL
 from signing import NEVER_SENT as _NEVER_SENT
@@ -532,7 +555,7 @@ def main():
         _entries = [a for a in (_yaml.safe_load(open(DEFAULT_ARSENAL, encoding="utf-8")) or [])
                     if isinstance(a, dict) and a.get("id")]
         _arsenal = {a["id"] for a in _entries}
-        _sent = {a["id"] for a in _entries if (a["id"], attack_digest(a)) in sent}
+        _sent = sent_ids(_entries, sent, contexts())
         _never = sorted(_arsenal - _sent)
         print(f"{len(_arsenal)} attacks in the portable arsenal · {len(_sent)} with a stored "
               f"trial · {len(_never)} never sent against anything")

@@ -386,8 +386,9 @@ def main():
     from cli import parser as _cli_parser
     ap = _cli_parser("rejudge")
     ap.add_argument("--write", action="store_true",
-                    help="apply the re-scoring and rebuild each HTML report "
-                         "(default: preview only)")
+                    help="apply the re-scoring, and rebuild the report of each run whose "
+                         "rows changed (default: preview only). Scores the attack each row "
+                         "stored: a changed arsenal needs a re-run")
     ap.add_argument("--target", default=None, help="restrict to one target name")
     # REBUILDING A PAGE SHOULD NOT COST THE PROVENANCE OF THE RUN. `--write` stamps every
     # record it rewrites with the build doing the stamping, which is right for a re-score

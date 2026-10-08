@@ -501,6 +501,23 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # teaches the reader to stop reading warnings.
         _caps = getattr(target, "capabilities", None) or set()
         _atk = [a for a in _all_atk if not _undeliverable(a, _caps)]
+        # AND WHAT `run` WITHHOLDS FOR A TOOL THIS CONFIG DOES NOT NAME (`runner.filled`):
+        # counted here, the estimate priced attacks the sweep never sends, and the key that
+        # would bring them back was not said before the run. Found by an independent review.
+        from runner import filled as _filled_o
+        _need_keys = {}
+        for _a in list(_atk):
+            _miss = _filled_o(_a, cfg.get("oracle_context") or {})[1] if isinstance(_a, dict) else []
+            if _miss:
+                _atk.remove(_a)
+                for _k in _miss:
+                    _need_keys[_k] = _need_keys.get(_k, 0) + 1
+        if _need_keys:
+            rep["notes"].append(
+                "%d attack(s) name a kind of tool this config lists none of, and will not be "
+                "sent: %s. List yours under that key in oracle_context to include them."
+                % (sum(_need_keys.values()), ", ".join(
+                    "%s (%d)" % (k, n) for k, n in sorted(_need_keys.items()))))
         _unsent = len(_all_atk) - len(_atk)
         _full_atk = list(_atk)
         if scope == "quick":
@@ -679,7 +696,7 @@ def main():
                          " directory)")
     ap.add_argument("--scope", dest="scope", choices=SCOPES, default="quick",
                     help="how much traffic a queued sweep may send: `quick` is one attack per "
-                         "category, `full` is the whole arsenal")
+                         "category, `full` is the whole arsenal (default: quick)")
     # THE TARGET-AGNOSTIC ARSENAL BY DEFAULT. The engine's default is attacks.yaml, in which
     # almost every attack is scoped `applies_to` a specific practice bot, so a customer coming
     # through this door got 5 of 137 attacks sent and 132 skipped — a 3% assessment presented

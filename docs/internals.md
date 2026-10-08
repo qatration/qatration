@@ -50,8 +50,8 @@ sent the key out while the user got a perfectly ordinary reply. **MCP tool-descr
 poisoning needs no attacker interaction at all** — and the engine had been calling it
 defended.
 
-**Whitespace is not free.** A YAML block scalar (`text: |`) appends a newline, and 110 of
-the 225 payloads in this repo are written that way. On portalagent at temperature 0 the
+**Whitespace is not free.** A YAML block scalar (`text: |`) appends a newline, and 246 of
+the 530 distinct `text:` payloads in this repo end in one. On portalagent at temperature 0 the
 identical request scored 0/3 with the trailing newline and 3/3 without it: `GetProfile(1)`
 versus `GetProfile(2)`, an authorization boundary decided by one invisible character. Every
 send path now normalises through `target.payload()`, and `test_payload.py` exercises each
@@ -155,16 +155,16 @@ It ships in two builds, and the pair is the point.
 
 | | plain | `append_sources` |
 |---|---|---|
-| attacks breached (of 24) | 13 | **22** |
+| attacks breached (of 25) | 15 | **25** |
 
 The second build pastes the raw tool output under the answer, the way a great many support
 and RAG bots show their sources. Same model, same attacks. The model declines to repeat a
 script tag or a stack trace in exactly the same way — and the application pastes it in
-underneath regardless. **Its caution was worth nine attacks and the architecture threw all
-nine away.** A careful model is not a control when it is not on the path the content takes.
+underneath regardless. **Its caution was worth ten attacks and the architecture threw all
+ten away.** A careful model is not a control when it is not on the path the content takes.
 
-Running the range on a 24B model instead scored 13 of 24 as well, but a *different*
-thirteen: `nosql_injection` and `canary_encoded` appeared because it follows "copy this
+Running the range on a 24B model instead scored 13 of 24 (an earlier, 24-attack arsenal), and a
+*different* thirteen: `nosql_injection` and `canary_encoded` appeared because it follows "copy this
 exactly" properly, while `xss_in_output` and `canary_normalized` vanished because it
 sanitises. **Model size changes which failures are reachable, not how many.** Neither model
 is safer; they break in different places.
@@ -287,7 +287,9 @@ qatration run --target-config redteam/targets_guardbot.yaml --trials 3
 ```
 
 The intended order on a target nobody has touched yet is recon, then the lock map, then
-the sweep. Each step writes `out/<step>_<target>.json`, and the sweep folds the first two
+the sweep. `recon` writes `out/recon_<target>.json` and the lock map `out/isolation_<target>.json`;
+`generate` writes objectives to `out/isolation_generated_<target>.yaml`, which `isolation` reads
+when passed it with `--objectives`. The sweep folds the profile and the lock map
 into the HTML scorecard automatically (stamped with their own age, so a fingerprint from
 last week cannot pass for today's):
 

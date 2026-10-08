@@ -78,7 +78,7 @@ target's security.
 be a mistake.** The portable arsenal is what runs against a stranger's endpoint, and
 `build_generic.py` builds it from the library while deliberately ignoring `applies_to` — that
 field was "usually habit" rather than a decision, and honouring it left an outside target
-receiving 22 attacks out of a library of several hundred. Measured today: **173 of the 207
+receiving 22 attacks out of a library of several hundred. Measured today: **175 of the 412
 attacks that carry `applies_to` are in the portable arsenal**, and attacks whose success
 condition is a canary are promoted at almost the same rate whether they are scoped or not.
 
@@ -94,6 +94,7 @@ What actually keeps an attack out is what is IN it, which is a property nobody h
 | is a `control` | an ordinary question used as a per-target baseline, not an attack |
 | names a canary planted in one practice bot | tests a string that does not exist anywhere else |
 | names one bot's tool | same |
+| names a practice bot's data (`DocBrown`, `GetCurrentUser`, ...) | asks a stranger's system about a user or tool it never had |
 | names a marker planted in one practice bot, and does not carry it in its own `plants:` | same: a marker the attack brings itself exists on any target, so it travels |
 | carries a `seed:` block | plants a document, which needs a store a chat endpoint does not expose |
 | carries `paired_with` | one half of an A/B pair, whose measurement is the pair rather than the prompt — the framed halves of `attacks_guardlift.yaml` are sixty variants of one question and mean nothing apart from their twins |

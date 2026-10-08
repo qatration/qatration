@@ -173,9 +173,8 @@ def main():
         for m, (t, eng, ars, tr, said) in sorted(when.items()):
             print(f"  {m:<18}{t:<{_tw}}build {eng or 'unstamped':<16}{ars}  x{tr}")
         if not all(v[4] for v in when.values()):
-            print("    (file) — that run recorded no date, so this one is the artifact's "
-                  "timestamp:\n    a clone or a copy resets it, and it is not when the run "
-                  "happened.")
+            print("    date not recorded — that run kept no date of its own, and the file's "
+                  "time is not\n    when the run happened: a clone or a copy resets it.")
         # BOTH SIDES OR NOTHING, over NAMED builds only. `engine_version` stamps the
         # literal "unknown" where there is no repository to ask, and that string is
         # truthy: a set of {'unknown', 'a1b2c3'} has two members and this warned about a

@@ -320,6 +320,10 @@ def main():
         notes = " ".join(rep["notes"])
         check("...and the multi-turn and canary warnings are then gone",
               "SKIPPED" not in notes and "invisible" not in notes, notes[:200])
+        # AND THE ATTACKS `run` WITHHOLDS FOR A KIND OF TOOL THIS CONFIG NAMES NONE OF, said
+        # before the run with the key, and left out of the request estimate.
+        check("...and it is told which attacks name a kind of tool it lists none of",
+              "lists none of" in notes and "privileged_tools" in notes, notes[-300:])
 
         # --- a budget that cannot hold the run is said BEFORE the run ---------------------
         tight = write("tight", "choices.0.message.content",
@@ -372,7 +376,11 @@ def main():
         from runner import requests_for as _rf, undeliverable as _und
         _HIST = "history:\n  field: messages\n  mode: splice\n"
         _CHAIN_CAPS = {"chain", "forged_history"}
-        _atk = [a for a in onboard._arsenal() if not _und(a, _CHAIN_CAPS)]
+        # AND WHAT `run` WITHHOLDS FOR A TOOL KIND THE CONFIG NAMES NONE OF (`runner.filled`):
+        # these fixtures declare no oracle_context, so every slotted attack is withheld.
+        from runner import filled as _filled_ob
+        _atk = [a for a in onboard._arsenal() if not _und(a, _CHAIN_CAPS)
+                and not _filled_ob(a, {})[1]]
         _need, _old_sum = _rf(_atk, 3), len(_atk) * 3
         check("a chain makes a sweep cost more requests than it has attacks",
               _need > _old_sum, "%d requests for %d attacks" % (_need, _old_sum))
@@ -416,7 +424,8 @@ def main():
         # STOP part way" at 1,464 requests while the run would send 924 of a 1,200 budget,
         # two notes below its own "multi-turn deliveries will be SKIPPED". Driven at the
         # boundary: a budget between what is sent and what the arsenal holds.
-        _plain = [a for a in onboard._arsenal() if not _und(a, set())]
+        _plain = [a for a in onboard._arsenal() if not _und(a, set())
+                  and not _filled_ob(a, {})[1]]
         _sent_req, _all_req = _rf(_plain, 3), _rf(onboard._arsenal(), 3)
         check("a config with no history sends fewer requests than the arsenal holds",
               _sent_req < _all_req, "%d vs %d" % (_sent_req, _all_req))

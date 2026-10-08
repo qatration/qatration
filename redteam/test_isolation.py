@@ -1707,6 +1707,18 @@ def main():
     check("...and one that kept nothing names only its own",
           _ri_o.objectives_named("/a/isolation_example.yaml", _om, []),
           "isolation_example.yaml")
+    # A STORED VALUE THAT IS NOT A NAME does not crash the write after a paid run.
+    _bad_o = []
+    for _v in (5, True, [1, "curated.yaml"], {"a": 1}):
+        _io_o.open(_om, "w", encoding="utf-8").write(_js_o.dumps(
+            {"meta": {"target": "x", "objectives": _v}, "maps": []}))
+        try:
+            _bad_o.append(_ri_o.objectives_named("/a/isolation_example.yaml", _om, ["o1"]))
+        except Exception as _e_o:
+            _bad_o.append(type(_e_o).__name__)
+    check("a stored objectives value that is not a file name is skipped, not a crash",
+          _bad_o, ["isolation_example.yaml", "isolation_example.yaml",
+                   ["curated.yaml", "isolation_example.yaml"], "isolation_example.yaml"])
 
     # ONE MEASURED-TRIAL RULE, and what the objective verdict reads from it.
     from isolation import _verdict as _vd, _status as _st, measured_n as _mn, \

@@ -632,6 +632,20 @@ def check_refusal(check):
               str(sorted(_la_c.list_attack_fields())))
     finally:
         _la_c.ROOT = _real_root_c
+    # A MISSING SHIPPED CORPUS IS A BROKEN INSTALL, 2, not a finding in the arsenal, 1.
+    _empty_c = _tf_c.mkdtemp()
+    _argv_c = sys.argv
+    try:
+        _la_c.ROOT = _empty_c
+        sys.argv = ["lint"]
+        import contextlib as _cl_c
+        with _cl_c.redirect_stdout(_io_c.StringIO()):
+            _rc_c = _la_c.main()
+    finally:
+        _la_c.ROOT = _real_root_c
+        sys.argv = _argv_c
+    check("lint with no shipped arsenal beside it exits 2, the code for a broken install",
+          _rc_c == 2, str(_rc_c))
     check("...and the real corpus still answers for itself afterwards",
           "applies_to" in _la_c.list_attack_fields(),
           str(sorted(_la_c.list_attack_fields())))
@@ -1617,7 +1631,8 @@ def main():
     # "The corpus IS the product. An install without the YAML is a runner with nothing to
     # run." Absence read as a clean result, in the tool whose job is to refuse that.
     _code, _said = run_lint_bare({})
-    check("no arsenal at all is a failure, not a clean bill", _code == 1, _said[-160:])
+    # 2, the code for a broken install: 1 is a finding in the arsenal.
+    check("no arsenal at all is a failure, not a clean bill", _code == 2, _said[-160:])
     check("...and it says what is missing, and where to look",
           "REFUSED" in _said and "package-data" in _said, _said[-200:])
 

@@ -151,8 +151,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 384 | 1,488 | ~50 min | ~99 min |
-| `--scope full`, 1 trial | 384 | 496 | ~17 min | ~33 min |
+| `--scope full`, 3 trials (the default) | 381 | 1,479 | ~49 min | ~99 min |
+| `--scope full`, 1 trial | 381 | 493 | ~16 min | ~33 min |
 | `--scope quick`, 3 trials | 60 | 219 | ~7 min | ~15 min |
 | `--scope quick`, 1 trial | 60 | 73 | ~2 min | ~5 min |
 
@@ -193,7 +193,7 @@ on a schedule with `--scope quick` on pull requests, writing into one timeline, 
 comparison comes back:
 
 ```
-CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 362 -> 58 attacks
+CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 381 -> 60 attacks
 ```
 
 Correct, and useless. The same happens for `--trials`: a run at 1 compared against a baseline at
@@ -233,20 +233,20 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.78 / $2.34 / $3.90 | $2.11 / $6.33 / $10.55 |
-| `full` x1 | $0.26 / $0.78 / $1.30 | $0.70 / $2.11 / $3.52 |
+| `full` x3 (the default) | $0.77 / $2.32 / $3.87 | $2.10 / $6.29 / $10.48 |
+| `full` x1 | $0.26 / $0.77 / $1.29 | $0.70 / $2.10 / $3.49 |
 | `quick` x3 | $0.12 / $0.35 / $0.58 | $0.31 / $0.93 / $1.56 |
 | `quick` x1 | $0.04 / $0.12 / $0.19 | $0.10 / $0.31 / $0.52 |
 
-**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 47
+**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 46
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,488 requests that is 1.5M input tokens of your own instructions — about
+single request. At 1,479 requests that is 1.5M input tokens of your own instructions — about
 85% of the input bill — before a single attack payload is counted.
 
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.33 to
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.29 to
   around $2.31. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on
@@ -376,8 +376,8 @@ so the security tab lists findings that point at nothing.
 |---|---|
 | `0` | this change introduced no finding the trials agree on. Rows that moved without agreeing are named under the verdict, not hidden by it. On `--fail-on exploited` and `--fail-on any` the question is absolute rather than comparative, so `0` means nothing broke among the attacks that were SCORED - the line says how many that was, and names the ones that errored or were never sent |
 | `1` | this change introduced or reopened a finding — the one case where red means what red usually means |
-| `2` | the config or the invocation was refused, including a committed results file this run would replace — or the command crashed, which is a bug in the tool and is reported here rather than as `1`. Nothing was sent, and this is a build problem rather than a security one |
-| `3` | the question could not be answered: the endpoint did not answer, no baseline yet, the comparison was confounded, or the command read the workspace and found nothing in it — `rejudge` with no stored artifact to re-score, `coverage` with no probes to replay, `history` before a second sweep. **Not a pass** |
+| `2` | the config or the invocation was refused, including a committed results file this run would replace — or the command crashed, which is a bug in the tool and is reported here rather than as `1`. A refusal sends nothing; a crash can come after traffic went out. Either way this is a build problem rather than a security one |
+| `3` | the question could not be answered: the endpoint did not answer, more than `--max-unmeasured` of the run went unmeasured, no baseline yet, the comparison was confounded, or the command read the workspace and found nothing in it — `rejudge` with no stored artifact to re-score, `coverage` with no probes to replay, `history` before a second sweep. **Not a pass** |
 | `4` | not authorised: the target is not localhost and control of it was not proved. EVERY door that drives a target answers with this one, which is not free: `onboard` caught the gate's refusal into its own problem list and exited `2`, so a pipeline asking "may I test this target" was told `the invocation was refused` by one command and `not authorised` by the next, for one cause |
 | `5` | a precondition failed — usually the canary was never planted, so nothing could have been detected |
 
@@ -390,9 +390,9 @@ comparison, because a fleet-wide listing nearly always holds one confounded targ
 that is red every day is one nobody reads. Gate a build on the comparison with
 `qatration run --fail-on regression`, which answers `1` and `3` from the same diff.
 
-**`1` means a finding in whatever the command examined, and two commands do not examine the
+**`1` means a finding in whatever the command examined, and five commands do not examine the
 target.** Worth knowing before a build goes red on one of them, because the row above describes
-only the third.
+only the sweep.
 
 - **`verify`** re-sends what a stored report already claims, so it cannot introduce a finding.
   It exits `1` when a published claim **no longer reproduces**: the finding is in the artifact,
@@ -404,8 +404,8 @@ only the third.
   in the arsenal, and it is caught before anything is sent. WHICH arsenal is named on the line
   that counts it and again in the verdict, because it used to be neither: with no `--attacks`
   this reads the corpus that ships inside the package, so a clean bill run from a directory
-  holding somebody's own `attacks_*.yaml` was a clean bill about forty-one files they did not
-  write. That case now names their file and says it was not opened. `--attacks` takes a file or
+  holding somebody's own `attacks_*.yaml` was a clean bill about every file that ships with
+  it, none of which they wrote. That case now names their file and says it was not opened. `--attacks` takes a file or
   a directory and lints that instead; a path that is not there exits `5`, because a filename
   somebody mistyped is a precondition and not a packaging fault in this install.
 - **`benign --dry-run`** exits `1` when a detector fires on the corpus with a bland reply — that
@@ -426,9 +426,12 @@ only the third.
   since nothing says those items were not there before, and it exits `0` as well. A channel
   the server did not declare before was empty by design, so an item appearing there is a
   change. A comparison in which no server could be re-read at all exits `3`: nothing was
-  measured.
+  measured. The corpus it compares against is written by `qatration mcp <server> --record
+  <file>`, once per server, before the release you want to hold it to.
+- **`discrimination`** exits `1` when a control fired: a request that should break nothing was
+  scored as a breach, so the finding is in this tool's own oracle, about the stored runs.
 
-Neither has a better code available: `2` is a refusal, `3` is nothing measured, and either would
+None has a better code available: `2` is a refusal, `3` is nothing measured, and either would
 tell a pipeline to ignore it.
 
 

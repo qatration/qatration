@@ -866,10 +866,10 @@ def main():
     from cli import parser as _cli_parser
     ap = _cli_parser("benign")
     ap.add_argument("--target", default=None,
-                    help="a target that lives in redteam/, by name; use --target-config"
-                         " for one that does not")
+                    help="a target shipped with this package, by name; use "
+                         "--target-config for your own")
     ap.add_argument("--target-config", default=None,
-                    help="path to a config, for a target that does not live in redteam/ — "
+                    help="path to a config, for a target not shipped with this package — "
                          "the configured-target path, where an operator's YAML is wherever they put it")
     ap.add_argument("--rejudge", action="store_true",
                     help="re-score every stored benign run with the current oracle, no "

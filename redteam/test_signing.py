@@ -323,7 +323,7 @@ _fb_rows = [{"attack": {"id": "f%d" % i, "category": "x"}, "headline": "ERROR",
              "trials": [{"probe": {"error": signing.FORBIDDEN + ": HTTP 403"}}]}
             for i in range(2)]
 check("...and the closing line says they were blocked or expired, not measured",
-      "refused with HTTP 403 after the credential had worked" in _cn(_fb_rows),
+      "refused with HTTP 403 after earlier requests had succeeded" in _cn(_fb_rows),
       _cn(_fb_rows))
 import runner as _rn_f
 _sent_f = []

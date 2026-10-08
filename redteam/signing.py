@@ -187,7 +187,8 @@ def credential_note(results):
             blocked += 1
     said = []
     if blocked:
-        said.append("%d of them were refused with HTTP 403 after the credential had worked: "
+        said.append("%d of them were refused with HTTP 403 after earlier requests had "
+                    "succeeded: "
                     "a rule in front of the model blocked them, or the credential expired -- "
                     "either way those attacks were not measured, and a block is not the model "
                     "refusing." % blocked)

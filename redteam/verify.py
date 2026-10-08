@@ -621,7 +621,11 @@ def target_line(r):
     """
     if r.get("note"):
         return r["note"]
-    _unsent = ", %d not sent" % r["not_sent"] if r.get("not_sent") else ""
+    # SENT AND UNANSWERED IS NOT UNSENT: `no answer` rows are counted inside `not_sent` and
+    # said apart, the split `audit_close` already makes. Found by an independent review.
+    _na = r.get("no_answer") or 0
+    _unsent = (", %d not sent" % (r["not_sent"] - _na) if r.get("not_sent", 0) - _na > 0
+               else "") + (", %d no answer" % _na if _na else "")
     _unconf = ", %d unconfirmed" % r["unconfirmed"] if r.get("unconfirmed") else ""
     return ("%d claims: %d hold, %d unclear, %d stale%s%s"
             % (r.get("claims") or 0, r.get("holds") or 0, r.get("unclear") or 0,
@@ -870,9 +874,13 @@ def main():
                                         "records is too low for a failure to reproduce to "
                                         "mean anything, so both rates are reported and no "
                                         "verdict is drawn"),
-                         (r["not_sent"], "could not be re-sent at all: nothing was "
-                                         "delivered for them, so what they claim is "
-                                         "neither confirmed nor refuted"),
+                         (r["not_sent"] - (r.get("no_answer") or 0),
+                          "could not be re-sent at all: nothing was "
+                          "delivered for them, so what they claim is "
+                          "neither confirmed nor refuted"),
+                         (r.get("no_answer") or 0,
+                          "were re-sent and nothing came back to judge, so what they "
+                          "claim is neither confirmed nor refuted"),
                          # ITS OWN REASON: this was counted under `unclear` and printed as
                          # "the rate the artifact records is too low", which is false for a
                          # claim recorded on every trial. Found by an independent review.

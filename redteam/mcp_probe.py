@@ -893,6 +893,11 @@ def main():
     from workspace import at_least as _at_least
     ap.add_argument("--timeout", type=_at_least(1, "--timeout"), default=180,
                     help="seconds to wait for the server to answer (default 180)")
+    ap.add_argument("--record", metavar="CORPUS",
+                    help="also write this reading into a corpus file, created or merged by "
+                         "server name, for a later --compare to hold the server to")
+    ap.add_argument("--name", default=None,
+                    help="the name --record files this server under (default: its package)")
     ap.add_argument("--compare", metavar="RECORDED",
                     help="re-read the servers a recorded corpus names and report what "
                          "moved; exits 1 when a description changed under an unchanged "
@@ -930,7 +935,8 @@ def main():
     # 27,312, and on the one server there that publishes prompts and resources, 2,651
     # of 3,900. Fourteen of seventy-seven items were outside the number entirely, and
     # the line carried no hint that anything was.
-    found, why, _caps, fatal = list_surface(args.server, timeout=args.timeout)
+    _info = {}
+    found, why, _caps, fatal = list_surface(args.server, timeout=args.timeout, info=_info)
     if fatal:
         print("could not read the server: %s" % fatal)
         return 2
@@ -990,6 +996,46 @@ def main():
         print("nothing was measured: this server listed no tool, prompt or resource, and "
               "returned no instructions.")
         return 3
+    if args.record:
+        return record_reading(args.record, args.name, args.server, found, why, _info)
+    return 0
+
+
+def record_reading(path, name, cmd, found, why, info):
+    """Write one server's reading into the corpus `--compare` reads. -> exit code.
+
+    THE CORPUS HAD NO WRITER. `--compare RECORDED` was documented as the way to hold a server
+    to the release somebody pinned, and nothing a user could run produced RECORDED: the one
+    corpus in existence was this repository's. Written here in the shape `--compare` builds
+    for its own second reading, so both sides are one shape (`server_record`). Merged by name,
+    so a corpus grows one server at a time. Found by an independent review.
+    """
+    import datetime
+    import re as _re
+    from workspace import read_artifact, atomic_write, writable_path, shell_arg
+    spec = next((a for a in reversed(cmd) if not str(a).startswith("-")), str(cmd[-1]))
+    pkg = _re.sub(r"(?<=.)@[^@/]*$", "", str(spec))
+    name = name or _re.sub(r"[^A-Za-z0-9_.-]+", "-", pkg.rsplit("/", 1)[-1]).strip("-") or "server"
+    corpus = {"servers": {}}
+    if os.path.exists(path):
+        data, err = read_artifact(path)
+        if err is not None or not isinstance(data, dict) or not isinstance(data.get("servers"),
+                                                                            dict):
+            print("REFUSED: %s is not a corpus this command wrote (%s); nothing was written."
+                  % (path, err or "no `servers` mapping"), file=sys.stderr)
+            return 2
+        corpus = data
+    writable_path(path, "an MCP corpus", "mcp --record")
+    rec = {"package": pkg, "version": pinned_version(cmd), "command": list(cmd)}
+    rec.update(server_record(found, why, info))
+    corpus["servers"][name] = rec
+    corpus["when"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    corpus["protocol"] = PROTOCOL
+    with atomic_write(path) as f:
+        json.dump(corpus, f, indent=2, ensure_ascii=False)
+    print("recorded %s in %s (%d server(s)). Hold it to this reading later with:\n"
+          "    qatration mcp --compare %s" % (name, path, len(corpus["servers"]),
+                                                shell_arg(path)))
     return 0
 
 

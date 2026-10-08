@@ -415,7 +415,9 @@ def shell_arg(value, shell=None):
         return _shlex.quote(s)
     # PowerShell, and cmd where it can be done: bare when nothing in it is read by either.
     # Not `,` (an array in PowerShell), not a leading `@` (splatting), not `%` (cmd).
-    if _re.match(r"^[\w+=:./\\-]+$", s):
+    # Not `\` either: bare, a Windows path pasted into Git Bash lost every backslash. Double
+    # quotes keep it in all three shells. Found by an independent review.
+    if _re.match(r"^[\w+=:./-]+$", s):
         return s
     # DOUBLE QUOTES WHERE BOTH SHELLS READ THEM ALIKE. A `$` or a backtick expands inside
     # them in PowerShell -- `"C:\\$work\\bot.yaml"` lost `$work` -- so then single quotes,
@@ -3581,10 +3583,15 @@ def run_command(main, workspace=True):
     # a job killed at its ceiling lost up to the last eight kilobytes -- the attack it was on
     # -- and every stderr line (a refusal, a traceback, a `!` note) landed ABOVE stdout it
     # followed.
-    try:
-        _sys.stdout.reconfigure(line_buffering=True)
-    except (AttributeError, ValueError):
-        pass
+    # AND IN ONE ENCODING, through both doors: stdout was UTF-8 where a module said so and
+    # stderr was the console's code page, so one redirected log on Windows held both and every
+    # em dash on a refusal arrived as a replacement character. Found by an independent review.
+    for _stream in (_sys.stdout, _sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace",
+                                line_buffering=_stream is _sys.stdout or None)
+        except (AttributeError, ValueError, TypeError):
+            pass
     # THE WORKSPACE BEFORE THE COMMAND, and not in front of `--help`, which reads nothing.
     # AND NOT IN FRONT OF A COMMAND THAT NEVER READS OR WRITES IT: `init`, `mint` and `lint`
     # were refused for a QATRATION_OUT pointing at a file, though none of them goes near it.

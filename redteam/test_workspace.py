@@ -1670,6 +1670,9 @@ def check_shared_rules_review():
         check("a Windows path with a space gets double quotes, which cmd reads too",
               _w_s.shell_arg("C:\\Users\\Jo Smith\\bot.yaml", "powershell"),
               '"C:\\Users\\Jo Smith\\bot.yaml"')
+        check("a Windows path with backslashes is quoted, so Git Bash keeps them",
+              _shl_s.split(_w_s.shell_arg("C:\\Users\\me\\bot.yaml", "powershell")),
+              ["C:\\Users\\me\\bot.yaml"])
         check("...and one with a comma is quoted: bare, PowerShell reads it as an array",
               _w_s.shell_arg("C:\\a,b\\bot.yaml", "powershell"), '"C:\\a,b\\bot.yaml"')
         _pac = _w_s.point_at_configs(_hard, indent="")

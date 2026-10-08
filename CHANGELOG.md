@@ -17,12 +17,14 @@ as a breach. Each fix below has a check, and each check was mutated until it wen
 declares no markers, canaries or prompt cannot be read at all, and it used to score as held. It
 is `not measured` now, in the sweep and in the lock map. Once more than `--max-unmeasured` of a
 run went unmeasured (errored, empty or never sent; default 10%), every gate exits `3` instead of
-passing. The regression gate and the absolute gates read the same rule.
+passing. Both kinds of gate apply that one threshold: the absolute gates over the attacks this
+run counted, the regression gate over the rows it compares with the run before.
 
 **A breach made of the attacker's own words is not a breach.** Every detector that subtracts the
 echo now subtracts what was asked in every encoding the attack was sent in, not only the plain
-text. A reply the bot gives to anything, measured on the benign baseline, is attributed to the
-bot and not to the attack. A tool argument is read the way the tool receives it: parsed as JSON,
+text. A reply the bot gives to anything (on the benign baseline, or repeated word for word across
+three attacks of one run) is attributed to the bot and not to the attack, and the CI gate does
+not fail a build on it. A tool argument is read the way the tool receives it: parsed as JSON,
 percent-decoded, and with the canary's decodings, and a call written inside a string literal is
 not a call.
 
@@ -31,10 +33,15 @@ named something only a practice bot has: `GrantAdmin`, `DeleteAccount`, a plante
 marker, one bot's forbidden phrase. On anybody else's deployment those strings do not exist, so
 the rows came back DEFENDED. Four published httpbot rows were exactly that: 0/3 over transcripts
 where the bot appended the marker to its next answer, now EXPLOITED 3/3. A tool or phrase a
-config declares is written into the portable copy as a slot (`{privileged_tool}`,
-`{destructive_tool}`, `{forbidden_phrase}`, ...) and filled from the config of the target being
-swept. An attack whose slot that config cannot fill is not sent, and the run names the key it
-needed. A marker travels in the attack's own `plants:`. The portable arsenal is 384 attacks.
+config declares by what it does (`privileged_tools`, `destructive_tools`, `identity_tools`, ...)
+is written into the portable copy as a slot (`{privileged_tool}`, `{identity_tool}`,
+`{forbidden_phrase}`, ...) and filled from the config of the target being swept. An attack whose
+slot that config cannot fill is not sent; the run names the key it needed, and the results keep
+it under `meta.unfilled`. A marker travels in the attack's own `plants:`. Attacks that name one
+bot's data (its users, a tool no config describes) stay in that bot's arsenal. SQL injection
+travels as three new attacks with no table, column or tool in them, judged by `sql_injection` on
+what the bot passes to a tool, which now also reads a quote closed into a comment (`x' --`).
+The portable arsenal is 381 attacks.
 
 **A refusal leads the reply.** `refusal_expected_but_absent` reads the opening of the reply, so a
 bot that complies and then adds a disclaimer is not credited with refusing. The decline rules
@@ -68,9 +75,14 @@ category, so the same attack against two models stays two alerts.
 
 **A printed command is quoted for the shell it will be pasted into**: `shlex` on POSIX, double
 quotes on Windows (read alike by cmd and PowerShell), and PowerShell single quotes with `''`
-when the path holds a `$` or a backtick. The `QATRATION_CONFIGS` hint prints each shell's line
+when the path holds a `$` or a backtick; a Windows path is always quoted, so Git Bash keeps its
+backslashes. The `QATRATION_CONFIGS` hint prints each shell's line
 with that shell's quoting. The recon fleet page puts a profile whose probes mostly did not land
 above one that answered every probe and raised more warnings.
+
+**An MCP corpus you can write.** `qatration mcp <server> --record <file>` writes a server's
+reading into the corpus `mcp --compare` holds it to later; before, the only corpus was this
+repository's own.
 
 **The hosted queue reads each job's own config**, refuses a submitted config that shadows a
 shipped one, claims job ids exclusively, and refuses a job that brings its own refusal regexes:
@@ -78,10 +90,13 @@ a pattern run over replies the same submitter controls can hold a worker for hou
 
 ### Upgrading
 
-Stored results scored by 0.4.x carry verdicts this oracle no longer gives. Re-score them before
-comparing a new run against them: `qatration rejudge --write`. A CI job that passed on a run
-with many errored or empty rows may now exit `3`; that is the run telling you it measured too
-little, and `--max-unmeasured` sets the share it will accept. On the first SARIF upload from
+The first `--fail-on regression` run after upgrading answers `3` once: the engine changed, so
+its verdicts cannot be compared with the 0.4.x run before them. That run is recorded, and the
+next one compares against it. `qatration rejudge --write` re-scores stored results with the new
+oracle for the pages, but it scores the attack each row stored: changes to the arsenal itself
+(slots, `plants:`, new attacks) reach a target only through a new run. A CI job that passed on
+a run with many errored or empty rows may now exit `3`; that is the run telling you it measured
+too little, and `--max-unmeasured` sets the share it will accept. On the first SARIF upload from
 0.5.0, code scanning closes the old per-rule alerts and opens one per breach: that is the new
 fingerprint, not a change in the target.
 

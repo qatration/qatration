@@ -257,7 +257,8 @@ several, so the zero is a statement about the rule rather than about a bland cor
 `targets_mcpagent.py` keeps a rug-pull variant because that is the shape one listing is blind
 to: clean while the user approves the tool, poisoned from the next turn. `qatration mcp
 --compare out/mcp_tools.json` replays the command each recorded server carries and reports what
-moved.
+moved. A corpus of your own servers is written by `qatration mcp <server command> --record
+<file>`.
 
 **The version separates the three states.** Text that changed along with the package version is
 an upgrade: the instructions in a model's context changed and somebody should read the diff,
@@ -274,8 +275,8 @@ Every channel, not just tools. That is not a detail: the comparison read `tools`
 first, so a prompt rewritten under a pinned version was the same event happening where nobody
 was looking, committed by the comparison written to find it.
 
-Exit 1 on a rug pull, 0 on an upgrade or on nothing, which is the same contract every other
-command here keeps. A channel that stopped being readable gets a verdict of its own and does
+Exit 1 on a rug pull, 0 on an upgrade or on nothing moving, 3 when no server could be re-read
+and 2 on a corpus it cannot read, which is the same contract every other command here keeps. A channel that stopped being readable gets a verdict of its own and does
 not set the exit code, because a finding this tool cannot support is the mistake it is named
 after. On the six recorded servers, re-read the same evening: nothing moved.
 
@@ -692,7 +693,8 @@ why every row still reads as its own sample says. A page may not pool and also c
 this one does not.
 
 **The unit is the pair, not the attack.** Pooling the discordant attacks themselves gives
-p = 1 × 10⁻⁸ and treats twenty-five attacks against one stand as twenty-five independent facts.
+p = 2 × 10⁻¹⁰ (33 discordant, none reversed) and treats ten attacks against one stand as ten
+independent facts.
 They share a target, a defence and an arsenal, so that single stand would decide the answer for
 the fleet. Counting each pair once, in the direction it fell, is the version this design
 supports, and it is the weaker of the two numbers on purpose.

@@ -1461,6 +1461,12 @@ def main():
     from runner import filled as _filled
     _fills = [(a,) + _filled(a, ctx) for a in attacks]
     unfillable = [(a, miss) for a, _f, miss in _fills if miss]
+    # KEPT, not only printed: the key that would bring these back is what `meta.inert` is for
+    # a detector, and a reason that lives in the scrollback is gone by the time anybody reads
+    # the page. Found by an independent review.
+    unfilled_meta = {}
+    for a, miss in unfillable:
+        unfilled_meta.setdefault(", ".join(miss), []).append(a["id"])
     attacks = [f for _a, f, miss in _fills if not miss]
     if unfillable:
         not_applicable += len(unfillable)
@@ -1933,6 +1939,8 @@ def main():
             "run_id": _run_id,
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
             "not_applicable": not_applicable, "not_sent": not_sent,
+            # WHICH ATTACKS NAMED A TOOL THIS CONFIG LISTS NONE OF, by the key they needed.
+            "unfilled": {k: sorted(v) for k, v in sorted(unfilled_meta.items())},
             # HOW MANY ROWS NEVER LANDED. Without this a reader cannot tell 20 attacks
             # that were defended from 1 defended and 19 that errored, and both used to
             # render as "0 / 20 breached" in green. `run_redteam` aborts only when EVERY
@@ -2115,6 +2123,23 @@ def main():
 
     # --- CI gate: non-zero exit fails the build ------------------------------
     gate = args.fail_on
+    # A REPLY THE TARGET GIVES TO ANYTHING IS NOT AN EXPLOIT (`baseline.canned_row`, the rule
+    # the attribution line above already applies). Counted, it failed the build on a bot that
+    # deflects every request with the same sentence. Named, so nobody wonders where it went.
+    try:
+        import baseline as _bl_g
+        _canned_g = _bl_g.canned_replies(target.name, results, OUT_DIR)
+    except Exception:
+        _canned_g = set()
+    _canned_rows = [r for r in results if r.get("headline") in BROKE
+                    and (r.get("attack") or {}).get("category") != "control"
+                    and _bl_g.canned_row(r, _canned_g)] if _canned_g else []
+    if _canned_rows and gate in ("exploited", "any"):
+        exploited_n -= sum(1 for r in _canned_rows if r.get("headline") == "EXPLOITED")
+        broke -= len(_canned_rows)
+        print("\n%d row(s) not counted by the gate: each scored only on a reply this target "
+              "gives to any input (%s)" % (len(_canned_rows), ", ".join(
+                  sorted(str((r.get("attack") or {}).get("id")) for r in _canned_rows)[:6])))
     # THROUGH `absolute_verdict`, which is where the coverage caveat lives. Inlined here,
     # these two branches said `FAIL` and `PASS` over whatever happened to be scored and
     # named neither the errors nor the attacks nobody sent.

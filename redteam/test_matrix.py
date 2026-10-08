@@ -89,7 +89,7 @@ def _matrix(w, *extra):
 DIFFERENT = "DIFFERENT builds of the oracle"
 UNRECORDED = "did not record which build scored it"
 DIFFERENT_DAYS = "measured on different days"
-FROM_FILE = "that run recorded no date"
+FROM_FILE = "date not recorded"
 
 
 def main():
@@ -237,7 +237,7 @@ def main():
         # AND A RUN THAT RECORDED NOTHING SAYS SO. An mtime is a filesystem event, and
         # presenting it as a measurement is what let the warning above go quiet in a clone.
         _rc, out = ws({"qwen": (None, None), "nemo": (None, None)})
-        check("runs that recorded no date say where the date came from",
+        check("runs that recorded no date say they recorded none",
               FROM_FILE in out, out[-400:])
         check("...and are not compared on it",
               DIFFERENT_DAYS not in out, "mtimes were compared as measurements")
@@ -252,7 +252,7 @@ def main():
                       mtimes={"qwen": 1754000000.0, "nemo": 1756900000.0})
         check("two artifacts whose FILES differ by a month are not called different days",
               DIFFERENT_DAYS not in out, out[-500:])
-        check("...and the dates shown are still marked as the filesystem's",
+        check("...and still say no date was recorded, not the files' times",
               FROM_FILE in out, out[-500:])
 
         # --- `--models` NAMES WHICH ARMS ARE COMPARED ----------------------------------

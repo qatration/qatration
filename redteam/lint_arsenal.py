@@ -1292,7 +1292,9 @@ def main():
         print(f"REFUSED: no attacks*.yaml beside {ROOT} — an arsenal that is not there\n"
               f"cannot be linted, and this is what a packaging mistake looks like from\n"
               f"inside an installed copy. Check [tool.setuptools.package-data].")
-        return 1
+        # 2, NOT 1: a broken install is the tool's problem, and 1 is the code for a finding in
+        # the arsenal. Found by an independent review.
+        return 2
 
     from workspace import configs_by_name as _cbn
     _by_name = _cbn(ROOT)

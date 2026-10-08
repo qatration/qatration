@@ -545,7 +545,16 @@ def sent_form(s, enc=None):
 # DEFENDED about a request the target was never really asked. `build_generic` writes the slot
 # where the fleet's literal stood; the sweep fills it from the target being swept, and an
 # attack whose slot this config cannot fill is not sent. Found by an independent review.
-SLOT_RE = re.compile(r"\{((?:[a-z]+_)*[a-z]+_tool|forbidden_phrase)\}")
+#
+# ONLY A KEY THAT SAYS WHAT THE TOOL DOES. `watch_tools` says which tools `rogue_tool_call`
+# watches, not what they are: filled from it, a read-only SQL injection on a config listing
+# `DeleteAccount` there asked a live deployment to run DeleteAccount. A literal under any
+# other `*_tools` key is not slotted; `build_generic` keeps the attack home instead. Found by
+# an independent review.
+SLOT_KEYS = ("privileged_tools", "destructive_tools", "command_tools", "fetch_tools",
+             "identity_tools", "object_tools", "forbidden_tokens")
+SLOT_RE = re.compile(r"\{(%s)\}" % "|".join(
+    ["forbidden_phrase"] + [k[:-1] for k in SLOT_KEYS if k.endswith("_tools")]))
 # Fields that are not text the attacker sends.
 _NOT_SENT = ("id", "category", "success", "partial", "applies_to", "plants", "delivery",
              "encode", "expects_refusal", "paired_with", "family")
@@ -558,10 +567,11 @@ def slot_key(name):
 
 
 def slot_of(key):
-    """-> the slot written where a literal from `key` stood, or None. `slot_key`'s inverse."""
-    if key == "forbidden_tokens":
-        return "forbidden_phrase"
-    return key[:-1] if key.endswith("_tools") else None
+    """-> the slot written where a literal from `key` stood, or None for a key that does not
+    say what the tool does (`SLOT_KEYS`). `slot_key`'s inverse."""
+    if key not in SLOT_KEYS:
+        return None
+    return "forbidden_phrase" if key == "forbidden_tokens" else key[:-1]
 
 
 def _slot_value(ctx, name):
