@@ -90,16 +90,16 @@ history:
   insert_before: 1
 
 rate:
-  # SIZED TO THE ARSENAL, not guessed. A full sweep is 357 attacks, but 64 of them are
-  # multi-turn and cost two or three requests each, so one trial is 463 requests and the
-  # default three trials is 1,389. The previous ceiling here was 400 — calibrated when the
+  # SIZED TO THE ARSENAL, not guessed. A full sweep is 422 attacks, but 81 of them are
+  # multi-turn and cost two or three requests each, so one trial is 545 requests and the
+  # default three trials is 1,635. The previous ceiling here was 400 — calibrated when the
   # corpus was 285 single-turn-ish attacks — which truncated a default run at 29% and left the
   # rest unsent. `test_arsenal.py` now fails if these stop covering a full sweep.
   #
   # These are ceilings, not targets. Lower them and the run stops early and says so; raise
   # them and nothing happens except that a bigger arsenal still fits.
   min_interval_s: 0.5
-  max_requests: 1600
+  max_requests: 2000
   max_seconds: 5400
 
 oracle_context:
