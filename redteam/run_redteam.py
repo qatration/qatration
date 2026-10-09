@@ -1272,6 +1272,8 @@ def main():
     # baseline_tool_inputs" -- the input this one request supplies. The gate and the budget
     # already count it (`runner.baseline_requests`). Found by an independent review.
     ctx = baseline_tool_context(target, tcfg, ctx)
+    from runner import with_caps as _with_caps
+    ctx = _with_caps(ctx, target.capabilities)
     if "baseline_tool_inputs" in ctx and "tool_visibility" in target.capabilities:
         print(f"baseline probe → clean tool inputs = {ctx['baseline_tool_inputs']}")
 

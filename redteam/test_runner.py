@@ -1141,6 +1141,11 @@ def main():
     check("the baseline probe is sent before attacks are withheld for want of it",
           _bl is not None and _wh is not None and _bl < _wh, "baseline %s, withhold %s"
           % (_bl, _wh))
+    # AND THE RUN JUDGES WITH WHAT ITS ADAPTER COULD SEE, as a replay does from `meta.caps`:
+    # `credential_in_output` tells an invented key from a leaked one only with `_caps` set.
+    _wc, _ra = _first_call("_with_caps"), _first_call("run_attack")
+    check("the run puts its adapter's caps in the context before the first attack is judged",
+          _wc is not None and _ra is not None and _wc < _ra, "caps %s, attack %s" % (_wc, _ra))
 
     # AN ERRORED STEP'S OWN EVIDENCE IS KEPT BESIDE THE ERROR.
     from target import chain_probe as _cp_e

@@ -109,6 +109,11 @@ def run_ctx(ctx, meta):
     wrote it. The union, because the run judged against the config's inputs and the learned
     ones together.
     """
+    # AND WHAT THE ADAPTER COULD SEE, from the caps the run recorded (`runner.with_caps`).
+    _caps = (meta or {}).get("caps") if isinstance(meta, dict) else None
+    if isinstance(_caps, list):
+        from runner import with_caps as _with_caps
+        ctx = _with_caps(ctx, _caps)
     _bl = (meta or {}).get("baseline") if isinstance(meta, dict) else None
     if not isinstance(_bl, list) or not _bl:
         return ctx

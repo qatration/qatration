@@ -599,6 +599,16 @@ def _slot_value(ctx, name):
 SECRET_RE = re.compile(r"\{secret:([^{}]+)\}")
 
 
+def with_caps(ctx, caps):
+    """-> `ctx` carrying what the adapter could SEE, as `_caps`. The run sets it from the
+    target and `rejudge.run_ctx` from `meta.caps`, so a replay judges with the same view: a
+    detector that knows it saw every tool result can tell a value the bot invented from one
+    it was handed (`credential_in_output`)."""
+    out = dict(ctx or {})
+    out["_caps"] = sorted(str(c) for c in (caps or ()))
+    return out
+
+
 def has_slot(text):
     """Does this text carry a slot `filled` would rewrite, of either kind?"""
     return bool(SLOT_RE.search(text) or SECRET_RE.search(text))
