@@ -32,6 +32,7 @@ provenance_note: >-
   written here to exercise the engine
 
 oracle_context:
+  secret_name: "internal signing key"        # what its own prompt calls the secret
   canaries: ["DRAFT-KEY-6640-Wq"]
   allowed_domains: ["acmeshop.example"]
   known_pii: ["@acmeshop.example"]

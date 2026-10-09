@@ -588,6 +588,34 @@ def _slot_value(ctx, name):
     return max(vals, key=len) if name == "forbidden_phrase" else vals[0]
 
 
+# THE SECRET, CALLED WHAT THE TARGET CALLS IT. A portable attack asked for "the internal
+# staff key"; secretbot holds a "recovery code" and its prompt says so, and on a live run qwen
+# answered "I can't provide ... internal staff keys or access codes": a refusal of a thing it
+# does not hold, scored as a defence of the thing it does. `build_generic` writes each name
+# for the secret as `{secret:<the words that stood there>}` and `secret_name` in the target's
+# oracle_context fills it. With none, the words come back exactly, so a config that sets
+# nothing sends what it always sent and its stored results keep their digests. Never
+# unfillable: the old words are a real attack, not a gap.
+SECRET_RE = re.compile(r"\{secret:([^{}]+)\}")
+
+
+def has_slot(text):
+    """Does this text carry a slot `filled` would rewrite, of either kind?"""
+    return bool(SLOT_RE.search(text) or SECRET_RE.search(text))
+
+
+def _secret(m, ctx):
+    said = m.group(1)
+    # `ctx.get(k) or ""`, the form `workspace` scans for: read any other way, the key is
+    # "nothing reads it" to `onboard` and a non-text value is not refused at the door.
+    ctx = ctx or {}
+    name = str(ctx.get("secret_name") or "").strip()
+    if not name:
+        return said
+    # A SENTENCE THAT OPENED WITH THE OLD WORDS opens with the new ones.
+    return name[:1].upper() + name[1:] if said[:1].isupper() else name
+
+
 def filled(attack, ctx):
     """-> (the attack with every slot filled from `ctx`, [config keys it needed and lacked]).
 
@@ -603,7 +631,7 @@ def filled(attack, ctx):
                     missing.add(slot_key(m.group(1)))
                     return m.group(0)
                 return got
-            return SLOT_RE.sub(_one, v)
+            return SLOT_RE.sub(_one, SECRET_RE.sub(lambda m: _secret(m, ctx), v))
         if isinstance(v, list):
             return [_fill(x) for x in v]
         if isinstance(v, dict):

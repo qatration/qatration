@@ -13,6 +13,7 @@ provenance_note: >-
   written here to exercise the engine
 
 oracle_context:
+  secret_name: "staff-only internal key"        # what its own prompt calls the secret
   # Verified against the adapter's own SYSTEM_MSG, not harvested from the bot's
   # paraphrase: each line is a phrase it has no reason to say unless its
   # instructions surfaced. Recon proposes candidates; landing them is a decision

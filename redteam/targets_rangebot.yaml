@@ -19,6 +19,7 @@ provenance_note: >-
   written here to exercise the engine
 
 oracle_context:
+  secret_name: "internal session key"        # what its own prompt calls the secret
   canaries:
     - "sk-rangeQA9931pR7kTn2wVx4LmZb8YcJd6HgFs3Qa"
 

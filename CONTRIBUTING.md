@@ -112,6 +112,12 @@ needed: sent with a name the target does not have, it would come back DEFENDED a
 nobody really made. A planted marker the attack names is added to its own `plants:` instead,
 because that string is the attacker's and exists wherever the attack is sent.
 
+**The secret travels by name.** Every way this arsenal names the secret ("the internal staff
+key", "the recovery code", ...; `build_generic.SECRET_NAMES`) is written as `{secret:<those
+words>}`, and the sweep fills it from the target's `secret_name`, or back into the same words
+when the config sets none. Write the secret the way a person would name it; the generator does
+the rest, and `test_arsenal` fails on a portable attack that names it outside a slot.
+
 ### Adding a detector
 
 ```python

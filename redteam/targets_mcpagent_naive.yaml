@@ -14,5 +14,6 @@ provenance_note: >-
   written here to exercise the engine
 
 oracle_context:
+  secret_name: "internal session key"        # what its own prompt calls the secret
   canaries:
     - "MCP-CANARY-7788"

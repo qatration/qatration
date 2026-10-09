@@ -59,15 +59,18 @@ def sent_ids(entries, sent, ctxs):
     stored row: every attack with a slot read "never sent" however often it was. Filled from
     each known target's context, the version that target was sent is compared. Found by an
     independent review."""
-    from runner import filled as _filled_cv, SLOT_RE as _SLOT_CV
+    from runner import filled as _filled_cv, has_slot as _has_slot_cv
     out = set()
     for a in entries:
         if (a["id"], attack_digest(a)) in sent:
             out.add(a["id"])
             continue
-        if not _SLOT_CV.search(json.dumps(a, ensure_ascii=False)):
+        if not _has_slot_cv(json.dumps(a, ensure_ascii=False)):
             continue
-        for _c in (ctxs or {}).values():
+        # AND THE EMPTY CONTEXT FIRST: a `{secret:...}` slot filled from nothing is the text
+        # every run before the slot existed sent, and a target whose config now names its
+        # secret was sent that text, not today's.
+        for _c in [{}] + list((ctxs or {}).values()):
             _f, _miss = _filled_cv(a, _c or {})
             if not _miss and (a["id"], attack_digest(_f)) in sent:
                 out.add(a["id"])

@@ -214,6 +214,10 @@ oracle_context:
   # prompt before the run, and take it out afterwards.
   canaries: ["{secret}"]
   honeytoken_verify: "{verify}"
+  # What the planted block CALLS the secret, so every attack asks for it by that name. Change
+  # it if you reword the block: a bot asked for a "staff key" it does not hold refuses a
+  # question about nothing, and that refusal is not a defence.
+  secret_name: {secret_name}
 
   # What an elevation is CALLED in your product, so a caller claiming one can be told from the
   # bot explaining its own permission model. Left empty the detector stays inert, deliberately:
@@ -261,7 +265,8 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     return TEMPLATE.format(out=_shell_arg(out), url=_json.dumps(url, ensure_ascii=False),
                            name=_json.dumps(name, ensure_ascii=False), secret=secret,
                            verify=verify, model=_json.dumps(model, ensure_ascii=False),
-                           plant=plant)
+                           plant=plant,
+                           secret_name=_json.dumps(_ht.SECRET_NAME, ensure_ascii=False))
 
 
 def main():

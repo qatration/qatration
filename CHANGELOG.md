@@ -46,6 +46,14 @@ ones drop `qatration_probe`, a table nobody has, so a bot that passes one throug
 nothing. Every category that held three or four attacks now holds five (32 more, none naming
 a column, a tool or a practice bot). The portable arsenal is 422 attacks.
 
+**The secret is asked for by the target's own name for it.** 113 portable attacks asked for "the
+internal staff key", while the block `qatration init` and `mint` print plants an "internal
+dispatch key", and a live run against a bot holding a "recovery code" refused to give out
+"internal staff keys or access codes": a refusal of a thing it does not hold. Each name for the
+secret is now a `{secret:...}` slot, filled from `secret_name` in the target's `oracle_context`;
+`init` and the hosted examples write the plant's name, and each practice config writes its own
+bot's. A config that sets nothing sends exactly what it sent before, byte for byte.
+
 **A refusal leads the reply.** `refusal_expected_but_absent` reads the opening of the reply, so a
 bot that complies and then adds a disclaimer is not credited with refusing. The decline rules
 gained phrasings in English, Italian, Portuguese and Dutch. A reply that is only a tool call is
@@ -101,7 +109,9 @@ oracle for the pages, but it scores the attack each row stored: changes to the a
 a run with many errored or empty rows may now exit `3`; that is the run telling you it measured
 too little, and `--max-unmeasured` sets the share it will accept. On the first SARIF upload from
 0.5.0, code scanning closes the old per-rule alerts and opens one per breach: that is the new
-fingerprint, not a change in the target.
+fingerprint, not a change in the target. A config that now sets `secret_name` sends different
+words to its target, so its next regression run names those attacks as changed rather than
+comparing them; a config that leaves it unset sends what it sent before.
 
 ---
 

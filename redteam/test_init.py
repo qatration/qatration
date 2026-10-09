@@ -471,6 +471,25 @@ def main():
           and "http://localhost:8000/chat" in ((_pu.stdout or "") + (_pu.stderr or "")),
           "exit %s" % _pu.returncode)
 
+    # THE ATTACKS ASK FOR THE SECRET BY THE NAME THE PLANT GIVES IT. The block `init` and `mint`
+    # print plants an "Internal dispatch key", and the arsenal asked every planted canary for
+    # an "internal staff key". One constant, read by the plant, the written config and the
+    # shipped hosted examples, which tell their reader to plant the same block.
+    import honeytoken as _ht_sn
+    _sn_cfg = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                                verify="QAT-VERIFY-X"))
+    check("init writes the secret_name its own plant uses",
+          (_sn_cfg.get("oracle_context") or {}).get("secret_name") == _ht_sn.SECRET_NAME
+          and _ht_sn.snippet("S", "V").lower().startswith(_ht_sn.SECRET_NAME + ":"),
+          str((_sn_cfg.get("oracle_context") or {}).get("secret_name")))
+    _hosted_sn = {}
+    for _f in ("anthropic", "bedrock", "openai_compatible", "vertex"):
+        _hc = yaml.safe_load(io.open(os.path.join(HERE, "targets_%s.yaml" % _f),
+                                     encoding="utf-8").read())
+        _hosted_sn[_f] = (_hc.get("oracle_context") or {}).get("secret_name")
+    check("...and so does every hosted example that tells its reader to plant that block",
+          set(_hosted_sn.values()) == {_ht_sn.SECRET_NAME}, str(_hosted_sn))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:
         print("  ! " + f)

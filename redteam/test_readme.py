@@ -1704,8 +1704,13 @@ def main():
     if _replies:
         _reply_tok = (sum(_replies) / float(len(_replies))) / _CPT
 
+        # WHAT IS SENT, not the arsenal's spelling of it: `{secret:internal key}` goes out as
+        # `internal key` when a config names no secret, and pricing the braces billed a sweep
+        # for characters no request carries.
+        from runner import filled as _filled_p
+
         def _payload_tok(_rows):
-            return (sum(len(_ws_p.payload_text(_a)) for _a in _rows)
+            return (sum(len(_ws_p.payload_text(_filled_p(_a, {})[0])) for _a in _rows)
                     / float(len(_rows))) / _CPT
 
         def _cell(_req, _ptok, _chars, _pin, _pout):

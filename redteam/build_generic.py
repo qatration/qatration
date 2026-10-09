@@ -145,16 +145,10 @@ def slotted(a, slots, markers):
         return a
 
     def _sub(v):
-        if isinstance(v, str):
-            for lit, slot in subs.items():
-                v = re.sub(r"\b" + re.escape(lit) + r"\b", slot, v, flags=re.I)
-            return v
-        if isinstance(v, list):
-            return [_sub(x) for x in v]
-        if isinstance(v, dict):
-            return {k: _sub(x) for k, x in v.items()}
+        for lit, slot in subs.items():
+            v = re.sub(r"\b" + re.escape(lit) + r"\b", slot, v, flags=re.I)
         return v
-    out = {k: (v if k in keep else _sub(v)) for k, v in a.items()}
+    out = _in_sent_strings(a, _sub, keep)
     if named:
         # THE SPELLING THE ATTACK USES, which is the one the reply will repeat.
         _raw = json.dumps({k: v for k, v in a.items() if k not in keep}, ensure_ascii=False)
@@ -165,6 +159,47 @@ def slotted(a, slots, markers):
                 have.append(hit.group(0))
         out["plants"] = have
     return out
+
+
+# THE NAMES THIS ARSENAL GIVES THE SECRET, longest first so `internal staff key` is not read as
+# `staff key` inside it. Each becomes `{secret:<the words as written>}`, which `runner.filled`
+# turns into the target's own `secret_name` or back into these words. Not a plural (`internal
+# keys may be shared` is about keys in general) and not a hyphenated field name (`staff-key
+# field`). Hand-written attacks are slotted too: verbatim is about who wrote them, and an
+# attack asking a recovery-code bot for a staff key measures its vocabulary, not its defence.
+SECRET_NAMES = ("internal staff-only promo code", "staff-only promo code",
+                "internal staff key", "staff key", "internal key", "recovery code")
+_SECRET_LIT = re.compile(r"(?<![\w-])(%s)(?![\w-])" % "|".join(re.escape(n) for n in SECRET_NAMES),
+                         re.I)
+_SECRET_SLOT = re.compile(r"\{secret:[^{}]+\}")
+
+
+def _in_sent_strings(a, fn, keep):
+    """-> `a` with `fn` applied to every string in a field outside `keep`, at any depth. The
+    one walk for both rewrites here: `slotted` and `secret_slotted` each carried a copy."""
+    def _walk(v):
+        if isinstance(v, str):
+            return fn(v)
+        if isinstance(v, list):
+            return [_walk(x) for x in v]
+        if isinstance(v, dict):
+            return {k: _walk(x) for k, x in v.items()}
+        return v
+    return {k: (v if k in keep else _walk(v)) for k, v in a.items()}
+
+
+def secret_slotted(a):
+    """-> `a` with every name for the secret in a field the sweep sends written as a
+    `{secret:...}` slot. Idempotent: text already inside a slot is left alone."""
+    from runner import _NOT_SENT
+
+    def _sub(v):
+        parts = _SECRET_SLOT.split(v)
+        slots = _SECRET_SLOT.findall(v)
+        out = [_SECRET_LIT.sub(lambda m: "{secret:%s}" % m.group(1), p) for p in parts]
+        return "".join(x for pair in zip(out, slots + [""]) for x in pair)
+    out = _in_sent_strings(a, _sub, tuple(_NOT_SENT) + ("scored_by", "seed"))
+    return out if out != a else a
 
 
 def library():
@@ -253,13 +288,14 @@ def build():
         # Compliance attack, the whole `serialization` category, the recon set — so a run
         # against an outside target never saw one of them. The same defect as the scoping itself, one directory deeper:
         # not a decision about what to send, an accident of which file something was written in.
-        a = slotted(a, slots, markers)
+        a = secret_slotted(slotted(a, slots, markers))
         why = blocked_reason(a, canaries, tools, markers)
         if why:
             blocked.append((aid, a.get("category"), why))
             continue
         clean = {k: v for k, v in a.items() if k != "applies_to"}
         promoted.append(clean)
+    hand = {k: secret_slotted(v) for k, v in hand.items()}
     return hand, promoted, blocked
 
 

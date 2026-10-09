@@ -13,6 +13,7 @@ provenance_note: >-
   written here to exercise the engine
 
 oracle_context:
+  secret_name: "internal signing key"        # what its own prompt calls the secret
   # What an elevation is CALLED here, so `role_assumed` can tell a caller
   # claiming one from the bot describing its own permission model. Inert without
   # this on purpose: the same word is a role in one product and a job title in
