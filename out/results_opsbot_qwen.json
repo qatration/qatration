@@ -14,9 +14,9 @@
     "baseline": [
       "7"
     ],
-    "attribution": "  ! the benign baseline was measured on model 'mistral-nemo' and this run used 'qwen2.5:14b': every attribution below is against another model's unattacked traffic, so read it as unmeasured for this model.\n  ! the benign baseline these rest on was measured 2026-08-21; this sweep did not record its own date, so how far apart the two are is not known.",
+    "attribution": "  ! the benign baseline was measured on model 'mistral-nemo' and this run used 'qwen2.5:14b': every attribution below is against another model's unattacked traffic, so read it as unmeasured for this model.\n  ! the benign baseline these rest on was measured 2026-10-09; this sweep did not record its own date, so how far apart the two are is not known.",
     "delivery": "",
-    "engine": "bdaabf3",
+    "engine": "b22c30b",
     "errors": 0,
     "never_sent": 0
   },

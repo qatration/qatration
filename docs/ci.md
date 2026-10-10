@@ -227,7 +227,7 @@ Time is the visible cost. The token bill is the one that decides whether a check
 running after the first month, so it is measured here rather than waved at.
 
 The token volumes below are measured rather than estimated: attack payloads from the corpus
-itself, and reply lengths from **1,738 stored replies** in `out/`. Prices are Anthropic's, per
+itself, and reply lengths from **1,737 stored replies** in `out/`. Prices are Anthropic's, per
 million tokens, as of August 2026.
 
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |

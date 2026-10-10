@@ -127,10 +127,10 @@ describes a bot this repo already has an adapter for, and sweeps it with the gen
 `skip_in_fleet: true`, because a template swept as a target would put a second copy of an
 existing bot into every aggregate under a different name.
 
-**"443 findings across 35 targets" invites a reading that is not true, so the front page now
+**"435 findings across 35 targets" invites a reading that is not true, so the front page now
 says which.** Most of those targets are bots written here to exercise the engine. A finding on
 one of them is evidence that the engine works, which is worth having and is not the same claim
-as a finding on somebody else's code. Nine are third-party and carry **62 of the 443**:
+as a finding on somebody else's code. Nine are third-party and carry **62 of the 435**:
 smolagents two ways, LangChain, NeMo Guardrails with and without its output rail, and two
 cloned practice applications this repository does not ship.
 
@@ -338,9 +338,9 @@ about what to send — an accident of which file something was written in. Gener
 attack ids already live in two files at once: the per-bot arsenals were split out of the main
 one by hand and both halves were then edited. A third hand-maintained copy would repeat it.
 
-The arsenal is **422 attacks across 60 categories** now. Against a plain chat endpoint that
-declares only a canary, **249 attacks in 46 categories** actually run; one that carries a
-transcript gets **313 in 56**. What is held back is held back for a reason each time: `control` rows are
+The arsenal is **422 attacks across 60 categories** now. Against a plain chat endpoint (an
+`adapter: http` config that declares only a canary and maps no tool calls), **266 attacks in 44
+categories** actually run; one that carries a transcript gets **337 in 54**. What is held back is held back for a reason each time: `control` rows are
 per-target baselines and sending eighteen of them would pad the count with prompts that are not
 attacks, `seed:` rows need a corpus we can write to, and rows naming a practice bot's canary or
 tool would test a string that does not exist on anybody else's system.

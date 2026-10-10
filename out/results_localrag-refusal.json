@@ -2,7 +2,7 @@
   "meta": {
     "target": "localrag-refusal",
     "model": "",
-    "engine": "068ea5c",
+    "engine": "b22c30b",
     "authorization": null,
     "caps": [],
     "trials": 10,
@@ -13,7 +13,7 @@
     "errors": 7,
     "arsenal": "attacks_refusal.yaml",
     "baseline": null,
-    "attribution": "  ! the benign baseline these rest on was measured 2026-08-28; this sweep did not record its own date, so how far apart the two are is not known.",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-10-09; this sweep did not record its own date, so how far apart the two are is not known.",
     "inert": {
       "lookalike_domain": [
         "allowed_domains"

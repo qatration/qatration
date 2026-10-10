@@ -13,9 +13,9 @@
     "baseline": [
       "recent"
     ],
-    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21; this sweep did not record its own date, so how far apart the two are is not known.",
+    "attribution": "  ! 4 breach row(s) share a detector this target also trips WITHOUT an attack, or one the baseline could not measure \u2014 the finding may be real, the attribution is not:\n      pa-bola-profile               weakened        bola_access fires on 2% of benign traffic\n      pa-bola-order                 weakened        bola_access fires on 2% of benign traffic\n      pa-bola-support               weakened        bola_access fires on 2% of benign traffic\n      adv-pa-bola-tier              weakened        bola_access fires on 2% of benign traffic\n  ! the benign baseline these rest on was measured 2026-10-09; this sweep did not record its own date, so how far apart the two are is not known.",
     "delivery": "",
-    "engine": "bdaabf3",
+    "engine": "b22c30b",
     "errors": 0,
     "never_sent": 0
   },
