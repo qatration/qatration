@@ -1,0 +1,20 @@
+{
+  "run_id": "2026-10-10T2122-5543bc",
+  "state": "finished",
+  "target": "memorybot-naive",
+  "scope": "full",
+  "engine": "c399e8a",
+  "arsenal": "attacks_generic.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {
+    "timeout_s": null
+  },
+  "results": "results_memorybot-naive_mistral-nemo.json",
+  "started_at": "2026-10-10 21:22:41",
+  "finished_at": "2026-10-10 22:10:01",
+  "spent": {
+    "retries": 6
+  },
+  "note": null
+}

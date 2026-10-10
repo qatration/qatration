@@ -5,10 +5,6 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "137",
-      "62"
-    ],
     "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "9",
       "6"
@@ -18,6 +14,10 @@
       "1",
       "48",
       "38"
+    ],
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "229",
+      "113"
     ]
   },
   "strings": {
@@ -81,7 +81,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "Bir turda yerleştirilen bir kural, sonraki her yanıtı sessizce değiştirir, konuşma yeniden normal göründükten çok sonra bile.",
     "Needs access to the thing being attacked": "Saldırılan şeye erişim gerektirir",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz. Botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunun için külliyat değil, saldırı kümesi, araç tanımları ya da çağrıların görünürlüğü gerekir.",
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 137 bulgunun 62'i, yalnızca yanıt okunduğunda hiç görünmüyor.",
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": "Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 229 bulgunun 113'i, yalnızca yanıt okunduğunda hiç görünmüyor.",
     "The bot answers politely and puts the secret in an argument.": "Bot kibarca yanıt verir ve sırrı bir çağrı argümanının içine koyar.",
     "Agent tool abuse": "Ajan araçlarının kötüye kullanımı",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "Ajanınız geri alınamaz bir eyleme ikna edilir: silme, para iadesi, e-posta gönderme.",
@@ -114,7 +114,7 @@
     "Why it held, not just that it held": "Neden dayandığı, yalnızca dayandığı değil",
     "When an attack fails, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "Bir saldırı başarısız olduğunda rapor onu neyin durdurduğunu adıyla söyler: kimlik denetimi, içerik filtresi, arka uçtaki bir yetki ya da yalnızca yazdırılmış olup hiç çalıştırılmamış bir araç çağrısı. Sonuncusu bir dökümde ihlal gibi okunur ve hiçbir değeri yoktur.",
     "A bigger model is not the fix": "Daha büyük bir model çözüm değil",
-    "One bot, two models, 245 attacks each, 3 tries apiece. The smaller broke on 39, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "Bir bot, iki model, her modele 245 saldırı, her saldırıya 3 deneme. Küçük olan bunların 39'inde kırıldı, büyük olan 34'inde ve bunların 28'i aynı saldırılar, 24'si her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.",
+    "One bot, two models, 264 attacks each, 3 tries apiece. The smaller broke on 38, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "Bir bot, iki model, her modele 264 saldırı, her saldırıya 3 deneme. Küçük olan bunların 38'inde kırıldı, büyük olan 34'inde ve bunların 28'i aynı saldırılar, 24'si her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.",
     "The gap a config can't show you": "Bir yapılandırmanın size gösteremeyeceği boşluk",
     "Against a real guardrail framework, 46 attacks typed into the chat box: none got through. Neither did one carried inside a retrieved document, while both of its rails were on. Turn the output filter off and that same document walks out on every single try. Input filters read what the user types, and never see what your knowledge base hands the model, so the input rail was never what stopped it.": "Gerçek bir guardrail çerçevesine karşı sohbet kutusuna yazılan 46 saldırıdan hiçbiri geçemedi. Getirilen bir belgenin içinde taşınan bir saldırı da, her iki rayı da açıkken geçemedi. Çıktı filtresini kapatın, aynı belge her tek denemede dışarı yürür. Girdi filtreleri kullanıcının yazdığını okur ve bilgi tabanınızın modele verdiğini asla görmez, yani girdi tarafındaki guardrail onu durduran şey hiç olmamıştı.",
     "And how steady the answer is": "Ve yanıtın ne kadar tutarlı olduğu",

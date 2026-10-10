@@ -5,10 +5,6 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "137",
-      "62"
-    ],
     "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "9",
       "6"
@@ -18,6 +14,10 @@
       "1",
       "48",
       "38"
+    ],
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "229",
+      "113"
     ]
   },
   "strings": {
@@ -81,7 +81,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "在某一轮里埋下的规则，会悄悄改变之后的每一个回答，哪怕对话早已看起来恢复正常。",
     "Needs access to the thing being attacked": "需要接触被攻击的对象本身",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "你无法把文档放进一个你没有写入权限的知识库，从外部也无法分辨一次真正执行了的工具调用和一次机器人只是嘴上描述的调用。机器人在这一点上会把自己说错，这一点我们实测过。这需要语料、工具定义，或者对调用的可见性。",
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "基于随本工具分发的证据实测：在会报告工具调用的目标上，137 项发现中有 62 项，如果只读回复就完全看不到。",
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": "基于随本工具分发的证据实测：在会报告工具调用的目标上，229 项发现中有 113 项，如果只读回复就完全看不到。",
     "The bot answers politely and puts the secret in an argument.": "机器人礼貌地作答，同时把机密塞进调用参数里。",
     "Agent tool abuse": "智能体工具滥用",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "你的智能体被说服执行了不可撤销的操作：删除、退款、发送邮件。",
@@ -114,7 +114,7 @@
     "Why it held, not just that it held": "为什么扛住了，而不只是知道它扛住了",
     "When an attack fails, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "当一次攻击失败时，报告会指明是什么拦住了它：身份校验、内容过滤、后端的权限，或者一次只打印出来、从未真正执行的工具调用。最后这一种在对话记录里读起来像是被攻破，实际上一文不值。",
     "A bigger model is not the fix": "更大的模型不是解药",
-    "One bot, two models, 245 attacks each, 3 tries apiece. The smaller broke on 39, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "一个机器人，两个模型，各 245 次攻击，各试 3 遍。较小的那个在其中 39 次上被攻破，较大的在 34 次上被攻破，其中 28 次是同样的攻击，而这里面有 24 次每一遍都能攻破两个模型。在这个机器人上，更大的模型只是重新洗了牌，改变哪些攻击能在边缘处打通。这个洞它并没有堵上。",
+    "One bot, two models, 264 attacks each, 3 tries apiece. The smaller broke on 38, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "一个机器人，两个模型，各 264 次攻击，各试 3 遍。较小的那个在其中 38 次上被攻破，较大的在 34 次上被攻破，其中 28 次是同样的攻击，而这里面有 24 次每一遍都能攻破两个模型。在这个机器人上，更大的模型只是重新洗了牌，改变哪些攻击能在边缘处打通。这个洞它并没有堵上。",
     "The gap a config can't show you": "配置看不出来的那道缺口",
     "Against a real guardrail framework, 46 attacks typed into the chat box: none got through. Neither did one carried inside a retrieved document, while both of its rails were on. Turn the output filter off and that same document walks out on every single try. Input filters read what the user types, and never see what your knowledge base hands the model, so the input rail was never what stopped it.": "面对一套真正的护栏框架，输入聊天框的 46 次攻击一次也没通过。夹带在检索文档里的那一次同样没有通过，只要它的两道栏都开着。把输出过滤关掉，同一份文档每一遍都会走出去。输入过滤读的是用户敲进去的内容，永远看不到你的知识库递给模型的东西，所以拦住它的从来就不是输入侧那道栏。",
     "And how steady the answer is": "以及答案有多稳定",

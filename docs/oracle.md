@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **63 demonstrated, 3 declared-only** over 6,770 stored probes. Few tools publish a plugin count
+It reports **63 demonstrated, 3 declared-only** over 7,851 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.

@@ -5,10 +5,6 @@
       "9",
       "5"
     ],
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": [
-      "137",
-      "62"
-    ],
     "The same guard that blocked that document also refused 6 of 9 ordinary customer questions on the affected topics. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "9",
       "6"
@@ -19,6 +15,10 @@
       "1",
       "48",
       "38"
+    ],
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": [
+      "229",
+      "113"
     ]
   },
   "strings": {
@@ -82,7 +82,7 @@
     "A rule planted in one turn quietly changes every later answer, long after the conversation looks normal again.": "あるターンで仕込まれた規則が、以降のすべての応答を静かに変えます。会話が再び普通に見えるようになった、ずっとあとまで。",
     "Needs access to the thing being attacked": "攻撃対象そのものへのアクセスが必要",
     "You cannot plant a document in a knowledge base you cannot write to, and from outside you cannot tell a tool call that ran from one the bot merely described, a distinction we have measured bots getting wrong about themselves. These need the corpus, the tool definitions, or visibility of the calls.": "書き込めない知識ベースに文書を仕込むことはできませんし、外側からは、実際に実行されたツール呼び出しと、ボットがただ説明しただけの呼び出しを見分けられません。この点についてボットが自分自身をどれだけ取り違えるかを、私たちは測定しました。これにはコーパス、ツール定義、または呼び出しの可視性が必要です。",
-    "Measured on the evidence shipped with this tool: 62 of 137 findings on targets that report tool calls do not appear at all when only the reply is read.": "このツールに同梱された証拠で測定した結果です。ツール呼び出しを報告する対象では、137件の指摘のうち62件が、応答だけを読んだ場合にはまったく現れません。",
+    "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": "このツールに同梱された証拠で測定した結果です。ツール呼び出しを報告する対象では、229件の指摘のうち113件が、応答だけを読んだ場合にはまったく現れません。",
     "The bot answers politely and puts the secret in an argument.": "ボットは丁重に答えつつ、秘密を呼び出しの引数に入れます。",
     "Agent tool abuse": "エージェントのツール悪用",
     "Your agent is talked into an irreversible action: delete, refund, send email.": "エージェントが取り返しのつかない操作へ誘導されます。削除、返金、メール送信。",
@@ -115,7 +115,7 @@
     "Why it held, not just that it held": "持ちこたえた事実ではなく、持ちこたえた理由",
     "When an attack fails, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "攻撃が失敗したとき、報告書は何がそれを止めたのかを名指しします。本人確認、コンテンツフィルター、バックエンドの権限、あるいは出力されただけで実際には実行されなかったツール呼び出し。最後のものは記録の上では侵害のように読めますが、何の価値もありません。",
     "A bigger model is not the fix": "より大きなモデルは解決策ではない",
-    "One bot, two models, 245 attacks each, 3 tries apiece. The smaller broke on 39, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "ボット一つ、モデル二つ、それぞれ245件の攻撃、それぞれ3回の試行。小さい方は39件で破られ、大きい方は34件で破られました。そのうち28件は同じ攻撃で、うち24件は両方のモデルを毎回破ります。このボットでは、大きなモデルは端のどの攻撃が通るかを入れ替えただけでした。穴は塞ぎません。",
+    "One bot, two models, 264 attacks each, 3 tries apiece. The smaller broke on 38, the larger on 34, and 28 of those are the same attacks, 24 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "ボット一つ、モデル二つ、それぞれ264件の攻撃、それぞれ3回の試行。小さい方は38件で破られ、大きい方は34件で破られました。そのうち28件は同じ攻撃で、うち24件は両方のモデルを毎回破ります。このボットでは、大きなモデルは端のどの攻撃が通るかを入れ替えただけでした。穴は塞ぎません。",
     "The gap a config can't show you": "設定では見えない隙間",
     "Against a real guardrail framework, 46 attacks typed into the chat box: none got through. Neither did one carried inside a retrieved document, while both of its rails were on. Turn the output filter off and that same document walks out on every single try. Input filters read what the user types, and never see what your knowledge base hands the model, so the input rail was never what stopped it.": "実際のガードレールのフレームワークに対して、チャット欄に打ち込んだ46件の攻撃は一つも通りませんでした。取得された文書の中に忍ばせた攻撃も、両方のレールが入っている間は通りませんでした。出力フィルターを切ると、同じ文書が毎回そのまま外へ出ていきます。入力フィルターが読むのは利用者が打った内容であり、知識ベースがモデルに渡すものは決して見ないので、入力側のレールはそもそもそれを止めていたものではなかったのです。",
     "And how steady the answer is": "そして答えがどれだけ安定しているか",
