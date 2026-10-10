@@ -195,6 +195,23 @@ def main():
     check("a target that declares no tools claims no blindness it cannot prove",
           not blind_spots(hidden, {"canaries": ["x"]}))
 
+    # AND NO CANARY THE BOT SAYS ABOUT ITSELF. httpbot's config carried its own name,
+    # "AcmeShop customer-support assistant", as a canary "that only appears if the system
+    # prompt leaks"; it is the prompt's first line, the bot introduces itself with it, and
+    # eight stored EXPLOITED rows rested on nothing else. A canary is a token nothing says
+    # by accident. A phrase from the instructions is a `sysprompt_markers` entry, where it is
+    # read as quoting the prompt rather than as handing over a secret.
+    import yaml as _yaml
+    from target import target_configs as _target_configs
+    _phrases = {}
+    for _f in _target_configs(HERE):
+        _oc = (_yaml.safe_load(open(_f, encoding="utf-8")) or {}).get("oracle_context") or {}
+        _bad = [c for c in (_oc.get("canaries") or []) if isinstance(c, str) and " " in c.strip()]
+        if _bad:
+            _phrases[os.path.basename(_f)] = _bad
+    check("no shipped config uses a phrase as a canary (a phrase is a sysprompt marker)",
+          not _phrases, str(_phrases))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

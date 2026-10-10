@@ -1801,25 +1801,29 @@ def main():
               int(_fm.group(1).replace(",", "")) == len(_arsenal),
               "the page says %s; the arsenal holds %d" % (_fm.group(1), len(_arsenal)))
 
-    # WHAT THIS DOES NOT COVER, said because a list of what is checked reads as the whole
-    # list. `docs/onboarding.md` publishes a NARROWER fact twice more -- "249 attacks in 46
-    # categories actually run" against a plain chat endpoint, "313 in 56" with a transcript
-    # -- and neither is recounted here. Reproducing the engine's own withholding
-    # (`is_unmeasurable` over `inert_for`, then `undeliverable` over the target's
-    # capabilities) gives 264 in 47 and 319 in 56 for the nearest reading of those two
-    # configurations, close enough to suggest the page has drifted the same way and not
-    # equal, so the method behind the published pair could not be confirmed and the numbers
-    # were left alone rather than replaced with a guess. What IS asserted is the one thing
-    # true under every reading: a subset cannot be larger than the set.
+    # AND HOW MUCH OF IT REACHES A PLAIN ENDPOINT, recounted by the run's own rule. This pair
+    # stood unrecounted at "249 in 46" and "313 in 56" because nobody could say which
+    # configuration it described; reproducing the withholding by hand gave 264 and 319 and the
+    # numbers were left alone. The page now names the configuration (an `adapter: http` config
+    # declaring only a canary, mapping no tool calls; with a transcript, `chain` and
+    # `forged_history` as well), and `run_redteam.would_send` -- the run's three withholdings
+    # in the run's order -- counts it.
+    from run_redteam import would_send as _would_send
     _onb = io.open(os.path.join(ROOT, "docs", "onboarding.md"), encoding="utf-8").read()
-    _subsets = [int(x) for x in re.findall(r"\*\*(\d+) attacks in \d+ categories\*\* "
-                                           r"actually run", _onb)]
-    _subsets += [int(x) for x in re.findall(r"gets \*\*(\d+) in \d+\*\*", _onb)]
+    _said_plain = re.search(r"\*\*(\d+) attacks in (\d+)\s+categories\*\* actually run", _onb)
+    _said_hist = re.search(r"gets \*\*(\d+) in (\d+)\*\*", _onb)
     check("the page still says how much of the arsenal reaches a plain endpoint",
-          len(_subsets) == 2, str(_subsets))
-    for _s in _subsets:
-        check("...and a subset of the arsenal is not larger than the arsenal (%d)" % _s,
-              _s <= len(_arsenal), "%d of %d" % (_s, len(_arsenal)))
+          bool(_said_plain and _said_hist), "the sentence is not there to be checked")
+    for _said, _caps_r, _what in ((_said_plain, set(), "a plain endpoint"),
+                                  (_said_hist, {"chain", "forged_history"}, "a transcript")):
+        if not _said:
+            continue
+        _sent_r = _would_send(_arsenal, {"canaries": ["QAT-CANARY-PLAIN"]}, _caps_r, "http")
+        _got_r = (len(_sent_r), len({a.get("category") for a in _sent_r}))
+        check("...and what reaches %s is what a sweep would send" % _what,
+              (int(_said.group(1)), int(_said.group(2))) == _got_r,
+              "page says %s in %s, the run sends %d in %d"
+              % (_said.group(1), _said.group(2), _got_r[0], _got_r[1]))
 
     # AND THE CLAIMS TABLE'S PATTERNS, POINTED AT THE SOURCE'S OWN PROSE.
     #

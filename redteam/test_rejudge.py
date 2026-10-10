@@ -706,7 +706,7 @@ def main():
             # THE COUNTS, NOT JUST THE HEADING. A note printed with both rates empty would
             # satisfy a substring check and say nothing.
             check("...carrying the background this run measured, not a quoted one",
-                  "27/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
+                  "28/48" in (_meta.get("delivery") or ""), str(_meta.get("delivery"))[:200])
             # AND THE ATTRIBUTION NOTE WHOLE, not its first three lines: rows added at the
             # bottom of it printed nothing that changed.
             _attr_last = [l.strip() for l in (_meta.get("attribution") or "").splitlines()

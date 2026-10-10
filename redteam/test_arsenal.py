@@ -263,25 +263,18 @@ def main():
     declared = set()
     for a in on_disk:
         declared |= set(a.get("success") or []) | set(a.get("partial") or [])
-    dead = set(inert_for(plain, declared))
 
     # THE SHIPPED RULE, NOT A COPY OF IT. This was a local re-implementation, so the breadth
     # claim below was a statement about this file rather than about what a sweep does. Proven:
     # flipping `run_redteam.is_unmeasurable` from `decl <= dead` to `decl & dead` cuts a plain
     # endpoint from 318 attacks to 261, and this check went on printing PASS.
-    from run_redteam import is_unmeasurable
+    # NOW THE WHOLE RULE, `run_redteam.would_send`: the run's three withholdings in its order.
+    # This still re-implemented the delivery half (`delivery in caps`) and skipped the tool-only
+    # one, which is how the published "249 in 46" could not be reproduced by anyone.
+    from run_redteam import would_send
 
-    # AND THE FILL RULE, which the sweep applies before it sends: an attack naming a slot a
-    # plain endpoint's config cannot fill is withheld there (`runner.filled`).
-    from runner import filled as _filled_s
-
-    def sendable(a, caps):
-        return (a.get("delivery", "direct") in caps and not is_unmeasurable(a, dead)
-                and not _filled_s(a, plain)[1])
-
-    direct = [a for a in on_disk if sendable(a, {"direct"})]
-    withhist = [a for a in on_disk
-                if sendable(a, {"direct", "chain", "forged_history", "sessions"})]
+    direct = would_send(on_disk, plain, set())
+    withhist = would_send(on_disk, plain, {"chain", "forged_history"})
     # A FLOOR AT THE MEASUREMENT, NOT WELL BELOW IT. This read `>= 100` while the truth was
     # 253, so a regression of 153 attacks passed and the check printed PASS. It is the shape
     # this project keeps finding: a threshold set once, far under the real value, that stops
@@ -289,8 +282,10 @@ def main():
     #
     # Measured 2026-08-21: 253 direct in 46 categories, 318 with a transcript in 56. A DROP IS
     # NOT AUTOMATICALLY A BUG -- retiring an attack is legitimate -- but it has to be looked at
-    # and the number moved deliberately, which is the whole job of this line.
-    SENT_DIRECT, CATS_DIRECT = 253, 46
+    # and the number moved deliberately, which is the whole job of this line. Moved 2026-10-09
+    # to 266 in 44: the arsenal grew to 422, and `would_send` now applies the tool-only rule this
+    # copy skipped, so tool categories no longer count on an endpoint that reports no calls.
+    SENT_DIRECT, CATS_DIRECT = 266, 44
     _cats = len({a.get("category") for a in direct})
     check("a plain chat endpoint receives a broad run, not a token one",
           len(direct) >= SENT_DIRECT and _cats >= CATS_DIRECT,

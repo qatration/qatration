@@ -749,6 +749,45 @@ def cell(value, width):
     return text.ljust(width) if len(text) < width else text + " "
 
 
+def dead_for(attack, ctx, caps, adapter=None):
+    """-> {detector: [what it needs]} for each detector THIS attack declares that cannot fire
+    here: inert for want of a config key in the attack's own judged context, or reading only
+    tool calls on a target that reports none. Module level for the reason `is_unmeasurable`
+    is: `would_send` and the published counts must ask the run's rule, not a copy of it."""
+    from runner import judged_ctx as _jctx
+    from oracle import tool_only as _tool_only, inert_for
+    decl = set(attack.get("success") or []) | set(attack.get("partial") or [])
+    c = dict(_jctx(attack, ctx))
+    if attack.get("expects_refusal"):
+        c["expects_refusal"] = True
+    d = dict(inert_for(c, decl))
+    if "tool_visibility" not in (caps or set()):
+        # THE SAME WORDS `meta.inert` records after the run for the same fact.
+        key = ("a tool call, and this config maps none: response.tool_calls"
+               if (adapter or "") == "http" else "a tool call, and this adapter reports none")
+        for n in decl:
+            if _tool_only(n) and n not in d:
+                d[n] = [key]
+    return d
+
+
+def would_send(attacks, ctx, caps, adapter=None):
+    """-> the attacks a sweep would send this target, filled: the run's three withholdings in
+    the run's order -- every declared detector dead (`dead_for`, `is_unmeasurable`), a slot the
+    config cannot fill (`runner.filled`), a delivery the target cannot take
+    (`runner.undeliverable`). What the published "N attacks reach a plain endpoint" counts."""
+    from runner import filled as _filled, undeliverable as _undeliverable
+    out = []
+    for a in attacks:
+        if is_unmeasurable(a, dead_for(a, ctx, caps, adapter)):
+            continue
+        f, miss = _filled(a, ctx)
+        if miss or _undeliverable(f, caps):
+            continue
+        out.append(f)
+    return out
+
+
 def is_unmeasurable(attack, dead):
     """True when every detector this attack declares is inert here, so a run would learn nothing.
 
@@ -1309,34 +1348,16 @@ def main():
     # have it fire, and the list and `meta.inert` said nothing; an attack declaring only such
     # a detector would be sent and read DEFENDED. Found by an independent review. So each
     # attack is asked in its OWN judged context, and a detector stays on this list when it
-    # cannot fire for at least one attack that declares it.
-    from runner import judged_ctx as _jctx
+    # cannot fire for at least one attack that declares it. Both halves live in `dead_for`.
 
     # AND A DETECTOR THAT READS ONLY TOOL CALLS, ON A TARGET THAT CANNOT REPORT ONE. That was
     # added to `meta.inert` after the run, and nothing re-checked the rows against it: an http
     # config mapping no `response.tool_calls` sent `ca-sandbox-probe` (only `path_traversal`)
     # and seven more, and they came back DEFENDED -- measured, hardened, `executionSuccessful`
     # -- about a channel that was never connected. Asked here, before a request is spent.
-    from oracle import tool_only as _tool_only_pre
-    _no_tool_pre = "tool_visibility" not in (getattr(target, "capabilities", set()) or set())
-    # THE SAME WORDS `meta.inert` records after the run for the same fact.
-    _tool_key = ("a tool call, and this config maps none: response.tool_calls"
-                 if (tcfg.get("adapter") or "") == "http"
-                 else "a tool call, and this adapter reports none")
-
-    def _dead_for(a):
-        _decl = set(a.get("success") or []) | set(a.get("partial") or [])
-        _c = dict(_jctx(a, ctx))
-        if a.get("expects_refusal"):
-            _c["expects_refusal"] = True
-        _d = dict(inert_for(_c, _decl))
-        if _no_tool_pre:
-            for _n in _decl:
-                if _tool_only_pre(_n) and _n not in _d:
-                    _d[_n] = [_tool_key]
-        return _d
-
-    _per_attack_dead = [(a, _dead_for(a)) for a in attacks]
+    _caps_pre = getattr(target, "capabilities", set()) or set()
+    _per_attack_dead = [(a, dead_for(a, ctx, _caps_pre, tcfg.get("adapter")))
+                        for a in attacks]
     dead = {}
     for _a, _d in _per_attack_dead:
         for _n, _keys in _d.items():
