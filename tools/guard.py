@@ -247,7 +247,17 @@ def endonyms(root):
 # `text` was the expensive one. `recon.hints()` writes tool-authored English into it, so a
 # name in a generated hint sat in the one field the scan was told to ignore, and the guard
 # printed `ok`. An exemption has to be a property of the DATA, and the data says these five.
-MODEL_FIELDS = {"output", "observations", "evidence", "full", "reply"}
+#
+# AND THE CALLS A MODEL WROTE. `tool_calls` and `resolved` hold the arguments an agent composed
+# (on smolagents the reply itself travels as `final_answer`'s argument), and the first generic
+# run on foreign under qwen2.5:14b answered three attacks in Russian through them: evidence,
+# under a field the list above had not met yet.
+MODEL_FIELDS = {"output", "observations", "evidence", "full", "reply", "tool_calls", "resolved"}
+
+# A PAGE BUILT FROM THE ARTIFACTS may quote what a model wrote, and only that: a Cyrillic run in
+# `out/*.html` passes when the same run is a model-written string in an artifact of the same
+# scan. Our own words on a page are still caught, because they are in no recorded reply.
+REPORT_PAGE = re.compile(r"(^|/)out/.*\.html$")
 
 # WORDS A MODEL WROTE THAT THIS PROJECT MUST NOT PUBLISH, as SHA-256 digests.
 #
@@ -640,6 +650,27 @@ def _cyrillic_outside_model_output(text):
     return out[:3]
 
 
+def _model_cyrillic(text):
+    """-> every model-written string in a stored artifact that contains Cyrillic."""
+    import json as _json
+    lit = re.compile(LITERAL_CYRILLIC[0])
+    try:
+        data = _json.loads(text)
+    except Exception:
+        return set()
+    out, stack = set(), [(data, None)]
+    while stack:
+        node, key = stack.pop()
+        if isinstance(node, str):
+            if key in MODEL_FIELDS and lit.search(node):
+                out.add(node)
+        elif isinstance(node, dict):
+            stack.extend((v, str(k)) for k, v in node.items())
+        elif isinstance(node, list):
+            stack.extend((v, key) for v in node)
+    return out
+
+
 def scan_files(items, reader, refusals, path_of=None, partial=None):
     """Every rule, over every item. `items` are LABELS, not necessarily paths.
 
@@ -685,6 +716,12 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
     lit_run = re.compile(LITERAL_CYRILLIC[0] + "+")
     translations = translation_files(ROOT)
     known_endonyms = endonyms(ROOT)
+    quoted = set()
+    for item in items:
+        if ARTIFACT.search(to_path(item).replace("\\", "/")):
+            _t = reader(item)
+            if isinstance(_t, str):
+                quoted |= _model_cyrillic(_t)
     for item in items:
         path = to_path(item)
         rel = path.replace("\\", "/").lstrip("./")
@@ -727,8 +764,11 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
             # against a language name would let anything through the moment one name was
             # allowed; a maximal run means a language's own name is exempt and a sentence
             # that merely contains it is not.
+            page = bool(REPORT_PAGE.search(rel))
             for m in lit_run.finditer(text):
                 if m.group(0) in known_endonyms:
+                    continue
+                if page and any(m.group(0) in q for q in quoted):
                     continue
                 line = text[:m.start()].count("\n") + 1
                 refusals.append(f"{item}:{line}: a Cyrillic character in a tracked file "

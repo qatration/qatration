@@ -121,6 +121,30 @@ def main():
         guard.scan_files([path], lambda _p: text, refusals)
         return refusals
 
+    # --- WHAT A MODEL WROTE, IN A CALL AND QUOTED ON A PAGE -----------------------------------
+    #
+    # qwen2.5:14b answered three foreign attacks in Russian through `final_answer` and
+    # `send_email` arguments: model output under `tool_calls`, and the report page quoting it.
+    # Built from code points so this file carries no Cyrillic of its own.
+    _cy = "".join(map(chr, (0x41F, 0x440, 0x438, 0x432, 0x435, 0x442)))
+    _art = json.dumps({"results": [{"trials": [{"probe": {"tool_calls": [
+        ["final_answer", '{"answer": "%s"}' % _cy]]}}]}]}, ensure_ascii=False)
+    check("Cyrillic a model wrote into a tool call is a recorded reply",
+          not scan("out/results_x.json", _art), str(scan("out/results_x.json", _art)))
+    _pg = "<td>%s</td>" % _cy
+    _both = []
+    guard.scan_files(["out/results_x.json", "out/report_x.html"],
+                     lambda p: _art if p.endswith(".json") else _pg, _both)
+    check("...and a report page quoting it passes beside the artifact it quotes", not _both,
+          str(_both))
+    _own = []
+    guard.scan_files(["out/results_x.json", "out/report_x.html"],
+                     lambda p: _art if p.endswith(".json") else "<p>%s</p>" % _cy[::-1], _own)
+    check("...while Cyrillic on a page that is in no recorded reply is still refused", bool(_own),
+          "nothing refused")
+    check("...and the same page with no artifact beside it is refused",
+          bool(scan("out/report_x.html", _pg)), "nothing refused")
+
     # --- A FILE WHOSE NAME ENDS IN .png IS NOT A FILE THAT IS CLEAN -------------------------
     #
     # `scan_files` began with `if path.lower().endswith(BINARY): continue` -- skipped before it
@@ -1409,16 +1433,24 @@ def main():
     # AND EVERY ONE IS A PLACE THE EXEMPTION ACTUALLY NAMES. The count alone would pass if a
     # leak replaced a translation file one for one, so the run itself is checked: outside a
     # declared dictionary, the only Cyrillic allowed is a language writing its own name.
+    # A STORED ARTIFACT answers to the field rule, and a page built from the artifacts may quote
+    # what a model wrote in them (`guard.REPORT_PAGE`): asked of the guard's own reading, not a
+    # copy of it here.
+    _quoted = set()
+    for _f in _tracked:              # EVERY artifact: JSON stores Cyrillic escaped, not literal
+        if guard.ARTIFACT.search(_f):
+            _quoted |= guard._model_cyrillic(io.open(os.path.join(ROOT, _f), encoding="utf-8").read())
     _stray = []
     for _f in _carry:
-        if _f in guard.translation_files(ROOT):
+        if _f in guard.translation_files(ROOT) or guard.ARTIFACT.search(_f):
             continue
         _txt = io.open(os.path.join(ROOT, _f), encoding="utf-8").read()
-        _bad = [m.group(0) for m in _run.finditer(_txt) if m.group(0) not in guard.endonyms(ROOT)]
+        _bad = [m.group(0) for m in _run.finditer(_txt) if m.group(0) not in guard.endonyms(ROOT)
+                and not (guard.REPORT_PAGE.search(_f) and any(m.group(0) in q for q in _quoted))]
         if _bad:
             _stray.append("%s: %s" % (_f, _bad[0][:20]))
-    check("...and every Cyrillic run outside a dictionary is a language naming itself",
-          not _stray, "; ".join(_stray))
+    check("...and every Cyrillic run outside a dictionary is a language naming itself, or a "
+          "page quoting a recorded reply", not _stray, "; ".join(_stray))
 
     # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE GATES ------------------------------------
     # Each a file the gate read as noise, or did not read, and then passed.
