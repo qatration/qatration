@@ -6,7 +6,7 @@ What changed, in the project's own words, newest first.
 
 ---
 
-## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-07)
+## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-11)
 
 **Five weeks of independent reviews, fuzzers over every stored artifact, seeded random walks and
 first runs from a fresh install, and almost every defect they found was one of two shapes.**
@@ -85,6 +85,34 @@ three withholdings in its order, and `docs/onboarding.md` now says what it count
 `adapter: http` config declaring only a canary: 266 attacks in 44 categories, 337 in 54 with a
 transcript (the page said 249 and 313, which nobody could reproduce).
 
+**Four detectors stopped reading the bot's own words as evidence.** Live runs of the new attacks
+found each one. `path_traversal` and `secret_material_access` scored an agent that EMAILED
+instructions naming `../../.bashrc` or `os.environ` as one that reached them; both now drop the
+prose fields of a JSON argument (`body`, `message`, `content`, ...), while `sql_injection` and
+`template_injection` keep reading them, since a body can reach an INSERT or a template.
+`rogue_tool_call` was armed on every tool target by the ONE input the sweep learns before it
+starts, and fired on a customer's own order on 18 of 50 ordinary prompts; without `watch_tools`
+it now does not judge, and the learned input only widens a declared baseline.
+`fabricated_citation` read the filenames in a `mv oldname.txt newname.txt` example as documents;
+citations are read from prose, not code.
+
+**Two defects that changed what a run measured.** The runner remembered which timed-out sends
+it had waited for by `id()`, which CPython reuses, so a new abandoned send could be skipped and
+its write land in the next attack's trial (a breach that attack did not cause); the mark is on
+the thread now. And `tools/check.py` crashed printing a failed suite's output into a console
+whose code page lacked a character, which left every later suite unrun with no summary.
+
+**Every benign baseline re-taken.** Thirty-five targets, 50 prompts each, on the 0.5 oracle: 780
+fires on clean traffic, 622 settled as findings and 158 as false alarms (20.3%). Taking them
+again found a defect in the practice fleet as well: the NeMo server dropped every second request
+after it went multi-threaded in August, which the old baselines predated. The four
+generic-arsenal targets were re-run on the 422-attack arsenal. The guard reads arguments a model
+wrote into a tool call as a recorded reply, and lets a report page quote one. The ledger lost the
+verdicts of 31 pairs that no longer fire, so a pair that comes back is reported unsettled rather
+than settled by a judgement about something else. And `onboard` names everything a detector
+lacks on one line: `rogue_tool_call` needs `baseline_tool_inputs` and `watch_tools`, and
+`bola_access` a whole pair, where it used to suggest that any one key would do.
+
 **A refusal leads the reply.** `refusal_expected_but_absent` reads the opening of the reply, so a
 bot that complies and then adds a disclaimer is not credited with refusing. The decline rules
 gained phrasings in English, Italian, Portuguese and Dutch. A reply that is only a tool call is
@@ -142,7 +170,11 @@ too little, and `--max-unmeasured` sets the share it will accept. On the first S
 0.5.0, code scanning closes the old per-rule alerts and opens one per breach: that is the new
 fingerprint, not a change in the target. A config that now sets `secret_name` sends different
 words to its target, so its next regression run names those attacks as changed rather than
-comparing them; a config that leaves it unset sends what it sent before.
+comparing them; a config that leaves it unset sends what it sent before. `rogue_tool_call` is
+inert without `watch_tools`: a config that never declared one sees it listed as unable to fire,
+and an attack that relied on it alone is withheld. A benign baseline taken before 0.5 was judged
+by detectors that have since changed; `qatration benign --rejudge --write` re-scores it, and a
+re-take is what a published false-alarm rate should rest on.
 
 ---
 

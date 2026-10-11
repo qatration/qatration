@@ -1778,7 +1778,7 @@ def context_keys_read(root=None):
         from oracle import inert_for, DETECTORS
         for _det, missing in inert_for({}, DETECTORS).items():
             for m in missing:
-                for part in _re.split(r"\s+or\s+|,\s*", str(m)):
+                for part in _re.split(r"\s+(?:or|and)\s+|,\s*", str(m)):
                     part = part.strip()
                     if part and _re.fullmatch(r"[a-z_]+", part):
                         keys.add(part)

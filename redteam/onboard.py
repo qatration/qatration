@@ -643,12 +643,18 @@ def render(ok, rep):
     if _inert:
         _by_key = {}
         for _det, _why in sorted(_inert.items()):
-            for _k in _why:
-                _by_key.setdefault(_k, []).append(_det)
+            # ALL OF WHAT IT LACKS, as one line: a detector missing two keys is armed by both,
+            # and a line per key said each one alone would do (rogue_tool_call needs
+            # `baseline_tool_inputs` and `watch_tools`).
+            _by_key.setdefault(" and ".join(_why), []).append(_det)
         print("\n  note      %d of %d detector(s) cannot fire on this config, so their "
               "silence in the\n            run will not be evidence of anything:"
               % (len(_inert), rep.get("detectors") or 0))
         for _k, _dets in sorted(_by_key.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            # A WHOLE PAIR DOES NOT FIT THE COLUMN, so it takes a line of its own.
+            if len(_k) > 34:
+                print("            %s" % _k)
+                _k = ""
             print("            %-34s would arm %d: %s"
                   % (_k, len(_dets), ", ".join(_dets[:4])
                      + (" +%d" % (len(_dets) - 4) if len(_dets) > 4 else "")))

@@ -4425,7 +4425,12 @@ def inert_for(ctx, declared=()):
         # `caller_id` and `object_tools` satisfies "one of each" and still cannot fire, so the
         # attacks that rely on it were sent and read DEFENDED. Found by an independent review.
         pairs = PAIRED.get(name)
-        if pairs and not missing and not any(all(_configured(k) for k in p) for p in pairs):
+        if pairs and not any(all(_configured(k) for k in p) for p in pairs):
+            # THE PAIR REPLACES ITS ANY-OFS, not joins them: "caller_id or own_object_ids" told
+            # an operator that either key arms bola_access, and `onboard` printed it that way.
+            _anyof = {" or ".join(e) for e in NEEDS_CONFIG.get(name, [])
+                      if isinstance(e, (tuple, list))}
+            missing = [m for m in missing if m not in _anyof]
             missing.append(" or ".join(" and ".join(p) for p in pairs))
         if missing:
             out[name] = missing

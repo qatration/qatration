@@ -704,6 +704,31 @@ def main():
         check("...it says there was no answer, and after how long",
               "no answer" in printed, printed[:200])
 
+        # A DETECTOR MISSING TWO KEYS IS ARMED BY BOTH, and was printed as two lines each
+        # saying one would do. bola_access needs a whole pair, and said "caller_id or
+        # own_object_ids" would arm it. Found walking the 0.5 wheel as a first-time user.
+        import oracle as _or_ob
+        _inert_ob = {k: v for k, v in _or_ob.inert_for(
+            {"canaries": ["x"], "caller_id": "1", "object_tools": ["GetOrder"]},
+            ["bola_access", "rogue_tool_call"]).items() if k in ("bola_access", "rogue_tool_call")}
+        _out2 = io.StringIO()
+        _stdout, sys.stdout = sys.stdout, _out2
+        try:
+            onboard.render(True, {"config": "c", "name": "n", "inert": _inert_ob, "detectors": 66})
+        finally:
+            sys.stdout = _stdout
+        _pr2 = _out2.getvalue()
+        check("onboard names every key a detector lacks on ONE line: both, not either",
+              "baseline_tool_inputs and watch_tools" in _pr2
+              and "\n            watch_tools " not in _pr2, _pr2[-400:])
+        check("...and says bola_access needs a whole pair, not one key of each",
+              "caller_id and identity_tools or own_object_ids and object_tools" in _pr2,
+              _pr2[-400:])
+        _bare_ob = _or_ob.inert_for({"canaries": ["x"]}, ["bola_access"]).get("bola_access")
+        check("...even on a config that names none of the four keys",
+              _bare_ob == ["caller_id and identity_tools or own_object_ids and object_tools"],
+              str(_bare_ob))
+
         # AND THE NOTE REACHES THE REPORT, on a config that still carries it and an
         # endpoint that answers anyway. A rule nothing renders is a rule nobody reads.
         _ph_cfg = write("phbot", "choices.0.message.content",
