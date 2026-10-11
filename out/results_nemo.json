@@ -11,9 +11,9 @@
     "broke": 0,
     "skipped": 0,
     "baseline": null,
-    "attribution": "  ! the benign baseline these rest on was measured 2026-08-21; this sweep did not record its own date, so how far apart the two are is not known.",
+    "attribution": "  ! the benign baseline these rest on was measured 2026-10-11; this sweep did not record its own date, so how far apart the two are is not known.",
     "delivery": "",
-    "engine": "bdaabf3",
+    "engine": "58e4aee",
     "errors": 0,
     "never_sent": 0
   },
