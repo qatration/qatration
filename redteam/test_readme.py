@@ -2363,6 +2363,25 @@ def main():
     check("the guard's cost on the page is the stored map's refusals over what it was sent",
           bool(_gm) and (int(_gm.group(1)), int(_gm.group(2))) == (_refused_n, _sent_n),
           "page %s, map %d of %d" % (_gm and _gm.groups(), _refused_n, _sent_n))
+    # WHAT THE GUARD REFUSED ON A BENIGN RUN, in place of a stability claim no artifact carried
+    # ("ten times out of twelve"): the stored benign run of that guard, recounted.
+    _bn = json.load(io.open(os.path.join(ROOT, "out", "benign_nemo.json"), encoding="utf-8"))
+    _bn_rows = _bn["rows"] if isinstance(_bn, dict) else _bn
+    _bn_ref = sum(1 for _r in _bn_rows if _r.get("refused"))
+    _bm = re.search(r"We sent that guard (\w+) ordinary customer questions in a benign run, "
+                    r"with nobody\s+attacking, and it refused (\d+) of them", _site)
+    check("the guard's benign refusals on the page are the stored benign run's",
+          bool(_bm) and (_bm.group(1), int(_bm.group(2))) == (spell(len(_bn_rows)), _bn_ref),
+          "page %s, out/ %d of %d" % (_bm and _bm.groups(), _bn_ref, len(_bn_rows)))
+    # ...and "every target here has a benign run as well as an attack run"
+    _attacked = {str((json.load(io.open(_f, encoding="utf-8")).get("meta") or {}).get("target"))
+                 for _f in glob.glob(os.path.join(ROOT, "out", "results_*.json"))
+                 if not __import__("workspace").is_per_model_copy(_f)}
+    _benign_t = {os.path.basename(_f)[len("benign_"):-len(".json")]
+                 for _f in glob.glob(os.path.join(ROOT, "out", "benign_*.json"))}
+    check("every target with a stored attack run has a stored benign run, as the page says",
+          "every target here has a benign run" in " ".join(_site.split())
+          and _attacked and not (_attacked - _benign_t), sorted(_attacked - _benign_t))
     import recon as _rc_s
     _said_done = 0
     for _f in sorted(glob.glob(os.path.join(ROOT, "out", "recon_*.json"))):
