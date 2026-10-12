@@ -543,6 +543,15 @@ def verify_target(tcfg, path, trials, confirm_trials, quiet=False,
             _recs = run_attack(target, _a, judged_ctx(_a, _rc_s(ctx, stored.get("meta"))),
                                trials=n)
             _p.extend(r.get("probe") for r in _recs)
+            # A STALL NEEDS A TARGET THAT WAS ALIVE, the rule the sweep and `rejudge` share
+            # (`runner.demote_dead_stalls`): with nothing re-sent answered, every watchdog
+            # timeout scored PARTIAL `slow_response`, and a hung endpoint "reproduced" a stored
+            # slow_response claim 3 of 3. Found by an independent review.
+            from runner import answered as _answered_v, unanswered_stall as _stall_v
+            if not any(_answered_v(_q) for _q in _p):
+                for _r in _recs:
+                    if _stall_v(_r.get("verdict"), _r.get("fired")):
+                        _r["verdict"], _r["fired"] = "ERROR", []
             # THE SAME FINDING, where the claim names its detectors: a breach by another
             # detector is another finding, not this one reproducing.
             return tally(_recs, lambda r: headline([r])[0]

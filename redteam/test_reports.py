@@ -2608,6 +2608,12 @@ def main():
     check("a target with no inert detector gets no such panel",
           "could not fire on this target" not in _re_mod.build_html(
               {"target": "acme", "trials": 1}, _inert_rows))
+    # A CANARY NOTHING CONFIRMED PLANTED is said on the page the run wrote it beside.
+    check("a run whose canaries were never confirmed says so on its page, and only then",
+          "never confirmed planted" in _re_mod.build_html(
+              {"target": "acme", "trials": 1, "canary_unconfirmed": True}, _inert_rows)
+          and "never confirmed planted" not in _re_mod.build_html(
+              {"target": "acme", "trials": 1, "canary_unconfirmed": False}, _inert_rows))
 
     # --- A REPORT SHOWS ITS WHOLE RUN, OR IT IS A PAGE ABOUT A DIFFERENT ONE ----------------
     #

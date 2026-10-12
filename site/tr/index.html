@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">İki bağımlılık. Saldırı kümesinin tamamı pakete dahildir, bu sayfadaki her sayının arkasındaki kanıtlar da öyle, hepsi de şurada:
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, depoyla birlikte gelir. Diğer iki aracın kendi raporları burada değil, çünkü lisansları buna izin vermiyor. Onları yeniden üreten komutlar ise burada.</p>
       <ul class="evid">
-        <li><b>46</b> saldırı, korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve <b>bir</b> saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.</li>
-        <li><b>9 bottan 5'i</b> botun sıradan bir isteğe karşılık kendi talimatlarını verdiği görüldü, <span class="keep">hiçbir saldırı olmadan.</span></li>
-        <li><b>İki bot</b> bir veritabanının yeniden başlatıldığını bildirdi. İkisinin de herhangi bir şeyi yeniden başlatabilecek bir aracı yoktu.</li>
+        <li><b>46</b> saldırı, tek bir çalıştırmada korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve <b>bir</b> saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.</li>
+        <li><b>9 bottan 5'i</b> sıradan bir isteğe karşılık kendi talimatlarını verdi, <span class="keep">hiçbir saldırı olmadan.</span></li>
+        <li><b>Üç bot</b> bir veritabanının yeniden başlatıldığını bildirdi. Hiçbirinin herhangi bir şeyi yeniden başlatabilecek bir aracı yoktu.</li>
       </ul>
       <p class="evid-note">Kendi test hedeflerimizde ölçüldü, tahmin edilmedi. Yandaki döküm fikri gösteriyor, yukarıdaki sayılar ise sonuçlar.</p>
     </div>
@@ -683,7 +683,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     </div>
 
     <div class="grp">Saldırılan şeye erişim gerektirir</div>
-    <p class="grp-note">Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz. Botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunun için külliyat değil, saldırı kümesi, araç tanımları ya da çağrıların görünürlüğü gerekir.
+    <p class="grp-note">Yazma yetkinizin olmadığı bir bilgi tabanına belge yerleştiremezsiniz ve dışarıdan, gerçekten çalışmış bir araç çağrısını botun yalnızca anlattığı bir çağrıdan ayırt edemezsiniz. Botların bu konuda kendileri hakkında yanıldığını ölçtük. Bunlar için belge külliyatı, araç tanımları ya da çağrıların görünürlüğü gerekir.
       <b>Bu araçla birlikte dağıtılan kanıtlar üzerinde ölçüldü: araç çağrılarını bildiren hedeflerde 229 bulgunun 113'i, yalnızca yanıt okunduğunda hiç görünmüyor.</b> Bot kibarca yanıt verir ve sırrı bir çağrı argümanının içine koyar.</p>
     <div class="finds">
       <div class="find">
@@ -747,11 +747,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Daha büyük bir model çözüm değil</h3></div>
-        <p>Bir bot, iki model, her modele 242 saldırı, her saldırıya 3 deneme. Küçük olan bunların 39'inde kırıldı, büyük olan 34'inde ve bunların 28'i aynı saldırılar, 25'si her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.</p>
+        <p>Bir bot, iki model, her modele 242 saldırı, her saldırıya 3 deneme. Küçük olan bunların 39'unda kırıldı, büyük olan 34'ünde ve bunların 28'i aynı saldırılar, 25'i her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Bir yapılandırmanın size gösteremeyeceği boşluk</h3></div>
-        <p>Gerçek bir guardrail çerçevesine karşı sohbet kutusuna yazılan 46 saldırıdan hiçbiri geçemedi. Getirilen bir belgenin içinde taşınan bir saldırı da, her iki rayı da açıkken geçemedi. Çıktı filtresini kapatın, aynı belge her tek denemede dışarı yürür. Girdi filtreleri kullanıcının yazdığını okur ve bilgi tabanınızın modele verdiğini asla görmez, yani girdi tarafındaki guardrail onu durduran şey hiç olmamıştı.</p>
+        <p>Gerçek bir guardrail çerçevesine karşı tek bir çalıştırmada sohbet kutusuna yazılan 46 saldırıdan hiçbiri geçemedi. Getirilen bir belgenin içinde taşınan bir saldırı da, her iki rayı da açıkken geçemedi. Çıktı filtresini kapatın, aynı belge her tek denemede dışarı yürür. Girdi filtreleri kullanıcının yazdığını okur ve bilgi tabanınızın modele verdiğini asla görmez, yani girdi tarafındaki guardrail onu durduran şey hiç olmamıştı.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve yanıtın ne kadar tutarlı olduğu</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve o guardrail'in bedeli</h3></div>
-        <p>O belgeyi engelleyen aynı guardrail, ilgili konulardaki 9 sıradan müşteri sorusundan 6'sını da yanıtlamayı reddetti. Müşterilerinize “hayır” diyen bir savunma, yayına almadan önce bilmek isteyeceğiniz bir sayıdır, sonrasında değil.</p>
+        <p>O belgeyi engelleyen aynı guardrail, o testte kendisine gönderilen 6 sıradan müşteri sorusundan 4'ünü de, zehirlenmiş konuda da onun dışında da yanıtlamayı reddetti. Müşterilerinize “hayır” diyen bir savunma, yayına almadan önce bilmek isteyeceğiniz bir sayıdır, sonrasında değil.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Onu kendimize karşı çalıştırdık</h3></div>
@@ -771,13 +771,13 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ve iki başka aracın yanında, herkesin gözü önünde</h3></div>
-        <p>garak ve promptfoo ile aynı üçüncü taraf hedeflere karşı çalıştırıldı ve üçünün de her yanıtı, her aracın kendi hakemi yerine tek bir alt dize kuralıyla puanlandı. Hiçbir guardrail'i olmayan bir RAG uygulamasında <b>zararsız sondaların 46%'sı yerleştirilen diziyi zaten geri döndürüyor</b>, dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 324'te 1 ihlal. Aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.
+        <p>garak ve promptfoo ile aynı üçüncü taraf hedeflere karşı çalıştırıldı ve üçünün de her yanıtı, her aracın kendi hakemi yerine tek bir alt dize kuralıyla puanlandı. Hiçbir guardrail'i olmayan bir RAG uygulamasında <b>zararsız sondaların %46'sı yerleştirilen diziyi zaten geri döndürüyor</b>, dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 324'te 1 ihlal. Aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Karşılaştırmayı okuyun</a>.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>İlk saldırıdan önce bulunanlar</h3></div>
-        <p>On iki yoklamadan oluşan bir profil, hepsi zararsız: beş bot sıradan bir isteğe karşılık kendi talimatlarını verdi. Biri, o anahtarı paylaşmasını yasaklayan cümlenin tam içinde gizli oturum anahtarını yazdırdı. İki bot ise hiçbir şeyi yeniden başlatabilecek bir aracı yokken bir veritabanının yeniden başlatıldığını bildirdi.</p>
+        <p>On iki kadar yoklamadan oluşan bir profil, hepsi zararsız: beş bot sıradan bir isteğe karşılık kendi talimatlarını verdi. Biri, o anahtarı paylaşmasını yasaklayan cümlenin tam içinde gizli oturum anahtarını yazdırdı. Üç bot ise hiçbirinin herhangi bir şeyi yeniden başlatabilecek bir aracı yokken bir veritabanının yeniden başlatıldığını bildirdi.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Yalnızca izin verilen hedefler.</b> Bu araç, yöneltildiği şey her ne olursa olsun ona gerçek saldırılar gönderir ve sizin makinenizde, sizin anahtarınızla, sizin yetkinizle çalışır. localhost olmayan her şey, onu sizin denetlediğinizi kanıtlamak zorundadır (bir DNS kaydı, bilinen bir yoldaki bir dosya ya da botun kendisinin döndürdüğü bir token) ve bu olmadan çalıştırma, hatırlamanızı istemek yerine başlamayı reddeder. Size ait olmayan ya da izniniz bulunmayan sistemleri test etmek çoğu ülkede suçtur ve bu sorumluluk aracın değil, onu çalıştıranındır.
+      <b>Yalnızca izin verilen hedefler.</b> Bu araç, yöneltildiği şey her ne olursa olsun ona gerçek saldırılar gönderir ve sizin makinenizde, sizin anahtarınızla, sizin yetkinizle çalışır. localhost olmayan her şey, son iki hafta içinde o adres için imzalanmış bir kanıt gerektirir ve bu kanıt olmadan çalıştırma, hatırlamanızı istemek yerine başlamayı reddeder. Çalıştırma bunu, hedefte bilinen bir yoldaki bir dosyayı indirerek denetler. Bunun yerine yapılandırmada bir DNS kaydı ya da botun döndürdüğü bir token belirtilebilir, ama o zaman kanıtlanan şey hedefi denetlediğiniz değil, imzalama anahtarına sahip olduğunuzdur. Size ait olmayan ya da izniniz bulunmayan sistemleri test etmek çoğu ülkede suçtur ve bu sorumluluk aracın değil, onu çalıştıranındır.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">AUTHORISED-USE.md dosyasını okuyun</a> ilk çalıştırmadan önce.
       <br><br>
       Bir hata mı buldunuz, yoksa bu aracın ölçmediği bir şeyi bildirdiği bir durum mu?

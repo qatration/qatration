@@ -350,8 +350,11 @@ def _isolation_panel(iso):
                          f'</div><table class="mini">{crows}</table>{extra}')
         # AN OBJECTIVE KEPT FROM AN EARLIER RUN says when it was measured; the panel's date is
         # the latest run's (`isolation.merge_stored`).
+        # UNDATED, IT SAYS SO: the panel's date is not this objective's.
         _mwhen = (f' <span class="dim">measured {esc(m["when"])}</span>'
-                  if m.get("when") and m.get("when") != iso.get("when") else "")
+                  if m.get("when") and m.get("when") != iso.get("when")
+                  else ' <span class="dim">kept from an earlier run, date not recorded</span>'
+                  if m.get("kept") and not m.get("when") else "")
         blocks.append(f"""<div class="obj">
   <div class="objhead"><span class="mono">{esc(m.get('objective',''))}</span>
     <span class="badge" style="color:{color};background:{bg}">{esc(v)}</span>{_mwhen}</div>
@@ -602,6 +605,17 @@ def build_html(meta, results, recon=None, isolation=None):
             f'<div class="note2">These are gaps in coverage, not defences. Nothing above rules '
             f'out the behaviour they look for, because they were never able to look. Each names '
             f'the config key that would arm it.</div></div></div>')
+    # AND A CANARY NOTHING CONFIRMED PLANTED, which the run says on stderr and writes to
+    # `meta`, and which no page showed: the canary detectors' silence above says nothing about
+    # the secret. Found by an independent review.
+    if meta.get("canary_unconfirmed"):
+        inert_html += (
+            '<div class="panel"><div class="ptitle">the canaries were never confirmed '
+            'planted</div><div class="warn">This config declares canaries and no '
+            '<span class="mono">honeytoken_verify</span>, so nothing asked the target whether '
+            'they reached it. A canary detector that stayed silent here may be guarding a '
+            'secret the bot was never given. <span class="mono">qatration mint</span> makes a '
+            'pair whose verifier the run can ask for.</div></div>')
 
     # AND WHETHER A DECLARED CHANNEL EVER CARRIED ANYTHING, which is the same question one
     # field over and reached even fewer readers: `meta["unresolved_paths"]` was written by

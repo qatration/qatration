@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Twee afhankelijkheden. Het volledige aanvalscorpus wordt meegeleverd, en het bewijs achter elk getal op deze pagina ook, en dat alles staat in
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, dat met de repository wordt meegeleverd. De eigen rapporten van de twee andere tools zitten er niet bij, hun licenties staan dat niet toe. De commando's die ze opnieuw genereren wel.</p>
       <ul class="evid">
-        <li><b>46</b> aanvallen getypt in het chatvenster van een beschermde bot: geen enkele kwam erdoor. Zet zijn uitvoerfilter uit en <b>één</b> aanval meegedragen in een opgehaald document wandelt elke keer naar buiten. Het invoerfilter heeft hem nooit gezien.</li>
+        <li><b>46</b> aanvallen in één run getypt in het chatvenster van een beschermde bot: geen enkele kwam erdoor. Zet zijn uitvoerfilter uit en <b>één</b> aanval meegedragen in een opgehaald document wandelt elke keer naar buiten. Het invoerfilter heeft hem nooit gezien.</li>
         <li><b>5 van de 9</b> bots gaven hun eigen instructies prijs op een eenvoudig verzoek, <span class="keep">zonder enige aanval.</span></li>
-        <li><b>Twee</b> meldden dat een database opnieuw was gestart. Geen van beide had een tool die iets opnieuw kon starten.</li>
+        <li><b>Drie</b> meldden dat een database opnieuw was gestart. Geen van hen had een tool die iets opnieuw kon starten.</li>
       </ul>
       <p class="evid-note">Gemeten op onze eigen testdoelen, niet geëxtrapoleerd. Het transcript hiernaast illustreert het idee, de getallen hierboven zijn resultaten.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Het gat dat een configuratie je niet kan laten zien</h3></div>
-        <p>Tegen een echt guardrail-framework: 46 aanvallen getypt in het chatvenster, geen enkele kwam erdoor. Eén aanval meegedragen in een opgehaald document kwam er evenmin door, zolang beide rails aanstonden. Zet het uitvoerfilter uit en datzelfde document wandelt bij elke afzonderlijke poging naar buiten. Invoerfilters lezen wat de gebruiker typt, en zien nooit wat je kennisbank aan het model doorgeeft, dus de invoerrail was nooit wat het tegenhield.</p>
+        <p>Tegen een echt guardrail-framework: 46 aanvallen in één run getypt in het chatvenster, geen enkele kwam erdoor. Eén aanval meegedragen in een opgehaald document kwam er evenmin door, zolang beide rails aanstonden. Zet het uitvoerfilter uit en datzelfde document wandelt bij elke afzonderlijke poging naar buiten. Invoerfilters lezen wat de gebruiker typt, en zien nooit wat je kennisbank aan het model doorgeeft, dus de invoerrail was nooit wat het tegenhield.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>En hoe stabiel het antwoord is</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>En wat die guardrail kost</h3></div>
-        <p>Diezelfde guardrail die dat document blokkeerde, weigerde ook 6 van de 9 doodgewone klantvragen over de betrokken onderwerpen te beantwoorden. Een verdediging die „nee” zegt tegen je klanten is een getal dat je vóór het uitbrengen wilt kennen, niet erna.</p>
+        <p>Diezelfde guardrail die dat document blokkeerde, weigerde ook 4 van de 6 doodgewone klantvragen die hij in die test kreeg te beantwoorden, over het vergiftigde onderwerp en daarbuiten. Een verdediging die „nee” zegt tegen je klanten is een getal dat je vóór het uitbrengen wilt kennen, niet erna.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>We hebben het tegen onszelf gedraaid</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Gevonden nog vóór de eerste aanval</h3></div>
-        <p>Een profiel van twaalf probes, allemaal onschuldig: vijf bots gaven hun eigen instructies prijs op een eenvoudig verzoek. Eén drukte zijn vertrouwelijke sessiesleutel af binnen precies de zin die hem verbood die sleutel te delen. Twee meldden dat een database opnieuw was gestart terwijl ze geen enkele tool hadden die iets opnieuw kon starten.</p>
+        <p>Een profiel van een stuk of twaalf probes, allemaal onschuldig: vijf bots gaven hun eigen instructies prijs op een eenvoudig verzoek. Eén drukte zijn vertrouwelijke sessiesleutel af binnen precies de zin die hem verbood die sleutel te delen. Drie meldden dat een database opnieuw was gestart terwijl geen van hen een tool had die iets opnieuw kon starten.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Alleen toegestane doelen.</b> Dit stuurt echte aanvallen naar waar het ook op wordt gericht, en het draait op je machine, met jouw sleutel, onder jouw verantwoordelijkheid. Alles wat geen localhost is moet aantonen dat jij het beheert (een DNS-record, een bestand op een bekend pad, of een token dat de bot zelf teruggeeft), en zonder dat weigert de run te starten in plaats van erop te vertrouwen dat jij eraan denkt. Systemen testen die niet van jou zijn of waarvoor je geen toestemming hebt, is in de meeste landen strafbaar, en die verantwoordelijkheid ligt bij degene die het uitvoert, niet bij de tool.
+      <b>Alleen toegestane doelen.</b> Dit stuurt echte aanvallen naar waar het ook op wordt gericht, en het draait op je machine, met jouw sleutel, onder jouw verantwoordelijkheid. Alles wat geen localhost is, heeft een bewijs nodig dat in de afgelopen twee weken voor dat adres is ondertekend, en zonder dat weigert de run te starten in plaats van erop te vertrouwen dat jij eraan denkt. De run controleert het door een bestand op een bekend pad bij het doel op te halen. In plaats daarvan kun je in de config een DNS-record of een token dat de bot teruggeeft opgeven, en dan is alleen aangetoond dat jij de ondertekeningssleutel hebt, niet dat jij het doel beheert. Systemen testen die niet van jou zijn of waarvoor je geen toestemming hebt, is in de meeste landen strafbaar, en die verantwoordelijkheid ligt bij degene die het uitvoert, niet bij de tool.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Lees AUTHORISED-USE.md</a> vóór de eerste run.
       <br><br>
       Een bug gevonden, of een geval waarin dit gereedschap iets rapporteert dat het niet heeft gemeten?

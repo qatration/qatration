@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -629,11 +629,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, which ships with the repository. The two other tools' own reports are not
         here, because their licences keep them out. The commands that regenerate them are.</p>
       <ul class="evid">
-        <li><b>46</b> attacks typed into the chat box of a guarded bot: none got through.
+        <li><b>46</b> attacks typed into the chat box of a guarded bot in one run: none got through.
           Take its output filter off and <b>one</b> attack carried inside a retrieved document
           walks out every time. The input filter never saw it.</li>
         <li><b>5 of 9</b> bots handed over their own instructions to a plain request, <span class="keep">with no attack at all.</span></li>
-        <li><b>Two</b> reported a database restarted. Neither had a tool that could restart
+        <li><b>Three</b> reported a database restarted. None had a tool that could restart
           anything.</li>
       </ul>
       <p class="evid-note">Measured on our own test targets, not projected. The transcript
@@ -797,7 +797,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>The gap a config can't show you</h3></div>
-        <p>Against a real guardrail framework, 46 attacks typed into the chat box: none got
+        <p>Against a real guardrail framework, 46 attacks typed into the chat box in one run: none got
           through. Neither did one carried inside a retrieved document, while both of its
           rails were on. Turn the output filter off and that same document walks out on every
           single try. Input filters read what the user types, and never see what your
@@ -813,8 +813,8 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>And what that guard costs</h3></div>
-        <p>The same guard that blocked that document also refused 6 of 9 ordinary customer
-          questions on the affected topics. A defence that answers “no” to your customers
+        <p>The same guard that blocked that document also refused 4 of the 6 ordinary customer
+          questions it was sent in that test, on the poisoned topic and off it. A defence that answers “no” to your customers
           is a number you want before you ship, not after.</p>
       </div>
       <div class="find">
@@ -851,10 +851,10 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Found before a single attack</h3></div>
-        <p>A twelve-probe profile, all of it benign: five bots handed over their own
+        <p>A profile of a dozen or so probes, all of it benign: five bots handed over their own
           instructions on a plain request. One printed its confidential session key inside
-          the very sentence forbidding it from sharing that key. Two reported a database
-          restarted when they had no tool that could restart anything.</p>
+          the very sentence forbidding it from sharing that key. Three reported a database
+          restarted when none had a tool that could restart anything.</p>
       </div>
     </div>
 
@@ -921,9 +921,11 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     <div class="auth">
       <b>Authorized targets only.</b> This sends real attacks at whatever it is pointed at,
       and it runs on your machine, under your key, on your authority. Anything that is not
-      localhost has to prove you control it: a DNS record, a file at a known path, or a token
-      the bot itself returns. The run refuses without that rather than asking you to
-      remember. Testing systems you do not own or are not permitted to test is a crime in most
+      localhost needs a proof signed for that address in the last two weeks, and the run
+      refuses without one rather than asking you to remember. The run checks it by fetching a
+      file at a known path on the target. A DNS record or a token the bot returns can be
+      stated in the config instead, and then what is proved is that you hold the signing key,
+      not that you control the target. Testing systems you do not own or are not permitted to test is a crime in most
       places, and
       that is on the operator, not the tool.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Read

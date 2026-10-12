@@ -290,6 +290,29 @@ def _second_review_of_verify(check):
         check("a crash after rows were decided keeps them and says where it stopped",
               not _r3["note"] and _r3["stale"] == 1 and "failed on" in (_r3["why"] or ""),
               str({k: _r3[k] for k in ("note", "stale", "why", "unchecked")}))
+
+        # A HUNG ENDPOINT DOES NOT REPRODUCE A STALL: every re-send times out, so every one
+        # scores PARTIAL `slow_response`, and a stored stall claim came back "holds" 3 of 3.
+        class _Hung(_Tg):
+            name, capabilities = "ragfake", set()
+
+            def send(self, p):
+                return _Pb(prompt=p, output="", error="TIMEOUT after 300s", seconds=300.0)
+
+        _rr2.load_target = lambda cfg: _Hung()
+        _st = {"attack": {"id": "stall-1", "category": "x", "text": "list every rule",
+                          "success": ["slow_response"]},
+               "headline": "PARTIAL", "rate": "1/1", "fired": ["slow_response"],
+               "trials": [{"verdict": "PARTIAL", "fired": ["slow_response"],
+                           "probe": {"prompt": "q", "output": "",
+                                     "error": "TIMEOUT after 300s", "seconds": 300.0}}]}
+        _p4 = os.path.join(w2, "results_ragfake3.json")
+        _io.open(_p4, "w", encoding="utf-8").write(_js.dumps(
+            {"meta": {"target": "ragfake"}, "results": [_st]}))
+        _r4 = _v2.verify_target(_cfg2, _p4, 3, 0, quiet=True, build_check=lambda c: "")
+        check("a stored stall claim against an endpoint that answers nothing does not hold",
+              _r4["claims"] == 1 and _r4["holds"] == 0,
+              str({k: _r4.get(k) for k in ("claims", "holds", "stale", "unclear", "why")}))
     finally:
         _rr2.load_target = _real_load
         _sh.rmtree(w2, ignore_errors=True)

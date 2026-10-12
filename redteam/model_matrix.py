@@ -383,6 +383,20 @@ def report(tname, per_model, short=None):
         # the warning said these attacks were out of the comparison and they still decided
         # which model "held better". Found by an independent review.
         breaches = {m: len(broke_set[m]) for m in ms}
+    # AND AN ATTACK ONE ARM NEVER HELD is not a question that arm answered: a stored run of a
+    # ten-attack arsenal against one of three, run to completion, ranked "modelB held better"
+    # on the seven modelB was never asked. Compared over the ids every arm holds, as above.
+    # Found by an independent review.
+    _common = set.intersection(*(set(per_model[m]) for m in ms)) if ms else set()
+    _absent = sorted(set(ids) - _common - set(_versions))
+    if _absent:
+        print("\n  ! %d attack(s) are not in every arm's run, so a difference on them is the "
+              "arsenal changing\n    rather than the model: %s%s.\n    They are in the counts "
+              "above and out of the comparison below."
+              % (len(_absent), ", ".join(_absent[:6]), " …" if len(_absent) > 6 else ""))
+        for m in ms:
+            broke_set[m] = broke_set[m] & _common
+        breaches = {m: len(broke_set[m]) for m in ms}
 
     # WHICH ARMS THE ARSENAL OUTRAN, before any sentence that ranks them. `comparable`
     # names the runs that were excluded; these were INCLUDED and are short, which is the

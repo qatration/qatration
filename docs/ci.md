@@ -246,7 +246,8 @@ Time is the visible cost. The token bill is the one that decides whether a check
 running after the first month, so it is measured here rather than waved at.
 
 The token volumes below are measured rather than estimated: attack payloads from the corpus
-itself, and reply lengths from **1,737 stored replies** in `out/`. Prices are Anthropic's, per
+itself, and reply lengths from **1,737 stored replies** in `out/`, the answers to ordinary
+questions in the benign baselines. Prices are Anthropic's, per
 million tokens, as of August 2026.
 
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
@@ -259,8 +260,8 @@ million tokens, as of August 2026.
 
 **The dominant cost is your own system prompt, not the attacks.** An attack payload averages 45
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,635 requests that is 1.6M input tokens of your own instructions — about
-85% of the input bill — before a single attack payload is counted.
+single request. At 1,635 requests that is 1.6M input tokens of your own instructions, about
+**96% of the input tokens**, before a single attack payload is counted.
 
 Two consequences worth acting on:
 
@@ -273,10 +274,12 @@ Two consequences worth acting on:
 
 Two honest caveats. The reply lengths were measured against this project's own practice bots on
 local models, so a chattier deployment costs more and a terser one less — the shape holds, the
-third decimal place does not. And one attack, `g-unbounded`, deliberately asks for output until
-something stops it: the longest stored reply is 45,000 characters. That is the finding, not an
-accident, but it is why a deployment with no output ceiling of its own costs more to test than
-one that has thought about it.
+third decimal place does not. And the replies priced are answers to ordinary questions, which
+are shorter than answers to attacks: a few attacks deliberately ask for output until something
+stops it, and the longest stored attack reply, `g-degenerate` on shipdesk, is **45,408
+characters**, where the longest ordinary answer the table is priced from is **2,868**. That is
+the finding, not an accident, but it is why a deployment with no output ceiling of its own costs
+more to test than one that has thought about it.
 
 ### Ten pull requests at once
 

@@ -1,8 +1,8 @@
 """Translated copies of the landing page, generated from the English one.
 
-WHY A GENERATOR AND NOT N HAND-WRITTEN PAGES. Every number on that page is recounted from
-`out/` by `redteam/test_readme.py`, so a second copy of the page is a second copy of thirty
-numbers that nothing recounts. The first time a figure is re-measured, the English page moves
+WHY A GENERATOR AND NOT N HAND-WRITTEN PAGES. The numbers on that page that
+`redteam/test_readme.py` lists are recounted from `out/`, so a second copy of the page is a
+second copy of those numbers that nothing recounts. The first time a figure is re-measured, the English page moves
 and the other pages keep publishing yesterday's, in languages nobody here reads well enough
 to notice. That is the same defect this project keeps finding in other people's work, and
 writing it on purpose would be worse than finding it.
@@ -493,8 +493,8 @@ MARK_LC_OPEN = "<!-- i18n:locale -->"
 MARK_LC_CLOSE = "<!-- /i18n:locale -->"
 
 # What each language calls itself, for the `title` a reader gets on hover and for screen
-# readers. The visible label stays the two-letter code because the header has ten pixels of
-# room at 375px, measured, and `Українська` needs eighty.
+# readers, and shown beside the two-letter code in the menu (`switcher`). The header keeps the
+# code alone, because it has ten pixels of room at 375px, measured, and `Українська` needs eighty.
 # The territory each language is announced with to a link preview. `og:locale` wants a full
 # locale, not a language code, and there is no way to derive one: `pt` could be pt_BR or pt_PT,
 # and the choice here is Brazil because that is where the readers are. A language without an

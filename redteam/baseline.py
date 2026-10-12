@@ -968,7 +968,16 @@ def two_factor(target, results, ctx, out_dir=None, caps=()):
     out["question_level"] = {"attack": [qa, na], "control": [qc, nc]}
     p = fisher_exact(qa, na - qa, qc, nc - qc)
     out["p"] = p
-    if p is None:
+    # A TEST THAT COULD NOT HAVE COME OUT SIGNIFICANT IS NOT A NULL RESULT. With the question as
+    # the unit, three attacks against two control questions cannot reach p < 0.05 however
+    # they split -- the best case, every attack acting and no control, is p = 0.1 -- and that
+    # was printed as "no lift", a measured nothing. Said as what it is. Found by a review.
+    _best = fisher_exact(na, 0, 0, nc)
+    if p is not None and (_best is None or _best >= 0.05):
+        out["p"] = None
+        out["verdict"] = ("not separable: %d attack and %d control question(s) cannot reach "
+                          "p < 0.05 at the question level, whatever they do" % (na, nc))
+    elif p is None:
         out["verdict"] = "not comparable"
     elif p >= 0.05:
         out["verdict"] = "no lift over the same question unframed"

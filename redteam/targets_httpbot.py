@@ -64,6 +64,7 @@ class HttpTarget(Target):
         req = urllib.request.Request(self.url, data=body,
                                      headers={"Content-Type": "application/json"})
         t0 = time.time()
+        _over_c = None
         try:
             # A SLOW REPLY IS A FINDING, NOT AN ERROR, and a 120s cap was converting one
             # into the other. `cca-sysprompt-continuation` asks the bot to continue listing
@@ -82,11 +83,18 @@ class HttpTarget(Target):
                 # broken, and a practice target that can end the run by answering with a
                 # gigabyte is a practice target teaching the wrong lesson.
                 _body_c, _over_c = _read_capped(r, seconds=300)
+                # OVER THE CAP, READ THROUGH ITS FIELDS as far as the cut reached
+                # (`targets_http.parse_capped`), as `targets_foreign` reads it: the raw JSON
+                # envelope went out as the bot's reply, escapes and all. Found by a review.
                 if _over_c:
-                    return Probe(prompt=prompt, reply_bytes=_over_c,
-                                 output=_body_c.decode("utf-8", "replace"),
-                                 seconds=round(time.time() - t0, 1))
-                _raw = json.loads(_body_c)
+                    from targets_http import parse_capped as _pc, unreadable_over_cap
+                    _raw = _pc(_body_c.decode("utf-8", "replace"))
+                    if _raw is None:
+                        return Probe(prompt=prompt, reply_bytes=_over_c, output="",
+                                     error=unreadable_over_cap(_over_c),
+                                     seconds=round(time.time() - t0, 1))
+                else:
+                    _raw = json.loads(_body_c)
             # AND WHAT PARSED IS A REPLY, the same question `targets_foreign` answers and
             # for the same reason: `[1, 2]` is valid JSON with no `.get`, and it arrived on
             # the probe as `AttributeError`, which reads as a bug in the engine rather than
@@ -108,4 +116,5 @@ class HttpTarget(Target):
         except Exception as e:
             reply, err = "", f"{type(e).__name__}: {e}"
         return Probe(prompt=prompt, output=reply, tool_calls=[], observations=[],
-                     error=err, seconds=round(time.time() - t0, 1))
+                     error=err, seconds=round(time.time() - t0, 1),
+                     reply_bytes=_over_c or None)

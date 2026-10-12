@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -611,7 +611,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <h1>Descubra o que um atacante consegue levar o seu chatbot a fazer.</h1>
       <p class="sub">O QAtration dispara ataques reais de injeção de prompt contra o seu bot de IA e entrega um relatório em linguagem simples do que ele vazou ou fez, antes que outra pessoa descubra. <b>Quem roda é você.</b> Na sua máquina ou no seu CI, contra o seu próprio deployment: sem conta, sem entregar nenhum endpoint, sem enviar nada para nós.</p>
       <p class="warnbox">
-        <b>Não aponte isto para um sistema que não é seu.</b> Ele envia ataques reais (injeção de prompt, exfiltração de dados, abuso de ferramentas) para qualquer URL que você indicar. O seu próprio deployment, ou um cujo dono tenha dado autorização por escrito com antecedência. Não um chatbot público que você achou interessante. Não a demonstração de um fornecedor.
+        <b>Não aponte isto para um sistema que não é seu.</b> Ele envia ataques reais (injeção de prompt, exfiltração de dados, abuso de ferramentas) para qualquer URL que você indicar. O seu próprio deployment, ou um cujo dono tenha dado a você autorização por escrito com antecedência. Não um chatbot público que você achou interessante. Não a demonstração de um fornecedor.
         <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Leia o AUTHORISED-USE.md</a> antes da primeira execução.</p>
       <div class="cta-row">
         <span class="install" translate="no"><span class="pmt">$</span>pip install qatration</span>
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Duas dependências. Todo o corpus de ataques vem junto, e as evidências por trás de cada número desta página também, tudo isso em
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, que é distribuído com o repositório. Os relatórios das outras duas ferramentas não estão aqui, porque as licenças delas não permitem. Os comandos que os regeneram estão.</p>
       <ul class="evid">
-        <li><b>46</b> ataques digitados no chat de um bot protegido: nenhum passou. Desligue o filtro de saída dele e <b>um</b> ataque levado dentro de um documento recuperado sai andando todas as vezes. O filtro de entrada nunca chegou a vê-lo.</li>
+        <li><b>46</b> ataques digitados no chat de um bot protegido em uma única execução: nenhum passou. Desligue o filtro de saída dele e <b>um</b> ataque levado dentro de um documento recuperado sai andando todas as vezes. O filtro de entrada nunca chegou a vê-lo.</li>
         <li><b>5 de 9</b> bots entregaram as próprias instruções a um pedido simples, <span class="keep">sem ataque nenhum.</span></li>
-        <li><b>Dois</b> relataram o reinício de um banco de dados. Nenhum dos dois tinha ferramenta capaz de reiniciar coisa alguma.</li>
+        <li><b>Três</b> relataram o reinício de um banco de dados. Nenhum tinha ferramenta capaz de reiniciar coisa alguma.</li>
       </ul>
       <p class="evid-note">Medido nos nossos próprios alvos de teste, não estimado. A transcrição ao lado ilustra a ideia. Os números acima são resultados.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>A lacuna que uma configuração não mostra</h3></div>
-        <p>Contra um framework de guardrails de verdade, 46 ataques digitados no chat: nenhum passou. Também não passou um levado dentro de um documento recuperado, enquanto os dois guardrails dele estavam ligados. Desligue o filtro de saída e esse mesmo documento sai andando em toda e qualquer tentativa. Filtros de entrada leem o que o usuário digita, e nunca veem o que a sua base de conhecimento entrega ao modelo, então o guardrail de entrada nunca foi o que o detinha.</p>
+        <p>Contra um framework de guardrails de verdade, 46 ataques digitados no chat em uma única execução: nenhum passou. Também não passou um levado dentro de um documento recuperado, enquanto os dois guardrails dele estavam ligados. Desligue o filtro de saída e esse mesmo documento sai andando em toda e qualquer tentativa. Filtros de entrada leem o que o usuário digita, e nunca veem o que a sua base de conhecimento entrega ao modelo, então o guardrail de entrada nunca foi o que o detinha.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>E quão estável é a resposta</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>E quanto custa aquele guardrail</h3></div>
-        <p>O mesmo guardrail que bloqueou aquele documento também se recusou a responder 6 de 9 perguntas comuns de clientes sobre os assuntos afetados. Uma defesa que responde “não” aos seus clientes é um número que você quer ter antes de publicar, não depois.</p>
+        <p>O mesmo guardrail que bloqueou aquele documento também se recusou a responder 4 das 6 perguntas comuns de clientes que recebeu nesse teste, no assunto envenenado e fora dele. Uma defesa que responde “não” aos seus clientes é um número que você quer ter antes de publicar, não depois.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Rodamos contra nós mesmos</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Encontrado antes do primeiro ataque</h3></div>
-        <p>Um perfil de doze sondas, todas inofensivas: cinco bots entregaram as próprias instruções a um pedido simples. Um imprimiu a sua chave de sessão confidencial dentro da mesma frase que o proibia de compartilhar essa chave. Dois relataram o reinício de um banco de dados sem ter ferramenta capaz de reiniciar coisa alguma.</p>
+        <p>Um perfil de uma dúzia de sondas, mais ou menos,, todas inofensivas: cinco bots entregaram as próprias instruções a um pedido simples. Um imprimiu a sua chave de sessão confidencial dentro da mesma frase que o proibia de compartilhar essa chave. Três relataram o reinício de um banco de dados sem que nenhum tivesse ferramenta capaz de reiniciar coisa alguma.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Somente alvos autorizados.</b> Isto envia ataques reais contra o que quer que seja apontado, e roda na sua máquina, com a sua chave, sob a sua autoridade. Tudo o que não for localhost precisa provar que você o controla (um registro DNS, um arquivo em um caminho conhecido, ou um token que o próprio bot devolve), e sem isso a execução se recusa a iniciar em vez de pedir que você lembre. Testar sistemas que não são seus ou para os quais você não tem permissão é crime na maioria dos países, e a responsabilidade aqui é de quem opera, não da ferramenta.
+      <b>Somente alvos autorizados.</b> Isto envia ataques reais contra o que quer que seja apontado, e roda na sua máquina, com a sua chave, sob a sua autoridade. Tudo o que não for localhost precisa de uma prova assinada para esse endereço nas últimas duas semanas, e sem ela a execução se recusa a iniciar em vez de pedir que você lembre. A execução a verifica baixando um arquivo em um caminho conhecido no alvo. Em vez disso, é possível declarar na configuração um registro DNS ou um token que o bot devolve, e então o que fica provado é que você tem a chave de assinatura, não que controla o alvo. Testar sistemas que não são seus ou para os quais você não tem permissão é crime na maioria dos países, e a responsabilidade aqui é de quem opera, não da ferramenta.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Leia o AUTHORISED-USE.md</a> antes da primeira execução.
       <br><br>
       Encontrou um bug, ou um caso em que esta ferramenta relata algo que não mediu?

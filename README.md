@@ -21,8 +21,9 @@ doing?*
 
 **Apache 2.0. Run it yourself.** The engine is meant to run where the system under test is: on
 your machine, in your CI, against your own deployment. Nothing here needs a service, and `out/`
-ships with the repository, so every number in these pages can be recounted rather than believed
-— `test_readme.py` recounts them and fails when a claim and the code disagree.
+ships with the repository, so the numbers in these pages can be checked against the evidence
+rather than believed, and `test_readme.py` recounts the ones it lists and fails when a claim and
+the code disagree.
 
 ## Why this and not "another eval tool"
 
@@ -178,9 +179,11 @@ and still cannot quietly disappear.
 One QA engineer, with Claude doing most of the typing. The design decisions, the failures worth
 chasing and the calls about what counts as evidence are mine.
 
-None of that needs taking on trust. Every number in this README and on the site is recounted
-from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
-in the suite is allowed to be one that cannot fail — 5,774 of them, `check()` calls and bare
+None of that needs taking on trust. The counts `test_readme.py` lists, in this README and on the
+site, are recounted from the artifacts in `out/` by a test that fails the build when the two
+disagree. The site's other figures come from single dated runs and from the benchmark against
+garak and promptfoo, and are not recounted. No assertion
+in the suite is allowed to be one that cannot fail — 5,818 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

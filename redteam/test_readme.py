@@ -1775,13 +1775,42 @@ def main():
                    and abs(float(_cache_s.group(2)) - _cached) < 0.05),
                   "page $%s -> $%s, derived $%.2f -> $%.2f"
                   % (_cache_s.group(1), _cache_s.group(2), _plain, _cached))
-    # WHAT THIS DOES NOT COVER, in the same section, said because a block of checks reads as
-    # covering the screen it sits on. The paragraph under the table calls the system prompt
-    # `about 85% of the input bill`, and no reading of these numbers gives 85: at 4,000
-    # characters the prompt is 96% of the input tokens, 89% of all tokens and 70% of the
-    # money. It was 96, 88 and 70 under the measurements the table was built from as well, so
-    # this is not drift -- the basis could not be reconstructed, and a figure whose method is
-    # unknown is left alone rather than replaced with a guess.
+        # THE PROMPT'S SHARE, by the table's own arithmetic. It read `about 85% of the input
+        # bill`, and no reading of these numbers gave 85: at 4,000 characters the prompt is 96%
+        # of the input tokens. Stated as that now, and recounted. Found by a review.
+        _share_s = re.search(r"about\s+\*\*(\d+)% of the input tokens\*\*", _ci)
+        _sp_tok = 4000 / _CPT
+        _share = int(round(100 * _sp_tok / (_sp_tok + _ptok_f)))
+        check("the page says how much of the input is the system prompt, and it is the "
+              "table's arithmetic", bool(_share_s) and int(_share_s.group(1)) == _share,
+              "page %s, derived %d" % (_share_s and _share_s.group(1), _share))
+        # AND WHAT THE PRICED REPLIES ARE: answers to ordinary questions, against the longest
+        # answer to an attack. The page put `g-unbounded` at 45,000 characters, which is
+        # `g-degenerate` on shipdesk, beside a table priced from benign replies.
+        _ord_s = re.search(r"the longest ordinary answer the table is priced from is "
+                           r"\*\*([\d,]+)\*\*", _ci)
+        check("the longest ordinary answer the page names is the longest one priced",
+              bool(_ord_s) and int(_ord_s.group(1).replace(",", "")) == max(_replies),
+              "page %s, out/ %d" % (_ord_s and _ord_s.group(1), max(_replies)))
+        _long = (0, "", "")
+        for _p in sorted(glob.glob(os.path.join(ROOT, "out", "results_*.json"))):
+            try:
+                _d = json.load(io.open(_p, encoding="utf-8"))
+            except Exception:
+                continue
+            _tg = str((_d.get("meta") or {}).get("target") or "")
+            for _r in _d.get("results") or []:
+                for _t in (_r.get("trials") or []):
+                    _o = ((_t or {}).get("probe") or {}).get("output") or ""
+                    if isinstance(_o, str) and len(_o) > _long[0]:
+                        _long = (len(_o), str((_r.get("attack") or {}).get("id")), _tg)
+        _att_s = re.search(r"the longest stored attack reply, `([\w-]+)` on ([\w-]+), is "
+                           r"\*\*([\d,]+)\s+characters\*\*", _ci)
+        check("the longest attack reply the page names is the longest stored one",
+              bool(_att_s) and (_att_s.group(1), _att_s.group(2),
+                                int(_att_s.group(3).replace(",", "")))
+              == (_long[1], _long[2], _long[0]),
+              "page %s, out/ %r" % (_att_s and _att_s.groups(), _long))
 
     # AND A THIRD PLACE SAYS THE SAME SIZE, which is where the block above stopped looking.
     # The comment on it opens "THE SAME FACT, PUBLISHED TWICE, GATED ONCE" and fixed the
@@ -2318,6 +2347,37 @@ def main():
                   _worst_pct - _claim <= 10,
                   f"the page says {_claim}% and the evidence now shows {_worst_pct}%")
 
+    # --- WHAT THE GUARD COST, AND WHO SAID THE DATABASE RESTARTED ---------------------------
+    #
+    # Both were typed: "refused 6 of 9 ordinary customer questions on the affected topics",
+    # which no artifact carries, and "Two reported a database restarted" where recon's own
+    # warning stands on three profiles. Recounted from the stored map and the profiles now.
+    # Found by an independent review.
+    _iso_n = json.load(io.open(os.path.join(ROOT, "out", "isolation_nemo-rag.json"),
+                               encoding="utf-8"))
+    _props_n = [p for m in _iso_n for p in (m.get("properties") or [])]
+    _refused_n = sum(int((p.get("locks") or {}).get("guard_block") or 0) for p in _props_n)
+    _sent_n = sum(int(str(p.get("hits", "0/0")).split("/")[1]) for p in _props_n)
+    _gm = re.search(r"refused (\d+) of the (\d+) ordinary customer\s+questions it was sent in "
+                    r"that test", _site)
+    check("the guard's cost on the page is the stored map's refusals over what it was sent",
+          bool(_gm) and (int(_gm.group(1)), int(_gm.group(2))) == (_refused_n, _sent_n),
+          "page %s, map %d of %d" % (_gm and _gm.groups(), _refused_n, _sent_n))
+    import recon as _rc_s
+    _said_done = 0
+    for _f in sorted(glob.glob(os.path.join(ROOT, "out", "recon_*.json"))):
+        try:
+            _pf = json.load(io.open(_f, encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(_pf, dict) and any("infrastructure action COMPLETE" in h["text"]
+                                         for h in _rc_s.current_hints(_pf)):
+            _said_done += 1
+    _dm = re.findall(r"(?:<b>)?([A-Z][a-z]+)(?:</b>)? reported a database\s+restarted", _site)
+    check("every count of bots that reported a restart is how many profiles recon warns on",
+          len(_dm) == 2 and set(_dm) == {spell(_said_done).capitalize()},
+          "page %s, recon %d" % (_dm, _said_done))
+
     # ============================================================== TRANSLATIONS
     #
     # A SECOND LANGUAGE IS A SECOND COPY OF EVERY NUMBER ON THIS PAGE, and every check above
@@ -2406,9 +2466,9 @@ def main():
     #    recount - and order is half the claim, because `5 of 9` and `9 of 5` carry the same
     #    digits and say opposite things.
     #
-    #    ORDER IS NOT UNIVERSAL, AND THE EXCEPTION IS DECLARED. Japanese and Korean write
-    #    `5 of 9` as `9 of which 5`, which is correct and reverses the figures, and both render
-    #    an English number written as a word (`reports a zero`) as a digit, which adds one the
+    #    ORDER IS NOT UNIVERSAL, AND THE EXCEPTION IS DECLARED. Japanese, Korean, Turkish and
+    #    Chinese write `5 of 9` as `9 of which 5`, which is correct and reverses the figures,
+    #    and some render an English number written as a word (`reports a zero`) as a digit, which adds one the
     #    English side does not have. So a dictionary may NAME the strings where its figures do
     #    not line up, and for exactly those the demand drops to every English figure still being
     #    present. The list is checked against reality: a key on it that passes the strict rule

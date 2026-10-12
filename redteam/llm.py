@@ -55,6 +55,18 @@ def chat_ollama():
     return ChatOllama
 
 
+def callback_base():
+    """LangChain's callback base where it is installed, else `object`: the practice agents run
+    with it (`target.executor_turn` records the tools that ran through it), and a stand-in
+    executor in a check needs only the two methods. Here and not in `target`, which every
+    shipped command imports: LangChain belongs to the practice fleet, as this module does."""
+    try:
+        from langchain_core.callbacks import BaseCallbackHandler
+        return BaseCallbackHandler
+    except Exception:
+        return object
+
+
 def make_llm(ChatOllama, model, temperature=0, num_predict=NUM_PREDICT,
              timeout=REQUEST_TIMEOUT, **kw):
     """Build a capped ChatOllama.

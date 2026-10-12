@@ -86,7 +86,8 @@ def _row(profile, name, when):
     unmeasured = sum(1 for v in lock.values() if v == "unmeasured")
     _untried = profile.get("token_lock_untried")
     _untried = _untried if isinstance(_untried, int) and not isinstance(_untried, bool) else 0
-    disc = profile.get("disclosure_open")
+    # a secret printed on the plain ask leaks with or without markers (`recon.fingerprint`)
+    disc = True if profile.get("disclosure_leaked_canary") else profile.get("disclosure_open")
     # RAW HERE, MADE SAFE WHERE IT IS SHOWN. Every string below is the target describing
     # itself, and each surface neutralises it once: the page through `esc`, which is
     # `html.escape(plain(...))`, and the console through `plain` at print time. Running

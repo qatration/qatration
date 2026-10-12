@@ -39,9 +39,8 @@ from refusal import classify, summarize
 from runner import headline, answered_anywhere, unanswered_stall
 from report_engine import build_html
 import datetime
-from isolation import restate_combined_inert
-from isolation import (apply_keysearch, _verdict, read_maps, write_maps,
-                       map_target as _map_target, restate_unmeasured)
+from isolation import (read_maps, write_maps, rescore as rescore_one_map,
+                       map_target as _map_target)
 from baseline import note as _baseline_note
 from baseline import two_factor_note as _two_factor_note
 
@@ -166,7 +165,8 @@ def _probe(attack, d):
                  turns=d.get("turns") or [],
                  retries=int(_number(d.get("retries"), 0)),
                  reply_bytes=(int(_number(d["reply_bytes"], 0))
-                              if d.get("reply_bytes") is not None else None))
+                              if d.get("reply_bytes") is not None else None),
+                 tool_view=(d["tool_view"] if isinstance(d.get("tool_view"), str) else None))
 
 
 def rescore(path, ctx, why=None):
@@ -291,15 +291,7 @@ def rescore_map(path):
     _map_meta[path] = meta
     changed = []
     for m in maps:
-        before = (m.get("verdict"), tuple(m.get("keyed") or ()))
-        # THE STORED STATUSES FIRST, where the tallies beside them say they measured nothing.
-        for _row in (m.get("properties") or []) + [m.get("combined")]:
-            restate_unmeasured(_row)
-        restate_combined_inert(m)
-        m["verdict"] = _verdict(m.get("properties") or [], m.get("combined") or {},
-                                m.get("coupling") or [])
-        apply_keysearch(m)
-        after = (m.get("verdict"), tuple(m.get("keyed") or ()))
+        before, after = rescore_one_map(m)
         if before != after:
             changed.append((m.get("objective", "?"), before, after))
     return maps, changed

@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Dvě závislosti. Celý korpus útoků je součástí balíčku a spolu s ním i důkazy za každým číslem na této stránce, všechny v
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, který se distribuuje spolu s repozitářem. Vlastní zprávy zbylých dvou nástrojů tu nejsou, protože to jejich licence nedovolují. Příkazy, které je znovu vytvoří, ano.</p>
       <ul class="evid">
-        <li><b>46</b> útoků napsaných do chatovacího okna chráněného bota: neprošel ani jeden. Vypni mu výstupní filtr a <b>jeden</b> útok pronesený uvnitř dohledaného dokumentu odejde ven pokaždé. Vstupní filtr ho nikdy neviděl.</li>
+        <li><b>46</b> útoků napsaných do chatovacího okna chráněného bota v jednom běhu: neprošel ani jeden. Vypni mu výstupní filtr a <b>jeden</b> útok pronesený uvnitř dohledaného dokumentu odejde ven pokaždé. Vstupní filtr ho nikdy neviděl.</li>
         <li><b>5 z 9</b> botů vydalo vlastní instrukce na obyčejnou žádost, <span class="keep">úplně bez útoku.</span></li>
-        <li><b>Dva</b> ohlásili restart databáze. Ani jeden z nich neměl nástroj, který by dokázal cokoli restartovat.</li>
+        <li><b>Tři</b> ohlásili restart databáze. Žádný z nich neměl nástroj, který by dokázal cokoli restartovat.</li>
       </ul>
       <p class="evid-note">Změřeno na našich vlastních testovacích cílech, ne odhadnuto. Přepis vedle ilustruje myšlenku, čísla nahoře jsou výsledky.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Mezera, kterou ti konfigurace neukáže</h3></div>
-        <p>Proti skutečnému frameworku guardrailů: 46 útoků napsaných do chatovacího okna, neprošel ani jeden. Neprošel ani jeden pronesený uvnitř dohledaného dokumentu, dokud byly zapnuté obě jeho pojistky. Vypni výstupní filtr a tentýž dokument odejde ven při každém jednotlivém pokusu. Vstupní filtry čtou to, co píše uživatel, a nikdy nevidí to, co modelu podává tvoje znalostní báze, takže vstupní guardrail nikdy nebyl to, co ho zastavovalo.</p>
+        <p>Proti skutečnému frameworku guardrailů: 46 útoků napsaných do chatovacího okna v jednom běhu, neprošel ani jeden. Neprošel ani jeden pronesený uvnitř dohledaného dokumentu, dokud byly zapnuté obě jeho pojistky. Vypni výstupní filtr a tentýž dokument odejde ven při každém jednotlivém pokusu. Vstupní filtry čtou to, co píše uživatel, a nikdy nevidí to, co modelu podává tvoje znalostní báze, takže vstupní guardrail nikdy nebyl to, co ho zastavovalo.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>A jak stabilní ta odpověď je</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>A co ten guardrail stojí</h3></div>
-        <p>Tentýž guardrail, který zablokoval onen dokument, také odmítl odpovědět na 6 z 9 obyčejných zákaznických otázek k dotčeným tématům. Obrana, která tvým zákazníkům odpovídá „ne“, je číslo, které chceš znát před vydáním, ne po něm.</p>
+        <p>Tentýž guardrail, který zablokoval onen dokument, také odmítl odpovědět na 4 ze 6 obyčejných zákaznických otázek, které v tom testu dostal, k otrávenému tématu i mimo něj. Obrana, která tvým zákazníkům odpovídá „ne“, je číslo, které chceš znát před vydáním, ne po něm.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Pustili jsme to proti sobě samým</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Nalezeno ještě před prvním útokem</h3></div>
-        <p>Profil ze dvanácti sond, všechny neškodné: pět botů vydalo vlastní instrukce na obyčejnou žádost. Jeden vypsal svůj důvěrný klíč relace uvnitř téže věty, která mu ten klíč zakazovala sdílet. Dva ohlásili restart databáze, přestože neměli nástroj, který by dokázal cokoli restartovat.</p>
+        <p>Profil ze zhruba tuctu sond, všechny neškodné: pět botů vydalo vlastní instrukce na obyčejnou žádost. Jeden vypsal svůj důvěrný klíč relace uvnitř téže věty, která mu ten klíč zakazovala sdílet. Tři ohlásili restart databáze, přestože žádný neměl nástroj, který by dokázal cokoli restartovat.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Jen povolené cíle.</b> Tenhle nástroj posílá skutečné útoky na cokoli, na co je namířený, a běží na tvém stroji, pod tvým klíčem, na tvou odpovědnost. Všechno, co není localhost, musí doložit, že to ovládáš ty (DNS záznam, soubor na známé cestě, nebo token, který vrátí sám bot), a bez toho běh odmítne nastartovat, místo aby spoléhal, že si vzpomeneš. Testovat systémy, které ti nepatří nebo ke kterým nemáš souhlas, je ve většině zemí trestné, a odpovědnost nese ten, kdo to spouští, ne nástroj.
+      <b>Jen povolené cíle.</b> Tenhle nástroj posílá skutečné útoky na cokoli, na co je namířený, a běží na tvém stroji, pod tvým klíčem, na tvou odpovědnost. Všechno, co není localhost, potřebuje doklad podepsaný pro tu adresu v posledních dvou týdnech, a bez něj běh odmítne nastartovat, místo aby spoléhal, že si vzpomeneš. Běh ho ověří tak, že stáhne soubor na známé cestě u cíle. Místo toho lze v konfiguraci uvést DNS záznam nebo token, který vrátí bot, a pak se dokazuje jen to, že máš podpisový klíč, ne že cíl ovládáš. Testovat systémy, které ti nepatří nebo ke kterým nemáš souhlas, je ve většině zemí trestné, a odpovědnost nese ten, kdo to spouští, ne nástroj.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Přečti si AUTHORISED-USE.md</a> před prvním spuštěním.
       <br><br>
       Našel jsi chybu, nebo případ, kdy tenhle nástroj hlásí něco, co neměřil?

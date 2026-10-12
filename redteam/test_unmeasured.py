@@ -260,6 +260,15 @@ def main():
     check("...nor count an errored or skipped control as one that was sent",
           "the 3 that have" not in _od, _od[-400:])
 
+    # THE GATE ALLOWS WHAT IT SAYS IT ALLOWS: `--max-unmeasured 10%` lets one row in ten go
+    # unmeasured and answers 3 at the eleventh percent, not at the tenth.
+    import run_redteam as _rr_u
+    check("the unmeasured gate allows exactly its limit and refuses past it",
+          _rr_u._too_much_unmeasured(1, 10, None) == ""
+          and _rr_u._too_much_unmeasured(2, 10, None) != ""
+          and _rr_u._too_much_unmeasured(0, 10, 0.0) == ""
+          and _rr_u._too_much_unmeasured(1, 10, 0.0) != "", "")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

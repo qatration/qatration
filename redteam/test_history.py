@@ -891,6 +891,13 @@ def main():
                          R(a1="DEFENDED"), when="2026-09-29 22:05:01", dated_by_run=True)
         check("...but a different minute is a different run",
               H.same_run(_sa, _se) is False, str((_sa.get("run"), _se.get("run"))))
+        # AND A LIVE RECORD IS DATED BY THE SWEEP, not the clock at append time: a sweep
+        # whose `meta.when` is 22:04:58, recorded at 22:05:01, is the 22:04 run.
+        _sf = H.snapshot({"target": "sr", "model": "m", "trials": 3,
+                          "when": "2026-09-29 22:04:58"}, R(a1="DEFENDED"))
+        check("a live record with no date given takes the sweep's own date",
+              _sf.get("run") == "2026-09-29 22:04:58" and H.same_run(_sa, _sf) is True,
+              str(_sf.get("run")))
 
         # AN EARLIER BREAK OF A DIFFERENT QUESTION IS NOT A FIX THAT DID NOT HOLD.
         def _rx(text, v):

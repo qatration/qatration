@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Dua dependensi. Seluruh korpus serangan ikut disertakan, begitu pula bukti di balik setiap angka di halaman ini, semuanya ada di
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, yang didistribusikan bersama repositorinya. Laporan milik dua alat lainnya tidak ada di sini, karena lisensi mereka tidak mengizinkannya. Perintah yang membuatnya ulang ada.</p>
       <ul class="evid">
-        <li><b>46</b> serangan diketikkan ke kotak obrolan bot yang terlindungi: tidak satu pun tembus. Matikan filter keluarannya dan <b>Satu serangan</b> serangan yang dibawa di dalam dokumen yang diambil melenggang keluar setiap kali. Filter masukan tidak pernah melihatnya.</li>
+        <li><b>46</b> serangan diketikkan ke kotak obrolan bot yang terlindungi dalam satu kali proses: tidak satu pun tembus. Matikan filter keluarannya dan <b>satu</b> serangan yang dibawa di dalam dokumen yang diambil melenggang keluar setiap kali. Filter masukan tidak pernah melihatnya.</li>
         <li><b>5 dari 9</b> bot menyerahkan instruksinya sendiri hanya karena permintaan biasa, <span class="keep">tanpa serangan sama sekali.</span></li>
-        <li><b>Dua</b> bot melaporkan basis data telah dimulai ulang. Keduanya sama sekali tidak punya tool yang bisa memulai ulang apa pun.</li>
+        <li><b>Tiga</b> bot melaporkan basis data telah dimulai ulang. Tidak satu pun punya tool yang bisa memulai ulang apa pun.</li>
       </ul>
       <p class="evid-note">Diukur pada target uji kami sendiri, bukan diperkirakan. Transkrip di sebelahnya menggambarkan idenya, angka di atas adalah hasilnya.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Celah yang tidak bisa ditunjukkan oleh sebuah konfigurasi</h3></div>
-        <p>Terhadap kerangka kerja guardrail sungguhan, 46 serangan yang diketikkan ke kotak obrolan: tidak satu pun tembus. Satu serangan yang dibawa di dalam dokumen yang diambil juga tidak tembus, selama kedua guardrail-nya menyala. Matikan filter keluaran dan dokumen yang sama itu melenggang keluar pada setiap percobaan. Filter masukan membaca apa yang diketik pengguna, dan tidak pernah melihat apa yang diserahkan basis pengetahuan Anda kepada model, jadi guardrail di sisi masukan tidak pernah menjadi hal yang menghentikannya.</p>
+        <p>Terhadap kerangka kerja guardrail sungguhan, 46 serangan yang diketikkan ke kotak obrolan dalam satu kali proses: tidak satu pun tembus. Satu serangan yang dibawa di dalam dokumen yang diambil juga tidak tembus, selama kedua guardrail-nya menyala. Matikan filter keluaran dan dokumen yang sama itu melenggang keluar pada setiap percobaan. Filter masukan membaca apa yang diketik pengguna, dan tidak pernah melihat apa yang diserahkan basis pengetahuan Anda kepada model, jadi guardrail di sisi masukan tidak pernah menjadi hal yang menghentikannya.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Dan seberapa stabil jawabannya</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Dan berapa harga guardrail itu</h3></div>
-        <p>Guardrail yang sama yang memblokir dokumen tadi juga menolak menjawab 6 dari 9 pertanyaan pelanggan biasa pada topik-topik yang terkait. Pertahanan yang menjawab “tidak” kepada pelanggan Anda adalah angka yang ingin Anda ketahui sebelum rilis, bukan sesudahnya.</p>
+        <p>Guardrail yang sama yang memblokir dokumen tadi juga menolak menjawab 4 dari 6 pertanyaan pelanggan biasa yang dikirim kepadanya dalam uji itu, baik pada topik yang diracuni maupun di luarnya. Pertahanan yang menjawab “tidak” kepada pelanggan Anda adalah angka yang ingin Anda ketahui sebelum rilis, bukan sesudahnya.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Kami menjalankannya terhadap diri kami sendiri</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Ditemukan bahkan sebelum serangan pertama</h3></div>
-        <p>Sebuah profil dari dua belas uji, semuanya tidak berbahaya: lima bot menyerahkan instruksinya sendiri hanya karena permintaan biasa. Satu bot mencetak kunci sesi rahasianya di dalam kalimat yang justru melarangnya membagikan kunci itu. Dua bot melaporkan basis data telah dimulai ulang padahal keduanya tidak punya tool yang bisa memulai ulang apa pun.</p>
+        <p>Sebuah profil dari sekitar selusin uji, semuanya tidak berbahaya: lima bot menyerahkan instruksinya sendiri hanya karena permintaan biasa. Satu bot mencetak kunci sesi rahasianya di dalam kalimat yang justru melarangnya membagikan kunci itu. Tiga bot melaporkan basis data telah dimulai ulang padahal tidak satu pun punya tool yang bisa memulai ulang apa pun.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Hanya target yang diizinkan.</b> Alat ini mengirim serangan sungguhan ke apa pun yang diarahkan kepadanya, dan berjalan di mesin Anda, dengan kunci Anda, atas wewenang Anda. Segala sesuatu yang bukan localhost harus membuktikan bahwa Anda yang mengendalikannya (satu rekaman DNS, satu berkas di jalur yang diketahui, atau satu token yang dikembalikan oleh bot itu sendiri), dan tanpa itu proses menolak berjalan alih-alih mengandalkan ingatan Anda. Menguji sistem yang bukan milik Anda atau yang tidak Anda punya izinnya merupakan tindak pidana di sebagian besar negara, dan tanggung jawabnya ada pada yang menjalankan, bukan pada alatnya.
+      <b>Hanya target yang diizinkan.</b> Alat ini mengirim serangan sungguhan ke apa pun yang diarahkan kepadanya, dan berjalan di mesin Anda, dengan kunci Anda, atas wewenang Anda. Segala sesuatu yang bukan localhost memerlukan bukti yang ditandatangani untuk alamat itu dalam dua minggu terakhir, dan tanpa bukti itu proses menolak berjalan alih-alih mengandalkan ingatan Anda. Proses memeriksanya dengan mengambil sebuah berkas di jalur yang diketahui pada target. Sebagai gantinya, satu rekaman DNS atau satu token yang dikembalikan bot dapat dinyatakan di konfigurasi, dan yang terbukti saat itu adalah bahwa Anda memegang kunci penandatanganan, bukan bahwa Anda mengendalikan target. Menguji sistem yang bukan milik Anda atau yang tidak Anda punya izinnya merupakan tindak pidana di sebagian besar negara, dan tanggung jawabnya ada pada yang menjalankan, bukan pada alatnya.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Baca AUTHORISED-USE.md</a> sebelum menjalankannya pertama kali.
       <br><br>
       Menemukan bug, atau kasus ketika alat ini melaporkan sesuatu yang tidak diukurnya?

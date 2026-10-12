@@ -449,6 +449,14 @@ def _opener_for(proxy):
     """The opener for a target whose config names a proxy -- said, not inherited."""
     if not proxy:
         return _OPENER
+    # NOT ON A SERVER: the pin checks the socket's peer, and through a proxy the peer is the
+    # proxy, so the policy would check the proxy's address and never the target's. `intake`
+    # refuses a submitted `proxy:` at the door; this refuses it where the bytes would leave.
+    # Found by an independent review.
+    if _az_pin.hosted():
+        raise OSError("refused by network policy: a `proxy:` is not allowed on the hosted "
+                      "service, where the address check would see the proxy and not the "
+                      "target. Nothing was sent.")
     return urllib.request.build_opener(
         _GuardedRedirect, urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
         *_az_pin.pinned_handlers())
@@ -484,6 +492,13 @@ def _retry_after(headers):
         return max(0.0, (when - now).total_seconds())
     except Exception:
         return None
+
+
+def unreadable_over_cap(size):
+    """The error for a body over the cap whose prefix is no JSON an adapter can read: one
+    sentence for the two adapters that read a fixed shape (`targets_foreign`, `targets_httpbot`)."""
+    return ("ExtractionFailed: the reply was %s bytes, over the cap, and its prefix is not JSON "
+            "this adapter can read" % format(size, ","))
 
 
 def parse_capped(text, limit=64):

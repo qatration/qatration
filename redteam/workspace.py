@@ -2877,6 +2877,8 @@ _RESULTS_REQUIRE = {
     "meta.never_sent": (int, False, "`measured` subtracts it from what was sent"),
     "meta.arsenal": (str, False, "`compare` checks every target ran the same corpus"),
     "meta.stopped": (str, False, "the pages say why a run ended early"),
+    "meta.canary_unconfirmed": (bool, False, "the report says the canaries were never "
+                                             "confirmed planted"),
     "meta.baseline": (list, False, "the report lists the clean tool inputs a run was given"),
     "meta.attribution": (str, False, "`rejudge --pages` prints it"),
     "meta.inert": (dict, False, "`rejudge --pages` and `sarif` name each inert detector"),

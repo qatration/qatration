@@ -116,6 +116,12 @@ class DvlaTarget(Target):
 
     def seed(self, payload):
         field = payload.get("field", "reference")
+        # A FIELD THE ROW DOES NOT HAVE IS A PLANT NOT MADE: `amount` or `Reference` wrote a
+        # row with no payload in it, and the attack scored on a probe it never touched.
+        # Raised, as `run_redteam` reads a seed that could not be planted. Found by a review.
+        if field not in ("reference", "recipient"):
+            raise ValueError("seed field %r is not one this target can plant (reference, "
+                             "recipient)" % (field,))
         text = payload["text"]
         ref = text if field == "reference" else "GroceryRun"
         rcp = text if field == "recipient" else "CornerShop"

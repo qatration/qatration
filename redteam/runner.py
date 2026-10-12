@@ -799,16 +799,23 @@ def run_attack(target, attack, ctx, trials=1):
     return records
 
 
+def answered(p):
+    """Is this probe an answer: no error, and something in it (a reply or a tool call)?
+    A stored dict or a live `Probe`, by the one rule."""
+    if isinstance(p, dict):
+        return bool(not p.get("error")
+                    and (str(p.get("output") or "").strip() or p.get("tool_calls")))
+    if p is None:
+        return False
+    return bool(not getattr(p, "error", None)
+                and (str(getattr(p, "output", "") or "").strip()
+                     or getattr(p, "tool_calls", None)))
+
+
 def answered_anywhere(results):
-    """Did the target answer ANY probe in this set of rows? An answer is a probe with no
-    error and something in it (a reply or a tool call)."""
-    for r in results or []:
-        for t in (r or {}).get("trials") or []:
-            p = (t or {}).get("probe")
-            if (isinstance(p, dict) and not p.get("error")
-                    and (str(p.get("output") or "").strip() or p.get("tool_calls"))):
-                return True
-    return False
+    """Did the target answer ANY probe in this set of rows? (`answered`)"""
+    return any(answered((t or {}).get("probe"))
+               for r in (results or []) for t in ((r or {}).get("trials") or []))
 
 
 def unanswered_stall(verdict, fired):

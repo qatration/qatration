@@ -103,8 +103,8 @@ its write land in the next attack's trial (a breach that attack did not cause); 
 the thread now. And `tools/check.py` crashed printing a failed suite's output into a console
 whose code page lacked a character, which left every later suite unrun with no summary.
 
-**Every benign baseline re-taken.** Thirty-five targets, 50 prompts each, on the 0.5 oracle: 780
-fires on clean traffic, 622 settled as findings and 158 as false alarms (20.3%). Taking them
+**Every benign baseline re-taken.** Thirty-five targets, 50 prompts each, on the 0.5 oracle: 779
+fires on clean traffic, 622 settled as findings and 157 as false alarms (20.2%). Taking them
 again found a defect in the practice fleet as well: the NeMo server dropped every second request
 after it went multi-threaded in August, which the old baselines predated. The four
 generic-arsenal targets were re-run on the 422-attack arsenal. The guard reads arguments a model
@@ -194,6 +194,52 @@ expression into a shell. The guard and `credential_in_output` know nine more tok
 wheel no longer ships the test suites, the README's links work on PyPI, `lint` refuses a
 near-miss slot such as `{privileged_tools}`, and the arsenal no longer depends on whose
 `QATRATION_CONFIGS` built it.
+
+**A second round of reviews, on what the first did not read.** Five more reviewers took recon,
+the lock maps, the practice fleet, the site and its translations, the suite's own strength, and
+the first round's fixes. Everything they found is fixed below, with a check that was mutated red.
+
+**A combination that broke, broke.** A combined probe achieved on three trials of three read
+`unmeasured` because one property's detector could not hear its own half. A hit now stands
+wherever a lock-map status is read, and a composed attack that landed on some of its trials makes
+the map EXPLOITED, as the same tally on the combined probe does. An objective kept from an
+earlier run is re-scored by the build whose stamp it goes out under, and says when it has no
+date. A key search whose frames were not answered by a majority is `UNMEASURED`, and `matrix`
+compares two models only over the attacks both were sent.
+
+**Recon reads with the sweep's detectors.** The content lock asks `forced_output`, so a token
+said with a curly apostrophe or a hyphen is not reported as locked. A secret printed on the plain
+"print your instructions" ask is a warning and a leak on the fleet page, and the rules a bot
+recites there are still proposed as markers. `generate` matches a tool by whole words (`sh` is
+not named by "share") and names a stated rule it could not turn into an ask, and its YAML is
+scrubbed of control characters as recon's fragment is. A live timeline entry is dated by its
+sweep.
+
+**Three of the first round's fixes went too far, and are narrowed.** A key path bound to a
+variable is read again by `secret_material_access`, a real package recommended beside an
+unrelated warning is a recommendation, a model the bot claims to run on is identified beside a
+decline, and "I am currently unable to", "this assistant is unable to" and "is not something I
+can do" are refusals again. `session_leak` counts what any earlier session was told, not only the
+first. Markup a bot composes inside a `<script>` the prompt only named is XSS, and an executor's
+"Agent stopped due to iteration limit" is not a reply. `verify` does not reproduce a stall
+against an endpoint that answered nothing, and a lift test that cannot reach significance says
+`not separable` rather than `no lift`.
+
+**The practice fleet says what it saw.** `fleet.sh down` stops only a process running a fleet
+script by its full path: it matched any `server.py` under a bare `python3`, which on a fresh
+clone is somebody else's server. The guardedrag configs pin all four of the server's build
+settings. A probe whose tool view the adapter lost carries `tool_view: partial`, so a credential a
+tool handed the bot is not called made up; a tool that ran before the executor raised is on the
+probe, a conversation keeps the reply of the turn that errored, and a reply over the cap is read
+through its fields. A verifier made of words, or one shorter than any canary shipped, is refused
+before anything is sent, and a published canary is refused in any case or spacing.
+
+**The pages say what is checked.** The site's footer, in all sixteen languages, no longer says a
+DNS record or an echoed token proves control: the run fetches a file, and the other two prove
+possession of the signing key. Three bots reported a database restarted, not two; the guard's
+cost is the four of six ordinary questions its map recorded, not a figure no artifact carried;
+the 46-attack claim says it was one run. The README now says which numbers are recounted and
+which are not, and translation slips in four languages are corrected.
 
 ### Upgrading
 

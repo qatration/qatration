@@ -42,7 +42,7 @@ class ForeignAgentTarget(Target):
                                      headers={"Content-Type": "application/json"})
         t0 = time.time()
         calls, obs, res, reply, err = [], [], [], "", None
-        _over = None
+        _over, _view = None, None
         try:
             # THROUGH THE GUARDED OPENER, as `targets_http` sends: plain `urlopen` followed a
             # redirect to any host or port and took a proxy from the environment, so a 302 to
@@ -58,13 +58,11 @@ class ForeignAgentTarget(Target):
                 # (`targets_http.parse_capped`): judged as raw text, a canary in a tool's
                 # `observations` read as the bot saying it, and the tool calls were dropped.
                 if _over:
-                    from targets_http import parse_capped as _pc
+                    from targets_http import parse_capped as _pc, unreadable_over_cap
                     d = _pc(_body.decode("utf-8", "replace"))
                     if d is None:
                         return Probe(prompt=prompt, reply_bytes=_over, output="",
-                                     error="ExtractionFailed: the reply was %s bytes, over "
-                                           "the cap, and its prefix is not JSON this adapter "
-                                           "can read" % format(_over, ","),
+                                     error=unreadable_over_cap(_over),
                                      seconds=round(time.time() - t0, 1))
                 else:
                     d = json.loads(_body)
@@ -96,8 +94,14 @@ class ForeignAgentTarget(Target):
             # "False", so every clean row was an ERROR. `targets_http` was fixed for this
             # shape already. Found by an independent review.
             err = d.get("error") or None
+            # A STEP LOG THE SERVER COULD NOT READ, or a deployment that sends no tool fields
+            # at all, is a probe this adapter did not see the tools of, whatever
+            # `capabilities` claims for the class (`Probe.tool_view`). Found by a review.
+            if (("tool_calls" not in d and "observations" not in d)
+                    or any(str(o).startswith("[step log unavailable") for o in obs)):
+                _view = "partial"
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
         return Probe(prompt=prompt, output=reply, tool_calls=calls, observations=obs,
                      resolved=res, error=err, seconds=round(time.time() - t0, 1),
-                     reply_bytes=_over or None)
+                     reply_bytes=_over or None, tool_view=_view)

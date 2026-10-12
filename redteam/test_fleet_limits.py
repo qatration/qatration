@@ -303,6 +303,29 @@ def main():
                   f"nothing answered on {port} within 60s; the launcher said "
                   f"{said.strip()[:200]!r}")
 
+            # AND `down` STOPS IT, by the full path it was started with. Not on Windows, where
+            # `fleet_procs` asks PowerShell for the process table: a console spawned from a
+            # check on a workstation is a window on somebody's screen. CI's Linux and macOS
+            # runners walk it.
+            if os.name != "nt":
+                r_dn = _sp.run([sh, os.path.join(d, "tools", "fleet.sh"), "down"],
+                               capture_output=True, text=True, env=env, timeout=120)
+                _down = r_dn.stdout + r_dn.stderr
+                _closed = False
+                for _ in range(40):
+                    with socket.socket() as _gone_d:
+                        _gone_d.settimeout(0.2)
+                        if _gone_d.connect_ex(("127.0.0.1", port)) != 0:
+                            _closed = True
+                            break
+                    time.sleep(0.1)
+                check("`down` stops the server it started, by the path it started it with",
+                      r_dn.returncode == 0 and "stopped 1" in _down and _closed,
+                      _down.strip()[:300])
+            else:
+                print("SKIP  `down`, end to end: it asks PowerShell for the process table, "
+                      "which is not run from a check here; CI walks it on Linux and macOS")
+
             pidfile = os.path.join(d, "mybot", "pid")
             if os.path.isfile(pidfile):
                 try:
@@ -323,6 +346,32 @@ def main():
             # the directory removable, and this is what keeps a slow release from failing a
             # suite that has already answered its question.
             _sh.rmtree(d, ignore_errors=True)
+
+    # ANOTHER PROJECT'S server.py IS NOT OURS, whatever interpreter runs it: on a fresh clone the
+    # fleet's interpreter is the bare `python3` on PATH, and matching the script by its basename
+    # killed three or four of four foreign processes in this table. No process is touched.
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import fleet_procs as _fp
+    _table = {
+        "101": "python3 /home/me/qatration-oss/httpbot/server.py",
+        "202": "/usr/bin/python3 /home/me/other-project/api/server.py",
+        "303": "python3.12 -m uvicorn app:server.py",
+        "404": "C:/Python312/python.exe E:/work/billing/server.py",
+        "505": "/home/me/venvs/jupyter/bin/python /srv/notebooks/server_code.py",
+        "606": "python3 /home/me/qatration-oss/httpbot/server.py.bak",
+    }
+    _real_cl = _fp.command_lines
+    _fp.command_lines = lambda: dict(_table)
+    try:
+        _got = [pid for pid, _ in _fp.owners(
+            ["python3", "python"], ["/home/me/qatration-oss/httpbot/server.py",
+                                    "/home/me/qatration-oss/foreign-agent/server_code.py"])]
+    finally:
+        _fp.command_lines = _real_cl
+    check("`down` matches the fleet's own script by its full path, and nothing else",
+          _got == ["101"], str(_got))
+    check("...and refuses to stop anything when no script path is given",
+          _fp.main(["stop", "--interp", "python3"]) == 2, "")
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

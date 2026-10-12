@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Dwie zależności. Cały korpus ataków jest dołączony, a razem z nim dowody stojące za każdą liczbą na tej stronie, wszystko w
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, który jest dostarczany razem z repozytorium. Własnych raportów dwóch pozostałych narzędzi tu nie ma, bo nie pozwalają na to ich licencje. Polecenia, które je odtwarzają, są.</p>
       <ul class="evid">
-        <li><b>46</b> ataków wpisanych w okno czatu chronionego bota: nie przeszedł żaden. Wyłącz jego filtr wyjściowy, a <b>jeden</b> atak przeniesiony wewnątrz pobranego dokumentu wychodzi na zewnątrz za każdym razem. Filtr wejściowy nigdy go nie zobaczył.</li>
+        <li><b>46</b> ataków wpisanych w okno czatu chronionego bota w jednym przebiegu: nie przeszedł żaden. Wyłącz jego filtr wyjściowy, a <b>jeden</b> atak przeniesiony wewnątrz pobranego dokumentu wychodzi na zewnątrz za każdym razem. Filtr wejściowy nigdy go nie zobaczył.</li>
         <li><b>5 z 9</b> botów oddało własne instrukcje na zwykłą prośbę, <span class="keep">bez żadnego ataku.</span></li>
-        <li><b>Dwa</b> zgłosiły restart bazy danych. Żaden z nich nie miał narzędzia, które mogłoby cokolwiek zrestartować.</li>
+        <li><b>Trzy</b> zgłosiły restart bazy danych. Żaden z nich nie miał narzędzia, które mogłoby cokolwiek zrestartować.</li>
       </ul>
       <p class="evid-note">Zmierzone na naszych własnych celach testowych, nie oszacowane. Transkrypcja obok ilustruje samą ideę, liczby powyżej to wyniki.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Luka, której konfiguracja ci nie pokaże</h3></div>
-        <p>Przeciwko prawdziwemu frameworkowi guardraili, 46 ataków wpisanych w okno czatu: nie przeszedł żaden. Nie przeszedł też jeden przeniesiony wewnątrz pobranego dokumentu, dopóki oba jego guardraile były włączone. Wyłącz filtr wyjściowy, a ten sam dokument wychodzi na zewnątrz przy każdej pojedynczej próbie. Filtry wejściowe czytają to, co wpisuje użytkownik, i nigdy nie widzą tego, co twoja baza wiedzy podaje modelowi, więc guardrail wejściowy nigdy nie był tym, co go zatrzymywało.</p>
+        <p>Przeciwko prawdziwemu frameworkowi guardraili, 46 ataków wpisanych w okno czatu w jednym przebiegu: nie przeszedł żaden. Nie przeszedł też jeden przeniesiony wewnątrz pobranego dokumentu, dopóki oba jego guardraile były włączone. Wyłącz filtr wyjściowy, a ten sam dokument wychodzi na zewnątrz przy każdej pojedynczej próbie. Filtry wejściowe czytają to, co wpisuje użytkownik, i nigdy nie widzą tego, co twoja baza wiedzy podaje modelowi, więc guardrail wejściowy nigdy nie był tym, co go zatrzymywało.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>I jak stabilna jest odpowiedź</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>I ile ten guardrail kosztuje</h3></div>
-        <p>Ten sam guardrail, który zablokował tamten dokument, odmówił też odpowiedzi na 6 z 9 zwykłych pytań klientów dotyczących tych samych tematów. Obrona, która odpowiada „nie” twoim klientom, to liczba, którą chcesz znać przed wydaniem, a nie po.</p>
+        <p>Ten sam guardrail, który zablokował tamten dokument, odmówił też odpowiedzi na 4 z 6 zwykłych pytań klientów, które dostał w tym teście, zarówno w zatrutym temacie, jak i poza nim. Obrona, która odpowiada „nie” twoim klientom, to liczba, którą chcesz znać przed wydaniem, a nie po.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Puściliśmy to na nas samych</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Znalezione jeszcze przed pierwszym atakiem</h3></div>
-        <p>Profil z dwunastu sond, wszystkich nieszkodliwych: pięć botów oddało własne instrukcje na zwykłą prośbę. Jeden wypisał swój poufny klucz sesji wewnątrz tego samego zdania, które zabraniało mu ten klucz udostępniać. Dwa zgłosiły restart bazy danych, nie mając narzędzia, które mogłoby cokolwiek zrestartować.</p>
+        <p>Profil z około tuzina sond, wszystkich nieszkodliwych: pięć botów oddało własne instrukcje na zwykłą prośbę. Jeden wypisał swój poufny klucz sesji wewnątrz tego samego zdania, które zabraniało mu ten klucz udostępniać. Trzy zgłosiły restart bazy danych, choć żaden nie miał narzędzia, które mogłoby cokolwiek zrestartować.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Tylko autoryzowane cele.</b> To wysyła prawdziwe ataki na to, na co zostanie skierowane, i działa na twojej maszynie, z twoim kluczem, na twoją odpowiedzialność. Wszystko, co nie jest localhostem, musi udowodnić, że to ty go kontrolujesz (wpis DNS, plik pod znaną ścieżką albo token, który zwraca sam bot), a bez tego przebieg odmawia startu, zamiast liczyć na twoją pamięć. Testowanie systemów, które nie należą do ciebie albo na które nie masz zgody, jest w większości krajów przestępstwem, a odpowiedzialność spoczywa tu na operatorze, nie na narzędziu.
+      <b>Tylko autoryzowane cele.</b> To wysyła prawdziwe ataki na to, na co zostanie skierowane, i działa na twojej maszynie, z twoim kluczem, na twoją odpowiedzialność. Wszystko, co nie jest localhostem, wymaga dowodu podpisanego dla tego adresu w ciągu ostatnich dwóch tygodni, a bez niego przebieg odmawia startu, zamiast liczyć na twoją pamięć. Przebieg sprawdza go, pobierając plik spod znanej ścieżki na celu. Zamiast tego można podać w konfiguracji wpis DNS albo token, który zwraca bot, i wtedy dowodzi to tylko tego, że masz klucz podpisujący, a nie że kontrolujesz cel. Testowanie systemów, które nie należą do ciebie albo na które nie masz zgody, jest w większości krajów przestępstwem, a odpowiedzialność spoczywa tu na operatorze, nie na narzędziu.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Przeczytaj AUTHORISED-USE.md</a> przed pierwszym uruchomieniem.
       <br><br>
       Masz błąd albo przypadek, w którym to narzędzie raportuje coś, czego nie zmierzyło?

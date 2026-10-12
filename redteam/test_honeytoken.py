@@ -658,6 +658,26 @@ def main():
     check("...and a hand-typed canary's declared verifier is asked as well",
           _p4 is not None and _p4[1] == "NOT PLANTED" and _t4.sent == [_hp.VERIFY_PROMPT],
           "%r, sent %r" % (_p4, _t4.sent))
+    # A VERIFIER ANY REPLY CAN CARRY IS REFUSED BEFORE IT IS ASKED: the bot that never saw the
+    # snippet calls itself "the Acme Support assistant", and `ACME-SUPPORT` passed.
+    _t5 = _Fake("Hi, I'm the Acme Support assistant. I have no reference to share.")
+    _p5 = [(_v, (_hp.precondition(_t5, {"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"],
+                                        "honeytoken_verify": _v}) or (None, None))[1])
+           for _v in ("ACME-SUPPORT", "support", "Acme", "R2-D2")]
+    check("a verifier made of words, or too short, is refused, and nothing is sent",
+          [x[1] for x in _p5] == ["WEAK VERIFIER"] * 4 and not _t5.sent,
+          "%r, sent %r" % (_p5, _t5.sent))
+    _t6 = _Fake("Our deployment reference is ACME-REF-55821.")
+    check("...while a hand-written one carrying a digit is asked as before",
+          _hp.precondition(_t6, {"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"],
+                                 "honeytoken_verify": "ACME-REF-55821"}) is None
+          and _t6.sent == [_hp.VERIFY_PROMPT], str(_t6.sent))
+    # AND A PUBLISHED CANARY IS PUBLISHED IN ANY CASE, as the oracle matches it.
+    _pubc = sorted(_hp.published_canaries())[0]
+    check("a published canary declared in another case or spacing is still refused",
+          [(_hp.precondition(_Fake("x"), {"canaries": [_c]}) or (0, None))[1]
+           for _c in (_pubc.lower(), _pubc.upper(), _pubc.replace("-", " "))]
+          == ["PUBLISHED"] * 3, _pubc)
     check("...and priced: a declared verifier is one request whatever the canary looks like",
           _hp.verify_requests({"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"],
                                "honeytoken_verify": "ACME-REF-55821"}) == 1, "")

@@ -126,6 +126,14 @@ def _rebind_pinned(check, az):
             check("hosted, %s refuses a socket whose peer is loopback" % _name,
                   "refused by network policy" in _why, _why)
         check("...and nothing reached the loopback listener", got == [], str(got))
+        # A NAMED PROXY IS REFUSED THERE: through it the pin would check the proxy's address.
+        try:
+            _th_mod._opener_for("http://127.0.0.1:%d" % srv.server_address[1])
+            _why_p = "built"
+        except OSError as e:
+            _why_p = str(e)
+        check("hosted, a target naming a proxy is refused before an opener exists",
+              "refused by network policy" in _why_p and "proxy" in _why_p, _why_p)
         os.environ.pop("QATRATION_HOSTED", None)
         _th_mod._OPENER.open(url, timeout=5).read()
         check("...while on a workstation the same socket connects (the practice fleet)",
@@ -1498,6 +1506,18 @@ def main():
     _rebind_pinned(check, az)
     _authorize_command(check, az)
     _provenance_of_hosted(check, az)
+    # THE PAGE SAYS WHAT IS OBSERVED, as `OBSERVED_METHODS` does: the footer (and fifteen
+    # translations of it) said a DNS record, a file or an echoed token proves control, where
+    # only the well-known file is fetched. Found by an independent review.
+    _site = open(os.path.join(os.path.dirname(HERE), "site", "index.html"),
+                 encoding="utf-8").read()
+    _foot = " ".join(_site[_site.index('<div class="auth">'):].split("</div>")[0].split())
+    check("the site's authorization note names the observed proof as the one fetched, and the "
+          "stated ones as proving the signing key",
+          az.OBSERVED_METHODS == frozenset({"well_known"})
+          and "fetching a file at a known path" in _foot
+          and "you hold the signing key, not that you control the target" in _foot
+          and "has to prove you control it" not in _foot, _foot[:300])
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

@@ -356,6 +356,18 @@ def main():
     _said2 = _buf2.getvalue()
     check("two arms that both got the whole arsenal are ranked as before",
           "held better than" in _said2 and "FLOOR" not in _said2, _said2[-300:])
+    # AND AN ATTACK ONE ARM NEVER HELD is out of the comparison: `other` was run to completion
+    # on three of `whole`'s six, so m4-m6 are named and the ranking reads m1-m3 only. Here
+    # `whole` broke m4 too, which on the totals made the gap 3 to 1.
+    _whole4 = dict(_whole, m4=_row("m4", "EXPLOITED"))
+    _buf3 = _io_m.StringIO()
+    with _ctx_m.redirect_stdout(_buf3):
+        _mm.report("t", {"whole": _whole4, "other": _cut}, {"whole": (0, ""),
+                                                            "other": (0, "")})
+    _said3 = _buf3.getvalue()
+    check("an attack one arm's run never held is named and kept out of the ranking",
+          "3 attack(s) are not in every arm's run" in _said3
+          and "other (1) held better than whole (2)" in _said3, _said3[-500:])
 
     # AND THROUGH THE DOOR, on the path this command's own help calls the whole risk.
     _w_cut = _workspace({"aaa": (None, "2026-09-01 10:00"),

@@ -1756,6 +1756,8 @@ def main():
                 # reply was exactly the cap. Absent means it fit, which is why the default
                 # is None rather than 0.
                 "reply_bytes": getattr(r["probe"], "reply_bytes", None),
+                # AND WHERE THE ADAPTER COULD NOT SEE THE TOOLS (`Probe.tool_view`)
+                "tool_view": getattr(r["probe"], "tool_view", None),
             },
         } for r in recs]
         # WHAT THE SENDS COST IN SECOND ATTEMPTS. `_resilient_send` retries once and said

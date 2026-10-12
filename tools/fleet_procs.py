@@ -19,8 +19,14 @@ listens. `down` during that window would have called it "not running" and walked
 exactly the orphan this file exists to prevent — the same defect as the pid file, wearing a
 better disguise. A booting server has a command line long before it has a port.
 
-    python tools/fleet_procs.py owners --interp PY [--interp PY] [PORT ...]
-    python tools/fleet_procs.py stop   --interp PY [--interp PY] [PORT ...]
+    python tools/fleet_procs.py owners --interp PY [--interp PY] --script PATH [...] [PORT ...]
+    python tools/fleet_procs.py stop   --interp PY [--interp PY] --script PATH [...] [PORT ...]
+
+THE SCRIPT BY ITS FULL PATH, which `fleet.sh` now launches it by. The match used to be the
+basename, `server.py`, beside an interpreter that on a fresh clone is the bare `python3` on
+PATH -- so `down` matched another project's `python3 .../api/server.py` and killed it, three or
+four of four foreign processes in a fixture. A path inside this checkout names one process.
+Found by an independent review.
 
 Ports are optional and only decide what `status`-style reporting says; stopping does not depend
 on them.
@@ -37,11 +43,10 @@ import signal
 import subprocess
 import sys
 
-# A process is ours only if its command line names one of these AND one of the interpreters
-# passed in. Kept explicit rather than derived from the fleet table so that widening it is a
-# deliberate edit: "anything python running a server.py" is exactly the blind kill this file
-# exists to avoid, and there is more than one server.py on a developer's machine.
-OURS = ("server.py", "server_code.py")
+# A process is ours only if its command line names one of the fleet's scripts BY ITS FULL PATH
+# (`--script`) AND one of the interpreters passed in: "anything python running a server.py" is
+# exactly the blind kill this file exists to avoid, and there is more than one server.py on a
+# developer's machine.
 
 WINDOWS = os.name == "nt"
 
@@ -143,30 +148,32 @@ def listeners():
     return out
 
 
-def _names_script(cmdline):
-    """Does this command line run one of OUR scripts, as a whole argument?
+def _names_script(cmdline, scripts):
+    """Does this (normalised) command line run one of OUR scripts, by its full path, as a whole
+    argument?
 
-    Anchored, because a bare substring also matches `test_server.py`, `webserver.py` and
-    `myserver.py` — and this function decides what gets killed.
+    Anchored, because a bare substring also matches `/x/mybot/server.py.bak` and a longer path
+    ending in ours -- and this function decides what gets killed.
     """
-    for name in OURS:
-        if re.search(r"(?:^|[\s/\\\"'])" + re.escape(name) + r"(?:[\s\"']|$)", cmdline):
+    for path in scripts:
+        if re.search(r"(?:^|[\s\"'])" + re.escape(_norm(path)) + r"(?:[\s\"']|$)", cmdline):
             return True
     return False
 
 
-def owners(interps):
+def owners(interps, scripts):
     """[(pid, cmdline)] for every process that is recognisably one of ours, listening or not.
 
     Raises CannotLook when the OS would not answer. The caller must not turn that into "none".
     """
     wanted = [_norm(i) for i in interps if i]
-    if not wanted:
+    scripts = [s for s in scripts if s]
+    if not wanted or not scripts:
         return []
     found = []
     for pid, cmd in command_lines().items():
         low = _norm(cmd)
-        if any(i in low for i in wanted) and _names_script(low):
+        if any(i in low for i in wanted) and _names_script(low, scripts):
             found.append((pid, cmd))
     return found
 
@@ -191,14 +198,14 @@ def stop(pid):
 
 
 def main(argv):
-    action, interps, ports = None, [], []
+    action, interps, scripts, ports = None, [], [], []
     i = 0
     while i < len(argv):
         a = argv[i]
-        if a == "--interp":
+        if a in ("--interp", "--script"):
             i += 1
             if i < len(argv):
-                interps.append(argv[i])
+                (interps if a == "--interp" else scripts).append(argv[i])
         elif action is None:
             action = a
         else:
@@ -206,18 +213,18 @@ def main(argv):
         i += 1
 
     if action not in ("owners", "stop"):
-        print("usage: fleet_procs.py [owners|stop] --interp PY [--interp PY] [PORT ...]",
-              file=sys.stderr)
+        print("usage: fleet_procs.py [owners|stop] --interp PY [--interp PY] --script PATH "
+              "[--script PATH] [PORT ...]", file=sys.stderr)
         return 2
-    if not interps:
-        # Without an interpreter there is no safe match, and guessing one would mean killing
-        # by script name alone. Refusing is the only honest answer.
-        print("  refusing: no --interp given, so nothing can be identified as ours",
-              file=sys.stderr)
+    if not interps or not scripts:
+        # Without both there is no safe match, and guessing one would mean killing by
+        # the other alone. Refusing is the only honest answer.
+        print("  refusing: no --%s given, so nothing can be identified as ours"
+              % ("interp" if not interps else "script"), file=sys.stderr)
         return 2
 
     try:
-        mine = owners(interps)
+        mine = owners(interps, scripts)
     except CannotLook as e:
         # NOT "nothing is running". The point of this module is that a claim about what is
         # running must be backed by an observation, and here there is none. Exit 3 matches the
@@ -249,7 +256,7 @@ def main(argv):
     print("  stopped %d: pids %s" % (len(mine), ", ".join(pid for pid, _ in mine)))
 
     try:
-        left = owners(interps)
+        left = owners(interps, scripts)
     except CannotLook as e:
         print("  could not re-check after stopping (%s) — run `status` before trusting this" % e,
               file=sys.stderr)

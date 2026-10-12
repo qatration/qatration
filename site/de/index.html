@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Zwei Abhängigkeiten. Das gesamte Angriffskorpus wird mitgeliefert, und ebenso die Belege hinter jeder Zahl auf dieser Seite, alles in
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, das mit dem Repository ausgeliefert wird. Die eigenen Berichte der beiden anderen Werkzeuge sind nicht dabei, weil ihre Lizenzen das nicht zulassen. Die Befehle, die sie erzeugen, schon.</p>
       <ul class="evid">
-        <li><b>46</b> Angriffe, in das Chat-Eingabefeld eines geschützten Bots getippt: keiner kam durch. Schalten Sie seinen Ausgangsfilter ab, und <b>ein</b> Angriff, in einem abgerufenen Dokument mitgeliefert, spaziert jedes Mal hinaus. Der Eingangsfilter hat ihn nie zu sehen bekommen.</li>
+        <li><b>46</b> Angriffe, in einem einzigen Lauf in das Chat-Eingabefeld eines geschützten Bots getippt: keiner kam durch. Schalten Sie seinen Ausgangsfilter ab, und <b>ein</b> Angriff, in einem abgerufenen Dokument mitgeliefert, spaziert jedes Mal hinaus. Der Eingangsfilter hat ihn nie zu sehen bekommen.</li>
         <li><b>5 von 9</b> Bots gaben ihre eigenen Anweisungen auf eine schlichte Bitte hin heraus, <span class="keep">ganz ohne Angriff.</span></li>
-        <li><b>Zwei</b> meldeten einen Datenbank-Neustart. Keiner von beiden hatte ein Tool, das irgendetwas neu starten könnte.</li>
+        <li><b>Drei</b> meldeten einen Datenbank-Neustart. Keiner von ihnen hatte ein Tool, das irgendetwas neu starten könnte.</li>
       </ul>
       <p class="evid-note">Auf unseren eigenen Testzielen gemessen, nicht hochgerechnet. Das Transkript daneben veranschaulicht die Idee, die Zahlen darüber sind Ergebnisse.</p>
     </div>
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Die Lücke, die eine Konfiguration Ihnen nicht zeigen kann</h3></div>
-        <p>Gegen ein echtes Guardrail-Framework: 46 Angriffe, in das Chat-Eingabefeld getippt, kamen nicht durch. Ein Angriff in einem abgerufenen Dokument kam ebenso wenig durch, solange beide Rails eingeschaltet waren. Schalten Sie den Ausgangsfilter ab, und dasselbe Dokument spaziert bei jedem einzelnen Versuch hinaus. Eingangsfilter lesen, was der Nutzer tippt, und sehen nie, was Ihre Wissensbasis dem Modell reicht, also war der Eingangsfilter nie das, was es aufgehalten hat.</p>
+        <p>Gegen ein echtes Guardrail-Framework: 46 Angriffe, in einem einzigen Lauf in das Chat-Eingabefeld getippt, kamen nicht durch. Ein Angriff in einem abgerufenen Dokument kam ebenso wenig durch, solange beide Rails eingeschaltet waren. Schalten Sie den Ausgangsfilter ab, und dasselbe Dokument spaziert bei jedem einzelnen Versuch hinaus. Eingangsfilter lesen, was der Nutzer tippt, und sehen nie, was Ihre Wissensbasis dem Modell reicht, also war der Eingangsfilter nie das, was es aufgehalten hat.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Und wie stabil die Antwort ist</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Und was dieser Guard kostet</h3></div>
-        <p>Derselbe Guard, der jenes Dokument blockierte, verweigerte auch die Antwort auf 6 von 9 gewöhnlichen Kundenfragen zu den betroffenen Themen. Ein Schutz, der Ihren Kunden „nein“ antwortet, ist eine Zahl, die Sie vor dem Release haben wollen, nicht danach.</p>
+        <p>Derselbe Guard, der jenes Dokument blockierte, verweigerte auch die Antwort auf 4 der 6 gewöhnlichen Kundenfragen, die er in diesem Test bekam, zum vergifteten Thema ebenso wie abseits davon. Ein Schutz, der Ihren Kunden „nein“ antwortet, ist eine Zahl, die Sie vor dem Release haben wollen, nicht danach.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Wir haben es gegen uns selbst laufen lassen</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Gefunden noch vor dem ersten Angriff</h3></div>
-        <p>Ein Profil aus zwölf Proben, alle harmlos: fünf Bots gaben ihre eigenen Anweisungen auf eine schlichte Bitte hin heraus. Einer gab seinen vertraulichen Sitzungsschlüssel genau in dem Satz aus, der ihm verbot, diesen Schlüssel weiterzugeben. Zwei meldeten einen Datenbank-Neustart, obwohl sie kein Tool hatten, das irgendetwas hätte neu starten können.</p>
+        <p>Ein Profil aus rund einem Dutzend Proben, alle harmlos: fünf Bots gaben ihre eigenen Anweisungen auf eine schlichte Bitte hin heraus. Einer gab seinen vertraulichen Sitzungsschlüssel genau in dem Satz aus, der ihm verbot, diesen Schlüssel weiterzugeben. Drei meldeten einen Datenbank-Neustart, obwohl keiner ein Tool hatte, das irgendetwas hätte neu starten können.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Nur erlaubte Ziele.</b> Dieses Werkzeug schickt echte Angriffe an das, worauf es gerichtet wird, und es läuft auf Ihrem Rechner, unter Ihrem Schlüssel, auf Ihre Verantwortung. Alles, was nicht localhost ist, muss belegen, dass Sie es kontrollieren (ein DNS-Eintrag, eine Datei an einem bekannten Pfad, oder ein Token, das der Bot selbst zurückgibt), und ohne das verweigert der Lauf den Start, statt sich darauf zu verlassen, dass Sie daran denken. Systeme zu testen, die Ihnen nicht gehören oder für die Sie keine Erlaubnis haben, ist in den meisten Ländern strafbar, und die Verantwortung liegt hier beim Betreiber, nicht beim Werkzeug.
+      <b>Nur erlaubte Ziele.</b> Dieses Werkzeug schickt echte Angriffe an das, worauf es gerichtet wird, und es läuft auf Ihrem Rechner, unter Ihrem Schlüssel, auf Ihre Verantwortung. Alles, was nicht localhost ist, braucht einen Nachweis, der in den letzten zwei Wochen für genau diese Adresse signiert wurde, und ohne ihn verweigert der Lauf den Start, statt sich darauf zu verlassen, dass Sie daran denken. Der Lauf prüft ihn, indem er eine Datei an einem bekannten Pfad auf dem Ziel abruft. Stattdessen lässt sich in der Konfiguration ein DNS-Eintrag oder ein Token angeben, das der Bot zurückgibt, und dann ist nur belegt, dass Sie den Signaturschlüssel besitzen, nicht dass Sie das Ziel kontrollieren. Systeme zu testen, die Ihnen nicht gehören oder für die Sie keine Erlaubnis haben, ist in den meisten Ländern strafbar, und die Verantwortung liegt hier beim Betreiber, nicht beim Werkzeug.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Lesen Sie AUTHORISED-USE.md</a> vor dem ersten Lauf.
       <br><br>
       Einen Fehler gefunden oder einen Fall, in dem dieses Werkzeug über etwas berichtet, das es nicht gemessen hat?

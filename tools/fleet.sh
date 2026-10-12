@@ -171,7 +171,9 @@ case "${1:-status}" in
         echo "  $port NO PYTHON  $py"
         continue
       fi
-      detach "$dir" "$py" "$script" "$args"
+      # BY ITS FULL PATH, so `down` can tell this server from another project's server.py
+      # (tools/fleet_procs.py): the bare name is what the command line used to carry.
+      detach "$dir" "$py" "$dir/$script" "$args"
       echo "  $port starting  $(basename "$dir")/$script"
     done
     echo "give them a few seconds, then: tools/fleet.sh status"
@@ -192,14 +194,16 @@ case "${1:-status}" in
     # kept listening. Still not a blind kill by port — a process is stopped only when its own
     # command line names one of the fleet's scripts.
     ports=()
+    scripts=()
     for entry in "${FLEET[@]}"; do
       IFS='|' read -r port dir py script args <<< "$entry"
       ports+=("$port")
+      scripts+=(--script "$dir/$script")
     done
     # Every interpreter the table names, because a server started under the wrong one is
     # exactly the orphan worth catching. The ports only decide what the failure message says.
     "$MAIN" "$HERE/tools/fleet_procs.py" stop \
-      --interp "$MAIN" --interp "$SMOL" --interp "$NEMO" "${ports[@]}"
+      --interp "$MAIN" --interp "$SMOL" --interp "$NEMO" "${scripts[@]}" "${ports[@]}"
     rc=$?
     rm -f "$PIDS"
     exit $rc

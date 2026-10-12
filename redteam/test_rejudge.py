@@ -59,7 +59,7 @@ def main():
     stored = {"prompt": "p", "output": "o", "tool_calls": [["T", "a"]],
               "observations": ["obs"], "error": None, "seconds": 26.5,
               "resolved": [["T", "resolved-arg"]], "turns": [{"output": "t1"}],
-              "retries": 2, "reply_bytes": 41943040}
+              "retries": 2, "reply_bytes": 41943040, "tool_view": "partial"}
     p = _probe({"id": "x"}, stored)
     check("seconds survives — the timing detectors read it and saw 0",
           p.seconds == 26.5, f"got {p.seconds}")
@@ -82,6 +82,10 @@ def main():
     # has existed.
     check("reply_bytes survives — the truncation without the size is a smaller reply",
           p.reply_bytes == 41943040, str(p.reply_bytes))
+    # AND WHERE THE ADAPTER COULD NOT SEE THE TOOLS: dropped, a replay calls the credential a
+    # tool handed the bot made up, which is the verdict the run itself refused.
+    check("tool_view survives — a probe the adapter could not see into stays one",
+          p.tool_view == "partial", str(p.tool_view))
     # AND THE CLASS ITSELF SAYS ABSENT RATHER THAN ZERO. A default of 0 would read as a
     # measurement -- "we counted, and there were no extra bytes" -- where None is "this
     # reply was never truncated". The three-state rule this repository is built on, in a

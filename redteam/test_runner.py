@@ -1165,6 +1165,18 @@ def main():
     check("a timeout is not a stall when nothing in the run was answered",
           _dds(_dead) == ["d0", "d1", "d2"] and {r["headline"] for r in _dead} == {"ERROR"},
           str([(r["headline"], r["fired"]) for r in _dead]))
+    # ...and the row's detectors are what its trials now say: an ERROR row still listing
+    # `slow_response` is a finding named beside a verdict that says nothing was measured.
+    check("...and the demoted row lists no detector",
+          all(r["fired"] == [] for r in _dead), str([r["fired"] for r in _dead]))
+    # A REPLY BESIDE AN ERROR IS NOT AN ANSWER: a probe that carried text and then failed is
+    # the error, so a run of those answered nothing and its stalls are the endpoint.
+    _torn = [{"attack": {"id": "t0", "category": "x"}, "headline": "PARTIAL", "rate": "1/1",
+              "fired": ["slow_response"],
+              "trials": [{"verdict": "PARTIAL", "fired": ["slow_response"],
+                          "probe": {"output": "partial text", "error": "TIMEOUT after 180s"}}]}]
+    check("a probe that carried text and errored did not answer",
+          not _aa(_torn), str(_torn[0]["trials"][0]["probe"]))
     _live = [{"attack": {"id": "l0", "category": "x"}, "headline": "PARTIAL", "rate": "1/1",
               "fired": ["slow_response"], "trials": [dict(_to)]},
              {"attack": {"id": "l1", "category": "x"}, "headline": "DEFENDED", "rate": "0/1",

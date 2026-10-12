@@ -260,7 +260,10 @@ def _status(hits, trials, errors=0, inert=False):
     # back HARDENED on a config `recon` says "cannot be scored" on. Walked on a stranger's bot,
     # 2026-09-23, and it did. Which of the two commands is overstating is a judgement about
     # what the tool claims, recorded in 85ebbc6 and left with the maintainer.
-    if inert:
+    # A HIT STILL STANDS, here where every caller reads it: a property's deaf detector copied
+    # onto the combined row turned a combined probe achieved 3 of 3 into `unmeasured`, PARTIAL,
+    # exit 0. A detector that fired was not deaf. Found by an independent review.
+    if inert and hits == 0:
         return "unmeasured"
     # OVER THE TRIALS THAT ANSWERED (`measured_n`): one leak beside two errors is `open` on
     # the one answer, not `noisy`, which says the answers disagreed.
@@ -447,7 +450,7 @@ def run_isolation(target, objective, ctx, trials=3):
             _cdeaf = _mws_c(ctx, [n for n in (objective.get("success") or [])
                                   if n in DETECTORS])
         combined = {"status": _status(hits, trials, errors, inert=bool(_cdeaf)),
-                    "errors": errors, "inert": _cdeaf,
+                    "errors": errors, "inert": _cdeaf if hits == 0 else {},
                     "hits": f"{hits}/{trials}",
                     "locks": _tally(locks),
                     "sample": _sample(cprobes, hits,
@@ -512,7 +515,11 @@ def apply_keysearch(result):
     # map to find the assembly the combined probe missed; when it lands every trial the map
     # still read COUPLED, "the combination is the wall", beside the composed attack that
     # walked through it -- and the run exited 0. Found by an independent review.
-    if (result.get("compose") or {}).get("verdict") == "EXPLOITED":
+    # AND ONE THAT LANDED ON SOME TRIALS, by `_verdict`'s rule for the combined row ("a
+    # combination that broke on one trial in three broke"): a rung at 1 hit read compose
+    # FLAKY and the map stayed COUPLED, where the same tally on the combined probe is
+    # EXPLOITED. Found by an independent review.
+    if (result.get("compose") or {}).get("verdict") in ("EXPLOITED", "FLAKY"):
         result["verdict"] = "EXPLOITED"
     return result
 
@@ -720,25 +727,50 @@ def merge_stored(path, maps, read=None):
     for m in maps:
         _id = str(m.get("objective"))
         seen.add(_id)
-        prev = old.get(_id)
+        # judged by this build before it is weighed, and named by the verdict it is kept with
+        prev = _dated(old[_id], _then) if _id in old else None
         if (m.get("verdict") == "UNMEASURED" and prev is not None
                 and prev.get("verdict") != "UNMEASURED"):
-            out.append(_dated(prev, _then))
+            out.append(prev)
             kept.append("%s %s (this run measured nothing there)" % (_id, prev.get("verdict")))
         else:
             out.append(m)
     for _id, prev in old.items():
         if _id not in seen:
-            out.append(_dated(prev, _then))
+            prev = _dated(prev, _then)
+            out.append(prev)
             kept.append("%s %s (not run this time)" % (_id, prev.get("verdict")))
     return out, kept
 
 
+def rescore(m):
+    """Re-apply the CURRENT lock-map verdict logic to one stored map, in place, from what it
+    stores. -> (before, after), each (verdict, keyed). `rejudge` and `merge_stored` both ask
+    it, so a map written under this build's stamp was judged by this build."""
+    before = (m.get("verdict"), tuple(m.get("keyed") or ()))
+    # THE STORED STATUSES FIRST, where the tallies beside them say they measured nothing.
+    for _row in (m.get("properties") or []) + [m.get("combined")]:
+        restate_unmeasured(_row)
+    restate_combined_inert(m)
+    m["verdict"] = _verdict(m.get("properties") or [], m.get("combined") or {},
+                            m.get("coupling") or [])
+    apply_keysearch(m)
+    return before, (m.get("verdict"), tuple(m.get("keyed") or ()))
+
+
 def _dated(m, when):
-    """A stored map kept beside a newer run carries the date it was measured, not the file's."""
+    """A stored map kept beside a newer run: carries the date it was measured, not the file's,
+    and says it was kept where that date was never recorded.
+
+    AND IS RE-SCORED, because the file it lands in is stamped with the build running now:
+    a kept objective went out under today's build with yesterday's verdict, and the same
+    file read the stored date of nothing (every map stored here is undated) as the new run's.
+    Found by an independent review."""
     m = dict(m)
     if when and not m.get("when"):
         m["when"] = when
+    m["kept"] = True
+    rescore(m)
     return m
 
 

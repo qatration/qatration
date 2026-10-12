@@ -145,6 +145,13 @@ class Probe:
     # could not see. The sweep's serialiser never carried it, `rejudge` never restored it,
     # and the report the comment promises could not say anything: the size reached no file.
     reply_bytes: Optional[int] = None
+    # WHAT THE ADAPTER COULD NOT SEE ON THIS PROBE. `tool_visibility` is an adapter's claim
+    # that it reports every tool result; "partial" is the probe where it could not -- a step
+    # log that failed on the server, a deployment that sent no tool fields -- and
+    # `oracle._everything_given` reads it, so a credential a tool handed the bot is not
+    # called made up because the result that carried it was not reported. Found by an
+    # independent review.
+    tool_view: Optional[str] = None
 
     def __post_init__(self):
         """The annotations above are a promise; this is what keeps it.
@@ -438,7 +445,7 @@ def chain_probe(prompts, step, turn_extra=None):
     turns, out, calls, obs, res, secs = [], "", [], [], [], 0.0
     # AND HOW LARGE THE LARGEST ANSWER WAS: a turn cut at the reply cap says so on its probe,
     # and the conversation's probe dropped it -- `None`, which reads as "it fit".
-    big = None
+    big, tv = None, None
     import threading as _thr
     for i, p in enumerate(prompts):
         # NOT ONE MORE STEP FOR A CONVERSATION NOBODY IS WAITING FOR: the watchdog abandoned
@@ -448,7 +455,8 @@ def chain_probe(prompts, step, turn_extra=None):
             return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
                          observations=obs, resolved=res, turns=turns, seconds=secs,
                          error="ABANDONED: the watchdog gave up on this conversation; "
-                               "the remaining steps were not sent", reply_bytes=big)
+                               "the remaining steps were not sent", reply_bytes=big,
+                         tool_view=tv)
         t0 = _t.time()
         # A STEP THAT RAISES IS A STEP THAT ERRORED: the exception went past this loop, the
         # turns that had answered went with it, and the retry guard -- which keeps a
@@ -463,15 +471,25 @@ def chain_probe(prompts, step, turn_extra=None):
         _rb = getattr(pr, "reply_bytes", None)
         if _rb is not None:
             big = max(big or 0, _rb)
+        # one step the adapter could not see into is a conversation it could not see into
+        tv = tv or getattr(pr, "tool_view", None)
         if getattr(pr, "error", None):
             # AND WHAT THE ERRORED STEP ITSELF DID: an agent that ran a tool and then failed
             # reports both, and the step's calls were dropped with the turn.
+            # AND WHAT IT SAID: a recovery code printed before a truncated stream was dropped
+            # here and scored ERROR, where the same reply sent alone is EXPLOITED.
+            if str(pr.output or "").strip():
+                out = pr.output
+                turns.append({"prompt": p, "output": pr.output,
+                              "tool_calls": list(pr.tool_calls or []),
+                              "observations": list(pr.observations or []), "seconds": s,
+                              "error": pr.error})
             calls += list(pr.tool_calls or [])
             obs += list(pr.observations or [])
             res += list(getattr(pr, "resolved", None) or [])
             return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
                          observations=obs, resolved=res, turns=turns, seconds=secs + s,
-                         error=pr.error, reply_bytes=big)
+                         error=pr.error, reply_bytes=big, tool_view=tv)
         out = pr.output
         calls += list(pr.tool_calls or [])
         obs += list(pr.observations or [])
@@ -483,11 +501,18 @@ def chain_probe(prompts, step, turn_extra=None):
                           **({"reply_bytes": _rb} if _rb is not None else {}),
                           **(turn_extra(i) if turn_extra else {})))
     return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls, observations=obs,
-                 resolved=res, turns=turns, seconds=secs, reply_bytes=big)
+                 resolved=res, turns=turns, seconds=secs, reply_bytes=big, tool_view=tv)
 
 
 # What a LangChain executor answers when it ran out of iterations without a final answer.
 AGENT_STOPPED = "Agent stopped due to iteration limit or time limit."
+
+
+def agent_stopped(text):
+    """Is this reply the executor's canned iteration-limit sentence rather than an answer?
+    One rule for an executor run here (`executor_turn`) and one reached over HTTP, where a
+    LangChain deployment hands the same sentence back as its reply."""
+    return str(text or "").strip() == AGENT_STOPPED
 
 
 def executor_turn(ex, prompt):
@@ -506,11 +531,31 @@ def executor_turn(ex, prompt):
     import contextlib as _cl
     import time as _t
     t0 = _t.time()
+    # WHAT RAN BEFORE AN EXCEPTION. `intermediate_steps` arrives only with a result, so a tool
+    # that ran and then a model call that timed out left a probe with no calls: a
+    # `DeleteAccount` that happened, scored ERROR. A callback sees each tool as it starts and
+    # ends; on a result the steps are the record, as before. Found by an independent review.
+    ran = []
+    from llm import callback_base as _callback_base
+
+    class _Ran(_callback_base()):
+        def on_tool_start(self, serialized, input_str, **_kw):
+            # the arguments as the steps record them (`_arg_text`), where LangChain passes them
+            _in = _kw.get("inputs")
+            ran.append([str((serialized or {}).get("name") or "?"),
+                        _arg_text(_in) if _in is not None else str(input_str), ""])
+
+        def on_tool_end(self, output, **_kw):
+            if ran:
+                ran[-1][2] = str(output)
+
     with _cl.redirect_stdout(io.StringIO()), _cl.redirect_stderr(io.StringIO()):
         try:
-            r = ex.invoke({"input": prompt})
+            r = ex.invoke({"input": prompt}, config={"callbacks": [_Ran()]})
         except Exception as e:
             return Probe(prompt=prompt, output="", error=f"{type(e).__name__}: {e}",
+                         tool_calls=[(n, a) for n, a, _o in ran],
+                         observations=[o for _n, _a, o in ran],
                          seconds=round(_t.time() - t0, 1))
     steps = r.get("intermediate_steps", []) or []
     real = [(a, o) for a, o in steps if getattr(a, "tool", None) != "_Exception"]
@@ -518,7 +563,7 @@ def executor_turn(ex, prompt):
              if getattr(a, "tool", None) == "_Exception"]
     prose = [x for x in prose if x]
     out, err = r.get("output", "") or "", None
-    if out.strip() == AGENT_STOPPED:
+    if agent_stopped(out):
         out = prose[-1] if prose else ""
         if not prose and not real:
             err = ("AgentStopped: the agent hit its iteration limit with no final answer, no "

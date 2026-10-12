@@ -75,7 +75,12 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
         rows[attack_name(r["attack"])] = {"v": r["headline"], "rate": r.get("rate", ""),
                                    "fired": sorted(r.get("fired") or []),
                                    "h": attack_digest(r["attack"])}
-    return {"run": when or datetime.datetime.now().isoformat(" ", "seconds"),
+    # THE RUN'S OWN DATE before the clock: `record` stamped now() a few seconds after the
+    # sweep's `meta.when`, so across a minute boundary the live entry and its backfilled copy
+    # (dated by `meta.when`) were two runs to `same_run`, and a re-score diffed as `fixed`.
+    # Found by an independent review.
+    _said = str(meta.get("when") or "") if dated_by_run else ""
+    return {"run": when or _said or datetime.datetime.now().isoformat(" ", "seconds"),
             "target": meta.get("target"), "model": meta.get("model", ""),
             # THE BUILD THAT JUDGED IT, for the same reason `model` is here. A verdict is
             # the product of the target and the oracle, and this file compares verdicts. An

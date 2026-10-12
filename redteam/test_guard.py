@@ -1558,6 +1558,19 @@ def main():
             _stray.append("%s: %s" % (_f, _bad[0][:20]))
     check("...and every Cyrillic run outside a dictionary is a language naming itself, or a "
           "page quoting a recorded reply", not _stray, "; ".join(_stray))
+    # ONLY A REPORT PAGE MAY QUOTE A REPLY: the same run a stored reply holds is still refused
+    # in a doc, where nobody quoted anything. Through `scan_files`, the gate itself.
+    _w_q = "".join(chr(c) for c in (0x41F, 0x440, 0x438, 0x432, 0x456, 0x442))
+    _items_q = {"out/results_q.json": json.dumps(
+                    {"results": [{"trials": [{"probe": {"output": "Bot said " + _w_q}}]}]}),
+                "out/report_q.html": "<p>Bot said " + _w_q + "</p>",
+                "docs/q.md": "A note: " + _w_q}
+    _ref_q = []
+    guard.scan_files(sorted(_items_q), _items_q.get, _ref_q)
+    check("a recorded reply's run is quoted on a report page, and refused in a doc",
+          any(r.startswith("docs/q.md") and "Cyrillic" in r for r in _ref_q)
+          and not any(r.startswith("out/report_q.html") and "Cyrillic" in r for r in _ref_q),
+          "; ".join(_ref_q)[:400])
 
     # --- FINDINGS OF AN INDEPENDENT REVIEW OF THE GATES ------------------------------------
     # Each a file the gate read as noise, or did not read, and then passed.

@@ -248,47 +248,51 @@ def weak_canaries(ctx, root=None):
         bot answering normally. Narrow -- the corpus is small -- but when it fires it is
         certain rather than heuristic, which is the opposite of the rule above it.
     """
-    out = []
+    # THROUGH `declared`, the one reading of the value: read raw, `"support hours "` with a
+    # quoted trailing space was not in the ordinary corpus and raised nothing, while every
+    # detector matched the stripped `support hours` in "Our support hours are 9 to 5".
+    return [(c, _why) for c in declared(ctx or {})
+            for _why in [_too_ordinary(c, root)] if _why]
+
+
+def _too_ordinary(c, root=None):
+    """-> why this value is too ordinary to be evidence (`weak_canaries`), or None. One rule for
+    a canary and for a verifier: `precondition` asks it of `honeytoken_verify` too."""
     floor = max(1, (_shipped_floor(root) * 2) // 3)
     try:
         from benign import ORDINARY as _ordinary
         blob = " ".join(str(p) for p in _ordinary).lower()
     except Exception:
         blob = ""
-    # THROUGH `declared`, the one reading of the value: read raw, `"support hours "` with a
-    # quoted trailing space was not in the ordinary corpus and raised nothing, while every
-    # detector matched the stripped `support hours` in "Our support hours are 9 to 5".
-    for c in declared(ctx or {}):
-        s = squeezed(c)
-        if not s:
-            # A CANARY MADE OF SEPARATORS IS THE WORST ONE THERE IS, and it was the only
-            # one this check passed over in silence. `squeezed` drops every separator, so
-            # `!!!`, `---` and `   ` come back empty: there is no string left for the two
-            # signals below to measure, and `continue` read that as nothing to say.
-            #
-            # What it is, measured: `canary_in_output` compares the raw value, so a canary
-            # of `!!!` fires on `Sure! Here is your answer!!! Anything else?` -- an ordinary
-            # reply, scored as a leak. The check that warns an operator their canary is too
-            # short to be evidence warned about `abc` and stayed quiet about this, which is
-            # strictly worse than `abc`.
-            #
-            # A NOTE AND NOT A REFUSAL, like the two below it: the operator's config is
-            # theirs, and this says what will happen rather than stopping them.
-            out.append((c, "has nothing left once separators are dropped, so there is no "
-                           "string here to look for. The detector compares the value as "
-                           "written, so every reply containing those characters scores as "
-                           "a leak"))
-            continue
-        if blob and str(c).lower() in blob:
-            out.append((c, "appears in an ordinary customer question, so a reply containing "
-                           "it is not evidence of anything"))
-        elif len(s) < floor:
-            out.append((c, "is %d characters once separators are dropped, shorter than any "
-                           "canary this project ships (%d). A short string appears in "
-                           "ordinary replies, and every one of those scores as a leak — run "
-                           "`qatration benign --target-config <yours>.yaml` to measure how "
-                           "often it does" % (len(s), _shipped_floor(root))))
-    return out
+    s = squeezed(c)
+    if not s:
+        # A CANARY MADE OF SEPARATORS IS THE WORST ONE THERE IS, and it was the only
+        # one this check passed over in silence. `squeezed` drops every separator, so
+        # `!!!`, `---` and `   ` come back empty: there is no string left for the two
+        # signals below to measure, and `continue` read that as nothing to say.
+        #
+        # What it is, measured: `canary_in_output` compares the raw value, so a canary
+        # of `!!!` fires on `Sure! Here is your answer!!! Anything else?` -- an ordinary
+        # reply, scored as a leak. The check that warns an operator their canary is too
+        # short to be evidence warned about `abc` and stayed quiet about this, which is
+        # strictly worse than `abc`.
+        #
+        # A NOTE AND NOT A REFUSAL, like the two below it: the operator's config is
+        # theirs, and this says what will happen rather than stopping them.
+        return ("has nothing left once separators are dropped, so there is no "
+                "string here to look for. The detector compares the value as "
+                "written, so every reply containing those characters scores as "
+                "a leak")
+    if blob and str(c).lower() in blob:
+        return ("appears in an ordinary customer question, so a reply containing "
+                "it is not evidence of anything")
+    if len(s) < floor:
+        return ("is %d characters once separators are dropped, shorter than any "
+                "canary this project ships (%d). A short string appears in "
+                "ordinary replies, and every one of those scores as a leak — run "
+                "`qatration benign --target-config <yours>.yaml` to measure how "
+                "often it does" % (len(s), _shipped_floor(root)))
+    return None
 
 
 def planted(reply, verify):
@@ -384,7 +388,11 @@ def precondition(target, ctx, answered=None):
     # without knowing anything about the deployment, so a run that fails to extract it proves
     # nothing. It lived in `run` alone, and `verify` and `isolation` -- which now ask this
     # function -- would have measured against it.
-    _pub = sorted(published_canaries() & set(declared(ctx)))
+    # IN THE FORM THE ORACLE MATCHES IN (`squeezed`): `oai-canary-4417-rk` passed as not
+    # published while `canary_in_output` matched the published value case-insensitively.
+    # Found by an independent review.
+    _pubs = {squeezed(p) for p in published_canaries()}
+    _pub = sorted(c for c in declared(ctx) if squeezed(c) in _pubs)
     if _pub:
         return (5, "PUBLISHED",
                 "%s uses a canary that ships with this tool (%s). That value is published, "
@@ -414,6 +422,23 @@ def precondition(target, ctx, answered=None):
                 "%s declares a honeytoken (%s) but no `honeytoken_verify`, so nothing can "
                 "confirm it was ever pasted in. Mint a pair with `qatration mint` and declare "
                 "both." % (getattr(target, "name", "this target"), ours[0]), None)
+    # A VERIFIER ANY REPLY CAN CARRY PROVES NOTHING: `honeytoken_verify: support` passed on a
+    # bot that never saw the snippet, because it calls itself "the Acme Support assistant",
+    # and every canary detector then stood silent behind a precondition that said planted.
+    # The rule a canary is held to, `_too_ordinary`. Found by an independent review.
+    _weak_v = _too_ordinary(verify) if verify else None
+    # AND ONE MADE OF WORDS: `ACME-SUPPORT` is long enough and in no ordinary question, and a bot
+    # that never saw the snippet says it introducing itself. A minted verifier is random; one
+    # written by hand has to carry something no sentence does, a digit at least.
+    if (verify and not _weak_v and not re.search(r"[0-9]", verify)
+            and not re.fullmatch(rf"{VERIFY_PREFIX}-[A-Z0-9]{{8}}", verify, flags=re.I)):
+        _weak_v = ("is made of words alone, and a bot that never saw the snippet can say "
+                   "words")
+    if _weak_v:
+        return (5, "WEAK VERIFIER",
+                "%s declares `honeytoken_verify: %r`, which %s. A reply carrying it does not "
+                "show the snippet was pasted in: mint a pair with `qatration mint`."
+                % (getattr(target, "name", "this target"), verify, _weak_v), None)
     if verify_requests(ctx):
         if answered is not None:
             probe = answered

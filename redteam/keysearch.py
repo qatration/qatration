@@ -335,12 +335,13 @@ def search(target, task, success, ctx, frames=None, trials=3, stop_on_hit=False,
         # can fill -- so nothing in the library was tried, which is not "nothing in the
         # library moved it". `run_isolation` names this very case as a defect.
         verdict = "UNMEASURED"
-    elif results and all((r.get("errors") or 0) + (r.get("silent") or 0)
-                         >= (r.get("trials") or 1) for r in results):
-        # EVERY FRAMED TRIAL ERRORED: nothing in the library was measured, which is not
-        # "nothing in the library moved it". `try_frame` counts the errors and this read
-        # only the hits, so a target that fell over after the control answered LOCKED.
-        # Found by an independent review.
+    elif not any(r["measured"] for r in results):
+        # NO FRAME WAS MEASURED: nothing in the library was, which is not "nothing in the
+        # library moved it". `try_frame` counts the errors and this read only the hits, so a
+        # target that fell over after the control answered LOCKED. And by `measured_n`, the
+        # rule every arm in this family reads: "every trial errored" let four frames with one
+        # answer and two errors each read LOCKED where `isolation._status` says unmeasured
+        # for the same tally. Found by independent reviews.
         verdict = "UNMEASURED"
     else:
         verdict = "LOCKED"        # nothing in the library moved it

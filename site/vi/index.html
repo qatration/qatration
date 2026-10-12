@@ -552,9 +552,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
          pixels of room at 375px and a native name needs eighty. But `UK` read aloud is
          United Kingdom, not Ukrainian, and the visitor who most needs this control is the
          one who cannot read the page it sits on. So each entry carries the language's own
-         name for itself, off-screen and marked as that language so it is pronounced
-         correctly, and the visible code stays INSIDE the accessible name rather than being
-         replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
+         name for itself, shown beside the code in the menu and marked as that language so
+         it is pronounced correctly, and the code stays INSIDE the accessible name rather than
+         being replaced by it, which is what 2.5.3 asks and what a voice-control user has to say.
 
          The word `Language` is written here rather than generated, so it is an ordinary
          string this file's own dictionary translates. Generated, it would be text the
@@ -620,9 +620,9 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       <p class="evid-note" style="margin-top:14px">Chỉ hai gói phụ thuộc. Toàn bộ kho tấn công đi kèm sẵn, và bằng chứng đằng sau từng con số trên trang này cũng vậy, tất cả đều nằm trong
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, được phát hành cùng kho mã. Báo cáo của hai công cụ kia không có ở đây, vì giấy phép của chúng không cho phép. Các lệnh tạo lại chúng thì có.</p>
       <ul class="evid">
-        <li><b>46</b> cuộc tấn công gõ thẳng vào khung chat của một bot có phòng vệ: không cuộc nào lọt qua. Tắt bộ lọc đầu ra của nó đi và <b>một</b> cuộc tấn công được mang theo trong một tài liệu được truy xuất sẽ đi ra ngoài, lần nào cũng vậy. Bộ lọc đầu vào chưa bao giờ nhìn thấy nó.</li>
+        <li><b>46</b> cuộc tấn công gõ thẳng vào khung chat của một bot có phòng vệ trong một lần chạy: không cuộc nào lọt qua. Tắt bộ lọc đầu ra của nó đi và <b>một</b> cuộc tấn công được mang theo trong một tài liệu được truy xuất sẽ đi ra ngoài, lần nào cũng vậy. Bộ lọc đầu vào chưa bao giờ nhìn thấy nó.</li>
         <li><b>5 trên 9</b> bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường, <span class="keep">không hề có tấn công nào.</span></li>
-        <li><b>Hai con bot</b> báo rằng một cơ sở dữ liệu đã được khởi động lại. Cả hai đều không hề có công cụ nào khởi động lại được thứ gì.</li>
+        <li><b>Ba con bot</b> báo rằng một cơ sở dữ liệu đã được khởi động lại. Không con nào có công cụ nào khởi động lại được thứ gì.</li>
       </ul>
       <p class="evid-note">Đo trên chính các mục tiêu thử nghiệm của chúng tôi, không phải ước tính. Bản ghi bên cạnh minh họa ý tưởng, còn những con số phía trên là kết quả.</p>
     </div>
@@ -683,7 +683,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
     </div>
 
     <div class="grp">Cần quyền truy cập vào chính thứ bị tấn công</div>
-    <p class="grp-note">Bạn không thể cài một tài liệu vào kho tri thức mà bạn không có quyền ghi, và từ bên ngoài bạn không phân biệt được một lệnh gọi công cụ thực sự đã chạy với một lệnh gọi mà bot chỉ mô tả suông, một điều mà chúng tôi đã đo và thấy chính các bot cũng nhầm về bản thân mình. Muốn vậy phải có kho tấn công, định nghĩa công cụ, hoặc quyền nhìn thấy các lệnh gọi.
+    <p class="grp-note">Bạn không thể cài một tài liệu vào kho tri thức mà bạn không có quyền ghi, và từ bên ngoài bạn không phân biệt được một lệnh gọi công cụ thực sự đã chạy với một lệnh gọi mà bot chỉ mô tả suông, một điều mà chúng tôi đã đo và thấy chính các bot cũng nhầm về bản thân mình. Muốn vậy phải có kho tài liệu (nội dung kho tri thức), định nghĩa công cụ, hoặc quyền nhìn thấy các lệnh gọi.
       <b>Đo trên bằng chứng phát hành kèm công cụ này: 113 trong số 229 phát hiện trên các mục tiêu có báo cáo lệnh gọi công cụ hoàn toàn không hiện ra nếu chỉ đọc câu trả lời.</b> Bot trả lời lịch sự rồi nhét bí mật vào một đối số của lệnh gọi.</p>
     <div class="finds">
       <div class="find">
@@ -751,7 +751,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Khoảng hở mà một tệp cấu hình không thể cho bạn thấy</h3></div>
-        <p>Đối đầu với một framework guardrail thật, 46 cuộc tấn công gõ thẳng vào khung chat: không cuộc nào lọt qua. Một cuộc mang trong tài liệu được truy xuất cũng không lọt, khi cả hai hàng rào của nó còn bật. Tắt bộ lọc đầu ra đi và chính tài liệu ấy đi ra ngoài ở mọi lần thử. Bộ lọc đầu vào đọc thứ người dùng gõ, và không bao giờ thấy thứ kho tri thức của bạn đưa cho mô hình, nên hàng rào đầu vào chưa bao giờ là thứ đã chặn nó.</p>
+        <p>Đối đầu với một framework guardrail thật, 46 cuộc tấn công gõ thẳng vào khung chat trong một lần chạy: không cuộc nào lọt qua. Một cuộc mang trong tài liệu được truy xuất cũng không lọt, khi cả hai hàng rào của nó còn bật. Tắt bộ lọc đầu ra đi và chính tài liệu ấy đi ra ngoài ở mọi lần thử. Bộ lọc đầu vào đọc thứ người dùng gõ, và không bao giờ thấy thứ kho tri thức của bạn đưa cho mô hình, nên hàng rào đầu vào chưa bao giờ là thứ đã chặn nó.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Và câu trả lời ổn định đến đâu</h3></div>
@@ -759,7 +759,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Và cái giá của guardrail ấy</h3></div>
-        <p>Chính guardrail đã chặn tài liệu đó cũng từ chối trả lời 6 trong số 9 câu hỏi khách hàng bình thường về những chủ đề liên quan. Một lớp phòng vệ trả lời “không” với khách hàng của bạn là một con số bạn muốn biết trước khi phát hành, chứ không phải sau.</p>
+        <p>Chính guardrail đã chặn tài liệu đó cũng từ chối trả lời 4 trong số 6 câu hỏi khách hàng bình thường mà nó nhận trong lần thử ấy, cả về chủ đề bị đầu độc lẫn ngoài chủ đề đó. Một lớp phòng vệ trả lời “không” với khách hàng của bạn là một con số bạn muốn biết trước khi phát hành, chứ không phải sau.</p>
       </div>
       <div class="find">
         <div class="top-row"><h3>Chúng tôi đã chạy nó nhắm vào chính mình</h3></div>
@@ -777,7 +777,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Tìm ra trước cả cuộc tấn công đầu tiên</h3></div>
-        <p>Một hồ sơ gồm mười hai lượt thăm dò, tất cả đều vô hại: năm con bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường. Một con in ra khóa phiên bí mật của nó ngay bên trong đúng câu đang cấm nó chia sẻ khóa ấy. Hai con báo rằng một cơ sở dữ liệu đã được khởi động lại trong khi chúng không hề có công cụ nào khởi động lại được thứ gì.</p>
+        <p>Một hồ sơ gồm khoảng một tá lượt thăm dò, tất cả đều vô hại: năm con bot đã giao nộp chính chỉ dẫn của mình chỉ vì một lời đề nghị bình thường. Một con in ra khóa phiên bí mật của nó ngay bên trong đúng câu đang cấm nó chia sẻ khóa ấy. Ba con báo rằng một cơ sở dữ liệu đã được khởi động lại trong khi không con nào có công cụ nào khởi động lại được thứ gì.</p>
       </div>
     </div>
 
@@ -831,7 +831,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
 <footer>
   <div class="wrap foot-row">
     <div class="auth">
-      <b>Chỉ những mục tiêu được phép.</b> Công cụ này gửi những cuộc tấn công thật vào bất cứ thứ gì nó được chĩa vào, và nó chạy trên máy của bạn, bằng khóa của bạn, và do chính bạn cho phép. Mọi thứ không phải localhost đều phải chứng minh được rằng chính bạn kiểm soát nó (một bản ghi DNS, một tệp ở một đường dẫn đã biết, hoặc một token do chính con bot trả về), và không có thứ đó thì lần chạy sẽ từ chối khởi động chứ không trông chờ bạn tự nhớ. Kiểm thử những hệ thống không thuộc về bạn hoặc bạn không được phép là hành vi phạm pháp ở phần lớn các nước, và trách nhiệm ấy thuộc về người vận hành, không thuộc về công cụ.
+      <b>Chỉ những mục tiêu được phép.</b> Công cụ này gửi những cuộc tấn công thật vào bất cứ thứ gì nó được chĩa vào, và nó chạy trên máy của bạn, bằng khóa của bạn, và do chính bạn cho phép. Mọi thứ không phải localhost đều cần một bằng chứng được ký cho đúng địa chỉ đó trong vòng hai tuần gần nhất, và không có nó thì lần chạy sẽ từ chối khởi động chứ không trông chờ bạn tự nhớ. Lần chạy kiểm tra bằng chứng đó bằng cách tải về một tệp ở một đường dẫn đã biết trên mục tiêu. Thay vào đó, có thể khai báo trong cấu hình một bản ghi DNS hoặc một token do con bot trả về, và khi đó điều được chứng minh chỉ là bạn nắm khóa ký, chứ không phải bạn kiểm soát mục tiêu. Kiểm thử những hệ thống không thuộc về bạn hoặc bạn không được phép là hành vi phạm pháp ở phần lớn các nước, và trách nhiệm ấy thuộc về người vận hành, không thuộc về công cụ.
       <a href="https://github.com/qatration/qatration/blob/main/AUTHORISED-USE.md" target="_blank" rel="noopener noreferrer">Hãy đọc AUTHORISED-USE.md</a> trước lần chạy đầu tiên.
       <br><br>
       Bạn tìm thấy một lỗi, hay một trường hợp công cụ này báo cáo thứ nó chưa hề đo?

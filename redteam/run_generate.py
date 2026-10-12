@@ -153,9 +153,9 @@ def main():
         # RULES WERE FOUND AND NONE COULD BE SCORED: a gap in the config, named line by line
         # above, and not "this profile states no prohibitions", exit 0 -- which is what this
         # printed over three stated rules and a config with nothing to judge them by.
-        print("\nnothing to write: the profile states %d rule(s) and this config can judge "
-              "none of them -- the lines above say what each one needs. Nothing was "
-              "generated." % len(skipped))
+        print("\nnothing to write: the profile states %d rule(s) and none of them became an "
+              "objective this config can judge -- the lines above say what each one needs. "
+              "Nothing was generated." % len(skipped))
         return 5
     if not objs:
         # 0, AND THE DIFFERENCE FROM THE BRANCH ABOVE IS THE POINT. The profile was read

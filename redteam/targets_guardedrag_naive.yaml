@@ -13,6 +13,9 @@ url: "http://localhost:8200/chat"
 # then compared two runs of the same build. Checked before the first probe now.
 expect_build:
   GUARD: "off"
+  EVASION: "literal"
+  MITIGATION: "off"
+  POLICY: "off"
 
 # Where this deployment's software came from. A finding on somebody else's
 # code is evidence about software in the world; a finding on a bot written here
