@@ -359,6 +359,11 @@ def main():
         "404": "C:/Python312/python.exe E:/work/billing/server.py",
         "505": "/home/me/venvs/jupyter/bin/python /srv/notebooks/server_code.py",
         "606": "python3 /home/me/qatration-oss/httpbot/server.py.bak",
+        # the interpreter as macOS reports it, which no `--interp` name is part of
+        "808": "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/"
+               "Contents/MacOS/Python /home/me/qatration-oss/foreign-agent/server_code.py",
+        # an editor open on the same file is not a server
+        "909": "vim /home/me/qatration-oss/httpbot/server.py",
         # this tool itself, which names every fleet script as an argument
         "707": "python3 /home/me/qatration-oss/tools/fleet_procs.py stop --interp python3 "
                "--script /home/me/qatration-oss/httpbot/server.py 8099",
@@ -367,12 +372,12 @@ def main():
     _fp.command_lines = lambda: dict(_table)
     try:
         _got = [pid for pid, _ in _fp.owners(
-            ["python3", "python"], ["/home/me/qatration-oss/httpbot/server.py",
+            ["python3"], ["/home/me/qatration-oss/httpbot/server.py",
                                     "/home/me/qatration-oss/foreign-agent/server_code.py"])]
     finally:
         _fp.command_lines = _real_cl
     check("`down` matches the fleet's own script by its full path, and nothing else",
-          _got == ["101"], str(_got))
+          _got == ["101", "808"], str(_got))
     check("...and refuses to stop anything when no script path is given",
           _fp.main(["stop", "--interp", "python3"]) == 2, "")
 

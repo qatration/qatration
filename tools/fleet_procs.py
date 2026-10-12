@@ -7,8 +7,9 @@ and nothing caught it because the only evidence was a `status` nobody ran afterw
 them survived an hour that way.
 
 So this does not trust a recorded number. It asks the operating system what is running and
-matches on two things at once: the process is one of the fleet's own interpreters, AND it is
-running one of the fleet's own scripts. Something else of yours on 8099 is left alone, which is
+matches on two things at once: the process is a Python (one of the fleet's own interpreters, or
+a program whose file is a Python), AND it is running one of the fleet's own scripts by its full
+path. Something else of yours on 8099 is left alone, which is
 the property the pid file was there to provide — provided now by a check that can be wrong out
 loud rather than by a note we wrote to ourselves.
 
@@ -161,6 +162,17 @@ def _names_script(cmdline, scripts):
     return False
 
 
+def _runs_python(cmdline):
+    """Is the program this (normalised) command line runs a Python interpreter, by its file
+    name? `--interp python3` is not in the command line macOS reports for it,
+    `.../Python.app/Contents/MacOS/Python`, and `down` left the server running there. An
+    editor open on `server.py` is not a Python, which is why the program is asked and not the
+    line."""
+    s = cmdline.strip()
+    prog = s[1:].split('"', 1)[0] if s.startswith('"') else s.split(None, 1)[0] if s else ""
+    return os.path.basename(prog.replace("\\", "/")).startswith("python")
+
+
 def owners(interps, scripts):
     """[(pid, cmdline)] for every process that is recognisably one of ours, listening or not.
 
@@ -179,7 +191,7 @@ def owners(interps, scripts):
         if pid == str(os.getpid()) or re.search(r"(?:^|[\s/\\\"'])fleet_procs\.py(?:[\s\"']|$)",
                                                  low):
             continue
-        if any(i in low for i in wanted) and _names_script(low, scripts):
+        if (any(i in low for i in wanted) or _runs_python(low)) and _names_script(low, scripts):
             found.append((pid, cmd))
     return found
 
