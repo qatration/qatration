@@ -26,6 +26,7 @@ The three states worth being careful about, because each is a place this repo ha
     eventually picks it up may be running a different build.
 """
 import datetime, io, json, os, glob, time, uuid
+from target import glob_in  # noqa: E402  one escape for every directory
 
 STATES = ("queued", "running", "done", "failed", "dead", "cancelled")
 LEASE_SECONDS = 3600        # a full sweep over 19 attacks x 3 trials runs well under this
@@ -288,7 +289,7 @@ def load(root, job_id):
 
 def listing(root, state=None):
     out = []
-    for p in sorted(glob.glob(os.path.join(str(root), "job_*.json"))):
+    for p in sorted(glob_in(str(root), "job_*.json")):
         jid = os.path.basename(p)[len("job_"):-len(".json")]
         j = load(root, jid)
         if j and (state is None or j.get("state") == state):

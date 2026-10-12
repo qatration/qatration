@@ -48,6 +48,7 @@ from workspace import measured_when # and one definition of when a run happened
 from lint_arsenal import attack_digest
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def _path(target):
@@ -161,8 +162,14 @@ def same_run(a, b):
     # beside the original, dated the same minute, an oracle change printed as `fixed 3`.
     # Two snapshots that both carry the sweep's own date and agree on it are one sweep.
     # Found by an independent review.
+    # AT ONE PRECISION: `record` stamps seconds (`2026-10-10 21:22:37`) and `backfill` dates by
+    # `measured_when`, which keeps minutes (`2026-10-10 21:22`), so the two stamps of one sweep
+    # never matched and a re-scored copy was diffed against the original as `fixed`. Both come
+    # from the run's own `meta.when`; to the minute they are the same moment. Found by an
+    # independent review.
+    _minute = lambda x: str(x or "")[:16]
     _same_moment = bool(a.get("dated_by_run") and b.get("dated_by_run")
-                        and a.get("run") and a.get("run") == b.get("run"))
+                        and a.get("run") and _minute(a.get("run")) == _minute(b.get("run")))
     return (a.get("model") == b.get("model")
             and a.get("trials") == b.get("trials")
             and (a.get("rows") == b.get("rows") or _same_moment))
@@ -862,7 +869,7 @@ def main():
     args = ap.parse_args()
 
     known = sorted(os.path.basename(p)[:-len(".jsonl")]
-                   for p in glob.glob(os.path.join(HIST, "*.jsonl")))
+                   for p in glob_in(HIST, "*.jsonl"))
 
     if args.backfill:
         # SAID PER ENTRY, NOT FOR ALL OF THEM. This printed "their run times are file

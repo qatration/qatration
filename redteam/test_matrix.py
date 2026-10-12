@@ -521,7 +521,7 @@ def main():
                               "--scope", "quick"],
                              capture_output=True, text=True, timeout=300, env=_env_t)
         check("a run --model over another model's results file is refused before sending",
-              _pr.returncode == 5 and "holds results for model" in (_pr.stdout + _pr.stderr),
+              _pr.returncode == 2 and "holds results for model" in (_pr.stdout + _pr.stderr),
               "exit %s: %s" % (_pr.returncode, (_pr.stdout + _pr.stderr)[-300:]))
     finally:
         shutil.rmtree(_wt, ignore_errors=True)

@@ -102,6 +102,11 @@ def load(known=None, unreadable=None, left_out=None):
         # THROUGH THE ONE COUNTER. This loop and `workspace._rows_with` were the same
         # comprehension, and the second counter below is the reason the shared one exists.
         m["_counted"] = _rows_with(d.get("results"), BROKE)
+        # AND THE ROWS THEMSELVES, for `verdict_for`: read from the meta alone, a run whose
+        # every attack came back SKIP (sent, every detector it declared mute) had nothing to
+        # subtract them with and took the green "hardened" tile. Found by an independent
+        # review.
+        m["_rows"] = d.get("results")
         # AND THE ERRORS, WHICH DECIDE THE OTHER HALF OF THE VERDICT. The docstring above
         # says a stored count outlives the run that wrote it, and that is as true of
         # `errors` as of `broke`: this page recounted one of them and handed the pair to
@@ -214,12 +219,13 @@ def classify(rows):
     stayed green when the bug was put back — the same mistake the roll-up arithmetic in
     `benign.py` was extracted to avoid, repeated one file over.
     """
-    held = [m for m in rows if verdict_for(m) == "Hardened"]
-    never_attacked = [m for m in rows if verdict_for(m) == "Not measured"]
+    held = [m for m in rows if verdict_for(m, m.get("_rows")) == "Hardened"]
+    never_attacked = [m for m in rows if verdict_for(m, m.get("_rows")) == "Not measured"]
     return held, never_attacked
 
 
 from workspace import named_or_more   # noqa: E402  one spelling of `and N more`
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def main():
@@ -271,7 +277,7 @@ def main():
                              m["target"]))
     n_targets = len(rows)
     n_find = sum(m.get("broke", 0) for m in rows)
-    n_doubt = sum(m.get("doubtful", 0) for m in rows)
+    n_doubt = sum(m.get("doubtful") or 0 for m in rows)
     hardened, unmeasured = classify(rows)
     prov = provenance()
     _cav = caveats()
@@ -353,7 +359,7 @@ def main():
     # silently in favour of either number.
     moved = [m for m in rows if m.get("broke_at_run") is not None
              and m["broke_at_run"] != m["broke"]]
-    adaptive = sorted(glob.glob(str(OUT / "adaptive_*.json")))
+    adaptive = sorted(glob_in(OUT, "adaptive_*.json"))
     _n_unread_before = len(_unreadable)
 
     cards = ""
@@ -367,7 +373,7 @@ def main():
         # the reader has no way to tell it from a score that was earned.
         # THE CARD'S COLOUR FROM `verdict_for`, the predicate the tiles above use: 1 DEFENDED
         # beside 19 ERROR is "Not measured" there and was a green `0 / 1 breached` here.
-        if not atk or verdict_for(m) == "Not measured":
+        if not atk or verdict_for(m, m.get("_rows")) == "Not measured":
             col, bar = SEV.get("unknown", "#6b6b6b"), 0
             headline = "not measured" if not atk else f"{broke} / {atk} breached, not measured"
         else:
@@ -477,10 +483,29 @@ def main():
     for _a in _absent:
         print("  ! " + _a)
     unread_bar += "".join('<div class="stalebar">%s.</div>' % esc(_a) for _a in _absent)
+    # AND ONE WHOSE ATTRIBUTION COULD NOT BE COUNTED (`doubtful_count` -> None) is not
+    # attributed either: summed as 0 it read as "every breach attributed".
+    _uncounted = [m["target"] for m in rows if m.get("broke") and m.get("doubtful") is None]
+    if _uncounted:
+        unread_bar += ('<div class="stalebar">%d breach(es) on %s whose attribution could not '
+                       'be counted: the benign baseline could not be read against them.</div>'
+                       % (sum(m["broke"] for m in rows if m["target"] in _uncounted),
+                          esc(named_or_more(_uncounted, 4))))
     # AND A BREACH ON A TARGET WITH NO BENIGN BASELINE IS NOT ATTRIBUTED, said beside the count:
     # `doubtful` is 0 both for "all attributed" and for "nothing to attribute against".
-    _no_bl = [m["target"] for m in rows
-              if m.get("broke") and baseline.rates(m["target"], str(OUT)) is None]
+    # TORN IS NOT ABSENT: `rates` is None for both, and "run `qatration benign`" over a file
+    # that is sitting there unreadable sends the reader to overwrite it. Said apart, as the
+    # SARIF and the fixes page already keep it. Found by an independent review.
+    _bl_why = {m["target"]: baseline._load(m["target"], str(OUT))[1] for m in rows
+               if m.get("broke") and baseline.rates(m["target"], str(OUT)) is None}
+    _torn_bl = sorted(t for t, w in _bl_why.items() if w)
+    _no_bl = [t for t, w in _bl_why.items() if not w]
+    if _torn_bl:
+        unread_bar += ('<div class="stalebar">%d breach(es) on %s whose benign baseline could '
+                       'not be read, so they are not attributed. Read or restore the file '
+                       'before replacing it.</div>'
+                       % (sum(m["broke"] for m in rows if m["target"] in _torn_bl),
+                          esc(named_or_more(_torn_bl, 4))))
     if _no_bl:
         unread_bar += ('<div class="stalebar">%d breach(es) on %s with no benign baseline: '
                        'nothing measured what those targets do unattacked, so they are not '

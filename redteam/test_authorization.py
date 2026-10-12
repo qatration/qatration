@@ -28,6 +28,117 @@ URL = "https://api.acmeshop.example/v1/chat"
 OTHER = "https://api.someone-else.example/v1/chat"
 
 
+def _authorize_command(check, az):
+    """`qatration authorize`: the token a refused run would print, asked for on purpose, through
+    the real door. Found by an independent review: the only way to get one was a failing
+    gate's stderr."""
+    import subprocess as _sp
+    cli = os.path.join(HERE, "cli.py")
+    url = "https://bot.acme.example/chat"
+
+    def _run(env_extra, *args):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("QATRATION_AUTH_SECRET", "QATRATION_HOSTED")}
+        env.update(env_extra, PYTHONIOENCODING="utf-8")
+        p = _sp.run([sys.executable, cli, "authorize"] + list(args), capture_output=True,
+                    text=True, encoding="utf-8", timeout=120, env=env)
+        return p.returncode, p.stdout + p.stderr
+    _rc, _out = _run({"QATRATION_AUTH_SECRET": "s3cret"}, "--url", url)
+    _want = az.issue(url, "s3cret")[0]
+    check("authorize prints the token the gate will accept for that origin",
+          _rc == 0 and _want in _out and "well_known" in _out, "%s %s" % (_rc, _out[:300]))
+    _rc2, _out2 = _run({}, "--url", url)
+    check("...and without the secret says what the secret is, exit 2",
+          _rc2 == 2 and "QATRATION_AUTH_SECRET" in _out2, "%s %s" % (_rc2, _out2[:200]))
+    _rc3, _out3 = _run({"QATRATION_AUTH_SECRET": "s3cret", "QATRATION_HOSTED": "1"},
+                       "--url", url)
+    check("...and on a hosted service prints no token", _rc3 == 2 and _want not in _out3,
+          "%s %s" % (_rc3, _out3[:200]))
+
+
+def _provenance_of_hosted(check, az):
+    """A hosted gate's record says it was hosted (`verified_by`), and `onboard --submit`
+    queues its job under the mode it ran in, as the intake does. Found by a review."""
+    url = "https://bot.acme.example/chat"
+    tok, day = az.issue(url, "s3cret")
+    cfg = {"name": "acme", "url": url,
+           "authorization": {"method": "well_known", "token": tok, "issued": day}}
+    _saved = {k: os.environ.get(k) for k in ("QATRATION_HOSTED", "QATRATION_AUTH_SECRET")}
+    _pol, _get = az.unreachable_by_policy, az._http_get
+    try:
+        os.environ["QATRATION_HOSTED"] = "1"
+        os.environ["QATRATION_AUTH_SECRET"] = "s3cret"
+        az.unreachable_by_policy = lambda u: ""
+        az._http_get = lambda u, timeout=10: tok + "\n"
+        _rec = az.gate(cfg, "test")
+    finally:
+        az.unreachable_by_policy, az._http_get = _pol, _get
+        for k, v in _saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("a hosted gate's record says it was checked by the hosted service",
+          (_rec or {}).get("verified_by") == "hosted", str(_rec))
+    import ast as _ast_p
+    _src = open(os.path.join(HERE, "onboard.py"), encoding="utf-8").read()
+    _subs = [c for c in _ast_p.walk(_ast_p.parse(_src)) if isinstance(c, _ast_p.Call)
+             and getattr(c.func, "attr", "") == "submit"]
+    check("...and onboard --submit queues its job with the mode it ran under",
+          bool(_subs) and all(any(k.arg == "hosted" for k in c.keywords) for c in _subs),
+          str(len(_subs)))
+
+
+def _rebind_pinned(check, az):
+    """THE REBIND, closed where the bytes go: a name checked public that answers loopback the
+    next time reaches a socket whose peer is loopback, and on a server that socket is refused
+    before a byte of the request is written. Driven through the openers the adapters and the
+    well-known probe actually use, against a real listener on 127.0.0.1. Found by a review."""
+    import http.server as _hs, threading as _th, urllib.error as _ue
+    import targets_http as _th_mod
+    got = []
+
+    class _H(_hs.BaseHTTPRequestHandler):
+        def do_GET(self):
+            got.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *a):
+            pass
+
+    srv = _hs.HTTPServer(("127.0.0.1", 0), _H)
+    _t = _th.Thread(target=srv.serve_forever, daemon=True)
+    _t.start()
+    url = "http://127.0.0.1:%d/x" % srv.server_address[1]
+    _saved = os.environ.get("QATRATION_HOSTED")
+    try:
+        os.environ["QATRATION_HOSTED"] = "1"
+        for _name, _op in (("the adapter's opener", _th_mod._OPENER),
+                           ("the opener for a proxied target", _th_mod._opener_for("")),
+                           ("the well-known probe's opener", az._OPENER)):
+            try:
+                _op.open(url, timeout=5).read()
+                _why = "connected"
+            except (_ue.URLError, OSError) as e:
+                _why = str(getattr(e, "reason", e))
+            check("hosted, %s refuses a socket whose peer is loopback" % _name,
+                  "refused by network policy" in _why, _why)
+        check("...and nothing reached the loopback listener", got == [], str(got))
+        os.environ.pop("QATRATION_HOSTED", None)
+        _th_mod._OPENER.open(url, timeout=5).read()
+        check("...while on a workstation the same socket connects (the practice fleet)",
+              got == ["/x"], str(got))
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        if _saved is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _saved
+
+
 def _review_gate_66(check, az):
     """An independent review of the gate: a refused proxy is named as the proxy; an empty
     url is a config problem hosted too; a proof file with a byte-order mark holds its
@@ -143,6 +254,32 @@ def main():
     check("a token at /.well-known is a proof", ok, why)
     ok, why = az.check(cfg("dns_txt", records=[f"v=spf1 ...", token]), SECRET)
     check("a token in a TXT record is a proof", ok, why)
+    # ...ON A WORKSTATION. Both are read out of the config that carries the token, so on a
+    # server they are a stranger's word: the hosted service takes only what it observes.
+    # Found by an independent review.
+    _saved_hm = os.environ.get("QATRATION_HOSTED")
+    os.environ["QATRATION_HOSTED"] = "1"
+    try:
+        _hh = az.check(cfg("header", echoed=token), SECRET)
+        _hd = az.check(cfg("dns_txt", records=[token]), SECRET)
+        _hw = az.check(cfg("well_known"), SECRET, fetch=lambda u: f"{token}\n")
+    finally:
+        if _saved_hm is None:
+            os.environ.pop("QATRATION_HOSTED", None)
+        else:
+            os.environ["QATRATION_HOSTED"] = _saved_hm
+    check("hosted, a proof the run does not observe is refused (header, dns_txt)",
+          not _hh[0] and not _hd[0] and "accepts only well_known" in _hh[1], str((_hh, _hd)))
+    check("...while the well-known file it fetches is still a proof", _hw[0], str(_hw))
+    # AND THE REPORT SAYS WHICH IT WAS: an asserted proof is not "Authorised". Found by a
+    # review.
+    import workspace as _ws_az
+    _said_a = _ws_az.authorization_line({"authorization": az.record(
+        cfg("header", echoed=token), "x")})
+    _said_o = _ws_az.authorization_line({"authorization": az.record(cfg("well_known"), "x")})
+    check("an asserted proof is reported as the operator's statement, not as authorised",
+          "not observed" in _said_a and not _said_a.startswith("Authorised"), _said_a)
+    check("...and an observed one as authorised", _said_o.startswith("Authorised"), _said_o)
 
     # --- and every way of looking like one -------------------------------------------
     ok, why = az.check({"name": "acme", "url": URL}, SECRET)
@@ -1358,6 +1495,9 @@ def main():
           and "not a URL a target can be reached at" in str(_gh2), repr(_gh2))
 
     _review_gate_66(check, az)
+    _rebind_pinned(check, az)
+    _authorize_command(check, az)
+    _provenance_of_hosted(check, az)
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

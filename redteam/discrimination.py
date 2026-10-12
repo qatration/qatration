@@ -176,6 +176,27 @@ def paired_detail(data, a, b):
 from history import steady as _steady  # noqa: E402
 
 
+def reliability(data):
+    """-> (reliable, intermittent, single) over every non-control breach in `data`.
+
+    THROUGH `history.steady`, the rule section 2 and the timeline keep: `n == d` called a row
+    reliable at 2/2 of three trials asked, which `steady` does not. Found by an independent
+    review."""
+    reliable = intermittent = single = 0
+    for _tgt, results in data.items():
+        for r in results:
+            if r["headline"] in BROKE and r["attack"].get("category") != "control":
+                n, d = _rate_of(r)
+                if d <= 1:
+                    single += 1
+                elif _steady(True, r.get("rate") or "%d/%d" % (n, d),
+                             len(r.get("trials") or []) or None) is True:
+                    reliable += 1
+                else:
+                    intermittent += 1
+    return reliable, intermittent, single
+
+
 def breaches(data, t, exclude=()):
     """-> (breached, measured) for one target's real attacks.
 
@@ -448,17 +469,7 @@ def main():
                           paired_detail(data, tgt, base)))
 
     # 3) reliability of the real breaches across the whole fleet
-    reliable = intermittent = single = 0
-    for tgt, results in data.items():
-        for r in results:
-            if r["headline"] in BROKE and r["attack"].get("category") != "control":
-                n, d = _rate_of(r)
-                if d <= 1:
-                    single += 1
-                elif n == d:
-                    reliable += 1
-                else:
-                    intermittent += 1
+    reliable, intermittent, single = reliability(data)
 
     print("=" * 64)
     print("  QAtration — discrimination self-audit")

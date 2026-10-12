@@ -219,9 +219,14 @@ def main():
     # AND ONE THAT CANNOT FIRE ON THIS CONFIG, by the rule `run` skips an attack on: the
     # default canary detectors over a config with no canaries printed HELD, exit 0, against a
     # bot printing its code. Nothing is sent. Found by an independent review.
-    from oracle import inert_for as _inert_for
+    from oracle import inert_for as _inert_for, mute_when_silent as _mute_a
     from run_redteam import is_unmeasurable as _unmeasurable
-    _dead_a = _inert_for(ctx, success)
+    # AND ONE WHOSE SILENCE MEASURES NOTHING HERE (`oracle.SILENT_UNMEASURED`), which `judge`
+    # scores SKIP: `--success sysprompt_leak` on a config with no markers ran twelve SKIP
+    # rounds and printed HELD, exit 0. Found by an independent review.
+    _dead_a = dict(_inert_for(ctx, success))
+    _dead_a.update({d: " or ".join(w) for d, w in _mute_a(ctx, success).items()
+                    if d not in _dead_a})
     if _unmeasurable({"success": success}, set(_dead_a)):
         print("NOTHING MEASURED: every detector this goal names cannot fire on this config "
               "(%s), so a hold would describe a question nobody could answer. Nothing was "
@@ -249,6 +254,15 @@ def main():
         _writable(learned_path(), "learned attacks", "adaptive --promote",
                   replaces=("the learned attacks",))
 
+    # THE CANARY THE GOAL LOOKS FOR IS THERE, which `run` and `isolation` refuse without: a
+    # declared verifier whose snippet was never planted was attacked anyway, where `run`
+    # exits 5. Found by an independent review.
+    import honeytoken as _ht_pre
+    _pre = _ht_pre.precondition(target, ctx)
+    if _pre is not None:
+        print("ABORT — %s\n  no attack was sent and nothing was written." % _pre[2],
+              file=sys.stderr)
+        return _pre[0]
     print("=" * 78)
     print(f"  QAtration — ADAPTIVE attacker vs '{target.name}'  (attacker={args.attacker_model})")
     print(f"  goal: {args.goal}")

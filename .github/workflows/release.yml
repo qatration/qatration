@@ -11,9 +11,11 @@
 # say so — a version is a number somebody trusts without re-reading. The job below refuses when
 # they disagree, which is the same rule this repository applies to every other published count.
 #
-# The suites run first, on the artifact that is about to ship. A release that fails its own
-# checks is the worst thing this project could put on PyPI: the tool exists to say when a
-# system is quietly broken.
+# The suites run first, through `check.yml` itself -- every interpreter and operating system
+# the package claims -- on the tagged tree, installed the way a stranger installs it. (The
+# wheel that is uploaded is built from that same tree in the next job.) A release that fails
+# its own checks is the worst thing this project could put on PyPI: the tool exists to say
+# when a system is quietly broken.
 
 name: release
 
@@ -26,53 +28,50 @@ permissions: {}
 
 jobs:
   # --- 1. does the thing that is about to ship actually pass? --------------------------------
+  # THE MATRIX, NOT ONE LEG OF IT. This ran `check.py` on ubuntu and 3.13 only, so a change
+  # that broke the 3.9 floor or Windows could be tagged and published under `requires-python
+  # >=3.9`. Found by an independent review.
   suites:
+    uses: ./.github/workflows/check.yml
+    permissions:
+      contents: read
+
+  # --- 1b. the tag itself, and where it points ---------------------------------------------
+  tag:
     runs-on: ubuntu-latest
-    # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
-    # its own deadline and names it; this catches what that cannot reach — a wedged
-    # runner, an install that never returns — instead of letting the job sit for the
-    # six hours GitHub allows by default and report as 'cancelled', which names nothing.
-    timeout-minutes: 30
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      # FULL HISTORY, because the guard now checks WHO wrote each commit and whether its
-        # stamp names a place, and `actions/checkout` fetches one commit by default. Those two
-        # rules used to live only on `--range`, i.e. only in an optional local hook, which is
-        # how an unrelated author and a local offset walk past every gate that is
-        # not this one. A shallow clone
-        # would make the check present and blind.
         with:
           fetch-depth: 0
-        # 3.13 ON PURPOSE, and it is not the matrix in `check.yml` gone stale. That matrix
-        # states what the package SUPPORTS, and its newest leg is 3.14. This is the
-        # interpreter that builds and uploads the artifact, which is a different question:
-        # the wheel is `py3-none-any`, so the builder's version is not in it, and pinning the
-        # one that has published before keeps the publishing path off whatever shipped most
-        # recently. Moving it is a deliberate change, not a tidy-up.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: install
-        run: python -m pip install --upgrade pip && pip install .
-      - name: the commit guard, on the whole tree
-        # The same script `.githooks/pre-commit` runs. A hook is advice: it can be skipped with
-        # `--no-verify` and it does not exist until somebody runs `git config core.hooksPath
-        # .githooks`. This is the part that cannot be skipped — a credential, a copyleft
-        # dependency or text that must not be published reaching a pull request fails it here.
-        #
-        # `--selftest` first, and separately: it proves every pattern can still fire. A scanner
-        # whose pattern has been mangled reports a clean tree, and this project has believed
-        # three of those.
+      # THE TAG OBJECT IS PUBLISHED TOO: its tagger line and message go out with the release,
+      # and the commit rules never read them (`guard.py --tag`). Fetched again by name,
+      # because a checkout of a tag ref can leave it lightweight, which would read as nothing
+      # to check. And A TAG ON `main`: nothing required the tagged commit to be one `main`
+      # holds, so a commit from a side branch could be published. Through `env:`, never
+      # expanded into the script. Found by an independent review.
+      - name: the tag object passes the guard, and names a commit main holds
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          python tools/guard.py --selftest
-          python tools/guard.py --tree
-
-      - name: run every offline suite
-        run: python tools/check.py
+          set -euo pipefail
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          python tools/guard.py --tag "$TAG"
+          git fetch origin main
+          if ! git merge-base --is-ancestor "refs/tags/$TAG^{commit}" origin/main; then
+            echo "REFUSED: $TAG names a commit main does not hold." >&2
+            exit 1
+          fi
 
   # --- 2. build, and refuse a tag that disagrees with the package ----------------------------
   build:
-    needs: suites
+    needs: [suites, tag]
     runs-on: ubuntu-latest
     # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
     # its own deadline and names it; this catches what that cannot reach — a wedged
@@ -146,7 +145,9 @@ jobs:
     # releasing, and that is only true if this job cannot run from it. Belt and braces with the
     # version check above: that one refuses a tag that disagrees with the package, this one
     # refuses anything that is not a tag at all.
-    if: startsWith(github.ref, 'refs/tags/v')
+    # AND A PUSH: dispatching the workflow ON a tag ref sets `github.ref` to `refs/tags/v...`
+    # too, so the condition above alone let the button publish. Found by an independent review.
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
     runs-on: ubuntu-latest
     # A ceiling, not a schedule. `tools/check.py` already kills any single suite at
     # its own deadline and names it; this catches what that cannot reach — a wedged

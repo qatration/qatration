@@ -439,7 +439,16 @@ def chain_probe(prompts, step, turn_extra=None):
     # AND HOW LARGE THE LARGEST ANSWER WAS: a turn cut at the reply cap says so on its probe,
     # and the conversation's probe dropped it -- `None`, which reads as "it fit".
     big = None
+    import threading as _thr
     for i, p in enumerate(prompts):
+        # NOT ONE MORE STEP FOR A CONVERSATION NOBODY IS WAITING FOR: the watchdog abandoned
+        # this call (`runner._invoke_with_timeout`), and the steps it went on sending landed
+        # in the next attack's trial and spent its budget. Found by an independent review.
+        if i and getattr(_thr.current_thread(), "_qatration_abandoned", False):
+            return Probe(prompt="\n".join(prompts), output=out, tool_calls=calls,
+                         observations=obs, resolved=res, turns=turns, seconds=secs,
+                         error="ABANDONED: the watchdog gave up on this conversation; "
+                               "the remaining steps were not sent", reply_bytes=big)
         t0 = _t.time()
         # A STEP THAT RAISES IS A STEP THAT ERRORED: the exception went past this loop, the
         # turns that had answered went with it, and the retry guard -- which keeps a
@@ -520,7 +529,18 @@ def executor_turn(ex, prompt):
                  seconds=round(_t.time() - t0, 1))
 
 
-def target_configs(directory=None):
+def glob_in(directory, *parts):
+    """-> `glob.glob` of `parts` under `directory`, with the DIRECTORY taken literally.
+
+    ONE ESCAPE FOR EVERY DIRECTORY. `glob` reads `[...]` in a path as a character class, so a
+    workspace named `ws[client]` matched nothing and every reader saw an empty directory: the
+    index answered "no results ... run a sweep first", exit 3, over a folder holding results.
+    Only the pattern the caller writes is a pattern. Found by an independent review.
+    """
+    return glob.glob(os.path.join(glob.escape(str(directory)), *parts))
+
+
+def target_configs(directory=None, with_env=True):
     """Every real target config in a directory, sorted, temporaries excluded.
 
     ONE enumeration because there were eleven, and only one of them excluded the temporary
@@ -533,7 +553,7 @@ def target_configs(directory=None):
     reason `test_end_to_end.py` puts its process id BEFORE `_tmp` rather than after.
     """
     directory = directory or os.path.dirname(os.path.abspath(__file__))
-    found = sorted(p for p in glob.glob(os.path.join(directory, "targets_*.yaml"))
+    found = sorted(p for p in glob_in(directory, "targets_*.yaml")
                    if not os.path.basename(p).endswith(("_tmp.yaml", ".tmp.yaml")))
 
     # AND THE ONES THAT DO NOT LIVE HERE, which is every config `qatration init` writes. This
@@ -550,7 +570,11 @@ def target_configs(directory=None):
     # A named path is used as named. The `_tmp` exclusion above exists because the end-to-end
     # suites write throwaway configs into THIS directory; somebody who spells out a path means
     # the file they spelled out.
-    extra = os.environ.get("QATRATION_CONFIGS", "")
+    # NOT FOR WHAT SHIPS: `build_generic` derives the arsenal from the configs in this
+    # directory, and with the operator's own config exported -- which `init` tells everyone
+    # to do -- their tools and markers re-slotted 21 shipped attacks and dropped three
+    # (`with_env=False`). Found by an independent review.
+    extra = os.environ.get("QATRATION_CONFIGS", "") if with_env else ""
     for p in extra.split(os.pathsep):
         p = p.strip()
         if p and p not in found:

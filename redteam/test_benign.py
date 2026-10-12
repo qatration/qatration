@@ -425,6 +425,23 @@ def main():
         # whole event. No fixture here touches the network: the comparison is a function
         # over two recordings, and that is the half that can be wrong.
         from mcp_probe import compare as _cmp_m
+        # A COMMAND CARRYING A SECRET IS NOT RECORDED: the corpus stores it as typed so
+        # `--compare` can run it again, and a `--token ghp_...` went to disk with it. Found by
+        # an independent review.
+        import mcp_probe as _mp_r, tempfile as _tf_mr, contextlib as _cx_mr, io
+        _dmr = _tf_mr.mkdtemp()
+        _pmr = os.path.join(_dmr, "corpus.json")
+        with _cx_mr.redirect_stderr(io.StringIO()), _cx_mr.redirect_stdout(io.StringIO()):
+            _rc_mr = _mp_r.record_reading(_pmr, "srv", ["npx", "-y", "@acme/srv", "--token",
+                                                        "ghp_" + "a" * 36], {}, {}, {})
+            _rc_ok = _mp_r.record_reading(_pmr, "srv", ["npx", "-y", "@acme/srv",
+                                                        "--auth-mode", "none"], {}, {}, {})
+        check("an MCP command carrying a credential is refused, and nothing is written",
+              _rc_mr == 2 and not ("ghp_" in (io.open(_pmr, encoding="utf-8").read()
+                                               if os.path.exists(_pmr) else "")),
+              str(_rc_mr))
+        check("...while a command whose flags merely mention auth is recorded",
+              _rc_ok == 0 and os.path.exists(_pmr), str(_rc_ok))
 
         def _fleet(version, desc, name="t"):
             return {"servers": {"s": {"package": "p", "version": version,
@@ -2365,9 +2382,60 @@ def main():
     # non-empty on a fleet where nineteen of them are aimed at and quiet.
     _never = set(DETECTORS) - set(roll.get("reached") or {})
     check("...and the split covers exactly the detectors that never fired",
-          set(roll.get("passed") or []) | set(roll.get("untested") or []) == _never,
-          "%d passed + %d untested against %d that never fired"
-          % (len(roll.get("passed") or []), len(roll.get("untested") or []), len(_never)))
+          set(roll.get("passed") or []) | set(roll.get("untested") or [])
+          | set(roll.get("raised") or []) == _never,
+          "%d passed + %d untested + %d raised against %d that never fired"
+          % (len(roll.get("passed") or []), len(roll.get("untested") or []),
+             len(roll.get("raised") or []), len(_never)))
+    # A RE-SCORE RECORDS WHAT JUDGED THE FILE even when no fire moved: written only when rows
+    # changed, a baseline from before `meta.detectors` never got one. Driven through the door.
+    import tempfile as _tf_md, shutil as _sh_md, subprocess as _sp_md
+    _wmd = _tf_md.mkdtemp()
+    try:
+        with open(os.path.join(_wmd, "benign_citebot.json"), "w", encoding="utf-8") as _f:
+            __import__("json").dump({"meta": {"target": "citebot", "probes": 1,
+                                              "when": "2026-10-01 10:00"},
+                                     "rows": [{"id": "hours", "fired": [], "refused": False,
+                                               "probe": {"prompt": "q",
+                                                         "output": "We open at nine."}}]}, _f)
+        _pmd = _sp_md.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
+                           "--rejudge", "--write"], capture_output=True, text=True,
+                          timeout=300, env=dict(os.environ, QATRATION_OUT=_wmd,
+                                                PYTHONIOENCODING="utf-8"))
+        _dmd = __import__("json").load(open(os.path.join(_wmd, "benign_citebot.json"),
+                                            encoding="utf-8"))
+    finally:
+        _sh_md.rmtree(_wmd, ignore_errors=True)
+    check("a re-score with nothing moved still records which detectors judged the file",
+          sorted((_dmd.get("meta") or {}).get("detectors") or []) == sorted(DETECTORS),
+          "%s %s" % (_pmd.returncode, (_pmd.stdout + _pmd.stderr)[-300:]))
+    # A DETECTOR THAT RAISED IS ITS OWN FACT: quiet on one aimed row and raising on another,
+    # it fell out of both halves, and its `!name:Error` was counted as a false-alarm fire.
+    # Found by an independent review.
+    import tempfile as _tf_ra, shutil as _sh_ra
+    _wra = _tf_ra.mkdtemp()
+    try:
+        with open(os.path.join(_wra, "benign_rabot.json"), "w", encoding="utf-8") as _f:
+            __import__("json").dump({"meta": {"target": "rabot", "probes": 2,
+                                              "when": "2026-10-01 10:00"},
+                       "rows": [{"id": "sql-a", "provokes": "sql_injection", "fired": [],
+                                 "probe": {"prompt": "q", "output": "an answer"}},
+                                {"id": "sql-b", "provokes": "sql_injection",
+                                 "fired": ["!sql_injection:TypeError"],
+                                 "probe": {"prompt": "q", "output": "an answer"}}]}, _f)
+        _was_ra = _bn.OUT_DIR
+        _bn.OUT_DIR = _wra
+        try:
+            _roll_ra = _bn.roll_up()
+        finally:
+            _bn.OUT_DIR = _was_ra
+    finally:
+        _sh_ra.rmtree(_wra, ignore_errors=True)
+    check("a detector that raised on a benign probe is in the raised bucket, not a fire",
+          "sql_injection" in (_roll_ra.get("raised") or [])
+          and not any(str(k).startswith("!") for k in (_roll_ra.get("fires") or {}))
+          and "sql_injection" not in (_roll_ra.get("passed") or []),
+          str({k: _roll_ra.get(k) for k in ("raised", "fires", "passed")}))
     check("...and the pass half is not empty on this fleet",
           bool(roll.get("passed")), "no detector is reported as aimed at and quiet")
     _zero = [d for d, n in _ex.items() if not n]
@@ -2680,6 +2748,24 @@ def main():
             check("...and the rest are counted as unmeasured, in numbers",
                   bool(_m8) and int(_m8.group(1)) > 50,
                   _m8.group(0) if _m8 else "no unmeasured line at all")
+        # A TORN FILE IS NOT A MISSING ONE: its target's verdicts were "no benign run here
+        # ... `qatration benign` is what would" -- the command that overwrites it -- and the
+        # summary exited 0. Found by an independent review.
+        with tempfile.TemporaryDirectory() as _d9:
+            _sh6.copy(_src6[0], _d9)
+            with open(os.path.join(_d9, "benign_ragbot.json"), "w", encoding="utf-8") as _f9:
+                _f9.write('{"meta": {"target": "ragbot"')
+            _r9 = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"),
+                                  "benign", "--summary"],
+                                 capture_output=True, text=True, timeout=300,
+                                 env=dict(os.environ, QATRATION_OUT=_d9,
+                                          PYTHONIOENCODING="utf-8"))
+            _s9 = _r9.stdout + _r9.stderr
+            check("a torn benign file is named as unreadable, not as a target never run",
+                  "whose benign file could not be read: benign_ragbot.json" in _s9,
+                  _s9[-500:])
+            check("...and the roll-up over the rest exits 3, not 0", _r9.returncode == 3,
+                  "exit %s" % _r9.returncode)
 
     # --- A CONFIG THAT DOES NOT LIVE IN THIS PACKAGE ------------------------------------
     #
@@ -2949,6 +3035,14 @@ def main():
                 if isinstance(_c, _ast_s.Call)}
     check("benign learns the tool baseline the sweep learns, and replays with it",
           {"_btc", "_run_ctx_b"} <= _calls_s, str(sorted(_calls_s & {"_btc", "_run_ctx_b"})))
+    # AND JUDGES WITH WHAT THE ADAPTER COULD SEE, recorded for the replay: judged without
+    # `with_caps` the benign rate and the sweep rate were two different detectors. Found by a
+    # review.
+    _keys_s = {_k.value for _n in _ast_s.walk(_ast_s.parse(_src_s)) if isinstance(_n, _ast_s.Dict)
+               for _k in _n.keys if isinstance(_k, _ast_s.Constant)}
+    check("benign judges with the adapter's caps and records them as meta.caps",
+          "_with_caps_b" in _calls_s and "caps" in _keys_s,
+          str(("_with_caps_b" in _calls_s, "caps" in _keys_s)))
 
     # A DETECTOR THAT RAISED WAS NOT QUIET, and a backup copy is not a second target.
     _w2 = _tf_r.mkdtemp()

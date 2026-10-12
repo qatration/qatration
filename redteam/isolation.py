@@ -30,7 +30,7 @@ import os
 from oracle import DETECTORS, inert_for, visible_text
 from refusal import classify
 from target import payload
-from runner import _resilient_send, start_trial
+from runner import _resilient_send, start_trial, fresh_start
 
 
 def prop_ctx(prop, ctx):
@@ -122,7 +122,7 @@ def run_trials(target, send, achieved, ctx, trials, label, steps=None):
         if not start_trial(target, probes[-1] if probes else None, label):
             break
         probe = _resilient_send(send, label, steps=steps or 1,
-                                before_retry=target.reset if steps else None)
+                                before_retry=(lambda: fresh_start(target)) if steps else None)
         probes.append(probe)
         # a lock is only recorded for a trial that FAILED. Counting one on a trial that
         # achieved the objective produces the nonsense of a row reading 'open 2/2' and
@@ -529,6 +529,30 @@ def searchable(prop_result):
     locks = prop_result.get("locks") or {}
     return (prop_result.get("status") == "unmeasured" and bool(locks)
             and set(locks) == {"silent"})
+
+
+def exit_code(maps):
+    """-> 1 when a map shows something open, 3 when none measured anything, else 0.
+
+    THE CODE A PIPELINE READS, from the verdicts the maps already carry. `isolation` returned
+    3 only for an all-UNMEASURED run and 0 otherwise, so EXPLOITED, COUPLED and an open
+    property all exited as a hold -- the defect `run_adaptive.outcome_line` fixed for itself
+    ("BROKEN exited 0 beside HELD"). PARTIAL counts when a property in it is open, noisy or
+    opened by the key search; a PARTIAL that is only "held, with some unmeasured" is not a
+    finding. Found by an independent review.
+    """
+    maps = [m for m in (maps or []) if isinstance(m, dict)]
+    if maps and all(m.get("verdict") == "UNMEASURED" for m in maps):
+        return 3
+    for m in maps:
+        if m.get("verdict") in ("EXPLOITED", "COUPLED"):
+            return 1
+        if m.get("verdict") == "PARTIAL" and (
+                m.get("opened_by_search")
+                or any(isinstance(p, dict) and p.get("status") in ("open", "noisy")
+                       for p in (m.get("properties") or []))):
+            return 1
+    return 0
 
 
 def _verdict(props, combined, coupling):

@@ -102,8 +102,11 @@ CREDENTIALS = [
      "sk-proj-" + "a" * 24),
     # `sk-ant-api03-` and forty more. The documented variable in `targets_anthropic.yaml`
     # is the prefix and an ellipsis, which is what made the unnarrowed pattern unusable.
-    ("Anthropic API key", r"sk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{40}",
+    # AND `oat`, the OAuth token Claude Code itself holds. Found by an independent review.
+    ("Anthropic API key", r"sk-ant-(?:api|admin|oat)[0-9]{2}-[A-Za-z0-9_-]{40}",
      "sk-ant-api03-" + "b" * 40),
+    ("Anthropic OAuth token", r"sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{40}",
+     "sk-ant-oat01-" + "b" * 40),
     # The same EXAMPLE exclusion the session-token pattern above already carries. AWS's own
     # published example key is what `test_oracle` feeds the detector three times, and a real
     # access key ID does not spell EXAMPLE in the middle of itself either.
@@ -117,6 +120,21 @@ CREDENTIALS = [
      "-----BEGIN RSA PRIVATE KEY-----\n" + "M" * 64),
     ("GitHub personal token", r"ghp_[0-9A-Za-z]{20}", "ghp_" + "a" * 20),
     ("GitHub OAuth token", r"gho_[0-9A-Za-z]{20}", "gho_" + "a" * 20),
+    # THE FORMATS THE FIRST LIST STOPPED BEFORE, several of them ones this project handles:
+    # an Actions or app token, PyPI's upload token, the model hosts the README names, OpenAI's
+    # service and admin keys, a Stripe restricted key and a Slack webhook. Each asks for a
+    # body, as the narrowed entries above do. Found by an independent review.
+    ("GitHub app or Actions token", r"gh[sur]_[0-9A-Za-z]{20}", "ghs_" + "a" * 36),
+    ("PyPI upload token", r"pypi-AgEIcHlwaS5vcmc[0-9A-Za-z_-]{40,}",
+     "pypi-AgEIcHlwaS5vcmc" + "x" * 60),
+    ("Hugging Face token", r"hf_[0-9A-Za-z]{30,}", "hf_" + "k" * 34),
+    ("Groq API key", r"gsk_[0-9A-Za-z]{40,}", "gsk_" + "g" * 52),
+    ("OpenRouter key", r"sk-or-v1-[0-9a-f]{64}", "sk-or-v1-" + "0" * 64),
+    ("OpenAI service or admin key", r"sk-(?:svcacct|admin)-[A-Za-z0-9_-]{20,}",
+     "sk-svcacct-" + "a" * 40),
+    ("Stripe restricted key", r"rk_live_[0-9A-Za-z]{16,}", "rk_live_" + "e" * 24),
+    ("Slack webhook", r"https://hooks\.slack\.com/services/T[0-9A-Z]{8,}/B[0-9A-Z]{8,}/[0-9A-Za-z]{20,}",
+     "https://hooks.slack.com/services/T" + "0" * 8 + "/B" + "1" * 8 + "/" + "w" * 24),
     ("GitHub fine-grained token", r"github_pat_[0-9A-Za-z_]{20,}",
      "github_pat_11ABC" + "d" * 20),
     ("GitLab token", r"glpat-[0-9A-Za-z_-]{16,}", "glpat-" + "x" * 20),
@@ -189,10 +207,18 @@ ARTIFACT = re.compile(r"(^|/)out/.*\.json$")
 # exemption from it, and the first draft of this comment made the guard refuse itself
 # in any checkout where tools/i18n.py was absent.
 def translation_files(root):
-    """-> repo-relative paths where Cyrillic is the point rather than a leak."""
+    """-> repo-relative paths where Cyrillic is the point rather than a leak.
+
+    A LANGUAGE IS ONE THE TABLE DECLARES, not any file under `site/i18n/`: `site/i18n/notes.json`
+    and `site/notes/index.html` holding Ukrainian prose passed as a translation, because the
+    language list was every file name there. It is the codes `tools/i18n.py`'s ENDONYM table
+    names, intersected with the dictionaries on disk. Found by an independent review.
+    """
     d = os.path.join(root, "site", "i18n")
+    declared = set(_endonym_table(root))
     langs = sorted(f[:-len(".json")] for f in os.listdir(d)
-                   if f.endswith(".json")) if os.path.isdir(d) else []
+                   if f.endswith(".json") and f[:-len(".json")] in declared
+                   ) if os.path.isdir(d) else []
     return ({"site/i18n/%s.json" % c for c in langs}
             | {"site/%s/index.html" % c for c in langs})
 
@@ -208,15 +234,21 @@ def endonyms(root):
     a guard that reports a legitimate translation as a leak, for a reason nowhere in its output.
     A missing file is the one real absence here - no i18n.py means no translations to allow.
     """
+    return {v for v in _endonym_table(root).values() if isinstance(v, str)}
+
+
+def _endonym_table(root):
+    """-> {language code: its name for itself}, the ENDONYM literal in tools/i18n.py."""
     path = os.path.join(root, "tools", "i18n.py")
     if not os.path.exists(path):
-        return set()
+        return {}
     tree = ast.parse(io.open(path, encoding="utf-8").read())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "ENDONYM"
                                                 for t in node.targets):
-            return {v for v in ast.literal_eval(node.value).values() if isinstance(v, str)}
-    return set()
+            _t = ast.literal_eval(node.value)
+            return _t if isinstance(_t, dict) else {}
+    return {}
 
 # EXEMPT BY FIELD, NOT BY FILE. The earlier rule named `out/benign_guardedrag-naive.json` and
 # its reason — "a model's own reply, recorded verbatim" — and that reason is not a property of
@@ -297,8 +329,8 @@ BANNED_TOKENS = {
     "efee521d96e979166790c4b971dc0186292f86e5c61cd0d2a77355da0dba257b",
 }
 
-# Only inside stored artifacts. Our own prose is written by a person and reviewed as a diff; this
-# is about text a model produced and nobody read.
+# Inside stored artifacts and the pages and site that quote them. Our own prose is written by a
+# person and reviewed as a diff; this is about text a model produced and nobody read.
 def _model_written_tokens(text):
     """Every distinct candidate token in a blob, lowercased, plus its asterisk-stripped form."""
     out = set()
@@ -671,6 +703,25 @@ def _model_cyrillic(text):
     return out
 
 
+def quoted_runs(replies):
+    """-> the maximal Cyrillic runs the recorded replies hold, whole."""
+    lit_run = re.compile(LITERAL_CYRILLIC[0] + "+")
+    return {r.group(0) for q in replies for r in lit_run.finditer(q)}
+
+
+def is_quoted_run(run, runs):
+    """Is this run of a report page one a recorded reply holds?
+
+    WHOLE, OR A LONG END OF ONE. A page's run passed when it appeared ANYWHERE inside a reply,
+    so a sentence of our own whose every word sits inside a longer word some bot wrote went out
+    as "quoted". A page quotes a reply: its runs are the reply's runs, or -- where the page cut
+    the quote short -- a long enough start or end of one. Found by an independent review.
+    """
+    if run in runs:
+        return True
+    return len(run) >= 12 and any(q.startswith(run) or q.endswith(run) for q in runs)
+
+
 def scan_files(items, reader, refusals, path_of=None, partial=None):
     """Every rule, over every item. `items` are LABELS, not necessarily paths.
 
@@ -722,6 +773,7 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
             _t = reader(item)
             if isinstance(_t, str):
                 quoted |= _model_cyrillic(_t)
+    runs_quoted = quoted_runs(quoted)
     for item in items:
         path = to_path(item)
         rel = path.replace("\\", "/").lstrip("./")
@@ -738,20 +790,24 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
             continue
         if not text:
             continue
-        if binary:
-            # NEITHER CYRILLIC RULE, for the reason in the docstring: they read text, and
-            # this is not text. Everything below this block still runs over it.
-            pass
-        elif ARTIFACT.search(path):
-            # SEE BANNED_TOKENS. A recorded reply may legitimately contain almost anything —
-            # that is what makes these artifacts evidence — but not this, and not in a
-            # repository that invites strangers to read every number out of `out/`.
+        # SEE BANNED_TOKENS. A recorded reply may legitimately contain almost anything --
+        # that is what makes these artifacts evidence -- but not this, and not in a
+        # repository that invites strangers to read every number out of `out/`. AND NOT IN
+        # WHAT QUOTES THEM: the report pages and the site carry the same replies, and only
+        # the JSON was read. Found by an independent review.
+        if not binary and (ARTIFACT.search(path) or REPORT_PAGE.search(rel)
+                           or rel.startswith("site/")):
             for tok in sorted(_model_written_tokens(text)):
                 if hashlib.sha256(tok.encode()).hexdigest() in BANNED_TOKENS:
                     refusals.append(
                         f"{item}: a stored reply contains a word on the published-content "
                         f"denylist (sha256 {hashlib.sha256(tok.encode()).hexdigest()[:8]}). "
                         f"Redact it; the verdict and the rate are what the artifact is for")
+        if binary:
+            # NEITHER CYRILLIC RULE, for the reason in the docstring: they read text, and
+            # this is not text. Everything below this block still runs over it.
+            pass
+        elif ARTIFACT.search(path):
             for where, sample in _cyrillic_outside_model_output(text):
                 refusals.append(
                     f"{item}: does not parse as JSON ({sample}), so what it holds is unknown"
@@ -768,7 +824,7 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
             for m in lit_run.finditer(text):
                 if m.group(0) in known_endonyms:
                     continue
-                if page and any(m.group(0) in q for q in quoted):
+                if page and is_quoted_run(m.group(0), runs_quoted):
                     continue
                 line = text[:m.start()].count("\n") + 1
                 refusals.append(f"{item}:{line}: a Cyrillic character in a tracked file "
@@ -822,38 +878,76 @@ def scan_messages(rng, refusals):
                         f"checked \u2014 {why}")
         return
 
+    for record in proc.stdout.split("\x01"):
+        if not record.strip():
+            continue
+        sha, _, body = record.strip().partition("\x00")
+        _message_problems(f"commit {sha[:8]}'s message", body, refusals)
+
+
+def _message_problems(where, body, refusals):
+    """The rules published prose is held to: a commit's message, and a tag's."""
     literals = _local_literals()
     lit = re.compile(LITERAL_CYRILLIC[0])
     # A timezone offset in prose is as permanent as one in a header, and quoting the thing you
     # just removed is the way it comes back.
     tz = re.compile(r"(?<![\d])[+-](?:0[1-9]|1[0-4]):[03]0\b")
+    m = lit.search(body)
+    if m:
+        refusals.append(f"{where}: a Cyrillic character ({m.group(0)})")
+    for label, pattern, _sample in CREDENTIALS:
+        m = re.search(pattern, body)
+        if m:
+            refusals.append(f"{where}: looks like a {label} ({m.group(0)[:12]}\u2026)")
+    m = tz.search(body)
+    if m:
+        refusals.append(f"{where}: quotes the timezone offset {m.group(0)}, and an offset "
+                        f"is a location whether it sits in a header or in a sentence")
+    if literals:
+        low = body.lower()
+        for literal in literals:
+            if literal.lower() in low:
+                refusals.append(f"{where}: contains a string listed in .guard-local")
+                break
 
-    for record in proc.stdout.split("\x01"):
-        if not record.strip():
+
+def scan_tag(name, refusals):
+    """An ANNOTATED TAG is an object of its own, with a tagger line and a message, and a tag
+    is what publishes a release.
+
+    The commit rules never read it: `git tag -a v0.5.0` made without `TZ=UTC`, under another
+    identity or with a Cyrillic message, passed `--range` and fired `release.yml`, and the
+    tag's `+03:00` was public and permanent. Same identity, offset and message rules as a
+    commit. A lightweight tag is only a name for a commit, which `--range` already reads.
+    Found by an independent review.
+    """
+    ref = name if name.startswith("refs/") else "refs/tags/" + name
+    kind = _git("cat-file", "-t", ref)
+    if kind.returncode != 0:
+        why = " ".join(kind.stderr.split())[:120] or f"git exited {kind.returncode}"
+        refusals.append(f"the tag {name} could not be read, so nothing about it was "
+                        f"checked \u2014 {why}")
+        return
+    if kind.stdout.strip() != "tag":
+        return
+    raw = _git("cat-file", "tag", ref).stdout
+    head, _, body = raw.partition("\n\n")
+    where = f"the tag {name}"
+    tagger = [ln for ln in head.splitlines() if ln.startswith("tagger ")]
+    if not tagger:
+        refusals.append(f"{where} names no tagger, so who published it cannot be checked")
+    for ln in tagger:
+        m = re.match(r"tagger (.*?) (\d+) ([+-]\d{4})$", ln)
+        if not m:
+            refusals.append(f"{where}: an unreadable tagger line")
             continue
-        sha, _, body = record.strip().partition("\x00")
-        where = f"commit {sha[:8]}'s message"
-
-        m = lit.search(body)
-        if m:
-            refusals.append(f"{where}: a Cyrillic character ({m.group(0)})")
-
-        for label, pattern, _sample in CREDENTIALS:
-            m = re.search(pattern, body)
-            if m:
-                refusals.append(f"{where}: looks like a {label} ({m.group(0)[:12]}\u2026)")
-
-        m = tz.search(body)
-        if m:
-            refusals.append(f"{where}: quotes the timezone offset {m.group(0)}, and an offset "
-                            f"is a location whether it sits in a header or in a sentence")
-
-        if literals:
-            low = body.lower()
-            for literal in literals:
-                if literal.lower() in low:
-                    refusals.append(f"{where}: contains a string listed in .guard-local")
-                    break
+        if m.group(1) != IDENTITY:
+            refusals.append(f"{where} is tagged by {m.group(1)}, not by the project identity")
+        off = m.group(3)
+        if off not in ("+0000", "-0000"):
+            refusals.append(f"{where} is stamped {off[:3]}:{off[3:]}, not UTC \u2014 an "
+                            f"offset is a location, and a published tag keeps it")
+    _message_problems(f"{where}'s message", body, refusals)
 
 
 def _pending_stamp(refusals):
@@ -1074,6 +1168,7 @@ def main(argv=None):
     g.add_argument("--staged", action="store_true", help="what is about to be committed")
     g.add_argument("--range", help="a commit range about to be pushed, e.g. origin/main..HEAD")
     g.add_argument("--tree", action="store_true", help="every tracked file")
+    g.add_argument("--tag", help="an annotated tag about to be pushed or published")
     g.add_argument("--selftest", action="store_true", help="prove the patterns can fire")
     args = ap.parse_args(argv)
 
@@ -1157,6 +1252,11 @@ def main(argv=None):
         if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0:
             _stamps("HEAD", refusals)
         scan_files(_tree_files(), _read_tree, refusals, partial=partial)
+    elif args.tag:
+        # THE TAG OBJECT, and the commit it names through the commit rules. Files are what
+        # `--tree` reads; the release job runs both.
+        scan_tag(args.tag, refusals)
+        _stamps(args.tag + "^{commit}", refusals)
     else:
         # MESSAGES ONLY ON THE PUSH PATH, and the scope is the point. A message does not
         # exist yet at `--staged` time, and scanning all of HEAD on `--tree` would fail
@@ -1175,10 +1275,14 @@ def main(argv=None):
               "reason — never by passing --no-verify.\n", file=sys.stderr)
         return 1
 
-    where = "staged changes" if args.staged else ("the tree" if args.tree else args.range)
+    where = ("staged changes" if args.staged else "the tree" if args.tree
+             else "the tag %s" % args.tag if args.tag else args.range)
     note = "" if _local_literals() is not None else "  (no .guard-local on this machine)"
-    print(f"  ok  guard: {where} — no credential, no copyleft dependency, "
-          f"no Cyrillic outside a recorded reply{note}")
+    # WHAT THE CYRILLIC RULE READS, said: literal Cyrillic everywhere, escaped `\u04xx` only
+    # inside the artifacts, a declared translation exempt. "No Cyrillic outside a recorded
+    # reply" claimed more than that. Found by an independent review.
+    print(f"  ok  guard: {where} — no credential, no copyleft dependency, no literal Cyrillic "
+          f"outside a recorded reply or a declared translation{note}")
     if partial:
         _shown = ", ".join(sorted(partial)[:6])
         _more = len(partial) - 6

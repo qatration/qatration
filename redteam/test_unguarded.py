@@ -855,6 +855,21 @@ def main():
               not os.path.exists(unguarded._note_path())
               and io.open(_kf, encoding="utf-8").read() == "ORIGINAL",
               unguarded._note_path())
+        # NO NOTE, NO MUTANT: a note that cannot be written stops the sweep with the file
+        # untouched, rather than leaving a mutant nothing records. Found by a review.
+        _real_np = unguarded._note_path
+        unguarded._note_path = lambda: os.path.join(_kw, "no-such-dir", "note.json")
+        try:
+            try:
+                unguarded.write_mutant(_kf, "MUTANT", "ORIGINAL")
+                _stopped = False
+            except SystemExit:
+                _stopped = True
+        finally:
+            unguarded._note_path = _real_np
+        check("a mutant whose undo note cannot be written is not put on disk",
+              _stopped and io.open(_kf, encoding="utf-8").read() == "ORIGINAL",
+              "%s %r" % (_stopped, io.open(_kf, encoding="utf-8").read()))
     finally:
         import shutil as _sh_k
         _sh_k.rmtree(_kw, ignore_errors=True)

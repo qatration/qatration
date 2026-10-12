@@ -1345,8 +1345,9 @@ oracle_context:
             # for an artifact rescored by `rejudge`, which recomputed the same field from the
             # same rows and had the same hole.
             _real = [r for r in rows2 if r["attack"].get("category") != "control"]
+            # EVERY ATTACK ROW, SKIP INCLUDED (`workspace.skip_rows` takes those off once).
             check("...so attacks_n never exceeds the rows that were actually sent",
-                  meta2["attacks_n"] == sum(1 for r in _real if r["headline"] != "SKIP"),
+                  meta2["attacks_n"] == len(_real),
                   f"{meta2['attacks_n']} vs {[(r['attack']['id'], r['headline']) for r in _real]}")
         finally:
             shutil.rmtree(_w2, ignore_errors=True)

@@ -205,6 +205,25 @@ def main():
         check("a misspelled config key is reported rather than queued",
               code in (400, 422) and "respones" in json.dumps(obj), f"{code} {obj}")
 
+        # WHAT THE RUN WILL REFUSE IS NOT QUEUED: `refusal_patterns` came back 202 from a hosted
+        # intake while `run` refused it and the job went dead. The hosted rule is stood in for
+        # here, because hosted mode refuses the loopback fixture at the gate first, which would
+        # pass this for the wrong reason. Found by an independent review.
+        import refusal as _rf_i
+        _real_hpp = _rf_i.hosted_pattern_problem
+        _rf_i.hosted_pattern_problem = lambda ctx: (
+            [("oracle_context.refusal_patterns", "is not accepted by the hosted service")]
+            if (ctx or {}).get("refusal_patterns") else [])
+        try:
+            code, obj = intake.submit(
+                root, body(cfg={"oracle_context": {"canaries": ["QAT-X-1"],
+                                                   "refusal_patterns": {"guard_block": ["x"]}}}),
+                policy=allow_loopback, wake=lambda r: True)
+        finally:
+            _rf_i.hosted_pattern_problem = _real_hpp
+        check("a config the run refuses is refused at the door, not queued",
+              code == 422 and "refusal_patterns" in json.dumps(obj), f"{code} {obj}")
+
         # The name becomes a filename.
         # Through the stub policy like everything else here: this check is about the NAME, and
         # the real policy now resolves the host, which makes `.example` — a TLD that resolves
@@ -565,6 +584,18 @@ def main():
                                    % (_m, _pth, _rs.getheader("Content-Type")))
             finally:
                 _cn.close()
+        # NO LISTING OF OTHER PEOPLE'S JOBS: a job id is what stands between a stranger and a
+        # submitter's report. Asked after a job was accepted above, so there IS one to leak.
+        # Found by an independent review.
+        _cn = _hc_i.HTTPConnection("127.0.0.1", _iport, timeout=10)
+        try:
+            _cn.request("GET", "/runs")
+            _rs = _cn.getresponse()
+            _lst = _rs.status, _rs.read().decode("utf-8", "replace")
+        finally:
+            _cn.close()
+        check("GET /runs does not list the jobs on the queue",
+              _lst[0] == 404 and (job_id or "x") not in _lst[1], str(_lst)[:300])
         # HEAD OVER A RAW SOCKET, because `http.client` never reads a body for a HEAD
         # response whatever the server sends -- so "HEAD carried no body" asked of it holds
         # of every server. Mutation said so: a HEAD answered with the full body passed.
@@ -768,9 +799,11 @@ def main():
         check("a job id that is a path is refused rather than joined",
               _st == 400 and "bad job id" in _tx, "%s %s" % (_st, _tx[:80]))
 
-        _st, _tx = _ask(_iport, None, b'', '/runs', 'GET')
-        check("...while the ordinary listing still answers",
-              _st == 200 and "jobs" in _tx, "%s %s" % (_st, _tx[:80]))
+        # ...while a well-formed id is looked up rather than refused (there is no listing to
+        # ask any more: it handed out every job id).
+        _st, _tx = _ask(_iport, None, b'', '/runs/nosuchjob', 'GET')
+        check("...while a well-formed id is looked up, not refused",
+              _st == 404 and "no such job" in _tx, "%s %s" % (_st, _tx[:80]))
 
         # --- AND THE ONE ENDPOINT THAT HANDS SOMEBODY A CONCLUSION ----------------------
         #

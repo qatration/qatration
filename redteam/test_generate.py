@@ -605,6 +605,20 @@ def main():
                              PYTHONIOENCODING="utf-8"))
     check("rules this config can judge none of exit 5, and do not say `no prohibitions`",
           (_pg.returncode, "states no prohibitions" in _pg.stdout), (5, False))
+    # AND A REMOTE CONFIG IS NOT REFUSED AS UNAUTHORISED: `generate` sends nothing, and it
+    # exited 4 on offline work. Found by an independent review.
+    _cfg_r = os.path.join(_ws_g, "rulebot-remote.yaml")
+    io.open(_cfg_r, "w", encoding="utf-8").write(
+        "adapter: http" + chr(10) + "name: rulebot" + chr(10)
+        + 'url: "https://bot.acme.example/x"' + chr(10))
+    _env_r = {k: v for k, v in os.environ.items() if k != "QATRATION_AUTH_SECRET"}
+    _env_r.update(QATRATION_OUT=_ws_g, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
+    _pr_g = _sp_g.run([sys.executable, os.path.join(HERE, "cli.py"), "generate",
+                       "--target-config", _cfg_r], capture_output=True, text=True,
+                      errors="replace", timeout=300, env=_env_r)
+    check("generate over a remote config is not refused as unauthorised: it sends nothing",
+          _pr_g.returncode != 4 and "not authorised" not in (_pr_g.stdout + _pr_g.stderr),
+          True)
 
     # --- an independent review of generate ---------------------------------------------
     # A SYSTEM PROMPT SPEAKS TO THE BOT: its "your" is already the ask's.

@@ -205,6 +205,34 @@ _USE_SHELL = os.name == "nt"
 _SHELL_META = frozenset('&|<>^%"' + chr(13) + chr(10))
 
 
+import re as _re_mcp  # noqa: E402
+
+_SECRET_FLAG = _re_mcp.compile(r"^--?(?:[\w-]*(?:token|secret|password|passwd|api[-_]?key|"
+                                r"credential)[\w-]*)(?:=(.+))?$", _re_mcp.I)
+_SECRET_ENV = _re_mcp.compile(r"^[A-Za-z_][\w]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|"
+                               r"CREDENTIAL)[\w]*=(.+)$", _re_mcp.I)
+
+
+def credential_args(argv):
+    """-> the indices of `argv` that carry what looks like a credential: a known token shape
+    (the detector's own list, `oracle._SECRETS`), a value after a `--token`-like flag, or a
+    `NAME_TOKEN=value` pair."""
+    from oracle import _SECRETS
+    out, args = [], [str(a) for a in (argv or [])]
+    for i, a in enumerate(args):
+        if any(_re_mcp.search(p, a) for p, _ in _SECRETS):
+            out.append(i)
+            continue
+        m = _SECRET_FLAG.match(a)
+        if m and m.group(1):
+            out.append(i)
+        elif m and i + 1 < len(args) and not args[i + 1].startswith("-"):
+            out.append(i + 1)
+        elif _SECRET_ENV.match(a):
+            out.append(i)
+    return sorted(set(out))
+
+
 def _shell_unsafe(argv):
     """-> the first argument cmd.exe would read as syntax rather than as text, or None."""
     for _a in argv or []:
@@ -1025,6 +1053,17 @@ def record_reading(path, name, cmd, found, why, info):
                   % (path, err or "no `servers` mapping"), file=sys.stderr)
             return 2
         corpus = data
+    # NOT A COMMAND THAT CARRIES A SECRET. The corpus keeps the command verbatim because
+    # `--compare` runs it again, so a `--token ghp_...` or `-e API_KEY=...` in it was written
+    # to disk as typed, into a file meant to be committed beside the code. Refused rather than
+    # masked: a masked command could not be replayed. Found by an independent review.
+    _secret_at = credential_args(cmd)
+    if _secret_at:
+        print("REFUSED: argument %s of the server command looks like a credential, and the "
+              "corpus stores the command as typed so it can run it again. Pass it through an "
+              "environment variable the server reads instead; nothing was written."
+              % ", ".join(str(i + 1) for i in _secret_at), file=sys.stderr)
+        return 2
     writable_path(path, "an MCP corpus", "mcp --record")
     rec = {"package": pkg, "version": pinned_version(cmd), "command": list(cmd)}
     rec.update(server_record(found, why, info))

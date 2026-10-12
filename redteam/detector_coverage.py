@@ -80,6 +80,7 @@ def sent_ids(entries, sent, ctxs):
 from workspace import named_or_more, DEFAULT_ARSENAL
 from signing import NEVER_SENT as _NEVER_SENT
 from lint_arsenal import attack_digest
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def provenance(engines, engine_now):
@@ -166,7 +167,7 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
             unresolved.append((artifact, name))
         return ctxs.get(hit, {})
 
-    def scan(pr, ctx, target, source="attack"):
+    def scan(pr, ctx, target, source="attack", fired=None):
         nonlocal n
         n += 1
         # HOW MANY OF THEM CAME BACK EMPTY, counted beside `n` rather than out of it, because
@@ -180,6 +181,17 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         # evidence bucket, over five empty replies.
         if scanned_out is not None and target and not pr.silent():
             scanned_out.add(target)
+        # WHAT A DOOR ALREADY DECIDED is taken as decided: a benign row is judged by
+        # `benign.fires_for_row`, `!name:Error` being a detector that raised.
+        if fired is not None:
+            for name in fired:
+                if str(name).startswith("!"):
+                    broke[str(name)[1:].split(":")[0]] += 1
+                else:
+                    hits[name] += 1
+                    where[name].add(target)
+                    sources[name].add(source)
+            return
         for name, fn in DETECTORS.items():
             try:
                 if fn(pr, ctx):
@@ -272,7 +284,7 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
     # foreign-code. Two tools in this repo contradicting each other about the same artifact,
     # because one of them derived its bucket from a filtered set rather than from everything
     # that happened.
-    for fp in glob.glob(os.path.join(OUT, "benign_*.json")):
+    for fp in glob_in(OUT, "benign_*.json"):
         d, _why = read_artifact(fp)
         if _why:
             unreadable.append((os.path.basename(fp), _why))
@@ -282,21 +294,28 @@ def replay(unresolved=None, engines=None, attacks=None, unreadable_out=None,
         # run ever wrote. `read_artifact` refuses a blank `meta.target` now, so the
         # fallback answered a question that cannot be asked.
         tgt = (d.get("meta") or {}).get("target")
-        ctx = ctx_for(tgt, os.path.basename(fp))
+        # AS THE BENIGN RUN JUDGED IT: `benign.fires_for_row` (a row that expects a refusal is
+        # no evidence of `over_refusal`) in the context the run recorded (`rejudge.run_ctx`:
+        # its caps and tool baseline). The replay here judged neither, and counted 146
+        # `over_refusal` hits where the baselines hold 140. Found by an independent review.
+        from benign import fires_for_row as _ffr
+        from rejudge import run_ctx as _run_ctx_c
+        ctx = _run_ctx_c(ctx_for(tgt, os.path.basename(fp)), d.get("meta"))
         before = n
         for r in d.get("rows") or []:
             pd = r.get("probe") or {}
             if not pd:
                 continue
-            scan(Probe(prompt=pd.get("prompt") or "", output=pd.get("output") or "",
-                       tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
-                       observations=pd.get("observations") or [],
-                       turns=pd.get("turns") or [], error=pd.get("error"),
-                       resolved=[tuple(x) for x in (pd.get("resolved") or [])] or None,
-                       seconds=pd.get("seconds") or 0), ctx, tgt, source="benign")
+            _pb = Probe(prompt=pd.get("prompt") or "", output=pd.get("output") or "",
+                        tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
+                        observations=pd.get("observations") or [],
+                        turns=pd.get("turns") or [], error=pd.get("error"),
+                        resolved=[tuple(x) for x in (pd.get("resolved") or [])] or None,
+                        seconds=pd.get("seconds") or 0)
+            scan(_pb, ctx, tgt, source="benign", fired=_ffr(_pb, ctx, r.get("id")))
         note_engine(d, os.path.basename(fp), n - before)
 
-    for fp in glob.glob(os.path.join(OUT, "isolation_*.json")):
+    for fp in glob_in(OUT, "isolation_*.json"):
         stem = os.path.basename(fp)[len("isolation_"):-len(".json")]
         # Lock maps were outside the provenance audit entirely: `note_engine` was called in
         # the results loop only, and the artifacts were a bare JSON list that could not carry

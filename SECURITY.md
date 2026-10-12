@@ -67,6 +67,7 @@ product.
 
 `AUTHORISED-USE.md` is the rule, and it is short: this sends real attacks at whatever it is
 pointed at, so point it only at something you own or have written permission to test. Anything
-that is not localhost has to prove control before a run — a DNS record, a file at a known path,
-or a token the bot itself returns — and the run exits 4 without it rather than trusting you to
-remember. Testing systems you do not own is illegal, and that is on the operator, not the tool.
+that is not localhost needs a token issued for its origin before a run, and the run exits 4
+without it rather than trusting you to remember. Only a file at a known path is checked
+against the target; the `header` and `dns_txt` methods are the operator's statement and are
+reported as one, and the hosted service accepts only the file. Testing systems you do not own is illegal, and that is on the operator, not the tool.

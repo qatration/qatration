@@ -136,7 +136,7 @@ def unread_context_keys(cfg):
 
 
 def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
-          verified=None, probe_ceiling=None):
+          verified=None, probe_ceiling=None, queued=False):
     """Returns (ok, report dict). Sends one request, and a second when the config declares
     a honeytoken verifier -- the same one `run` sends before its first attack."""
     rep = {"config": cfg_path, "problems": [], "notes": [], "unread_keys": []}
@@ -172,6 +172,18 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     # and this command does not accept them: it onboards `adapter: http` configs. Their guard
     # is a check over the shipped configs, in `test_http_adapter`, where it can run without a
     # target at all.
+    # WHAT THE RUN WILL REFUSE, asked of the rule the run asks (`refuse_unusable_config`),
+    # collected rather than raised. The intake trusts this answer: a config with
+    # `refusal_patterns` came back 202 "queued" from a hosted intake while `run` refused it
+    # (`hosted_pattern_problem`) and the job went dead. Found by an independent review.
+    from workspace import refuse_unusable_config as _refuse_ob
+    try:
+        _refuse_ob(cfg, "onboard")
+    except SystemExit as e:
+        rep["problems"].extend(
+            ln.strip() for ln in str(e.code if isinstance(e.code, str) else e).splitlines()[1:]
+            if ln.strip())
+        return False, rep
     # THE ARSENAL BEFORE THE PROBE, so a run that cannot start is refused with nothing sent.
     try:
         _pre_atk = _arsenal(attacks)
@@ -573,6 +585,24 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                     f"trials, {need_req} requests) needs roughly {need / 60:.0f} min against a budget of "
                     f"{rate.max_seconds / 60:.0f} min. It will STOP part way, and the attacks "
                     f"it never sent are a gap rather than rows that held.")
+        # AND THE QUEUE'S OWN CLOCK, which is not the config's. A queued job runs the benign
+        # baseline and the sweep inside ONE worker lease (`worker.execute`), and the worker
+        # stops it there whatever `max_seconds` says: a 4 s endpoint was "ready to queue"
+        # against init's 5400 s, sent an hour of traffic, and ended `failed`. Refused, not
+        # noted: a job the queue will kill is not one to queue. Found by an independent
+        # review.
+        if queued and rep["seconds"]:
+            from jobqueue import LEASE_SECONDS as _LEASE
+            from benign import CORPUS as _BC, CONVERSATIONS as _BV
+            _bn_req = len(_BC) + sum(len(c[3]) for c in _BV)
+            _need_q = rep["seconds"] * (need_req + _bn_req)
+            if _need_q > _LEASE - 30:
+                rep["problems"].append(
+                    f"that reply took {rep['seconds']}s, so the queued job (a {_bn_req}-request "
+                    f"benign baseline, then {need_req} requests) needs roughly "
+                    f"{_need_q / 60:.0f} min, and the queue stops a job at "
+                    f"{(_LEASE - 30) / 60:.0f} min. It would end `failed` after sending most "
+                    f"of it. Use a smaller scope, or run it yourself with `qatration run`.")
     # NOT `True`. Every branch above that found something fatal returns False on the spot,
     # and two do not: `bad_patterns` and `bad_context_shapes` COLLECT into the same list and
     # fall through to here, where the verdict ignored it. Those two are the pair
@@ -614,8 +644,11 @@ def render(ok, rep):
     print(f"target      {rep.get('name')}  {rep.get('url') or ''}")
     auth = rep.get("authorization")
     if auth:
-        print(f"authorised  {auth.get('method')}" + (f"  {auth.get('origin')}"
-                                                     if auth.get("origin") else ""))
+        # OBSERVED OR ASSERTED, as the report says it (`workspace.authorization_line`).
+        _seen = auth.get("evidence") == "observed by this run"
+        print(f"{'authorised' if _seen else 'asserted  '}  {auth.get('method')}"
+              + (f"  {auth.get('origin')}" if auth.get("origin") else "")
+              + ("" if _seen else "  (the operator's statement, not observed)"))
     _answered = answered_state(rep)
     if _answered is not None:
         print(f"answered    in {rep['seconds']}s" if _answered
@@ -799,7 +832,8 @@ def main():
             sys.exit(_ht.VERIFY_EXIT.get(_why[0], 5))
 
     ok, rep = check(args.config, attacks=args.attacks, trials=args.trials, scope=args.scope,
-                    verified=(probe if args.verify_honeytoken else None))
+                    verified=(probe if args.verify_honeytoken else None),
+                    queued=bool(args.submit))
     render(ok, rep)
     if not ok:
         # 2 UNLESS THE REPORT SAYS OTHERWISE. Every problem this command finds is a refused
@@ -848,7 +882,10 @@ def main():
                    attacks=args.attacks,
                    trials=args.trials or _trial_count(cfg.get("trials", 3),
                                                       "trials: in the target config"),
-                   requester=args.requester)
+                   requester=args.requester,
+                   # THE MODE THIS DOOR RAN UNDER, as the intake passes it: a worker started by
+                   # hand ran this door's hosted job under local rules. Found by a review.
+                   hosted=authorization.hosted())
     d = q.depth(args.root)
     print(f"\nqueued      {job['job_id']}")
     print(f"position    {d['queued']} queued, {d['running']} running"

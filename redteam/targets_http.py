@@ -439,7 +439,10 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
 # so every probe -- the operator's auth header and the canary in it -- went to a third party
 # that could answer in the target's place, while the ownership proof went direct. Found by an
 # independent review. A network that needs one names it in the config: `proxy:`.
-_OPENER = urllib.request.build_opener(_GuardedRedirect, urllib.request.ProxyHandler({}))
+# AND THE ADDRESS IT CONNECTS TO, checked on a server (`authorization.pinned_handlers`).
+import authorization as _az_pin  # noqa: E402
+_OPENER = urllib.request.build_opener(_GuardedRedirect, urllib.request.ProxyHandler({}),
+                                      *_az_pin.pinned_handlers())
 
 
 def _opener_for(proxy):
@@ -447,7 +450,8 @@ def _opener_for(proxy):
     if not proxy:
         return _OPENER
     return urllib.request.build_opener(
-        _GuardedRedirect, urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        _GuardedRedirect, urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
+        *_az_pin.pinned_handlers())
 
 def _retry_after(headers):
     """-> seconds this endpoint asked us to wait, or None if it did not say.

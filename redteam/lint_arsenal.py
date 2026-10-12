@@ -24,6 +24,7 @@ from encoders import ENCODERS
 ROOT = os.path.dirname(os.path.abspath(__file__))
 from workspace import arsenal_files as _arsenal_files, point_at_configs as _point_at_configs
 from workspace import shell_arg as _shell_arg
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def known_targets():
@@ -303,7 +304,7 @@ def _corpus_objectives(root):
     by the rule `arsenal_files` keeps for the arsenal."""
     import glob as _glob
     import io as _io
-    for fname in sorted(_glob.glob(os.path.join(root, "isolation*.yaml"))):
+    for fname in sorted(glob_in(root, "isolation*.yaml")):
         if fname.endswith(("_tmp.yaml", ".tmp.yaml")):
             continue
         try:
@@ -994,11 +995,45 @@ def unusable_entries(attacks, fname="arsenal"):
             out.append("%s: %s: missing 'category'" % (fname, aid))
         out += bad_delivery(a, fname)
         out += misspelt_keys(a, fname, known)
+        out += near_miss_slots(a, fname)
     # NOT `bad_entry_shapes` HERE, and the absence is the point. It is already raised by
     # `refuse_unknown_detectors`, which both `run_redteam` and `run_isolation` call before
     # anything is sent -- shape before spelling, with the reason written there. Adding it
     # to this function too would be a second implementation of one rule at one door, which
     # is the mistake `workspace.BROKE` and `runner.attacker_side` were each collapsed out of.
+    return out
+
+
+def near_miss_slots(a, fname="arsenal"):
+    """-> a sentence per brace token in what the attack SENDS that is nearly a slot and is not.
+
+    A SLOT THE FILLER DOES NOT RECOGNISE IS SENT AS TYPED. `{privileged_tools}`, `{secret
+    internal key}` and `{secret:}` match neither `runner.SLOT_RE` nor `SECRET_RE`, so `filled`
+    reported nothing missing and the target was asked about a tool literally named
+    `{privileged_tools}` -- DEFENDED, about a question nobody meant to ask. `lint` said clean.
+    Found by an independent review. Only tokens that LOOK like a slot (a near spelling of a
+    slot name, or anything opening with `secret`): JSON, `{{template}}` probes and a literal
+    `{name}` are what an attack may mean to send.
+    """
+    import difflib
+    from runner import SLOT_RE as _SLOT, SECRET_RE as _SECRET, SLOT_KEYS as _KEYS
+    names = ["forbidden_phrase"] + [k[:-1] for k in _KEYS if k.endswith("_tools")]
+    out = []
+    for text in sent_strings(a):
+        for m in re.finditer(r"(?<!\{)\{([^{}\n]{0,60})\}(?!\})", str(text or "")):
+            tok = m.group(0)
+            if _SLOT.fullmatch(tok) or _SECRET.fullmatch(tok):
+                continue
+            inner = m.group(1).strip()
+            head = re.split(r"[:\s]", inner, maxsplit=1)[0].lower()
+            near = (head.startswith("secret")
+                    or (re.fullmatch(r"[a-z_]+", inner)
+                        and difflib.get_close_matches(inner, names, n=1, cutoff=0.8)))
+            if near:
+                out.append("%s: %s: %s is not a slot the run fills, and would be sent as "
+                           "typed -- a slot is %s, or {secret:<words>}"
+                           % (fname, a.get("id"), tok,
+                              ", ".join("{%s}" % n for n in sorted(names))))
     return out
 
 

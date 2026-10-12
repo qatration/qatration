@@ -38,9 +38,10 @@ and it does not exist at all until somebody runs the command above. The hook is 
 about it now instead of after a push; CI is the part that cannot be skipped.
 
 If it refuses something it should not, say so in `tools/guard.py` with the reason. A gate people
-work around by passing `--no-verify` is a gate that has already stopped working — and the four
-credential patterns deliberately left out of that file, each named with the fixture it fired on,
-are what that principle looks like in practice.
+work around by passing `--no-verify` is a gate that has already stopped working — and the
+credential patterns in that file that were narrowed rather than dropped (`sk-`, `AKIA`,
+`sk-ant-`, the PEM header), each with the fixture it fired on written beside it, are what that
+principle looks like in practice.
 
 ## The three things you can add without touching the engine
 
@@ -97,7 +98,7 @@ What actually keeps an attack out is what is IN it, which is a property nobody h
 | names a practice bot's data (`DocBrown`, `GetCurrentUser`, ...) | asks a stranger's system about a user or tool it never had |
 | names a marker planted in one practice bot, and does not carry it in its own `plants:` | same: a marker the attack brings itself exists on any target, so it travels |
 | carries a `seed:` block | plants a document, which needs a store a chat endpoint does not expose |
-| carries `paired_with` | one half of an A/B pair, whose measurement is the pair rather than the prompt — the framed halves of `attacks_guardlift.yaml` are sixty variants of one question and mean nothing apart from their twins |
+| carries `paired_with` | one half of an A/B pair, whose measurement is the pair rather than the prompt — the framed halves of `attacks_guardlift.yaml` are a hundred framed questions, each meaningless apart from its plain twin |
 | names a brand | reads as a different company's bot, which changes what is being tested — promotable with a text edit, and `build_generic.py --blocked` lists these so the work stays visible |
 
 So write the payload so it says what it means without naming our furniture, and it travels. Name

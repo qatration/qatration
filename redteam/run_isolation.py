@@ -437,6 +437,10 @@ def main():
                                        for p in _skip}))))
         print("  Nothing measured is not the same as nothing open.")
         return 3
+    # AND 1 WHEN SOMETHING IS OPEN, through the rule the verdicts are read by
+    # (`isolation.exit_code`): EXPLOITED and COUPLED exited 0. Found by an independent review.
+    from isolation import exit_code as _iso_exit
+    return _iso_exit(maps)
 
 
 def compose_parts(result, by_name):

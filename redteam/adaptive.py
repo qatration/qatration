@@ -174,5 +174,15 @@ def adaptive_attack(target, goal, ctx, success, attacker_model="qwen2.5:14b",
         return {"success": False, "iterations": max_iters,
                 "error": "no round was sent to the target", "transcript": transcript,
                 "seconds": round(time.time() - t0, 1)}
+    # AND ROUNDS THAT MEASURED NOTHING ARE NOT A HOLD: a SKIP verdict is a round whose
+    # declared detectors could not speak, and twelve of them printed HELD. Found by an
+    # independent review.
+    from workspace import NOT_MEASURED as _NM_a
+    if not any(isinstance(r, dict) and r.get("verdict") not in _NM_a
+               for r in transcript):
+        return {"success": False, "iterations": max_iters,
+                "error": "every round came back SKIP: the detectors this goal names could not "
+                         "measure anything on this config", "transcript": transcript,
+                "seconds": round(time.time() - t0, 1)}
     return {"success": False, "iterations": max_iters, "transcript": transcript,
             "seconds": round(time.time() - t0, 1)}

@@ -877,6 +877,13 @@ def main():
           "<" in _chain_row["memory"], False)
     check("...and still says what it means",
           "carries chains" in _chain_row["memory"], True)
+    # ONE NEUTRALISATION PER SURFACE: the row plained every field and the page's `esc` plained
+    # it again, so a real U+202E rendered as `<U++202E>` -- the marker for a target that TYPED
+    # "<U+202E>". Found by an independent review.
+    _bidi_row = _cr._row({"target": "t", "tool_channel": "real" + chr(0x202E)}, "t", "when")
+    _bidi_pg = _cr.render([_bidi_row])
+    check("a real invisible character is shown once on the fleet page, not as typed text",
+          "&lt;U+202E&gt;" in _bidi_pg and "U++202E" not in _bidi_pg, True)
 
     # AND THE COLUMN IS AS WIDE AS WHAT GOES IN IT. `memory` was a constant 26 while the
     # phrase above is 33, so it ran into the next column with no space:

@@ -1892,6 +1892,13 @@ def main():
     check("PARTIAL counts as broken, or a boundary breach reads as a defence",
           "PARTIAL" in disc.BROKE and "EXPLOITED" in disc.BROKE
           and "DEFENDED" not in disc.BROKE)
+    # RELIABLE IS `history.steady`'s WORD: 2/2 of three asked is not reliable. Found by a
+    # review.
+    _rw = lambda rate, nt: {"attack": {"id": "a", "category": "x"}, "headline": "EXPLOITED",
+                            "rate": rate, "trials": [{"verdict": "EXPLOITED"}] * nt}
+    check("a breach on 2 of 3 asked trials is not reliable; 3 of 3 is",
+          disc.reliability({"t": [_rw("2/2", 3), _rw("3/3", 3), _rw("1/1", 1)]}) == (1, 1, 1),
+          str(disc.reliability({"t": [_rw("2/2", 3), _rw("3/3", 3), _rw("1/1", 1)]})))
 
     # --- one run, one answer to "how much of this was measured" -------------------------
     # `meta["errors"]` is written by the sweep so a reader can tell twenty attacks defended
@@ -1967,7 +1974,12 @@ def main():
                 {"attack": {"id": "c1", "category": "extraction", "text": "x",
                             "delivery": "chain"},
                  "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {},
-                 "trials": _tr}]}, f)
+                 "trials": _tr},
+                # A CONTROL exercised no attack family. Found by a review.
+                {"attack": {"id": "k1", "category": "control", "text": "x",
+                            "delivery": "sessions"},
+                 "headline": "DEFENDED", "rate": "0/1", "fired": [], "locks": {},
+                 "trials": _ok}]}, f)
         dr.OUT_DIR = pathlib.Path(tmp)
         try:
             _absent_after_error = dr.delivered()[1]
@@ -1993,6 +2005,8 @@ def main():
           _cov is not None and _cov[0] == 5 and _cov[2] == 19, str(_cov))
     check("...and a family whose only attack errored reports as NOT tried",
           "chain" in _absent_after_error, str(_absent_after_error))
+    check("...and a family only a control was sent through reports as NOT tried",
+          "sessions" in _absent_after_error, str(_absent_after_error))
     check("...and renders the coverage section on errors alone, with nothing skipped",
           "COVERAGE" in _page and "19 errored" in _page, _page[:200] or "no page written")
 
@@ -2566,6 +2580,17 @@ def main():
                                           "observations": [], "prompt": "x", "seconds": 0.1,
                                           "resolved": [], "turns": []}}]}]
     _page = _re_mod.build_html(_inert_meta, _inert_rows)
+    # A LOCK VALUE IS READ FROM THE ARTIFACT, and reached the scorecard unescaped. Found by a
+    # review.
+    # AND A ROW THAT CAME BACK SKIP HAS A TILE, or the tiles do not add up to the run.
+    _skip_pg = _re_mod.build_html(dict(_inert_meta, attacks_n=2), _inert_rows + [
+        dict(_inert_rows[0], attack=dict(_inert_rows[0]["attack"], id="s1"), headline="SKIP",
+             rate="0/1")])
+    check("the scorecard counts the rows that came back SKIP in a tile of their own",
+          '<div class="n">1</div><div class="l">came back SKIP' in _skip_pg, "no SKIP tile")
+    _lk = _re_mod._locks_cell({"refusal_content": "<img src=x onerror=alert(1)>"})
+    check("a lock value from an artifact is escaped on the scorecard",
+          "<img" not in _lk and "&lt;img" in _lk, _lk)
     check("the scorecard names every detector that could not fire",
           all(n in _page for n in _inert_meta["inert"]),
           "the inert list is in meta and absent from the page")
@@ -2573,6 +2598,12 @@ def main():
           "privileged_tools" in _page and "forbidden_tokens" in _page)
     check("...and calls them a gap rather than leaving them beside the defences",
           "gaps in coverage, not defences" in _page)
+    # AND THE BREACH CARD COUNTS THE ROWS, not `meta.broke`: a re-score moves one and not
+    # the other. Found by an independent review.
+    _stale_pg = _re_mod.build_html(dict(_inert_meta, broke=7), _inert_rows)
+    check("the scorecard's breach card counts the rows, not a stale stored counter",
+          '<div class="n">0</div><div class="l">breached' in _stale_pg,
+          "stored broke=7 over one DEFENDED row")
     # ...and says nothing when there is nothing to say, or the panel becomes furniture.
     check("a target with no inert detector gets no such panel",
           "could not fire on this target" not in _re_mod.build_html(
@@ -4385,6 +4416,30 @@ def main():
     _c2b, _p2b, _o2b = _idx_run({"results_beta_gpt4o.json": _res("beta", [_A, _A])})
     check("...and a workspace of only per-model runs is not told to run a sweep",
           _c2b == 3 and "per-model" in _o2b and "run a sweep first" not in _o2b, _o2b[-300:])
+    # A RUN WHOSE EVERY ATTACK CAME BACK SKIP HELD NOTHING: it took the green tile because the
+    # tile read the meta alone, with no rows to subtract the SKIPs from. Found by a review.
+    _cS, _pS, _oS = _idx_run({"results_citebot.json": _res("citebot", [("SKIP", "x")] * 3,
+                                                           errors=0)})
+    _tileS = re.search(r'<div class="n"[^>]*>(\d+)</div><div class="l">[^<]*hardened', _pS)
+    check("a run whose every attack came back SKIP is not counted hardened",
+          bool(_tileS) and _tileS.group(1) == "0",
+          _tileS.group(0) if _tileS else _pS[:600])
+    # AN ATTRIBUTION THAT COULD NOT BE COUNTED IS NAMED, not summed as zero doubt.
+    _real_dc = _bi_q.baseline.doubtful_count
+    try:
+        _bi_q.baseline.doubtful_count = lambda *a, **k: None
+        _c2c, _p2c, _o2c = _idx_run({"results_citebot.json": _res("citebot", [_A, _D])})
+    finally:
+        _bi_q.baseline.doubtful_count = _real_dc
+    check("a breach whose attribution could not be counted is named on the index",
+          "could not be counted" in _p2c, _p2c[:400])
+    # A TORN BASELINE IS NOT A MISSING ONE: "run `qatration benign`" sends the reader to
+    # overwrite a file sitting there unreadable. Found by an independent review.
+    _c2t, _p2t, _o2t = _idx_run({"results_citebot.json": _res("citebot", [_A, _D]),
+                                 "benign_citebot.json": '{"meta": {"target": "citebot"'})
+    check("a breach over an unreadable baseline says the file could not be read",
+          "whose benign baseline could not be read" in _p2t
+          and "with no benign baseline" not in _p2t, _p2t[:600])
     # A CONTROL IS NOT A MEASUREMENT OF THE TARGET.
     _c3, _p3, _o3 = _idx_run({"results_alpha.json": _res(
         "alpha", [_E, _E, _E, _E, _E, ("DEFENDED", "control")])})
@@ -4528,6 +4583,12 @@ def main():
               _bl.qualified("t", _rows) == (None, None)
               and _bl.doubtful_count("t", {"results": _rows, "meta": {}}) == 0,
               "qualified/doubtful_count disagree about an unmeasured target")
+        # AND A READER THAT CRASHED IS NOT A CLEAN BILL EITHER: 0 is "every breach
+        # attributed", and the fleet pages printed it. Found by an independent review.
+        _bl.rates = lambda *a, **k: 1 / 0
+        check("a count that could not be made is None, not zero doubt",
+              _bl.doubtful_count("t", {"results": _rows, "meta": {}}) is None,
+              repr(_bl.doubtful_count("t", {"results": _rows, "meta": {}})))
     finally:
         _bl.rates = _real_rates
 

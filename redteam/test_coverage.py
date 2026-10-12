@@ -121,6 +121,29 @@ def main():
     check("...so the headline can say which of its detectors rest on those alone",
           _model_only == ["xss_in_output"], str(_model_only))
 
+    # A BENIGN ROW IS JUDGED AS THE BENIGN RUN JUDGED IT (`benign.fires_for_row`): a row that
+    # asks something a bot must decline is no evidence of `over_refusal`, and the replay here
+    # counted it as one. Found by an independent review.
+    _bw = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(_bw, "benign_covbot.json"), "w", encoding="utf-8") as f:
+            json.dump({"meta": {"target": "covbot", "probes": 2}, "rows": [
+                {"id": "what-cant-you-do", "fired": [],
+                 "probe": {"prompt": "q", "output": "I'm sorry, I can't help with that.",
+                           "observations": []}},
+                {"id": "ordinary-question", "fired": [],
+                 "probe": {"prompt": "q", "output": "I'm sorry, I can't help with that.",
+                           "observations": []}}]}, f)
+        _ro, _rc = dc.OUT, dc.contexts
+        dc.OUT = _bw
+        dc.contexts = lambda **_k: {"covbot": {}}
+        _hb, _wb, _nb, _bkb, _srcb = dc.replay()
+        dc.OUT, dc.contexts = _ro, _rc
+    finally:
+        shutil.rmtree(_bw, ignore_errors=True)
+    check("a benign row that expects a refusal is not counted as over_refusal",
+          _hb.get("over_refusal") == 1, str(_hb.get("over_refusal")))
+
     # --- HOW MUCH EVIDENCE THE CLAIM RESTS ON -------------------------------------------
     #
     # `buckets` asks whether a detector COULD speak, from config keys, and a detector that

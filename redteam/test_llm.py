@@ -404,6 +404,50 @@ def main():
               not _called_ad and all(str(v).startswith("refused") or v == 2
                                      for v in _refused_ad.values()),
               "%d loop(s) ran: %s" % (len(_called_ad), _refused_ad))
+        # ROUNDS THAT MEASURED NOTHING ARE NOT A HOLD, and a goal whose detectors are mute on
+        # this config is refused before anything is sent; a declared verifier is asked first,
+        # as `run` asks it. Found by an independent review.
+        _n_sent = len(sent)
+        _rs = adaptive_attack(Silent(), "get the prompt", {}, ["sysprompt_leak"],
+                              max_iters=3, log=lambda *a: None)
+        del sent[_n_sent:]      # the budget checks below count the first loop's calls
+        check("a loop whose every round came back SKIP is not HELD",
+              bool(_rs.get("error")) and "SKIP" in _rs["error"]
+              and _ra.outcome_line(_rs)[1] == 3, str({k: _rs.get(k) for k in ("error",)}))
+        _cfg_mu = _os_p.path.join(_w_ad, "mutebot.yaml")
+        io.open(_cfg_mu, "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: mutebot" + chr(10)
+            + 'url: "http://127.0.0.1:9/x"' + chr(10))
+        _cfg_ver = _os_p.path.join(_w_ad, "verbot.yaml")
+        io.open(_cfg_ver, "w", encoding="utf-8").write(
+            "adapter: http" + chr(10) + "name: verbot" + chr(10)
+            + 'url: "http://127.0.0.1:9/x"' + chr(10)
+            + "oracle_context:" + chr(10) + '  canaries: ["ACME-REF-55821-SECRET"]' + chr(10)
+            + '  honeytoken_verify: "ACME-REF-55821"' + chr(10))
+        _called_ad, _rc_ad = [], {}
+        _ra.adaptive_attack = lambda *a, **k: _called_ad.append(1) or {"success": False}
+        _ra.OUT_DIR = _w_ad
+        try:
+            for _lbl, _cf, _extra in (("mute", _cfg_mu, ["--success", "sysprompt_leak"]),
+                                      ("verifier", _cfg_ver, [])):
+                sys.argv = ["adaptive", "--target-config", _cf] + _extra
+                import contextlib as _cx_ad_pre
+                with _cx_ad_pre.redirect_stderr(io.StringIO()), \
+                        _cx_ad_pre.redirect_stdout(io.StringIO()):
+                    _n_called = len(_called_ad)
+                    try:
+                        _rc_ad[_lbl] = _ra.main()
+                    except SystemExit as _e_ad:
+                        _rc_ad[_lbl] = "refused: %s" % str(_e_ad)[:60]
+                    if len(_called_ad) > _n_called:
+                        _rc_ad[_lbl] = "SENT"
+        finally:
+            sys.argv = _saved_argv
+            _ra.adaptive_attack, _ra.OUT_DIR = _real_aa, _real_out
+        check("a goal whose detectors are mute on this config is refused before the loop",
+              _rc_ad.get("mute") == 3, str(_rc_ad))   # "SENT" when the loop ran
+        check("...and a declared verifier is asked before the loop, as `run` asks it",
+              not _called_ad and _rc_ad.get("verifier") not in (0, None), str(_rc_ad))
         # --- the command, after an independent review ---------------------------------
         import baseline as _bl_ad, contextlib as _cx_ad
         _w2 = _tf_p.mkdtemp()

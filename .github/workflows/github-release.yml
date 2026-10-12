@@ -53,13 +53,18 @@ jobs:
     steps:
       - name: the tag this is about
         id: which
+        # THROUGH `env:`, NEVER EXPANDED INTO THE SCRIPT. `${{ ... }}` is pasted into the bash
+        # source before it runs, and `git check-ref-format` accepts `v$(id)` as a tag name: in a
+        # job holding `contents: write` that is a command, not a name. And a version, not
+        # anything starting with v. Found by an independent review.
+        env:
+          TAG_IN: ${{ inputs.tag || github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.event.workflow_run.head_branch }}"
-          case "$tag" in
-            v*) ;;
-            *) echo "REFUSED: '$tag' is not a version tag." >&2; exit 1 ;;
-          esac
+          tag="$TAG_IN"
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([a-z0-9.]*)$'; then
+            echo "REFUSED: that is not a version tag." >&2; exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
@@ -83,9 +88,11 @@ jobs:
       - name: the tag must exist, and must be the version the package states
         # The same rule `release.yml` applies before publishing, applied again here because
         # this entry point can be reached without going through that one.
+        env:
+          TAG: ${{ steps.which.outputs.tag }}
         run: |
           set -euo pipefail
-          tag="${{ steps.which.outputs.tag }}"
+          tag="$TAG"
           git rev-parse -q --verify "refs/tags/$tag" >/dev/null || {
             echo "REFUSED: no tag $tag in this repository." >&2; exit 1; }
           pip install --quiet tomli
@@ -96,18 +103,21 @@ jobs:
           fi
 
       - name: the notes come from the changelog
-        run: python tools/release_notes.py "${{ steps.which.outputs.tag }}" > "$RUNNER_TEMP/notes.md"
+        env:
+          TAG: ${{ steps.which.outputs.tag }}
+        run: python tools/release_notes.py "$TAG" > "$RUNNER_TEMP/notes.md"
 
       - name: create it, or say it is already there
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.which.outputs.tag }}
         # NOT `--clobber`, and no overwrite. A Release that already exists may have been edited
         # by a human, and silently replacing that text with a regenerated copy is a change
         # nobody asked for. Existing is not a failure either: this workflow can legitimately be
         # re-run.
         run: |
           set -euo pipefail
-          tag="${{ steps.which.outputs.tag }}"
+          tag="$TAG"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "$tag already has a Release; leaving it alone."
             exit 0

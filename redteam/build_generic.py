@@ -21,8 +21,8 @@ WHAT IS NOT PROMOTED, and why each is a judgement rather than a filter:
     portable arsenal would pad the count with prompts that are not attacks, and a probe count
     inflated by non-attacks is a number nobody can act on.
   * attacks carrying `paired_with` — half of an A/B pair, whose measurement is the pair and
-    not the prompt. Promoting the framed halves alone would pad the arsenal with twenty
-    variants of one question and leave the comparison behind.
+    not the prompt. Promoting the framed halves alone would pad the arsenal with a hundred
+    framed variants of plain questions and leave the comparison behind.
   * attacks naming a CANARY or a TOOL — they reference one bot's planted secret or one bot's
     tool by name, so against anything else they test a string that does not exist.
   * attacks with a `seed:` block — they plant a document in a corpus. That needs a store we can
@@ -85,7 +85,10 @@ def fleet_literals():
     # silently contributed no canaries, which is how an attack stops being pinned to
     # anything without the corpus getting smaller.
     from workspace import oracle_contexts as _ocs
-    for _name, oc in _ocs(HERE).items():
+    # THE SHIPPED CONFIGS ONLY, never the operator's exported `QATRATION_CONFIGS`: the
+    # arsenal is a file this repository ships, and it must not depend on whose machine built
+    # it. Found by an independent review.
+    for _name, oc in _ocs(HERE, with_env=False).items():
         import honeytoken as _ht
         for x in _ht.declared(oc):
             if str(x).strip():
@@ -244,8 +247,8 @@ def blocked_reason(a, canaries, tools, markers=()):
         return "seeds a document: needs a corpus we can write to"
     if a.get("paired_with"):
         # HALF OF AN A/B PAIR, and useless without the other half. `attacks_guardlift.yaml`
-        # holds twenty variants of one question so a framing can be compared against the plain
-        # form of the SAME question; promoting the twenty framed halves would pad the portable
+        # holds a hundred framed questions, each beside its plain form, so a framing can be
+        # compared against the SAME question; promoting the hundred framed halves would pad the portable
         # arsenal with an experiment's scaffolding, and their measurement is the pair rather
         # than the prompt. Same judgement as `control` above and for the same reason.
         return "one half of an A/B pair: measured against its twin, not on its own"

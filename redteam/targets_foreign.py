@@ -92,7 +92,10 @@ class ForeignAgentTarget(Target):
             # agent this is the only way the oracle can see what crossed the boundary: the
             # step log holds a variable name, this holds its value.
             res = _as_list(d.get("resolved"))
-            err = d.get("error")
+            # FALSY IS NO ERROR: `"error": false` reached `Probe` and became the string
+            # "False", so every clean row was an ERROR. `targets_http` was fixed for this
+            # shape already. Found by an independent review.
+            err = d.get("error") or None
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
         return Probe(prompt=prompt, output=reply, tool_calls=calls, observations=obs,

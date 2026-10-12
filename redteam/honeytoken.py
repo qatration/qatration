@@ -434,7 +434,11 @@ def verify_requests(ctx):
     honeytoken's verifier, else 0. ONE rule for the probe and for the budget `onboard` prices,
     which left it out and called a run that could not finish "ready"."""
     verify = (ctx.get("honeytoken_verify") or "").strip() if isinstance(ctx, dict) else ""
-    return 1 if (verify and [c for c in declared(ctx) if looks_like_ours(c)]) else 0
+    # A DECLARED VERIFIER IS ASKED, whatever the canary looks like. This asked only beside a
+    # minted `QAT-CANARY-...`, so an operator's own canary with its own verifier was never
+    # checked: an unplanted snippet left every canary detector silent and the report clean,
+    # where the README promises exit 5. Found by an independent review.
+    return 1 if verify else 0
 
 
 def verify_refusal(probe, verify):

@@ -36,6 +36,7 @@ CHANNEL = {
 
 
 from workspace import esc as _ws_esc
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def esc(s):
@@ -86,20 +87,13 @@ def _row(profile, name, when):
     _untried = profile.get("token_lock_untried")
     _untried = _untried if isinstance(_untried, int) and not isinstance(_untried, bool) else 0
     disc = profile.get("disclosure_open")
-    # AT THE BOUNDARY, so both surfaces get it and the column widths are computed on what
-    # is actually printed. Every string below is the target describing itself -- the tool
-    # channel it named, the tools it listed, the hints its answers raised -- and this is
-    # the one renderer whose console output nothing had attacked. `esc` on the HTML side
-    # is `html.escape(plain(...))`, so a value that has already been through here escapes
-    # to the same string the page showed before.
-    def _v(x):
-        if isinstance(x, str):
-            return plain(x, oneline=True)
-        if isinstance(x, list):
-            return [plain(i, oneline=True) if isinstance(i, str) else i for i in x]
-        return x
-
-    return {k: _v(v) for k, v in {
+    # RAW HERE, MADE SAFE WHERE IT IS SHOWN. Every string below is the target describing
+    # itself, and each surface neutralises it once: the page through `esc`, which is
+    # `html.escape(plain(...))`, and the console through `plain` at print time. Running
+    # `plain` here as well made the page plain it twice, and a real U+202E came out as
+    # `<U++202E>` -- the marker `plain` keeps for a target that TYPED the text "<U+202E>",
+    # inverting the evidence. Found by an independent review.
+    return {k: v for k, v in {
         "target": name,
         "when": when,
         # ASKED OF THE VALUE, NOT ASSUMED FROM THE KEY. Both surfaces format this with a
@@ -166,7 +160,7 @@ def collect(unreadable=None):
     from workspace import read_artifact as _read
     rows = []
     unreadable = unreadable if unreadable is not None else []
-    for fp in sorted(glob.glob(str(OUT_DIR / "recon_*.json"))):
+    for fp in sorted(glob_in(OUT_DIR, "recon_*.json")):
         name = os.path.basename(fp)[len("recon_"):-len(".json")]
         profile, _why = _read(fp)
         if _why:
@@ -290,7 +284,7 @@ def main():
     # A SEPARATE LIST, because `rows` is the PAGE'S data and it is rendered a few lines
     # below. A first draft normalised the cells in place -- `unlabelled` 0 to "-" -- and
     # the console's display string went out in the HTML.
-    _shown = [{k: ("-" if k == "unlabelled" and not r[k] else str(r[k]))
+    _shown = [{k: ("-" if k == "unlabelled" and not r[k] else plain(str(r[k]), oneline=True))
                for k, _h in _cells} for r in rows]
     _ws = {k: max(len(h), *(len(s[k]) for s in _shown)) + 2 for k, h in _cells}
     _heads = "".join("%-*s" % (_ws[k], h) for k, h in _cells) + "warnings"
@@ -301,7 +295,7 @@ def main():
               + str(len(r["warnings"]) or "-"))
     for r in rows:
         for warn in r["warnings"]:
-            print(f"  ! {r['target']}: {warn}")
+            print(f"  ! {plain(str(r['target']), oneline=True)}: {plain(str(warn), oneline=True)}")
 
     out = OUT_DIR / "recon_fleet.html"
     out.parent.mkdir(exist_ok=True)

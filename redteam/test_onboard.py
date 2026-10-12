@@ -718,6 +718,18 @@ def main():
         finally:
             sys.stdout = _stdout
         _pr2 = _out2.getvalue()
+        # AN ASSERTED PROOF IS NOT "authorised". Found by an independent review.
+        _out3 = io.StringIO()
+        _stdout, sys.stdout = sys.stdout, _out3
+        try:
+            onboard.render(True, {"config": "c", "name": "n", "authorization": {
+                "method": "header", "origin": "https://x.example",
+                "evidence": "asserted in the target config"}})
+        finally:
+            sys.stdout = _stdout
+        check("onboard calls a header proof the operator's statement, not authorised",
+              "asserted" in _out3.getvalue() and "authorised  header" not in _out3.getvalue(),
+              _out3.getvalue()[:300])
         check("onboard names every key a detector lacks on ONE line: both, not either",
               "baseline_tool_inputs and watch_tools" in _pr2
               and "\n            watch_tools " not in _pr2, _pr2[-400:])
@@ -1081,7 +1093,9 @@ def main():
               not any("endpoint" in p for p in _rep8.get("problems") or [])
               and "reply" not in _rep8, str(_rep8.get("problems")))
         check("...and the refusal says the name is required",
-              any("`name` is required" in p for p in _rep8.get("problems") or []),
+              # In the words of the rule the run refuses with (`refuse_unusable_config`).
+              any(p.startswith("name") and "is missing" in p
+                  for p in _rep8.get("problems") or []),
               str(_rep8.get("problems")))
 
         # THE OTHER DIRECTION, or the check above is satisfied by a door that refuses
@@ -1284,6 +1298,48 @@ def main():
     finally:
         _srv_r.shutdown()
         shutil.rmtree(_wr, ignore_errors=True)
+
+    # --- A JOB THE QUEUE WILL KILL IS NOT "READY TO QUEUE" ---------------------------------
+    # A 4 s endpoint, the whole arsenal: under init's 5400 s budget, over the worker's one
+    # lease for baseline and sweep together. Found by an independent review.
+    import http.server as _hs_l, threading as _th_l, tempfile as _tf_l, yaml as _y_l, time as _t_l
+
+    class _Slow(_hs_l.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            _t_l.sleep(4)
+            _b = b'{"reply": "We are open nine to five."}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(_b)))
+            self.end_headers()
+            self.wfile.write(_b)
+
+        def log_message(self, *a):
+            pass
+    _srv_l = _hs_l.ThreadingHTTPServer(("127.0.0.1", 0), _Slow)
+    _th_l.Thread(target=_srv_l.serve_forever, daemon=True).start()
+    _wl = _tf_l.mkdtemp()
+    try:
+        _pl = os.path.join(_wl, "slowbot.yaml")
+        with open(_pl, "w", encoding="utf-8") as _f:
+            _y_l.safe_dump({"name": "slowbot", "adapter": "http",
+                            "url": "http://127.0.0.1:%d/chat" % _srv_l.server_address[1],
+                            "request": {"body": {"message": "{prompt}"}},
+                            "response": {"reply": "reply"},
+                            "rate": {"max_requests": 1800, "max_seconds": 5400},
+                            "oracle_context": {"canaries": ["QAT-SLOW-1"]}}, _f)
+        _okq, _repq = onboard.check(_pl, scope="full", queued=True)
+        check("a job that outlasts the worker's lease is not ready to queue",
+              not _okq and any("the queue stops a job" in p for p in _repq["problems"]),
+              str(_repq.get("problems"))[:300])
+        _okl, _repl = onboard.check(_pl, scope="full")
+        check("...while the same run typed by hand is not refused on the queue's clock",
+              not any("the queue stops a job" in p for p in _repl["problems"]),
+              str(_repl.get("problems"))[:300])
+    finally:
+        _srv_l.shutdown()
+        shutil.rmtree(_wl, ignore_errors=True)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

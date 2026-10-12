@@ -449,7 +449,8 @@ def main():
                        _art9("citebot", [("a1", "EXPLOITED"), ("a2", "EXPLOITED")],
                              arsenal=None)),
                       ("results_ragbot.json",
-                       _art9("ragbot", [("a1", "EXPLOITED"), ("a2", "DEFENDED")], broke=1,
+                       # `broke=2` A STALE COPY: one row breached, and the page says 1.
+                       _art9("ragbot", [("a1", "EXPLOITED"), ("a2", "DEFENDED")], broke=2,
                              when="2026-05-06 07:08")),
                       ("results_ragbot.v1.json",
                        _art9("ragbot", [("a1", "DEFENDED"), ("a2", "DEFENDED")], broke=0)),
@@ -471,6 +472,11 @@ def main():
     check("a run with no stored breach count is counted from its rows, not read as 0",
           bool(_cit) and ">2<" in _cit.group(0).replace(" ", ""),
           _cit.group(0)[:400] if _cit else "no citebot row")
+    _rgb = _re9.search(r"ragbot<div.*?</tr>", _pg9, _re9.S)
+    check("...and one whose stored count the rows no longer carry is counted from the rows",
+          bool(_rgb) and _re9.search(r'font-weight:700">(\d+)', _rgb.group(0))
+          and _re9.search(r'font-weight:700">(\d+)', _rgb.group(0)).group(1) == "1",
+          _rgb.group(0)[:400] if _rgb else "no ragbot row")
     # A FILE'S DATE IS MARKED AS ONE: citebot recorded no `when`, ragbot did.
     _rag = _re9.search(r"ragbot<div[^>]*>([^<]*)<", _pg9)
     _cdt = _re9.search(r"citebot<div[^>]*>([^<]*)<", _pg9)

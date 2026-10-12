@@ -390,6 +390,13 @@ arrived over a socket, and a local intake that waived loopback would be the same
 smaller blast radius, which is not the same as not having it. `intake.py` refuses to start at all
 without `QATRATION_HOSTED=1` and an authorization secret.
 
+**A submitter's proof comes from whoever runs the service, not from the service.** Hosted, the
+gate prints no token and accepts only the file at `/.well-known/qatration-authorization`. The
+operator issues one with `qatration authorize --url <the submitter's url>`, using the service's
+secret on a machine where `QATRATION_HOSTED` is unset, and hands it over; the submitter serves
+it on their own origin, and it is good for fourteen days. The intake listens on `localhost`
+unless `--host` names another interface.
+
 The honest cost of getting that right is that **the door cannot be exercised against anything
 reachable from the host running the tests**. Every offline target is loopback, and the door refuses loopback.
 So the accept path is driven with the network policy injected — the same trick

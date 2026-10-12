@@ -881,6 +881,16 @@ def main():
         _sc = dict(_sb, dated_by_run=False)
         check("...while a date read off the filesystem proves nothing about identity",
               H.same_run(_sa, _sc) is False, str((_sa, _sc)))
+        # AND AT ONE PRECISION: `record` stamps seconds, `backfill` minutes, and a re-score
+        # backfilled beside its own sweep was diffed against it as `fixed`. Found by a review.
+        _sd = H.snapshot({"target": "sr", "model": "m", "trials": 3},
+                         R(a1="DEFENDED"), when="2026-09-29 22:04:37", dated_by_run=True)
+        check("...and a stamp in seconds and one in minutes of the same sweep are one run",
+              H.same_run(_sa, _sd) is True, str((_sa.get("run"), _sd.get("run"))))
+        _se = H.snapshot({"target": "sr", "model": "m", "trials": 3},
+                         R(a1="DEFENDED"), when="2026-09-29 22:05:01", dated_by_run=True)
+        check("...but a different minute is a different run",
+              H.same_run(_sa, _se) is False, str((_sa.get("run"), _se.get("run"))))
 
         # AN EARLIER BREAK OF A DIFFERENT QUESTION IS NOT A FIX THAT DID NOT HOLD.
         def _rx(text, v):
@@ -1621,6 +1631,33 @@ def main():
           bool(_calls) and "never_sent=" in _calls[0], str(_calls))
     check("...and whether it was the TARGET that stopped the run",
           bool(_calls) and "wall=" in _calls[0], str(_calls))
+    check("...and how many rows came back SKIP",
+          bool(_calls) and "skips=" in _calls[0], str(_calls))
+
+    # A SKIP ROW SCORED NOTHING, ONE RULE (`workspace.skip_rows`). The sweep counted SKIP rows
+    # as scored and clean, so a plain endpoint with no canary passed `--fail-on any`; the pages
+    # subtracted them from an `attacks_n` `rejudge` had already written without them, and the
+    # index read 4/5 = 80% for eight scored rows. Found by an independent review.
+    check("a SKIP row leaves the closing line's denominator, and is named",
+          _cl(0, 10, 0, skips=3).startswith("0/7 attacks breached") and "SKIP" in _cl(0, 10, 0, skips=3),
+          _cl(0, 10, 0, skips=3))
+    check("...and a sweep of nothing but SKIP rows measured nothing",
+          "NOTHING MEASURED" in _cl(0, 3, 0, skips=3), _cl(0, 3, 0, skips=3))
+    from run_redteam import absolute_verdict as _av_s, nothing_measured as _nm_s
+    check("...and the gate does not pass over them",
+          _av_s("any", 0, 0, 10, 0, skip_rows=3)[0] == 3, str(_av_s("any", 0, 0, 10, 0, skip_rows=3)))
+    _abs_call = _re2.findall(r"absolute_verdict\((?:[^()]|\([^()]*\))*\)", _src)
+    check("...and the sweep hands the gate its SKIP count",
+          bool(_abs_call) and "skip_rows=" in _abs_call[0], str(_abs_call))
+    check("...and a run whose every trial was SKIP is nothing measured",
+          _nm_s([{"attack": {"category": "x"}, "headline": "SKIP",
+                  "trials": [{"verdict": "SKIP", "probe": {"output": "an answer"}}]}]), "")
+    import workspace as _ws_s
+    _rows_s = ([{"headline": "SKIP", "attack": {}}] * 3 + [{"headline": "DEFENDED", "attack": {}}] * 4
+               + [{"headline": "EXPLOITED", "attack": {}}] * 4)
+    check("...and a page measures eight of eleven rows, subtracting SKIP once",
+          _ws_s.measured({"attacks_n": 11, "errors": 0}, _rows_s) == (8, 0),
+          str(_ws_s.measured({"attacks_n": 11, "errors": 0}, _rows_s)))
 
     # A ROW THAT WAS NEVER SENT DID NOT ERROR EITHER. Walked: a forty-request budget against a
     # forty-five attack sweep left seven rows headed ERROR whose error reads "this run's

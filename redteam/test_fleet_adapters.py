@@ -160,6 +160,13 @@ def main():
         p = f.send("hello")
         check("foreign: an error field inside a 200 is an error",
               bool(p.error) and "step limit" in str(p.error), repr(p.error))
+        # AND A FALSE ONE IS NOT: `"error": false` became the string "False" and every clean
+        # row was an ERROR, the shape `httpbot` above was already fixed for. Found by a review.
+        for _falsy in (False, None, ""):
+            REPLY["body"] = json.dumps({"reply": "All good.", "error": _falsy})
+            p = f.send("hello")
+            check("foreign: an error field of %r is no error" % (_falsy,),
+                  p.error is None and p.output == "All good.", repr(p.error))
 
         # --- AND A JSON ANSWER THAT IS NOT AN OBJECT --------------------------------------
         #

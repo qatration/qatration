@@ -724,6 +724,12 @@ check("...and a breach that repeated does not carry it",
       "sent ONCE" not in _msg("3/3"), _msg("3/3")[:120])
 check("...nor does one that broke once out of three, which is a rate",
       "sent ONCE" not in _msg("1/3"), _msg("1/3")[:120])
+# AND A THREE-TRIAL RUN WHOSE OTHER TWO TRIALS CAME BACK EMPTY was told to re-run with
+# --trials 3. It says what was measured of what was asked. Found by an independent review.
+_r13 = build([row("a1", "EXPLOITED", ["canary_in_output"], rate="1/1")], {}, trials=3)
+_m13 = _r13["runs"][0]["results"][0]["message"]["text"]
+check("a 1/1 row of a 3-trial run says 1 of 3 measured, not 'sent ONCE'",
+      "1 of 3 trials asked" in _m13 and "sent ONCE" not in _m13, _m13[:160])
 
 # --- A TARGET THAT SURVIVES BY NOT ANSWERING -------------------------------------------
 #
@@ -892,6 +898,17 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         sys.argv = argv
     check("an export over a run that measured nothing exits 3, not 0", _rc_n == 3, str(_rc_n))
+    # AND A CONTROL THAT ANSWERED MEASURED NO ATTACK. Found by an independent review.
+    with io.open(src, "w", encoding="utf-8") as f:
+        json.dump(results([row("a1", "ERROR", []),
+                           row("c1", "DEFENDED", [], category="control", rate="0/2")],
+                          errors=1), f)
+    sys.argv = ["sarif", "--results", src, "--out", os.path.join(tmp, "o.sarif")]
+    try:
+        _rc_c = sarif.main()
+    finally:
+        sys.argv = argv
+    check("...and so does one where only a control answered", _rc_c == 3, str(_rc_c))
 
 # --- a newer run that failed, and per-model copies -----------------------------------------
 import runs as _runs_s
@@ -951,6 +968,12 @@ with tempfile.TemporaryDirectory() as tmp:
           str(_log_m["runs"][0].get("automationDetails")))
     check("...while the plain export keeps no category, so its alerts stay matched",
           "automationDetails" not in _log_p["runs"][0], str(_log_p["runs"][0].keys()))
+
+# THE BREACH COUNT IS THE ROWS', not the stored copy a re-score leaves behind. Found by a
+# review.
+_stale = build([row("a1", "DEFENDED", [], rate="0/2")], {}, broke=4)
+check("the run's breached count is counted from its rows, not its stored counter",
+      _stale["runs"][0]["properties"]["breached"] == 0, str(_stale["runs"][0]["properties"]))
 
 print("\n%d/%d passed" % (PASS, PASS + FAIL))
 if FAIL:

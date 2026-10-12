@@ -57,6 +57,32 @@ def main():
                json.dumps(b, sort_keys=True, ensure_ascii=False)
                for a, b in zip(on_disk, expected))
     check("...down to the content of every attack, not just the ids", same)
+    # ...WHOSE EVER MACHINE BUILDS IT: with the operator's own config exported, as `init`
+    # tells everyone to, its tools and markers re-slotted 21 shipped attacks and dropped
+    # three. Found by an independent review.
+    import tempfile as _tf_bg
+    _dbg = _tf_bg.mkdtemp()
+    _own = os.path.join(_dbg, "mine.yaml")
+    with open(_own, "w", encoding="utf-8") as _f:
+        _f.write("name: mine\nadapter: http\nurl: http://localhost:9/x\n"
+                 "oracle_context:\n  privileged_tools: [\"refund\"]\n"
+                 "  planted_markers: [\"debug\"]\n  canaries: [\"window\"]\n")
+    _was_env = os.environ.get("QATRATION_CONFIGS")
+    os.environ["QATRATION_CONFIGS"] = _own
+    try:
+        _hand_e, _prom_e, _ = bg.build()
+    finally:
+        if _was_env is None:
+            os.environ.pop("QATRATION_CONFIGS", None)
+        else:
+            os.environ["QATRATION_CONFIGS"] = _was_env
+        import shutil as _sh_bg
+        _sh_bg.rmtree(_dbg, ignore_errors=True)
+    _exp_e = list(_hand_e.values()) + _prom_e
+    check("...and an exported config of the operator's own does not change it",
+          json.dumps(_exp_e, sort_keys=True, ensure_ascii=False)
+          == json.dumps(expected, sort_keys=True, ensure_ascii=False),
+          "%d vs %d attacks" % (len(_exp_e), len(expected)))
 
     # A SCRATCH FILE IN redteam/ IS PART OF THE ARSENAL unless something says otherwise, and
     # the glob that builds the library matches one. `test_end_to_end.py` writes

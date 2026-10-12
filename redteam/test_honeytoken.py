@@ -439,8 +439,20 @@ def main():
     check("...and refuses a honeytoken declared with nothing to verify it by",
           "honeytoken_verify" in rr)
     # Only for tokens that are OURS: a customer who declared their own real value has made a
-    # different choice, and this has nothing to say about it.
-    check("...only when the canary is one we minted", "looks_like_ours(" in rr)
+    # different choice, and this has nothing to say about it. ASKED OF THE RULE, not of a
+    # substring of the run's source: the refusal lives in `honeytoken.precondition`.
+    class _NoVerifier(object):
+        name, sent = "own", []
+
+        def reset(self):
+            pass
+
+        def send(self, text):
+            self.sent.append(text)
+    _own_t = _NoVerifier()
+    check("...only when the canary is one we minted",
+          ht.precondition(_own_t, {"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"]}) is None
+          and not _own_t.sent, "")
 
     check("onboarding can mint a pair and print the paste", "--mint-honeytoken" in ob)
     mn_src = open(os.path.join(HERE, "mint.py"), encoding="utf-8").read()
@@ -637,6 +649,18 @@ def main():
     check("...and one it does return lets the run start",
           _hp.precondition(_t3, {"canaries": [_sec], "honeytoken_verify": _ver}) is None,
           "refused a planted honeytoken")
+    # A DECLARED VERIFIER IS ASKED FOR AN OPERATOR'S OWN CANARY TOO. It was asked only beside a
+    # minted QAT-CANARY, so an unplanted snippet with a hand-typed canary gave a clean report.
+    # Found by an independent review.
+    _t4 = _Fake("Our store is open 9 to 5.")
+    _p4 = _hp.precondition(_t4, {"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"],
+                                 "honeytoken_verify": "ACME-REF-55821"})
+    check("...and a hand-typed canary's declared verifier is asked as well",
+          _p4 is not None and _p4[1] == "NOT PLANTED" and _t4.sent == [_hp.VERIFY_PROMPT],
+          "%r, sent %r" % (_p4, _t4.sent))
+    check("...and priced: a declared verifier is one request whatever the canary looks like",
+          _hp.verify_requests({"canaries": ["ACME-PROD-KEY-7Q2X9W4R8T"],
+                               "honeytoken_verify": "ACME-REF-55821"}) == 1, "")
     # AND EVERY DOOR ASKS IT, read as the call: a door that inlines the rule again is the
     # shape this was a fix for.
     import ast as _ast_hp, io as _io_hp

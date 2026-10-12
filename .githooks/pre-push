@@ -45,6 +45,11 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     fi
     # shellcheck disable=SC2086
     $py "$root/tools/guard.py" --range "$range" || status=1
+    # AND A TAG IS AN OBJECT OF ITS OWN: its tagger line and message are published with the
+    # release it triggers, and `--range` reads commits only. See `scan_tag`.
+    case "$_local_ref" in
+        refs/tags/*) $py "$root/tools/guard.py" --tag "$_local_ref" || status=1 ;;
+    esac
 done
 
 # NO REFS ON STDIN means git had nothing to tell us, not that there is nothing to check —

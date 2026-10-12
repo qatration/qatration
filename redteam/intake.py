@@ -1,5 +1,6 @@
 """The door: an HTTP front end for the queue, for driving the engine from CI or another
-machine on a trusted network.
+machine on a trusted network. It listens on `localhost` unless `--host` names another
+interface, which is a decision somebody makes on purpose.
 
 `workspace.py` gave a run its own namespace, `authorization.py` decides whether a target may be
 touched, `targets_http.py` turns a YAML into a driveable target, `jobqueue.py` and `worker.py`
@@ -10,6 +11,13 @@ it. This is the smallest thing that changes that:
     POST /runs            a target config -> a job id
     GET  /runs/<id>       what happened to it
     GET  /runs/<id>/report  the quick report, once there is one
+
+WHERE A SUBMITTER'S TOKEN COMES FROM. Not from here: hosted, the gate prints no token (a
+token printed for a stranger is one they could hand back), and the service accepts only the
+file at `/.well-known/qatration-authorization` as proof. Whoever runs the service issues it --
+`qatration authorize --url <the submitter's url>`, with the service's QATRATION_AUTH_SECRET, on
+a machine where QATRATION_HOSTED is unset -- and gives it to the submitter, who serves it on
+their origin. It is good for fourteen days.
 
 WHAT IT IS NOT. There is no authentication, no per-caller quota and no rate limit on the
 intake itself, so it is not something to expose to the internet as it stands. That is said here
@@ -261,7 +269,8 @@ def submit(root, body, policy=None, wake=None):
         except OSError:
             pass
     try:
-        ok, rep = onboard_check(cfg_path, scope=scope, probe_ceiling=PROBE_CEILING)
+        ok, rep = onboard_check(cfg_path, scope=scope, probe_ceiling=PROBE_CEILING,
+                                queued=True)
     except SystemExit as e:
         # NOT EVERY REFUSAL IS "NOT AUTHORISED": a `trials: 0` raised here came back 403, and
         # the refused config stayed on disk. 403 is the gate's; anything else is the config.
@@ -577,10 +586,11 @@ def make_handler(root):
 
         def do_GET(self):
             parts = [p for p in self.path.split("?")[0].strip("/").split("/") if p]
-            if parts == ["runs"]:
-                return self._send(200, {"jobs": [{k: j.get(k) for k in
-                                                  ("job_id", "state", "target")}
-                                                 for j in q.listing(root)]})
+            # NO LISTING. `GET /runs` handed every job id to anybody who asked, and a job id
+            # is the only thing between a stranger and another submitter's report -- their
+            # bot's replies and its canary. The ids are long so they cannot be guessed; a
+            # listing made guessing unnecessary. A submitter has their own id from the 202.
+            # Found by an independent review.
             if len(parts) == 2 and parts[0] == "runs":
                 return self._send(*status(root, parts[1]))
             if len(parts) == 3 and parts[0] == "runs" and parts[2] == "report":
@@ -591,7 +601,7 @@ def make_handler(root):
                     code = 404 if (why or "").startswith(("no report", "bad job")) else 409
                     return self._send(*_problem(code, why or "no report for that job yet"))
                 return self._send(200, html, "text/html")
-            self._send(*_problem(404, "GET /runs, /runs/<id>, /runs/<id>/report"))
+            self._send(*_problem(404, "GET /runs/<id>, /runs/<id>/report"))
 
         def log_message(self, *a):
             pass
@@ -602,6 +612,9 @@ def make_handler(root):
 def main():
     ap = argparse.ArgumentParser(description="the intake door")
     ap.add_argument("--port", type=int, default=8300)
+    ap.add_argument("--host", default="localhost",
+                    help="the interface to listen on (default localhost); naming another one "
+                         "is exposing an unauthenticated door, so it is never the default")
     ap.add_argument("--root", default=str(OUT), help="where jobs and their workspaces live")
     args = ap.parse_args()
 
@@ -618,9 +631,9 @@ def main():
                  "verified, so every submission would be a scan of somebody's system on their "
                  "say-so. Nothing was started.")
     os.makedirs(args.root, exist_ok=True)
-    print(f"intake on http://localhost:{args.port}/runs   (jobs in {args.root})")
+    print(f"intake on http://{args.host}:{args.port}/runs   (jobs in {args.root})")
     print("  no authentication and no per-caller rate limit: bind it to a trusted network.")
-    ThreadingHTTPServer(("localhost", args.port), make_handler(args.root)).serve_forever()
+    ThreadingHTTPServer((args.host, args.port), make_handler(args.root)).serve_forever()
 
 
 if __name__ == "__main__":

@@ -15,6 +15,10 @@ on:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
+  # AND FROM `release.yml`, so a tag publishes only after THIS matrix -- the 3.9 floor,
+  # Windows, macOS -- passed on the tagged commit. A copy of the matrix there would be a second
+  # list to keep in step with this one.
+  workflow_call:
 
 # NOTHING THIS WORKFLOW DOES NEEDS TO WRITE. It installs the package, runs the guard and
 # runs the suites; it opens no issue, pushes no commit and uploads no artifact. Without

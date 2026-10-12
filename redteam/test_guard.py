@@ -144,6 +144,45 @@ def main():
           "nothing refused")
     check("...and the same page with no artifact beside it is refused",
           bool(scan("out/report_x.html", _pg)), "nothing refused")
+    # A RUN THAT IS ONLY INSIDE A LONGER WORD OF A REPLY IS NOT A QUOTE of it: a sentence of
+    # our own passed because every word sat inside some bot's longer word. Found by a review.
+    _long = _cy + _cy[::-1] + _cy
+    _art_l = json.dumps({"results": [{"trials": [{"probe": {"output": _long}}]}]},
+                        ensure_ascii=False)
+    _inside = []
+    guard.scan_files(["out/results_x.json", "out/report_x.html"],
+                     lambda p: _art_l if p.endswith(".json")
+                     else "<p>%s</p>" % (_cy[::-1][:4]), _inside)
+    check("...nor a run found only inside a longer word of a recorded reply", bool(_inside),
+          "a fragment of a reply passed as a quote of it")
+    # AND THE DENYLIST READS THE PAGES AND THE SITE that quote the replies, not the JSON alone.
+    _real_bt = guard.BANNED_TOKENS
+    guard.BANNED_TOKENS = {__import__("hashlib").sha256(b"zorblat").hexdigest()}
+    try:
+        _dn = [bool(scan(_pth, "<p>a reply said zorblat here</p>"))
+               for _pth in ("out/report_x.html", "site/index.html")]
+    finally:
+        guard.BANNED_TOKENS = _real_bt
+    check("a denylisted word on a report page or the site is refused, not only in the JSON",
+          _dn == [True, True], str(_dn))
+    # A TRANSLATION IS A LANGUAGE THE TABLE DECLARES, not any file name under `site/i18n/`:
+    # `notes.json` and `site/notes/index.html` holding Ukrainian prose passed. Found by a
+    # review.
+    import tempfile as _tf_tr, shutil as _sh_tr
+    _rt = _tf_tr.mkdtemp()
+    try:
+        os.makedirs(os.path.join(_rt, "site", "i18n"))
+        os.makedirs(os.path.join(_rt, "tools"))
+        for _c in ("uk", "notes"):
+            io.open(os.path.join(_rt, "site", "i18n", _c + ".json"), "w").write("{}")
+        io.open(os.path.join(_rt, "tools", "i18n.py"), "w").write(
+            'ENDONYM = {"en": "English", "uk": "x"}\n')
+        _tf_set = guard.translation_files(_rt)
+    finally:
+        _sh_tr.rmtree(_rt, ignore_errors=True)
+    check("only a language the endonym table declares is a translation",
+          "site/i18n/uk.json" in _tf_set and "site/i18n/notes.json" not in _tf_set
+          and "site/notes/index.html" not in _tf_set, str(sorted(_tf_set)))
 
     # --- A FILE WHOSE NAME ENDS IN .png IS NOT A FILE THAT IS CLEAN -------------------------
     #
@@ -237,6 +276,20 @@ def main():
     check("every credential pattern matches its own sample", not broken, "; ".join(broken))
     check("...and there are enough of them to be worth running", len(guard.CREDENTIALS) >= 12,
           f"{len(guard.CREDENTIALS)} patterns")
+    # THE FORMATS A REVIEW FOUND PASSING, each built here rather than written out, and each
+    # different from the entry's own selftest sample. Found by an independent review.
+    _fmt = {"Claude Code OAuth": "sk-ant-oat01-" + "Q7" * 25,
+            "GitHub Actions": "ghs_" + "Ab1" * 12, "GitHub user-to-server": "ghu_" + "Zx9" * 12,
+            "PyPI": "pypi-AgEIcHlwaS5vcmc" + "Jw" * 40, "Hugging Face": "hf_" + "aB3" * 12,
+            "Groq": "gsk_" + "Kq2" * 18, "OpenRouter": "sk-or-v1-" + "9f" * 32,
+            "OpenAI service account": "sk-svcacct-" + "Tm4-" * 10,
+            "OpenAI admin": "sk-admin-" + "Pq7_" * 10, "Stripe restricted": "rk_live_" + "51H" * 9,
+            "Slack webhook": "https://hooks.slack.com/services/T0ABCDEFG/B0HIJKLMN/"
+                             + "xY" * 12}
+    _missed = [k for k, v in _fmt.items()
+               if not any(re.search(p, "key = '%s'" % v) for _, p, _ in guard.CREDENTIALS)]
+    check("the credential formats this project handles are all recognised", _missed == [],
+          str(_missed))
 
     # --- AND THE ENGINE KNOWS EVERY FAMILY THIS GATE DOES ---------------------------------
     #
@@ -591,6 +644,58 @@ def main():
                   "only the author date is being read")
         finally:
             guard.ROOT = old_root
+
+    # --- AN ANNOTATED TAG IS AN OBJECT OF ITS OWN, and it is what publishes ----------------
+    # Its tagger line and message were never read: a tag made off UTC, by another identity,
+    # with a Cyrillic message passed `--range` and fired the release. Found by an independent
+    # review. Built as a real repository, as the commit check above is.
+    with tempfile.TemporaryDirectory() as d:
+        def tg(*a, **env):
+            return _sp.run(["git", "-C", d] + list(a), capture_output=True, text=True,
+                           env=git_env(d, **env))
+        tg("init", "-q", "-b", "main")
+        tg("config", "user.name", "QAtration")
+        tg("config", "user.email", "qatration@gmail.com")
+        io.open(os.path.join(d, "a.txt"), "w").write("one")
+        tg("add", "-A")
+        tg("commit", "-qm", "utc", GIT_AUTHOR_DATE="2026-01-01T12:00:00+00:00",
+           GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        tg("tag", "-a", "v9.9.0", "-m", "release 9.9.0",
+           GIT_COMMITTER_DATE="2026-01-01T12:00:00+00:00")
+        _msg = os.path.join(d, "..", os.path.basename(d) + "-msg.txt")
+        io.open(_msg, "w", encoding="utf-8").write("release " + chr(0x0440) + chr(0x0435) + "\n")
+        tg("tag", "-a", "v9.9.1", "-F", _msg, GIT_COMMITTER_NAME="Someone Else",
+           GIT_COMMITTER_DATE="2026-01-01T15:00:00+03:00")
+        tg("tag", "v9.9.2")                    # lightweight: only a name for the commit
+        old_root = guard.ROOT
+        try:
+            guard.ROOT = d
+            _clean, _dirty, _light = [], [], []
+            guard.scan_tag("v9.9.0", _clean)
+            guard.scan_tag("v9.9.1", _dirty)
+            guard.scan_tag("v9.9.2", _light)
+        finally:
+            guard.ROOT = old_root
+            try:
+                os.remove(_msg)
+            except OSError:
+                pass
+        check("an annotated tag by the project identity, stamped UTC, passes", _clean == [],
+              str(_clean))
+        check("...and one by another identity, off UTC, with a Cyrillic message is refused "
+              "on all three", len(_dirty) == 3
+              and any("not by the project identity" in r for r in _dirty)
+              and any("+03:00" in r for r in _dirty)
+              and any("Cyrillic" in r for r in _dirty), str(_dirty))
+        check("...while a lightweight tag has nothing of its own to read", _light == [],
+              str(_light))
+    # AND BOTH PLACES A TAG LEAVES THROUGH ASK IT: the push, and the job that publishes.
+    _pp = io.open(os.path.join(ROOT, ".githooks", "pre-push"), encoding="utf-8").read()
+    _rel = io.open(os.path.join(ROOT, ".github", "workflows", "release.yml"),
+                   encoding="utf-8").read()
+    check("pre-push reads a pushed tag object, and the release job reads the one it publishes",
+          "refs/tags/*)" in _pp and '--tag "$_local_ref"' in _pp
+          and "tools/guard.py --tag" in _rel, "a tag reaches the remote or PyPI unread")
 
     # --- THE THREE HOLES A REVIEW OPENED IN THIS GATE ----------------------------------------
     #
@@ -1440,13 +1545,15 @@ def main():
     for _f in _tracked:              # EVERY artifact: JSON stores Cyrillic escaped, not literal
         if guard.ARTIFACT.search(_f):
             _quoted |= guard._model_cyrillic(io.open(os.path.join(ROOT, _f), encoding="utf-8").read())
+    _quoted_runs = guard.quoted_runs(_quoted)
     _stray = []
     for _f in _carry:
         if _f in guard.translation_files(ROOT) or guard.ARTIFACT.search(_f):
             continue
         _txt = io.open(os.path.join(ROOT, _f), encoding="utf-8").read()
         _bad = [m.group(0) for m in _run.finditer(_txt) if m.group(0) not in guard.endonyms(ROOT)
-                and not (guard.REPORT_PAGE.search(_f) and any(m.group(0) in q for q in _quoted))]
+                and not (guard.REPORT_PAGE.search(_f)
+                         and guard.is_quoted_run(m.group(0), _quoted_runs))]
         if _bad:
             _stray.append("%s: %s" % (_f, _bad[0][:20]))
     check("...and every Cyrillic run outside a dictionary is a language naming itself, or a "

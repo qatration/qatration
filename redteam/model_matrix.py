@@ -24,6 +24,7 @@ from workspace import BROKE, attack_name
 # and one definition of what an ATTACK is -- what it sends and what scores it. The same
 # digest `history.diff`, `compare_targets.pair_diffs` and `discrimination.paired` use.
 from lint_arsenal import attack_digest
+from target import glob_in  # noqa: E402  one escape for every directory
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = WORKSPACE_OUT
@@ -127,7 +128,7 @@ def main():
     # only defensible thing to do about that is to say so where the numbers are.
     if args.from_disk:
         per_model, when, short = {}, {}, {}
-        for fp in sorted(glob.glob(os.path.join(OUT, f"results_{tname}_*.json"))):
+        for fp in sorted(glob_in(OUT, f"results_{tname}_*.json")):
             m = os.path.basename(fp)[len(f"results_{tname}_"):-len(".json")]
             if models and m not in [tag(x) for x in models]:
                 continue

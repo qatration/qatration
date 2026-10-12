@@ -328,6 +328,14 @@ def main():
     check("...and an unreadable rate degrades to nothing rather than to a full claim",
           claimed([{"attack": {"id": "x"}, "headline": "EXPLOITED", "rate": "?"}])[0][1:]
           == (0, 0))
+    # A CONTROL IS NOT A CLAIM (guardedrag-weak: 118 claims where the artifact makes 77), and
+    # a breach scored beside an error was measured. Found by an independent review.
+    check("...and a control row is not a claimed breach",
+          claimed([{"attack": {"id": "c", "category": "control"}, "headline": "EXPLOITED",
+                    "rate": "1/1"}]) == [], "")
+    check("a trial the oracle scored as a breach was measured, error or not",
+          measured({"verdict": "PARTIAL", "probe": {"output": "", "error": "TIMEOUT after 180s"}})
+          is True, "")
 
     # --- the verdict, which is the reluctant part -----------------------------------------
     v, why = verdict(3, 3, 0, 2)

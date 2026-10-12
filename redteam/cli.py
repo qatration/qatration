@@ -89,6 +89,10 @@ COMMANDS = {
     # `summarise` were called by the suite and by `worker`, and the module had no `main()`
     # to invoke either. The seventh command found by the same walk as the six above it.
     "runs":     ("runs",            "what ran, on whose authority, and how it ended"),
+    # AND THE TOKEN A REMOTE TARGET NEEDS, which only the stderr of a refused run printed: a
+    # CI pipeline built from docs/ci.md exited 4 on its first run and every fortnight after,
+    # with no command to ask. Found by an independent review.
+    "authorize": ("authorization",  "print the proof token a remote target's origin needs, and where it goes"),
 }
 
 
@@ -143,7 +147,7 @@ def parser(name, description=None, **kw):
 
 # THE COMMANDS THAT NEVER READ OR WRITE THE WORKSPACE, so a bad QATRATION_OUT does not
 # refuse them (`workspace.run_command`).
-WORKSPACE_FREE = ("init_config", "mint", "lint_arsenal")
+WORKSPACE_FREE = ("init_config", "mint", "lint_arsenal", "authorization")
 
 
 def main(argv=None):

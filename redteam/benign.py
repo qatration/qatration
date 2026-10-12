@@ -48,6 +48,7 @@ from workspace import measured_when, FILE_DATED
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more
 from oracle import DETECTORS, inert_for, visible_text, ATTACK_ARMED
+from target import glob_in  # noqa: E402  one escape for every directory
 
 # ---------------------------------------------------------------------------------------
 # The corpus. Each entry names the detector it is built to provoke, so a fire is readable:
@@ -574,6 +575,8 @@ def rejudge(path):
         r["evidence"] = excerpt(p) if noisy else ""
         r["full"] = visible_text(p) if noisy else ""
     d["meta"].update(summary(d["rows"]))
+    # RE-JUDGED BY EVERY DETECTOR THERE IS NOW, which `baseline.rates` reads as measured.
+    d["meta"]["detectors"] = sorted(DETECTORS)
     return d, changed
 
 
@@ -673,13 +676,16 @@ def adjudication_gaps(rows_by_target=None, path=None):
             sorted(p for p in settled_quiet if p[0] not in measured))
 
 
-def _benign_by_target():
+def _benign_by_target(unreadable=None):
     """target -> (path, document) for the stored benign runs: the FIRST readable file per
-    target in sorted order, the rule `roll_up` counts by and names its exclusions under."""
+    target in sorted order, the rule `roll_up` counts by and names its exclusions under.
+    `unreadable` collects the files that could not be read: TORN IS NOT ABSENT."""
     out = {}
-    for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
+    for fp in sorted(glob_in(OUT_DIR, "benign_*.json")):
         d, why = read_artifact(fp)
         if why:
+            if unreadable is not None:
+                unreadable.append(fp)
             continue
         t = (d.get("meta") or {}).get("target")
         if t and t not in out:
@@ -707,7 +713,7 @@ def roll_up():
     raised = set()                      # detectors that raised on some row
     ages = {}
     _from = {}
-    for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
+    for fp in sorted(glob_in(OUT_DIR, "benign_*.json")):
         d, why = read_artifact(fp)
         if why:
             print(f"  ! {os.path.basename(fp)} could not be read ({why}); its age is unknown.",
@@ -783,6 +789,11 @@ def roll_up():
                     and _aim not in (r.get("fired") or []) and _aim not in _raised_here):
                 exercised[_aim] += 1
             for f in (r.get("fired") or []):
+                # A RAISE IS NOT A FIRE: `!sql_injection:TypeError` was counted as a candidate
+                # false alarm on clean traffic. It is its own bucket (`raised`). Found by an
+                # independent review.
+                if str(f).startswith("!"):
+                    continue
                 reached[f] += 1
                 # An over-refusal on clean traffic is USUALLY a usability finding rather than a
                 # false alarm: the detector is right, the guard just cost a real answer. But
@@ -825,7 +836,12 @@ def roll_up():
             "passed": sorted(d for d in DETECTORS
                              if d not in reached and d not in raised and exercised.get(d)),
             "untested": sorted(d for d in DETECTORS
-                               if d not in reached and not exercised.get(d)),
+                               if d not in reached and d not in raised
+                               and not exercised.get(d)),
+            # AND THE THIRD FACT: a detector that raised on a probe is in neither of the two
+            # above -- it was not quiet, and it was not left untried. A detector quiet on one
+            # aimed row and raising on another fell out of the split entirely.
+            "raised": sorted(d for d in raised if d not in reached),
             "per_target": {k: dict(v) for k, v in per_target.items()},
             "fires": {k: {"n": v, "targets": sorted(seen[k])} for k, v in per.most_common()}}
 
@@ -903,7 +919,7 @@ def main():
 
     if args.rejudge:
         total, replayable, skipped_rows, seen = 0, 0, 0, []
-        for fp in sorted(glob.glob(os.path.join(OUT_DIR, "benign_*.json"))):
+        for fp in sorted(glob_in(OUT_DIR, "benign_*.json")):
             # A FILE THAT DOES NOT READ IS NOT A FILE WITH NO CONFIG: both were "no config,
             # left alone", because `rejudge` raises the same way for either.
             _d0, _why0 = read_artifact(fp)
@@ -918,10 +934,17 @@ def main():
             seen.append(fp)
             replayable += sum(1 for r in d["rows"] if r.get("probe"))
             skipped_rows += sum(1 for r in d["rows"] if not r.get("probe"))
-            if not changed:
+            # AND A FILE WHOSE ROWS DID NOT MOVE BUT WHICH NOW KNOWS WHAT JUDGED IT: a baseline
+            # written before `meta.detectors` existed is re-judged by every detector there is
+            # now, and that is worth writing down even when no fire moved, or a detector added
+            # later reads as 0% on it forever (`baseline.rates`).
+            _meta_moved = ((_d0.get("meta") or {}).get("detectors")
+                           != (d.get("meta") or {}).get("detectors"))
+            if not changed and not _meta_moved:
                 continue
             total += len(changed)
-            print(f"\n{d['meta']['target']}")
+            if changed:
+                print(f"\n{d['meta']['target']}")
             for cid, before, after in changed:
                 print(f"  {cid:<26}{','.join(before) or '-':<34} -> {','.join(after) or '-'}")
             if args.write:
@@ -1083,6 +1106,11 @@ def main():
             for _d in passed:
                 print(f"    {_d:<26}{s['exercised'][_d]:>4} probe(s) aimed at it")
 
+        if s.get("raised"):
+            print(f"\nraised on this corpus: {len(s['raised'])} detector(s) threw on a benign "
+                  f"probe, so their silence elsewhere is not a pass:\n    "
+                  + ", ".join(s["raised"]))
+
         print(f"\nsilent on this corpus: {len(quiet)} detectors. Not a clean bill — the "
               f"corpus is\n{len(CORPUS) + len(CONVERSATIONS)} exchanges wide and cannot "
               f"reach every channel. "
@@ -1108,6 +1136,21 @@ def main():
             print("    " + named_or_more(["%s/%s" % p for p in _stale], 8))
             print("    A verdict outlives the fire it was written about; re-read before "
                   "trusting one.")
+        # A TORN FILE IS NOT A MISSING ONE: its target's adjudications were reported as "no
+        # benign run here ... `qatration benign` is what would" -- the command that overwrites
+        # the file the reader should look at first -- and the summary exited 0 with that
+        # target out of the rates. Found by an independent review.
+        _torn_b = []
+        _benign_by_target(_torn_b)
+        _torn_t = {os.path.basename(f)[len("benign_"):-len(".json")] for f in _torn_b}
+        _torn_adj = [p for p in _unmeasured if p[0] in _torn_t]
+        _unmeasured = [p for p in _unmeasured if p[0] not in _torn_t]
+        if _torn_adj:
+            print(f"\n{len(_torn_adj)} adjudication(s) are about target(s) whose benign file "
+                  f"could not be read: "
+                  + named_or_more(sorted({os.path.basename(f) for f in _torn_b}), 6)
+                  + ". Read or restore it before replacing it; `qatration benign` would "
+                    "overwrite it.")
         if _unmeasured:
             # AND THE ONES THAT ARE NEITHER. These were counted as stale, which reads as
             # `the target stopped doing this` and is a statement about a target nothing
@@ -1118,6 +1161,11 @@ def main():
             print("    " + named_or_more(sorted({p[0] for p in _unmeasured}), 8))
             print("    Nothing above says anything about them. `qatration benign --target-config"
                   " <yours>.yaml` is what would.")
+        # AND NOT A PASS OVER A SET THAT WAS NOT ALL READ (`workspace.partial_exit`).
+        from workspace import partial_exit as _partial_exit_b
+        _code_b = _partial_exit_b(0, _torn_b, "this roll-up")
+        if _code_b:
+            sys.exit(_code_b)
         return
 
     # A CONFIGURED TARGET COULD NOT GET A BASELINE AT ALL, which quietly hollowed out the
@@ -1270,6 +1318,12 @@ def main():
     # with it as `rejudge.run_ctx` does. Found by an independent review.
     from run_redteam import baseline_tool_context as _btc
     ctx = _btc(target, cfg, ctx)
+    # AND WHAT THE ADAPTER COULD SEE, as the sweep judges (`runner.with_caps`) and recorded as
+    # `meta.caps` for a replay. Judged without it, `credential_in_output` could not tell a
+    # value the bot was handed from one it invented, so the benign rate and the sweep rate it
+    # is held against were two different detectors. Found by an independent review.
+    from runner import with_caps as _with_caps_b
+    ctx = _with_caps_b(ctx, getattr(target, "capabilities", ()))
 
     print(f"benign corpus -> {args.target}  ({len(CORPUS)} prompts + "
           f"{len(CONVERSATIONS)} conversations x{args.trials})\n")
@@ -1419,6 +1473,10 @@ def main():
                                         # (`baseline.rates`).
                                         "inert": sorted(set(inert_for(ctx, DETECTORS))
                                                         - set(ATTACK_ARMED)),
+                                        "caps": ctx.get("_caps") or [],
+                                        # WHICH DETECTORS JUDGED IT, so one added later
+                                        # reads as unmeasured here (`baseline.rates`).
+                                        "detectors": sorted(DETECTORS),
                                         "trials": args.trials, **s}), "rows": rows},
                   f, indent=2)
     print(f"\nwrote {path}")
@@ -1429,8 +1487,7 @@ def main():
     # just did what it asked. `rejudge --write` is what attaches a baseline to results that
     # exist already; this names it, and the config it will need, only when there are some.
     import glob as _glob_b
-    _earlier = sorted(os.path.basename(_p) for _p in _glob_b.glob(
-        os.path.join(str(OUT_DIR), "results_%s*.json" % args.target))
+    _earlier = sorted(os.path.basename(_p) for _p in glob_in(str(OUT_DIR), "results_%s*.json" % args.target)
         if os.path.basename(_p) == "results_%s.json" % args.target
         or os.path.basename(_p).startswith("results_%s_" % args.target))
     if _earlier:

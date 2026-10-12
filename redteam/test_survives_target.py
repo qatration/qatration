@@ -143,6 +143,46 @@ def main():
         check(f"...and the oversized reply is still reported — {shape}",
               "unbounded_output" in fired, "timed out" if timed_out else str(fired))
 
+    # AND A HOSTILE TOOL ARGUMENT, which no shape above is: a code agent's program is read by
+    # `_acted` inside `real_calls`, about twenty detectors deep, and testing each call against
+    # every string literal made 56 KB of `f("a")` take 33 s to judge. Found by an independent
+    # review. Same stopwatch, in a subprocess, at the reply cap.
+    _code = ("import sys; sys.path.insert(0, %r)\n"
+             "from target import Probe\n"
+             "from oracle import judge\n"
+             "src = 'f(\"a\")' + chr(10)\n"
+             "p = Probe(prompt='x', output='ok', tool_calls=[('python_interpreter', "
+             "src * (%d // 7))])\n"
+             "print(judge({'success': ['path_traversal']}, p, {})[0])\n" % (HERE, real_max))
+    t0 = time.time()
+    try:
+        _r = subprocess.run([sys.executable, "-c", _code], capture_output=True, text=True,
+                            timeout=60)
+        _el, _to = time.time() - t0, False
+    except subprocess.TimeoutExpired:
+        _el, _to = time.time() - t0, True
+    check("a hostile code-agent program at the cap is judged in seconds, not hours",
+          not _to and _r.returncode == 0, "still judging after %.0fs" % _el if _to
+          else (_r.stderr or "")[-200:])
+
+    # --- A TURN THAT IS NOT TEXT --------------------------------------------------------------
+    # `Probe` does not normalise `turns`, and a third-party adapter can store a number, a
+    # mapping or a list as a turn's output: `memory_poison` called `.lower()` on it and `judge`
+    # raised. Every detector, over each shape. Found by an independent review.
+    import oracle as _or_t
+    from target import Probe as _Pr_t
+    _raised_t = []
+    for _turns in ([{"output": 12345, "new_session": True}, {"output": {"a": 1}}],
+                   ["hello", 42], [{"prompt": 7, "output": ["a"]}, {"output": None}]):
+        _p_t = _Pr_t(prompt="p", output="x", turns=_turns)
+        for _n_t, _fn_t in _or_t.DETECTORS.items():
+            try:
+                _fn_t(_p_t, {"canaries": ["QAT-T-1"], "planted_markers": ["M-1"]})
+            except Exception as _e_t:
+                _raised_t.append("%s: %s" % (_n_t, type(_e_t).__name__))
+    check("no detector raises on a turn whose output is not text", _raised_t == [],
+          str(sorted(set(_raised_t))[:6]))
+
     # --- A TOOL A POISONED MODEL GETS TO CALL ------------------------------------------------
     import targets_mcpagent
     calc = targets_mcpagent.McpAgentTarget.__new__(targets_mcpagent.McpAgentTarget)

@@ -130,3 +130,6 @@ packages = ["qatration"]
 # The corpus IS the product. An install without the YAML is a runner with nothing to run, and
 # it would fail at the first sweep rather than at install time.
 qatration = ["*.yaml", "*.md", "*.txt"]
+
+# THE SUITES STAY IN THE REPOSITORY: `setup.py` drops `test_*.py` from the wheel. Not
+# `exclude-package-data`, which setuptools applies to data files and not to modules.

@@ -48,6 +48,7 @@ def _path(root, run_id):
 # `jobqueue.scope_of` keeps it because that module owns a job record and this one owns a run
 # record, and the field means the same thing in both: what the run was scoped to.
 from jobqueue import scope_of as _scope
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def record_for(meta, root):
@@ -270,13 +271,13 @@ def listing(root, jobs=False):
     """
     import glob
     out = []
-    for p in glob.glob(os.path.join(str(root), "run_*.json")):
+    for p in glob_in(str(root), "run_*.json"):
         rid = os.path.basename(p)[len("run_"):-len(".json")]
         rec = load(root, rid)
         if rec:
             out.append(rec)
     if jobs:
-        for p in glob.glob(os.path.join(str(root), "runs", "*", "run_*.json")):
+        for p in glob_in(str(root), "runs", "*", "run_*.json"):
             _dir = os.path.dirname(p)
             rid = os.path.basename(p)[len("run_"):-len(".json")]
             rec = load(_dir, rid)
@@ -435,7 +436,11 @@ def main(argv=None):
     # from there meant the one view where it matters most — somebody asking about one
     # target — was the one view that never mentioned it.
     _say_torn(_torn, args)
-    return 0
+    # 3, NOT 0, OVER A SET THAT WAS NOT ALL READ (`workspace.partial_exit`), the rule `rejudge`,
+    # `coverage` and the pages already follow. Found by an independent review.
+    from workspace import partial_exit as _partial_exit
+    return _partial_exit(0, [r.get("run_id") or r.get("file") or "a run record" for r in _torn],
+                         "this listing")
 
 
 if __name__ == "__main__":

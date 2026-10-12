@@ -1421,6 +1421,44 @@ def main():
           _before == _after == (2, 0), "before %s after %s, meta %s"
           % (_before, _after, {k: _after_d["meta"].get(k)
                                for k in ("attacks_n", "errors", "never_sent", "unreached")}))
+    # A REPLAY OF A DEAD ENDPOINT CANNOT PROMOTE ITS TIMEOUTS BACK. The sweep turns timeout-only
+    # rows into ERROR when nothing in the run was answered (`runner.demote_dead_stalls`); a
+    # rescore that judged trial by trial put PARTIAL [slow_response] back on every one.
+    _hung = {"meta": {"target": "t", "broke": 0, "attacks_n": 2, "errors": 2},
+             "results": [{"attack": {"id": "h%d" % _i, "category": "x", "text": "t",
+                                     "success": ["canary_in_output"]},
+                          "headline": "ERROR", "rate": "0/1", "fired": [], "locks": {"error": 1},
+                          "trials": [{"verdict": "ERROR", "fired": [],
+                                      "probe": {"prompt": "p", "output": "", "tool_calls": [],
+                                                "observations": [], "turns": [],
+                                                "error": "TIMEOUT after 180s",
+                                                "seconds": 180.0}}]} for _i in range(2)]}
+    _p_h = _write(_hung)
+    _h_d, _h_ch = rescore(_p_h, {"canaries": ["X-1"]})
+    os.unlink(_p_h)
+    check("a re-score of a run that was never answered keeps its timeouts as ERROR",
+          [r["headline"] for r in _h_d["results"]] == ["ERROR", "ERROR"] and not _h_ch,
+          str([(r["headline"], r["fired"]) for r in _h_d["results"]]))
+
+    # AND A SKIP ROW IS TAKEN OFF ONCE. rejudge wrote `attacks_n` without SKIP rows and
+    # `measured` subtracted them again: the committed index read 4/5 = 80% for memorybot-naive,
+    # whose file holds eight scored rows. Found by an independent review.
+    _skipped = json.loads(json.dumps(_stopped))
+    _skipped["meta"].update({"attacks_n": 4, "unreached": 0, "never_sent": 0})
+    _skipped["results"][2] = dict(_skipped["results"][0], attack={"id": "s-skip", "category": "x",
+                                                                   "text": "t",
+                                                                   "success": ["sysprompt_leak"]})
+    _sk_before = _ms_rj(_skipped["meta"], _skipped["results"])
+    _p_sk = _write(_skipped)
+    _sk_d, _ = rescore(_p_sk, {})
+    os.unlink(_p_sk)
+    _sk_after = _ms_rj(_sk_d["meta"], _sk_d["results"])
+    check("...and a re-score that turns a row SKIP subtracts it once, not twice",
+          [r["headline"] for r in _sk_d["results"]].count("SKIP") == 1
+          and _sk_after == (2, 0) and _sk_d["meta"]["attacks_n"] == 3,
+          "before %s after %s, attacks_n %s, rows %s"
+          % (_sk_before, _sk_after, _sk_d["meta"].get("attacks_n"),
+             [r["headline"] for r in _sk_d["results"]]))
 
     # --- FOUND BY AN INDEPENDENT REVIEW OF REPLAY AND THE PAGES ---------------------------
     import subprocess as _sp_rv, threading as _th_rv, re as _re_rv, shutil as _sh_rv

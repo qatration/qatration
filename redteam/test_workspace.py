@@ -138,6 +138,9 @@ def check_every_command_refuses():
                       "config IS this command, and it must say everything wrong at once",
         "sarif.py": "reads a config to look up the canaries of a run that already happened; "
                     "refusing would fail an export over evidence already recorded",
+        "authorization.py": "`authorize` reads only the url, to print a token for its origin; "
+                            "it sends nothing and judges nothing, and a config the run "
+                            "would refuse still names an origin to authorise",
     }
     check("every exemption names a file that still reads a config",
           sorted(set(_EXEMPT) - set(_readers)), [])
@@ -180,6 +183,26 @@ def check_every_command_refuses():
               "looks like %r" % _meant in _cfg_refused(_c), True)
     check("...and the message says the run would describe the wrong deployment",
           "rather than the way it is" in _cfg_refused(dict(_CFG, gaurd=False)), True)
+    # THE FLEET PAGES' TEXT KEYS, IN THE SHAPE THEY ARE READ: a list here took both fleet
+    # pages down for every target. Found by an independent review.
+    check("a provenance or compare_with that is a list is refused before any page reads it",
+          all("read as one line of text" in _cfg_refused(dict(_CFG, **{_k: ["x"]}))
+              for _k in ("provenance", "compare_with", "compare_label", "caveat")), True)
+    # A WORKSPACE WHOSE NAME HOLDS GLOB CHARACTERS IS STILL A WORKSPACE: `ws[client]` read as
+    # empty and the index said "run a sweep first" over results. Found by an independent review.
+    import tempfile as _tf_gl, shutil as _sh_gl
+    _gl_root = _tf_gl.mkdtemp()
+    try:
+        _gl_ws = _os_c.path.join(_gl_root, "ws[client]")
+        _os_c.makedirs(_gl_ws)
+        _io_c.open(_os_c.path.join(_gl_ws, "results_citebot.json"), "w").write("{}")
+        _gl_got = [_os_c.path.basename(p) for p in _ws.results_files(_gl_ws)]
+    finally:
+        _sh_gl.rmtree(_gl_root, ignore_errors=True)
+    check("a workspace named with glob characters is read, not seen as empty",
+          _gl_got, ["results_citebot.json"])
+    check("...while the same keys as text are not", _cfg_refused(dict(
+        _CFG, provenance="first-party", compare_with="rangebot", caveat="c")), "")
 
     # NOT THE ANNOTATIONS, and `notes:` is the one that decides the design. Against the WIDE
     # membership set it reads as a misspelling of `note` -- a key no config has ever had,
@@ -1612,6 +1635,17 @@ def check_shared_rules_review():
         except SystemExit as _e4:
             _r4 = "refused: %s" % str(_e4)[:80]
         check("a config using a YAML merge key is read", _r4, "mergebot")
+        # ...AND ONE OVERRIDING A MERGED KEY, which is what a merge key is for: refused as
+        # "the key is written twice". Found by an independent review.
+        _mk2 = _cfg("merge2.yaml", "base: &hdr" + chr(10) + "  adapter: http" + chr(10)
+                    + "  name: mergebot" + chr(10) + "<<: *hdr" + chr(10)
+                    + "name: overridden" + chr(10))
+        try:
+            _r5 = _w_s.load_yaml_or_refuse(_mk2).get("name")
+        except SystemExit as _e5:
+            _r5 = "refused: %s" % str(_e5)[:80]
+        check("...and one overriding a key it merged is read with the override", _r5,
+              "overridden")
         # A SKIP ROW MEASURED NOTHING; A NEGATIVE COUNTER IS NO COUNTER.
         _skips = [{"attack": {"id": "s%d" % i, "category": "x"}, "headline": "SKIP"}
                   for i in range(5)]
@@ -1752,6 +1786,19 @@ def check_esc():
                + list(range(0xE0000, 0xE0200))
                if _or_h._INVISIBLE.match(chr(c)) and not CONTROL_CHARS.match(chr(c))]
     check("every character `invisible_chars` fires on is shown on a page", _missed, [])
+    # AND EVERY FORMAT CHARACTER UNICODE HAS, bar the visible number signs, plus the blanks
+    # that render as nothing (Hangul fillers, the empty Braille cell). The list had gaps --
+    # U+180E, U+FFF9-FFFB, the musical and shorthand controls. Found by an independent review.
+    import unicodedata as _ud_c
+    _VISIBLE_CF = {0x600, 0x601, 0x602, 0x603, 0x604, 0x605, 0x6DD, 0x70F, 0x890, 0x891,
+                   0x8E2, 0x110BD, 0x110CD}       # prepended number signs: they show
+    _cf_missed = [hex(c) for c in range(0x110000)
+                  if _ud_c.category(chr(c)) == "Cf" and c not in _VISIBLE_CF
+                  and not CONTROL_CHARS.match(chr(c))]
+    _blank_missed = [hex(c) for c in (0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, 0x180E)
+                     if not CONTROL_CHARS.match(chr(c))]
+    check("every invisible format character and blank is shown on a page",
+          _cf_missed + _blank_missed, [])
     # A TARGET CANNOT FORGE A MARKER: its own `<U+202E>` is not a real one.
     check("a literal marker in the target's text is not rendered as a real one",
           esc("<U+202E>") != esc("‮"), True)
@@ -3102,6 +3149,21 @@ def main():
           == "Vulnerable",
           _vf({"attacks_n": 2},
               [{"headline": "EXPLOITED", "attack": {"id": "a", "category": "x"}}]))
+    # AND A COUNT THE FILE DOES CARRY IS A COPY OF THE ROWS, not a second witness: a re-score
+    # moves the rows and not `broke`, and three pages read the copy. Found by a review.
+    _DEF_ROWS = [{"headline": "DEFENDED", "attack": {"id": "a", "category": "x"}},
+                 {"headline": "DEFENDED", "attack": {"id": "b", "category": "x"}}]
+    check("a stored breach count the rows no longer carry does not make a run Vulnerable",
+          _vf({"attacks_n": 2, "broke": 2, "errors": 0}, _DEF_ROWS) == "Hardened",
+          _vf({"attacks_n": 2, "broke": 2, "errors": 0}, _DEF_ROWS))
+    check("...and a stored zero beside a breach in the rows does not hide it",
+          _vf({"attacks_n": 1, "broke": 0, "errors": 0},
+              [{"headline": "EXPLOITED", "attack": {"id": "a", "category": "x"}}])
+          == "Vulnerable")
+    import workspace as _w_bc
+    check("...through one count every page reads",
+          _w_bc.broke_count({"broke": 5}, _DEF_ROWS) == 0
+          and _w_bc.broke_count({"broke": 5}) == 5 and _w_bc.broke_count({}) == 0)
 
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:

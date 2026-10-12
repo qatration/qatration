@@ -1720,6 +1720,77 @@ def main():
           _bad_o, ["isolation_example.yaml", "isolation_example.yaml",
                    ["curated.yaml", "isolation_example.yaml"], "isolation_example.yaml"])
 
+    # A RETRY STARTS WHERE A TRIAL STARTS (`runner.fresh_start`), in the loop every lock map
+    # shares: `reset` alone let a failed attempt's stored note reach the measured retry.
+    # Found by an independent review.
+    from isolation import run_trials as _rt_i
+    from target import Probe as _Pr_i
+
+    class _NotesI:
+        def __init__(self):
+            self.notes, self.calls = [], 0
+
+        def begin_trial(self):
+            self.notes = []
+
+        def reset(self):
+            pass
+    _nti = _NotesI()
+
+    def _send_i():
+        _nti.calls += 1
+        if _nti.calls == 1:
+            _nti.notes.append("QAT-ISO-RETRY-1")
+            return _Pr_i(prompt="q", output="", error="ConnectionError: reset")
+        return _Pr_i(prompt="q", output=" ".join(_nti.notes) or "nothing stored")
+    _hits_i = _rt_i(_nti, _send_i, lambda p: "QAT-ISO-RETRY-1" in (p.output or ""), {}, 1,
+                    "iso-retry", steps=2)[0]
+    check("a lock map's retry clears what the failed attempt stored", _hits_i, 0)
+
+    # THE EXIT CODE IS THE VERDICT'S: EXPLOITED and COUPLED exited 0, beside a hold. Found
+    # by an independent review.
+    from isolation import exit_code as _ex_i
+    _pp = lambda *st: [{"name": "p%d" % i, "status": s} for i, s in enumerate(st)]
+    check("an exploited or coupled map exits 1, a hardened one 0, an unmeasured run 3",
+          [_ex_i([{"verdict": "EXPLOITED"}]), _ex_i([{"verdict": "COUPLED"}]),
+           _ex_i([{"verdict": "HARDENED"}]), _ex_i([{"verdict": "UNMEASURED"}])],
+          [1, 1, 0, 3])
+    check("...a PARTIAL with an open property or a key exits 1, one that only held does not",
+          [_ex_i([{"verdict": "PARTIAL", "properties": _pp("locked", "open")}]),
+           _ex_i([{"verdict": "PARTIAL", "properties": _pp("locked"),
+                   "opened_by_search": {"p0": "KEYED"}}]),
+           _ex_i([{"verdict": "PARTIAL", "properties": _pp("locked", "unmeasured")}])],
+          [1, 1, 0])
+    # AND THE COMMAND RETURNS IT: driven through `main` with the map stubbed.
+    _wd_x = _tf_o.mkdtemp()
+    _cfg_x = _os_o.path.join(_wd_x, "exitbot.yaml")
+    _io_o.open(_cfg_x, "w", encoding="utf-8").write(
+        'adapter: http\nname: exitbot\nurl: "http://127.0.0.1:1/x"\n'
+        'oracle_context:\n  canaries: ["EXIT-CANARY-1"]\n')
+    _obj_x = _os_o.path.join(_wd_x, "objs.yaml")
+    _io_o.open(_obj_x, "w", encoding="utf-8").write(
+        "- id: o1\n  properties:\n    - name: p\n      probe: x\n"
+        "      success: [canary_in_output]\n  combined: x\n  success: [canary_in_output]\n")
+    _real_ri_fn, _argv_x, _real_fm_x = _ri_o.run_isolation, sys.argv, _ri_o.format_map
+    _ri_o.format_map = lambda m: ""
+    _ri_o.run_isolation = lambda *a, **k: {
+        "id": "o1", "verdict": "EXPLOITED", "properties": [{"name": "p", "status": "open"}],
+        "combined": {"status": "open"}}
+    sys.argv = ["isolation", "--target-config", _cfg_x, "--objectives", _obj_x,
+                "--json", _os_o.path.join(_wd_x, "maps.json")]
+    import contextlib as _cx_x
+    try:
+        with _cx_x.redirect_stdout(_io_o.StringIO()), _cx_x.redirect_stderr(_io_o.StringIO()):
+            try:
+                _rc_x = _ri_o.main()
+            except SystemExit as _e_x:
+                _rc_x = "exit %s" % _e_x.code
+            except Exception as _e_x:
+                _rc_x = "%s: %s" % (type(_e_x).__name__, _e_x)
+    finally:
+        _ri_o.run_isolation, sys.argv, _ri_o.format_map = _real_ri_fn, _argv_x, _real_fm_x
+    check("the command exits 1 over an exploited map", _rc_x, 1)
+
     # ONE MEASURED-TRIAL RULE, and what the objective verdict reads from it.
     from isolation import _verdict as _vd, _status as _st, measured_n as _mn, \
         apply_keysearch as _ak

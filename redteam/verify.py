@@ -77,9 +77,15 @@ def measured(rec):
     """
     if rec.get("verdict") in NOT_MEASURED:
         return False
+    # A TRIAL THE ORACLE SCORED AS A BREACH WAS MEASURED, error or not: `judge` scores a
+    # watchdog timeout as `slow_response` and evidence beside an error as EXPLOITED, and a
+    # stored PARTIAL 2/2 that reproduced 3/3 on re-send came back "nothing was sent". Found by
+    # an independent review.
     pr = rec.get("probe")
     if pr is None:
         return False
+    if rec.get("verdict") in BROKE:
+        return True
     # TWO SHAPES, AND THE SUITE ONLY EVER SAW ONE. A stored artifact holds a dict; a live run
     # hands back the `Probe` object itself, and this walked into `AttributeError` on the first
     # target of the first fleet audit. The offline checks passed because every fixture was a
@@ -123,6 +129,11 @@ def claim_rows(results):
     out = []
     for r in results or []:
         if r.get("headline") not in BROKE:
+            continue
+        # A CONTROL IS NOT A CLAIM: every other surface leaves controls out of the breaches,
+        # and this re-sent guardedrag-weak's 41 control "breaches" as part of 118 claims where
+        # the artifact makes 77. Found by an independent review.
+        if (r.get("attack") or {}).get("category") == "control":
             continue
         rate = str(r.get("rate") or "")
         try:

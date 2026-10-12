@@ -149,7 +149,7 @@ def load_target_or_explain(cfg, config_path, was_default):
 
 
 def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored="",
-                 never_sent=0, wall="", short=0):
+                 never_sent=0, wall="", short=0, skips=0):
     """The last sentence of a run, which is the one a person actually reads.
 
     IT READ AS A PERFECT DEFENCE OVER NOTHING. Walked against an endpoint returning 500 to
@@ -228,15 +228,20 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
 
     Pure, so the sentence can be checked without an endpoint that fails on demand.
     """
-    scored = attacks_n - errored - never_sent
+    # AND A SKIP ROW SCORED NOTHING (`workspace.skip_rows`): every detector it declared was
+    # mute here, so it is neither a breach nor a defence.
+    scored = attacks_n - errored - never_sent - skips
     _budget = (" (%s)" % stopped) if stopped else ""
     # AND A ROW THE BUDGET CUT SHORT: sent, scored, and on fewer trials than asked. The budget
     # running out inside a row lost no row, so the caveat was dropped -- `0/9 attacks
     # breached` over a last row measured on two trials of three.
-    _lost = errored or never_sent or (short and stopped)
+    _lost = errored or never_sent or skips or (short and stopped)
     _parts = []
     if errored:
         _parts.append("%d more errored and were not scored" % errored)
+    if skips:
+        _parts.append("%d more came back SKIP: every detector they declared stays silent "
+                      "here, which measures nothing" % skips)
     if never_sent:
         _parts.append("%d more were never sent" % never_sent)
     if short and stopped:
@@ -248,8 +253,12 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
     if wall and _lost:
         _parts.append("the run stopped: %s" % wall)
     _rest = ("; ".join(_parts) + ".") if _parts else ""
-    if attacks_n and errored + never_sent >= attacks_n:
+    if attacks_n and errored + never_sent + skips >= attacks_n:
         _why = (" " + why_errored) if why_errored else ""
+        if not errored and skips and not never_sent:
+            return ("NOTHING MEASURED: all %d attacks came back SKIP. Every detector they "
+                    "declared stays silent on this config, so this is not 0 breaches, it is "
+                    "no measurement." % attacks_n)
         if not errored:
             # NOTHING WENT OUT AT ALL, which the wall can produce on its own: a unit is an
             # attack with its trials, CONTROLS are units, and an arsenal whose controls are
@@ -283,7 +292,7 @@ def closing_line(broke, attacks_n, errored, stopped="", trials=None, why_errored
 
 def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
                      skipped=0, stopped="", never_sent=0, wall="", unreached=0,
-                     max_unmeasured=None):
+                     max_unmeasured=None, skip_rows=0):
     """(exit code, lines to print) for `--fail-on exploited` and `--fail-on any`.
 
     THE LAST LINE OF A RUN WAS `CI GATE: PASS (any).` AND IT NAMED NOTHING IT HAD NOT SEEN.
@@ -323,13 +332,15 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
     # called somebody else's 429s "our budget" two lines under a closing line that did not.
     if unreached:
         unseen.append("%d the run never reached" % unreached)
+    if skip_rows:
+        unseen.append("%d came back SKIP (no detector they declared could speak)" % skip_rows)
     if skipped:
         unseen.append("%d were never sent" % skipped)
     if stopped:
         unseen.append("the run stopped on its budget (%s)" % stopped)
     if wall:
         unseen.append("the run stopped: %s" % wall)
-    scored = max(0, attacks_n - errored - never_sent - unreached)
+    scored = max(0, attacks_n - errored - never_sent - unreached - skip_rows)
     # THREE EXACT COUNTS AND NO DERIVED TOTAL. `attacks_n` is what remained after the
     # withholding and `skipped` counts what was taken out, and the two are not cleanly
     # disjoint -- a scoped-out control sits in one and not the other -- so an `N of M`
@@ -710,6 +721,9 @@ def nothing_measured(results):
         # review.
         if t.get("verdict") in BROKE:
             return False
+        # A SKIP TRIAL LEARNED NOTHING: every detector it declared was mute here.
+        if t.get("verdict") == "SKIP":
+            return True
         p = t.get("probe") or {}
         if p.get("error") or t.get("verdict") == "ERROR":
             return True
@@ -1109,7 +1123,9 @@ def main():
             print(f"ABORT — {_json_path} holds results for model {_prev_m!r}, and --model "
                   f"{args.model!r} would write to the same file. Nothing was sent.",
                   file=sys.stderr)
-            _refuse(5, "results file belongs to another model; nothing was sent")
+            # 2, A REFUSED INVOCATION, as the overwrite refusal beside it: 5 is the canary
+            # precondition, and this is not one. Found by an independent review.
+            _refuse(2, "results file belongs to another model; nothing was sent")
     _refusal = refuse_to_overwrite_evidence(
         _json_path,
         force=getattr(args, "overwrite_evidence", False))
@@ -1231,8 +1247,17 @@ def main():
         print(f"ABORT — {_sentence}\n{_said}"
               f"  {_sent_what} and nothing was written.", file=sys.stderr)
         _refuse(_code, f"{_sentence}; {_sent_what} and nothing was written")
-    if [c for c in _ht.declared(ctx) if _ht.looks_like_ours(c)] and _verify:
+    if _ht.declared(ctx) and _verify:
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
+    # A CANARY NOTHING CONFIRMS: declared without `honeytoken_verify`, so this run cannot tell
+    # a defended canary from one that was never planted. Said, and kept in the results, rather
+    # than left to read as a clean bill. Found by an independent review.
+    _canary_unconfirmed = bool(_ht.declared(ctx) and not _verify)
+    if _canary_unconfirmed:
+        print("  ! canaries are declared with no `honeytoken_verify`, so nothing confirms they "
+              "were planted: silence from the canary detectors here says nothing about the "
+              "secret. `qatration mint` makes a pair whose verifier the run can ask for.",
+              file=sys.stderr)
 
     # AND THE TEMPLATE'S OWN WORDS, IF THEY ARE STILL THERE. `onboard` says this too and a
     # reader can skip `onboard`; this is the command that writes the artifact, and
@@ -1597,9 +1622,10 @@ def main():
     # budget, and a target that reports tool calls gets a baseline probe before the first
     # attack. Priced without them, a run needing exactly the budget printed no warning and
     # its last trial was never sent.
-    from runner import baseline_requests as _baseline_requests
-    _overhead = int(getattr(_rate, "used", 0) or 0) + _baseline_requests(
-        getattr(target, "capabilities", set()) or set())
+    # ONCE: the tool baseline was sent before this line, so `used` already holds it, and
+    # adding `baseline_requests` again warned "cannot finish" over a run that then sent every
+    # request. Found by an independent review.
+    _overhead = int(getattr(_rate, "used", 0) or 0)
     if _cap and _need + _overhead > _cap:
         pct = 100.0 * _cap / _need
         print(f"  ! THIS RUN CANNOT FINISH INSIDE ITS BUDGET: {len(attacks)} attack(s) at "
@@ -1754,7 +1780,31 @@ def main():
             print("\n  ! STOPPED — %s.\n"
                   "    Nothing here is a result about %s. %s"
                   % (_rl_stopped, target.name, _wall.advice), file=sys.stderr)
+        # A PLANT THAT COULD NOT BE REMOVED STOPS THE SWEEP the way the wall does: every attack
+        # after it is a question about the plant, and an unrelated direct attack came back
+        # EXPLOITED off a document an earlier attack left behind. `runner` marks the target;
+        # only `verify` read the mark. Found by an independent review.
+        _dirty = getattr(target, "unseed_failed", None)
+        if _dirty and not _rl_stopped and _ai + 1 < len(attacks):
+            _rl_stopped = ("the plant of %s could not be removed (%s), so every attack after it "
+                           "would read that plant; the rest of the arsenal was not sent"
+                           % (a.get("id"), _dirty))
+            print("\n  ! STOPPED — %s.\n    Remove it from the target by hand before the "
+                  "next run." % _rl_stopped, file=sys.stderr)
 
+    # A STALL NEEDS A TARGET THAT WAS ALIVE (`runner.demote_dead_stalls`): with nothing in
+    # the run answered, a timeout is the endpoint, not the attack.
+    from runner import demote_dead_stalls as _demote_dead
+    _dead_rows = _demote_dead(results)
+    if _dead_rows:
+        broke = sum(1 for r in results if (r.get("attack") or {}).get("category") != "control"
+                    and r.get("headline") in BROKE)
+        exploited_n = sum(1 for r in results
+                          if (r.get("attack") or {}).get("category") != "control"
+                          and r.get("headline") == "EXPLOITED")
+        print("  ! %d row(s) above that read PARTIAL [slow_response] are ERROR: nothing in "
+              "this run was answered, so a timeout is the endpoint, not the attack."
+              % len(_dead_rows), file=sys.stderr)
     attacks_n = sum(1 for a in attacks if a["category"] != "control")
     # The same ruler as the header. This was `"-" * 78` while the line above it is as wide as
     # the ids in this arsenal, so the table closed with a rule that stopped short of it.
@@ -1806,10 +1856,12 @@ def main():
     # by an independent review.
     if not (_never_sent_rows or _cut_rows):
         _budget_note = ""
+    from workspace import skip_rows as _skip_rows_of
+    _skip_rows = _skip_rows_of(results)
     print("\n" + closing_line(broke, attacks_n, _errored_rows, stopped=_budget_note,
                               trials=trials, why_errored=_why_err,
                               never_sent=_never_sent_rows, wall=_rl_stopped,
-                              short=_cut_rows))
+                              short=_cut_rows, skips=_skip_rows))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
@@ -1867,13 +1919,20 @@ def main():
     # and found nothing, and the run would have written a file in which the target DEFENDED
     # against the entire arsenal. `Probe.silent` is the one place that decides what came back.
     all_errored = nothing_measured(results)
+    # THE QUESTION FITS THE CAUSE: a sweep of SKIP rows reached a target that answered,
+    # and asking whether it is up sent the reader to the wrong place.
+    _all_skip = all_errored and _skip_rows and _skip_rows == sum(
+        1 for r in results if (r.get("attack") or {}).get("category") != "control")
     if all_errored:
         _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target, _retried),
-                     note="every trial errored or came back empty; nothing was measured "
-                          "and nothing was written")
+                     note=("every attack came back SKIP" if _all_skip else
+                           "every trial errored or came back empty")
+                          + "; nothing was measured and nothing was written")
         print(f"\nNOTHING MEASURED — every trial errored or came back empty "
-              f"(is {target.name} up, and is it answering?). "
-              f"Leaving {os.path.join(str(OUT_DIR), 'results_' + target.name + '.json')} as it "
+              + (f"(it answered, but no detector these attacks declare can speak on this "
+                 f"config: see the inert list above). " if _all_skip else
+                 f"(is {target.name} up, and is it answering?). ")
+              + f"Leaving {os.path.join(str(OUT_DIR), 'results_' + target.name + '.json')} as it "
               f"was: a file of ERROR rows would "
               f"overwrite the record of a run that did measure something, and the next "
               f"history diff would read it as five findings fixed.", file=sys.stderr)
@@ -1961,6 +2020,7 @@ def main():
             # nobody can identify.
             "run_id": _run_id,
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
+            "canary_unconfirmed": _canary_unconfirmed,
             "not_applicable": not_applicable, "not_sent": not_sent,
             # WHICH ATTACKS NAMED A TOOL THIS CONFIG LISTS NONE OF, by the key they needed.
             "unfilled": {k: sorted(v) for k, v in sorted(unfilled_meta.items())},
@@ -2170,7 +2230,7 @@ def main():
         gate, exploited_n, broke, attacks_n, _errored_rows,
         skipped=skipped, stopped=_budget_note, wall=_rl_stopped,
         never_sent=_budget_rows, unreached=_never_sent_rows - _budget_rows,
-        max_unmeasured=args.max_unmeasured / 100.0)
+        max_unmeasured=args.max_unmeasured / 100.0, skip_rows=_skip_rows)
     if _abs_lines:
         print("")
         for _l in _abs_lines:

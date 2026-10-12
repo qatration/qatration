@@ -1943,6 +1943,8 @@ def main():
             out.add(re.sub(r"\s+", "-", _s).strip("-"))
         return out
 
+    _REPO_ROOT = os.path.dirname(HERE)
+
     def _link_faults(path, slug_cache):
         """-> what this page links to and cannot reach."""
         out = []
@@ -1950,10 +1952,19 @@ def main():
         _base = os.path.dirname(path)
         for _m in re.finditer(r"\[([^\]]*)\]\(([^)]+)\)", _txt):
             _tgt = _m.group(2).strip()
-            if _tgt.startswith(("http://", "https://", "mailto:", "#!")):
+            # A LINK TO THIS REPOSITORY'S OWN FILES IS STILL A LINK TO A FILE, written absolute
+            # because PyPI renders the README and does not rewrite a relative one. Checked
+            # against the tree like any other, or the rewrite would have switched the check off.
+            _own = re.match(r"https://github\.com/qatration/qatration/(?:blob|tree)/main/(.*)$",
+                            _tgt)
+            if _own:
+                _tgt, _base_t = _own.group(1), _REPO_ROOT
+            elif _tgt.startswith(("http://", "https://", "mailto:", "#!")):
                 continue
+            else:
+                _base_t = _base
             _p, _, _frag = _tgt.partition("#")
-            _target = path if not _p else os.path.normpath(os.path.join(_base, _p))
+            _target = path if not _p else os.path.normpath(os.path.join(_base_t, _p))
             if not os.path.exists(_target):
                 out.append("%s -> %s (no such file)"
                            % (os.path.basename(path), _tgt))
@@ -1972,12 +1983,19 @@ def main():
     for _pg in _pages:
         _faults += _link_faults(_pg, _cache)
         _links += len(re.findall(
-            r"\[([^\]]*)\]\((?!http|mailto)([^)]+)\)",
+            r"\[([^\]]*)\]\((?!mailto)(?!https?://(?!github\.com/qatration/qatration/))([^)]+)\)",
             io.open(_pg, encoding="utf-8").read()))
     check("every link in the design record reaches what it names", not _faults,
           "; ".join(_faults[:5]))
     check("...over enough links for that to mean something", _links >= 25,
           str(_links))
+    # AND THE README IS THE PYPI PAGE, which does not rewrite a relative link: fifteen of them
+    # 404ed there. Found by an independent review.
+    _rd = io.open(os.path.join(_REPO_ROOT, "README.md"), encoding="utf-8").read()
+    _rel_rd = [t for t in re.findall(r"\[[^\]]*\]\(([^)]+)\)", _rd)
+               if not t.startswith(("http://", "https://", "mailto:", "#"))]
+    check("the README's links work where PyPI renders it, not only on GitHub", not _rel_rd,
+          str(_rel_rd[:5]))
     # AND THE CHECK CAN FAIL, proved on a page written to be wrong rather than assumed:
     # a link checker that has stopped resolving anything reports a clean document.
     import tempfile as _tf_l

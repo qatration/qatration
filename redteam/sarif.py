@@ -110,7 +110,7 @@ def _uri(path):
     return _quote(text, safe="/")
 
 
-def _message(row, verdict, noisy, baseline_why=""):
+def _message(row, verdict, noisy, baseline_why="", asked=None):
     a = row.get("attack") or {}
     import workspace as _ws_m
     parts = ["%s: %s (%s)" % (row.get("headline", "?"),
@@ -129,7 +129,16 @@ def _message(row, verdict, noisy, baseline_why=""):
         # sentence they can read. `QUALIFIERS_NOT_CARRIED` exempts `trials` on the grounds
         # that the rate rides on the message: it does, and now so does what it costs.
         _d = str(row["rate"]).split("/")[-1].strip()
-        if _d == "1":
+        # FEWER MEASURED THAN ASKED IS NOT "SENT ONCE": [EXPLOITED, ERROR, ERROR] on a
+        # `--trials 3` run stores `1/1`, and this told the reader to re-run with --trials 3,
+        # the scorecard's rule (`report_engine._reliability`) being "1 of 3 trials measured".
+        # Found by an independent review.
+        _asked = asked if isinstance(asked, int) and not isinstance(asked, bool) else None
+        if _d.isdigit() and _asked and int(_d) < _asked:
+            parts.append("measured on %s of %d trials asked (the rest came back with nothing "
+                         "to judge), so this cannot be told from a lucky break -- re-run it "
+                         "before acting on it" % (_d, _asked))
+        elif _d == "1":
             parts.append("sent ONCE, so this cannot be told from a lucky break -- re-run "
                          "with --trials 3 before acting on it")
     if row.get("fired"):
@@ -281,7 +290,8 @@ def build(results, target_config=None, out_dir=None, source=None):
         sarif_results.append({
             "ruleId": rule_id,
             "level": level,
-            "message": {"text": _message(row, verdict, noisy, _b_why)},
+            "message": {"text": _message(row, verdict, noisy, _b_why,
+                                         asked=meta.get("trials"))},
             # NO LOCATION RATHER THAN A FALSE ONE. SARIF 2.1.0 allows a result with no
             # physical location, and that is the honest shape when the config this run was
             # pointed at cannot be found from here.
@@ -597,7 +607,8 @@ def build(results, target_config=None, out_dir=None, source=None):
         "invocations": [invocation],
         "properties": {"target": target,
                        "attacks": meta.get("attacks_n"),
-                       "breached": meta.get("broke")},
+                       # FROM THE ROWS (`workspace.broke_count`), as every page counts it.
+                       "breached": workspace.broke_count(meta, rows)},
     }
     # A PER-MODEL COPY IS ANOTHER ANALYSIS, said the way code scanning expects: its own
     # category (`automationDetails.id`, "category/"), not other fingerprints. GitHub matches
@@ -706,8 +717,12 @@ def main():
     # exited 0, which a CI step reads as a clean scan. Found by an independent review.
     # BY THE ROWS, not by `attacks_n`: a file written before that counter existed reads as
     # zero measured through it, and every row in it answered.
+    # AND NOT BY A CONTROL: a control is a false-alarm check, not an attack, so a file
+    # where every attack errored and one control answered exited 0. Found by an independent
+    # review.
     import workspace as _ws_x
     if not any(isinstance(r, dict) and r.get("headline") not in _ws_x.NOT_MEASURED
+               and (r.get("attack") or {}).get("category") != "control"
                for r in (results.get("results") or [])):
         print("  ! nothing in %s was measured, so this export says nothing about the target."
               % args.results)

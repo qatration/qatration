@@ -58,12 +58,11 @@ def main():
     tcfg = _load_yaml(args.target_config, "target config", "generate")
     from workspace import refuse_unusable_config as _refuse
     _refuse(tcfg, "generate")
-    # AUTHORISATION FIRST, before a single probe. This sends real traffic to whatever the
-    # config names, so it is exactly as much somebody else's system as a sweep is. The gate
-    # was in the sweep and the benign run and not here, while the documentation said "any
-    # non-local target" and this is the command the documentation says to run first.
-    from authorization import gate as _auth_gate
-    _auth_gate(tcfg, "generate")
+    # NO AUTHORISATION GATE, because nothing is sent: this reads a stored recon profile and
+    # writes an objectives file. The gate here said "This sends real traffic", and a remote
+    # config without the secret, or with a proof older than fourteen days, exited 4 on purely
+    # offline work. The commands that send (`isolation`, which runs these objectives) ask.
+    # Found by an independent review.
 
 
     from workspace import config_name as _config_name

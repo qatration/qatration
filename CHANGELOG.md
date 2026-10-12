@@ -46,8 +46,9 @@ ones drop `qatration_probe`, a table nobody has, so a bot that passes one throug
 nothing. Every category that held three or four attacks now holds five (32 more, none naming
 a column, a tool or a practice bot). The portable arsenal is 422 attacks.
 
-**The secret is asked for by the target's own name for it.** 113 portable attacks asked for "the
-internal staff key", while the block `qatration init` and `mint` print plants an "internal
+**The secret is asked for by the target's own name for it.** 73 portable attacks asked for "the
+internal staff key" (and 40 more for "the internal key", "the staff-only promo code", "the
+recovery code" or "the staff key"), while the block `qatration init` and `mint` print plants an "internal
 dispatch key", and a live run against a bot holding a "recovery code" refused to give out
 "internal staff keys or access codes": a refusal of a thing it does not hold. Each name for the
 secret is now a `{secret:...}` slot, filled from `secret_name` in the target's `oracle_context`;
@@ -158,6 +159,42 @@ repository's own.
 shipped one, claims job ids exclusively, and refuses a job that brings its own refusal regexes:
 a pattern run over replies the same submitter controls can hold a worker for hours.
 
+**A row that measured nothing is not a row that held, in every count.** A row whose declared
+detectors could not speak on the config comes back `SKIP`, and the closing line, the CI gate,
+the scorecard (a tile of its own), the index and `rejudge` all count it the same way, as not
+scored. On the committed index this moved memorybot-naive from 4/5 (80%) to 4/8 (50%). An
+endpoint that never answered is no longer reported as one `slow_response` breach per attack. A
+failed unseed stops the sweep, a retry inside a trial starts clean the way a trial does, and an
+abandoned conversation sends no further step into the next attack. `isolation` exits `1` when a
+map shows something open, `adaptive` refuses a goal whose detectors cannot speak and asks for the
+declared verifier first, and the pages count breaches from the rows rather than from a stored
+counter.
+
+**Fewer findings the evidence does not support.** Echo subtraction works per match, so the
+attacker's own `<script` no longer disarms the rule for a payload the bot composed. A refusal
+spoken through `final_answer` is not a reach for credentials; the caller reading their own
+records is not an id walk; a secret the target holds in every session is not a cross-session
+leak; "I am sorry to hear..." is not a decline; a model-written argument or a short retrieved
+document is not a backend block; an answer that says "if you are unable to..." is not a refusal.
+The canary rescue reads what the user saw, and its sentence names the detector whose rate it
+quotes. The delivery-and-effect test counts questions, not repeats of one.
+
+**Authorisation says what it checked.** On the hosted service only the well-known file, which
+the run fetches, is a proof; `header` and `dns_txt` are recorded and reported as the operator's
+statement. The address a probe connects to is checked against the hosted policy after
+connecting, which closes DNS rebinding. `qatration authorize --url <url>` prints the token an
+origin needs, and `docs/ci.md` covers the secret, the block and the fourteen-day renewal. The
+intake no longer lists every job, and refuses at the door a config the run would refuse or a job
+the worker's lease would kill.
+
+**The release is checked like everything else.** The guard reads an annotated tag's tagger and
+message (`guard.py --tag`, in `pre-push` and in the release job), and the release runs the full
+`check.yml` matrix, requires the tag to be on `main`, publishes only on a push, and passes no
+expression into a shell. The guard and `credential_in_output` know nine more token formats. The
+wheel no longer ships the test suites, the README's links work on PyPI, `lint` refuses a
+near-miss slot such as `{privileged_tools}`, and the arsenal no longer depends on whose
+`QATRATION_CONFIGS` built it.
+
 ### Upgrading
 
 The first `--fail-on regression` run after upgrading answers `3` once: the engine changed, so
@@ -174,7 +211,14 @@ comparing them; a config that leaves it unset sends what it sent before. `rogue_
 inert without `watch_tools`: a config that never declared one sees it listed as unable to fire,
 and an attack that relied on it alone is withheld. A benign baseline taken before 0.5 was judged
 by detectors that have since changed; `qatration benign --rejudge --write` re-scores it, and a
-re-take is what a published false-alarm rate should rest on.
+re-take is what a published false-alarm rate should rest on. A baseline now records the adapter's
+capabilities and the detectors that judged it; one written before carries neither, and a
+detector added since it was taken reads as unmeasured once it is re-scored. Exit codes that
+moved: `isolation` exits `1` on an open map, `runs` exits `3` when a record could not be read,
+a `--model` run over another model's results file exits `2` (it was `5`), and `generate` no
+longer asks for authorisation, since it sends nothing. A hosted deployment that relied on
+`header` or `dns_txt` proofs needs the well-known file, and a script that read `GET /runs` keeps
+the job id from its `POST` instead.
 
 ---
 

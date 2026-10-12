@@ -174,11 +174,17 @@ def write_mutant(path, mutant, orig):
     week must not overwrite work somebody has done since, and a tool that restores from
     a stale note is a worse version of the problem it is fixing.
     """
+    # NO NOTE, NO MUTANT. This went on to write the mutant when the note failed, so a kill
+    # after that left a deleted guard in the tree that `guard.py`'s `live_mutation` -- which
+    # reads only the note -- could not see. The sweep stops instead, with nothing mutated.
+    # Found by an independent review.
     try:
         io.open(_note_path(), "w", encoding="utf-8").write(json.dumps(
             {"path": os.path.abspath(path), "mutant": mutant, "orig": orig}))
-    except OSError:
-        pass          # a note that cannot be written is not a reason to skip the sweep
+    except OSError as e:
+        raise SystemExit("unguarded: the undo note (%s) could not be written (%s), so no "
+                         "mutant was put on disk and the sweep stops: a mutant nothing "
+                         "records is one no gate can see." % (_note_path(), e))
     io.open(path, "w", encoding="utf-8", newline="").write(mutant)
 
 

@@ -6,7 +6,7 @@ detectors, and each attack's probe) — target-agnostic, works for any adapter.
 import html
 import re
 from recon import memory_phrase
-from workspace import measured, never_sent, BROKE, attack_name
+from workspace import measured, never_sent, BROKE, attack_name, broke_count
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -102,7 +102,10 @@ def _locks_cell(locks):
     top, n = items[0]
     extra = f' <span class="dim">+{len(items) - 1}</span>' if len(items) > 1 else ""
     cls = "lk warnlk" if top == "simulated_call" else "lk"
-    return f'<span class="{cls}">{esc(LOCK_LABEL.get(top, top))} ×{n}</span>{extra}'
+    # ESCAPED, the count too: a lock value is read from the artifact, and `{"refusal_content":
+    # "<img src=x onerror=...>"}` passed `read_artifact` and landed as markup. Found by a
+    # review.
+    return f'<span class="{cls}">{esc(LOCK_LABEL.get(top, top))} ×{esc(n)}</span>{extra}'
 
 
 # ONE RENDERER, in `workspace`. This module and `defense_report` each had a copy of
@@ -379,6 +382,14 @@ def build_html(meta, results, recon=None, isolation=None):
     _errored_card = (f'<div class="stat"><div class="n">{_errored_n}</div>'
                      f'<div class="l">errored — nothing measured</div></div>'
                      if _errored_n else "")
+    # AND THE ROWS THAT CAME BACK SKIP, which `measured` subtracts and no tile showed, so the
+    # tiles did not add up to the attacks the run holds -- 28 rows missing on one run. Found
+    # by an independent review.
+    from workspace import skip_rows as _skip_rows_re
+    _skip_n = _skip_rows_re(results)
+    _skip_card = (f'<div class="stat"><div class="n">{_skip_n}</div>'
+                  f'<div class="l">came back SKIP — no declared detector could speak</div></div>'
+                  if _skip_n else "")
 
     # ONE OF THESE IS ABOUT THE BOT AND THE OTHER IS ABOUT THE COMMAND. They were a single
     # tile reading "not applicable / skipped", and on a `--scope quick` run the number under
@@ -683,11 +694,12 @@ table.mini th{{padding:4px 8px 4px 0;font-size:10.5px}} table.mini td{{padding:5
 <p class="sub">target <b>{esc(meta.get('target',''))}</b> · {esc(meta.get('model') or 'model not recorded')} · run {esc(_run_date)} · caps: {esc(caps)} · {meta.get('trials',1)} trials/attack · objective oracle</p>
 <div class="cards">
   <div class="stat"><div class="n">{_measured_n}</div><div class="l">attacks measured</div></div>
-  <div class="stat red"><div class="n">{meta.get('broke',0)}</div><div class="l">breached (exploited+partial)</div></div>
+  <div class="stat red"><div class="n">{broke_count(meta, results)}</div><div class="l">breached (exploited+partial)</div></div>
   <div class="stat"><div class="n">{_not_applicable}</div><div class="l">{_gap_label}</div></div>
   {_not_sent_card}
   {_unreached_card}
   {_errored_card}
+  {_skip_card}
 </div>
 {baseline_html}
 {attribution_html}

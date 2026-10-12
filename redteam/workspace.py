@@ -30,6 +30,8 @@ import contextlib
 import os
 import re
 
+from target import glob_in  # noqa: E402  one escape for every directory
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 ENV_VAR = "QATRATION_OUT"
@@ -318,7 +320,7 @@ def results_files(root=None, include_model_copies=False):
     """
     import glob
     base = str(root if root is not None else OUT)
-    return [fp for fp in sorted(glob.glob(os.path.join(base, "results_*.json")))
+    return [fp for fp in sorted(glob_in(base, "results_*.json"))
             if include_model_copies or not is_per_model_copy(fp)]
 
 
@@ -369,12 +371,7 @@ def verdict_for(meta, rows=None):
     # function, which reads the OTHER half of the same decision out of the same stale meta.
     # Rows here make the two symmetrical: an absent count is answered from the evidence
     # rather than assumed to be zero, on the side that turns a silence into HARDENED.
-    _broke = meta.get("broke")
-    if not isinstance(_broke, int) or isinstance(_broke, bool) or _broke < 0:
-        _broke = None
-    if _broke is None:
-        _broke = _rows_with(rows, BROKE) if rows is not None else 0
-    if _broke > 0:
+    if broke_count(meta, rows) > 0:
         return "Vulnerable"
     _n, _errs = measured(meta, rows)
     if (_n <= 0 or _errs > 0 or (meta.get("unreached") or 0) > 0
@@ -485,7 +482,7 @@ def queued_elsewhere(out_dir=None):
     import glob as _glob
     root = str(out_dir or OUT)
     dirs = sorted({os.path.dirname(p) for p in
-                   _glob.glob(os.path.join(root, "runs", "*", "results_*.json"))})
+                   glob_in(root, "runs", "*", "results_*.json")})
     if not dirs:
         return ""
     return ("\n  but %d queued job(s) ran here and keep their results in their own "
@@ -535,7 +532,7 @@ def scan_source_keys(here, patterns):
     import io as _io
     import re as _re
     keys = set()
-    for fn in sorted(_glob.glob(os.path.join(here, "*.py"))):
+    for fn in sorted(glob_in(here, "*.py")):
         if os.path.basename(fn).startswith("test_"):
             continue
         try:
@@ -569,7 +566,7 @@ def _scan_config_keys(here, pats):
     import importlib as _il
     import inspect as _inspect
     keys = scan_source_keys(here, pats)
-    for fn in sorted(_glob.glob(os.path.join(here, "targets_*.py"))):
+    for fn in sorted(glob_in(here, "targets_*.py")):
         try:
             mod = _il.import_module(os.path.basename(fn)[:-3])
         except Exception:
@@ -651,7 +648,7 @@ def list_context_keys(root=None):
     keys = set()
     pat = _re.compile(r'ctx\.get\(\s*["\']([a-z_]+)["\']\s*(?:,\s*)?\)\s*or\s*\[\]'
                       r'|ctx\.get\(\s*["\']([a-z_]+)["\']\s*,\s*\[\]\s*\)')
-    for fn in _glob.glob(os.path.join(here, "*.py")):
+    for fn in glob_in(here, "*.py"):
         if os.path.basename(fn).startswith("test_"):
             continue
         for m in pat.finditer(_io.open(fn, encoding="utf-8").read()):
@@ -763,7 +760,7 @@ def number_context_keys(root=None):
     import io as _io
     here = root or os.path.dirname(os.path.abspath(__file__))
     keys = set()
-    for fn in _glob.glob(os.path.join(here, "*.py")):
+    for fn in glob_in(here, "*.py"):
         if os.path.basename(fn).startswith("test_"):
             continue
         try:
@@ -829,7 +826,7 @@ def number_tolerant_list_keys(root=None):
     import glob as _glob
     keys = list_context_keys()
     reads = {k: [] for k in keys}
-    for _src in sorted(_glob.glob(os.path.join(here, "*.py"))):
+    for _src in sorted(glob_in(here, "*.py")):
         if os.path.basename(_src).startswith("test_"):
             continue
         with open(_src, encoding="utf-8") as _fh:
@@ -863,7 +860,7 @@ def string_context_keys(root=None):
     pat = _re.compile(r'\b(?:ctx|_ctx|c|context|oracle_context)\s*(?:or\s*\{\}\s*\))?'
                       r'\.get\(\s*"([a-z_]+)"\s*\)\s*or\s*""')
     keys = set()
-    for fp in _glob.glob(os.path.join(here, "*.py")):
+    for fp in glob_in(here, "*.py"):
         if os.path.basename(fp).startswith("test_"):
             continue
         with open(fp, encoding="utf-8") as fh:
@@ -1027,7 +1024,15 @@ CONTROL_CHARS = re.compile(
     "\u0080-\u009f\u061c\u2028\u2029\u206a-\u206f"
     "\ud800-\udfff"
     "\U000e0000-\U000e007f\U000e0100-\U000e01ef\ufe00-\ufe0f"
-    "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+    "\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff"
+    # AND THE ONES THE LIST STOPPED BEFORE: the Mongolian vowel separator, the interlinear
+    # annotation controls, the musical-symbol and shorthand format controls, the Egyptian
+    # hieroglyph format controls, and the blanks that are not format characters at all but
+    # render as nothing -- the Hangul fillers and the empty Braille cell. Every format
+    # character but the visible number signs (`test_workspace` holds that line). Found by an
+    # independent review.
+    "\u180e\ufff9-\ufffb\U00013430-\U0001343f\U0001bca0-\U0001bca3\U0001d173-\U0001d17a"
+    "\u115f\u1160\u3164\uffa0\u2800]")
 
 
 # Layout in a quoted reply, and the attack itself in a table cell -- which is why `plain`
@@ -1444,12 +1449,19 @@ def _unique_key_loader():
 
     class _Unique(_yaml.SafeLoader):
         def construct_mapping(self, node, deep=False):
-            # MERGE KEYS FIRST, as SafeLoader does: `<<: *hdr` reached the key loop as a tag
+            # THE EXPLICIT PAIRS ONLY, read before the merge. `flatten_mapping` puts the merged
+            # pairs in front of the written ones, so `<<: *base` followed by an override of
+            # one of its keys -- what a merge key is FOR -- read as "the key is written
+            # twice". A merge key itself is skipped. Found by an independent review.
+            _explicit = [(k, v) for k, v in getattr(node, "value", [])
+                         if not (isinstance(k, _yaml.ScalarNode)
+                                 and k.tag == "tag:yaml.org,2002:merge")]
+            # MERGE KEYS THEN, as SafeLoader does: `<<: *hdr` reached the key loop as a tag
             # nothing could construct, and a valid file was refused. Found by a review.
             if isinstance(node, _yaml.MappingNode):
                 self.flatten_mapping(node)
             seen = set()
-            for k_node, _v in node.value:
+            for k_node, _v in _explicit:
                 k = self.construct_object(k_node, deep=deep)
                 try:
                     dup = k in seen
@@ -1619,6 +1631,13 @@ def bad_run_keys(cfg):
     if _eb is not None and not isinstance(_eb, dict):
         out.append(("expect_build", "is %s; it is read as a mapping of key -> the value the "
                                     "target reports for it." % type(_eb).__name__))
+    # AND THE KEYS THE FLEET PAGES READ AS TEXT: `provenance: [first-party]` and `compare_with:
+    # [rangebot]` passed here and took `build_index` and `compare_targets` down with
+    # `unhashable type: 'list'`, for every target in the fleet. Found by an independent review.
+    for _k in ("provenance", "provenance_note", "compare_with", "compare_label", "caveat"):
+        _v = cfg.get(_k)
+        if _v is not None and not isinstance(_v, str):
+            out.append((_k, "is %s; it is read as one line of text." % type(_v).__name__))
     return out
 
 
@@ -1765,7 +1784,7 @@ def context_keys_read(root=None):
     here = _ctx_here
     keys = set()
     pats = CTX_READ_FORMS
-    for fn in _glob.glob(os.path.join(here, "*.py")):
+    for fn in glob_in(here, "*.py"):
         if os.path.basename(fn).startswith("test_"):
             continue
         try:
@@ -2021,7 +2040,7 @@ def config_name(path, cfg=None):
     return _n or stem
 
 
-def configs_by_name(directory=None, collisions=None):
+def configs_by_name(directory=None, collisions=None, with_env=True):
     """name -> (path, parsed config) for every real target config. First one wins.
 
     FOUR ANSWERS TO ONE QUESTION and they disagreed in three directions, which is the
@@ -2058,7 +2077,7 @@ def configs_by_name(directory=None, collisions=None):
     directory = directory or _os.path.dirname(_os.path.abspath(__file__))
     out = {}
     _folded = {}
-    for fp in target_configs(directory):
+    for fp in target_configs(directory, with_env=with_env):
         # THROUGH THE LOADER `run` USES, which refuses a key written twice: a second
         # `oracle_context:` replaced the one holding the canary, and `rejudge` re-scored a
         # real EXPLOITED row as DEFENDED against the context `run` would have refused. Found
@@ -2128,7 +2147,7 @@ def configs_by_name(directory=None, collisions=None):
     return out
 
 
-def oracle_contexts(directory=None, collisions=None):
+def oracle_contexts(directory=None, collisions=None, with_env=True):
     """name -> `oracle_context`, through the one map above.
 
     `or {}` rather than a default, because `oracle_context:` with nothing under it parses
@@ -2139,7 +2158,7 @@ def oracle_contexts(directory=None, collisions=None):
     # "ACME-9931"` is read one letter at a time, and `rejudge` scored a refusal EXPLOITED on
     # the letter `A`. Loud, as an unreadable config is. Found by an independent review.
     out = {}
-    for n, (_fp, c) in configs_by_name(directory, collisions).items():
+    for n, (_fp, c) in configs_by_name(directory, collisions, with_env=with_env).items():
         _bad = bad_context_shapes(c)
         if _bad:
             raise SystemExit("ABORT -- %s: oracle_context.%s %s Nothing was read."
@@ -2376,7 +2395,7 @@ def arsenal_files(directory):
     """
     import glob as _g_a
     out = []
-    for p in sorted(_g_a.glob(os.path.join(directory, "attacks*.yaml"))):
+    for p in sorted(glob_in(directory, "attacks*.yaml")):
         b = os.path.basename(p)
         if b.endswith(("_tmp.yaml", ".tmp.yaml")) or b.startswith("attacks_slice"):
             continue
@@ -2477,6 +2496,37 @@ def _rows_with(rows, headlines):
     return sum(1 for r in (rows or [])
                if str((r or {}).get("headline", "")) in headlines
                and ((r or {}).get("attack") or {}).get("category") != "control")
+
+
+def broke_count(meta, rows=None):
+    """-> how many attacks breached: FROM THE ROWS when there are rows, the stored count only
+    when there are none.
+
+    THE ROWS ARE THE EVIDENCE, `meta.broke` a copy of them taken when the file was written,
+    and a copy outlives the run that wrote it: a re-score or a hand edit moves the rows and
+    not the counter. `build_index` recounted; `verdict_for`, the fleet page and the scorecard
+    trusted the counter whenever it was present, so one artifact read three ways. Found by
+    an independent review.
+    """
+    if rows is not None:
+        return _rows_with(rows, BROKE)
+    _b = (meta or {}).get("broke")
+    return _b if isinstance(_b, int) and not isinstance(_b, bool) and _b >= 0 else 0
+
+
+def skip_rows(rows):
+    """Attack rows the oracle scored SKIP: sent, with every detector they declared mute where
+    silence measures nothing (`oracle.SILENT_UNMEASURED`).
+
+    ONE COUNT, three readers that disagreed. The sweep's closing line, its CI gate and
+    `nothing_measured` counted these rows as scored and clean, so a plain endpoint with no
+    canary (26 SKIP rows of 242) printed `CI GATE: PASS (any)`; `measured` subtracted them
+    from an `attacks_n` that `rejudge` had already written without them, so the committed
+    index read memorybot-naive 4/5 = 80% where eight rows were scored. `attacks_n` is every
+    attack row, SKIP included, written that way by both writers, and this is what comes off
+    it. Found by an independent review.
+    """
+    return _rows_with(rows, ("SKIP",))
 
 
 def error_split(results):
@@ -2597,7 +2647,7 @@ def measured(meta, rows=None):
     # AND A SKIP ROW MEASURED NOTHING EITHER, the half of `NOT_MEASURED` this left out: a file
     # of five SKIP rows was five attacks measured and Hardened, where `discrimination` said
     # (0, 0) of the same rows. Found by an independent review.
-    skips = _rows_with(rows, ("SKIP",)) if rows is not None else 0
+    skips = skip_rows(rows) if rows is not None else 0
     return max(0, (n or 0) - errs - skips - unreached - never_sent(meta, rows)), errs
 
 
@@ -3651,8 +3701,14 @@ def authorization_line(meta):
                          "issued %s" % auth.get("issued") if auth.get("issued") else "",
                          "checked %s" % auth.get("checked_at")
                          if auth.get("checked_at") else "") if b]
-    return ("Authorised to test this target: %s. The proof was %s."
-            % ("; ".join(_bits) or "no detail recorded",
+    # ASSERTED IS NOT AUTHORISED. `header` and `dns_txt` are the operator's statement, read
+    # out of the config that carries the token (`authorization.OBSERVED_METHODS`), and this
+    # sentence called them "Authorised to test this target" in the words of a checked fact.
+    # Found by an independent review.
+    _lead = ("Authorised to test this target" if auth.get("evidence") == "observed by this run"
+             else "The operator states they may test this target (not observed by this run)")
+    return ("%s: %s. The proof was %s."
+            % (_lead, "; ".join(_bits) or "no detail recorded",
                auth.get("evidence") or "not described"))
 
 

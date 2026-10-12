@@ -210,6 +210,7 @@ def row_version_tags(matrix, aid):
 
 
 from history import steady, instrument_confounds
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def pair_diffs(matrix):
@@ -354,7 +355,7 @@ def movement():
         return {}, ("the run history could not be read here (%s), so this column is "
                     "empty for every target rather than unchanged" % type(_e).__name__)
     out = {}
-    for fp in glob.glob(str(OUT_DIR / "history" / "*.jsonl")):
+    for fp in glob_in(OUT_DIR, "history", "*.jsonl"):
         t = os.path.basename(fp)[:-len(".jsonl")]
         out[t] = diff(t)
     return out, ""
@@ -373,7 +374,7 @@ def benign_noise():
     nothing, on the same target, the same day.
     """
     out, unreadable = {}, []
-    for fp in glob.glob(str(OUT_DIR / "benign_*.json")):
+    for fp in glob_in(OUT_DIR, "benign_*.json"):
         d, why = read_artifact(fp)
         if why:
             unreadable.append((os.path.basename(str(fp)), why))
@@ -574,10 +575,10 @@ def main():
                         worst = s
         # AN ABSENT COUNT IS COUNTED FROM THE ROWS, as `verdict_for` beside it does: read as 0
         # it put "Breached 0" next to "Vulnerable" and sorted the system below a safer one.
-        broke = meta.get("broke")
-        if not isinstance(broke, int) or isinstance(broke, bool):
-            broke = sum(1 for _r in d["results"] if _r.get("headline") in BROKE
-                        and (_r.get("attack") or {}).get("category") != "control")
+        # FROM THE ROWS, through the one rule (`workspace.broke_count`): the stored counter
+        # is a copy that outlives a re-score.
+        from workspace import broke_count as _broke_count
+        broke = _broke_count(meta, d["results"])
         # a matrix mixing today's numbers with last week's reads as one snapshot, which is
         # how a stale row gets cited as current. The age travels with the row -- and it is the
         # RUN's date where the run recorded one, never the file's, which a clone resets.
@@ -711,7 +712,7 @@ def main():
           <td class="tname">{esc(r['target'])}<div class="dim when">{esc(r['measured'])}</div></td>
           <td class="dim">{esc(caps_label(r['caps']))}</td>
           <td class="num">{r['attacks_n']}{f"<div class='dim when'>{r['errored']} errored</div>" if r['errored'] else ""}</td>
-          <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}{f"<div class='dim when'>{r['doubtful']} unattributed</div>" if r['doubtful'] else ""}</td>
+          <td class="num" style="color:{'var(--accent)' if r['broke'] else 'var(--dim)'};font-weight:700">{r['broke']}{f"<div class='dim when'>{r['doubtful']} unattributed</div>" if r['doubtful'] else ("<div class='dim when'>attribution unknown</div>" if r['doubtful'] is None and r['broke'] else "")}</td>
           <td class="num">{benign_html}</td>
           <td class="num">{refused_html}</td>
           <td class="num">{move_html}</td>
@@ -846,11 +847,15 @@ def main():
     _undated = len(rows) - len(_dated)
     newest = max((r["measured"] for r in _dated), default="")
     older = sorted({r["measured"][:10] for r in _dated if r["measured"][:10] < newest[:10]})
+    # IN THE WORDS THE CELLS USE: since `dated()` stopped showing a file's date, those cells
+    # read "date not recorded", and this banner went on telling the reader how to read a
+    # file date nobody could see. Found by an independent review.
     undatedbar = ("" if not _undated else
-                  f'<div class="stalebar">{_undated} of {len(rows)} rows are dated by their '
-                  f'FILE, not by the run: those artifacts predate the field that records when '
-                  f'a sweep happened, and a clone or a copy resets a file date. Read those '
-                  f'dates as "when this checkout got the file".</div>')
+                  f'<div class="stalebar">{_undated} of {len(rows)} rows say "date not '
+                  f'recorded": those artifacts predate the field that records when a sweep '
+                  f'happened, and a file\'s own date is not shown in its place because a clone '
+                  f'or a copy resets it. They are left out of the comparison of days '
+                  f'below.</div>')
     staleness = ("" if not older else
                  f'<div class="stalebar">Rows on this page were measured on different '
                  f'days: newest {esc(newest[:10])}, also {esc(", ".join(older))}. '

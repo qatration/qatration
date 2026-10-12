@@ -447,6 +447,10 @@ def main():
     _rc, _out = _runs_cmd(_w)
     check("an unreadable record is reported rather than dropped",
           "could not be read" in _out and "torn" in _out, _out[-300:])
+    # ...AND THE LISTING OVER THE REST IS NOT A PASS: 3, as every command reading many
+    # artifacts answers over a set it could not all read. Found by an independent review.
+    check("...and the command exits 3 rather than 0 over a set it could not all read",
+          _rc == 3, "exit %s" % _rc)
 
     # AND THE COLUMN CANNOT WELD ITSELF TO THE NEXT ONE. At 20 characters the target name
     # ran straight into `scope=` -- `guardedrag-mitigatedscope=full` -- and a row that runs
@@ -579,7 +583,7 @@ def main():
         check("...while the unfiltered view names them without that caveat",
               "r2" in _all and "rules out" not in _all, _all)
         check("...and the run that WAS asked for is still listed",
-              "r1" in _said and _rc == 0, "%r %s" % (_rc, _said))
+              "r1" in _said and _rc == 3, "%r %s" % (_rc, _said))
         # AND `None` IS NOT A TARGET NAME. With only an unreadable record in the
         # workspace, the `none matching` line listed the literal string `None` among the
         # targets this workspace holds.

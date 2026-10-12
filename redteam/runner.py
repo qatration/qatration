@@ -156,9 +156,16 @@ def _settle_abandoned(label):
     for _th in list(_ABANDONED):
         if _th.is_alive() and not getattr(_th, "_qatration_waited", False):
             _th._qatration_waited = True
-            print(f"  ! {label}: waiting up to {SEND_TIMEOUT}s for a send abandoned at its "
+            # FOR ITS OWN LIMIT, not one step's: a chain's watchdog is SEND_TIMEOUT per step,
+            # and waiting one step's worth let the rest of an abandoned conversation land in
+            # the next attack's trial. It has been told to stop (`chain_probe`), so this
+            # returns as soon as the step in flight does. Found by an independent review.
+            # NEVER LESS than a single send's: a call abandoned at a short limit may still
+            # be in its first step.
+            _lim = max(getattr(_th, "_qatration_limit", None) or 0, SEND_TIMEOUT)
+            print(f"  ! {label}: waiting up to {_lim}s for a send abandoned at its "
                   f"timeout, so it cannot land in this trial", file=sys.stderr)
-            _th.join(SEND_TIMEOUT)
+            _th.join(_lim)
     _ABANDONED[:] = [_th for _th in _ABANDONED if _th.is_alive()]
 
 
@@ -183,6 +190,11 @@ def _invoke_with_timeout(fn, timeout):
     th.start()
     th.join(timeout)
     if th.is_alive():
+        # TOLD TO STOP, and how long it may still take: a conversation checks the mark before
+        # each next step (`target.chain_probe`) instead of sending the rest of itself into
+        # whatever trial comes next.
+        th._qatration_abandoned = True
+        th._qatration_limit = timeout
         _ABANDONED.append(th)
         return Probe(prompt="", error=f"TIMEOUT after {timeout}s", seconds=float(timeout))
     if "err" in box:
@@ -219,14 +231,25 @@ def start_trial(target, last_probe, label):
               f"the remaining trials were not sent", file=sys.stderr)
         return False
     _settle_abandoned(label)
-    # A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
-    # under test: rangebot's shared notes outlived every trial and every attack, so
-    # rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
+    fresh_start(target)
+    return True
+
+
+def fresh_start(target):
+    """`begin_trial` where the target has one, then `reset`: where a trial starts, and where
+    a RETRY inside one starts too.
+
+    A TRIAL STARTS CLEAN of what an earlier one planted, even where `reset` is the flaw
+    under test: rangebot's shared notes outlived every trial and every attack, so
+    rb-session-leak's second trial broke on the first one's note -- 2/2 where it was 1/2.
+    AND SO DOES A RETRY: `_resilient_send` re-sent after `reset` alone, so a note the failed
+    attempt stored survived into the measured one, and a retry that declined to store
+    anything scored EXPLOITED on it. Found by an independent review.
+    """
     _bt = getattr(target, "begin_trial", None)
     if callable(_bt):
         _bt()
     target.reset()
-    return True
 
 
 def _resilient_send(fn, attack_id, steps=1, before_retry=None):
@@ -696,16 +719,16 @@ def run_attack(target, attack, ctx, trials=1):
                 else:
                     probe = _resilient_send(
                         lambda: target.send(_text(attack.get("user_prompt", "Hello"))), aid,
-                        before_retry=target.reset)
+                        before_retry=lambda: fresh_start(target))
             elif delivery == "sessions":
                 probe = _resilient_send(
                     lambda: _run_sessions(target, [_text(x) for x in attack["steps"]]),
-                    aid, steps=len(attack["steps"]), before_retry=target.reset)
+                    aid, steps=len(attack["steps"]), before_retry=lambda: fresh_start(target))
             elif delivery == "chain":
                 probe = _resilient_send(
                     lambda: target.send_chain(
                         [_text(s) for s in attack["steps"]]), aid,
-                    steps=len(attack["steps"]), before_retry=target.reset)
+                    steps=len(attack["steps"]), before_retry=lambda: fresh_start(target))
             elif delivery == "forged_history":
                 # The whole forged transcript is the attacker's side, assistant turns
                 # included — they wrote those too — so echo subtraction has to see all of
@@ -716,7 +739,7 @@ def run_attack(target, attack, ctx, trials=1):
                           for h in (attack.get("history") or [])]
                 probe = _resilient_send(
                     lambda: target.send_forged(_text(attack["text"]), forged), aid,
-                    before_retry=target.reset)
+                    before_retry=lambda: fresh_start(target))
                 if probe is not None:
                     # Same one implementation as the multi-step branch below.
                     probe.prompt = attacker_side(attack)
@@ -774,6 +797,51 @@ def run_attack(target, attack, ctx, trials=1):
                   f"not stuck; the oracle is reading it.", file=sys.stderr)
         records.append({"verdict": verdict, "fired": fired, "probe": probe})
     return records
+
+
+def answered_anywhere(results):
+    """Did the target answer ANY probe in this set of rows? An answer is a probe with no
+    error and something in it (a reply or a tool call)."""
+    for r in results or []:
+        for t in (r or {}).get("trials") or []:
+            p = (t or {}).get("probe")
+            if (isinstance(p, dict) and not p.get("error")
+                    and (str(p.get("output") or "").strip() or p.get("tool_calls"))):
+                return True
+    return False
+
+
+def unanswered_stall(verdict, fired):
+    """Is this trial's only evidence a timeout (`slow_response` from `judge`'s stall branch)?"""
+    return verdict == "PARTIAL" and list(fired or []) == ["slow_response"]
+
+
+def demote_dead_stalls(results):
+    """-> ids of rows whose timeout-only breach was turned back into ERROR, in place.
+
+    A STALL NEEDS A TARGET THAT WAS ALIVE. `judge` scores a send the watchdog gave up on as
+    PARTIAL `slow_response`: an attack that kept the bot generating past the ceiling. Against a
+    backend that never answers anything, every attack does that, and a hung endpoint closed
+    as `5/5 attacks breached` with exit 1 two lines under `Nothing here is a result about
+    hungbot`. Where nothing in the run was answered, a timeout says nothing about the bot.
+    The sweep applies this after its loop and `rejudge` with the same two functions, so a
+    replay cannot promote the rows back. Found by an independent review.
+    """
+    if answered_anywhere(results):
+        return []
+    out = []
+    for r in results or []:
+        ts = (r or {}).get("trials") or []
+        hit = False
+        for t in ts:
+            if unanswered_stall(t.get("verdict"), t.get("fired")):
+                t["verdict"], t["fired"] = "ERROR", []
+                hit = True
+        if hit:
+            r["headline"], r["rate"] = headline(ts)
+            r["fired"] = sorted({d for t in ts for d in (t.get("fired") or [])})
+            out.append(((r.get("attack") or {}).get("id")))
+    return out
 
 
 def headline(records):

@@ -737,6 +737,7 @@ def _rate_frac(rate):
 # printed `[planted]` where the assessment report named the field -- which is the one
 # thing a remediation page is for.
 from workspace import payload_shown as payload_text
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 
@@ -866,7 +867,7 @@ def _timeline():
     # ones that could not be compared are simply not keys here — which is what `back.get`
     # already distinguishes, and what filing them as `set()` destroyed.
     ages, back, again, torn = {}, {}, {}, []
-    for fp in glob.glob(str(OUT_DIR / "history" / "*.jsonl")):
+    for fp in glob_in(OUT_DIR, "history", "*.jsonl"):
         t = os.path.basename(fp)[:-len(".jsonl")]
         ages[t] = first_seen(t)
         again[t] = reopened(t)
@@ -1046,7 +1047,7 @@ def ambient_rates():
     # understate noise, which flatters every finding on the page.
     from baseline import rates as _rates
     out = {}
-    for fp in glob.glob(str(OUT_DIR / "benign_*.json")):
+    for fp in glob_in(OUT_DIR, "benign_*.json"):
         t = os.path.basename(fp)[len("benign_"):-len(".json")]
         r = _rates(t, str(OUT_DIR))
         if r is not None:
@@ -1404,6 +1405,10 @@ def delivered():
             # docstring above already rules it out: an attack that never applied is not
             # coverage, and an errored one applied exactly as little as a skipped one.
             if r.get("headline") in NOT_MEASURED:
+                continue
+            # NOR A CONTROL: a false-alarm check exercised no attack family, and a control
+            # alone published "direct" as tried. Found by an independent review.
+            if (r.get("attack", {}) or {}).get("category") == "control":
                 continue
             seen.add((r.get("attack", {}) or {}).get("delivery") or "direct")
     return sorted(seen), sorted(set(DELIVERY_NEEDS) - seen)
@@ -1807,7 +1812,8 @@ def main():
     _mute = {t: v[5] for t, v in _ran_all.items() if isinstance(v[5], int) and v[5]}
     _mutetext_all = ("" if not _mute else
                      " Detectors that could not speak here at all, for want of a config key: "
-                     + named_or_more(["%s on %s" % (n, t) for t, n in sorted(_mute.items())], 4)
+                     # ESCAPED: a target name is a file stem, and this goes into the page.
+                     + esc(named_or_more(["%s on %s" % (n, t) for t, n in sorted(_mute.items())], 4))
                      + ". Their silence is a gap in the instrument, not a defence by the "
                        "target, and nothing below rules out what they look for.")
     if ran:
@@ -1996,6 +2002,7 @@ def main():
         # one of them is a broken file; saying "could not be read" about a run that simply
         # predates the field tells a client their evidence is corrupt when it is old.
         _wr, _wf = (_cov_why[0] if _cov_why else ("unknown", ""))
+        _wf = esc(_wf)                  # a file name, into the page
         _cov_gap = (("%s could not be read, so how much of the arsenal ran cannot be stated "
                      "here at all — that is a gap in this page, not a clean bill" % _wf)
                     if _wr == "unreadable" else

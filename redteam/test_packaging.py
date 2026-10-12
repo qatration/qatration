@@ -613,6 +613,76 @@ def test_the_release_page_waits_for_the_artifact():
     print("  ok  the Release follows a successful publish, and grants one permission to do it")
 
 
+def test_the_wheel_ships_the_engine_not_its_suites():
+    """`setup.py`'s `build_py` drops `test_*.py`, which `exclude-package-data` cannot (it
+    filters data files): the suites need the repository, were half the wheel, and became
+    top-level module names in every process that imported qatration. Found by an independent
+    review. Driven with setuptools stood in for, so it runs where setuptools is not installed."""
+    import types
+    src = io.open(os.path.join(REPO, "setup.py"), encoding="utf-8").read()
+    called = {}
+
+    class _Base:
+        def find_package_modules(self, package, package_dir):
+            return [(package, "cli", "redteam/cli.py"), (package, "oracle", "redteam/oracle.py"),
+                    (package, "test_oracle", "redteam/test_oracle.py"),
+                    (package, "test_guard", "redteam/test_guard.py")]
+    fake = types.ModuleType("setuptools")
+    fake.setup = lambda **kw: called.update(kw)
+    cmd = types.ModuleType("setuptools.command")
+    bp = types.ModuleType("setuptools.command.build_py")
+    bp.build_py = _Base
+    saved = {k: sys.modules.get(k) for k in ("setuptools", "setuptools.command",
+                                              "setuptools.command.build_py")}
+    sys.modules.update({"setuptools": fake, "setuptools.command": cmd,
+                        "setuptools.command.build_py": bp})
+    try:
+        exec(compile(src, "setup.py", "exec"), {"__name__": "__main__"})
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    cls = (called.get("cmdclass") or {}).get("build_py")
+    assert cls is not None, "setup.py no longer installs its build_py"
+    kept = [m[1] for m in cls().find_package_modules("qatration", "redteam")]
+    assert kept == ["cli", "oracle"], kept
+    print("  ok  the wheel ships the engine's modules and none of its suites")
+
+
+def test_no_workflow_expands_an_expression_into_a_script():
+    """`${{ ... }}` inside `run:` is pasted into the shell source before it runs, so a value a
+    pusher chose -- a tag named `v$(id)` -- is a command in a job that may hold `contents:
+    write`. Every value reaches a script through `env:`. Found by an independent review.
+
+    And the release itself: it runs THE check matrix (`check.yml`, called), reads the tag object
+    with the guard, and publishes only on a push."""
+    import glob as _g
+    import yaml
+    bad = []
+    for path in sorted(_g.glob(os.path.join(REPO, ".github", "workflows", "*.yml"))):
+        doc = yaml.safe_load(io.open(path, encoding="utf-8").read()) or {}
+        for jn, job in (doc.get("jobs") or {}).items():
+            for st in (job or {}).get("steps") or []:
+                if "${{" in str(st.get("run", "")):
+                    bad.append("%s: %s / %s" % (os.path.basename(path), jn, st.get("name")))
+    assert not bad, "an expression expanded into a shell script: %s" % bad
+    doc, _ = _workflow("release.yml")
+    jobs = doc["jobs"]
+    assert jobs["suites"].get("uses") == "./.github/workflows/check.yml", \
+        "the release no longer runs the check matrix: %r" % jobs["suites"]
+    _, ctrig = _workflow("check.yml")
+    assert "workflow_call" in ctrig, "check.yml cannot be called by the release"
+    assert set(jobs["build"].get("needs") or []) >= {"suites", "tag"}, jobs["build"].get("needs")
+    _tag_run = "\n".join(str(s.get("run", "")) for s in jobs["tag"]["steps"])
+    assert "guard.py --tag" in _tag_run and "merge-base --is-ancestor" in _tag_run, _tag_run
+    assert "github.event_name == 'push'" in " ".join(str(jobs["publish"].get("if")).split()), \
+        "a dispatch on a tag ref can publish: %r" % jobs["publish"].get("if")
+    print("  ok  no workflow expands an expression into a script, and a release runs the "
+          "matrix, reads its tag and publishes only on a push")
+
+
 def test_out_dir_honours_the_env_var():
     old = os.environ.get(workspace.ENV_VAR)
     try:

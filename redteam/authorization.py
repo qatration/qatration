@@ -167,6 +167,15 @@ def check(cfg, secret, fetch=None):
         _has = ", ".join(sorted(map(str, auth))) if isinstance(auth, dict) else type(auth).__name__
         return False, ("the `authorization` block names no `method`: it needs `method` (header, "
                        "well_known or dns_txt), `token` and `issued`, and it has: %s" % _has)
+    # ON A SERVER, ONLY A PROOF THIS RUN OBSERVES. `header` and `dns_txt` are read back out of
+    # the config that carries the token (`OBSERVED_METHODS`), so they prove possession of the
+    # signing secret and nothing about the endpoint -- on a workstation that is the operator's
+    # own word about their own system; on a server it is a stranger's. Found by an independent
+    # review.
+    if hosted() and method not in OBSERVED_METHODS:
+        return False, (f"authorization.method={method} is the operator's statement, which "
+                       f"this build does not observe; the hosted service accepts only "
+                       f"{', '.join(sorted(OBSERVED_METHODS))} (a file at {WELL_KNOWN})")
     token, day = auth.get("token"), auth.get("issued")
     if not token or not TOKEN_RE.match(str(token)):
         return False, f"authorization.token is missing or malformed: {token!r}"
@@ -250,6 +259,8 @@ def how_to_prove(url, secret, issued=None):
         "    well_known  serve the token at %s%s" % (origin, WELL_KNOWN),
         "    header      your endpoint echoes it; add `echoed:` with what it returned",
         "    dns_txt     a TXT record carries it; add `records:` with the record's text",
+        "    (well_known is the one this build checks against the target; the other two are "
+        "recorded as your statement)",
         "  A token is good for %d days, and for this origin only." % MAX_AGE_DAYS,
     ]
 
@@ -280,9 +291,66 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
             headers, fp)
 
 
+def _pinned_connection(address, *args, **kwargs):
+    """`socket.create_connection`, with the address it CONNECTED TO put through the hosted
+    policy before a byte of the request is written.
+
+    THE REBIND. `unreachable_by_policy` resolves a name and checks every answer, and the
+    connection then resolves it again: a TTL-0 record answering public twice and 127.0.0.1 the
+    third time put the onboarding probe and the sweep on the service's own loopback, with a
+    valid token for the customer's own domain. Checking the socket's peer closes that, because
+    it is the address the bytes go to rather than one a resolver said a moment earlier. Found
+    by an independent review. Off a server it changes nothing: there `localhost` is the
+    practice fleet.
+    """
+    import socket
+    sock = socket.create_connection(address, *args, **kwargs)
+    if hosted():
+        try:
+            peer = _as_address(str(sock.getpeername()[0]).split("%")[0])
+        except Exception:
+            peer = None
+        why = _address_refused(peer) if peer is not None else "the connected address is unknown"
+        if why:
+            sock.close()
+            raise OSError(f"refused by network policy after connecting to {address[0]!r} "
+                          f"({peer}): {why}. Nothing was sent.")
+    return sock
+
+
+_PINNED = {}
+
+
+def _pinned(http_class):
+    """-> `http_class` connecting through `_pinned_connection` (one subclass per class)."""
+    if http_class not in _PINNED:
+        def __init__(self, *a, **k):
+            http_class.__init__(self, *a, **k)
+            self._create_connection = _pinned_connection
+        _PINNED[http_class] = type("Pinned" + http_class.__name__, (http_class,),
+                                   {"__init__": __init__})
+    return _PINNED[http_class]
+
+
+class PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def do_open(self, http_class, req, **kw):
+        return super().do_open(_pinned(http_class), req, **kw)
+
+
+class PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def do_open(self, http_class, req, **kw):
+        return super().do_open(_pinned(http_class), req, **kw)
+
+
+def pinned_handlers():
+    """The two handlers every opener that reaches a target is built with."""
+    return [PinnedHTTPHandler(), PinnedHTTPSHandler()]
+
+
 # No redirects, no cookies, no proxy inherited from the environment — the last of those because
 # a proxy is a third party that gets to see the probe and choose what answers it.
-_OPENER = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
+_OPENER = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}),
+                                      *pinned_handlers())
 
 
 def _http_get(url, timeout=10):
@@ -639,10 +707,10 @@ def unreachable_by_policy(url, resolve=None):
     name, and it is not the same as no gate.
 
     So: every address the name resolves to must pass, and a name that resolves to nothing is
-    refused rather than allowed through on the strength of the failure. WHAT REMAINS is the
-    rebind: this repository has no socket-level check to pin the answer to the connection, and
-    a hosted deployment that cares should put one in front of it. Stated here rather than
-    implied, because "the gate resolves names" reads like a closed door.
+    refused rather than allowed through on the strength of the failure. THE REBIND -- a second
+    answer between this check and the connection -- is closed where the bytes go: every opener
+    that reaches a target connects through `_pinned_connection`, which puts the socket's peer
+    through the same table.
     """
     from urllib.parse import urlparse
     try:
@@ -807,4 +875,61 @@ def gate(cfg, where):
             for _line in how_to_prove(url, secret):
                 print(_line, file=sys.stderr)
         raise NotAuthorised(_said)
-    return record(cfg, why)
+    # WHICH SIDE CHECKED IT, as a field: `verified_by` read "local" on every record, a hosted
+    # service's included. The mode, not a fingerprint of the secret -- these records are
+    # published, and a hash of a chosen secret is something to guess against. Found by a
+    # review.
+    return record(cfg, why, secret_id="hosted" if hosted() else "local")
+
+
+def main():
+    """`qatration authorize`: the token for a remote target's origin, and where to put it.
+
+    Sends nothing. The token is an HMAC of the origin and today's date under
+    QATRATION_AUTH_SECRET, so it is what a refused run would print, asked for on purpose --
+    the step a pipeline renews every fourteen days.
+    """
+    from cli import parser
+    ap = parser("authorize")
+    ap.add_argument("--url", help="the target's url (or --target-config)")
+    ap.add_argument("--target-config", help="a target config whose url to use")
+    ap.add_argument("--issued", help="the issue date, YYYY-MM-DD (default today)")
+    args = ap.parse_args()
+    url = args.url
+    if not url and args.target_config:
+        # THROUGH THE SHARED LOADER, which refuses a path that is not there and a file that is
+        # not a config in words, rather than with a traceback.
+        from workspace import load_yaml_or_refuse
+        url = (load_yaml_or_refuse(args.target_config, "target config", "authorize")
+               or {}).get("url")
+    if not url:
+        raise SystemExit("authorize: name the target with --url or --target-config.")
+    # NOT ON A SERVER: there the secret is the service's, and a token printed for a stranger
+    # is one they could hand back (see `gate`).
+    if hosted():
+        raise SystemExit("authorize: refused on a hosted service; its tokens are issued by "
+                         "whoever runs it, not printed to whoever asks.")
+    if url_problem(url):
+        raise SystemExit(f"authorize: {url!r} is not a URL a target can be reached at: "
+                         f"{url_problem(url)}.")
+    if is_local(url):
+        print(f"{origin_of(url)} is local to this machine: no proof is needed to test it.")
+        return 0
+    secret = os.environ.get("QATRATION_AUTH_SECRET")
+    if not secret:
+        raise SystemExit("authorize: QATRATION_AUTH_SECRET is not set. It is the key proof "
+                         "tokens are issued with: set it to a value you keep (in CI, a "
+                         "repository secret), and run this again.")
+    issued = None
+    if args.issued:
+        try:
+            issued = datetime.date.fromisoformat(args.issued)
+        except ValueError:
+            raise SystemExit(f"authorize: --issued {args.issued!r} is not a YYYY-MM-DD date.")
+    for line in how_to_prove(url, secret, issued):
+        print(line[2:] if line.startswith("  ") else line)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

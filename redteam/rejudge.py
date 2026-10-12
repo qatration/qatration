@@ -36,7 +36,7 @@ except Exception:
 from target import Probe
 from oracle import judge
 from refusal import classify, summarize
-from runner import headline
+from runner import headline, answered_anywhere, unanswered_stall
 from report_engine import build_html
 import datetime
 from isolation import restate_combined_inert
@@ -65,6 +65,7 @@ from baseline import two_factor_note as _two_factor_note
 # one in `coverage`, which is a second implementation with a shorter body: the import binds
 # the name instead.
 from workspace import oracle_contexts as contexts
+from target import glob_in  # noqa: E402  one escape for every directory
 
 
 def _prompt_of(attack, stored):
@@ -189,6 +190,7 @@ def rescore(path, ctx, why=None):
         return None, []
     changed = []
     ctx = run_ctx(ctx, data.get("meta"))
+    _alive = answered_anywhere(data.get("results", []))
     for r in data.get("results", []):
         attack = r["attack"]
         recs = []
@@ -211,6 +213,9 @@ def rescore(path, ctx, why=None):
             # definition of what did this attack declare" over the import. This was the third
             # module asking the question and the only one still answering it alone.
             v, fired = judge(attack, p, judged_ctx(attack, ctx))
+            # THE SWEEP'S RULE, NOT A SECOND ONE (`runner.demote_dead_stalls`).
+            if not _alive and unanswered_stall(v, fired):
+                v, fired = "ERROR", []
             t["verdict"], t["fired"] = v, fired
             t["refusal"] = classify(p, ctx)
             recs.append({"verdict": v, "fired": fired, "probe": p})
@@ -245,8 +250,10 @@ def rescore(path, ctx, why=None):
     # PLUS WHAT THE RUN NEVER REACHED, which left no row to count and which `measured`
     # subtracts: recounting from the rows alone took them off twice, and a no-op rejudge of a
     # stopped run lowered what it had measured. Found by an independent review.
-    data["meta"]["attacks_n"] = (sum(1 for r in real if r["headline"] != "SKIP")
-                                 + (data["meta"].get("unreached") or 0))
+    # EVERY ATTACK ROW, SKIP INCLUDED, as the sweep writes it: `workspace.measured` takes the
+    # SKIP rows off (`skip_rows`), and a count written without them lost them twice -- the
+    # committed index read 4/5 = 80% for a file with eight scored rows. Found by a review.
+    data["meta"]["attacks_n"] = len(real) + (data["meta"].get("unreached") or 0)
     # AND THE ERRORED COUNT, which is as derived as the two above it and was not in the
     # list. `workspace.measured` -- the denominator the scorecard, the defence page, the
     # fleet index and the SARIF export all share -- reads it, so a re-score moved
@@ -330,7 +337,7 @@ def no_such_target(target, what):
     _names = contexts()
     here = sorted({target_of(s, _names) or s
                    for s in (os.path.basename(p)[len("results_"):-len(".json")]
-                             for p in glob.glob(os.path.join(OUT_DIR, "results_*.json")))})
+                             for p in glob_in(OUT_DIR, "results_*.json"))})
     if not here or target in here:
         return None
     return ("no stored results for target %r in %s. The targets with results here: %s. "
@@ -363,7 +370,7 @@ def rebuild_pages(only=None):
     # first". One rule, the re-score's. A file whose target has no config is its own name,
     # because a page needs no oracle to be drawn.
     _names = contexts() if only else {}
-    for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
+    for path in sorted(glob_in(OUT_DIR, "results_*.json")):
         name = os.path.basename(path)[len("results_"):-len(".json")]
         if only and (target_of(name, _names) or name) != only:
             continue
@@ -455,7 +462,7 @@ def main():
     # either way. A CI step reads that as "scoring is up to date".
     examined, rows_examined = 0, 0
     total_changed, files_touched, skipped, unreadable = 0, 0, [], []
-    for path in sorted(glob.glob(os.path.join(OUT_DIR, "results_*.json"))):
+    for path in sorted(glob_in(OUT_DIR, "results_*.json")):
         name = os.path.basename(path)[len("results_"):-len(".json")]
         # Longest known target name, not `name.split("_")[0]`. The split assumes a target
         # name has no underscore and that whatever follows the first one is a --model tag;
@@ -567,7 +574,7 @@ def main():
     # directory holding lock maps and no sweep exited 3 — `nothing was
     # measured` — after re-scoring every map in it. See the note at the bottom.
     maps_examined = 0
-    for path in sorted(glob.glob(os.path.join(OUT_DIR, "isolation_*.json"))):
+    for path in sorted(glob_in(OUT_DIR, "isolation_*.json")):
         stem = os.path.basename(path)[len("isolation_"):-len(".json")]
         # A TORN LOCK MAP IS NAMED AND PASSED OVER, like a torn results file above. `read_maps`
         # raises through the one reader now, and this was the caller that did not catch it.
