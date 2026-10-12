@@ -173,6 +173,12 @@ def owners(interps, scripts):
     found = []
     for pid, cmd in command_lines().items():
         low = _norm(cmd)
+        # NEVER THIS TOOL: its own command line carries the interpreter and every `--script`
+        # path, so `stop` matched itself and was killed mid-run on Linux and macOS, before it
+        # had stopped anything. Nor another copy of it, for the same reason.
+        if pid == str(os.getpid()) or re.search(r"(?:^|[\s/\\\"'])fleet_procs\.py(?:[\s\"']|$)",
+                                                 low):
+            continue
         if any(i in low for i in wanted) and _names_script(low, scripts):
             found.append((pid, cmd))
     return found

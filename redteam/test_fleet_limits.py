@@ -359,6 +359,9 @@ def main():
         "404": "C:/Python312/python.exe E:/work/billing/server.py",
         "505": "/home/me/venvs/jupyter/bin/python /srv/notebooks/server_code.py",
         "606": "python3 /home/me/qatration-oss/httpbot/server.py.bak",
+        # this tool itself, which names every fleet script as an argument
+        "707": "python3 /home/me/qatration-oss/tools/fleet_procs.py stop --interp python3 "
+               "--script /home/me/qatration-oss/httpbot/server.py 8099",
     }
     _real_cl = _fp.command_lines
     _fp.command_lines = lambda: dict(_table)
