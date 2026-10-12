@@ -435,7 +435,8 @@ def _dynamic_routes():
             body = ast.get_source_segment(src, fn) or ""
             if "import_module(" not in body:
                 continue
-            for m in re.finditer(r'glob\(\s*[^)]*?["\']([^"\']*\*[^"\']*\.py)["\']',
+            # `glob_in(dir, "...")` too: every directory glob goes through it now.
+            for m in re.finditer(r'glob(?:_in)?\(\s*[^)]*?["\']([^"\']*\*[^"\']*\.py)["\']',
                                  body):
                 routes[m.group(1)] = f[:-3]
     return routes

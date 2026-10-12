@@ -108,9 +108,14 @@ def sent_strings(a):
     if not isinstance(a, dict):
         return []
     out = [a.get("text") or ""]
-    out += [str(x) for x in (a.get("steps") or [])]
-    out += [str((h or {}).get("content", "")) for h in (a.get("history") or [])]
-    out.append(str((a.get("seed") or {}).get("text", "")))
+    out += [str(x) for x in (a.get("steps") if isinstance(a.get("steps"), list) else [])]
+    # ANY SHAPE AN ARSENAL ON DISK CAN HOLD: a history turn or a seed written as a plain
+    # string raised AttributeError out of the linter's own refusal (`near_miss_slots` reads
+    # this for every entry). The shape itself is refused elsewhere; this only reads text.
+    out += [str(h.get("content", "")) if isinstance(h, dict) else str(h or "")
+            for h in (a.get("history") if isinstance(a.get("history"), list) else [])]
+    _seed = a.get("seed")
+    out.append(str(_seed.get("text", "")) if isinstance(_seed, dict) else str(_seed or ""))
     out.append(str(a.get("user_prompt") or ""))
     return [s for s in out if s]
 

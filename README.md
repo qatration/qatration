@@ -180,7 +180,7 @@ chasing and the calls about what counts as evidence are mine.
 
 None of that needs taking on trust. Every number in this README and on the site is recounted
 from the artifacts in `out/` by a test that fails the build when the two disagree. No assertion
-in the suite is allowed to be one that cannot fail — 5,654 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 5,774 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

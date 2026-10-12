@@ -951,6 +951,7 @@ def main():
         "SECURITY.md": "where to report a vulnerability in this tool",
         "pyproject.toml": "the package",
         "requirements.txt": "what a checkout needs to run the suites",
+        "setup.py": "the one build step pyproject cannot say: the wheel leaves out the suites",
         "wrangler.jsonc": "how the site is published",
     }
     import subprocess as _sp_r

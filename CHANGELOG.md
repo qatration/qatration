@@ -162,7 +162,7 @@ a pattern run over replies the same submitter controls can hold a worker for hou
 **A row that measured nothing is not a row that held, in every count.** A row whose declared
 detectors could not speak on the config comes back `SKIP`, and the closing line, the CI gate,
 the scorecard (a tile of its own), the index and `rejudge` all count it the same way, as not
-scored. On the committed index this moved memorybot-naive from 4/5 (80%) to 4/8 (50%). An
+scored. On the committed index this moved memorybot-naive from 4/5 (80%) to 4/6 (67%). An
 endpoint that never answered is no longer reported as one `slow_response` breach per attack. A
 failed unseed stops the sweep, a retry inside a trial starts clean the way a trial does, and an
 abandoned conversation sends no further step into the next attack. `isolation` exits `1` when a

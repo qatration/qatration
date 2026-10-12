@@ -925,8 +925,10 @@ def main():
                         "resolved": [], "turns": []})
     _bare, _ = _judge(_atk, _pr, {})
     _with, _ = _judge(_atk, _pr, _judged_ctx(_atk, {}))
+    # SKIP, NOT DEFENDED: with no marker to look for, the detector the attack declares cannot
+    # speak, and the judge now says so rather than scoring a hold. Either way it is no breach.
     check("an attack's own plant is invisible to the target context alone",
-          _bare == "DEFENDED", f"bare-context verdict was {_bare}")
+          _bare == "SKIP", f"bare-context verdict was {_bare}")
     check("...and the judged context is what makes the finding visible",
           _with in ("EXPLOITED", "PARTIAL"), f"judged-context verdict was {_with}")
     # THROUGH `rescore`, NOT THROUGH `judge`. The two checks above exercise the oracle and

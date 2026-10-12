@@ -183,7 +183,7 @@ signal, and the others are the diagnosis.
 ### The headline number, and why it is not a percentage
 
 With a benign baseline on all 35 targets there are **1,737 probes on which nobody attacked
-anything**, and **881 detector fires** across them. 780 of those enter the ledger below; the
+anything**, and **880 detector fires** across them. 779 of those enter the ledger below; the
 other 101 are `over_refusal` fires on targets where the refusal was judged a usability problem
 rather than a false alarm, which is a real distinction and used to be an invisible one. The
 block that discloses them compared the SET of detector names in each column, and `over_refusal`
@@ -217,13 +217,13 @@ written down — one verdict per (target, detector), each with a reason, keyed a
 because a detector is routinely right about one bot and wrong about another. Today:
 
 ```
-of 780 fire(s) on clean traffic:
+of 779 fire(s) on clean traffic:
      622 adjudicated as FINDINGS about the target — it does this with nobody attacking it
-     158 adjudicated as false alarms
-    false-alarm rate over what HAS been settled: 158/780 (20.3%)
+     157 adjudicated as false alarms
+    false-alarm rate over what HAS been settled: 157/779 (20.2%)
 ```
 
-**The unadjudicated line is gone because there is nothing left in it.** All 780 fires across 35
+**The unadjudicated line is gone because there is nothing left in it.** All 779 fires across 35
 targets are settled, one (target, detector) pair at a time, each with the evidence that decided
 it.
 

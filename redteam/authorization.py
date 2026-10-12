@@ -28,7 +28,7 @@ An expired proof is not a proof: the token is bound to the origin it was issued 
 day it was issued, and a stale one is refused with the reason rather than accepted with a
 warning.
 """
-import datetime, hashlib, hmac, json, os, re, urllib.error, urllib.request
+import datetime, hashlib, hmac, json, os, re, sys, urllib.error, urllib.request
 
 TOKEN_RE = re.compile(r"^qat-[0-9a-f]{32}$")
 WELL_KNOWN = "/.well-known/qatration-authorization"
