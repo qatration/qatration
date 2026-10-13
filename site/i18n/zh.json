@@ -161,6 +161,10 @@
     ", or write to": "，不该公开的事情请先写信到",
     "qatration@gmail.com": "qatration@gmail.com",
     "for anything that should not be public first.": "。",
-    "© QAtration": "© QAtration"
+    "© QAtration": "© QAtration",
+    "Across everything shipped with it": "纵观随它一起提供的一切",
+    "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35 个目标，442 次攻击得手，3 个目标一次也没被攻破。其中 9 个目标运行的是别人写的代码，发现中有 62 个出在它们身上。所有这些归结为 37 个根本原因，严重 2 个、高 23 个、中 12 个，修复报告为每一个都给出了修复方法。",
+    "And how much of it to believe": "以及其中有多少可信",
+    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "它有 66 项检查，其中 63 项在这里保存的 7851 次探测中触发过。从未触发的那 3 项被报告为仅声明，不计入覆盖。在没人攻击的流量上，它们触发了 779 次：622 次是机器人真正的问题，157 次是误报，两个数字都公开。"
   }
 }

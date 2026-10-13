@@ -141,6 +141,10 @@
     ", or write to": ", oppure scrivi prima a",
     "qatration@gmail.com": "qatration@gmail.com",
     "for anything that should not be public first.": "per tutto ciò che non deve essere pubblico.",
-    "© QAtration": "© QAtration"
+    "© QAtration": "© QAtration",
+    "Across everything shipped with it": "Su tutto ciò che viene fornito con lui",
+    "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35 obiettivi, 442 attacchi andati a segno e 3 obiettivi dove non ne è passato nessuno. 9 di quegli obiettivi eseguono codice scritto da qualcun altro, e a loro spettano 62 dei rilevamenti. Tutto si riduce a 37 cause radice, 2 critiche, 23 alte e 12 medie, e il rapporto delle correzioni dà a ciascuna la sua correzione.",
+    "And how much of it to believe": "E quanto crederci",
+    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "Ha 66 controlli, e 63 di essi sono scattati sulle 7851 sonde salvate qui. I 3 che non lo hanno mai fatto sono riportati come dichiarati, non contati come copertura. Su traffico che nessuno attaccava sono scattati 779 volte: 622 erano problemi reali del bot e 157 falsi allarmi, ed entrambi i numeri sono pubblicati."
   }
 }

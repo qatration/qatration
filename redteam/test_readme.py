@@ -2382,6 +2382,38 @@ def main():
     check("every target with a stored attack run has a stored benign run, as the page says",
           "every target here has a benign run" in " ".join(_site.split())
           and _attacked and not (_attacked - _benign_t), sorted(_attacked - _benign_t))
+    # THE FLEET AND THE CHECKS, as the pages built from out/ state them: the dashboard's tiles
+    # and the fix report's summary (both rebuilt and compared by test_reports), and the
+    # roll-up `facts()` recounts. Each figure on the two cards, against its source.
+    def _txt(_p):
+        return " ".join(re.sub(r"<[^>]+>", " ", io.open(os.path.join(ROOT, "out", _p),
+                                                         encoding="utf-8").read()).split())
+    _idx_t, _fix_t = _txt("index.html"), _txt("defense_report.html")
+    _site_t = " ".join(re.sub(r"<[^>]+>", " ", _site).split())
+    _tile = lambda _l: int(re.search(r"(\d+) %s" % re.escape(_l), _idx_t).group(1))
+    _sev = dict((k, int(v)) for v, k in re.findall(r"(\d+) (critical|high|medium)", _fix_t))
+    _roots = int(re.search(r"found (\d+) distinct weakness", _fix_t).group(1))
+    _fixes = int(re.search(r"reduce to (\d+) root-cause fix", _fix_t).group(1))
+    _c1 = re.search(r"(\d+) targets, (\d+) attacks that got through, and (\d+) targets where "
+                    r"none did\. (\d+) of those targets run code somebody else wrote, and they "
+                    r"carry (\d+) of the findings\. All of it comes down to (\d+) root causes, "
+                    r"(\d+) critical, (\d+) high and (\d+) medium, and the fix report gives each "
+                    r"one its fix\.", _site_t)
+    _want1 = (_tile("targets tested"), _tile("attacks breached"), _tile("hardened"),
+              _tile("third-party code"), _n_find_third, _roots,
+              _sev.get("critical"), _sev.get("high"), _sev.get("medium"))
+    check("the fleet card is the dashboard's and the fix report's own figures",
+          bool(_c1) and tuple(int(g) for g in _c1.groups()) == _want1 and _roots == _fixes,
+          "page %s, out/ %s, %d fixes" % (_c1 and _c1.groups(), _want1, _fixes))
+    _c2 = re.search(r"It has (\d+) checks, and (\d+) of them have fired on the ([\d,]+) probes "
+                    r"stored here\. The (\d+) that never have are reported as declared, not "
+                    r"counted as coverage\. On traffic nobody attacked they fired (\d+) times: "
+                    r"(\d+) were real problems with the bot and (\d+) were false alarms", _site_t)
+    _want2 = (f["detectors"], f["demonstrated"], f["probes"], f["declared_only"],
+              f["rollup_fires"], f["rollup_findings"], f["rollup_false_alarms"])
+    check("the checks card is the recount of the detectors and the clean-traffic roll-up",
+          bool(_c2) and tuple(int(g.replace(",", "")) for g in _c2.groups()) == _want2,
+          "page %s, recount %s" % (_c2 and _c2.groups(), _want2))
     import recon as _rc_s
     _said_done = 0
     for _f in sorted(glob.glob(os.path.join(ROOT, "out", "recon_*.json"))):

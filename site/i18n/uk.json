@@ -141,6 +141,10 @@
     ", or write to": ", або спершу напишіть на",
     "qatration@gmail.com": "qatration@gmail.com",
     "for anything that should not be public first.": "для всього, що не має бути публічним.",
-    "© QAtration": "© QAtration"
+    "© QAtration": "© QAtration",
+    "Across everything shipped with it": "На всьому, що йде в комплекті",
+    "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35 цілей, 442 атаки, що пройшли, і 3 цілі, де не пройшла жодна. 9 із цих цілей працюють на коді, який написав хтось інший, і на них припадає 62 знахідки. Усе це зводиться до 37 першопричин, 2 критичних, 23 високих і 12 середніх, і звіт із виправленнями дає для кожної її виправлення.",
+    "And how much of it to believe": "І скільки з цього варто вірити",
+    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "У нього 66 перевірок, і 63 з них спрацьовували на 7851 пробі, що зберігаються тут. Ті 3, що не спрацювали жодного разу, позначено як задекларовані, а не враховано як покриття. На трафіку, який ніхто не атакував, вони спрацювали 779 разів: 622 були справжніми проблемами бота, а 157 хибними тривогами, і обидва числа опубліковано."
   }
 }

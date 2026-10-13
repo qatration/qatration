@@ -141,6 +141,10 @@
     ", or write to": ", of schrijf eerst naar",
     "qatration@gmail.com": "qatration@gmail.com",
     "for anything that should not be public first.": "voor alles wat niet openbaar hoort te zijn.",
-    "© QAtration": "© QAtration"
+    "© QAtration": "© QAtration",
+    "Across everything shipped with it": "Over alles wat erbij geleverd wordt",
+    "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35 doelen, 442 aanvallen die erdoor kwamen, en 3 doelen waar er geen doorkwam. 9 van die doelen draaien code die iemand anders schreef, en daar vallen 62 van de bevindingen op. Alles komt neer op 37 grondoorzaken, 2 kritiek, 23 hoog en 12 middel, en het fixrapport geeft elk ervan zijn oplossing.",
+    "And how much of it to believe": "En hoeveel je ervan kunt geloven",
+    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "Het heeft 66 controles, en 63 daarvan zijn afgegaan op de 7851 probes die hier zijn opgeslagen. De 3 die dat nooit deden, worden als gedeclareerd gemeld en niet als dekking geteld. Op verkeer dat niemand aanviel gingen ze 779 keer af: 622 waren echte problemen van de bot en 157 waren vals alarm, en beide getallen worden gepubliceerd."
   }
 }

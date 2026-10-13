@@ -161,6 +161,10 @@
     ", or write to": ", ya da önce şuraya yazın:",
     "qatration@gmail.com": "qatration@gmail.com",
     "for anything that should not be public first.": "herkese açık olmaması gereken her şey için.",
-    "© QAtration": "© QAtration"
+    "© QAtration": "© QAtration",
+    "Across everything shipped with it": "Onunla birlikte gelen her şeyde",
+    "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35 hedef, geçen 442 saldırı ve hiçbirinin geçemediği 3 hedef. Bu hedeflerin 9'u başkasının yazdığı kodu çalıştırıyor ve bulguların 62'si onlarda. Hepsi 37 kök nedene iniyor, 2'si kritik, 23'ü yüksek ve 12'si orta, ve düzeltme raporu her birine kendi düzeltmesini veriyor.",
+    "And how much of it to believe": "Ve bunun ne kadarına inanılır",
+    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "66 denetimi var ve bunların 63'ü burada saklanan 7851 yoklamada tetiklendi. Hiç tetiklenmemiş 3'ü kapsama sayılmıyor, beyan edilmiş olarak raporlanıyor. Kimsenin saldırmadığı trafikte 779 kez tetiklendiler: 622'si botun gerçek sorunlarıydı, 157'si yanlış alarmdı ve iki sayı da yayımlanıyor."
   }
 }
