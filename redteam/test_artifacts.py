@@ -1153,6 +1153,30 @@ def main():
           not _off, "; ".join(_off[:6]))
     check("...over the artifacts this repository ships", _seen_c >= 20, str(_seen_c))
 
+    # A MISSING ARTIFACT IS A SKIP ONLY WHERE NO EVIDENCE SHIPS (`tools/tracked.need`): in a
+    # checkout whose index holds `out/`, a suite that loses its file fails, whether the file was
+    # deleted by hand or pruned in a commit. Asked of a scratch repository, not of this one.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+    import tracked as _tr
+    with tempfile.TemporaryDirectory() as _gt:
+        _genv = dict(os.environ, GIT_CONFIG_GLOBAL=os.path.join(_gt, "none"),
+                     GIT_CONFIG_SYSTEM=os.path.join(_gt, "none"))
+        subprocess.run(["git", "init", "-q", _gt], env=_genv, capture_output=True)
+        os.makedirs(os.path.join(_gt, "out"))
+        os.makedirs(os.path.join(_gt, "empty"))
+        io.open(os.path.join(_gt, "out", "a.json"), "w").write("{}")
+        subprocess.run(["git", "-C", _gt, "add", "out/a.json"], env=_genv, capture_output=True)
+        _seen = []
+        _stub = lambda label, ok, detail="": _seen.append((label, ok, detail))  # noqa: E731
+        _kept = _tr.need(_stub, os.path.join(_gt, "out", "a.json"), "x")
+        _lost = _tr.need(_stub, os.path.join(_gt, "out", "b.json"), "the lost one")
+        _n_fail = len(_seen)
+        _none = _tr.need(_stub, os.path.join(_gt, "empty", "c.json"), "no evidence here")
+    check("an artifact that is there is read; one lost where evidence ships fails; one where "
+          "none ships is a skip",
+          _kept is True and _lost is False and _n_fail == 1 and _seen[0][1] is False
+          and "b.json" in _seen[0][2] and _none is False and len(_seen) == 1, str(_seen))
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:

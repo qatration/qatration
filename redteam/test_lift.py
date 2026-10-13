@@ -36,6 +36,8 @@ except Exception:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+from tracked import need as _need  # noqa: E402  -- a missing artifact: SKIP or FAIL
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "out")
 
@@ -531,9 +533,9 @@ def main():
     # so ordinary traffic meets the same payload, which is what makes the comparison legitimate
     # here and illegitimate on a seedable bot.
     real = os.path.join(OUT, "results_localrag.json")
-    if not os.path.exists(real) or not os.path.exists(os.path.join(OUT, "benign_localrag.json")):
-        print("SKIP  the shipped localrag artifacts are not in this checkout, so the "
-              "real-data anchor was NOT checked")
+    if not _need(check, [real, os.path.join(OUT, "benign_localrag.json")],
+                 "the real-data anchor"):
+        pass
     else:
         import yaml
         cfg = yaml.safe_load(io.open(os.path.join(HERE, "targets_localrag.yaml"),

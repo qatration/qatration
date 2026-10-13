@@ -1448,8 +1448,10 @@ def main():
             _n, _took, _p = _drive(str(_CEIL * 10))
             check("a pause longer than the ceiling is not retried at all", _n == 1,
                   "%d request(s) in %.2fs" % (_n, _took))
-            check("...and the run does not sit waiting for it", _took < 2.0,
-                  "%.2fs" % _took)
+            # HALF THE CEILING, NOT TWO SECONDS: the property is that the run did not wait the
+            # pause out, and a bound a loaded CI runner can brush is one people learn to re-run.
+            check("...and the run does not sit waiting for it", _took < _CEIL / 2.0,
+                  "%.2fs against a ceiling of %ss" % (_took, _CEIL))
         finally:
             _lsrv.shutdown()
 

@@ -21,6 +21,8 @@ except Exception:
     pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+from tracked import need as _need  # noqa: E402  -- a missing artifact: SKIP or FAIL
 
 from rejudge import _probe, _prompt_of, rescore
 
@@ -649,11 +651,11 @@ def main():
 
     import shutil, subprocess
     _real = os.path.join(os.path.dirname(HERE), "out")
-    _have = all(os.path.exists(os.path.join(_real, f))
-                for f in ("results_localrag.json", "benign_localrag.json"))
+    _have = _need(check, [os.path.join(_real, f)
+                          for f in ("results_localrag.json", "benign_localrag.json")],
+                  "the replay door for delivery-vs-effect")
     if not _have:
-        print("SKIP  the replay door for delivery-vs-effect: the localrag artifacts are not "
-              "in this checkout, so it was NOT exercised")
+        pass
     else:
         with tempfile.TemporaryDirectory() as _d:
             for f in ("results_localrag.json", "benign_localrag.json"):
@@ -1110,10 +1112,10 @@ def main():
     # ended `qatration rejudge` with a traceback, and the two good files were not re-scored
     # either. A torn lock map did the same through `read_maps`.
     _real_t = os.path.join(os.path.dirname(HERE), "out")
-    if not all(os.path.exists(os.path.join(_real_t, _f))
-               for _f in ("results_localrag.json", "results_httpbot.json")):
-        print("SKIP  the torn-record replay: the artifacts are not in this checkout, so it "
-              "was NOT exercised")
+    if not _need(check, [os.path.join(_real_t, _f)
+                         for _f in ("results_localrag.json", "results_httpbot.json")],
+                 "the torn-record replay"):
+        pass
     else:
         with tempfile.TemporaryDirectory() as _dt:
             shutil.copy(os.path.join(_real_t, "results_localrag.json"), _dt)
@@ -1162,7 +1164,8 @@ def main():
                   _rl.returncode == 0, "exit %d: %s" % (_rl.returncode, _rl.stdout[-300:]))
         # AND THE A/B COMPARISON, over a workspace it would otherwise pass (secretbot's
         # controls are clean), so the 3 is the gap's and not a control alarm's.
-        if os.path.exists(os.path.join(_real_t, "results_secretbot.json")):
+        if _need(check, os.path.join(_real_t, "results_secretbot.json"),
+                 "discrimination over a torn record"):
             with tempfile.TemporaryDirectory() as _dd:
                 shutil.copy(os.path.join(_real_t, "results_secretbot.json"), _dd)
                 io.open(os.path.join(_dd, "results_httpbot.json"), "w", encoding="utf-8",
@@ -1176,13 +1179,12 @@ def main():
                 check("`discrimination` over a workspace with a torn record cannot answer in "
                       "full", _rd.returncode == 3 and "CANNOT ANSWER IN FULL" in _rd.stdout,
                       "exit %d: %s" % (_rd.returncode, (_rd.stdout + _rd.stderr)[-300:]))
-        else:
-            print("SKIP  discrimination over a torn record: results_secretbot.json is not here")
 
         # AND THE RECON TABLE, by the same rule.
         _recon = sorted(_f for _f in os.listdir(_real_t)
                         if _f.startswith("recon_") and _f.endswith(".json"))
-        if _recon:
+        if _recon or _need(check, os.path.join(_real_t, "recon_*.json"),
+                           "the recon table over a torn profile"):
             with tempfile.TemporaryDirectory() as _dr:
                 shutil.copy(os.path.join(_real_t, _recon[0]), _dr)
                 io.open(os.path.join(_dr, "recon_tornbot.json"), "w", encoding="utf-8",
@@ -1195,9 +1197,6 @@ def main():
                 check("`profiles` over a fleet with a torn profile cannot answer in full",
                       _rp.returncode == 3 and "recon_tornbot.json" in _rp.stdout + _rp.stderr,
                       "exit %d: %s" % (_rp.returncode, (_rp.stdout + _rp.stderr)[-300:]))
-        else:
-            print("SKIP  the recon table over a torn profile: no recon_*.json here, so it was "
-                  "NOT exercised")
         from workspace import partial_exit as _pex_t
         check("a finding stands over a gap, and a clean answer over one does not",
               (_pex_t(1, ["a.json"]), _pex_t(0, ["a.json"]), _pex_t(0, [])) == (1, 3, 0))
@@ -1226,9 +1225,8 @@ def main():
     # grew a `Which trial` block.
     _real_p = os.path.join(os.path.dirname(HERE), "out")
     _src_p = os.path.join(_real_p, "results_localrag.json")
-    if not os.path.exists(_src_p):
-        print("SKIP  the pages-only rebuild: the localrag artifacts are not in this "
-              "checkout, so it was NOT exercised")
+    if not _need(check, _src_p, "the pages-only rebuild"):
+        pass
     else:
         with tempfile.TemporaryDirectory() as _dp:
             shutil.copy(_src_p, os.path.join(_dp, "results_localrag.json"))

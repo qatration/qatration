@@ -2373,6 +2373,13 @@ def main():
     check("the guard's benign refusals on the page are the stored benign run's",
           bool(_bm) and (_bm.group(1), int(_bm.group(2))) == (spell(len(_bn_rows)), _bn_ref),
           "page %s, out/ %d of %d" % (_bm and _bm.groups(), _bn_ref, len(_bn_rows)))
+    _att_d = " ".join(io.open(os.path.join(ROOT, "docs", "attribution.md"),
+                              encoding="utf-8").read().split())
+    _am = re.search(r"with nobody attacking, it refused (\d+) of (\d+) ordinary customer "
+                    r"questions", _att_d)
+    check("...and so are the ones docs/attribution.md states",
+          bool(_am) and (int(_am.group(1)), int(_am.group(2))) == (_bn_ref, len(_bn_rows)),
+          "doc %s, out/ %d of %d" % (_am and _am.groups(), _bn_ref, len(_bn_rows)))
     # ...and "every target here has a benign run as well as an attack run"
     _attacked = {str((json.load(io.open(_f, encoding="utf-8")).get("meta") or {}).get("target"))
                  for _f in glob.glob(os.path.join(ROOT, "out", "results_*.json"))

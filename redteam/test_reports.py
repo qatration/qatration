@@ -22,6 +22,8 @@ except Exception:
     pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+from tracked import need as _need  # noqa: E402  -- a missing artifact: SKIP or FAIL
 
 import contextlib, io
 import workspace
@@ -3074,9 +3076,8 @@ def main():
     try:
         _sh6 = __import__("shutil")
         _srcu = os.path.join(os.path.dirname(HERE), "out", "results_httpbot.json")
-        if not os.path.exists(_srcu):
-            print("SKIP  the unmeasured-target rule: this checkout ships no httpbot "
-                  "artifact, so it was NOT exercised")
+        if not _need(check, _srcu, "the unmeasured-target rule"):
+            pass
         else:
             _sh6.copy(_srcu, _wu)
             with open(os.path.join(_wu, "results_dvla.json"), "w",

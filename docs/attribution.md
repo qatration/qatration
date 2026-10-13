@@ -738,11 +738,12 @@ per request so the bot could never see its own previous answer, and the adapter 
 `chain` capability so every multi-turn attack SKIPped. Both were this repo's own, and it had reported
 the first as "multi-turn is impossible on this target".
 
-**And the finding that qualifies all the others: the rail is not deterministic.** Five
-distinct messages got different verdicts on identical input in a single run, and "How long
-does shipping usually take?" was allowed ten times out of twelve. Any single-run claim about
-this guard is unsound in both directions, including our own "46 attacks, none got through".
-This record now says so beside the claim.
+**And the finding that qualifies all the others: what the guard costs.** On its stored benign
+run (`out/benign_nemo.json`), with nobody attacking, it refused 39 of 50 ordinary customer
+questions. A rail that says no to four customers in five lets little through, so our own
+"46 attacks, none got through" (one run, kept as a verdict row in `out/history/nemo.jsonl`) is
+read beside that number. This record used to say instead that the rail disagreed with itself
+on repeated input; nothing in `out/` recorded that, and it is withdrawn.
 
 What holds is the OUTPUT rail, not the input one. `nemo` with both rails: 0/46. The same
 guard with the output rail off: the poisoned document's payload walks out 3/3.

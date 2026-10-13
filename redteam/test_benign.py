@@ -24,6 +24,8 @@ except Exception:
     pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
+from tracked import need as _need  # noqa: E402  -- a missing artifact: SKIP or FAIL
 
 import yaml
 from target import Probe, payload, target_configs
@@ -326,9 +328,8 @@ def main():
     import json as _js_m, re as _re_m, io as _io_m
     from oracle import _IMPERATIVE as _IMP_m
     _mp = os.path.join(os.path.dirname(HERE), "out", "mcp_tools.json")
-    if not os.path.exists(_mp):
-        print("SKIP  out/mcp_tools.json is not in this checkout, so the MCP corpus was "
-              "NOT checked")
+    if not _need(check, _mp, "the MCP corpus"):
+        pass
     else:
         _mc = _js_m.load(_io_m.open(_mp, encoding="utf-8"))
         _srv = _mc.get("servers") or {}
@@ -2719,9 +2720,9 @@ def main():
     # the reader to re-read all of them: 136 of them, about targets the directory has never
     # measured. A finding manufactured out of an absence.
     _src6 = sorted(glob.glob(os.path.join(_out6, "benign_*.json")))
-    if not _src6:
-        print("SKIP  the roll-up over a partial workspace: this checkout ships no "
-              "benign_*.json, so it was NOT exercised")
+    if not _src6 and not _need(check, os.path.join(_out6, "benign_*.json"),
+                               "the roll-up over a partial workspace"):
+        pass
     else:
         with tempfile.TemporaryDirectory() as _d7:
             _sh6.copy(_src6[0], _d7)
