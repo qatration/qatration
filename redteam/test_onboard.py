@@ -629,6 +629,8 @@ def main():
         check("onboard without --submit says nothing was queued, and names --submit",
               _qp.returncode == 0 and "nothing was queued: add --submit" in _qout,
               "exit %s: %s" % (_qp.returncode, _qout[-300:]))
+        check("...and names the command that runs it here, now",
+              "to run it here instead: qatration run --target-config" in _qout, _qout[-300:])
         check("...and names the queue flags it did not use",
               all(_f in _qout for _f in ("--scope", "--trials", "--root"))
               and not os.path.exists(_qroot), _qout[-300:])

@@ -855,6 +855,12 @@ def main():
               + (" -- %s only shape%s a queued run and %s not used"
                  % (", ".join(_shaping), "s" if len(_shaping) == 1 else "",
                     "was" if len(_shaping) == 1 else "were") if _shaping else "") + ".")
+        # AND THE OTHER WAY ON, said as plainly: the README's next step is a local `run`, and
+        # a line naming only `--submit` read to a stranger as a step still owed before it.
+        # Found walking a fresh install.
+        from workspace import shell_arg
+        print("to run it here instead: qatration run --target-config %s"
+              % shell_arg(args.config))
         return
 
     cfg = _load_yaml_or_refuse(args.config, "target config", "onboard") or {}

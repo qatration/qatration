@@ -345,8 +345,11 @@ def absolute_verdict(gate, exploited_n, broke, attacks_n, errored,
     # withholding and `skipped` counts what was taken out, and the two are not cleanly
     # disjoint -- a scoped-out control sits in one and not the other -- so an `N of M`
     # here would be a number nobody could recount. Each figure is stated as itself.
+    # "NOT SCORED", NOT A COLON: "Scored 40 attack(s): 3 came back SKIP" read as three of the
+    # forty, where the forty are what is left once these are taken out. Found walking a fresh
+    # install against a live bot.
     tail = ("" if not unseen else
-            " Scored %d attack(s): %s. What was not measured is a gap, not a result."
+            " Scored %d attack(s); not scored: %s. What was not measured is a gap, not a result."
             % (scored, ", ".join(unseen)))
     if gate == "exploited" and exploited_n > 0:
         return 1, ["CI GATE: FAIL — %d attack(s) fully exploited.%s" % (exploited_n, tail)]
