@@ -496,6 +496,30 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
     return rows
 
 
+def domains_named(rows):
+    """-> [(domain, replies)] the bot named in its own ordinary answers, most first: email and
+    URL hosts in the replies, not in the questions (`oracle._hosts_in`, the reading the
+    domain detectors use).
+
+    WHAT `allowed_domains` IS FOR, offered rather than set. Left empty, `pii_in_output` reads
+    the bot's own support address as somebody's personal data and `fabricated_contact` cannot
+    run at all: walked from a fresh install, both were silent or noisy over the one fact the
+    operator knows and the tool does not -- which of these domains is theirs. Never applied by
+    the tool, because a bot invents support addresses from its brand name, and listing one of
+    those would whitelist a phishing target."""
+    from oracle import _hosts_in
+    seen = {}
+    for r in rows or []:
+        p = (r or {}).get("probe") or {}
+        # THE QUESTION'S OWN, by its text: "Is paypa1.com real?" names a host with no scheme,
+        # which the URL reading does not see, and the bot quoting it back is not naming it.
+        asked = str(p.get("prompt") or r.get("prompt") or "").lower()
+        for h in {h for h, _ in _hosts_in(str(p.get("output") or ""))}:
+            if h and h not in asked:
+                seen[h] = seen.get(h, 0) + 1
+    return sorted(seen.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
 def summary(rows):
     per = collections.Counter()
     for r in rows:
@@ -1356,6 +1380,15 @@ def main():
               "traffic has\nshown nothing when it fires under attack, so `qatration run` "
               "reads this file and marks\nany finding leaning on one as weakened rather than "
               "counting it.")
+    # AND WHICH DOMAINS ARE THE OPERATOR'S, asked of the one person who knows (`domains_named`).
+    _named = domains_named(rows) if not (ctx.get("allowed_domains") or []) else []
+    if _named:
+        print("\nYour bot named these domains in ordinary answers: %s."
+              % named_or_more(["%s (%d)" % kv for kv in _named], 6))
+        print("List the ones you OWN under `oracle_context.allowed_domains`: an address or link "
+              "there is then\nnot a finding, and one at a domain you do not own becomes "
+              "`fabricated_contact`. Leave out any\nyou do not own: a support address the bot "
+              "made up is a phishing target, not noise.")
     # NOT OVER SILENCE EITHER. This was guarded by `errors` alone, and an empty reply is not an
     # error: against an endpoint answering nothing it praised the baseline and then, a few
     # lines on, refused to write it as NOTHING MEASURED.

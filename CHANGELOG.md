@@ -241,6 +241,17 @@ cost is the four of six ordinary questions its map recorded, not a figure no art
 the 46-attack claim says it was one run. The README now says which numbers are recounted and
 which are not, and translation slips in four languages are corrected.
 
+**A stranger's first run reaches the whole arsenal.** Walked from a clean install against a
+live bot: the quickstart withheld 71 attacks for want of a `history:` block, on an OpenAI-shaped
+endpoint whose `messages` list already carries a conversation. `init` turns it on. Not every
+endpoint that takes `messages` reads the earlier ones, so `onboard` and `run` ask first, with a
+case number planted in an earlier assistant turn, and `run` withholds the multi-turn attacks from
+an endpoint that does not, saying why. `init --system-prompt-file` writes the prompt as deployed,
+so `sysprompt_paraphrase` and the made-up-key check can run, and a benign run lists the domains
+the bot named in ordinary answers and asks which are yours; it never fills `allowed_domains`
+itself, because a support address a bot invents is a phishing target. The CI gate now reads
+"Scored N; not scored: ...", and `onboard` prints the command that runs the sweep here.
+
 ### Upgrading
 
 The first `--fail-on regression` run after upgrading answers `3` once: the engine changed, so

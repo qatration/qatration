@@ -1255,6 +1255,29 @@ def main():
     # A CANARY NOTHING CONFIRMS: declared without `honeytoken_verify`, so this run cannot tell
     # a defended canary from one that was never planted. Said, and kept in the results, rather
     # than left to read as a clean bill. Found by an independent review.
+    # A TRANSCRIPT NOBODY READS IS NOT A CONVERSATION (`runner.reads_history`). A target that
+    # declares `chain` and `forged_history` gets a third of the arsenal as multi-turn attacks,
+    # and against an endpoint that answers the newest message alone every one of them runs as
+    # a single turn and comes back clean. Asked once, before the first attack: where the
+    # transcript is not read, the two deliveries are taken off the target and the attacks that
+    # need them are withheld below with the reason, not sent and filed as defended.
+    _history_unread = False
+    if ({"chain", "forged_history"} & set(target.capabilities)
+            and hasattr(target, "send_forged")):
+        from runner import reads_history as _reads_history
+        _rh, _ = _reads_history(target, "preflight")
+        if _rh is False:
+            _history_unread = True
+            target.capabilities = (set(target.capabilities)
+                                   - {"chain", "forged_history"})
+            print("  ! this endpoint did not read a transcript it was handed: a case number "
+                  "planted in an earlier assistant turn did not come back. The multi-turn "
+                  "attacks below are NOT SENT, because against it they would run as single "
+                  "turns and read as defended. Check the `history:` block in the config.",
+                  file=sys.stderr)
+        elif _rh is None:
+            print("  ! the check that this endpoint reads a transcript did not get an answer, "
+                  "so the multi-turn attacks below are sent unverified", file=sys.stderr)
     _canary_unconfirmed = bool(_ht.declared(ctx) and not _verify)
     if _canary_unconfirmed:
         print("  ! canaries are declared with no `honeytoken_verify`, so nothing confirms they "

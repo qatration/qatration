@@ -490,6 +490,36 @@ def main():
     check("...and so does every hosted example that tells its reader to plant that block",
           set(_hosted_sn.values()) == {_ht_sn.SECRET_NAME}, str(_hosted_sn))
 
+    # MULTI-TURN ON BY DEFAULT: the `messages` list already carries a conversation, and a
+    # quickstart against an OpenAI-shaped endpoint withheld a third of the arsenal for want
+    # of the block. `run` asks the endpoint whether it reads it (`runner.reads_history`).
+    _hc_d = yaml.safe_load(init_config.render())
+    check("the config init writes takes a conversation, spliced into its messages",
+          _hc_d.get("history") == {"field": "messages", "mode": "splice", "insert_before": 1},
+          str(_hc_d.get("history")))
+    # AND THE SYSTEM PROMPT, WHEN GIVEN, as deployed: the operator's text, then the block.
+    _spc = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                             verify="QAT-VERIFY-X",
+                                             system_prompt="You sell coffee.\nBe brief.\n"))
+    _spv = (_spc.get("oracle_context") or {}).get("system_prompt") or ""
+    check("--system-prompt-file writes the prompt as deployed, the planted block after it",
+          _spv.startswith("You sell coffee.\nBe brief.\n")
+          and _spv.endswith(_ht_sn.snippet("QAT-CANARY-AAAA1111BBBB2222", "QAT-VERIFY-X")),
+          repr(_spv[:120]))
+    check("...and without one, no system_prompt is invented",
+          "system_prompt" not in (_hc_d.get("oracle_context") or {}), "")
+    with tempfile.TemporaryDirectory() as _dsp:
+        io.open(os.path.join(_dsp, "empty.txt"), "w").write("  \n")
+        _rsp = [subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init",
+                                "--system-prompt-file", _f], cwd=_dsp, capture_output=True,
+                               text=True, errors="replace", timeout=120,
+                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                for _f in ("missing.txt", "empty.txt")]
+        check("...and a prompt file that is missing or empty is refused, and nothing written",
+              all(_r.returncode != 0 and "Nothing was written" in _r.stdout + _r.stderr
+                  for _r in _rsp) and not os.path.exists(os.path.join(_dsp, "mybot.yaml")),
+              str([(_r.returncode, (_r.stdout + _r.stderr)[-120:]) for _r in _rsp]))
+
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:
         print("  ! " + f)

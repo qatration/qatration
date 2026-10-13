@@ -31,10 +31,17 @@ class Bot(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0) or 0)
-        self.rfile.read(n)
+        _body = json.loads(self.rfile.read(n) or b"{}")
+        _said = "".join(" Earlier I said: %s" % m.get("content", "")
+                        for m in (_body.get("messages") or [])[-3:]
+                        if m.get("role") == "assistant")
+        # A BOT THAT READS THE TRANSCRIPT, unless the config names the model `deaf`: the one
+        # that takes `messages` and answers the newest alone (`runner.reads_history`).
+        if _body.get("model") == "deaf":
+            _said = ""
         out = json.dumps({"choices": [{"message": {
             "content": "Of course, I can help with your recent order. What is the order "
-                       "number?"}}], "id": "cmpl-1", "model": "scripted"}).encode()
+                       "number?" + _said}}], "id": "cmpl-1", "model": "scripted"}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(out)))
@@ -320,6 +327,20 @@ def main():
         notes = " ".join(rep["notes"])
         check("...and the multi-turn and canary warnings are then gone",
               "SKIPPED" not in notes and "invisible" not in notes, notes[:200])
+        # AND AN ENDPOINT THAT TAKES `messages` BUT ANSWERS THE NEWEST ALONE is told so, and
+        # its deliveries line shows what `run` will send it: no multi-turn.
+        deaf = write("deafbot", "choices.0.message.content",
+                     extra=("history:\n  field: messages\n  mode: splice\n"
+                            "  insert_before: 1\n"))
+        _deaf_txt = io.open(deaf, encoding="utf-8").read()
+        io.open(deaf, "w", encoding="utf-8").write(
+            _deaf_txt.replace("model: scripted", "model: deaf"))
+        ok_d, rep_d = onboard.check(deaf)
+        check("a history block the endpoint does not read is said, and multi-turn is dropped",
+              "did not read the transcript" in " ".join(rep_d["notes"])
+              and "chain" not in (rep_d.get("capabilities") or [])
+              and rep_d.get("reads_history") is False,
+              str((rep_d.get("capabilities"), rep_d.get("reads_history"), rep_d.get("problems"))))
         # AND THE ATTACKS `run` WITHHOLDS FOR A KIND OF TOOL THIS CONFIG NAMES NONE OF, said
         # before the run with the key, and left out of the request estimate.
         check("...and it is told which attacks name a kind of tool it lists none of",
@@ -381,7 +402,10 @@ def main():
         from runner import filled as _filled_ob
         _atk = [a for a in onboard._arsenal() if not _und(a, _CHAIN_CAPS)
                 and not _filled_ob(a, {})[1]]
-        _need, _old_sum = _rf(_atk, 3), len(_atk) * 3
+        # AND THE REQUESTS BEFORE THE FIRST ATTACK, through the rule `onboard` prices them by
+        # (`runner.baseline_requests`): with a transcript, the check that it is read.
+        from runner import baseline_requests as _br_ob
+        _need, _old_sum = _rf(_atk, 3) + _br_ob(_CHAIN_CAPS), len(_atk) * 3
         check("a chain makes a sweep cost more requests than it has attacks",
               _need > _old_sum, "%d requests for %d attacks" % (_need, _old_sum))
         _budget = write("oldsum", "choices.0.message.content",

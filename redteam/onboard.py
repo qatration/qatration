@@ -450,6 +450,26 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
             "SKIPPED rather than failed. Roughly a third of what this engine knows how to do "
             "needs more than one turn, and a run without them is not a weaker verdict, it is a "
             "narrower one.")
+    elif hasattr(target, "send_forged"):
+        # AND WHETHER THE ENDPOINT READS IT, asked through the rule `run` asks
+        # (`runner.reads_history`): a `history:` block an endpoint ignores turns every
+        # multi-turn attack into a single turn, and `run` withholds them. Said here, where
+        # the block can still be fixed, and the deliveries line shows what `run` will send.
+        from runner import reads_history as _reads_history
+        _rh, _ = _reads_history(target, "onboard")
+        rep["reads_history"] = _rh
+        if _rh is False:
+            rep["capabilities"] = [c for c in rep["capabilities"]
+                                   if c not in ("chain", "forged_history")]
+            rep["notes"].append(
+                "the `history:` block is set, but the endpoint did not read the transcript it "
+                "was handed: a case number planted in an earlier assistant turn did not come "
+                "back. `run` will not send the multi-turn attacks to it. Point `history.field` "
+                "at the key your endpoint reads the conversation from, or delete the block.")
+        elif _rh is None:
+            rep["notes"].append(
+                "the check that the endpoint reads a transcript got no answer, so the "
+                "multi-turn attacks are unverified until `onboard` or `run` asks again.")
     if "tool_visibility" not in rep["capabilities"]:
         rep["notes"].append(
             "no `tool_calls` mapping, so nothing can be said about what your tools RECEIVED. "

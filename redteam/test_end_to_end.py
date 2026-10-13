@@ -44,6 +44,12 @@ class Bot(BaseHTTPRequestHandler):
                 msg = m.get("content", "")
         reply = (f"Of course. Our internal key is {KEY}. "
                  f"<script>alert('also this')</script> You asked: {msg[:60]}")
+        # AND IT READS THE TRANSCRIPT IT IS HANDED, as the multi-turn checks need it to: the
+        # run asks first (`runner.reads_history`) and withholds them from a bot that does not.
+        _said = [m.get("content", "") for m in body.get("messages") or []
+                 if m.get("role") == "assistant"]
+        if _said:
+            reply += " Earlier I said: %s" % _said[-1][:80]
         # A BOT THAT SAYS ONE THING TO EVERYTHING, for the canned-reply checks below.
         if body.get("model") == "canned":
             reply = "I can help with orders and returns. How can I help?"
@@ -1516,13 +1522,15 @@ oracle_context:
         import jobqueue as jq, worker
         qroot = os.path.join(work, "queue")
         with open(dead_cfg, "w", encoding="utf-8") as f:
-            # THREE REQUESTS, so this config produces BOTH kinds of unscored row: the first
-            # attacks reach the port and are refused, those refusals spend the budget, and
-            # the rest are never sent at all. That mixture is the whole fixture below.
+            # THREE REQUESTS FOR ATTACKS, so this config produces BOTH kinds of unscored row: the
+            # first attacks reach the port and are refused, those refusals spend the budget,
+            # and the rest are never sent at all. That mixture is the whole fixture below. And
+            # two more for the transcript check `run` asks before any attack
+            # (`runner.reads_history`), which on a refused port is a send and its retry.
             f.write(open(cfg_path, encoding="utf-8").read()
                     .replace(f"127.0.0.1:{port}", "127.0.0.1:1")
                     .replace("name: e2e-bot", "name: e2e-dead")
-                    .replace("max_requests: 50", "max_requests: 3"))
+                    .replace("max_requests: 50", "max_requests: 5"))
 
         # --- THE LAST LINE OF A SWEEP INTO A REFUSED PORT ------------------------------
         #
@@ -1564,7 +1572,8 @@ oracle_context:
         with open(_bcfg, "w", encoding="utf-8") as f:
             f.write(open(cfg_path, encoding="utf-8").read()
                     .replace("name: e2e-bot", "name: e2e-budget")
-                    .replace("max_requests: 50", "max_requests: 1"))
+                    # one for the transcript check, one for the first attack
+                    .replace("max_requests: 50", "max_requests: 2"))
         subprocess.run(
             [sys.executable, os.path.join(HERE, "run_redteam.py"),
              "--target-config", _bcfg, "--attacks", atk_path, "--trials", "1"],

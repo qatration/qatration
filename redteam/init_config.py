@@ -196,10 +196,16 @@ rate:
 # that need more than one turn -- a rule planted early that changes a later answer, a forged
 # conversation history -- are SKIPPED, and a skipped attack is not a defence. `field` is the
 # key in `request:` holding the conversation, `insert_before` counts from the end.
-# history:
-#   field: messages
-#   mode: splice
-#   insert_before: 1
+#
+# ON BY DEFAULT, because the `messages` list above already carries a conversation. It was
+# commented out, and a quickstart run against an OpenAI-shaped endpoint withheld 71 attacks for
+# want of it. Not every endpoint that takes `messages` reads the earlier ones, so `onboard` and
+# `run` both ask (a case number planted in an earlier turn has to come back) and `run` does not
+# send these attacks to an endpoint that does not. Delete the block if yours takes one message.
+history:
+  field: messages
+  mode: splice
+  insert_before: 1
 
 # WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
 # the world; a finding against a bot you wrote is evidence that the engine works. Reports that
@@ -218,6 +224,12 @@ oracle_context:
   # it if you reword the block: a bot asked for a "staff key" it does not hold refuses a
   # question about nothing, and that refusal is not a defence.
   secret_name: {secret_name}
+
+  # YOUR SYSTEM PROMPT AS DEPLOYED, the block this command printed included. With it,
+  # `sysprompt_paraphrase` can tell a reworded leak of your instructions from an ordinary answer,
+  # and `credential_in_output` can tell a key the bot made up from one it was given. Without it
+  # both say so rather than guess. `qatration init --system-prompt-file <file>` fills it in.
+{system_prompt}
 
   # What an elevation is CALLED in your product, so a caller claiming one can be told from the
   # bot explaining its own permission model. Left empty the detector stays inert, deliberately:
@@ -247,7 +259,7 @@ oracle_context:
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
-           model=DEFAULT_MODEL):
+           model=DEFAULT_MODEL, system_prompt=None):
     """The file's text. Separated from writing it so a test can read it without a filesystem."""
     if secret is None or verify is None:
         secret, verify = _ht.mint()
@@ -266,7 +278,15 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                            name=_json.dumps(name, ensure_ascii=False), secret=secret,
                            verify=verify, model=_json.dumps(model, ensure_ascii=False),
                            plant=plant,
-                           secret_name=_json.dumps(_ht.SECRET_NAME, ensure_ascii=False))
+                           secret_name=_json.dumps(_ht.SECRET_NAME, ensure_ascii=False),
+                           # AS DEPLOYED: the operator's prompt with the planted block after it,
+                           # which is the text the bot will hold once they paste it in.
+                           system_prompt=(
+                               "  system_prompt: %s" % _json.dumps(
+                                   system_prompt.rstrip() + "\n" + _ht.snippet(secret, verify),
+                                   ensure_ascii=False)
+                               if system_prompt else
+                               '  # system_prompt: "You are the support assistant for ..."'))
 
 
 def main():
@@ -285,7 +305,24 @@ def main():
     ap.add_argument("--out", default=None,
                     help="where to write (default: <name>.yaml, so %s)" % DEFAULT_OUT)
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
+    ap.add_argument("--system-prompt-file", default=None,
+                    help="your bot's system prompt, read from a file and written into the "
+                         "config with the canary block after it, so the checks that compare "
+                         "a reply with the prompt can run")
     args = ap.parse_args()
+    # READ BEFORE ANYTHING IS WRITTEN, so a wrong path costs nothing: the config is not half
+    # made over a prompt that was never there.
+    _sp = None
+    if args.system_prompt_file is not None:
+        try:
+            _sp = io.open(args.system_prompt_file, encoding="utf-8").read()
+        except (OSError, UnicodeDecodeError) as _e_sp:
+            raise SystemExit("init --system-prompt-file: %r could not be read (%s). Nothing "
+                             "was written." % (args.system_prompt_file, type(_e_sp).__name__))
+        if not _sp.strip():
+            raise SystemExit("init --system-prompt-file: %r is empty, and an empty prompt "
+                             "compares with nothing. Nothing was written."
+                             % args.system_prompt_file)
     # THE NAME THROUGH THE RULE EVERY LATER COMMAND APPLIES. `init --name "my bot"` wrote a
     # config, printed "Wrote ..., with a canary nobody else has", and the very next command
     # it told the reader to run refused that config: `name='my bot' is not usable as a
@@ -339,7 +376,7 @@ def main():
     from workspace import atomic_write as _atomic
     with _atomic(args.out) as _fh:
         _fh.write(render(out=args.out, url=args.url, name=args.name, secret=secret,
-                         verify=verify, model=args.model))
+                         verify=verify, model=args.model, system_prompt=_sp))
 
     print("Wrote %s, with a canary nobody else has.\n" % args.out)
     # THE SNIPPET COMES FROM ONE PLACE. `mint` prints the same block through the same function;

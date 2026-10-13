@@ -66,7 +66,8 @@ it goes to the tracked `out/`: point `QATRATION_OUT` somewhere else for your own
 
 `init` writes the config so you do not have to invent one, and it mints the canary for you
 rather than leaving it as a step to remember. `qatration mint` still exists on its own, for a
-config you already have.
+config you already have. Give it `--system-prompt-file prompt.txt` and the config also carries
+your prompt as deployed, which the checks that compare a reply with your instructions need.
 
 **And the canary is not tidiness.** It is worth exactly the fact that nothing
 else in the world knows it. The example configs ship one so they run out of the box, and that
