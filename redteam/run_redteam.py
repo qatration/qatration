@@ -1276,8 +1276,9 @@ def main():
                   "turns and read as defended. Check the `history:` block in the config.",
                   file=sys.stderr)
         elif _rh is None:
-            print("  ! the check that this endpoint reads a transcript did not get an answer, "
-                  "so the multi-turn attacks below are sent unverified", file=sys.stderr)
+            print("  ! the check that this endpoint reads a transcript got no answer it could "
+                  "read (an error, an empty reply or a refusal), so the multi-turn attacks below "
+                  "are sent unverified", file=sys.stderr)
     _canary_unconfirmed = bool(_ht.declared(ctx) and not _verify)
     if _canary_unconfirmed:
         print("  ! canaries are declared with no `honeytoken_verify`, so nothing confirms they "

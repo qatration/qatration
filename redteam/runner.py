@@ -834,7 +834,16 @@ def reads_history(target, attack_id="history-check"):
         seen = None
     if seen is None or seen.error or seen.silent():
         return None, seen
-    return HISTORY_TOKEN.lower() in (seen.output or "").lower(), seen
+    if HISTORY_TOKEN.lower() in (seen.output or "").lower():
+        return True, seen
+    # A REFUSAL SAYS NOTHING ABOUT THE TRANSCRIPT EITHER. A guard that turns every request
+    # down turned this one down too, and that read as "does not read the history": the first
+    # real run of this rule, against NeMo Guardrails, withheld every multi-turn attack from the
+    # one target where the multi-turn breach had been found. Declined is not measured.
+    from refusal import declined as _declined
+    if _declined(seen, {}):
+        return None, seen
+    return False, seen
 
 
 def answered(p):

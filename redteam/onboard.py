@@ -468,8 +468,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                 "at the key your endpoint reads the conversation from, or delete the block.")
         elif _rh is None:
             rep["notes"].append(
-                "the check that the endpoint reads a transcript got no answer, so the "
-                "multi-turn attacks are unverified until `onboard` or `run` asks again.")
+                "the check that the endpoint reads a transcript got no answer it could read "
+                "(an error, an empty reply or a refusal), so the multi-turn attacks are sent "
+                "unverified.")
     if "tool_visibility" not in rep["capabilities"]:
         rep["notes"].append(
             "no `tool_calls` mapping, so nothing can be said about what your tools RECEIVED. "
