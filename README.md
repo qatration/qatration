@@ -112,6 +112,23 @@ The full walkthrough, including every way a first run can quietly lie to you, is
 
 ## In CI
 
+As a GitHub Action, pinned to the release it runs, with the SARIF written whatever the outcome:
+
+```yaml
+- uses: qatration/qatration@v0.5.0
+  with:
+    target-config: mybot.yaml
+    fail-on: exploited          # or regression, on a pull request
+  env:
+    LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    QATRATION_AUTH_SECRET: ${{ secrets.QATRATION_AUTH_SECRET }}   # a remote target's proof
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: qatration.sarif }
+  if: always()
+```
+
+Or the same steps by hand, on any CI:
+
 ```yaml
 - run: pip install qatration
 - run: qatration run --target-config mybot.yaml --fail-on exploited

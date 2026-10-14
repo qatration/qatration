@@ -252,6 +252,12 @@ the bot named in ordinary answers and asks which are yours; it never fills `allo
 itself, because a support address a bot invents is a phishing target. The CI gate now reads
 "Scored N; not scored: ...", and `onboard` prints the command that runs the sweep here.
 
+**A GitHub Action.** `uses: qatration/qatration@v0.5.0` runs the sweep, writes the SARIF whatever
+the outcome, and fails the step with the run's own exit code. It installs the engine from the
+tag it is pinned to, so the version in the workflow is the version that runs, and every input
+reaches its scripts through `env:`. The check matrix runs it against a local bot that leaks its
+key and expects exit 1 and a SARIF holding the finding.
+
 ### Upgrading
 
 The first `--fail-on regression` run after upgrading answers `3` once: the engine changed, so

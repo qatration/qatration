@@ -129,3 +129,6 @@ out/run_2026-08-21T0110-665c21.json
 # well, because an ignore rule is not a gate: `git add -f` walks straight past it.
 /*.yaml
 /*.yml
+# THE ONE ROOT YAML THAT IS NOT A CONFIG: GitHub reads an action from `action.yml` at the root,
+# and nowhere else. Ignored, the CI job that runs it ran an action that was never committed.
+!/action.yml

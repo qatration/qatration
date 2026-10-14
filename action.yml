@@ -1,0 +1,105 @@
+# QAtration as a GitHub Action: the README's three CI steps in one, pinned to the release it is
+# used at.
+#
+#   - uses: qatration/qatration@v0.5.0
+#     with:
+#       target-config: mybot.yaml
+#     env:
+#       QATRATION_AUTH_SECRET: ${{ secrets.QATRATION_AUTH_SECRET }}   # a remote target's proof
+#
+# INSTALLED FROM THIS CHECKOUT, not from PyPI: the action and the engine it runs are the same
+# tag, so `@v0.5.0` cannot quietly run a newer engine than the one it names.
+#
+# EVERY INPUT REACHES A SCRIPT THROUGH `env:`. An expression written into `run:` is pasted into
+# the shell source before it runs, and a config path is the caller's to choose.
+name: QAtration
+description: Fire real prompt-injection attacks at your own chatbot or agent, and fail the build on what it finds.
+author: qatration
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  target-config:
+    description: The YAML describing your target (`qatration init` writes one).
+    required: true
+  fail-on:
+    description: none, exploited, any or regression. On a pull request, regression.
+    required: false
+    default: exploited
+  scope:
+    description: full or quick. quick sends one attack from each category.
+    required: false
+    default: full
+  trials:
+    description: Trials per attack. Empty means the config's, else three.
+    required: false
+    default: ""
+  sarif:
+    description: Write a SARIF file for code scanning, whatever the run's outcome.
+    required: false
+    default: "true"
+  python-version:
+    description: The Python the engine runs on.
+    required: false
+    default: "3.12"
+
+outputs:
+  exit-code:
+    description: The run's exit code; README "In CI" says what each one means.
+    value: ${{ steps.run.outputs.exit-code }}
+  sarif-file:
+    description: The SARIF file written, or empty.
+    value: ${{ steps.sarif.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install the engine this action is pinned to
+      shell: bash
+      env:
+        QAT_ACTION_PATH: ${{ github.action_path }}
+      run: python -m pip install --disable-pip-version-check -q "$QAT_ACTION_PATH"
+
+    - name: Run the sweep
+      id: run
+      shell: bash
+      env:
+        QAT_CONFIG: ${{ inputs.target-config }}
+        QAT_FAIL_ON: ${{ inputs.fail-on }}
+        QAT_SCOPE: ${{ inputs.scope }}
+        QAT_TRIALS: ${{ inputs.trials }}
+      run: |
+        args=(run --target-config "$QAT_CONFIG" --fail-on "$QAT_FAIL_ON" --scope "$QAT_SCOPE")
+        if [ -n "$QAT_TRIALS" ]; then args+=(--trials "$QAT_TRIALS"); fi
+        set +e
+        qatration "${args[@]}"
+        rc=$?
+        set -e
+        echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+
+    - name: Write the SARIF
+      id: sarif
+      if: always() && inputs.sarif == 'true'
+      shell: bash
+      env:
+        QAT_CONFIG: ${{ inputs.target-config }}
+      run: |
+        results="$(python -c 'import os, sys, yaml; n = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("name"); print(os.path.join(os.environ.get("QATRATION_OUT") or "qatration-out", "results_%s.json" % n))' "$QAT_CONFIG")"
+        if [ -f "$results" ]; then
+          qatration sarif --results "$results" --target-config "$QAT_CONFIG" --out qatration.sarif
+          echo "path=qatration.sarif" >> "$GITHUB_OUTPUT"
+        else
+          echo "no results file at $results: the run wrote none, so there is no SARIF to write"
+          echo "path=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Fail the step as the run did
+      shell: bash
+      env:
+        QAT_RC: ${{ steps.run.outputs.exit-code }}
+      run: exit "${QAT_RC:-2}"

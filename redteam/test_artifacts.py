@@ -949,6 +949,7 @@ def main():
         "NOTICE": "attribution required by that licence",
         "README.md": "the front page, whose every number a suite recounts",
         "SECURITY.md": "where to report a vulnerability in this tool",
+        "action.yml": "the GitHub Action, which GitHub reads from the root and nowhere else",
         "pyproject.toml": "the package",
         "requirements.txt": "what a checkout needs to run the suites",
         "setup.py": "the one build step pyproject cannot say: the wheel leaves out the suites",

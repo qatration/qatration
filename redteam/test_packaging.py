@@ -667,7 +667,28 @@ def test_no_workflow_expands_an_expression_into_a_script():
             for st in (job or {}).get("steps") or []:
                 if "${{" in str(st.get("run", "")):
                     bad.append("%s: %s / %s" % (os.path.basename(path), jn, st.get("name")))
+    # AND THE ACTION, whose inputs are the CALLER's: a config path is somebody else's string.
+    _act = yaml.safe_load(io.open(os.path.join(REPO, "action.yml"), encoding="utf-8").read())
+    for st in ((_act or {}).get("runs") or {}).get("steps") or []:
+        if "${{" in str(st.get("run", "")):
+            bad.append("action.yml / %s" % st.get("name"))
     assert not bad, "an expression expanded into a shell script: %s" % bad
+    # THE ACTION'S CONTRACT: the engine it installs is its own checkout (so `@v0.5.0` runs
+    # 0.5.0), and the step that ends it exits with the sweep's code (so a breach fails the
+    # build). The `action` job in check.yml runs it; this says why each part is there.
+    _steps = _act["runs"]["steps"]
+    _runs = "\n".join(str(s.get("run", "")) for s in _steps)
+    _envs = " ".join(str(v) for s in _steps for v in (s.get("env") or {}).values())
+    assert "github.action_path" in _envs and "pip install" in _runs, \
+        "the action does not install the engine from its own checkout"
+    _rc_var = [k for k, v in (_steps[-1].get("env") or {}).items()
+               if "steps.run.outputs.exit-code" in str(v)]
+    _last = _steps[-1].get("run", "").strip()
+    assert _rc_var and _last.startswith("exit") and \
+        re.search(r"\$\{?%s\b" % re.escape(_rc_var[0]), _last), \
+        "the action's last step does not exit with the sweep's code: %r" % _last
+    _unused = [i for i in (_act.get("inputs") or {}) if ("inputs.%s" % i) not in str(_act["runs"])]
+    assert not _unused, "an action input nothing reads: %s" % _unused
     doc, _ = _workflow("release.yml")
     jobs = doc["jobs"]
     assert jobs["suites"].get("uses") == "./.github/workflows/check.yml", \

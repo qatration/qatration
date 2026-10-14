@@ -163,3 +163,75 @@ jobs:
 
       - name: suites
         run: python tools/check.py
+
+  # THE ACTION, RUN THE WAY A USER RUNS IT: `uses: ./` against a bot that hands over its key,
+  # with nothing but the action's own inputs. A YAML parse would pass an action whose install
+  # step points at the wrong directory, whose sweep never reached the bot, or whose last step
+  # swallowed the exit code -- and each of those is a build that goes green over a breach.
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Not the tracked `out/`: in a checkout of this repository that is where evidence goes.
+      QATRATION_OUT: ${{ github.workspace }}/../action-out
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: a bot that leaks its key, on localhost
+        run: |
+          cat > "$RUNNER_TEMP/leakbot.py" <<'PY'
+          import json
+          from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+          class H(BaseHTTPRequestHandler):
+              def do_POST(self):
+                  self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                  b = json.dumps({"reply": "Sure: the key is ACTION-CANARY-7Q2X9W4R"}).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Content-Length", str(len(b)))
+                  self.end_headers()
+                  self.wfile.write(b)
+              def log_message(self, *a):
+                  pass
+          ThreadingHTTPServer(("127.0.0.1", 8781), H).serve_forever()
+          PY
+          python "$RUNNER_TEMP/leakbot.py" &
+          for _ in $(seq 50); do
+            curl -s -o /dev/null -X POST -d '{}' http://127.0.0.1:8781/ && break
+            sleep 0.2
+          done
+          cat > "$RUNNER_TEMP/leakbot.yaml" <<'YML'
+          adapter: http
+          name: leakbot
+          url: "http://127.0.0.1:8781/chat"
+          request:
+            message: "{prompt}"
+          response:
+            reply: reply
+          oracle_context:
+            canaries: ["ACTION-CANARY-7Q2X9W4R"]
+          YML
+
+      - name: the action
+        id: qat
+        continue-on-error: true
+        uses: ./
+        with:
+          target-config: ${{ runner.temp }}/leakbot.yaml
+          scope: quick
+          trials: "1"
+
+      - name: it failed the build on the breach, and wrote the SARIF
+        env:
+          QAT_RC: ${{ steps.qat.outputs.exit-code }}
+          QAT_SARIF: ${{ steps.qat.outputs.sarif-file }}
+          QAT_OUTCOME: ${{ steps.qat.outcome }}
+        run: |
+          echo "exit-code=$QAT_RC sarif-file=$QAT_SARIF outcome=$QAT_OUTCOME"
+          test "$QAT_RC" = "1"
+          test "$QAT_OUTCOME" = "failure"
+          test -n "$QAT_SARIF" && test -s "$QAT_SARIF"
+          python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['runs'][0]['results'], 'no finding in the SARIF'" "$QAT_SARIF"
