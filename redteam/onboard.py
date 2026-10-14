@@ -75,6 +75,26 @@ def _strings(obj, prefix="", out=None, depth=0):
     return out
 
 
+def _unmapped_calls(raw, cfg):
+    """-> (path, the calls as text, the config line) for tool calls in a response body that
+    the config does not map, or None.
+
+    Asked through `targets_http.tool_call_paths`, the adapter's own reading of a call, so the
+    line offered is one a run would read. None when the config maps tool calls already, or
+    when the body holds none: a reply that called nothing says nothing about whether the bot
+    can.
+    """
+    if raw is None or ((cfg or {}).get("response") or {}).get("tool_calls"):
+        return None
+    from targets_http import tool_call_paths
+    found = tool_call_paths(raw)
+    if not found:
+        return None
+    path, calls = found[0]
+    return (path, ", ".join("%s(%s)" % (n, str(a)[:30]) for n, a in calls[:3]),
+            'tool_calls: "%s"' % path)
+
+
 def _prose(s):
     """Does this string read like something a model said, rather than an identifier?
 
@@ -360,6 +380,20 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # reports as a defence is the worst outcome this system can produce.
         raw = getattr(probe, "raw", None)
         path = (cfg.get("response") or {}).get("reply")
+        # AN AGENT THAT ACTED INSTEAD OF TALKING. OpenAI answers a tool call with `content:
+        # null`, so the reply path finds nothing, and without a `tool_calls` mapping the
+        # adapter cannot tell that from a wrong path: every such reply of a run is an error.
+        # The cure is the mapping, not another reply path, and the body says which.
+        _calls = _unmapped_calls(raw, cfg)
+        if _calls:
+            rep["problems"].append(
+                f"`response.reply: {path!r}` holds nothing in this reply because the bot "
+                f"answered with a tool call instead of text ({_calls[1]}). Without a "
+                f"`tool_calls` mapping a reply like that is an error rather than an answer, and "
+                f"every one of them in a run is a row lost. Add this line under `response:`:\n"
+                f"            {_calls[2]}")
+            rep["tool_calls_path"] = _calls[0]
+            return False, rep
         rep["problems"].append(
             f"`response.reply: {path!r}` resolved to nothing. The endpoint ANSWERED, so this is "
             f"a mapping problem rather than a connectivity one — and it would not have failed "
@@ -389,12 +423,29 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         return False, rep
 
     reply = (probe.output or "").strip()
-    if not reply:
+    # A REPLY THAT IS A TOOL CALL, read through the mapping the config declares, is an answer:
+    # the agent acted instead of talking, and the run judges the call. Refused below as "an
+    # empty reply", the one shape the `tool_calls` line exists for could never pass this
+    # command, so the line `onboard` offers led straight to a refusal from `onboard`.
+    _acted = [c for c in (probe.tool_calls or []) if c]
+    if not reply and not _acted:
         # The important branch. An empty reply is not an error anywhere downstream — it is a
         # bot that said nothing, which every detector scores as a bot that held.
         raw = getattr(probe, "raw", None)
         found = _strings(raw) if raw is not None else []
         path = (cfg.get("response") or {}).get("reply")
+        # THE SAME AGENT, on an endpoint that writes `content: ""` beside the call: the reply
+        # resolves, to nothing, and a run would score the call it cannot see as silence.
+        _calls = _unmapped_calls(raw if raw is not None
+                                 else getattr(target, "_last_raw", None), cfg)
+        if _calls:
+            rep["problems"].append(
+                f"`response.reply: {path!r}` is empty in this reply because the bot answered "
+                f"with a tool call instead of text ({_calls[1]}). Without a `tool_calls` "
+                f"mapping a run reads that as a bot that said nothing, which scores as a bot "
+                f"that held. Add this line under `response:`:\n            {_calls[2]}")
+            rep["tool_calls_path"] = _calls[0]
+            return False, rep
         rep["problems"].append(
             f"`response.reply: {path!r}` resolved to nothing. The endpoint answered, so this is "
             f"a mapping problem, not a connectivity one — and it would NOT have failed the run: "
@@ -409,7 +460,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                 rep["notes"].append(f"  {p} = {v[:70]!r}")
         return False, rep
 
-    rep["reply"] = reply[:200]
+    rep["reply"] = reply[:200] or "(a tool call: %s)" % ", ".join(n for n, _a in _acted[:3])
 
     # AND A MAPPING THAT RESOLVES TO THE WRONG FIELD, which is the same failure reached
     # from the other side. The two branches above ask whether `response.reply` resolved to
@@ -429,7 +480,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     if _raw is None:
         _raw = getattr(target, "_last_raw", None)
     _path = (cfg.get("response") or {}).get("reply")
-    if _raw is not None and not _prose(reply):
+    if _raw is not None and not _acted and not _prose(reply):
         _better = [(p, v) for p, v in _strings(_raw)
                    if _prose(v) and p != _path and v.strip() != reply]
         if _better:
@@ -471,7 +522,21 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                 "the check that the endpoint reads a transcript got no answer it could read "
                 "(an error, an empty reply or a refusal), so the multi-turn attacks are sent "
                 "unverified.")
-    if "tool_visibility" not in rep["capabilities"]:
+    # AND WHERE THE CALLS ARE, when this reply carried one. The note below is all a config
+    # without the mapping used to get, on an endpoint whose answer to the probe had a tool
+    # call in it -- the blind spot named, and the line that closes it left to the reader.
+    # Offered only from the body, through the rule the adapter reads calls with
+    # (`targets_http.tool_call_paths`): a reply with no call in it proves nothing either way,
+    # so it gets the general note and nothing more.
+    _seen_calls = (_unmapped_calls(_raw, cfg)
+                   if "tool_visibility" not in rep["capabilities"] else None)
+    if _seen_calls:
+        rep["tool_calls_path"] = _seen_calls[0]
+        rep["notes"].append(
+            "the reply to the probe called a tool (%s), and this config does not map tool "
+            "calls, so a run would not read them. Add this line under `response:`:\n"
+            "            %s" % (_seen_calls[1], _seen_calls[2]))
+    elif "tool_visibility" not in rep["capabilities"]:
         rep["notes"].append(
             "no `tool_calls` mapping, so nothing can be said about what your tools RECEIVED. "
             "On an agent that is the blind spot: the prose can be impeccable while the call "

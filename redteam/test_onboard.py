@@ -272,6 +272,97 @@ def main():
         finally:
             _tsrv.shutdown()
 
+        # AND WHERE AN AGENT'S TOOL CALLS ARE, from the body, never by default. Mapped on
+        # every OpenAI-shaped config, `tool_calls` is dead on a bot without tools and an
+        # empty list on servers that always write one, and an empty list on every reply
+        # reads as a channel that worked: tool attacks scored DEFENDED against a bot with no
+        # tools. So the line is offered where a call is in the reply and nowhere else, and
+        # the line offered is driven back through the adapter to show a run reads it.
+        _call = {"id": "c1", "type": "function",
+                 "function": {"name": "lookup_order", "arguments": "{\"id\": \"7\"}"}}
+        _BODIES = {
+            "nulltext": {"choices": [{"message": {"content": None, "tool_calls": [_call]}}]},
+            "emptytext": {"choices": [{"message": {"content": "", "tool_calls": [_call]}}]},
+            "both": {"choices": [{"message": {
+                "content": "Let me look that order up for you right away.",
+                "tool_calls": [_call]}}]},
+            "emptylist": {"choices": [{"message": {
+                "content": "Of course, what is the order number you are asking about?",
+                "tool_calls": []}}]},
+            "definitions": {"choices": [{"message": {
+                "content": "Of course, what is the order number you are asking about?"}}],
+                "tools": [{"type": "function", "function": {
+                    "name": "lookup_order", "parameters": {"type": "object"}}}]},
+            "anthropic": {"content": [
+                {"type": "text", "text": "Let me look that order up for you right away."},
+                {"type": "tool_use", "id": "t1", "name": "lookup_order",
+                 "input": {"id": "7"}}]},
+        }
+
+        class _Agent(Bot):
+            def do_POST(self):
+                _n = int(self.headers.get("Content-Length", 0) or 0)
+                self.rfile.read(_n)
+                _o = json.dumps(_BODIES[self.path.strip("/")]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(_o)))
+                self.end_headers()
+                self.wfile.write(_o)
+
+        _asrv = ThreadingHTTPServer(("127.0.0.1", 0), _Agent)
+        threading.Thread(target=_asrv.serve_forever, daemon=True).start()
+
+        def _agent_cfg(kind, reply="choices.0.message.content", extra=""):
+            _p = os.path.join(work, "targets_agent_%s.yaml" % kind)
+            with open(_p, "w", encoding="utf-8") as _f:
+                _f.write(CFG.format(name="agent" + kind, port=_asrv.server_address[1],
+                                    path=reply, extra=extra)
+                         .replace("/v1/chat/completions", "/" + kind))
+            return _p
+
+        try:
+            _line = 'tool_calls: "choices.0.message.tool_calls"'
+            for _kind in ("nulltext", "emptytext"):
+                _okt, _rept = onboard.check(_agent_cfg(_kind))
+                _pt = " ".join(_rept["problems"])
+                check("an agent that answers the probe with only a tool call (%s) is told the "
+                      "mapping it needs, not another reply path" % _kind,
+                      not _okt and _line in _pt and "instead of text" in _pt, _pt[:300])
+            _okb2, _repb2 = onboard.check(_agent_cfg("both"))
+            _nb2 = " ".join(_repb2["notes"])
+            check("a reply with text AND a tool call passes, with the line that maps the call",
+                  _okb2 and _line in _nb2 and "lookup_order(" in _nb2,
+                  str(_repb2.get("problems"))[:200] + " / " + _nb2[:300])
+            _oka2, _repa2 = onboard.check(_agent_cfg("anthropic", reply="content.0.text"))
+            check("...and an Anthropic-shaped `tool_use` block is found inside `content`",
+                  _repa2.get("tool_calls_path") == "content", str(_repa2.get("notes"))[:300])
+            for _kind in ("emptylist", "definitions"):
+                _okn, _repn = onboard.check(_agent_cfg(_kind))
+                check("no line is offered where no call was made (%s): an empty list and the "
+                      "tool definitions are not calls" % _kind,
+                      _okn and "tool_calls_path" not in _repn
+                      and any("no `tool_calls` mapping" in n for n in _repn["notes"]),
+                      str(_repn.get("notes"))[:300])
+            # THE LINE, PASTED IN, IS ONE A RUN READS: the config with it passes, says
+            # nothing more about tool calls, and the adapter built from it records the call.
+            _mapped = _agent_cfg("nulltext", extra="  " + _line)
+            _okm, _repm = onboard.check(_mapped)
+            check("...and the config with the offered line pasted in passes and is not told "
+                  "again", _okm and "tool_calls_path" not in _repm
+                  and "tool_visibility" in _repm["capabilities"],
+                  str(_repm.get("problems"))[:200])
+            import yaml as _yaml_t
+            from targets_http import HttpConfiguredTarget as _HCT_t
+            _cfg_t = _yaml_t.safe_load(io.open(_mapped, encoding="utf-8"))
+            _pb_t = _HCT_t(**{k: v for k, v in _cfg_t.items()
+                              if k not in onboard.CONFIG_ONLY_KEYS}).send("hello there")
+            check("...and the adapter built from it records the call a run would judge",
+                  [n for n, _a in (_pb_t.tool_calls or [])] == ["lookup_order"]
+                  and "7" in str(_pb_t.tool_calls), repr(_pb_t.tool_calls)[:200])
+        finally:
+            _asrv.shutdown()
+
         # AND THE BODY STAYS OFF THE PROBE. `targets_http` attaches the raw response to a
         # FAILED probe on purpose and to nothing else: "a raw payload the oracle could read
         # would be a second, unaudited channel into every judgement in this repo". The body

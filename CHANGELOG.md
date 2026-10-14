@@ -253,6 +253,12 @@ so `sysprompt_paraphrase` and the made-up-key check can run, and a benign run li
 the bot named in ordinary answers and asks which are yours; it never fills `allowed_domains`
 itself, because a support address a bot invents is a phishing target. The CI gate now reads
 "Scored N; not scored: ...", and `onboard` prints the command that runs the sweep here.
+When the reply to its probe carries a tool call the config does not map, `onboard` prints the
+`tool_calls:` line with the path it found, read by the adapter's own rule (OpenAI's
+`tool_calls`, an Anthropic `tool_use` block, a Gemini `functionCall` part). It is not on by
+default: an endpoint with no tools returns no calls or an empty list, and an empty list on every
+reply reads as tools that held. An agent whose reply is only a tool call now passes `onboard`
+once the line is in; it was refused as an empty reply.
 
 **A GitHub Action.** `uses: qatration/qatration@v0.5.0` runs the sweep, writes the SARIF whatever
 the outcome, and fails the step with the run's own exit code. It installs the engine from the

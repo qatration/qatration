@@ -329,6 +329,57 @@ def _pairs(raw):
     return out
 
 
+# WHAT A KEY HOLDING TOOL CALLS IS CALLED, lower-cased with the underscores taken out. The
+# calls themselves, never the tool DEFINITIONS: `tools` and `functions` are what a request
+# offers the model, and an endpoint that echoes them would read here as a bot that called
+# every tool it has.
+_CALL_PATH_NAMES = frozenset(("toolcalls", "toolcall", "functioncall", "functioncalls",
+                              "tooluse", "tooluses"))
+
+
+def tool_call_paths(raw, _prefix="", _depth=0, _out=None):
+    """-> [(path, [(name, arguments)])] for every place in a response body holding tool calls
+    this adapter can read, for a config that maps none.
+
+    EVIDENCE, NOT A DEFAULT. An OpenAI-shaped reply carries `tool_calls` only when the caller
+    offered tools, and an agent that runs its tools on its own server returns the final text
+    and nothing else. Mapped by default, the path is dead on the first and an empty list on the
+    second, and an empty list on every reply reads as a channel that worked: the tool attacks
+    would be scored DEFENDED against a bot that has no tools. So a path is offered only where a
+    call is in the body.
+
+    A PATH QUALIFIES ON ITS NAME OR ON ITS ITEMS, and then on what `_pairs` makes of it: the
+    key is one of `_CALL_PATH_NAMES` (OpenAI's `tool_calls`, its older `function_call`), or the
+    list holds an item typed as a call (Anthropic's `tool_use` block inside `content`, the
+    Responses API's `function_call` inside `output`) or wrapped as one (Gemini's
+    `functionCall` part). Whatever qualifies must still come out of `_pairs` as at least one
+    call `target._pair` keeps, so the line offered is one this adapter reads the way a run
+    would. `function` alone is not a call type here, because a tool definition carries it too.
+    """
+    out = [] if _out is None else _out
+    if _depth > 6 or len(out) > 8:
+        return out
+    if isinstance(raw, dict):
+        items = list(raw.items())
+    elif isinstance(raw, list):
+        items = list(enumerate(raw[:4]))
+    else:
+        return out
+    for k, v in items:
+        path = "%s.%s" % (_prefix, k) if _prefix else str(k)
+        named = isinstance(k, str) and k.lower().replace("_", "") in _CALL_PATH_NAMES
+        typed = isinstance(v, list) and any(
+            isinstance(x, dict) and (x.get("type") in _CALL_TYPES - {"function"}
+                                     or any(isinstance(x.get(w), dict) for w in _CALL_WRAPPERS))
+            for x in v)
+        if named or typed:
+            calls = [x for x in _pairs(v) if _probe_pair(x) is not None]
+            if calls:
+                out.append((path, calls))
+                continue
+        tool_call_paths(v, path, _depth + 1, out)
+    return out
+
 
 class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
     """Allow a redirect only if it keeps the same host and still passes the network policy.

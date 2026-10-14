@@ -178,6 +178,12 @@ response:
   # and YAML does that silently. Without the mapping the engine can only read the prose, and on
   # an agent that is the blind spot: the answer can be impeccable while the tool call
   # underneath it carries the secret.
+  #
+  # OFF BY DEFAULT, unlike `history:` below. This shape carries tool calls only when the caller
+  # offered tools, and an agent that runs its tools on its own server returns the final text
+  # alone; mapped anyway, the path finds nothing or an empty list, and an empty list on every
+  # reply reads as tools that were watched and held. `qatration onboard` prints this line,
+  # with the path it found, when its probe's reply carries a call.
   # tool_calls: "choices.0.message.tool_calls"
 
 # A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT, sized so a default run finishes inside
