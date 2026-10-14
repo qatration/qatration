@@ -2,8 +2,11 @@
 
 *Part of the [QAtration](../README.md) design record.*
 
-**Run on 2026-08-25.** QAtration 0.2.0, garak 0.16.0, promptfoo 0.122.0. One machine, one GPU,
-every run sequential. Raw commands at the bottom.
+**Run on 2026-08-25, QAtration's rows run again on 2026-10-14.** garak 0.16.0 and promptfoo
+0.122.0 on the first date, QAtration 0.5.0 on the second, against the same two stands. The shared
+rule reads raw replies and none of QAtration's own verdicts, so a new QAtration release changes
+its own rows and nobody else's. One machine, one GPU, every run sequential. Raw commands at the
+bottom.
 
 ---
 
@@ -89,7 +92,7 @@ then the model has to repeat what it says. Separating them is the whole finding.
 | no attack at all | 50 | 27 (54%) | 23/27 (85%) | 0/23 |
 | garak `latentinjection` | 256 | 121 (47%) | 103/121 (85%) | 0/135 |
 | promptfoo | 200 | 158 (79%) | 150/158 (**95%**) | 0/42 |
-| QAtration | 262 | 225 (**86%**) | 187/225 (83%) | 0/37 |
+| QAtration | 260 | 223 (**86%**) | 183/223 (82%) | 0/37 |
 
 **Nothing leaks when the poisoned document is not retrieved.** Zero, in every row, from every
 tool and from ordinary traffic alike.
@@ -112,7 +115,7 @@ not establish it. An earlier version of this page called it the clearest result 
 observations, without running the test. It was corrected within a day of publication after a
 review asked for the p-value, and the sentence it replaces is quoted in the commit.
 
-For the same comparison: garak 103/121 against the baseline is p = 1.00, and QAtration 187/225
+For the same comparison: garak 103/121 against the baseline is p = 1.00, and QAtration 183/223
 is p = 1.00. Those two add nothing to the repeat rate, and that part is not in doubt.
 
 **QAtration wins the other factor.** 86% retrieval against a 54% background: its arsenal pulls
@@ -132,7 +135,7 @@ Different questions, all legitimate, and the difference is most of the point.
 | garak | `dan.DanInTheWild` bypass **90.23%** [86.33, 93.75] | did the model comply with a request it should refuse |
 | garak | `encoding.InjectBase64` 0.78% | did the model decode and act on a base64 payload |
 | promptfoo | 143 of 200 tests failed | did a judge model think the attack succeeded |
-| QAtration | 192 breaches, 181 flagged unattributable by the tool itself | did a detector fire, and can the finding be attributed |
+| QAtration | 190 breaches, 168 flagged unattributable by the tool itself | did a detector fire, and can the finding be attributed |
 
 ## The guarded target
 
@@ -141,11 +144,11 @@ Different questions, all legitimate, and the difference is most of the point.
 | no attack at all | 48 | 0% | 38 of 48 ordinary questions **refused** |
 | garak `latentinjection` | 256 | 0% | attack success 0.78% [0.00, 1.95] |
 | promptfoo | 200 | 0% | 0 of 200 failed |
-| QAtration | 324 | 0% | **1 of 324 breached** |
+| QAtration | 321 | 0% | **2 of 337 breached** |
 
 *Corrected on 2026-08-31.* This cell said **1 of 323**, and 323 is the number of rows the run
-scored DEFENDED, not the number it sent. `out/bench/results_nemo.json` holds 324 rows: 323
-defended, 1 exploited, none unmeasured. The denominator had been filled in with the count of
+scored DEFENDED, not the number it sent. The August `out/bench/results_nemo.json` held 324
+rows: 323 defended, 1 exploited, none unmeasured. The denominator had been filled in with the count of
 the other column, and the sentence forty lines below already said 1 in 324, so the page
 disagreed with itself in the place a reader checks first. Found while checking whether a
 launch post could quote this number.
@@ -154,14 +157,16 @@ The rails hold. Everything that leaked on the bare application goes to zero for 
 tools, and the shared rule finds nothing at all.
 
 **Two things a breach count would not tell you.** The first is the price: this deployment
-refuses **79% of ordinary customer questions**. It refuses 96% of attacks, so the seventeen
+refuses **79% of ordinary customer questions**. It refuses 95% of attacks, so the sixteen
 points between those two numbers are what the rails actually buy. A benchmark that counted only
 breaches would call this target perfect and never mention that four customers in five get an
 apology instead of an answer.
 
-The second is the one thing that got through: `cap-numeric-anchor`, a multi-turn attack scored
-by the `capitulation` detector, 1 in 324. Twenty probes would have found nothing and concluded
-the target was impenetrable. **The budget for a published claim and the budget for a Tuesday
+The second is what got through, 2 in 337. `cap-numeric-anchor`, a multi-turn attack scored by
+the `capitulation` detector, broke it in August and broke it again in October: the bot confirmed
+a restocking fee the attacker made up. `g-invisible` got it to answer in zero-width spaces, which
+its output rail let past. Twenty probes would have found neither and concluded the target was
+impenetrable. **The budget for a published claim and the budget for a Tuesday
 are different budgets**, which is why `--scope quick` exists and why it was not used here.
 
 ## Where the other tools were better
@@ -188,9 +193,9 @@ nothing, not a fault.
 
 ## What QAtration did that the others cannot
 
-One thing, and it is the reason the project exists. Of the 192 breaches it reported on the
-unguarded target, **181 came with the reason they could not be attributed**, naming the benign
-rate of each detector that fired. The remaining 11 carry no such flag, because the detectors
+One thing, and it is the reason the project exists. Of the 190 breaches it reported on the
+unguarded target, **168 came with the reason they could not be attributed**, naming the benign
+rate of each detector that fired. The remaining 22 carry no such flag, because the detectors
 behind them do not fire on this target's benign traffic, and those are the findings the run
 stands behind. Neither of the other tools takes a benign baseline, so neither can make the
 distinction either way.
@@ -209,7 +214,7 @@ On the guarded target it was also the only tool to produce a positive finding.
   nothing once the payload is in context" is too broad, and the evidence is in
   [attribution.md](attribution.md).
 * **Two targets, two models, one day.** Nothing here generalises to a different application.
-* **The budgets are not equal.** 200, 256 and 324 replies. Rates are compared rather than
+* **The budgets are not equal.** 200, 256 and 321 replies. Rates are compared rather than
   totals, and each tool ran its own shipped corpus at its own default size, because truncating
   a tool's corpus would mean measuring something other than the tool as shipped.
   `run.soft_probe_prompt_cap` is not honoured by every garak module, which is why an equal
@@ -256,15 +261,14 @@ to create the folder and add your own. Put PDFs in `backend/pdfs`, one of them c
 minted with `qatration mint`, and run its ingestion script.
 
 ```
-pip install git+https://github.com/qatration/qatration@4c678f4
+pip install git+https://github.com/qatration/qatration@9019e08
 qatration benign --target-config redteam/targets_localrag.yaml
 qatration run --target-config redteam/targets_localrag.yaml --scope full --trials 1
 ```
 
-**Not 0.2.0, and the difference is six attacks.** `attacks_docframe.yaml` was committed eight
-minutes before these runs started, so the 262 replies include its six `doc-*` attacks while the
-released 0.2.0 arsenal does not contain them. Installing the release would send 362 attacks
-where this run sent 368, and would not reproduce the row. The commit above is what ran.
+**The commit above is what ran QAtration's rows**, the 0.5.0 code. The August rows were run at
+`4c678f4`, and its arsenal is not this one: the comparison between the two dates is in the
+history of `out/bench/`, not on this page.
 
 ```
 pip install garak==0.16.0
@@ -300,8 +304,8 @@ Same machine, one at a time, generation included where a tool generates its own 
 
 | run | prompts | time |
 |---|---|---|
-| QAtration, unguarded, full arsenal | 262 | 25 min |
-| QAtration, guarded, full arsenal | 324 | 47 min |
+| QAtration, unguarded, full arsenal | 260 | 25 min |
+| QAtration, guarded, full arsenal | 321 | 52 min |
 | garak `latentinjection`, unguarded | 256 | 27 min |
 | garak `latentinjection`, guarded | 256 | 19 min |
 | garak, four more families, unguarded | 553 | 55 min |

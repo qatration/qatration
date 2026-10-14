@@ -53,7 +53,7 @@ pre{white-space:pre-wrap;word-break:break-word;margin:4px 0;font-family:ui-monos
 </style></head><body><div class="wrap">
 <div class="rpt-head">
   <h1><span class="q">QA</span>tration — Security Assessment</h1>
-  <div class="sub">Adversarial test of AI features · 3 of 35 runs dated, 2026-09-03 to 2026-10-10 · 34 systems tested · 1 not measured: localrag-refusal</div>
+  <div class="sub">Adversarial test of AI features · 4 of 35 runs dated, 2026-09-03 to 2026-10-14 · 34 systems tested · 1 not measured: localrag-refusal</div>
 </div>
 
 <div class="summary">
@@ -68,7 +68,7 @@ dozens of problems. Of those occurrences, <b>380</b> are on practice bots writte
 <p class="coverage">Coverage: 34 targets, 31 with at least
 one finding. The findings below fall in LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM03 Supply Chain, LLM04 Data and Model Poisoning, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM07 System Prompt Leakage, LLM09 Misinformation, LLM10 Unbounded Consumption. An area not named is one this run did not demonstrate, which is not the same as one it cleared.</p>
 
-<div class="stalebar"><b>Mixed measurement dates.</b> Newest run 2026-10-10; measured earlier: citebot (2026-10-08), shipdesk (2026-09-03). Findings from an earlier run were produced by an earlier engine and may already be fixed, or may be wrong — re-run before acting on them.</div><div class="stalebar">draftbot, dvla, foreign, foreign-code … and 28 more did not record when they ran, so their date is a file date, which a clone or a copy rewrites, and is not compared.</div>
+<div class="stalebar"><b>Mixed measurement dates.</b> Newest run 2026-10-14; measured earlier: citebot (2026-10-08), httpbot (2026-10-10), shipdesk (2026-09-03). Findings from an earlier run were produced by an earlier engine and may already be fixed, or may be wrong — re-run before acting on them.</div><div class="stalebar">draftbot, dvla, foreign, foreign-code … and 27 more did not record when they ran, so their date is a file date, which a clone or a copy rewrites, and is not compared.</div>
 
 <div class="exec"><b>Executive summary.</b> This assessment found 37 distinct
 weaknesses, seen 442 times in total. 383 of those occurrences were fully exploited and 59 moved something short of the objective.
@@ -102,7 +102,7 @@ At Acme Store, we offer a 30-day window for customers to request a refund from t
           <div class="fix"><span class="fixlabel">Read this before the counts</span>an attack
             that was never sent is a GAP, not a finding that came back clean — the same sentence this engine
             applies to a budget that runs out. The smallest run on this page sent
-            6 attack(s). Detectors that could not speak here at all, for want of a config key: 24 on citebot, 5 on guardedrag, 5 on guardedrag-mitigated, 7 on guardedrag-refusal … and 6 more. Their silence is a gap in the instrument, not a defence by the target, and nothing below rules out what they look for. The rest of the file was scoped to other systems, so
+            6 attack(s). Detectors that could not speak here at all, for want of a config key: 24 on citebot, 5 on guardedrag, 5 on guardedrag-mitigated, 7 on guardedrag-refusal … and 7 more. Their silence is a gap in the instrument, not a defence by the target, and nothing below rules out what they look for. The rest of the file was scoped to other systems, so
             those were never candidates here; that is only reassuring if the arsenal named
             below is the one written for a system like yours. Deliveries your configuration
             cannot carry were skipped as well — a transcript for multi-turn work, a
@@ -1092,7 +1092,7 @@ def calculate_standard_deviation(numbers):
         </section>
         <section class="finding unseen">
           <div class="fhead"><span class="sev" style="color:#6b7280;background:#f3f4f6">COVERAGE</span></div>
-          <h2>892 attack(s) measured, 2202 not sent, 8 errored</h2>
+          <h2>934 attack(s) measured, 2202 not sent, 8 errored</h2>
           <div class="fix"><span class="fixlabel">What this page is</span>every finding this
             run produced is here, in full — payload, reply, detector, the caveat about whether
             it is attributable, and the fix. What it is not is an exhaustive statement about

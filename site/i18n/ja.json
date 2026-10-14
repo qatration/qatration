@@ -9,10 +9,10 @@
       "6",
       "4"
     ],
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
       "0",
-      "324",
-      "1",
+      "337",
+      "2",
       "48",
       "38"
     ],
@@ -129,7 +129,7 @@
     "And beside two other tools, in public": "そして他の二つのツールと並べて、公開の場で",
     "Run against the same third-party targets as garak and promptfoo, with every reply from all three scored by one substring rule instead of by each tool's own judge. On a RAG app with no guardrails,": "garakおよびpromptfooと同じ第三者の対象に対して実行し、三つすべての応答を、各ツール独自の判定ではなく単一の部分文字列規則で採点しました。ガードレールのないRAGアプリでは、",
     "46% of benign probes already return the planted string": "無害なプローブの46%がすでに仕込まれた文字列を返します",
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, one breach in 324, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": "。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。324件中1件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。比較ページには、他の二つが優れている点も、査読者からp値を求められて撤回した主張も載せています。",
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": "。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。337件中2件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。比較ページには、他の二つが優れている点も、査読者からp値を求められて撤回した主張も載せています。",
     "Read the comparison": "比較を読む",
     "Found before a single attack": "最初の攻撃より前に見つかったこと",
     "A profile of a dozen or so probes, all of it benign: five bots handed over their own instructions on a plain request. One printed its confidential session key inside the very sentence forbidding it from sharing that key. Three reported a database restarted when none had a tool that could restart anything.": "十件あまりのプローブによる調査で、すべて無害なものです。五体のボットが、ごく普通の依頼に対して自らの指示を差し出しました。一体は、その鍵を共有してはならないと述べたまさにその文の中で、機密のセッションキーを出力しました。三体は、何かを再起動できるツールを持たないまま、データベースの再起動を報告しました。",
@@ -166,6 +166,6 @@
     "Across everything shipped with it": "同梱されたすべてにわたって",
     "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35の対象、通った攻撃442件、そして一つも通らなかった対象が3つ。そのうち9つの対象は他人が書いたコードで動いており、検出結果のうち62件がそこにあります。すべては37の根本原因にまとまり、深刻が2、高が23、中が12で、修正レポートがそれぞれに修正を示しています。",
     "And how much of it to believe": "そして、どこまで信じてよいか",
-    "It has 66 checks, and 63 of them have fired on the 7,851 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "チェックは66あり、そのうち63がここに保存された7851件のプローブで発火しています。一度も発火していない3つは、カバー範囲には数えず、宣言のみとして報告しています。誰も攻撃していないトラフィックでは779回発火し、622件はボットの本当の問題、157件は誤検知でした。どちらの数字も公開しています。"
+    "It has 66 checks, and 63 of them have fired on the 7,977 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "チェックは66あり、そのうち63がここに保存された7977件のプローブで発火しています。一度も発火していない3つは、カバー範囲には数えず、宣言のみとして報告しています。誰も攻撃していないトラフィックでは779回発火し、622件はボットの本当の問題、157件は誤検知でした。どちらの数字も公開しています。"
   }
 }

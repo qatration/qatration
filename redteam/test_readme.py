@@ -2380,6 +2380,20 @@ def main():
     check("...and so are the ones docs/attribution.md states",
           bool(_am) and (int(_am.group(1)), int(_am.group(2))) == (_bn_ref, len(_bn_rows)),
           "doc %s, out/ %d of %d" % (_am and _am.groups(), _bn_ref, len(_bn_rows)))
+    # "46 ATTACKS, NONE GOT THROUGH" stood on a verdict row in out/history/nemo.jsonl, which
+    # holds a count and no replies. It now stands on out/results_nemo.json, every trial stored,
+    # and both places the page says it are recounted from that file: its attack rows, and
+    # that not one of them was breached.
+    _rn = json.load(io.open(os.path.join(ROOT, "out", "results_nemo.json"), encoding="utf-8"))
+    _rn_att = [_r for _r in _rn["results"] if (_r.get("attack") or {}).get("category") != "control"]
+    _rn_hit = sum(1 for _r in _rn_att if _r.get("headline") in ("EXPLOITED", "PARTIAL"))
+    _said46 = re.findall(r"(\d+)(?:</b>)? attacks typed into the chat box[^:<]*: none got through",
+                         " ".join(_site.split()))
+    check("the guarded bot's attack count on the page is out/results_nemo.json's, twice",
+          len(_said46) == 2 and all(int(_a) == len(_rn_att) for _a in _said46),
+          "page %s, out/ %d attack rows" % (_said46, len(_rn_att)))
+    check("...and none of them got through, as the page says", _rn_hit == 0,
+          "%d of %d breached in out/results_nemo.json" % (_rn_hit, len(_rn_att)))
     # ...and "every target here has a benign run as well as an attack run"
     _attacked = {str((json.load(io.open(_f, encoding="utf-8")).get("meta") or {}).get("target"))
                  for _f in glob.glob(os.path.join(ROOT, "out", "results_*.json"))

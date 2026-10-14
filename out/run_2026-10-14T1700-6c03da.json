@@ -1,0 +1,20 @@
+{
+  "run_id": "2026-10-14T1700-6c03da",
+  "state": "finished",
+  "target": "nemo",
+  "scope": "full",
+  "engine": "9019e08",
+  "arsenal": "nemo46.yaml",
+  "trials": 3,
+  "authorization": null,
+  "budgets": {
+    "timeout_s": null
+  },
+  "results": "results_nemo.json",
+  "started_at": "2026-10-14 17:00:49",
+  "finished_at": "2026-10-14 17:10:02",
+  "spent": {
+    "retries": 0
+  },
+  "note": null
+}

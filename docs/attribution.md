@@ -741,7 +741,7 @@ the first as "multi-turn is impossible on this target".
 **And the finding that qualifies all the others: what the guard costs.** On its stored benign
 run (`out/benign_nemo.json`), with nobody attacking, it refused 39 of 50 ordinary customer
 questions. A rail that says no to four customers in five lets little through, so our own
-"46 attacks, none got through" (one run, kept as a verdict row in `out/history/nemo.jsonl`) is
+"46 attacks, none got through" (one run, every reply kept in `out/results_nemo.json`) is
 read beside that number. This record used to say instead that the rail disagreed with itself
 on repeated input; nothing in `out/` recorded that, and it is withdrawn.
 

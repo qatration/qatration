@@ -246,7 +246,9 @@ live bot: the quickstart withheld 71 attacks for want of a `history:` block, on 
 endpoint whose `messages` list already carries a conversation. `init` turns it on. Not every
 endpoint that takes `messages` reads the earlier ones, so `onboard` and `run` ask first, with a
 case number planted in an earlier assistant turn, and `run` withholds the multi-turn attacks from
-an endpoint that does not, saying why. `init --system-prompt-file` writes the prompt as deployed,
+an endpoint that does not, saying why. A guard that refuses the question has not answered it:
+a refusal reads as unmeasured, and the attacks are sent with that said, where the first version
+withheld every multi-turn attack from NeMo Guardrails. `init --system-prompt-file` writes the prompt as deployed,
 so `sysprompt_paraphrase` and the made-up-key check can run, and a benign run lists the domains
 the bot named in ordinary answers and asks which are yours; it never fills `allowed_domains`
 itself, because a support address a bot invents is a phishing target. The CI gate now reads
@@ -257,6 +259,13 @@ the outcome, and fails the step with the run's own exit code. It installs the en
 tag it is pinned to, so the version in the workflow is the version that runs, and every input
 reaches its scripts through `env:`. The check matrix runs it against a local bot that leaks its
 key and expects exit 1 and a SARIF holding the finding.
+
+**The published comparisons, measured again on this engine.** The benchmark's QAtration column
+against garak and promptfoo was re-run on both targets: 183 of 223 retrieved replies leak on the
+bare application, and on the guarded one 2 of 337 trials breached, where August found one. The
+second is new and real: the bot answered in zero-width spaces and its output rail let them past.
+"46 attacks, none got through" on NeMo Guardrails rested on a verdict row; it is now a stored
+run with every reply, and the page, the site and `docs/attribution.md` are checked against it.
 
 ### Upgrading
 

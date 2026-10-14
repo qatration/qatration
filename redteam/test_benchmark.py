@@ -252,7 +252,7 @@ def main():
         # that only knew the digit would fail on correct English, and one that accepted any
         # form would pass on a stale number.
         forms = ["%d breach" % nbreach] + (["one breach"] if nbreach == 1 else [])
-        check("...and the single breach on the guarded target is still one",
+        check("...and the breach count on the guarded target is a recount",
               any(f in block for f in forms) and str(nreplies) in block,
               "artifact says %d in %d" % (nbreach, nreplies))
 
@@ -262,6 +262,37 @@ def main():
         check("...and the refusal count the rails cost is a recount",
               "%d of %d ordinary customer questions" % (refused, len(nrows)) in block,
               "artifact says %d of %d" % (refused, len(nrows)))
+
+    # --- WHAT THE RAILS COST, as the page prices it ------------------------------------
+    #
+    # The guarded-target paragraph subtracts one refusal rate from another and calls the gap
+    # what the rails buy. Both rates come from stored rows, so both are recounted: the benign
+    # one from `benign_nemo.json`, the attack one from every trial of every non-control row in
+    # `results_nemo.json` whose refusal class is anything but compliance. The gap is written as
+    # a word, so the word is derived too.
+    nemo = json.load(io.open(os.path.join(BENCH, "results_nemo.json"), encoding="utf-8"))
+    nben = json.load(io.open(os.path.join(BENCH, "benign_nemo.json"), encoding="utf-8"))["rows"]
+    asked = [t for r in nemo["results"] if (r.get("attack") or {}).get("category") != "control"
+             for t in r.get("trials") or []]
+    turned = sum(1 for t in asked if ((t.get("refusal") or {}).get("class") or "compliance")
+                 != "compliance")
+    on_attacks = round(100.0 * turned / len(asked)) if asked else -1
+    on_customers = round(100.0 * sum(1 for r in nben if r.get("refused")) / len(nben)) if nben else -1
+    words = ("zero one two three four five six seven eight nine ten eleven twelve thirteen "
+             "fourteen fifteen sixteen seventeen eighteen nineteen twenty").split()
+    gap = on_attacks - on_customers
+    said = re.search(r"refuses \*\*(\d+)% of ordinary customer questions\*\*\. It refuses (\d+)% "
+                     r"of attacks, so the (\w+)\s+points", text)
+    check("the page prices the rails: customers refused against attacks refused", bool(said),
+          "sentence gone")
+    if said:
+        check("...and both rates are recounts",
+              (int(said.group(1)), int(said.group(2))) == (on_customers, on_attacks),
+              "page %s%% / %s%%, rows %d%% / %d%% (%d of %d attack trials)"
+              % (said.group(1), said.group(2), on_customers, on_attacks, turned, len(asked)))
+        check("...and the gap between them is their difference",
+              said.group(3) in (str(gap), words[gap] if 0 <= gap < len(words) else str(gap)),
+              "page %s, difference %d" % (said.group(3), gap))
 
     # --- WAS IT THE ATTACK, OR WAS IT THE RETRIEVAL -------------------------------------
     #
