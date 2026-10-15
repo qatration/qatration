@@ -170,10 +170,17 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 422 | 1,635 | ~55 min | ~109 min |
-| `--scope full`, 1 trial | 422 | 545 | ~18 min | ~36 min |
+| `--scope full`, 3 trials (the default) | 427 | 1,650 | ~55 min | ~110 min |
+| `--scope full`, 1 trial | 427 | 550 | ~18 min | ~37 min |
 | `--scope quick`, 3 trials | 60 | 216 | ~7 min | ~14 min |
 | `--scope quick`, 1 trial | 60 | 72 | ~2 min | ~5 min |
+
+`--best-of N` is a different instrument rather than a bigger row: each single-turn attack is sent
+as N seeded random rewordings (letters shuffled inside words, case flipped, a few characters
+nudged, as in Anthropic's Best-of-N jailbreaking paper) and counts as broken if any got through,
+with the multi-turn attacks not sent. It costs N requests per attack, it replaces `--trials`, and
+`--fail-on regression` will not compare it with an ordinary run. It is for asking how a deployment
+holds up against a patient attacker, nightly or before a release, not on a pull request.
 
 **Nobody is running the top row on every pull request.** A busy repository merges ten an hour,
 and forty minutes of a paid endpoint per merge is not a security practice, it is a denial of
@@ -212,7 +219,7 @@ on a schedule with `--scope quick` on pull requests, writing into one timeline, 
 comparison comes back:
 
 ```
-CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 422 -> 60 attacks
+CI GATE: CANNOT ANSWER — the comparison is confounded: arsenal 427 -> 60 attacks
 ```
 
 Correct, and useless. The same happens for `--trials`: a run at 1 compared against a baseline at
@@ -253,21 +260,21 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.85 / $2.56 / $4.27 | $2.32 / $6.95 / $11.58 |
-| `full` x1 | $0.28 / $0.85 / $1.42 | $0.77 / $2.32 / $3.86 |
+| `full` x3 (the default) | $0.86 / $2.59 / $4.31 | $2.34 / $7.01 / $11.69 |
+| `full` x1 | $0.29 / $0.86 / $1.44 | $0.78 / $2.34 / $3.90 |
 | `quick` x3 | $0.11 / $0.34 / $0.57 | $0.31 / $0.92 / $1.53 |
 | `quick` x1 | $0.04 / $0.11 / $0.19 | $0.10 / $0.31 / $0.51 |
 
-**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 45
+**The dominant cost is your own system prompt, not the attacks.** An attack payload averages 46
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,635 requests that is 1.6M input tokens of your own instructions, about
+single request. At 1,650 requests that is 1.6M input tokens of your own instructions, about
 **96% of the input tokens**, before a single attack payload is counted.
 
 Two consequences worth acting on:
 
 * **Prompt caching pays for this outright.** If your deployment caches the system prefix, those
-  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $6.95 to
-  around $2.54. If you were looking for a reason to turn caching on, a security sweep is one.
+  repeated tokens drop to roughly a tenth, and a full Sonnet sweep goes from about $7.01 to
+  around $2.56. If you were looking for a reason to turn caching on, a security sweep is one.
 * **A per-PR check is cents, not dollars.** `quick` at three trials is well under a dollar on
   any of these models, which is the number to quote when someone asks whether this can run on
   every relevant pull request.

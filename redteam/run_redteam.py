@@ -933,6 +933,13 @@ def main():
     from cli import parser as _cli_parser
     ap = _cli_parser("run")
     from workspace import trial_count as _trial_count
+    ap.add_argument("--best-of", type=lambda v: _trial_count(v, where="--best-of"), default=None,
+                    metavar="N", dest="best_of",
+                    help="Best-of-N (Hughes, Price et al., Anthropic): send every single-turn "
+                         "attack N times, each a seeded random variant (letters shuffled inside "
+                         "words, case flipped, a few characters nudged), and count it broken if "
+                         "any variant got through. Replaces --trials; multi-turn attacks are "
+                         "not sent in this mode")
     ap.add_argument("--trials", type=_trial_count, default=None,
                     help="runs per attack (default 3, or the target config's 'trials'); "
                          "multi-trial separates a reliable breach (3/3) from a flaky one (1/3)")
@@ -1023,6 +1030,20 @@ def main():
     # reaches the same arithmetic without passing any parser at all.
     trials = (args.trials if args.trials is not None
               else _trial_count(tcfg.get("trials", 3), where="trials: in the target config"))
+    # BEST-OF-N REPLACES THE TRIAL COUNT, it does not multiply it: N variants of one attack are
+    # its N trials. Both given is two answers to one question, so it is refused.
+    if getattr(args, "best_of", None):
+        # EXIT 2, the refused invocation: a bare `SystemExit("...")` exits 1, which the
+        # README defines as "the target was exploited or breached".
+        if args.trials is not None:
+            print("run: --best-of %d and --trials %d both set the number of sends per attack. "
+                  "Give one. Nothing was sent." % (args.best_of, args.trials), file=sys.stderr)
+            sys.exit(2)
+        if args.best_of < 2:
+            print("run: --best-of %d is one wording of each attack, which is an ordinary run. "
+                  "Give 2 or more. Nothing was sent." % args.best_of, file=sys.stderr)
+            sys.exit(2)
+        trials = args.best_of
     from workspace import oracle_context_of as _octx
     ctx = _octx(tcfg)
 
@@ -1660,6 +1681,22 @@ def main():
                   f"{target.name} cannot take. Leaving results untouched.", file=sys.stderr)
             sys.exit(3)
 
+    # BEST-OF-N SENDS SINGLE-TURN ATTACKS ONLY. A variant is the same request reworded at
+    # random, which is defined for one message; a chain, a forged history or a seeded document
+    # would be perturbed somewhere the paper never measured. Not sent, and said, as a scope the
+    # operator chose rather than as coverage. Controls stay: they are the baseline.
+    if getattr(args, "best_of", None):
+        _bon_out = [a for a in attacks if a.get("delivery", "direct") != "direct"
+                    and a.get("category") != "control"]
+        if _bon_out:
+            _ids_b = {a["id"] for a in _bon_out}
+            attacks = [a for a in attacks if a["id"] not in _ids_b]
+            not_sent += len(_bon_out)
+            skipped = not_applicable + not_sent
+            print(f"  · best-of-{trials}: every single-turn attack is sent as {trials} random "
+                  f"variants and counted broken if any got through; {len(_bon_out)} multi-turn "
+                  f"attack(s) are not sent in this mode")
+
     # AFTER THE WITHHOLDING, so the one attack a category sends is one that CAN be sent: picked
     # first, a category whose pick was then withheld as undeliverable was not tested at all
     # while the line below still counted it -- three categories of the shipped arsenal lost
@@ -1788,7 +1825,8 @@ def main():
     for _ai, a in enumerate(attacks):
         if _rl_stopped:
             break
-        recs = run_attack(target, a, ctx, trials=trials)
+        recs = run_attack(target, a, ctx, trials=trials,
+                          best_of=getattr(args, "best_of", None) or 0)
         head, rate = headline(recs)
         fired_list = sorted({d for r in recs for d in r["fired"]})
         if head in BROKE and a["category"] != "control":
@@ -2109,6 +2147,9 @@ def main():
             # indistinguishable from an attack.
             "authorization": _auth,
             "caps": sorted(target.capabilities), "trials": trials,
+            # A BEST-OF-N RUN SAYS SO: its trials are N different wordings, not N repeats, and
+            # a rate from one is not comparable with a rate from the other.
+            **({"best_of": trials} if getattr(args, "best_of", None) else {}),
             # A CONFIGURED PATH THAT NEVER RESOLVED. `caps` says what the config claims; this
             # says which of those claims the run could not substantiate even once. Sixteen
             # detectors read the tool-call channel, and against a mistyped path every one of

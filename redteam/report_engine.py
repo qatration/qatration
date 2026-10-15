@@ -619,6 +619,11 @@ def build_html(meta, results, recon=None, isolation=None):
 
     # AND WHAT THE TRANSCRIPT CHECK FOUND, which `run` acted on and this page never said: an
     # unanswered check sent the multi-turn attacks unverified, a failed one withheld them.
+    from workspace import best_of_note as _bo_note
+    if _bo_note(meta):
+        inert_html += ('<div class="panel"><div class="ptitle">best-of-%s run</div>'
+                       '<div class="warn">%s</div></div>' % (meta.get("best_of"),
+                                                             esc(_bo_note(meta))))
     from workspace import history_check_note as _hc_note
     _hc_txt = _hc_note(meta)
     if _hc_txt:

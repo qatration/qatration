@@ -375,6 +375,12 @@ def build(results, target_config=None, out_dir=None, source=None):
             "level": "warning",
             "message": {"text": _part_txt},
             "descriptor": {"id": "mapping/partly-read-path"}})
+    from workspace import best_of_note as _bo_note
+    if _bo_note(meta):
+        notifications.append({
+            "level": "note",
+            "message": {"text": _bo_note(meta)},
+            "descriptor": {"id": "coverage/best-of-n"}})
     from workspace import history_check_note as _hc_note
     _hc_txt = _hc_note(meta)
     if _hc_txt:

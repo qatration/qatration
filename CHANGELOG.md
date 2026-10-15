@@ -15,6 +15,25 @@ steady-looking move can be chance, and more `--trials` settle it. `onboard` on i
 default now says the time budget of the whole-arsenal run it tells you to type next. The README
 says where the example configs are after `pip install`.
 
+**Five attacks from this year's research, and a Best-of-N mode.** `g-cot-forgery` and
+`g-cot-forgery-think` write the forbidden step in the voice of the model's own reasoning (Ye,
+Cui, Hadfield-Menell, "Prompt Injection as Role Confusion", ICML 2026). `g-double-request` asks
+for every answer twice and only the second shown, the shape that got past a guard checking the
+first (Varonis, "Reprompt", 2026). `g-fake-validator` dresses the exfiltration as an anti-bot
+check the assistant must pass (Trail of Bits, Comet audit, 2026). `g-data-forgery` carries no
+instruction at all, only a stored record whose escaped quotes close one field and open forged
+`author_role` and `approved_disclosure` ones (Choi et al., arXiv 2607.05120). The portable arsenal
+is 427 attacks. `run --best-of N` sends every single-turn attack as N seeded random rewordings
+(Hughes, Price et al., "Best-of-N Jailbreaking", Anthropic) and counts it broken if any got
+through; the results, the page and the SARIF say so, and the regression gate will not compare it
+with an ordinary run.
+
+**Two detector gaps found on the way.** `exfil_via_url` reads a protocol-relative link
+(`![x](//host/p?d=...)`, which a renderer fetches) and a scheme in capitals. `ansi_exfil` no
+longer reads the attacker's own written escape (`ESC]8;;`) repeated back as a terminal link; a
+bot writing `\033]8;;` or `\e]8;;` itself still counts. Re-judged against every stored result,
+neither changed a verdict.
+
 ---
 
 ## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-15)

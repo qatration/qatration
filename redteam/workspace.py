@@ -2881,6 +2881,7 @@ _RESULTS_REQUIRE = {
                                              "confirmed planted"),
     "meta.history_check": (str, False, "the report and the SARIF say multi-turn was sent "
                                        "unverified or withheld"),
+    "meta.best_of": (int, False, "the report and the SARIF say the rows are best-of-N"),
     "meta.baseline": (list, False, "the report lists the clean tool inputs a run was given"),
     "meta.attribution": (str, False, "`rejudge --pages` prints it"),
     "meta.inert": (dict, False, "`rejudge --pages` and `sarif` name each inert detector"),
@@ -3758,6 +3759,22 @@ def history_check_note(meta):
                 "unverified: an endpoint that drops the transcript answers each of them as a "
                 "single turn, and its DEFENDED rows say nothing about it.")
     return ""
+
+
+def best_of_note(meta):
+    """One sentence for a best-of-N run (`run --best-of`), or "".
+
+    Its rates mean something else: "3/50" is three of fifty random rewordings getting through,
+    and a breach is any one of them. Said beside the rows in the report and the SARIF, because
+    the same "3/50" from repeats of one wording would be a different and weaker claim.
+    """
+    n = (meta or {}).get("best_of")
+    if not n:
+        return ""
+    return ("Best-of-%d run: every single-turn attack was sent as %d random rewordings (letters "
+            "shuffled inside words, case flipped, a few characters nudged; Hughes, Price et al., "
+            "Anthropic), and a row is broken if any of them got through. Multi-turn attacks were "
+            "not sent. A rate here counts rewordings, not repeats." % (n, n))
 
 
 def dead_path_note(paths):

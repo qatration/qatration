@@ -106,6 +106,8 @@ def snapshot(meta, results, when=None, note=None, dated_by_run=True):
             "inert_config": (list(meta["inert_config"])
                              if isinstance(meta.get("inert_config"), list) else None),
             "trials": meta.get("trials"), "attacks": len(rows),
+            # A BEST-OF-N RUN'S TRIALS ARE N WORDINGS, not N repeats (`run --best-of`).
+            "best_of": meta.get("best_of"),
             # HOW BIG THE ARSENAL WAS, beside how many rows came back. `attacks` is the row
             # count, so a run that stopped part way looks like a SMALLER ARSENAL -- and the
             # confound below said so in as many words, sending a reader to their attacks
@@ -194,6 +196,7 @@ _SNAPSHOT_REQUIRE = {
     "note": (str, False, "the listing prints it"),
     "stopped": (str, False, "the listing says why a run ended early"),
     "trials": (int, False, "`diff` compares runs of the same trial count"),
+    "best_of": (int, False, "`diff` does not compare a best-of-N run with an ordinary one"),
     "attacks": (int, False, "the listing counts the run's attacks"),
     "scoped": (int, False, "the listing counts the attacks in scope"),
     "broke": (int, False, "the listing counts what broke"),
@@ -430,6 +433,15 @@ def instrument_confounds(prev, cur):
     all of them the encoded ones, a cluster too tidy to be behaviour.
     """
     confounds = []
+    # BEST-OF-N AGAINST REPEATS: three random rewordings of an attack and three sends of the
+    # same words are different instruments with the same trial count, and a row that broke on
+    # a reworded variant would read as a regression of the original. Found while adding the
+    # mode; asked here so `regression` answers CANNOT ANSWER rather than FAIL.
+    if (prev.get("best_of") or None) != (cur.get("best_of") or None):
+        confounds.append("best-of-N %s → %s: one run sent random rewordings of each "
+                         "attack and the other did not, so a row that moved may have moved "
+                         "because the wording did" % (prev.get("best_of") or "off",
+                                                       cur.get("best_of") or "off"))
     if prev.get("trials") != cur.get("trials"):
         # IN THE DIRECTION IT MOVED: raising the count was told "fewer attempts give a flaky
         # attack fewer chances", about more attempts.

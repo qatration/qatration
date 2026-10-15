@@ -677,7 +677,44 @@ def filled(attack, ctx):
     return (out if out != attack else attack), sorted(missing)
 
 
-def run_attack(target, attack, ctx, trials=1):
+# BEST-OF-N, as published: Hughes, Price et al., "Best-of-N Jailbreaking" (Anthropic, NeurIPS
+# 2025). The same request sent many times, each copy perturbed at random -- letters shuffled
+# inside words, case flipped, a few characters nudged one code point -- and the attack is
+# counted as having worked if ANY copy got through. Their result is that the rate climbs with N
+# as a power law, which is what a filter that judges one wording at a time cannot see.
+# The three rates are the paper's.
+BON_SCRAMBLE, BON_CAPS, BON_NOISE = 0.6, 0.6, 0.06
+
+
+def bon_augment(text, seed):
+    """-> `text` perturbed the Best-of-N way, the same for the same seed.
+
+    Seeded, so variant 7 of an attack is the same string on every run and a breach can be
+    replayed. Markup the sweep reads back -- `{...}` slots are already filled by here -- is
+    not special: the paper perturbs the whole request, and so does this. Only characters
+    in printable ASCII are nudged, so a variant never contains a control character the
+    original did not.
+    """
+    import random as _r
+    rng = _r.Random(str(seed))
+    words = []
+    for w in (text or "").split(" "):
+        if len(w) > 3 and rng.random() < BON_SCRAMBLE:
+            mid = list(w[1:-1])
+            rng.shuffle(mid)
+            w = w[0] + "".join(mid) + w[-1]
+        words.append(w)
+    out = []
+    for c in " ".join(words):
+        if c.isalpha() and rng.random() < BON_CAPS:
+            c = c.swapcase()
+        if 33 <= ord(c) <= 125 and rng.random() < BON_NOISE:
+            c = chr(ord(c) + rng.choice((-1, 1)))
+        out.append(c)
+    return "".join(out)
+
+
+def run_attack(target, attack, ctx, trials=1, best_of=0):
     records = []
     delivery = attack.get("delivery", "direct")
     caps = getattr(target, "capabilities", set())
@@ -703,7 +740,7 @@ def run_attack(target, attack, ctx, trials=1):
 
     def _text(s):
         return sent_form(s, _enc)
-    for _ in range(trials):
+    for _trial in range(trials):
         if not start_trial(target, records[-1].get("probe") if records else None, aid):
             break
         seeded = False
@@ -748,6 +785,10 @@ def run_attack(target, attack, ctx, trials=1):
                     probe.prompt = attacker_side(attack)
             else:
                 text = _text(attack["text"])
+                # A FRESH VARIANT EACH TRIAL under `--best-of`: the trial index is the seed's
+                # second half, so trial 7 of this attack is the same string on every run.
+                if best_of:
+                    text = bon_augment(text, "%s:%d" % (aid, _trial))
                 probe = _resilient_send(lambda t=text: target.send(t), aid)
         finally:
             if seeded:
