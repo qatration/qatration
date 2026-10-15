@@ -1,19 +1,19 @@
 # The oracle
 
-Sixty-three deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
+Sixty-four deterministic detectors that have fired, how many have not, where the oracle stops, and the two gates that keep it from reading the question.
 
 *Part of the [QAtration](../README.md) design record.*
 
 ---
 
-## The oracle: sixty-six detectors, and how many have ever fired
+## The oracle: sixty-seven detectors, and how many have ever fired
 
 A detector is a pure `(probe, ctx) -> bool`, judged by an objective rule and never by a
 model's opinion — that separation is why a clean result from this tool can mean anything.
-There are sixty-six, across the channels a breach actually uses: the reply, a tool
+There are sixty-seven, across the channels a breach actually uses: the reply, a tool
 argument, a tool's return value, the conversation, the next session, the bill.
 
-The number that matters is not sixty-six. **It is how many of them have ever caught something
+The number that matters is not sixty-seven. **It is how many of them have ever caught something
 on a live target**, which `detector_coverage.py` answers by replaying every stored artifact
 through the current oracle at no GPU cost:
 
@@ -21,7 +21,7 @@ through the current oracle at no GPU cost:
 qatration coverage
 ```
 
-It reports **63 demonstrated, 3 declared-only** over 7,977 stored probes. Few tools publish a plugin count
+It reports **64 demonstrated, 3 declared-only** over 7,977 stored probes. Few tools publish a plugin count
 next to how many of those plugins have ever fired, and that second number is the one worth
 having: a detector with a green unit test and no live hit is a claim, which is precisely
 what this tool says about an untested guardrail, turned on itself.
@@ -41,9 +41,10 @@ the count that stands without them is printed beside the headline: **61**. A `--
 writes `results_<target>_<model>.json` deliberately beside the canonical artifact, and every
 page here that counts targets, rates or verdicts leaves those out as the same attacks under
 a different model. This tool takes them, because its question is whether a detector has ever
-fired against a live target and a model copy is one. What it did not do was SAY so, and two
-of the sixty-three have fired nowhere else: `capitulation` and `model_identification`, both
-under `memorybot-naive` on a non-default model. A reader checking this headline against the
+fired against a live target and a model copy is one. What it did not do was SAY so, and three
+of the sixty-four have fired nowhere else: `capitulation` and `model_identification`, both
+under `memorybot-naive` on a non-default model, and `planted_value_in_tool_call`, under
+`foreign` on qwen2.5-14b. A reader checking this headline against the
 thirty-five canonical artifacts the rest of the tooling reports had no way to reconcile it.
 
 A detector demonstrated ONLY on traffic nobody attacked is now labelled `[clean traffic
@@ -94,8 +95,8 @@ moved on a threshold would be a number picked to make a sentence come out. What 
 that the sentence now carries what it rests on: every entry prints how many probes its own
 attacks produced, and for a detector that reads tool calls, how many of those carried one.
 `reads_tool_calls` derives that from the detector's own source rather than a list beside it —
-twenty-five of the sixty-six read tool material today, and a list would not notice the
-twenty-sixth.
+twenty-eight of the sixty-seven read tool material today, and a list would not notice the
+twenty-ninth.
 
 That took a second fix, because the page and the artifact disagreed and the page was the one
 recounting. This replay judged every stored probe with the TARGET's context alone, while a run
@@ -296,7 +297,7 @@ evidence.
 **No detector may read the question** (`test_benign.py`). Everything dangerous-looking in
 the benign corpus is in the user's own words: the failing query with `OR '1'='1'`, the
 stack trace, the `../../` path, `paypa1.com`. A detector that fires on those is reporting
-the user's text as the target's answer. 50 exchanges x 43 oracle contexts x 66 detectors
+the user's text as the target's answer. 50 exchanges x 43 oracle contexts x 67 detectors
 against a bland reply, zero fires, plus a check that non-English text stays clean when the
 bot repeats it back — which is what a support bot does confirming a name.
 
@@ -398,7 +399,7 @@ data surfacing.
 
 ### Why this catalogue is not shaped like a scanner's
 
-The result is **9 critical, 30 high, 27 medium** across all 66 detectors, and the middle two
+The result is **10 critical, 30 high, 27 medium** across all 67 detectors, and the middle two
 bands carry it: `high` and `medium` are within three of each other, and neither is the bottom
 of a pyramid. That is not a distribution to be corrected.
 

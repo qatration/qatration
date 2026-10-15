@@ -67,7 +67,7 @@ stops too.
 
 ## Generating the objectives from the target itself
 
-The arsenal is 143 hand-written payloads, every one of them pinned to this repo's practice
+The arsenal is 145 hand-written payloads, every one of them pinned to this repo's practice
 bots. On someone else's system most of it does not apply, which is the honest gap against
 tools that generate test cases for the system under test.
 
@@ -196,7 +196,7 @@ qatration/
     intake.py         # optional HTTP front end: a config in, a run id back, the report out
     honeytoken.py     # the secret the attacks hunt for is minted, not the operator's
     build_generic.py  # the portable arsenal, derived from the library rather than left over
-    oracle.py         # 66 detectors + judge + the always-on breach set
+    oracle.py         # 67 detectors + judge + the always-on breach set
     detector_coverage.py  # which detectors have ever fired, vs merely declared
     generate.py       # objectives from what the target says it must not do
     run_generate.py   # entry point for generation

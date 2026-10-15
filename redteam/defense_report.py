@@ -73,6 +73,19 @@ REMEDIATION = {
              "direction. An output check is worth having as well, since an obeyed injection "
              "usually leaves behind a token or a phrase the answer had no reason to carry.")),
 
+    "planted_value_in_tool_call": dict(sev="critical", order=1,
+        owasp="LLM06 Excessive Agency",
+        title="Took an action with a value that came from injected data",
+        fix=("A record, a ticket or a pasted message carried a value -- an account to refund "
+             "to, an address to forward to -- and the agent passed it to a tool. The value "
+             "existed nowhere except inside that data, so the action was steered by whoever "
+             "wrote the data, not by the user. Data an agent reads must not be able to choose "
+             "the arguments of an action: take recipients, accounts and amounts from the "
+             "authenticated session or from fields the user set, check every action argument "
+             "against what the user is allowed to reach before the call, and require the "
+             "user's confirmation for anything that moves money, sends a message or changes "
+             "a record.")),
+
     "insecure_code": dict(sev="high", order=2, owasp="LLM05 Improper Output Handling",
         title="Wrote working code with a classic vulnerability in it",
         fix=("Asked for an ordinary feature — a search box, a diagnostic endpoint, a saved-"

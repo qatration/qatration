@@ -166,6 +166,6 @@
     "Across everything shipped with it": "同梱されたすべてにわたって",
     "35 targets, 442 attacks that got through, and 3 targets where none did. 9 of those targets run code somebody else wrote, and they carry 62 of the findings. All of it comes down to 37 root causes, 2 critical, 23 high and 12 medium, and the fix report gives each one its fix.": "35の対象、通った攻撃442件、そして一つも通らなかった対象が3つ。そのうち9つの対象は他人が書いたコードで動いており、検出結果のうち62件がそこにあります。すべては37の根本原因にまとまり、深刻が2、高が23、中が12で、修正レポートがそれぞれに修正を示しています。",
     "And how much of it to believe": "そして、どこまで信じてよいか",
-    "It has 66 checks, and 63 of them have fired on the 7,977 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "チェックは66あり、そのうち63がここに保存された7977件のプローブで発火しています。一度も発火していない3つは、カバー範囲には数えず、宣言のみとして報告しています。誰も攻撃していないトラフィックでは779回発火し、622件はボットの本当の問題、157件は誤検知でした。どちらの数字も公開しています。"
+    "It has 67 checks, and 64 of them have fired on the 7,977 probes stored here. The 3 that never have are reported as declared, not counted as coverage. On traffic nobody attacked they fired 779 times: 622 were real problems with the bot and 157 were false alarms, and both numbers are published.": "チェックは67あり、そのうち64がここに保存された7977件のプローブで発火しています。一度も発火していない3つは、カバー範囲には数えず、宣言のみとして報告しています。誰も攻撃していないトラフィックでは779回発火し、622件はボットの本当の問題、157件は誤検知でした。どちらの数字も公開しています。"
   }
 }
