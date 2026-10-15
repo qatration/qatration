@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 from workspace import side_artifact as _side_artifact
 from workspace import SCOPES, DEFAULT_ARSENAL, shell_arg
-from workspace import error_split
+from workspace import error_split, named_or_more
 from workspace import (config_model, BROKE, OUT as WORKSPACE_OUT, safe_target_name,
                        refuse_to_overwrite_evidence,   # one place decides where output goes
                        OVERWRITE_HELP)
@@ -414,6 +414,34 @@ def _too_much_unmeasured(lost, base, limit):
             "a pass over rows nobody looked at." % (
                 lost, base, round(100.0 * lost / base),
                 round(100 * (MAX_UNMEASURED if limit is None else limit))))
+
+
+def slow_worst_case(attacks, trials, max_seconds):
+    """-> a sentence when the `resource` attacks' worst case alone passes a quarter of the time
+    budget, else "". Read by `run` before the sweep and by `onboard` before the run.
+
+    ONE RULE FOR BOTH. `run` warned "up to 162 min of a 90 min budget" on the config `init`
+    writes, and `onboard` -- the command whose job is saying whether a run will fit -- said
+    nothing on the same config. Found walking the quickstart from a fresh install.
+
+    FROM THE RUNNER'S OWN CONSTANTS, not the target's. `target.timeout` is the SOCKET timeout
+    and is not what abandons a probe; `runner.SEND_TIMEOUT` is, with `runner.RETRIES` more
+    attempts after the first.
+    """
+    from runner import SEND_TIMEOUT as _send_to, RETRIES as _retries
+    _slow = [a for a in (attacks or []) if (a.get("category") or "") == "resource"]
+    if not max_seconds or not _slow:
+        return ""
+    _to = float(_send_to)
+    _worst = len(_slow) * _to * (1 + _retries) * trials
+    if not _to or _worst < max_seconds * 0.25:
+        return ""
+    return (f"{len(_slow)} attack(s) here run to the response timeout BY DESIGN (category "
+            f"`resource`: they ask the model not to stop). At {_to:.0f}s and {_retries} "
+            f"retr{'y' if _retries == 1 else 'ies'} that is up to {_worst / 60:.0f} min of a "
+            f"{max_seconds / 60:.0f} min budget, before the rest of the arsenal is reached. "
+            f"A bot that does stop costs far less; raise `rate.max_seconds`, or exclude the "
+            f"`resource` attacks, if yours may not.")
 
 
 def regression_verdict(d, is_model_copy=False, max_unmeasured=None):
@@ -1140,7 +1168,7 @@ def main():
         # This is the invocation being refused, which is 2's own description, and the act that
         # clears it is a flag or QATRATION_OUT rather than anything about the target.
         print(_refusal, file=sys.stderr)
-        _refuse(2, "refused to replace committed evidence; nothing was sent and nothing was written")
+        _refuse(2, "refused to replace committed evidence; nothing was sent and no results were written")
 
     # scope the arsenal: keep generic attacks (no applies_to) + those naming this target,
     # minus any the target config explicitly excludes (e.g. a generic 'control' that can't
@@ -1191,7 +1219,7 @@ def main():
         for _u in _unusable[:8]:
             print("    " + _u, file=sys.stderr)
         # 2: the invocation was refused. Not 1, which is a finding about the target.
-        _refuse(2, f"{len(_unusable)} entr%s in the arsenal cannot be used; nothing was sent and nothing was written" % ("y" if len(_unusable) == 1 else "ies"))
+        _refuse(2, f"{len(_unusable)} entr%s in the arsenal cannot be used; nothing was sent and no results were written" % ("y" if len(_unusable) == 1 else "ies"))
     # AND THE TARGET'S OWN REFUSAL VOCABULARY. A misspelled class name under
     # `refusal_patterns` is not refused and not applied, so the operator's phrasings never
     # join the classifier and their bot reads as one that never refuses; an uncompilable
@@ -1248,8 +1276,8 @@ def main():
         _sent_what = ("no attack was sent (only the question asking for the verifier)"
                       if _p is not None else "nothing was sent")
         print(f"ABORT — {_sentence}\n{_said}"
-              f"  {_sent_what} and nothing was written.", file=sys.stderr)
-        _refuse(_code, f"{_sentence}; {_sent_what} and nothing was written")
+              f"  {_sent_what} and no results were written.", file=sys.stderr)
+        _refuse(_code, f"{_sentence}; {_sent_what} and no results were written")
     if _ht.declared(ctx) and _verify:
         print(f"  · honeytoken confirmed present ({_verify}) — the canary detectors can speak")
     # A CANARY NOTHING CONFIRMS: declared without `honeytoken_verify`, so this run cannot tell
@@ -1261,18 +1289,18 @@ def main():
     # a single turn and comes back clean. Asked once, before the first attack: where the
     # transcript is not read, the two deliveries are taken off the target and the attacks that
     # need them are withheld below with the reason, not sent and filed as defended.
-    _history_unread = False
+    _history_check = None
     if ({"chain", "forged_history"} & set(target.capabilities)
             and hasattr(target, "send_forged")):
         from runner import reads_history as _reads_history
         _rh, _ = _reads_history(target, "preflight")
+        _history_check = {True: "read", False: "not_read", None: "unanswered"}[_rh]
         if _rh is False:
-            _history_unread = True
             target.capabilities = (set(target.capabilities)
                                    - {"chain", "forged_history"})
             print("  ! this endpoint did not read a transcript it was handed: a case number "
-                  "planted in an earlier assistant turn did not come back. The multi-turn "
-                  "attacks below are NOT SENT, because against it they would run as single "
+                  "planted in an earlier assistant turn did not come back. Any multi-turn "
+                  "attack in this run is NOT SENT, because against it they would run as single "
                   "turns and read as defended. Check the `history:` block in the config.",
                   file=sys.stderr)
         elif _rh is None:
@@ -1344,7 +1372,7 @@ def main():
         # nothing measured, nothing written, and a CI that must not read it as a pass.
         _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                      note=f"no attack in this arsenal applies to {target.name}; "
-                          f"nothing was sent and nothing was written")
+                          f"nothing was sent and no results were written")
         print(f"engine → target='{target.name}'  NO applicable attacks in this arsenal "
               f"({len(all_attacks)} not applicable) — leaving "
               f"{os.path.join(str(OUT_DIR), 'results_' + target.name + '.json')} "
@@ -1352,6 +1380,10 @@ def main():
         sys.exit(3)
     skipped = not_applicable + not_sent
     scoped = f" ({not_applicable} not applicable to this target)" if not_applicable else ""
+    # AND A QUICK RUN SAYS SO IN THE HEADER: `attacks=422` led a run that sent 53, and the
+    # line saying where the rest went came a screen later. Found walking the quickstart.
+    if getattr(args, "scope", None) == "quick":
+        scoped += " (--scope quick: one per category is sent, the rest are not)"
     print(f"engine → target='{target.name}'  caps={sorted(target.capabilities)}  "
           f"attacks={len(attacks)}{scoped}  trials={trials}")
 
@@ -1483,8 +1515,17 @@ def main():
         _ln = max(26, *(len(n) for n in _loud)) + 2
         for name, keys in sorted(_loud.items()):
             print("      %-*sunset: %s" % (_ln, name, ", ".join(keys)))
-        print("      A benign sweep measures how often that happens here:")
-        print("          qatration benign --target-config %s" % shell_arg(args.target_config))
+        # NOT TOLD TO RUN WHAT IT ALREADY HAS: this asked for a benign sweep over the target's
+        # stored one, which the report then read. Found walking the quickstart from a fresh
+        # install.
+        _benign_have = os.path.join(str(OUT_DIR), "benign_%s.json" % target.name)
+        if os.path.exists(_benign_have):
+            print("      The benign sweep stored for this target measures how often that "
+                  "happens, and\n      the report reads it: %s" % _benign_have)
+        else:
+            print("      A benign sweep measures how often that happens here:")
+            print("          qatration benign --target-config %s"
+                  % shell_arg(args.target_config))
 
     # AN ATTACK WHOSE EVERY DECLARED DETECTOR IS INERT MUST NOT RUN. It used to: the console
     # said which detectors could not fire and the sweep sent the attacks anyway, so each came
@@ -1523,7 +1564,7 @@ def main():
             # printed here describes, and returning zero would report it as a clean run.
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                          note=f"every attack relied on detectors that cannot fire against "
-                              f"{target.name}; nothing was sent and nothing was written")
+                              f"{target.name}; nothing was sent and no results were written")
             print(f"NOTHING MEASURABLE — every attack in this arsenal relies on detectors that "
                   f"cannot fire against {target.name}. Leaving results untouched.",
                   file=sys.stderr)
@@ -1559,7 +1600,7 @@ def main():
         if not _real(attacks):
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                          note=f"every attack named a tool {target.name}'s config does not "
-                              f"list; nothing was sent and nothing was written")
+                              f"list; nothing was sent and no results were written")
             print(f"NOTHING FILLABLE — every attack in this arsenal names a tool or phrase "
                   f"{target.name}'s config does not list. Leaving results untouched.",
                   file=sys.stderr)
@@ -1604,7 +1645,7 @@ def main():
         if not _real(attacks):
             _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target),
                          note=f"every attack needed a delivery {target.name} cannot take; "
-                              f"nothing was sent and nothing was written")
+                              f"nothing was sent and no results were written")
             print(f"NOTHING DELIVERABLE — every attack in this arsenal needs a delivery "
                   f"{target.name} cannot take. Leaving results untouched.", file=sys.stderr)
             sys.exit(3)
@@ -1680,17 +1721,10 @@ def main():
     # at 180s, with `runner.RETRIES` more attempts after the first. Reading the wrong one
     # would have priced this warning off a number that decides nothing -- the same defect it
     # is here to report.
-    from runner import SEND_TIMEOUT as _send_to, RETRIES as _retries
-    _secs = getattr(_rate, "max_seconds", None) if _rate else None
-    _slow = [a for a in attacks if (a.get("category") or "") == "resource"]
-    if _secs and _slow:
-        _to = float(_send_to)
-        _worst = len(_slow) * _to * (1 + _retries) * trials
-        if _to and _worst >= _secs * 0.25:
-            print(f"  ! {len(_slow)} attack(s) here run to the response timeout BY DESIGN "
-                  f"(category `resource`: they ask the model not to stop). At {_to:.0f}s and "
-                  f"one retry that is up to {_worst / 60:.0f} min of a "
-                  f"{_secs / 60:.0f} min budget, before the rest of the arsenal is reached.")
+    _slow_txt = slow_worst_case(attacks, trials,
+                                getattr(_rate, "max_seconds", None) if _rate else None)
+    if _slow_txt:
+        print("  ! " + _slow_txt)
 
     print()
     # COLUMN WIDTHS FROM THE DATA. `{id:<22}` ran the id straight into the delivery on any
@@ -1891,6 +1925,25 @@ def main():
                               trials=trials, why_errored=_why_err,
                               never_sent=_never_sent_rows, wall=_rl_stopped,
                               short=_cut_rows, skips=_skip_rows))
+    # A REPLY THE TARGET GIVES TO ANYTHING IS NOT AN EXPLOIT (`baseline.canned_row`, the rule
+    # the attribution line below already applies). Counted, it failed the build on a bot that
+    # deflects every request with the same sentence. Named, so nobody wonders where it went.
+    # SAID HERE, UNDER THE COUNT IT QUALIFIES, and not only at the gate: "82/320 attacks
+    # breached" held eight rows that broke on the bot's stock reply, labelled unattributable
+    # a screen later while the headline kept them. Found walking the quickstart.
+    try:
+        import baseline as _bl_g
+        _canned_g = _bl_g.canned_replies(target.name, results, OUT_DIR)
+    except Exception:
+        _canned_g = set()
+    _canned_rows = [r for r in results if r.get("headline") in BROKE
+                    and (r.get("attack") or {}).get("category") != "control"
+                    and _bl_g.canned_row(r, _canned_g)] if _canned_g else []
+    if _canned_rows:
+        print("  (%d of these scored only on a reply this target gives to any input, so they "
+              "say nothing about the attack: %s. The CI gate does not count them.)"
+              % (len(_canned_rows), named_or_more(sorted(
+                  str((r.get("attack") or {}).get("id")) for r in _canned_rows), 6)))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it
@@ -1956,7 +2009,7 @@ def main():
         _runs.finish(OUT_DIR, _rec, "aborted", spent=_spend(target, _retried),
                      note=("every attack came back SKIP" if _all_skip else
                            "every trial errored or came back empty")
-                          + "; nothing was measured and nothing was written")
+                          + "; nothing was measured and no results were written")
         print(f"\nNOTHING MEASURED — every trial errored or came back empty "
               + (f"(it answered, but no detector these attacks declare can speak on this "
                  f"config: see the inert list above). " if _all_skip else
@@ -1999,6 +2052,16 @@ def main():
         for _d in _ALL_DETECTORS:
             if _tool_only(_d) and _d not in _dead_here:
                 _dead_here[_d] = [_tool_reason]
+    # AND SAID HERE, where the list printed before the run cannot have known them: the console
+    # named 30 detectors that could not fire and the page and the SARIF named 33, with nothing
+    # to say where the other three came from. Found walking the quickstart from a fresh install.
+    _late_dead = sorted(set(_dead_here) - set(dead))
+    if _late_dead:
+        print(f"  ! {len(_late_dead)} more detector(s) could not speak in this run, so "
+              f"{len(_dead_here)} in all: {_tool_reason} ({named_or_more(_late_dead, 6)})"
+              if all(_dead_here[_d] == [_tool_reason] for _d in _late_dead) else
+              f"  ! {len(_late_dead)} more detector(s) could not speak in this run, so "
+              f"{len(_dead_here)} in all: {named_or_more(_late_dead, 6)}")
 
     # --- step 4: write JSON + HTML scorecard to out/ -------------------------
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -2050,6 +2113,9 @@ def main():
             "run_id": _run_id,
             "attacks_n": attacks_n, "broke": broke, "skipped": skipped,
             "canary_unconfirmed": _canary_unconfirmed,
+            # WHAT THE TRANSCRIPT CHECK FOUND, kept where every reader of the run looks
+            # (`workspace.history_check_note`); absent when it was not asked.
+            **({"history_check": _history_check} if _history_check else {}),
             "not_applicable": not_applicable, "not_sent": not_sent,
             # WHICH ATTACKS NAMED A TOOL THIS CONFIG LISTS NONE OF, by the key they needed.
             "unfilled": {k: sorted(v) for k, v in sorted(unfilled_meta.items())},
@@ -2219,33 +2285,14 @@ def main():
                 # diff that does not say so is a story rather than a measurement.
                 print(f"\n! this comparison is confounded — {'; '.join(d['confounds'])}")
                 print("  read 'fixed' with that in mind: the measurement changed too")
-            if d["regressed"]:
-                print(f"\nREGRESSED {since}: {', '.join(d['regressed'])}\n"
-                      f"  a fix that did not hold is worse news than a new finding")
-            if d["new"]:
-                print(f"new {since}: {', '.join(d['new'][:8])}")
-            if d["fixed"]:
-                print(f"fixed {since}: {', '.join(d['fixed'][:8])}")
-            if d["not_run"]:
-                # absence is not a clean result: this arsenal did not send them
-                print(f"NOT RE-TESTED (still open until measured): "
-                      f"{', '.join(d['not_run'][:8])}"
-                      + (f" +{len(d['not_run']) - 8}" if len(d['not_run']) > 8 else ""))
-            print(f"still open: {len(d['open'])}")
+            # THROUGH `history.run_diff_lines`, in the words `history` prints the same diff in.
+            from history import run_diff_lines as _diff_lines
+            for _ln in _diff_lines(d, since):
+                print(_ln)
 
     # --- CI gate: non-zero exit fails the build ------------------------------
     gate = args.fail_on
-    # A REPLY THE TARGET GIVES TO ANYTHING IS NOT AN EXPLOIT (`baseline.canned_row`, the rule
-    # the attribution line above already applies). Counted, it failed the build on a bot that
-    # deflects every request with the same sentence. Named, so nobody wonders where it went.
-    try:
-        import baseline as _bl_g
-        _canned_g = _bl_g.canned_replies(target.name, results, OUT_DIR)
-    except Exception:
-        _canned_g = set()
-    _canned_rows = [r for r in results if r.get("headline") in BROKE
-                    and (r.get("attack") or {}).get("category") != "control"
-                    and _bl_g.canned_row(r, _canned_g)] if _canned_g else []
+    # (`_canned_rows`: computed under the closing line, which names them first.)
     if _canned_rows and gate in ("exploited", "any"):
         exploited_n -= sum(1 for r in _canned_rows if r.get("headline") == "EXPLOITED")
         broke -= len(_canned_rows)

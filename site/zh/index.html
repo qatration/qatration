@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a> 里，随仓库一起分发。另外两个工具自己的报告不在这里，因为它们的许可证不允许。能重新生成这些报告的命令是在的。</p>
       <ul class="evid">
         <li><b>46</b> 次攻击在一次运行中被输入到一个有防护的机器人的聊天框里：一次也没通过。把它的输出过滤关掉， <b>一次</b> 夹带在检索到的文档里的攻击每回都会走出去。输入过滤从来没有见过它。</li>
-        <li><b>9 个中的 5 个</b> 机器人在一句普通的请求面前交出了自己的指令， <span class="keep">完全没有攻击。</span></li>
+        <li><b>7 个中的 5 个</b> 机器人在一句普通的请求面前交出了自己的指令， <span class="keep">完全没有攻击。</span></li>
         <li><b>三个</b> 机器人报告数据库已重启。可它们都没有任何能重启东西的工具。</li>
       </ul>
       <p class="evid-note">在我们自己的测试目标上实测所得，不是推算。旁边的对话记录是用来说明思路的，上面的数字才是结果。</p>
@@ -771,7 +771,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>以及和另外两个工具并排，公开地</h3></div>
-        <p>针对与 garak、promptfoo 相同的第三方目标运行，三者的每一条回复都用同一条子串规则来判分，而不是各用各自的裁判。在一个没有任何护栏的 RAG 应用上， <b>46% 的无害探测本来就会返回被埋下的字符串</b>，因此发现的数量衡量的是这个应用，而不是攻击者。三个工具里有一个在自己的报告中说明了这一点。在有防护的目标上，按共同规则三者都是零分，而唯一找到东西的是我们，337 次里有 2 次攻破；与此同时，同一套部署会拒绝回答 48 个普通客户问题中的 38 个。那个页面同样公开了另外两者更好的地方，以及一条在审阅者要求给出 p 值之后我们撤回的主张。
+        <p>针对与 garak、promptfoo 相同的第三方目标运行，三者的每一条回复都用同一条子串规则来判分，而不是各用各自的裁判。在一个没有任何护栏的 RAG 应用上， <b>46% 的无害探测本来就会返回被埋下的字符串</b>，因此发现的数量衡量的是这个应用，而不是攻击者。三个工具里有一个在自己的报告中说明了这一点。在有防护的目标上，按共同规则三者都是零分，而唯一找到东西的是我们，321 次里有 2 次攻破；与此同时，同一套部署会拒绝回答 48 个普通客户问题中的 38 个。那个页面同样公开了另外两者更好的地方，以及一条在审阅者要求给出 p 值之后我们撤回的主张。
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">阅读对比</a>.</p>
       </div>

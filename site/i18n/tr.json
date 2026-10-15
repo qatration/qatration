@@ -1,16 +1,16 @@
 {
   "language": "tr",
   "figures_differ": {
-    "5 of 9": [
-      "9",
+    "5 of 7": [
+      "7",
       "5"
     ],
     "The same guard that blocked that document also refused 4 of the 6 ordinary customer questions it was sent in that test, on the poisoned topic and off it. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "6",
       "4"
     ],
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
-      "337",
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 321, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
+      "321",
       "2",
       "48",
       "38"
@@ -48,7 +48,7 @@
     "attacks typed into the chat box of a guarded bot in one run: none got through. Take its output filter off and": "saldırı, tek bir çalıştırmada korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve",
     "one": "bir",
     "attack carried inside a retrieved document walks out every time. The input filter never saw it.": "saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.",
-    "5 of 9": "9 bottan 5'i",
+    "5 of 7": "7 bottan 5'i",
     "bots handed over their own instructions to a plain request,": "sıradan bir isteğe karşılık kendi talimatlarını verdi,",
     "with no attack at all.": "hiçbir saldırı olmadan.",
     "Three": "Üç bot",
@@ -128,7 +128,7 @@
     "And beside two other tools, in public": "Ve iki başka aracın yanında, herkesin gözü önünde",
     "Run against the same third-party targets as garak and promptfoo, with every reply from all three scored by one substring rule instead of by each tool's own judge. On a RAG app with no guardrails,": "garak ve promptfoo ile aynı üçüncü taraf hedeflere karşı çalıştırıldı ve üçünün de her yanıtı, her aracın kendi hakemi yerine tek bir alt dize kuralıyla puanlandı. Hiçbir guardrail'i olmayan bir RAG uygulamasında",
     "46% of benign probes already return the planted string": "zararsız sondaların %46'sı yerleştirilen diziyi zaten geri döndürüyor",
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": ", dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 337'de 2 ihlal. Aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.",
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 321, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": ", dolayısıyla bulguları saymak saldırganı değil uygulamayı ölçer. Üç araçtan biri bunu kendi raporunda söylüyor. Korumalı hedefte ortak kurala göre üçü de sıfır alıyor ve herhangi bir şey bulan tek araç biz olduk, 321'de 2 ihlal. Aynı dağıtım ise 48 sıradan müşteri sorusundan 38'ini yanıtlamayı reddediyor. O sayfa diğer ikisinin daha iyi olduğu yerleri de, bir hakem p değeri istedikten sonra geri çektiğimiz bir iddiayı da yayımlıyor.",
     "Read the comparison": "Karşılaştırmayı okuyun",
     "Found before a single attack": "İlk saldırıdan önce bulunanlar",
     "A profile of a dozen or so probes, all of it benign: five bots handed over their own instructions on a plain request. One printed its confidential session key inside the very sentence forbidding it from sharing that key. Three reported a database restarted when none had a tool that could restart anything.": "On iki kadar yoklamadan oluşan bir profil, hepsi zararsız: beş bot sıradan bir isteğe karşılık kendi talimatlarını verdi. Biri, o anahtarı paylaşmasını yasaklayan cümlenin tam içinde gizli oturum anahtarını yazdırdı. Üç bot ise hiçbirinin herhangi bir şeyi yeniden başlatabilecek bir aracı yokken bir veritabanının yeniden başlatıldığını bildirdi.",

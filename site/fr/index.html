@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, livré avec le dépôt. Les rapports des deux autres outils n'y sont pas, leurs licences l'interdisent. Les commandes qui les régénèrent, si.</p>
       <ul class="evid">
         <li><b>46</b> attaques tapées dans le champ de saisie du chat d'un bot protégé en une seule exécution : aucune n'est passée. Coupez son filtre de sortie et <b>une</b> attaque portée à l'intérieur d'un document récupéré ressort à chaque fois. Le filtre d'entrée ne l'a jamais vue.</li>
-        <li><b>5 bots sur 9</b> ont livré leurs propres instructions à une simple demande, <span class="keep">sans la moindre attaque.</span></li>
+        <li><b>5 bots sur 7</b> ont livré leurs propres instructions à une simple demande, <span class="keep">sans la moindre attaque.</span></li>
         <li><b>Trois</b> ont signalé le redémarrage d'une base de données. Aucun n'avait d'outil capable de redémarrer quoi que ce soit.</li>
       </ul>
       <p class="evid-note">Mesuré sur nos propres cibles de test, non extrapolé. La transcription ci-contre illustre l'idée, les chiffres au-dessus sont des résultats.</p>
@@ -771,7 +771,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>Et à côté de deux autres outils, en public</h3></div>
-        <p>Exécuté contre les mêmes cibles tierces que garak et promptfoo, chaque réponse des trois étant notée par une unique règle de sous-chaîne plutôt que par le juge propre à chaque outil. Sur une application RAG sans aucun garde-fou, <b>46 % des sondes inoffensives renvoient déjà la chaîne déposée</b>, si bien que compter les constats mesure l'application et non l'attaquant. L'un des trois outils le dit dans son rapport. Sur la cible protégée, les trois obtiennent zéro selon la règle commune, et nous avons été les seuls à trouver quoi que ce soit, 2 brèches sur 337, alors que ce même déploiement refuse de répondre à 38 questions client ordinaires sur 48. La comparaison publie aussi les points où les deux autres font mieux, ainsi qu'une affirmation que nous avons retirée après qu'un relecteur a demandé une valeur p.
+        <p>Exécuté contre les mêmes cibles tierces que garak et promptfoo, chaque réponse des trois étant notée par une unique règle de sous-chaîne plutôt que par le juge propre à chaque outil. Sur une application RAG sans aucun garde-fou, <b>46 % des sondes inoffensives renvoient déjà la chaîne déposée</b>, si bien que compter les constats mesure l'application et non l'attaquant. L'un des trois outils le dit dans son rapport. Sur la cible protégée, les trois obtiennent zéro selon la règle commune, et nous avons été les seuls à trouver quoi que ce soit, 2 brèches sur 321, alors que ce même déploiement refuse de répondre à 38 questions client ordinaires sur 48. La comparaison publie aussi les points où les deux autres font mieux, ainsi qu'une affirmation que nous avons retirée après qu'un relecteur a demandé une valeur p.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Lire la comparaison</a>.</p>
       </div>

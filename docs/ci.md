@@ -138,10 +138,10 @@ check that renders green is the same defect as an inert detector.
 `--fail-on regression` needs the previous run to compare against, and CI starts from nothing
 every time. So the timeline has to survive, and **the best place for it is your own repository**.
 
-A timeline is one append-only JSONL file per target, one line per run, about **2 KB a run**
+A timeline is one append-only JSONL file per target, one line per run, about **3 KB a run**
 averaged over the timelines stored here -- most of them small practice arsenals. A line grows
-with the arsenal: the newest full-arsenal line stored here (`out/history/httpbot.jsonl`, 343
-attacks) is 25 KB, so a target swept nightly at full scope for a year is about 10 MB of text.
+with the arsenal: the newest line stored here (`out/history/httpbot.jsonl`, 345 attacks) is
+34 KB, so a target swept nightly at full scope for a year is about 12 MB of text.
 Commit the `history/` directory of each workspace -- `qatration-out/pr/history/` and
 `qatration-out/nightly/history/` in the per-tier setup below -- and you get
 three things a cache cannot give you:
@@ -302,6 +302,13 @@ concurrency:
 ```
 
 ## A workflow that does all of it
+
+The README's [In CI](../README.md#in-ci) section has the short form, `uses:
+qatration/qatration@v0.5.0`: the GitHub Action installs the engine from the tag it is pinned
+to, runs the sweep, writes the SARIF from the results that run wrote, and fails the step with
+the run's exit code. It takes `target-config`, `fail-on`, `scope`, `trials`, `sarif` and
+`python-version`. The workflow below is the long form, written out so each choice on this page
+is visible.
 
 ```yaml
 name: llm-security

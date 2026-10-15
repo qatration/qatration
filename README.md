@@ -112,10 +112,12 @@ The full walkthrough, including every way a first run can quietly lie to you, is
 
 ## In CI
 
-As a GitHub Action, pinned to the release it runs, with the SARIF written whatever the outcome:
+As a GitHub Action, pinned to the release it runs, with the SARIF written from whatever the run
+measured, pass or fail. A run that measured nothing writes none, and its exit code says why:
 
 ```yaml
 - uses: qatration/qatration@v0.5.0
+  id: qat
   with:
     target-config: mybot.yaml
     fail-on: exploited          # or regression, on a pull request
@@ -124,7 +126,7 @@ As a GitHub Action, pinned to the release it runs, with the SARIF written whatev
     QATRATION_AUTH_SECRET: ${{ secrets.QATRATION_AUTH_SECRET }}   # a remote target's proof
 - uses: github/codeql-action/upload-sarif@v3
   with: { sarif_file: qatration.sarif }
-  if: always()
+  if: always() && steps.qat.outputs.sarif-file != ''
 ```
 
 Or the same steps by hand, on any CI:
@@ -152,7 +154,7 @@ reason has to be recoverable from the number alone:
 | `2` | the config or the invocation was refused — an override that cannot apply, a build that is not the one described, a committed results file this run would replace — or the command crashed, which is a bug in the tool and is deliberately not `1` | **no** for a refusal; a crash can come after traffic went out |
 | `3` | the question could not be answered: every trial errored (the results file is left alone), or more than `--max-unmeasured` of the run went unmeasured, or `--fail-on regression` had nothing comparable to compare against (the results are written in both) | yes, or attempted |
 | `4` | not authorised: the target is not localhost and carries no valid proof (`qatration authorize` prints the token; it expires after 14 days, see [docs/ci.md](https://github.com/qatration/qatration/blob/main/docs/ci.md)) | **no** |
-| `5` | a precondition failed: the canary is one this tool publishes, or a declared honeytoken was not found in the target, so the canary detectors could not have spoken | one ordinary question (the verifier), no attack |
+| `5` | a precondition failed: the canary is one this tool publishes, or a declared honeytoken was not found in the target, so the canary detectors could not have spoken; for `lint`, no arsenal at the path given; for `generate`, no stated rule the config can judge | one ordinary question (the verifier), no attack; nothing for `lint` and `generate` |
 
 `2`, `3` and `5` are deliberately not `1`. A build that fails because a bot was compromised and
 a build that fails because nobody could reach it are different events, and a CI that cannot
@@ -201,7 +203,7 @@ None of that needs taking on trust. The counts `test_readme.py` lists, in this R
 site, are recounted from the artifacts in `out/` by a test that fails the build when the two
 disagree. The site's other figures come from single dated runs and from the benchmark against
 garak and promptfoo, and are not recounted. No assertion
-in the suite is allowed to be one that cannot fail — 5,846 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 5,882 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

@@ -412,9 +412,13 @@ def hints(profile):
     # AND A FORGED-HISTORY PROBE THAT DID NOT LAND, which said nothing at all: the only check
     # that the adapter reads a planted transcript disappeared without a word.
     if "reads_supplied_history" in profile and profile["reads_supplied_history"] is None:
-        warn("the forged-history probe did not land, so nothing here says whether this "
-             "target reads a transcript it is handed -- forged_history results against it are "
-             "unverified until recon is re-run")
+        # NOT "DID NOT LAND": `reads_history` answers None for an error, an empty reply AND a
+        # refusal, and a guard that refuses everything refused the probe too -- it landed, and
+        # re-running recon asks the same guard the same question. Found by an independent
+        # review.
+        warn("the forged-history probe got no answer it could read (an error, an empty "
+             "reply or a refusal), so nothing here says whether this target reads a "
+             "transcript it is handed -- forged_history results against it are unverified")
     if "self_description" in unmeasured_of(profile):
         # THE SELF-DESCRIPTION PROBE, the same: an empty rule list and no leaked canary read
         # as "volunteers no rules, did not leak". Found by an independent review.

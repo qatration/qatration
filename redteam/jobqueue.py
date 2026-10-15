@@ -245,7 +245,11 @@ def submit(root, target, config_path, scope="quick", authorization=None, budgets
     import secrets as _sec
     os.makedirs(str(root), exist_ok=True)
     for _ in range(8):
-        _id = f"{(when or _now()).strftime('%Y-%m-%dT%H%M')}-{_sec.token_hex(8)}"
+        # THE ID ON THE CLOCK THE RUN IDS USE, local wall time, so a job and the run it starts
+        # read as the same minute: `2026-10-15T0939-...` sat beside run `...T1239-...`. The
+        # leases stay on UTC (`_now`), for the reason given there. Found walking the quickstart.
+        _id = (f"{(when or datetime.datetime.now()).strftime('%Y-%m-%dT%H%M')}-"
+               f"{_sec.token_hex(8)}")
         try:
             _fd = os.open(_path(root, _id), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:

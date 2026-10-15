@@ -44,9 +44,15 @@ jobs:
     # for a tag. `head_branch` on a tag push is the tag name, and on a branch push it is the
     # branch — so the `v` test is what keeps a `workflow_dispatch` run of `release.yml`, which
     # deliberately publishes nothing, from producing a Release for `main`.
+    #
+    # AND ONLY FOR A RUN THE TAG PUSH STARTED. A `release.yml` run dispatched by hand on a tag
+    # -- the obvious retry -- has `head_branch` set to the tag and `success` as its conclusion,
+    # because `publish`, which requires a push, was skipped and a skipped job does not fail a
+    # run. That announced a version PyPI never received. Found by an independent review.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
        startsWith(github.event.workflow_run.head_branch, 'v'))
     permissions:
       contents: write        # create a release, and nothing else

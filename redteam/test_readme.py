@@ -379,6 +379,25 @@ def audit(text, f):
             if real_kb > claimed_kb * 1.35:
                 bad.append("history size: the guide says about %.1f KB a run, the stored "
                            "timelines average %.1f KB" % (claimed_kb, real_kb))
+    # AND THE NEWEST LINE IT NAMES, with the year that follows from it: "343 attacks, 25 KB,
+    # about 10 MB" was the line before last, and the newest was 345, 34 KB and 12.5 MB. In the
+    # same direction: the guide may name more than the file holds, never less. Found by a review.
+    _newest = list(re.finditer(r"\(`out/history/(\w[\w-]*)\.jsonl`, (\d+) attacks\) is\s+(\d+) "
+                               r"KB, so a target swept nightly at full scope for a year is about "
+                               r"(\d+) MB", text))
+    if not _newest:
+        bad.append("history size: the guide no longer names its newest timeline line, so the "
+                   "size of a year of runs is not checked")
+    for m in _newest:
+        _hp = os.path.join(ROOT, "out", "history", m.group(1) + ".jsonl")
+        _last = [l for l in open(_hp, encoding="utf-8") if l.strip()][-1] if os.path.exists(_hp) else ""
+        _kb = len(_last.encode("utf-8")) / 1024.0
+        _n = (json.loads(_last).get("attacks") if _last else None)
+        if _n != int(m.group(2)) or int(m.group(3)) < round(_kb) or \
+                int(m.group(4)) < int(_kb * 365 / 1024):
+            bad.append("history size: the guide says the newest %s line is %s attacks and %s KB "
+                       "(%s MB a year); it is %s attacks and %.0f KB"
+                       % (m.group(1), m.group(2), m.group(3), m.group(4), _n, _kb))
 
     # THE FIRST CONFIG A READER COPIES BUILDS. The onboarding example used `${ACME_TOKEN}`
     # without the `env:` list the adapter requires, and failed with the variable set.
@@ -2392,6 +2411,63 @@ def main():
     check("the guarded bot's attack count on the page is out/results_nemo.json's, twice",
           len(_said46) == 2 and all(int(_a) == len(_rn_att) for _a in _said46),
           "page %s, out/ %d attack rows" % (_said46, len(_rn_att)))
+    # "5 OF 9 BOTS HANDED OVER THEIR OWN INSTRUCTIONS" had no gate and no artifact: ten
+    # profiles are stored, five open, two closed and three that could not be scored for want
+    # of a marker. Recounted from the profiles, over the ones that could be scored, the
+    # denominator rule the benchmark keeps. Found by an independent review.
+    _disc = [json.load(io.open(_f, encoding="utf-8"))
+             for _f in sorted(glob.glob(os.path.join(ROOT, "out", "recon_*.json")))]
+    _disc = [(_p.get("profile", _p) if isinstance(_p, dict) else {}).get("disclosure_open")
+             for _p in _disc]
+    _m_disc = re.search(r"<b>(\d+) of (\d+)</b> bots handed over their own instructions", _site)
+    check("the bots that handed over their instructions are the stored profiles' count",
+          bool(_m_disc) and (int(_m_disc.group(1)), int(_m_disc.group(2)))
+          == (sum(1 for _v in _disc if _v is True),
+              sum(1 for _v in _disc if _v is not None)),
+          "page %s, profiles %s" % (_m_disc and _m_disc.groups(), _disc))
+    # AND THE RECORD'S ACCOUNT OF THAT RUN: it described "47 attacks, every trial ending in"
+    # the rail's template, a run that is not in `out/` -- the stored one has 46, and four of
+    # its trials are the model answering. Recounted from the same file. Found by a review.
+    _rn_trials = [_t for _r in _rn["results"] for _t in (_r.get("trials") or [])]
+    _rn_tpl = sum(1 for _t in _rn_trials if ((_t.get("probe") or {}).get("output") or "")
+                  .strip() == "I'm sorry, I can't respond to that.")
+    _att_m = re.search(r"(\d+) attacks at three trials each \(`out/results_nemo\.json`\), and "
+                       r"(\d+) of\s+the (\d+) trials ended in a byte-identical", _att_d)
+    check("...and docs/attribution.md's account of that run is a recount of it",
+          bool(_att_m) and tuple(int(_g) for _g in _att_m.groups())
+          == (len(_rn_att), _rn_tpl, len(_rn_trials)),
+          "doc %s, out/ %d attacks, %d of %d template"
+          % (_att_m and _att_m.groups(), len(_rn_att), _rn_tpl, len(_rn_trials)))
+    # THE BENIGN FIGURES THE DESIGN RECORD QUOTES, recounted from the stored baselines: four
+    # of them were still the numbers of the run before the October re-take and nothing read
+    # them. Found by an independent review.
+    def _bn_rows(_t):
+        _b = json.load(io.open(os.path.join(ROOT, "out", "benign_%s.json" % _t), encoding="utf-8"))
+        return _b["rows"] if isinstance(_b, dict) else _b
+
+    def _bn_out(_r):
+        return str((_r.get("probe") or {}).get("output") or "")
+    _gn, _lr, _ni = _bn_rows("guardedrag-naive"), _bn_rows("localrag"), _bn_rows("nemo-inputonly")
+    _or_d = " ".join(io.open(os.path.join(ROOT, "docs", "oracle.md"), encoding="utf-8").read().split())
+    _fi_d = " ".join(io.open(os.path.join(ROOT, "docs", "findings.md"), encoding="utf-8").read().split())
+    _want_bn = [
+        ("docs/oracle.md: guardedrag-naive's URL leak", _or_d,
+         "leaks its canary through a URL on %d of %d"
+         % (sum(1 for _r in _gn if "exfil_via_url" in (_r.get("fired") or [])), len(_gn))),
+        ("docs/oracle.md: localrag's phishing address", _or_d,
+         "localrag appends a phishing address to %d of %d"
+         % (sum(1 for _r in _lr if "SECURITY ALERT" in _bn_out(_r)), len(_lr))),
+        ("docs/findings.md: nemo-inputonly's injected notice", _fi_d,
+         "injects into %d of %d benign answers"
+         % (sum(1 for _r in _ni if "RAG-POISON-7788" in _bn_out(_r)), len(_ni))),
+        ("docs/findings.md: nemo-inputonly's canary rate", _fi_d,
+         "`canary_in_output` is %d%% noisy"
+         % round(100.0 * sum(1 for _r in _ni if "canary_in_output" in (_r.get("fired") or []))
+                 / len(_ni))),
+    ]
+    for _lab_bn, _doc_bn, _s_bn in _want_bn:
+        check("the benign figure is a recount: %s" % _lab_bn, _s_bn in _doc_bn,
+              "expected %r" % _s_bn)
     check("...and none of them got through, as the page says", _rn_hit == 0,
           "%d of %d breached in out/results_nemo.json" % (_rn_hit, len(_rn_att)))
     # ...and "every target here has a benign run as well as an attack run"

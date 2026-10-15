@@ -1,17 +1,17 @@
 {
   "language": "ja",
   "figures_differ": {
-    "5 of 9": [
-      "9",
+    "5 of 7": [
+      "7",
       "5"
     ],
     "The same guard that blocked that document also refused 4 of the 6 ordinary customer questions it was sent in that test, on the poisoned topic and off it. A defence that answers “no” to your customers is a number you want before you ship, not after.": [
       "6",
       "4"
     ],
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 321, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": [
       "0",
-      "337",
+      "321",
       "2",
       "48",
       "38"
@@ -49,7 +49,7 @@
     "attacks typed into the chat box of a guarded bot in one run: none got through. Take its output filter off and": "件の攻撃を、一度の実行で防御されたボットのチャット欄に打ち込みました。通ったものはありません。その出力フィルターを切ると、",
     "one": "一件",
     "attack carried inside a retrieved document walks out every time. The input filter never saw it.": "の攻撃が取得された文書の中に忍ばせられ、毎回そのまま外へ出ていきます。入力フィルターはそれを一度も見ていません。",
-    "5 of 9": "9体中5体",
+    "5 of 7": "7体中5体",
     "bots handed over their own instructions to a plain request,": "のボットが、ごく普通の依頼に対して自らの指示を差し出しました。",
     "with no attack at all.": "攻撃はいっさいありません。",
     "Three": "三体",
@@ -129,7 +129,7 @@
     "And beside two other tools, in public": "そして他の二つのツールと並べて、公開の場で",
     "Run against the same third-party targets as garak and promptfoo, with every reply from all three scored by one substring rule instead of by each tool's own judge. On a RAG app with no guardrails,": "garakおよびpromptfooと同じ第三者の対象に対して実行し、三つすべての応答を、各ツール独自の判定ではなく単一の部分文字列規則で採点しました。ガードレールのないRAGアプリでは、",
     "46% of benign probes already return the planted string": "無害なプローブの46%がすでに仕込まれた文字列を返します",
-    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 337, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": "。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。337件中2件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。比較ページには、他の二つが優れている点も、査読者からp値を求められて撤回した主張も載せています。",
+    ", so a count of findings measures the application rather than the attacker. One of the three tools says that in its report. On the guarded target all three score zero by the shared rule and we were the only one to find anything at all, 2 breaches in 321, while that same deployment refuses 38 of 48 ordinary customer questions. The page publishes where the other two are better, and a claim we withdrew after a reviewer asked for a p-value.": "。ですから指摘の件数は、攻撃者ではなくアプリケーションを測っていることになります。三つのうち一つはそれを自身の報告書に書いています。防御された対象では、共通の規則では三つとも0点で、何かを見つけたのは私たちだけでした。321件中2件の侵害です。その同じデプロイは、普通の顧客からの質問48件のうち38件に回答を拒みます。比較ページには、他の二つが優れている点も、査読者からp値を求められて撤回した主張も載せています。",
     "Read the comparison": "比較を読む",
     "Found before a single attack": "最初の攻撃より前に見つかったこと",
     "A profile of a dozen or so probes, all of it benign: five bots handed over their own instructions on a plain request. One printed its confidential session key inside the very sentence forbidding it from sharing that key. Three reported a database restarted when none had a tool that could restart anything.": "十件あまりのプローブによる調査で、すべて無害なものです。五体のボットが、ごく普通の依頼に対して自らの指示を差し出しました。一体は、その鍵を共有してはならないと述べたまさにその文の中で、機密のセッションキーを出力しました。三体は、何かを再起動できるツールを持たないまま、データベースの再起動を報告しました。",

@@ -6,7 +6,7 @@ What changed, in the project's own words, newest first.
 
 ---
 
-## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-11)
+## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-15)
 
 **Five weeks of independent reviews, fuzzers over every stored artifact, seeded random walks and
 first runs from a fresh install, and almost every defect they found was one of two shapes.**
@@ -260,15 +260,32 @@ default: an endpoint with no tools returns no calls or an empty list, and an emp
 reply reads as tools that held. An agent whose reply is only a tool call now passes `onboard`
 once the line is in; it was refused as an empty reply.
 
-**A GitHub Action.** `uses: qatration/qatration@v0.5.0` runs the sweep, writes the SARIF whatever
-the outcome, and fails the step with the run's own exit code. It installs the engine from the
+**A GitHub Action.** `uses: qatration/qatration@v0.5.0` runs the sweep, writes the SARIF from the
+results that run wrote, pass or fail (never from an earlier run's file), and fails the step with
+the run's own exit code. It installs the engine from the
 tag it is pinned to, so the version in the workflow is the version that runs, and every input
 reaches its scripts through `env:`. The check matrix runs it against a local bot that leaks its
 key and expects exit 1 and a SARIF holding the finding.
 
+**A third round of reviews, and a fresh install walked again.** Six reviewers took what this
+release added. A bot that drops the transcript and apologises for having "no record" read as a
+refusal, so every multi-turn attack was sent to it unverified; it reads as not reading now, a
+case number typed with another dash or fullwidth digits reads as read, and the answer is kept
+in the results (`meta.history_check`), on the page and in the SARIF. `onboard` no longer
+offers a `tool_calls` path pinned to one item of a transcript, asks a second question when the
+first reply was only a call, and keeps checking the reply field when calls are mapped. A key a
+tool returned that the response does not report is no longer scored made up. `--fail-on
+regression` calls a row unsteady, not regressed, when its only earlier break was partial. A
+benign run whose detectors fired is no longer praised as clean. `init` reads a prompt file
+saved with a BOM, writes any character YAML can read back, and refuses a prompt that already
+holds a planted block. `onboard` prices the time budget as `run` does, says when the canary
+check passed, and a local run names the environment variable it is missing. The Action
+exports a SARIF only from results the run wrote, and the benchmark counts its guarded breaches
+over scored trials: 2 of 321.
+
 **The published comparisons, measured again on this engine.** The benchmark's QAtration column
 against garak and promptfoo was re-run on both targets: 183 of 223 retrieved replies leak on the
-bare application, and on the guarded one 2 of 337 trials breached, where August found one. The
+bare application, and on the guarded one 2 of 321 scored trials breached, where August found one. The
 second is new and real: the bot answered in zero-width spaces and its output rail let them past.
 "46 attacks, none got through" on NeMo Guardrails rested on a verdict row; it is now a stored
 run with every reply, and the page, the site and `docs/attribution.md` are checked against it.

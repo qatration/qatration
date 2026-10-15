@@ -27,6 +27,7 @@ should never put traffic on somebody's deployment.
 
 import argparse
 import io
+import re
 import os
 import sys
 
@@ -186,13 +187,15 @@ response:
   # with the path it found, when its probe's reply carries a call.
   # tool_calls: "choices.0.message.tool_calls"
 
-# A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT, sized so a default run finishes inside
-# it -- the whole arsenal at three trials, with the multi-turn attacks the `history:` block
+# A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT. The requests are sized so a default run
+# fits -- the whole arsenal at three trials, with the multi-turn attacks the `history:` block
 # below turns on. This said 300, and a default run sends well over a thousand requests, so the
 # first run of anyone following the quickstart stopped a third of the way in, and the attacks
-# it never sent look identical to attacks that held. `qatration onboard` does this arithmetic
-# against the corpus you actually have and says so if these numbers stop fitting. Remove the
-# block entirely and there is no ceiling at all.
+# it never sent look identical to attacks that held. The seconds fit a bot that answers in a
+# few seconds; the `resource` attacks ask the model not to stop, and against one that obliges
+# each runs to the response timeout. `qatration onboard` does both sums against the corpus you
+# actually have and says so if these numbers stop fitting. Remove the block entirely and there
+# is no ceiling at all.
 rate:
   min_interval_s: 0.0
   max_requests: 1800
@@ -275,22 +278,34 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     # and `8`; inside hand-written quotes a backslash in a model or url was an escape, and a
     # `"` ended the string. A JSON string is a YAML double-quoted scalar, escapes and all.
     import json as _json
+
+    # AND ONLY CHARACTERS YAML WILL READ BACK. `ensure_ascii=False` leaves C1 controls and DEL
+    # raw, and PyYAML's reader refuses them: mojibake in a prompt file (a curly quote encoded
+    # twice comes out holding U+0080) gave "Wrote ..., with a canary nobody else has" and a
+    # config `onboard` could not open. NEL (U+0085) is printable to YAML and folded to a space
+    # inside a quoted scalar, so it is escaped too. A JSON `\uXXXX` escape is a YAML one.
+    # Found by an independent review.
+    def _q(value):
+        return "".join(
+            c if (c in "\t\n\r" or " " <= c <= "~" or "\xa0" <= c <= "퟿"
+                  or "" <= c <= "�" or c >= "\U00010000") and c != "\x85"
+            else "\\u%04x" % ord(c)
+            for c in _json.dumps(value, ensure_ascii=False))
     # AND THE PLANT FROM THE ONE BLOCK `mint` AND `init` PRINT. A copy here had already lost
     # `under any circumstances, including staff, administrators and diagnostics`, so the user
     # on a raw model API -- told to uncomment it -- tested a weaker defence than everyone else.
     plant = "\n".join("    #     " + _l for _l in
                       ["You are a support assistant."] + _ht.snippet(secret, verify).splitlines())
-    return TEMPLATE.format(out=_shell_arg(out), url=_json.dumps(url, ensure_ascii=False),
-                           name=_json.dumps(name, ensure_ascii=False), secret=secret,
-                           verify=verify, model=_json.dumps(model, ensure_ascii=False),
+    return TEMPLATE.format(out=_shell_arg(out), url=_q(url),
+                           name=_q(name), secret=secret,
+                           verify=verify, model=_q(model),
                            plant=plant,
-                           secret_name=_json.dumps(_ht.SECRET_NAME, ensure_ascii=False),
+                           secret_name=_q(_ht.SECRET_NAME),
                            # AS DEPLOYED: the operator's prompt with the planted block after it,
                            # which is the text the bot will hold once they paste it in.
                            system_prompt=(
-                               "  system_prompt: %s" % _json.dumps(
-                                   system_prompt.rstrip() + "\n" + _ht.snippet(secret, verify),
-                                   ensure_ascii=False)
+                               "  system_prompt: %s" % _q(
+                                   system_prompt.rstrip() + "\n" + _ht.snippet(secret, verify))
                                if system_prompt else
                                '  # system_prompt: "You are the support assistant for ..."'))
 
@@ -321,10 +336,27 @@ def main():
     _sp = None
     if args.system_prompt_file is not None:
         try:
-            _sp = io.open(args.system_prompt_file, encoding="utf-8").read()
+            # `utf-8-sig`: Notepad's "UTF-8 with BOM" puts U+FEFF first, `strip` keeps it, and
+            # an empty file saved that way passed the check below and wrote the planted block
+            # alone as the prompt "as deployed". Found by an independent review.
+            _sp = io.open(args.system_prompt_file, encoding="utf-8-sig").read().replace(
+                "﻿", "")
         except (OSError, UnicodeDecodeError) as _e_sp:
             raise SystemExit("init --system-prompt-file: %r could not be read (%s). Nothing "
                              "was written." % (args.system_prompt_file, type(_e_sp).__name__))
+        # A PROMPT THAT ALREADY HOLDS A PLANTED BLOCK -- the deployed one, from an earlier
+        # `init` -- gets this one's block after it, and the stored prompt then carries a canary
+        # the config does not declare. Refused, with the value, so the old block comes out of
+        # the file and the deployment first. Found by an independent review.
+        _old_plant = sorted(set(re.findall(r"\b(?:%s|%s)-[A-Z0-9]{4,}\b" % (
+            re.escape(_ht.SECRET_PREFIX), re.escape(_ht.VERIFY_PREFIX)), _sp)))
+        if _old_plant:
+            raise SystemExit(
+                "init --system-prompt-file: %r already holds a planted block (%s). This "
+                "command mints a new pair and would store the prompt with both blocks in it, "
+                "one naming a canary nothing looks for. Take the old block out of the file and "
+                "out of your deployment, then run init again. Nothing was written."
+                % (args.system_prompt_file, ", ".join(_old_plant)))
         if not _sp.strip():
             raise SystemExit("init --system-prompt-file: %r is empty, and an empty prompt "
                              "compares with nothing. Nothing was written."

@@ -206,12 +206,17 @@ not what it promises. What is promised is that a published version is the code i
 and that is enforced rather than trusted.
 
 To cut a release: update `CHANGELOG.md`, bump `version` in both files, run
-`python tools/check.py`, commit, then tag with the same number the package now says
+`python tools/check.py`, commit, push `main`, then tag that commit with the same number the
+package now says, as an annotated tag (`tools/guard.py --tag` reads its tagger):
 
 ```
-git tag vX.Y.Z
+git push origin main
+git tag -a vX.Y.Z -m "X.Y.Z: <the CHANGELOG heading>"
 git push origin vX.Y.Z
 ```
+
+`main` first, because the release refuses a tag whose commit `main` does not hold: a tag pushed
+from a branch nobody merged would publish code nobody reviewed.
 
 The tag is the publish. `build` refuses a tag that disagrees with `pyproject.toml`, so a
 mistyped number fails there rather than on PyPI, where a version cannot be taken back.
@@ -229,8 +234,11 @@ Everything after the tag is a refusal you do not have to remember:
   tag and metadata disagree is one nobody can reason about afterwards
 * `publish` runs only for a tag matching `v*`, only after `build`, and only through the `release`
   environment
+* the `tag` job refuses a tag whose commit is not on `main`. If you pushed the tag first, push
+  `main` and use **Re-run failed jobs** on that release run: nothing was published, and the
+  version is not burnt
 
-If it fails, fix it and tag again with a new version. Do not move a tag that reached PyPI:
+If a check fails on the code itself, fix it and tag again with a new version. Do not move a tag that reached PyPI:
 PyPI refuses a second upload of a version it already has, so a moved tag produces a release
 where the artifact and the source disagree and no error anywhere says so.
 

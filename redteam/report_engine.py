@@ -617,6 +617,16 @@ def build_html(meta, results, recon=None, isolation=None):
             'secret the bot was never given. <span class="mono">qatration mint</span> makes a '
             'pair whose verifier the run can ask for.</div></div>')
 
+    # AND WHAT THE TRANSCRIPT CHECK FOUND, which `run` acted on and this page never said: an
+    # unanswered check sent the multi-turn attacks unverified, a failed one withheld them.
+    from workspace import history_check_note as _hc_note
+    _hc_txt = _hc_note(meta)
+    if _hc_txt:
+        inert_html += (
+            '<div class="panel"><div class="ptitle">multi-turn: %s</div><div class="warn">'
+            '%s</div></div>' % ("not sent" if meta.get("history_check") == "not_read"
+                                else "sent unverified", esc(_hc_txt)))
+
     # AND WHETHER A DECLARED CHANNEL EVER CARRIED ANYTHING, which is the same question one
     # field over and reached even fewer readers: `meta["unresolved_paths"]` was written by
     # every sweep and read by the fleet-wide defense report alone. A mistyped

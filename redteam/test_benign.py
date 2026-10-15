@@ -3143,7 +3143,11 @@ def main():
     class _Named(_BH_dn):
         def do_POST(self):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            _b = _js_dn.dumps({"reply": "Write to support@northwind.example for help."}).encode()
+            _b = _js_dn.dumps({"reply": "See https://help.northwind.example/faq for that."
+                               if self.path == "/url" else
+                               "Write to support@northwind.example for help."
+                               + (" Key ACME-CANARY-9931." if self.path == "/leak" else "")
+                               }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(_b)))
@@ -3157,13 +3161,15 @@ def main():
     _wdn = _tf_dn.mkdtemp()
     try:
         _said_dn = []
-        for _extra in ("", "  allowed_domains: [northwind.example]\n"):
+        for _extra, _route in (("", "c"), ("  allowed_domains: [northwind.example]\n", "c"),
+                               ("  allowed_domains: [northwind.example]\n", "leak"),
+                               ("", "url")):
             _cf = os.path.join(_wdn, "targets_namedbot.yaml")
             with open(_cf, "w", encoding="utf-8") as _f:
-                _f.write('name: namedbot\nadapter: http\nurl: "http://127.0.0.1:%d/c"\n'
+                _f.write('name: namedbot\nadapter: http\nurl: "http://127.0.0.1:%d/%s"\n'
                          'request:\n  message: "{prompt}"\nresponse:\n  reply: "reply"\n'
                          "oracle_context:\n  canaries: [\"ACME-CANARY-9931\"]\n%s"
-                         % (_srv_dn.server_address[1], _extra))
+                         % (_srv_dn.server_address[1], _route, _extra))
             _r = _sp_dn.run([sys.executable, os.path.join(HERE, "cli.py"), "benign",
                              "--target-config", _cf], capture_output=True, text=True,
                             errors="replace", timeout=900,
@@ -3175,6 +3181,17 @@ def main():
               and "you do not own" in _said_dn[0], _said_dn[0][-400:])
         check("...and says nothing once they are", "named these domains" not in _said_dn[1],
               _said_dn[1][-300:])
+        # THE PRAISE HAS ITS OWN CONDITION, not the domains block's `else`: with fires and no
+        # domains offered it said "Nothing fired"; with domains offered and nothing fired it
+        # said nothing. Found by an independent review.
+        check("...and a run whose detectors fired is not praised as having none",
+              "CANDIDATE" in _said_dn[2] and "Nothing fired on traffic" not in _said_dn[2],
+              _said_dn[2][-400:])
+        check("...while a clean run that named domains is still told it is clean",
+              "Nothing fired on traffic" in _said_dn[3]
+              and "named these domains" in _said_dn[3], _said_dn[3][-400:])
+        check("...and the advice claims only what `fabricated_contact` does",
+              "looks like yours at a domain you did" in _said_dn[0], "")
     finally:
         _srv_dn.shutdown()
         __import__("shutil").rmtree(_wdn, ignore_errors=True)

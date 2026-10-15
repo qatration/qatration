@@ -510,15 +510,44 @@ def main():
           "system_prompt" not in (_hc_d.get("oracle_context") or {}), "")
     with tempfile.TemporaryDirectory() as _dsp:
         io.open(os.path.join(_dsp, "empty.txt"), "w").write("  \n")
+        # AN EMPTY FILE NOTEPAD SAVED AS "UTF-8 WITH BOM", and a prompt that already holds an
+        # earlier `init`'s block: both were written, the first as the planted block alone, the
+        # second with two canaries in it. Found by an independent review.
+        io.open(os.path.join(_dsp, "bom.txt"), "wb").write(b"\xef\xbb\xbf\r\n")
+        io.open(os.path.join(_dsp, "planted.txt"), "w", encoding="utf-8").write(
+            "You sell coffee.\n" + _ht_sn.snippet("QAT-CANARY-OLD0OLD0OLD0OLD0", "QAT-VERIFY-OLD0"))
         _rsp = [subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init",
                                 "--system-prompt-file", _f], cwd=_dsp, capture_output=True,
                                text=True, errors="replace", timeout=120,
                                env=dict(os.environ, PYTHONIOENCODING="utf-8"))
-                for _f in ("missing.txt", "empty.txt")]
-        check("...and a prompt file that is missing or empty is refused, and nothing written",
+                for _f in ("missing.txt", "empty.txt", "bom.txt", "planted.txt")]
+        check("...and a prompt file that is missing, empty (BOM or not) or already planted is "
+              "refused, and nothing written",
               all(_r.returncode != 0 and "Nothing was written" in _r.stdout + _r.stderr
                   for _r in _rsp) and not os.path.exists(os.path.join(_dsp, "mybot.yaml")),
               str([(_r.returncode, (_r.stdout + _r.stderr)[-120:]) for _r in _rsp]))
+        # A BOM IN FRONT OF A REAL PROMPT IS NOT PART OF IT.
+        io.open(os.path.join(_dsp, "bomprompt.txt"), "wb").write(
+            b"\xef\xbb\xbfYou sell coffee.\r\n")
+        subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--out",
+                        "bp.yaml", "--system-prompt-file", "bomprompt.txt"], cwd=_dsp,
+                       capture_output=True, timeout=120,
+                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        _bp = yaml.safe_load(io.open(os.path.join(_dsp, "bp.yaml"), encoding="utf-8"))
+        check("...and a BOM in front of a prompt is not stored as part of it",
+              ((_bp or {}).get("oracle_context") or {}).get("system_prompt", "")
+              .startswith("You sell coffee."), "")
+    # EVERY CHARACTER A PROMPT MAY HOLD COMES BACK OUT OF THE YAML: C1 controls and DEL were
+    # written raw and PyYAML refused the file, NEL was folded to a space. Found by an
+    # independent review.
+    _odd = "cafÃ© â\x80\x99s\x7f\x85 end é\U0001f600\t\"\\ #: {x}"
+    _oc = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                            verify="QAT-VERIFY-X", system_prompt=_odd,
+                                            url="http://x.test/\x80", model="m\x85"))
+    check("a prompt holding control characters is stored exactly, in a file YAML reads",
+          (_oc.get("oracle_context") or {}).get("system_prompt", "").startswith(_odd)
+          and _oc.get("url") == "http://x.test/\x80" and (_oc.get("request") or {}).get("model")
+          == "m\x85", repr((_oc.get("oracle_context") or {}).get("system_prompt", "")[:60]))
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:

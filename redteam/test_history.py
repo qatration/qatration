@@ -12,7 +12,7 @@ finding nobody had seen before, and reporting them as one hides the worse of the
 
     python test_history.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, json, tempfile, shutil, time
+import sys, os, io, json, tempfile, shutil, time
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -666,11 +666,11 @@ def main():
         # writes `1/1`, which a three-trial run only records when two trials errored.
         _r3d, _r3e = R(a1="DEFENDED"), R(a1="EXPLOITED")
         _r3d[0]["rate"], _r3e[0]["rate"] = "0/3", "3/3"
-        H.record({"target": "cf5", "model": "m", "trials": 3}, _r3d,
+        H.record({"target": "cf5b", "model": "m", "trials": 3}, _r3d,
                  when="2026-08-03 10:00")
-        H.record({"target": "cf5", "model": "m", "trials": 3}, _r3e,
+        H.record({"target": "cf5b", "model": "m", "trials": 3}, _r3e,
                  when="2026-08-04 10:00")
-        _d3 = H.diff("cf5")
+        _d3 = H.diff("cf5b")
         check("three trials a side carries no such caveat",
               not any("one attempt" in c for c in _d3["confounds"]), str(_d3["confounds"]))
         # Same shape, same file: `1` is truthy, so this passed on a 3 as well -- a gate
@@ -1053,6 +1053,39 @@ def main():
         d = diff_over([{"a": B}, {"a": C}, {"a": B}])
         check("an attack measured clean in between is still called regressed",
               d["regressed"] == ["a"], str(d))
+        # ...BUT NOT WHEN THE EARLIER BREAK WAS ONE TRIAL IN THREE: 1/3, 0/3, 3/3 on a bot
+        # nobody changed failed a pull request as a fix that did not hold. Found walking the
+        # quickstart from a fresh install.
+        _dc = tempfile.mkdtemp()
+        made.append(_dc)
+        os.makedirs(os.path.join(_dc, "history"), exist_ok=True)
+        with open(os.path.join(_dc, "history", "t.jsonl"), "w", encoding="utf-8") as _f:
+            for _i, (_v, _rt) in enumerate((("PARTIAL", "1/3"), ("DEFENDED", "0/3"),
+                                            ("EXPLOITED", "3/3"))):
+                _f.write(json.dumps({"run": "2026-01-0%d 00:00:00" % (_i + 1), "target": "t",
+                                     "model": "m", "trials": 3, "attacks": 1,
+                                     "rows": {"a": {"v": _v, "rate": _rt, "fired": []}}}) + "\n")
+        H.OUT, H.HIST = _dc, os.path.join(_dc, "history")
+        d = H.diff("t")
+        check("...while one whose only earlier break was one trial in three is unsteady",
+              d["regressed"] == [] and d["new"] == [] and "a" in d.get("unstable", []),
+              str({k: d.get(k) for k in ("regressed", "new", "unstable")}))
+        # AND WHAT `run` PRINTS AFTER A SWEEP NAMES EVERY STATE `history` DOES: its own copy
+        # had dropped the unsteady and the no-longer-measured rows. Asked of the caller too,
+        # so a second copy cannot grow back beside the function.
+        _ln = H.run_diff_lines({"regressed": ["r1"], "new": ["n1"], "fixed": ["f1"],
+                                "open": ["o1", "o2"], "not_run": ["x1"],
+                                "unmeasured_now": ["u1"], "unstable": ["s1"]}, "since then")
+        _keys_shown = {k for _l, k in H.DIFF_LABELS
+                       if k != "open" and any(_t.startswith(_l + " since then") for _t in _ln)}
+        check("the lines after a run name every state a diff has",
+              _keys_shown == {"regressed", "new", "fixed", "not_run", "unmeasured_now",
+                              "unstable"}
+              and "still open: 2" in _ln, str(_ln))
+        _rsrc = io.open(os.path.join(HERE, "run_redteam.py"), encoding="utf-8").read()
+        check("...and `run` prints them through that function, not a copy",
+              "_diff_lines(d, since)" in _rsrc and "run_diff_lines" in _rsrc
+              and "fixed {since}" not in _rsrc, "")
         check("...and carries no absence caveat", not d["assumed_clean"], str(d))
 
         # never seen broken before, and the previous run did not send it: a first sighting

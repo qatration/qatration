@@ -1660,6 +1660,26 @@ def main():
                 check("...and an empty declaration expands nothing", False, "expanded")
             except SystemExit:
                 check("...and an empty declaration expands nothing", True)
+            # A DECLARED VARIABLE THAT IS NOT SET IS NAMED IN THE OPERATOR'S OWN SHELL, and only
+            # there: the hosted intake hands this text to whoever submitted the config. Found
+            # walking the quickstart, where the reader had to open the YAML to learn the name.
+            _said_env = {}
+            for _hv in ("", "1"):
+                _prev_h = os.environ.pop("QATRATION_HOSTED", None)
+                if _hv:
+                    os.environ["QATRATION_HOSTED"] = _hv
+                try:
+                    expand_env("${QAT_TEST_UNSET_9}", "headers.X", ["QAT_TEST_UNSET_9"])
+                    _said_env[_hv] = "expanded"
+                except SystemExit as _e_env:
+                    _said_env[_hv] = str(_e_env)
+                finally:
+                    os.environ.pop("QATRATION_HOSTED", None)
+                    if _prev_h is not None:
+                        os.environ["QATRATION_HOSTED"] = _prev_h
+            check("an unset variable is named on a local run and not on the hosted one",
+                  "QAT_TEST_UNSET_9" in _said_env[""] and "QAT_TEST_UNSET_9" not in _said_env["1"]
+                  and "not set" in _said_env["1"], str(_said_env))
         finally:
             os.environ.pop("QAT_TEST_TOKEN", None)
             os.environ.pop("QAT_TEST_OTHER", None)
@@ -1690,7 +1710,10 @@ def main():
         # opposite — that the message contains the variable name — and that assertion was the
         # oracle: `intake` returns this text to whoever submitted the config, so set means
         # silence and unset means named, and an environment can be enumerated without a single
-        # probe being sent.
+        # probe being sent. ON THE HOSTED SIDE, which is where that oracle is: a local run
+        # names the variable to the person whose shell it is (checked above).
+        _prev_hosted = os.environ.get("QATRATION_HOSTED")
+        os.environ["QATRATION_HOSTED"] = "1"
         try:
             expand_env("Bearer ${QAT_TEST_MISSING}", "headers.Authorization",
                        ["QAT_TEST_MISSING"])
@@ -1701,6 +1724,11 @@ def main():
                   "Authorization" in str(e), str(e))
             check("...without naming anything from the environment",
                   "QAT_TEST_MISSING" not in str(e), str(e))
+        finally:
+            if _prev_hosted is None:
+                os.environ.pop("QATRATION_HOSTED", None)
+            else:
+                os.environ["QATRATION_HOSTED"] = _prev_hosted
 
         # --- and it refuses what it should not touch --------------------------------------
         for bad in ("file:///etc/passwd", "ftp://example.com/x", ""):

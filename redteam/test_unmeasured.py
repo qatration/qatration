@@ -30,6 +30,7 @@ anybody remembering to add it.
 """
 import io
 import os
+import re
 import sys
 
 try:
@@ -431,6 +432,29 @@ def main():
               and not any(l.startswith("m1 ") for l in _pd2.stdout.splitlines())
               and any(l.startswith("s1 ") for l in _pd2.stdout.splitlines()),
               _od2[-500:])
+        # ...AND THE ANSWER IS KEPT, not left on stderr: in the results, on the page and in
+        # the SARIF, through one sentence (`workspace.history_check_note`). Found by an
+        # independent review.
+        _res2 = _js_k.load(io.open(os.path.join(_wd2, "results_deafbot.json"), encoding="utf-8"))
+        check("...and the results record that the transcript was not read",
+              (_res2.get("meta") or {}).get("history_check") == "not_read",
+              str((_res2.get("meta") or {}).get("history_check")))
+        _page2 = io.open(os.path.join(_wd2, "report_deafbot.html"), encoding="utf-8").read()
+        check("...and the report says the multi-turn attacks were not sent",
+              "multi-turn: not sent" in _page2, "")
+        # AND THE CONSOLE'S COUNT OF DETECTORS THAT COULD NOT SPEAK IS THE RESULTS' COUNT: it
+        # said 30 where the page and the SARIF said 33, the three that read only tool calls
+        # added after the run with nothing printed. Found walking the quickstart.
+        _inert_n = len((_res2.get("meta") or {}).get("inert") or {})
+        _m_all = re.search(r"so (\d+) in all", _od2)
+        _m_pre = re.search(r"! (\d+) detector\(s\) cannot fire on this target", _od2)
+        _said_n = int(_m_all.group(1)) if _m_all else int(_m_pre.group(1)) if _m_pre else -1
+        check("...and the console names as many silent detectors as the results do",
+              _said_n == _inert_n, "console %d, meta.inert %d" % (_said_n, _inert_n))
+        import sarif as _sarif_h
+        _ids2 = [n["descriptor"]["id"] for n in _sarif_h.build(_res2)["runs"][0]
+                 ["invocations"][0].get("toolExecutionNotifications", [])]
+        check("...and so does the SARIF", "coverage/history-not_read" in _ids2, str(_ids2))
     finally:
         _srv_d.shutdown()
         shutil.rmtree(_wd2, ignore_errors=True)

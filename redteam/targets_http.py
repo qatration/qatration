@@ -77,6 +77,15 @@ def expand_env(value, where, allowed=None):
             f"not declare. List every variable a config may read under a top-level `env:` key, "
             f"so the set of things it can reach is written in the file that reaches them.")
     missing = [v for v in wanted if os.environ.get(v) is None]
+    # NAMED ON THE OPERATOR'S OWN MACHINE. The reason above is the hosted intake, which hands
+    # this text to whoever submitted the config; a local CLI hands it to the person whose shell
+    # it is, who then had to open the YAML to learn which variable to export. Hosted is
+    # `QATRATION_HOSTED`, which the intake requires. Found walking the quickstart.
+    from authorization import hosted as _hosted
+    if missing and not _hosted():
+        raise SystemExit(
+            f"{where}: {len(missing)} of the {len(wanted)} environment variable(s) this config "
+            f"declares are not set in this shell: {', '.join(missing)}.")
     if missing:
         raise SystemExit(
             f"{where}: {len(missing)} of the {len(wanted)} environment variable(s) this config "

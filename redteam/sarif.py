@@ -375,6 +375,13 @@ def build(results, target_config=None, out_dir=None, source=None):
             "level": "warning",
             "message": {"text": _part_txt},
             "descriptor": {"id": "mapping/partly-read-path"}})
+    from workspace import history_check_note as _hc_note
+    _hc_txt = _hc_note(meta)
+    if _hc_txt:
+        notifications.append({
+            "level": "warning",
+            "message": {"text": _hc_txt},
+            "descriptor": {"id": "coverage/history-" + str(meta.get("history_check"))}})
     from workspace import dead_path_note as _dead_note
     _dead_txt = _dead_note(meta.get("unresolved_paths") or [])
     if _dead_txt:

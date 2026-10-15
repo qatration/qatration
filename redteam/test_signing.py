@@ -199,6 +199,10 @@ check("a sigv4 config expands its credentials from the environment",
 check("...and a target starts having seen no success, so the first 401 is a config problem",
       t._seen_success is False)
 
+# ON THE HOSTED SIDE, where this text reaches whoever submitted the config. A local run names
+# the variable to the person whose shell it is (`test_http_adapter` checks both halves).
+_prev_hosted_s = os.environ.get("QATRATION_HOSTED")
+os.environ["QATRATION_HOSTED"] = "1"
 try:
     targets_http.HttpConfiguredTarget(
         url="https://x.example/y",
@@ -213,6 +217,11 @@ except SystemExit as e:
     # submitted the config, and naming an unset variable answers "is it set" for free.
     check("...and the refusal names the config key rather than the environment",
           "QAT_DEFINITELY_UNSET_KEY" not in str(e), str(e))
+finally:
+    if _prev_hosted_s is None:
+        os.environ.pop("QATRATION_HOSTED", None)
+    else:
+        os.environ["QATRATION_HOSTED"] = _prev_hosted_s
 
 try:
     targets_http.HttpConfiguredTarget(

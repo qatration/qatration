@@ -621,7 +621,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
         <a href="https://github.com/qatration/qatration/tree/main/out" target="_blank" rel="noopener noreferrer"><code>out/</code></a>, que é distribuído com o repositório. Os relatórios das outras duas ferramentas não estão aqui, porque as licenças delas não permitem. Os comandos que os regeneram estão.</p>
       <ul class="evid">
         <li><b>46</b> ataques digitados no chat de um bot protegido em uma única execução: nenhum passou. Desligue o filtro de saída dele e <b>um</b> ataque levado dentro de um documento recuperado sai andando todas as vezes. O filtro de entrada nunca chegou a vê-lo.</li>
-        <li><b>5 de 9</b> bots entregaram as próprias instruções a um pedido simples, <span class="keep">sem ataque nenhum.</span></li>
+        <li><b>5 de 7</b> bots entregaram as próprias instruções a um pedido simples, <span class="keep">sem ataque nenhum.</span></li>
         <li><b>Três</b> relataram o reinício de um banco de dados. Nenhum tinha ferramenta capaz de reiniciar coisa alguma.</li>
       </ul>
       <p class="evid-note">Medido nos nossos próprios alvos de teste, não estimado. A transcrição ao lado ilustra a ideia. Os números acima são resultados.</p>
@@ -771,7 +771,7 @@ footer{border-top:1px solid var(--line);padding:30px 0 50px;font-family:var(--mo
       </div>
       <div class="find">
         <div class="top-row"><h3>E ao lado de outras duas ferramentas, em público</h3></div>
-        <p>Rodado contra os mesmos alvos de terceiros que garak e promptfoo, com cada resposta das três pontuada por uma única regra de substring em vez do juiz próprio de cada ferramenta. Em uma aplicação RAG sem guardrail algum, <b>46% das sondas inofensivas já devolvem a string plantada</b>, de modo que contar achados mede a aplicação e não o atacante. Uma das três ferramentas diz isso no seu relatório. No alvo protegido as três pontuam zero pela regra comum, e fomos os únicos a encontrar qualquer coisa, 2 brechas em 337, enquanto esse mesmo deployment se recusa a responder 38 de 48 perguntas comuns de clientes. A página da comparação publica também onde as outras duas são melhores, e uma afirmação que retiramos depois que um revisor pediu um valor p.
+        <p>Rodado contra os mesmos alvos de terceiros que garak e promptfoo, com cada resposta das três pontuada por uma única regra de substring em vez do juiz próprio de cada ferramenta. Em uma aplicação RAG sem guardrail algum, <b>46% das sondas inofensivas já devolvem a string plantada</b>, de modo que contar achados mede a aplicação e não o atacante. Uma das três ferramentas diz isso no seu relatório. No alvo protegido as três pontuam zero pela regra comum, e fomos os únicos a encontrar qualquer coisa, 2 brechas em 321, enquanto esse mesmo deployment se recusa a responder 38 de 48 perguntas comuns de clientes. A página da comparação publica também onde as outras duas são melhores, e uma afirmação que retiramos depois que um revisor pediu um valor p.
           <a href="https://github.com/qatration/qatration/blob/main/docs/benchmark.md"
              target="_blank" rel="noopener noreferrer">Leia a comparação</a>.</p>
       </div>

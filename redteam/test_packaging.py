@@ -600,6 +600,11 @@ def test_the_release_page_waits_for_the_artifact():
         "a failed release run would still produce a Release: %r" % guard
     assert "head_branch, 'v'" in guard, \
         "a non-tag run would produce a Release for a branch: %r" % guard
+    # A HAND-DISPATCHED RELEASE RUN ON A TAG publishes nothing and still concludes `success`,
+    # because the skipped `publish` does not fail it. Found by an independent review.
+    assert "workflow_run.event == 'push'" in guard, \
+        "a release run dispatched by hand on a tag would produce a Release PyPI never got: %r" \
+        % guard
 
     steps = job["steps"]
     ref = [st for st in steps if st.get("uses", "").startswith("actions/checkout")]
@@ -687,6 +692,18 @@ def test_no_workflow_expands_an_expression_into_a_script():
     assert _rc_var and _last.startswith("exit") and \
         re.search(r"\$\{?%s\b" % re.escape(_rc_var[0]), _last), \
         "the action's last step does not exit with the sweep's code: %r" % _last
+    # AND THE SARIF FROM THIS RUN ONLY, located by the engine's rule: a run that measured
+    # nothing leaves the previous results file in place, and a check of existence alone
+    # exported it as this commit's analysis; a copied path rule skipped `expanduser`. Found by
+    # an independent review.
+    _sarif_run = str(next((s.get("run", "") for s in _steps if s.get("id") == "sarif"), ""))
+    _run_run = str(next((s.get("run", "") for s in _steps if s.get("id") == "run"), ""))
+    assert ("qatration-run-started" in _run_run and "-nt " in _sarif_run
+            and "qatration-run-started" in _sarif_run), \
+        "the SARIF step can export a results file this run did not write"
+    assert ("from qatration.workspace import out_dir" in _sarif_run
+            and "QATRATION_OUT" not in _sarif_run), \
+        "the action locates the results by a copy of the engine's rule, not the rule"
     _unused = [i for i in (_act.get("inputs") or {}) if ("inputs.%s" % i) not in str(_act["runs"])]
     assert not _unused, "an action input nothing reads: %s" % _unused
     doc, _ = _workflow("release.yml")

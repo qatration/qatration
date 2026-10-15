@@ -12,7 +12,7 @@ telling them a field was empty and leaving them to guess a second time.
 
     python test_onboard.py       # exits 1 on any failure (CI gate)
 """
-import sys, os, io, json, shutil, subprocess, tempfile, threading
+import sys, os, io, json, re, shutil, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
@@ -283,9 +283,19 @@ def main():
         _BODIES = {
             "nulltext": {"choices": [{"message": {"content": None, "tool_calls": [_call]}}]},
             "emptytext": {"choices": [{"message": {"content": "", "tool_calls": [_call]}}]},
-            "both": {"choices": [{"message": {
+            "both": {"id": "chatcmpl-9f2c1a7b", "choices": [{"message": {
                 "content": "Let me look that order up for you right away.",
                 "tool_calls": [_call]}}]},
+            # A TRANSCRIPT-SHAPED BODY (LangGraph's state): calls in two of six items.
+            "transcript": {"messages": [
+                {"type": "human", "content": "Where is my order?"},
+                {"type": "ai", "content": "", "tool_calls": [
+                    {"name": "lookup_order", "args": {"id": "7"}, "id": "c1"}]},
+                {"type": "tool", "content": "order 7: shipped"},
+                {"type": "ai", "content": "", "tool_calls": [
+                    {"name": "send_email", "args": {"to": "a@b.example"}, "id": "c2"}]},
+                {"type": "tool", "content": "sent"},
+                {"type": "ai", "content": "Your order has shipped and I emailed the details."}]},
             "emptylist": {"choices": [{"message": {
                 "content": "Of course, what is the order number you are asking about?",
                 "tool_calls": []}}]},
@@ -302,8 +312,12 @@ def main():
         class _Agent(Bot):
             def do_POST(self):
                 _n = int(self.headers.get("Content-Length", 0) or 0)
-                self.rfile.read(_n)
-                _o = json.dumps(_BODIES[self.path.strip("/")]).encode()
+                _asked = self.rfile.read(_n).decode("utf-8", "replace")
+                # ASKED FOR WORDS, an agent gives words: what lets the second probe check a
+                # reply path the first one, answered with a call alone, never reached.
+                _o = json.dumps(
+                    {"choices": [{"message": {"content": "I can help with orders and returns."}}]}
+                    if onboard.TEXT_PROBE in _asked else _BODIES[self.path.strip("/")]).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(_o)))
@@ -360,6 +374,31 @@ def main():
             check("...and the adapter built from it records the call a run would judge",
                   [n for n, _a in (_pb_t.tool_calls or [])] == ["lookup_order"]
                   and "7" in str(_pb_t.tool_calls), repr(_pb_t.tool_calls)[:200])
+            # A PATH PINNED TO ONE ITEM OF SEVERAL IS NOT OFFERED: `messages.1.tool_calls`
+            # would read the first turn's call and never the later one.
+            _okx, _repx = onboard.check(_agent_cfg("transcript", reply="messages.5.content"))
+            _nx = " ".join(_repx["notes"])
+            check("a transcript-shaped body is not offered a path pinned to one of its items",
+                  _okx and "tool_calls_path" not in _repx
+                  and "No single `tool_calls` path covers" in _nx, _nx[:300])
+            # MAPPING THE CALLS DOES NOT SWITCH OFF THE WRONG-FIELD CHECK.
+            _okw, _repw = onboard.check(_agent_cfg("both", reply="id", extra="  " + _line))
+            check("a reply path pointed at `id` is refused even when tool calls are mapped",
+                  not _okw and "does not read like an answer" in " ".join(_repw["problems"]),
+                  str(_repw.get("problems"))[:300])
+            # A REPLY THAT WAS ONLY A CALL CHECKED NO REPLY PATH, so a second question asks
+            # for words: a path one letter wrong is caught there.
+            _okt2, _rept2 = onboard.check(_agent_cfg("nulltext", reply="choices.0.message.contents",
+                                                      extra="  " + _line))
+            check("...and a reply path one letter wrong is caught when the probe was only a call",
+                  not _okt2 and "found no text" in " ".join(_rept2["problems"]),
+                  str(_rept2.get("problems"))[:300])
+            # A PATH AT A CONTAINER IS NOT "A TOOL CALL INSTEAD OF TEXT": the text is there.
+            _okc, _repc = onboard.check(_agent_cfg("anthropic", reply="content"))
+            _pc = " ".join(_repc["problems"])
+            check("a reply path pointed at a container is not diagnosed as a tool-call reply",
+                  not _okc and "instead of text" not in _pc and "tool_calls_path" not in _repc,
+                  _pc[:300])
         finally:
             _asrv.shutdown()
 
@@ -432,6 +471,33 @@ def main():
               and "chain" not in (rep_d.get("capabilities") or [])
               and rep_d.get("reads_history") is False,
               str((rep_d.get("capabilities"), rep_d.get("reads_history"), rep_d.get("problems"))))
+        # ...AND PRICED AS `run` WILL SEND IT: no multi-turn attack, plus the one request that
+        # asked. Priced with the declared caps, the estimate counted every withheld chain and
+        # warned "It will STOP part way" about a run that finishes; priced with the reduced
+        # caps, it dropped the history probe `run` does send. So the deaf bot's estimate is
+        # the same config without a history block, plus one. Found by an independent review.
+        def _estimate(path, model, history):
+            _p = write("est-" + model + str(int(history)), "choices.0.message.content",
+                       extra=("rate:\n  max_requests: 5\n  max_seconds: 99999\n"
+                              + ("history:\n  field: messages\n  mode: splice\n"
+                                 "  insert_before: 1\n" if history else "")))
+            _txt = io.open(_p, encoding="utf-8").read()
+            io.open(_p, "w", encoding="utf-8").write(
+                _txt.replace("model: scripted", "model: " + model))
+            _r = onboard.check(_p)[1]
+            _m = re.search(r"sends about (\d+) requests", " ".join(_r["notes"]))
+            return int(_m.group(1)) if _m else str(_r.get("problems"))[:200] + str(_r["notes"])[-300:]
+        _est_deaf, _est_none = _estimate(deaf, "deaf", True), _estimate(deaf, "deaf", False)
+        # AND THE TIME HALF OF THE BUDGET, in the sentence `run` prints: `run` warned "up to
+        # 162 min of a 90 min budget" on the config `init` writes and onboard said nothing.
+        _tb = write("timebudget", "choices.0.message.content",
+                    extra="rate:\n  max_requests: 100000\n  max_seconds: 5400\n")
+        _ntb = " ".join(onboard.check(_tb)[1]["notes"])
+        check("onboard warns about the resource attacks' worst case, as run does",
+              "run to the response timeout BY DESIGN" in _ntb, _ntb[-300:])
+        check("...and its request estimate is the run without multi-turn, plus the probe",
+              isinstance(_est_none, int) and _est_deaf == _est_none + 1,
+              "deaf %s, no history %s" % (_est_deaf, _est_none))
         # AND THE ATTACKS `run` WITHHOLDS FOR A KIND OF TOOL THIS CONFIG NAMES NONE OF, said
         # before the run with the key, and left out of the request estimate.
         check("...and it is told which attacks name a kind of tool it lists none of",
@@ -1281,6 +1347,11 @@ def main():
         _okd, _repd = onboard.check(_dcfg, scope="quick")      # the CLI's default
         check("onboard says when a default `run` would not fit the budget, though a quick one would",
               any("a default `qatration run`" in n for n in _repd.get("notes") or []),
+              str(_repd.get("notes"))[:400])
+        # AND A CANARY CHECK THAT PASSED SAYS SO, without the flag: the README promises one,
+        # and it ran and said nothing. Found walking the quickstart from a fresh install.
+        check("...and the canary check it ran is said to have passed, with the reference",
+              any("canary check passed" in n and _ver_d in n for n in _repd.get("notes") or []),
               str(_repd.get("notes"))[:400])
     finally:
         _psrv.shutdown()

@@ -624,7 +624,7 @@ def main():
     _hs_said = " ".join(h["text"] for h in _hints_fh(_hs))
     check("an empty reply to a forged transcript is unmeasured, not a discarded transcript",
           (_hs.get("reads_supplied_history"), "did not read a transcript" in _hs_said,
-           "forged-history probe did not land" in _hs_said), (None, False, True))
+           "forged-history probe got no answer it could read" in _hs_said), (None, False, True))
 
     # A REFUSAL PROBE THAT DID NOT LAND proposed no pattern, so the fleet row read
     # `unlabelled 0`, no warning -- the same row as a target whose every refusal was heard.
@@ -991,9 +991,9 @@ def main():
           _down["probes"], _up["probes"])
     check("...and among the errors", _down["errors"], _up["errors"] + 1)
     check("...and is said, not left as a silent None",
-          "forged-history probe did not land" in _said_h(_down, "warn"), True)
+          "forged-history probe got no answer it could read" in _said_h(_down, "warn"), True)
     check("...while one that landed says nothing of the kind",
-          "forged-history probe did not land" in _said_h(_up), False)
+          "forged-history probe got no answer it could read" in _said_h(_up), False)
 
     # One token tried (the one this bot echoes), three not.
     _many = {"forbidden_tokens": ["guaranteed returns", "fuck", "scam", "wire it now"]}

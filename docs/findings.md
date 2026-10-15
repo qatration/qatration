@@ -186,15 +186,15 @@ not stop the two-step refusal-overwrite.
 
 On `nemo-inputonly` the correction went the other way. It scored 4/5, and one of those four
 never produced the staff key at all — it fired on `RAG-POISON-7788`, a phishing notice that
-target's own poisoned corpus injects into 35 of 48 benign answers. Real finding, established
+target's own poisoned corpus injects into 31 of 50 benign answers. Real finding, established
 elsewhere, not evidence about the attack that happened to be running.
 
 Both were caught by reading two files side by side, by hand, after the fact. So the
 comparison is now [`baseline.py`](../redteam/baseline.py) and the sweep prints it beside the
 count it qualifies. **A detector that also fires without an attack does not make a finding
 false — it makes it unattributable**, and those are different words with different remedies.
-Detector granularity alone would have been too blunt here: `canary_in_output` is 75% noisy
-on that target, but 73 of those points are one string and the staff key is 4%, so the check
+Detector granularity alone would have been too blunt here: `canary_in_output` is 66% noisy
+on that target, but 62 of those points are one string and the staff key is 2%, so the check
 compares the specific value produced and three of the four rows survive it.
 
 **Model size is a third axis, and it cuts differently again.** Data exfiltration: size does

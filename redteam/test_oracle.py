@@ -3798,6 +3798,11 @@ def check_tool_review_65():
          _cred({"_caps": ["tool_visibility"]}), True)
     want("...nor where the adapter does not report tool results",
          _cred({"system_prompt": "You are a support agent.", "_caps": []}), True)
+    # ...NOR WHERE IT REPORTS THE CALL AND NOT WHAT CAME BACK: an http config that maps
+    # `tool_calls` and no `observations` saw `vault_lookup()` and never its result, and the
+    # prompt alone read as everything the bot was given. Found by an independent review.
+    want("...nor where a call is reported and its result is not",
+         _cred(_seen, calls=[("vault_lookup", "{}")]), True)
     import rejudge as _rj_caps
     want("...and a replay judges with the caps the run recorded",
          _rj_caps.run_ctx({}, {"caps": ["tool_visibility"]}).get("_caps"), ["tool_visibility"])

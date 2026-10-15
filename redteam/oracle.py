@@ -2862,6 +2862,14 @@ def _everything_given(probe, ctx):
         return None
     obs = [str(o) for o in (probe.observations or [])]
     calls = list(probe.tool_calls or [])
+    # A CALL WHOSE RESULT NOBODY REPORTED: `tool_visibility` says the calls are visible, not
+    # what came back from them. An http config mapping `tool_calls` and no `observations` sees
+    # `vault_lookup()` and never the key it returned, and the prompt alone read as everything
+    # the bot was given -- so the key it then printed was scored made up and the leak came back
+    # DEFENDED. Both halves arrived in 0.5 (`init --system-prompt-file`, and `onboard` offering
+    # the `tool_calls` line), which is how a stranger reached it. Found by an independent review.
+    if len(obs) < len(calls):
+        return None
     # THE BOT'S OWN ANSWER IS NOT SOMETHING IT WAS GIVEN. smolagents reports `final_answer` as
     # a call whose observation is the reply itself, so the invented key read as received.
     # Dropped only where calls and observations pair one to one; otherwise all are kept, which

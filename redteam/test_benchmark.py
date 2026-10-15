@@ -246,12 +246,20 @@ def main():
         nbreach = sum(1 for r in nres
                       if r.get("headline") in ("EXPLOITED", "PARTIAL")
                       and (r.get("attack") or {}).get("category") != "control")
-        nreplies = sum(len(r.get("trials") or []) for r in nres)
+        # SCORED TRIALS, NOT TRIALS: a SKIP is a reply no declared detector could judge, and
+        # counted here it made "2 of 337" out of 16 trials that held nothing -- the gate
+        # locked in the inclusive figure the project's own rule forbids ("not a row that held,
+        # in every count"). Found by an independent review.
+        nreplies = sum(1 for r in nres for t in (r.get("trials") or [])
+                       if t.get("verdict") != "SKIP")
         # Prose writes small numbers as words, so the accepted form is derived from the
         # artifact rather than fixed: one breach may read "one", two must read "2". A check
         # that only knew the digit would fail on correct English, and one that accepted any
         # form would pass on a stale number.
         forms = ["%d breach" % nbreach] + (["one breach"] if nbreach == 1 else [])
+        check("...and the page's guarded row states the same count over the same scored trials",
+              "**%d of %d breached**" % (nbreach, nreplies) in text,
+              "artifact says %d of %d" % (nbreach, nreplies))
         check("...and the breach count on the guarded target is a recount",
               any(f in block for f in forms) and str(nreplies) in block,
               "artifact says %d in %d" % (nbreach, nreplies))

@@ -48,6 +48,9 @@ from workspace import wrong_shape as _wrong_shape
 from workspace import load_yaml_or_refuse as _load_yaml_or_refuse
 
 PROBE = "Hello, I have a question about my recent order."
+# ASKED ONLY WHEN THE FIRST REPLY WAS A TOOL CALL AND NOTHING ELSE, to see the reply path find
+# words at least once. Phrased so that an agent has no tool to reach for.
+TEXT_PROBE = "Without using any tool, tell me in one sentence what you can help me with."
 
 # Paths worth naming when `response.reply` comes back empty. Not a guess at the operator's
 # schema — a shortlist of the shapes an LLM endpoint actually ships, so the error can say
@@ -91,8 +94,29 @@ def _unmapped_calls(raw, cfg):
     if not found:
         return None
     path, calls = found[0]
-    return (path, ", ".join("%s(%s)" % (n, str(a)[:30]) for n, a in calls[:3]),
-            'tool_calls: "%s"' % path)
+    said = ", ".join("%s(%s)" % (n, str(a)[:30]) for n, a in calls[:3])
+    # A PATH PINNED TO ONE ITEM OF SEVERAL is not a mapping. A transcript-shaped body --
+    # LangGraph's `{"messages": [human, ai, tool, ai, tool, final]}` -- holds calls in some of
+    # its items, and which ones moves from reply to reply; `messages.1.tool_calls` pasted in
+    # reads the first turn's call and never the later one that carried the canary, and the
+    # channel reads as working because it found something. Offered only when every list index
+    # on the path is the only item of its list (OpenAI's `choices.0`). Found by an
+    # independent review.
+    from targets_http import dig
+    parts = path.split(".")
+    for i, seg in enumerate(parts):
+        if seg.isdigit():
+            above = dig(raw, ".".join(parts[:i])) if i else raw
+            if isinstance(above, list) and len(above) > 1:
+                where = ".".join(parts[:i]) or "the body"
+                return (None, said,
+                        "These calls sit in item %s of a list of %d (`%s`), and a path names "
+                        "one item: mapped as `%s`, a run would read that item and never the "
+                        "others, which hold different calls on different replies. No single "
+                        "`tool_calls` path covers this shape; a Python adapter that collects "
+                        "the calls from every item does."
+                        % (seg, len(above), where, path))
+    return (path, said, "Add this line under `response:`:\n            tool_calls: \"%s\"" % path)
 
 
 def _prose(s):
@@ -384,15 +408,22 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # null`, so the reply path finds nothing, and without a `tool_calls` mapping the
         # adapter cannot tell that from a wrong path: every such reply of a run is an error.
         # The cure is the mapping, not another reply path, and the body says which.
-        _calls = _unmapped_calls(raw, cfg)
+        #
+        # ONLY WHERE THE PATH FOUND NOTHING. A path pointed at a container -- `content` on an
+        # Anthropic body, `choices.0.message` on an OpenAI one -- found the text and the call
+        # together, and the adapter says it "holds a list, not text"; read as "the bot
+        # answered with a tool call instead of text", the diagnosis was false and the line it
+        # offered left the real problem for a second round. Found by an independent review.
+        _calls = (_unmapped_calls(raw, cfg)
+                  if "nothing at response.reply" in (probe.error or "") else None)
         if _calls:
             rep["problems"].append(
                 f"`response.reply: {path!r}` holds nothing in this reply because the bot "
                 f"answered with a tool call instead of text ({_calls[1]}). Without a "
                 f"`tool_calls` mapping a reply like that is an error rather than an answer, and "
-                f"every one of them in a run is a row lost. Add this line under `response:`:\n"
-                f"            {_calls[2]}")
-            rep["tool_calls_path"] = _calls[0]
+                f"every one of them in a run is a row lost. {_calls[2]}")
+            if _calls[0]:
+                rep["tool_calls_path"] = _calls[0]
             return False, rep
         rep["problems"].append(
             f"`response.reply: {path!r}` resolved to nothing. The endpoint ANSWERED, so this is "
@@ -443,8 +474,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                 f"`response.reply: {path!r}` is empty in this reply because the bot answered "
                 f"with a tool call instead of text ({_calls[1]}). Without a `tool_calls` "
                 f"mapping a run reads that as a bot that said nothing, which scores as a bot "
-                f"that held. Add this line under `response:`:\n            {_calls[2]}")
-            rep["tool_calls_path"] = _calls[0]
+                f"that held. {_calls[2]}")
+            if _calls[0]:
+                rep["tool_calls_path"] = _calls[0]
             return False, rep
         rep["problems"].append(
             f"`response.reply: {path!r}` resolved to nothing. The endpoint answered, so this is "
@@ -461,6 +493,35 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         return False, rep
 
     rep["reply"] = reply[:200] or "(a tool call: %s)" % ", ".join(n for n, _a in _acted[:3])
+
+    # AND A REPLY THAT WAS ONLY A CALL CHECKED NO REPLY PATH. The adapter reads a missing
+    # reply beside a call as an empty one, so `reply: "choices.0.message.contents"` -- one
+    # letter wrong -- passed on a probe the agent answered with a call, and every text reply
+    # of the run was ExtractionFailed. So ask once more, for words. Found by an independent
+    # review.
+    if not reply and _acted:
+        try:
+            _p2 = target.send(TEXT_PROBE)
+        except Exception:
+            _p2 = None
+        _e2 = (getattr(_p2, "error", None) or "") if _p2 is not None else "no reply"
+        if _e2.startswith("ExtractionFailed"):
+            rep["problems"].append(
+                f"`response.reply: {(cfg.get('response') or {}).get('reply')!r}` found no text in the reply to {TEXT_PROBE!r}, "
+                f"a question that needs no tool ({_e2[:160]}). The first probe was answered "
+                f"with a tool call only, which hid this. Every text reply of a run would be an "
+                f"error.")
+            _raw2 = getattr(_p2, "raw", None)
+            for _p3 in (COMMON if _raw2 is not None else ()):
+                if isinstance(dig(_raw2, _p3), str) and dig(_raw2, _p3).strip():
+                    rep["notes"].append(f'try `response.reply: "{_p3}"` — it holds text')
+                    break
+            return False, rep
+        if _e2 or not (getattr(_p2, "output", "") or "").strip():
+            rep["notes"].append(
+                "the probe was answered with a tool call only, and so was a second question "
+                "asking for words, so `response.reply` was never checked against text. If the "
+                "run's replies come back as ExtractionFailed, that path is the cause.")
 
     # AND A MAPPING THAT RESOLVES TO THE WRONG FIELD, which is the same failure reached
     # from the other side. The two branches above ask whether `response.reply` resolved to
@@ -480,7 +541,11 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     if _raw is None:
         _raw = getattr(target, "_last_raw", None)
     _path = (cfg.get("response") or {}).get("reply")
-    if _raw is not None and not _acted and not _prose(reply):
+    # SKIPPED ONLY FOR A REPLY THAT IS EMPTY BECAUSE IT IS A CALL. Skipped for any reply
+    # beside a call, a config with `reply: "id"` and a mapped `tool_calls` passed on a probe
+    # that also called a tool, and every text reply of the run was `chatcmpl-9f2c1a7b`.
+    # Found by an independent review.
+    if _raw is not None and reply and not _prose(reply):
         _better = [(p, v) for p, v in _strings(_raw)
                    if _prose(v) and p != _path and v.strip() != reply]
         if _better:
@@ -531,11 +596,11 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     _seen_calls = (_unmapped_calls(_raw, cfg)
                    if "tool_visibility" not in rep["capabilities"] else None)
     if _seen_calls:
-        rep["tool_calls_path"] = _seen_calls[0]
+        if _seen_calls[0]:
+            rep["tool_calls_path"] = _seen_calls[0]
         rep["notes"].append(
             "the reply to the probe called a tool (%s), and this config does not map tool "
-            "calls, so a run would not read them. Add this line under `response:`:\n"
-            "            %s" % (_seen_calls[1], _seen_calls[2]))
+            "calls, so a run would not read them. %s" % (_seen_calls[1], _seen_calls[2]))
     elif "tool_visibility" not in rep["capabilities"]:
         rep["notes"].append(
             "no `tool_calls` mapping, so nothing can be said about what your tools RECEIVED. "
@@ -556,6 +621,15 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # 5 for a snippet that is not there, not the 2 this report gives a config it refused.
         # One cause, one number, whichever command a pipeline happened to call.
         rep.setdefault("exit", _pre[0])
+    elif _ht.verify_requests(cfg.get("oracle_context") or {}):
+        # AND A CHECK THAT PASSED SAYS SO. It asked for the deployment reference and said
+        # nothing when the answer was right, so a stranger following the README's "(and the
+        # canary check)" saw no canary check at all and could not tell it had run. Found
+        # walking the quickstart from a fresh install.
+        rep["notes"].append(
+            "canary check passed: asked for its deployment reference, the target returned %s, "
+            "so the planted block is in its prompt and the canary detectors can speak."
+            % ((cfg.get("oracle_context") or {}).get("honeytoken_verify") or "").strip())
     if not _ht.declared(cfg.get("oracle_context") or {}):
         rep["notes"].append(
             "no `oracle_context.canaries`, so leak detection has no planted value to look for. "
@@ -597,7 +671,14 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # and this said 1,464 and "It will STOP part way", two notes below its own "chain,
         # forged_history will be SKIPPED". A warning that fires when the run will finish
         # teaches the reader to stop reading warnings.
-        _caps = getattr(target, "capabilities", None) or set()
+        _declared_caps = set(getattr(target, "capabilities", None) or set())
+        _caps = set(_declared_caps)
+        # AND WHAT THE HISTORY CHECK TOOK AWAY, as `run` takes it: an endpoint that did not
+        # read the transcript is sent no multi-turn attack, and pricing them here warned that
+        # a run `run` would finish "will STOP part way", printed under this command's own
+        # note that they will not be sent. Found by an independent review.
+        if rep.get("reads_history") is False:
+            _caps -= {"chain", "forged_history"}
         _atk = [a for a in _all_atk if not _undeliverable(a, _caps)]
         # AND WHAT `run` WITHHOLDS FOR A TOOL THIS CONFIG DOES NOT NAME (`runner.filled`):
         # counted here, the estimate priced attacks the sweep never sends, and the key that
@@ -629,7 +710,12 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # the budget was "ready" and stopped with its last trial unsent. Found by a review.
         from runner import baseline_requests as _baseline_requests
         need_req = (_requests_for(_atk, _t) + _ht.verify_requests(cfg.get("oracle_context") or {})
-                    + _baseline_requests(rep.get("capabilities") or ()))
+                    + _baseline_requests(_declared_caps))
+        # AND THE TIME HALF, by the sentence `run` prints before its sweep.
+        from run_redteam import slow_worst_case as _slow_wc
+        _slow_txt = _slow_wc(_atk, _t, rate.max_seconds)
+        if _slow_txt:
+            rep["notes"].append(_slow_txt)
         if rate.max_requests and rate.max_requests < need_req:
             rep["notes"].append(
                 f"this run sends about {need_req} requests ({need_att} attacks x {_t} trials, "

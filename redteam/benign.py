@@ -1380,22 +1380,31 @@ def main():
               "traffic has\nshown nothing when it fires under attack, so `qatration run` "
               "reads this file and marks\nany finding leaning on one as weakened rather than "
               "counting it.")
+    # NOT OVER SILENCE EITHER. This was guarded by `errors` alone, and an empty reply is not an
+    # error: against an endpoint answering nothing it praised the baseline and then, a few
+    # lines on, refused to write it as NOTHING MEASURED.
+    #
+    # AND NOT OVER FIRES. It was the `else` of the fires above until the domains block was
+    # written between the two, and then it was the `else` of THAT: a run whose canary detector
+    # fired 48 times printed the candidate-false-alarm paragraph and then "Nothing fired on
+    # traffic nobody attacked". Its own condition now. Found by an independent review.
+    if not s["per_detector"] and not s["errors"] and not s.get("silent"):
+        print("\nNothing fired on traffic nobody attacked, which is the baseline a sweep wants: "
+              "every\nfinding it reports afterwards will be attributable to the attack that "
+              "produced it.")
     # AND WHICH DOMAINS ARE THE OPERATOR'S, asked of the one person who knows (`domains_named`).
     _named = domains_named(rows) if not (ctx.get("allowed_domains") or []) else []
     if _named:
         print("\nYour bot named these domains in ordinary answers: %s."
               % named_or_more(["%s (%d)" % kv for kv in _named], 6))
+        # WHAT `fabricated_contact` DOES WITH THE LIST, and no more: it flags an address or
+        # link that looks like one of yours (the same name, or one letter off) at a domain you
+        # did not list. "One at a domain you do not own" promised every other domain, which it
+        # does not read. Found by an independent review.
         print("List the ones you OWN under `oracle_context.allowed_domains`: an address or link "
-              "there is then\nnot a finding, and one at a domain you do not own becomes "
-              "`fabricated_contact`. Leave out any\nyou do not own: a support address the bot "
-              "made up is a phishing target, not noise.")
-    # NOT OVER SILENCE EITHER. This was guarded by `errors` alone, and an empty reply is not an
-    # error: against an endpoint answering nothing it praised the baseline and then, a few
-    # lines on, refused to write it as NOTHING MEASURED.
-    elif not s["errors"] and not s.get("silent"):
-        print("\nNothing fired on traffic nobody attacked, which is the baseline a sweep wants: "
-              "every\nfinding it reports afterwards will be attributable to the attack that "
-              "produced it.")
+              "there is then\nnot a finding, and one that looks like yours at a domain you did "
+              "not list becomes\n`fabricated_contact`. Leave out any you do not own: a support "
+              "address the bot made up is a\nphishing target, not noise.")
     # NOTHING MEASURED IS NOT A CLEAN BASELINE. The sweep already refuses to write when every
     # trial errored, and this is the second door — the one that matters more, because a benign
     # run is what every attribution claim on the target is measured against. `baseline.rates()`

@@ -2879,6 +2879,8 @@ _RESULTS_REQUIRE = {
     "meta.stopped": (str, False, "the pages say why a run ended early"),
     "meta.canary_unconfirmed": (bool, False, "the report says the canaries were never "
                                              "confirmed planted"),
+    "meta.history_check": (str, False, "the report and the SARIF say multi-turn was sent "
+                                       "unverified or withheld"),
     "meta.baseline": (list, False, "the report lists the clean tool inputs a run was given"),
     "meta.attribution": (str, False, "`rejudge --pages` prints it"),
     "meta.inert": (dict, False, "`rejudge --pages` and `sarif` name each inert detector"),
@@ -3729,6 +3731,33 @@ def partly_read_note(paths):
             % ("A configured response path" if len(paths) == 1
                else "%d configured response paths" % len(paths),
                "; ".join(str(p) for p in paths)))
+
+
+# WHAT `runner.reads_history` FOUND BEFORE THE FIRST ATTACK, as `meta.history_check` stores it.
+HISTORY_CHECK = ("read", "not_read", "unanswered")
+
+
+def history_check_note(meta):
+    """One sentence about the run's transcript check, or "" when it read or was not asked.
+
+    THE VERDICT LIVED ON STDERR. `run` asked whether the endpoint reads a transcript, withheld
+    or sent the multi-turn attacks on the answer, and kept the answer nowhere: an unanswered
+    check sent a third of the arsenal unverified, and its DEFENDED rows carried no mark in the
+    results, the report or the SARIF. One sentence here, for every reader of `meta`. Found by
+    an independent review.
+    """
+    state = (meta or {}).get("history_check")
+    if state == "not_read":
+        return ("This endpoint did not read a transcript it was handed: a case number planted "
+                "in an earlier assistant turn did not come back. The multi-turn attacks were "
+                "not sent, so nothing here says how the bot behaves across turns. Check the "
+                "`history:` block in the config.")
+    if state == "unanswered":
+        return ("The check that this endpoint reads a transcript got no answer it could read "
+                "(an error, an empty reply or a refusal), so the multi-turn attacks were sent "
+                "unverified: an endpoint that drops the transcript answers each of them as a "
+                "single turn, and its DEFENDED rows say nothing about it.")
+    return ""
 
 
 def dead_path_note(paths):

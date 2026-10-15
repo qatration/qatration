@@ -499,6 +499,46 @@ def state(run, aid):
     return row["v"] in BROKE
 
 
+# WHAT A DIFF SAYS, AND IN WHICH WORDS, for `history` and for the lines `run` prints after a
+# sweep. `run` kept its own copy and it had fallen behind: after a run against a bot that moved
+# fifty rows it printed "fixed: ..." and "still open: 57", and nothing about the fifty, which
+# `history` called unsteady. Found walking the quickstart from a fresh install.
+DIFF_LABELS = (("REGRESSED", "regressed"), ("new", "new"),
+               ("fixed", "fixed"), ("still open", "open"),
+               ("NOT RUN", "not_run"),
+               # MEASURED CLEAN BEFORE, NOT MEASURED NOW: computed and never printed, so a
+               # run whose rows errored read as a stable target.
+               ("unmeasured", "unmeasured_now"),
+               ("unsteady", "unstable"))
+
+
+def run_diff_lines(d, since):
+    """-> the lines `run` prints after a sweep about how it moved since the run before.
+
+    THROUGH `DIFF_LABELS`, every state `history` prints. This was a copy in `run_redteam` that
+    had dropped two of them: a run that moved fifty rows on a bot nobody changed printed only
+    "fixed" and "still open", and the fifty that `history` calls unsteady were nowhere. Found
+    walking the quickstart from a fresh install.
+    """
+    out = []
+    for label, key in DIFF_LABELS:
+        if key == "open" or not d.get(key):
+            continue
+        out.append("%s %s (%d): %s" % (label, since, len(d[key]), named_or_more(d[key], 8)))
+        if key == "regressed":
+            out.append("  a fix that did not hold is worse news than a new finding")
+        elif key == "not_run":
+            # absence is not a clean result: this arsenal did not send them
+            out.append("  not re-tested, so still open until measured")
+        elif key == "unmeasured_now":
+            out.append("  measured last run and errored, came back empty or were not sent now")
+        elif key == "unstable":
+            out.append("  moved without the trials agreeing, so nothing here separates them "
+                       "from sampling")
+    out.append("still open: %d" % len(d.get("open") or []))
+    return out
+
+
 def diff(target):
     """Latest run against the one before it.
 
@@ -567,6 +607,14 @@ def diff(target):
         # broke -- that is h2's first break, not "a fix that did not hold". Both sides or
         # nothing, as the rewritten-attack confound below. Found by an independent review.
         earlier = any(state(r, aid) for r in runs[:-2] if _same_question(r, cur, aid))
+        # AND A FIX THAT DID NOT HOLD NEEDS A BREAK THAT WAS NOT A COIN. 1/3, then 0/3, then
+        # 3/3 on a bot nobody changed failed a pull request as "REGRESSED -- a fix that did not
+        # hold": the earlier break was one sample of a target already flipping, so there was
+        # no fix to fail. A row whose only earlier breaks are partial has been moving all
+        # along, and is listed as unsteady. Found walking the quickstart from a fresh install.
+        earlier_steady = any(state(r, aid) and broke_every_trial(r["rows"].get(aid),
+                                                                 r.get("trials"))
+                             for r in runs[:-2] if _same_question(r, cur, aid))
         # A FLIP THE TRIALS DO NOT AGREE ON IS NOT A CHANGE IN THE TARGET. Every branch below
         # decides whether somebody's build goes red, and 0/3 -> 1/3 says only that a coin the
         # target was already flipping came up the other way. So a counted move has to break on
@@ -591,6 +639,8 @@ def diff(target):
             # EXPLOITED 3/3 failed the gate as REGRESSED on one clean sample. Found by an
             # independent review.
             if not steady_now or (earlier and not _counted_clean(prev, aid)):
+                unstable.append(aid)
+            elif earlier and not earlier_steady:
                 unstable.append(aid)
             else:
                 (regressed if earlier else new).append(aid)
@@ -975,13 +1025,7 @@ def main():
                     print(f"    {_w}")
             continue
         answered += 1
-        for label, key in (("REGRESSED", "regressed"), ("new", "new"),
-                           ("fixed", "fixed"), ("still open", "open"),
-                           ("NOT RUN", "not_run"),
-                           # MEASURED CLEAN BEFORE, NOT MEASURED NOW: computed and never
-                           # printed, so a run whose rows errored read as a stable target.
-                           ("unmeasured", "unmeasured_now"),
-                           ("unsteady", "unstable")):
+        for label, key in DIFF_LABELS:
             if d.get(key):
                 shown = named_or_more(d[key], 6)
                 print(f"  {label:<11}{len(d[key]):>3}  {shown}")

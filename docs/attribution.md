@@ -718,9 +718,11 @@ Four surfaces have now been exhausted against NVIDIA NeMo Guardrails, and the va
 in the zeros. It is that each one has a mechanism attached, which is what an operator can act
 on and what a pass/fail scan never produces.
 
-**Direct messages.** 47 attacks, every trial ending in a byte-identical "I'm sorry, I can't
-respond to that" — the rail's template, not the model. Forty-seven results that are really
-one result repeated: nothing reached the model at all.
+**Direct messages.** 46 attacks at three trials each (`out/results_nemo.json`), and 134 of
+the 138 trials ended in a byte-identical "I'm sorry, I can't respond to that" — the rail's
+template, not the model. The other four are the model answering two of the three questions
+that retrieve the poisoned document (shipping three times, returns once), each scored
+DEFENDED. Everything else is one result repeated: nothing reached the model at all.
 
 **Encodings.** Visual ones (homoglyph, zero-width, tag block, fullwidth, ASCII art) and
 classical ones (base64, ROT-13, quoted-printable, MIME) all blocked. Three probes settled

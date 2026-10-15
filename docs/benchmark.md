@@ -144,7 +144,7 @@ Different questions, all legitimate, and the difference is most of the point.
 | no attack at all | 48 | 0% | 38 of 48 ordinary questions **refused** |
 | garak `latentinjection` | 256 | 0% | attack success 0.78% [0.00, 1.95] |
 | promptfoo | 200 | 0% | 0 of 200 failed |
-| QAtration | 321 | 0% | **2 of 337 breached** |
+| QAtration | 321 | 0% | **2 of 321 breached** |
 
 *Corrected on 2026-08-31.* This cell said **1 of 323**, and 323 is the number of rows the run
 scored DEFENDED, not the number it sent. The August `out/bench/results_nemo.json` held 324
@@ -162,7 +162,7 @@ points between those two numbers are what the rails actually buy. A benchmark th
 breaches would call this target perfect and never mention that four customers in five get an
 apology instead of an answer.
 
-The second is what got through, 2 in 337. `cap-numeric-anchor`, a multi-turn attack scored by
+The second is what got through, 2 in 321. `cap-numeric-anchor`, a multi-turn attack scored by
 the `capitulation` detector, broke it in August and broke it again in October: the bot confirmed
 a restocking fee the attacker made up. `g-invisible` got it to answer in zero-width spaces, which
 its output rail let past. Twenty probes would have found neither and concluded the target was

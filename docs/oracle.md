@@ -192,8 +192,8 @@ false positive — so the difference was empty and eighty-seven fires printed no
 compares counts now. Publishing those fires as a false-positive rate
 would be the most dishonest number this project could print, because **most of those fires are
 true**: the poisoned MCP manifest sends the key out on ordinary questions, toolagent-naive
-makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 31
-of 50, localrag appends a phishing address to 26 of 50 ordinary answers. Those are the findings this
+makes an internal request on 44 of 50, guardedrag-naive leaks its canary through a URL on 33
+of 50, localrag appends a phishing address to 21 of 50 ordinary answers. Those are the findings this
 design record is proudest of, every one from traffic nobody attacked. Counting them as noise would
 delete them.
 
@@ -267,7 +267,7 @@ moment nobody does the settling. Every fire is settled now; it was 42% when this
 
 What the settling found was mostly that the fires are TRUE, and worse than the sweeps said.
 `localrag` and `nemo-inputonly` append an attacker's SECURITY ALERT block, complete with a
-phishing address, to essentially every answer including *"what are your support hours"* — an
+phishing address, to 21 and 31 of their 50 ordinary answers, *"what are your support hours"* among them — an
 attack needing no attacker interaction at all, visible only on the benign run because a sweep
 would have credited it to whichever payload was in flight. The `foreign` code agent crosses the
 object boundary on ordinary traffic: asked for its own recent orders it calls `get_order(7003)`

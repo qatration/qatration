@@ -235,3 +235,31 @@ jobs:
           test "$QAT_OUTCOME" = "failure"
           test -n "$QAT_SARIF" && test -s "$QAT_SARIF"
           python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['runs'][0]['results'], 'no finding in the SARIF'" "$QAT_SARIF"
+
+      # AND A RUN THAT MEASURED NOTHING EXPORTS NOTHING. The same target name against a port
+      # nobody listens on: every trial errors, the run exits 3 and leaves the results file
+      # above in place on purpose, and the SARIF step must not export that file as this run's
+      # analysis. Found by an independent review.
+      - name: the same target, unreachable
+        run: |
+          sed 's/8781/8799/' "$RUNNER_TEMP/leakbot.yaml" > "$RUNNER_TEMP/deadbot.yaml"
+          rm -f qatration.sarif
+
+      - name: the action, against nothing
+        id: dead
+        continue-on-error: true
+        uses: ./
+        with:
+          target-config: ${{ runner.temp }}/deadbot.yaml
+          scope: quick
+          trials: "1"
+
+      - name: it said nothing was measured, and exported no SARIF
+        env:
+          QAT_RC: ${{ steps.dead.outputs.exit-code }}
+          QAT_SARIF: ${{ steps.dead.outputs.sarif-file }}
+        run: |
+          echo "exit-code=$QAT_RC sarif-file=$QAT_SARIF"
+          test "$QAT_RC" = "3"
+          test -z "$QAT_SARIF"
+          test ! -e qatration.sarif
