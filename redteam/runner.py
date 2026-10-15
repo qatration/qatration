@@ -697,15 +697,19 @@ def bon_augment(text, seed):
     """
     import random as _r
     rng = _r.Random(str(seed))
+    # WORDS ARE WHAT WHITESPACE SEPARATES, ALL OF IT. Split on spaces alone, a line break sat
+    # inside a "word" and the shuffle moved it: `hours?\n\nWe` came out as `hwROt\nu?`, a
+    # request with its lines rearranged, which is not the perturbation the paper measured.
+    # Found in the first live run.
     words = []
-    for w in (text or "").split(" "):
-        if len(w) > 3 and rng.random() < BON_SCRAMBLE:
+    for w in re.split(r"(\s+)", text or ""):
+        if w and not w.isspace() and len(w) > 3 and rng.random() < BON_SCRAMBLE:
             mid = list(w[1:-1])
             rng.shuffle(mid)
             w = w[0] + "".join(mid) + w[-1]
         words.append(w)
     out = []
-    for c in " ".join(words):
+    for c in "".join(words):
         if c.isalpha() and rng.random() < BON_CAPS:
             c = c.swapcase()
         if 33 <= ord(c) <= 125 and rng.random() < BON_NOISE:

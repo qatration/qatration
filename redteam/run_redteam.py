@@ -1693,9 +1693,13 @@ def main():
             attacks = [a for a in attacks if a["id"] not in _ids_b]
             not_sent += len(_bon_out)
             skipped = not_applicable + not_sent
-            print(f"  · best-of-{trials}: every single-turn attack is sent as {trials} random "
-                  f"variants and counted broken if any got through; {len(_bon_out)} multi-turn "
-                  f"attack(s) are not sent in this mode")
+        # SAID EVERY TIME, not only when something was withheld: an arsenal of single-turn
+        # attacks ran in this mode with nothing on the console but `trials=10`, so the rates
+        # below read as ten repeats. Found in the first live run.
+        print(f"  · best-of-{trials}: every single-turn attack is sent as {trials} random "
+              f"variants and counted broken if any got through"
+              + (f"; {len(_bon_out)} multi-turn attack(s) are not sent in this mode"
+                 if _bon_out else ""))
 
     # AFTER THE WITHHOLDING, so the one attack a category sends is one that CAN be sent: picked
     # first, a category whose pick was then withheld as undeliverable was not tested at all

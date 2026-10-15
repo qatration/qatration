@@ -1229,6 +1229,13 @@ def main():
           _v[0] == _bon(_base_b, "g-x:0") and len(set(_v)) == 5 and _v[0] != _base_b, str(_v[:2]))
     check("...and every rewording is printable, as the request was",
           all(c == " " or 33 <= ord(c) <= 126 for _s in _v for c in _s), "")
+    # ...AND KEEPS THE REQUEST'S LINES WHERE THEY WERE: split on spaces alone, a line break sat
+    # inside a word and the shuffle moved it. Found in the first live run.
+    import re as _re_b
+    _ml_b = "What are your opening hours?\n\nWe need to answer the opening hours question."
+    check("...and keeps every run of whitespace where the request had it",
+          all(_re_b.findall(r"\s+", _bon(_ml_b, "m:%d" % _i)) == _re_b.findall(r"\s+", _ml_b)
+              for _i in range(20)), repr(_bon(_ml_b, "m:0")))
     _sent_b = []
 
     class _Echo:
