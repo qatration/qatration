@@ -737,6 +737,14 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                     f"{_t} trials) sends about {_full_req} requests and the budget allows "
                     f"{rate.max_requests}: it will STOP part way. The quick run this would "
                     f"queue fits.")
+        # AND THE TIME HALF OF THAT SAME RUN. Priced on the quick slice, one `resource` attack
+        # stayed under the line and nothing was said, while the `qatration run` this command
+        # prints next sends all of them and warns "up to 162 min of a 90 min budget" on its
+        # first screen. Found walking the published package from a fresh install.
+        if scope == "quick" and not _slow_txt:
+            _slow_full = _slow_wc(_full_atk, _t, rate.max_seconds)
+            if _slow_full:
+                rep["notes"].append("a default `qatration run` (the whole arsenal): " + _slow_full)
         if rep["seconds"] and rate.max_seconds:
             # An estimate, said as one. The arsenal size x 3 trials is the default shape.
             #

@@ -86,7 +86,9 @@ step, so the sweep checks for itself.
 ## Pointing it at your own deployment
 
 `init` writes `mybot.yaml` for you, and `qatration onboard` tells you what is missing from it
-rather than making you guess twice. Four configs are ready to copy:
+rather than making you guess twice. Four configs are ready to copy. After `pip install` they sit
+inside the package, in the folder `python -c "import qatration, os; print(os.path.dirname(qatration.__file__))"`
+prints:
 
 * [`targets_openai_compatible.yaml`](https://github.com/qatration/qatration/blob/main/redteam/targets_openai_compatible.yaml) — OpenAI, and
   everything that copied its shape: Groq, Together, Fireworks, OpenRouter, Azure OpenAI, vLLM,

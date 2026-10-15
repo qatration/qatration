@@ -677,6 +677,15 @@ def main():
         # saying `cannot answer` where a build should have gone red.
         check("...and that diff still fails the build",
               _rr.regression_verdict(_d3)[0] == 1, str(_rr.regression_verdict(_d3)))
+        # ...AND ON A TARGET THAT MOVED MANY ROWS WITHOUT ITS TRIALS AGREEING, THE FAILURE
+        # SAYS SO: walked on the published package against a bot leaking at random, FAIL on two
+        # rows beside thirty-seven unsteady ones. Still exit 1; the rule is unchanged.
+        _noisy_d = dict(_d3, unstable=["u%d" % _i for _i in range(37)])
+        _nv = _rr.regression_verdict(_noisy_d)
+        check("...and on a noisy target the failure says a steady-looking move may be chance",
+              _nv[0] == 1 and any("answers by chance" in _l for _l in _nv[1]), str(_nv[1][:2]))
+        check("...while on a quiet one it does not",
+              not any("answers by chance" in _l for _l in _rr.regression_verdict(_d3)[1]), "")
 
         # ONE MEASURED TRIAL OF THREE IS NOT EVERY TRIAL. A row asked three times that errored
         # twice is stored `1/1`, and it went to `new` on one sample, exit 1; the mirror,

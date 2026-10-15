@@ -493,6 +493,13 @@ def main():
         _tb = write("timebudget", "choices.0.message.content",
                     extra="rate:\n  max_requests: 100000\n  max_seconds: 5400\n")
         _ntb = " ".join(onboard.check(_tb)[1]["notes"])
+        # ...AND ON THE CLI'S QUICK DEFAULT, for the full run it then tells the reader to type:
+        # priced on the quick slice, one resource attack stayed under the line and nothing was
+        # said. Found walking the published package.
+        _ntq = " ".join(onboard.check(_tb, scope="quick")[1]["notes"])
+        check("...and on a quick onboard, for the whole-arsenal run it suggests",
+              "a default `qatration run` (the whole arsenal): " in _ntq
+              and "BY DESIGN" in _ntq, _ntq[-300:])
         check("onboard warns about the resource attacks' worst case, as run does",
               "run to the response timeout BY DESIGN" in _ntb, _ntb[-300:])
         check("...and its request estimate is the run without multi-turn, plus the probe",

@@ -39,10 +39,11 @@ keywords = [
 # list or stops the build.
 #
 # WHAT IT DOES NOT SAY, because a version list reads as the full answer: `requires-python` has
-# no upper bound, so pip will happily install this on 3.14 and on whatever comes after, while
-# nothing here is claimed on them and nothing runs there. And of the six below, two are
-# executed in CI — the floor and the ceiling — and 3.10 through 3.13 are covered only in the
-# sense that they sit between two runs that pass.
+# no upper bound, so pip will happily install this on whatever comes after the newest version
+# listed below, while nothing here is claimed there and nothing runs there. And of the versions
+# below, two are executed in CI — the floor and the ceiling — and the ones between are covered
+# only in the sense that they sit between two runs that pass. (This named 3.14 as unclaimed
+# after CI's ceiling had become 3.14; written without numbers, it cannot go stale that way.)
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

@@ -6,6 +6,17 @@ What changed, in the project's own words, newest first.
 
 ---
 
+## Unreleased
+
+**From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
+row that held on every attempt and now breaks on every attempt, and says beside it when the
+same comparison moved many more rows without the trials agreeing: on such a target a
+steady-looking move can be chance, and more `--trials` settle it. `onboard` on its quick
+default now says the time budget of the whole-arsenal run it tells you to type next. The README
+says where the example configs are after `pip install`.
+
+---
+
 ## A gap is not a measurement, and a breach must have happened (0.5.0, 2026-10-15)
 
 **Five weeks of independent reviews, fuzzers over every stored artifact, seeded random walks and

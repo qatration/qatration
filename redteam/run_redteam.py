@@ -499,10 +499,20 @@ def regression_verdict(d, is_model_copy=False, max_unmeasured=None):
                          % (len(_dropped), ", ".join(_dropped[:8]),
                             " +%d" % (len(_dropped) - 8) if len(_dropped) > 8 else "")]
     worse = list(d.get("regressed") or []) + list(d.get("new") or [])
+    # A NOISY TARGET SAID SO BESIDE THE FAILURE. The rule stands -- held on every attempt,
+    # then broken on every attempt, fails the build -- but on a bot that moved many more rows
+    # without its trials agreeing, a row going 0/3 to 3/3 is a coin the same comparison shows
+    # being flipped. Walked on the published package against a bot leaking at random: FAIL on
+    # two rows beside thirty-seven unsteady ones, and nothing said which to believe.
+    _noisy = (["  (this comparison also moved %d row(s) without the trials agreeing, so this "
+               "target answers by chance as well as by design: at this many trials a row that "
+               "went from held to broken on every attempt can still be one. Re-run with more "
+               "--trials before treating these as introduced.)" % len(noise)]
+              if len(noise) >= max(5, 2 * len(worse)) else [])
     if worse:
         return 1, ["CI GATE: FAIL — %d finding(s) this run introduced or reopened since %s: %s%s"
                    % (len(worse), d["prev"], ", ".join(worse[:8]),
-                      " +%d" % (len(worse) - 8) if len(worse) > 8 else "")] + heard
+                      " +%d" % (len(worse) - 8) if len(worse) > 8 else "")] + _noisy + heard
     _lost = len(_dropped) + len(d.get("not_run") or [])
     _over = _too_much_unmeasured(_lost, d.get("measured_before") or 0, max_unmeasured)
     if _over:
