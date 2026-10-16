@@ -69,7 +69,9 @@ rather than leaving it as a step to remember. `qatration mint` still exists on i
 config you already have. Give it `--system-prompt-file prompt.txt` and the config also carries
 your prompt as deployed, which the checks that compare a reply with your instructions need.
 `--shape vercel` writes the config for a Vercel AI SDK route that `useChat` talks to: its
-request, its streamed reply, and the conversation in its `parts` shape. A streamed reply is
+request, its streamed reply, and the conversation in its `parts` shape. `--shape dify`,
+`flowise`, `langflow` and `rasa` write one for an app built on those, with the conversation the
+app keeps under an id that is fresh for every trial. A streamed reply is
 read as the reply it streams, from an OpenAI-compatible endpoint, Anthropic, the Responses
 API, Gemini, Ollama, Dify, Flowise, Langflow or the Vercel AI SDK, by the config written for the same endpoint
 unstreamed; a stream of any other protocol is said to be one, with the flag that cures it.
@@ -210,7 +212,7 @@ None of that needs taking on trust. The counts `test_readme.py` lists, in this R
 site, are recounted from the artifacts in `out/` by a test that fails the build when the two
 disagree. The site's other figures come from single dated runs and from the benchmark against
 garak and promptfoo, and are not recounted. No assertion
-in the suite is allowed to be one that cannot fail — 6,004 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 6,010 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

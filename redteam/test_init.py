@@ -300,6 +300,58 @@ def _vercel_shape():
               "exit %s %s" % (_bad.returncode, _bad.stderr[-200:]))
 
 
+def _app_shapes():
+    """`init --shape dify|flowise|langflow|rasa`: apps that keep the conversation themselves, each
+    written so the adapter builds it, reads its reply where the app puts it, and sends the
+    conversation id where the app reads one."""
+    _want = {"dify": ("answer", "conversation_id"),
+             "flowise": ("text", None),
+             "langflow": ("outputs.0.outputs.0.results.message.text", None),
+             "rasa": ("*.text", None)}
+    check("init writes every app shape this suite knows, and knows every one it writes",
+          set(_want) | {"openai", "vercel"} == set(init_config.SHAPES), repr(init_config.SHAPES))
+    _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k"}
+    _old = {k: os.environ.get(k) for k in _env}
+    os.environ.update(_env)
+    try:
+        for _sh, (_reply, _from) in _want.items():
+            _c = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                                   verify="QAT-VERIFY-X", shape=_sh,
+                                                   url="http://localhost:9/x"))
+            try:
+                _t = HttpConfiguredTarget(**{k: x for k, x in _c.items()
+                                             if k not in CONFIG_ONLY_KEYS})
+                _why = ""
+            except SystemExit as e:
+                _t, _why = None, str(e)
+            check("init --shape %s writes a config the adapter builds" % _sh, _t is not None, _why)
+            if _t is None:
+                continue
+            check("...whose reply is read where %s puts it" % _sh,
+                  (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))
+            check("...and whose conversation is the app's own, under `{session}`: chain, and no "
+                  "forged_history", _t.server_memory and set(_t.capabilities) == {"chain"}
+                  and _t.session_from == _from, repr((_t.capabilities, _t.session_from)))
+            check("...and which names no placeholder of the OpenAI shape",
+                  init_config.placeholders_left(_c) == [], repr(init_config.placeholders_left(_c)))
+    finally:
+        for k, v in _old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    with tempfile.TemporaryDirectory() as d:
+        _r = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--shape",
+                             "rasa", "--url", "http://localhost:5005/webhooks/rest/webhook",
+                             "--out", os.path.join(d, "r.yaml")],
+                            capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=HERE))
+        _w = (yaml.safe_load(io.open(os.path.join(d, "r.yaml"), encoding="utf-8"))
+              if os.path.exists(os.path.join(d, "r.yaml")) else {}) or {}
+        check("`qatration init --shape rasa` writes the Rasa shape and asks for no model",
+              _r.returncode == 0 and (_w.get("response") or {}).get("reply") == "*.text"
+              and "request.model" not in _r.stdout, (_r.stdout + _r.stderr)[-300:])
+
+
 def main():
     _placeholder_checks()
     _value_checks()
@@ -602,6 +654,7 @@ def main():
           == "m\x85", repr((_oc.get("oracle_context") or {}).get("system_prompt", "")[:60]))
 
     _vercel_shape()
+    _app_shapes()
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:

@@ -286,6 +286,84 @@ response:
   # observations: "toolResults"
 
 ''',
+    "dify": '''\
+# A DIFY APP (`/v1/chat-messages`, chat, agent or chatflow). The url is your Dify's, e.g.
+# `https://api.dify.ai/v1/chat-messages` or `http://localhost/v1/chat-messages` self-hosted, and
+# the key is the APP's API key. The system prompt is the app's own, in Dify: that is where the
+# block this command printed goes.
+env:
+  - DIFY_API_KEY
+headers:
+  Authorization: "Bearer ${{DIFY_API_KEY}}"
+request:
+  query: "{{prompt}}"
+  inputs: {{}}
+  user: "qatration"
+  # STREAMING, because a Dify agent app answers no other way; the stream is folded into the
+  # blocking response, so the paths below read both.
+  response_mode: streaming
+  conversation_id: "{{session}}"
+
+response:
+  reply: "answer"
+  error: "error"
+  # If the app has tools: each tool an agent thought names, with its input, and what it returned.
+  # tool_calls: "tool_calls"
+  # observations: "observations"
+
+''',
+    "flowise": '''\
+# A FLOWISE CHATFLOW (`/api/v1/prediction/<chatflow id>`). The url is your Flowise's with the
+# chatflow id in it, e.g. `http://localhost:3000/api/v1/prediction/<id>`. The system prompt is
+# the chatflow's own, in Flowise: that is where the block this command printed goes.
+# A chatflow with an API key wants it as a bearer token; uncomment both:
+# env:
+#   - FLOWISE_API_KEY
+# headers:
+#   Authorization: "Bearer ${{FLOWISE_API_KEY}}"
+request:
+  question: "{{prompt}}"
+  overrideConfig:
+    sessionId: "{{session}}"
+
+response:
+  reply: "text"
+  error: "error"
+  # If the chatflow has tools: what each was called with (`toolInput`).
+  # tool_calls: "usedTools"
+
+''',
+    "langflow": '''\
+# A LANGFLOW FLOW (`/api/v1/run/<flow id or name>`). The url is your Langflow's with the flow in
+# it, e.g. `http://localhost:7860/api/v1/run/<flow id>`. The system prompt is the flow's own, in
+# Langflow: that is where the block this command printed goes.
+env:
+  - LANGFLOW_API_KEY
+headers:
+  x-api-key: "${{LANGFLOW_API_KEY}}"
+request:
+  input_value: "{{prompt}}"
+  input_type: chat
+  output_type: chat
+  session_id: "{{session}}"
+
+response:
+  reply: "outputs.0.outputs.0.results.message.text"
+  error: "error"
+
+''',
+    "rasa": '''\
+# A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
+# `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
+request:
+  sender: "{{session}}"
+  message: "{{prompt}}"
+
+# EVERY MESSAGE OF THE REPLY: Rasa answers with a list of them, and a leak can sit in the second.
+response:
+  reply: "*.text"
+
+''',
 }
 HISTORY = {
     "openai": '''\
@@ -321,6 +399,37 @@ history:
     parts:
       - type: text
         text: "{{text}}"
+
+''',
+    # THE APPS THAT KEEP THE CONVERSATION THEMSELVES: no transcript goes in the request, the id
+    # does, and what `{session}` is decides whether an attack's turns land in one conversation.
+    "dify": '''\
+# MULTI-TURN, kept by Dify: it names the conversation in its first reply and wants that name on
+# the next turn, and `{{session}}` is empty until it has, so a trial opens a conversation of its
+# own and the turns of an attack stay in it. `onboard` and `run` ask first whether they do.
+session:
+  from_reply: "conversation_id"
+
+''',
+    "flowise": '''\
+# MULTI-TURN, kept on the server: the app holds the conversation under the id `{{session}}` is,
+# a fresh one for every trial and the same one for the turns of a conversation, so the attacks
+# that need more than one turn are sent as real turns. `onboard` and `run` ask first whether the
+# server does keep them (a case number given in one turn has to come back in the next).
+
+''',
+    "langflow": '''\
+# MULTI-TURN, kept on the server: the app holds the conversation under the id `{{session}}` is,
+# a fresh one for every trial and the same one for the turns of a conversation, so the attacks
+# that need more than one turn are sent as real turns. `onboard` and `run` ask first whether the
+# server does keep them (a case number given in one turn has to come back in the next).
+
+''',
+    "rasa": '''\
+# MULTI-TURN, kept on the server: the app holds the conversation under the id `{{session}}` is,
+# a fresh one for every trial and the same one for the turns of a conversation, so the attacks
+# that need more than one turn are sent as real turns. `onboard` and `run` ask first whether the
+# server does keep them (a case number given in one turn has to come back in the next).
 
 ''',
 }
@@ -394,7 +503,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
     ap.add_argument("--shape", choices=SHAPES, default="openai",
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
-                         "or a Vercel AI SDK route that `useChat` talks to")
+                         "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
+                         "Langflow or Rasa app")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "
@@ -502,7 +612,7 @@ def main():
     _todo = []
     # A VERCEL ROUTE HAS NO `model` IN ITS REQUEST: the server picks it, so naming the field
     # as a placeholder sent the reader looking for a line that is not in the file.
-    if args.model == DEFAULT_MODEL and args.shape == "openai":
+    if args.model == DEFAULT_MODEL and "{model}" in WIRE[args.shape]:
         _todo.append("`request.model` (it is a placeholder)")
     if args.url == DEFAULT_URL:
         _todo.append("`url`")

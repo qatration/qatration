@@ -87,6 +87,12 @@ which a run reads as offered. `onboard` offers `*.text` for a reply that is a li
 `{session}` is now a UUID4 rather than `qat-` and hex digits, so a server that validates its
 conversation ids takes it: LangGraph's thread id is a UUID.
 
+**`init --shape dify|flowise|langflow|rasa`.** A whole config for an app built on one of them in
+one command: the request each takes, the reply where each puts it (`answer`, `text`, the run
+response's message, every Rasa message), the API key each wants as the header it wants, and the
+conversation the app keeps under `{session}`, or under the id Dify names, so the multi-turn
+attacks are sent as real turns of one conversation per trial.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a
