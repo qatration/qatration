@@ -478,10 +478,10 @@ def _vercel_ai_sdk(check):
               bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output
               and _vs(_mode["body"]) is None,
               "output=%r error=%r" % (_p.output, _p.error))
-        # AND A STREAM NOBODY FOLDS is still the JSON error it was, not a guessed reply.
-        _mode["body"] = ('event: message_start\ndata: {"type":"message_start"}\n\n'
-                         'event: content_block_delta\n'
-                         'data: {"type":"content_block_delta","delta":{"text":"hi"}}\n\n')
+        # AND A STREAM NOBODY FOLDS is still the JSON error it was, not a guessed reply:
+        # Gemini's `alt=sse` chunks, which no fold here reads.
+        _mode["body"] = ('data: {"candidates":[{"content":{"parts":[{"text":"hi"}],'
+                         '"role":"model"}}]}\n\n')
         _p = _t.send("hi")
         check("a stream of another protocol is still the JSON error it was",
               bool(_p.error) and "JSONDecode" in _p.error and not _p.output,
@@ -620,6 +620,174 @@ def _openai_stream(check):
     check("a stream with nothing to say leaves content null, not an empty reply",
           _os(_chunk({}, "stop"))["choices"][0]["message"]["content"] is None,
           repr(_os(_chunk({}, "stop"))))
+
+
+def _three_more_streams(check):
+    """Anthropic Messages, the OpenAI Responses API and Ollama's native API, each streamed and
+    each read by the config written for its non-streamed answer. The events are the ones their
+    documentation shows."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, anthropic_stream as _as,
+                              responses_stream as _rs, ollama_stream as _ol,
+                              _fold_stream as _fs)
+    _canary = "ACME-CANARY-9931"
+    _half = len(_canary) // 2
+
+    def _ev(kind, **fields):
+        return "event: %s\ndata: %s\n\n" % (kind, _j.dumps(dict(fields, type=kind)))
+
+    anthropic = (
+        _ev("message_start", message={"id": "msg_1", "type": "message", "role": "assistant",
+                                      "content": [], "model": "claude-x", "stop_reason": None,
+                                      "usage": {"input_tokens": 9, "output_tokens": 1}})
+        + _ev("content_block_start", index=0, content_block={"type": "text", "text": ""})
+        + _ev("ping")
+        + _ev("content_block_delta", index=0, delta={"type": "text_delta", "text": "Sending "})
+        + _ev("content_block_delta", index=0, delta={"type": "text_delta", "text": "it now."})
+        + _ev("content_block_stop", index=0)
+        + _ev("content_block_start", index=1,
+              content_block={"type": "tool_use", "id": "toolu_1", "name": "send_email",
+                             "input": {}})
+        + _ev("content_block_delta", index=1,
+              delta={"type": "input_json_delta", "partial_json": '{"body": "%s' % _canary[:_half]})
+        + _ev("content_block_delta", index=1,
+              delta={"type": "input_json_delta", "partial_json": '%s"}' % _canary[_half:]})
+        + _ev("content_block_stop", index=1)
+        + _ev("message_delta", delta={"stop_reason": "tool_use", "stop_sequence": None},
+              usage={"output_tokens": 20})
+        + _ev("message_stop"))
+    _msg = {"id": "msg_r", "type": "message", "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": "Sending it now.", "annotations": []}]}
+    _fc = {"id": "fc_1", "type": "function_call", "status": "completed", "call_id": "call_1",
+           "name": "send_email", "arguments": '{"body": "%s"}' % _canary}
+    responses = (
+        _ev("response.created", response={"id": "resp_1", "status": "in_progress", "output": []})
+        + _ev("response.output_item.added", output_index=0,
+              item={"id": "msg_r", "type": "message", "role": "assistant", "content": []})
+        + _ev("response.output_text.delta", item_id="msg_r", output_index=0, content_index=0,
+              delta="Sending ")
+        + _ev("response.output_text.delta", item_id="msg_r", output_index=0, content_index=0,
+              delta="it now.")
+        + _ev("response.output_item.added", output_index=1,
+              item={"id": "fc_1", "type": "function_call", "call_id": "call_1",
+                    "name": "send_email", "arguments": ""})
+        + _ev("response.function_call_arguments.delta", item_id="fc_1", output_index=1,
+              delta='{"body": "%s' % _canary[:_half])
+        + _ev("response.function_call_arguments.delta", item_id="fc_1", output_index=1,
+              delta='%s"}' % _canary[_half:])
+        + _ev("response.completed", response={"id": "resp_1", "status": "completed",
+                                              "error": None, "output": [_msg, _fc]}))
+    _line = lambda **o: _j.dumps(o) + "\n"
+    ollama = (_line(model="m", message={"role": "assistant", "content": "Sending "}, done=False)
+              + _line(model="m", message={"role": "assistant", "content": "it now."}, done=False)
+              + _line(model="m", message={"role": "assistant", "content": "", "tool_calls": [
+                  {"function": {"name": "send_email", "arguments": {"body": _canary}}}]},
+                      done=False)
+              + _line(model="m", message={"role": "assistant", "content": ""}, done=True,
+                      done_reason="stop", eval_count=12))
+    _mode = {"body": anthropic, "ctype": "text/event-stream"}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", _mode["ctype"])
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    url = "http://127.0.0.1:%d/v1" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        for _label, _body, _ctype, _resp in (
+                ("an Anthropic Messages stream", anthropic, "text/event-stream",
+                 {"reply": "content.0.text", "tool_calls": "content", "error": "error"}),
+                ("an OpenAI Responses API stream", responses, "text/event-stream",
+                 {"reply": "output.0.content.0.text", "tool_calls": "output",
+                  "error": "error"}),
+                ("an Ollama /api/chat stream", ollama, "application/x-ndjson",
+                 {"reply": "message.content", "tool_calls": "message.tool_calls",
+                  "error": "error"})):
+            _mode.update(body=_body, ctype=_ctype)
+            _t = _HT(url=url, name="s", request={"message": "{prompt}"}, response=_resp,
+                     timeout_s=5)
+            _p = _t.send("hi")
+            check("%s is read with its non-streamed config: the reply" % _label,
+                  _p.output == "Sending it now." and not _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+            check("...and its tool call, the canary whole",
+                  [n for n, _a in _p.tool_calls] == ["send_email"]
+                  and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+
+        # AN ERROR MID-STREAM IS AN ERROR, in each of the three.
+        for _label, _body, _ctype in (
+                ("Anthropic", _ev("message_start", message={"id": "m", "content": []})
+                 + _ev("error", error={"type": "overloaded_error", "message": "Overloaded"}),
+                 "text/event-stream"),
+                ("Responses", _ev("response.created", response={"id": "r", "output": []})
+                 + _ev("error", code="server_error", message="Overloaded"),
+                 "text/event-stream"),
+                ("Ollama", _line(model="m", message={"role": "assistant", "content": "Hel"},
+                                 done=False) + _line(error="Overloaded"),
+                 "application/x-ndjson")):
+            _mode.update(body=_body, ctype=_ctype)
+            _t = _HT(url=url, name="e", request={"message": "{prompt}"},
+                     response={"reply": "text", "error": "error"}, timeout_s=5)
+            _p = _t.send("hi")
+            check("an error in %s's stream is a TargetError naming it" % _label,
+                  bool(_p.error) and "TargetError" in _p.error and "Overloaded" in _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    # A RESPONSE THAT NEVER REACHED ITS LAST EVENT is rebuilt from the items that did.
+    _cut = _rs(responses[:responses.index("event: response.completed")])
+    check("a Responses stream cut before response.completed keeps the text and the call",
+          _cut is not None and _cut["output"][0]["content"][0]["text"] == "Sending it now."
+          and _cut["output"][1]["arguments"] == '{"body": "%s"}' % _canary, repr(_cut)[:300])
+    _failed = _rs(_ev("response.failed", response={
+        "id": "r", "status": "failed", "output": [],
+        "error": {"code": "server_error", "message": "boom"}}))
+    check("...and a response.failed says why at `error`",
+          (_failed or {}).get("error", {}).get("message") == "boom", repr(_failed))
+    check("...while a completed one carries no `error` key at all",
+          "error" not in _rs(responses), repr(_rs(responses))[:200])
+    _acut = _as(anthropic[:anthropic.index("event: content_block_stop", anthropic.index("toolu_1"))])
+    check("an Anthropic stream cut before its block closed still parses the input that arrived",
+          _acut is not None and _acut["content"][1]["input"] == {"body": _canary},
+          repr(_acut)[:300])
+    _ahalf = _as(anthropic[:anthropic.index(_canary[_half:])].rsplit("event:", 1)[0])
+    check("...and one cut halfway through the input keeps the half as text",
+          _ahalf is not None and _ahalf["content"][1]["input"] == '{"body": "%s' % _canary[:_half],
+          repr(_ahalf)[:300])
+    _new = _as(anthropic.replace("event: ping\ndata: {\"type\": \"ping\"}",
+                                 "event: future_event\ndata: {\"type\": \"future_event\", \"x\": 1}"))
+    check("an Anthropic event type nobody knows yet is skipped, not a refusal of the stream",
+          _new is not None and _new["content"][0]["text"] == "Sending it now.",
+          repr(_new)[:200])
+    _over = _as(_ev("error", error={"type": "overloaded_error", "message": "Overloaded"}))
+    check("...and an error before the message started is still Anthropic's error",
+          (_over or {}).get("error", {}).get("type") == "overloaded_error", repr(_over))
+    # ONE PROTOCOL EACH: no fold reads another's stream.
+    _reads = {_n: [_f.__name__ for _f in (_as, _rs, _ol) if _f(_b) is not None]
+              for _n, _b in (("anthropic", anthropic), ("responses", responses),
+                             ("ollama", ollama))}
+    check("each stream is recognised by exactly its own fold",
+          _reads == {"anthropic": ["anthropic_stream"], "responses": ["responses_stream"],
+                     "ollama": ["ollama_stream"]}, repr(_reads))
+    _gen = _ol(_line(model="m", response="Sending ", done=False)
+               + _line(model="m", response="it now.", done=True, done_reason="stop"))
+    check("an Ollama /api/generate stream joins `response`",
+          (_gen or {}).get("response") == "Sending it now." and _gen.get("done") is True,
+          repr(_gen))
+    check("...and a line that is not Ollama's makes the body not Ollama's",
+          _ol(_line(model="m", response="x", done=False) + _line(hello="world")) is None)
 
 
 def _history_turn(check):
@@ -2598,6 +2766,7 @@ def main():
     _vercel_ai_sdk(check)
     _openai_stream(check)
     _history_turn(check)
+    _three_more_streams(check)
     _third_review_of_replies(check)
     _review_capped(check)
 

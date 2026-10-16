@@ -74,7 +74,10 @@ response:
   # A list of blocks, not a string. Any leading non-text block moves the answer off this path —
   # see the note about thinking models above.
   reply: "content.0.text"
-  # tool_calls: "content.0.input"   # only if your deployment reports them
+  # The whole `content` list, not one block's `input`: an `input` is the ARGUMENTS of one call,
+  # read as a {tool: arguments} map, so `{"to": ..., "body": ...}` became two tools called `to`
+  # and `body`. The `tool_use` blocks are found among the text ones by their type.
+  # tool_calls: "content"   # only if your deployment has tools
 
 history:
   # Spliced, same as the OpenAI shape, but `insert_before: 1` means something slightly

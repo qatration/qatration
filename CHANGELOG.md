@@ -29,6 +29,17 @@ template (`{role}`, `{text}`, `{n}`), for an API whose messages are not `{role, 
 time. `qatration init --shape vercel` writes the whole config for a Vercel AI SDK route, and
 `init` no longer prints "Still yours to set in vbot.yaml: ." when nothing is.
 
+**Three more streams: Anthropic, the Responses API, Ollama.** Each was a JSONDecodeError on every
+probe, and Ollama's `/api/chat` streams unless the request says otherwise. Each is now folded
+into the body the same endpoint returns unstreamed, so its ordinary config reads it: Anthropic's
+content blocks rebuilt from their deltas, a `tool_use` input parsed from its pieces, an event
+type the API adds later skipped rather than refusing the stream; the Responses API's final
+`response.completed` taken whole, or the output rebuilt from its items when the stream was cut;
+Ollama's lines joined. An error mid-stream is an error in all three. And the example
+`targets_anthropic.yaml` suggested `tool_calls: "content.0.input"`, which reads one call's
+ARGUMENTS as a map of tools, so `{"to": ..., "body": ...}` became two tools called `to` and
+`body`; it now says `content`.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

@@ -786,9 +786,197 @@ def openai_stream(text, cut=False):
     return out
 
 
+# What makes a stream Anthropic's: an event about the message or one of its content blocks.
+_ANTHROPIC_CORE = frozenset(("message_start", "content_block_start", "content_block_delta",
+                             "content_block_stop", "message_delta", "message_stop"))
+
+
+def _json_or_text(s):
+    """A tool's streamed input as the object it spells, or as the text that arrived when the
+    stream was cut before it closed: half a canary is still where the canary was going."""
+    try:
+        return json.loads(s) if s.strip() else {}
+    except ValueError:
+        return s
+
+
+def anthropic_stream(text, cut=False):
+    """An Anthropic Messages `stream: true` reply folded into the message it answers without
+    streaming, or None: `{"content": [blocks], "stop_reason", "usage"}`, so `content.0.text`
+    and `tool_calls: "content"` read both.
+
+    A BLOCK IS BUILT FROM ITS DELTAS, by its `index`: `text_delta` onto a text block,
+    `thinking_delta` onto a thinking one, and `input_json_delta` pieces joined and parsed into a
+    `tool_use` block's `input` once the stream is over. An `error` event is kept at `error`,
+    where a config's `error: "error"` reads it: an overloaded model mid-reply is not a bot
+    that stopped talking.
+
+    RECOGNISED, NOT GUESSED, AND NOT FROZEN: every event carries a `type`, and at least one is
+    a message or content-block event. An event type this does not know is skipped, as the API's
+    documentation asks ("new event types may be added"): refusing the stream over one would
+    lose every reply the day a new event shipped.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    # AN ERROR BEFORE THE MESSAGE STARTED is still this protocol's: `{"type": "error", "error":
+    # {"type": "overloaded_error", ...}}` alone is how an overloaded model answers.
+    _err_only = payloads and all(
+        _p.get("type") == "ping" or (_p.get("type") == "error" and isinstance(_p.get("error"), dict)
+                                     and str(_p["error"].get("type", "")).endswith("_error"))
+        for _p in payloads)
+    if (not payloads or not all(isinstance(_p.get("type"), str) for _p in payloads)
+            or not (_err_only or any(_p["type"] in _ANTHROPIC_CORE for _p in payloads))):
+        return None
+    out, blocks, partial, error = {}, {}, {}, None
+    for _p in payloads:
+        t = _p["type"]
+        if t == "message_start" and isinstance(_p.get("message"), dict):
+            out.update({k: v for k, v in _p["message"].items() if k != "content"})
+        elif t == "content_block_start" and isinstance(_p.get("content_block"), dict):
+            blocks[_p.get("index", len(blocks))] = dict(_p["content_block"])
+        elif t == "content_block_delta" and isinstance(_p.get("delta"), dict):
+            _b = blocks.setdefault(_p.get("index", 0), {"type": "text", "text": ""})
+            _d = _p["delta"]
+            if _d.get("type") == "text_delta":
+                _b["text"] = str(_b.get("text") or "") + str(_d.get("text", ""))
+            elif _d.get("type") == "thinking_delta":
+                _b["thinking"] = str(_b.get("thinking") or "") + str(_d.get("thinking", ""))
+            elif _d.get("type") == "input_json_delta":
+                partial.setdefault(_p.get("index", 0), []).append(str(_d.get("partial_json", "")))
+        elif t == "message_delta" and isinstance(_p.get("delta"), dict):
+            out.update({k: v for k, v in _p["delta"].items() if v is not None})
+            if isinstance(_p.get("usage"), dict):
+                out["usage"] = dict(out.get("usage") or {}, **_p["usage"])
+        elif t == "error":
+            error = _p.get("error", _p)
+    for _i, _parts in partial.items():
+        if _i in blocks:
+            blocks[_i]["input"] = _json_or_text("".join(_parts))
+    _order = lambda k: (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+    out["content"] = [blocks[_k] for _k in sorted(blocks, key=_order)]
+    if error is not None:
+        out["error"] = error
+    return out
+
+
+def responses_stream(text, cut=False):
+    """An OpenAI Responses API `stream: true` reply folded into the response it answers without
+    streaming, or None: `{"output": [items], "status", ...}`, so `output.0.content.0.text` and
+    `tool_calls: "output"` read both.
+
+    THE LAST EVENT CARRIES THE WHOLE RESPONSE: `response.completed` (or `.failed`,
+    `.incomplete`) holds the same object a non-streamed call returns, and that is the answer
+    when it arrived. When it did not -- a stream cut at the size cap, a connection that dropped
+    -- the output is rebuilt from the items and their deltas, so what the model had already
+    said or sent to a tool is not lost with the last line.
+
+    RECOGNISED, NOT GUESSED: every event's `type` is `response.<...>` or `error`.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    if not payloads or not all(isinstance(_p.get("type"), str)
+                               and (_p["type"].startswith("response.") or _p["type"] == "error")
+                               for _p in payloads):
+        return None
+    final, items, error = None, {}, None
+    for _p in payloads:
+        t = _p["type"]
+        if t in ("response.created", "response.in_progress", "response.completed",
+                 "response.failed", "response.incomplete") and isinstance(_p.get("response"), dict):
+            if t in ("response.completed", "response.failed", "response.incomplete"):
+                final = _p["response"]
+        elif t in ("response.output_item.added", "response.output_item.done") \
+                and isinstance(_p.get("item"), dict):
+            items[_p.get("output_index", len(items))] = dict(_p["item"])
+        elif t == "response.output_text.delta":
+            _it = items.setdefault(_p.get("output_index", 0), {"type": "message", "content": []})
+            _content = _it.setdefault("content", [])
+            _ci = _p.get("content_index", 0)
+            while isinstance(_ci, int) and len(_content) <= _ci:
+                _content.append({"type": "output_text", "text": ""})
+            if isinstance(_ci, int) and isinstance(_content[_ci], dict):
+                _content[_ci]["text"] = str(_content[_ci].get("text") or "") + str(_p.get("delta", ""))
+        elif t == "response.function_call_arguments.delta":
+            _it = items.setdefault(_p.get("output_index", 0), {"type": "function_call"})
+            _it["arguments"] = str(_it.get("arguments") or "") + str(_p.get("delta", ""))
+        elif t == "error":
+            error = {k: v for k, v in _p.items() if k not in ("type", "sequence_number")}
+    if final is not None:
+        out = dict(final)
+    else:
+        _order = lambda k: (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+        out = {"output": [items[_k] for _k in sorted(items, key=_order)]}
+    # A FAILED RESPONSE SAYS WHY in its own `error` field, which is null on success.
+    if error is None and out.get("error"):
+        error = out["error"]
+    if error is not None:
+        out["error"] = error
+    else:
+        out.pop("error", None)
+    return out
+
+
+def ollama_stream(text, cut=False):
+    """Ollama's native streaming (`/api/chat`, `/api/generate`): one JSON object per line, not
+    server-sent events, folded into the object the same call returns with `stream: false`, or
+    None.
+
+    OLLAMA STREAMS BY DEFAULT. `stream` is true unless the request says otherwise, so a config
+    for `/api/chat` that left it out got newline-delimited JSON back and every probe was a
+    JSONDecodeError on its second line. `message.content` (or `response`) is joined across the
+    lines, tool calls collected, `thinking` joined too, and the last line's own fields -- `done`,
+    `done_reason`, the counts -- kept. An `{"error": ...}` line is kept at `error`.
+
+    RECOGNISED, NOT GUESSED: every line is a JSON object with a boolean `done` or an `error`.
+    """
+    lines = _stream_lines(text, cut)
+    if not lines:
+        return None
+    objs = []
+    for _l in lines:
+        try:
+            _o = json.loads(_l)
+        except ValueError:
+            return None
+        if not isinstance(_o, dict) or not (isinstance(_o.get("done"), bool) or "error" in _o):
+            return None
+        objs.append(_o)
+    # ONE LINE IS NOT A STREAM: it is the body of `stream: false`, which `json.loads` already
+    # read, and this is only ever asked after that failed.
+    out, content, response, thinking, calls, said = {}, [], [], [], [], False
+    for _o in objs:
+        if "error" in _o and not isinstance(_o.get("done"), bool):
+            out["error"] = _o["error"]
+            continue
+        _m = _o.get("message") if isinstance(_o.get("message"), dict) else None
+        if _m is not None:
+            said = True
+            content.append(str(_m.get("content") or ""))
+            thinking.append(str(_m.get("thinking") or ""))
+            calls.extend(_c for _c in (_m.get("tool_calls") or []) if isinstance(_c, dict))
+        if isinstance(_o.get("response"), str):
+            response.append(_o["response"])
+        out.update({k: v for k, v in _o.items() if k not in ("message", "response", "error")})
+    if said:
+        out["message"] = {"role": "assistant", "content": "".join(content)}
+        if any(thinking):
+            out["message"]["thinking"] = "".join(thinking)
+        if calls:
+            out["message"]["tool_calls"] = calls
+    if response:
+        out["response"] = "".join(response)
+    return out
+
+
 def _fold_stream(text, cut=False):
-    """A streamed body as the JSON object its route answers without streaming, or None."""
-    return vercel_stream(text, cut) or openai_stream(text, cut)
+    """A streamed body as the JSON object its route answers without streaming, or None. Each
+    fold recognises its own protocol and refuses every other, so at most one of them answers."""
+    for _fold in (vercel_stream, openai_stream, anthropic_stream, responses_stream,
+                  ollama_stream):
+        _got = _fold(text, cut)
+        if _got is not None:
+            return _got
+    return None
 
 
 def vercel_stream(text, cut=False):

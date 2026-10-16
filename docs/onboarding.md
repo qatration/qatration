@@ -76,11 +76,21 @@ message parts are read too (`tool-<name>`, `dynamic-tool`, SDK 4's `tool-invocat
 writes all of this, the request `useChat` sends and the history below included. Not covered:
 reasoning parts are not read.
 
-**An OpenAI-compatible `stream: true` is read the same way.** The chunks are folded into the
-body the endpoint answers without streaming, so `choices.0.message.content` and
-`choices.0.message.tool_calls` read both; a call's arguments arrive in pieces and are joined,
-and an `error` object in the stream is at `error`. A stream of any other protocol (Anthropic's
-events, the Responses API's) is not guessed at: it stays the JSON error it was.
+**A streamed reply is read as the reply it streams.** Each of these is folded into the body
+the same endpoint answers with streaming off, so the config written for that body reads both:
+
+| stream | read with |
+|---|---|
+| OpenAI-compatible `stream: true` (vLLM, LM Studio, llama.cpp, LiteLLM, OpenRouter) | `choices.0.message.content`, `tool_calls: "choices.0.message.tool_calls"` |
+| Anthropic Messages | `content.0.text`, `tool_calls: "content"` |
+| OpenAI Responses API | `output.0.content.0.text`, `tool_calls: "output"` |
+| Ollama's own `/api/chat` (it streams unless told not to) | `message.content`, `tool_calls: "message.tool_calls"` |
+| Vercel AI SDK, either version | `text`, `tool_calls: "toolCalls"` |
+
+A call's arguments arrive in pieces and are joined; a stream cut at the size cap keeps what had
+arrived, half an argument included; an error in the stream is at `error`, for `error: "error"`
+to read. Each fold recognises its own protocol and refuses every other, and a stream none of
+them knows (Gemini's `alt=sse`, for one) is not guessed at: it stays the JSON error it was.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in
