@@ -1144,6 +1144,132 @@ def _dify_and_server_ids(check):
           "{session}" in _said, repr(_said)[:160])
 
 
+def _flowise_and_langflow(check):
+    """Flowise's prediction API and Langflow's run API, each streamed as its source writes it and
+    read by the config written for its unstreamed answer."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, flowise_stream as _fs,
+                              langflow_stream as _ls, vercel_stream as _vs, _pairs as _pp)
+    _canary = "ACME-CANARY-9931"
+    _used = [{"tool": "send_email", "toolInput": {"body": _canary}, "toolOutput": "OUTPUT-MARK-77"}]
+
+    def _fe(event, data):
+        # AS SSEStreamer.ts WRITES IT: a bare `message:` field, `data:` with no space.
+        return "message:\ndata:%s\n\n" % _j.dumps({"event": event, "data": data})
+
+    flowise = (_fe("start", "Sending ") + ":heartbeat\n\n" + _fe("token", "Sending ")
+               + _fe("token", "it now.") + _fe("usedTools", _used)
+               + _fe("metadata", {"chatId": "chat-1", "sessionId": "sess-1",
+                                  "chatMessageId": "m1"})
+               + _fe("end", "[DONE]"))
+
+    def _le(event, data):
+        return _j.dumps({"event": event, "data": data}) + "\n\n"
+
+    _run = {"session_id": "s-1", "outputs": [{"inputs": {"input_value": "hi"}, "outputs": [
+        {"results": {"message": {"text": "Sending it now.", "sender": "Machine"}}}]}]}
+    langflow = (_le("add_message", {"sender": "User", "text": "hi", "session_id": "s-1"})
+                + _le("add_message", {"sender": "Machine", "text": "", "session_id": "s-1"})
+                + _le("token", {"chunk": "Sending ", "id": "m"})
+                + _le("token", {"chunk": "it now.", "id": "m"})
+                + _le("end", {"result": _run}))
+    _mode = {"body": flowise, "ctype": "text/event-stream"}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", _mode["ctype"])
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _flo = _HT(url="http://127.0.0.1:%d/api/v1/prediction/flow" % srv.server_address[1],
+                   name="flowise", request={"question": "{prompt}", "streaming": True},
+                   response={"reply": "text", "tool_calls": "usedTools", "error": "error"},
+                   timeout_s=5)
+        for _label, _body, _ctype in (
+                ("streamed", flowise, "text/event-stream"),
+                ("unstreamed", _j.dumps({"text": "Sending it now.", "chatId": "chat-1",
+                                         "usedTools": _used}), "application/json")):
+            _mode.update(body=_body, ctype=_ctype)
+            _p = _flo.send("hi")
+            check("Flowise %s is read with one config: the reply" % _label,
+                  _p.output == "Sending it now." and not _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+            check("...and its usedTools call with the toolInput it was given",
+                  [n for n, _a in _p.tool_calls] == ["send_email"]
+                  and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+        _mode.update(body=_fe("start", "") + _fe("error", "401 Unauthorized"),
+                     ctype="text/event-stream")
+        _p = _flo.send("hi")
+        check("a Flowise error event is a TargetError with its words, not read as Dify's",
+              bool(_p.error) and "TargetError" in _p.error and "401 Unauthorized" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _lf = _HT(url="http://127.0.0.1:%d/api/v1/run/flow?stream=true" % srv.server_address[1],
+                  name="langflow", request={"input_value": "{prompt}", "session_id": "{session}"},
+                  response={"reply": "outputs.0.outputs.0.results.message.text", "error": "error"},
+                  timeout_s=5)
+        for _label, _body, _ctype in (("streamed", langflow, "text/event-stream"),
+                                      ("unstreamed", _j.dumps(_run), "application/json")):
+            _mode.update(body=_body, ctype=_ctype)
+            _p = _lf.send("hi")
+            check("Langflow %s is read with one config: the reply" % _label,
+                  _p.output == "Sending it now." and not _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+        _mode.update(body=_le("add_message", {"sender": "User", "text": "hi"})
+                     + _le("error", {"error": "Flow build failed"}), ctype="text/event-stream")
+        _p = _lf.send("hi")
+        check("a Langflow error event is a TargetError naming it",
+              bool(_p.error) and "TargetError" in _p.error and "Flow build failed" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    _think = _fs(_fe("thinking", "Should I?") + _fe("token", "No.") + _fe("end", "[DONE]"))
+    check("a Flowise thinking event is kept apart, never in the answer",
+          (_think or {}).get("text") == "No." and _think.get("thinking") == "Should I?",
+          repr(_think))
+    _whole = _ls(langflow)
+    check("a Langflow end event's result is the run response whole, its inputs and sender kept",
+          (_whole or {}).get("outputs", [{}])[0].get("inputs") == {"input_value": "hi"}
+          and _whole["outputs"][0]["outputs"][0]["results"]["message"].get("sender") == "Machine",
+          repr(_whole)[:300])
+    _flat = _ls(_le("token", {"chunk": "Sen"}) + _le("end", {"result": {
+        "session_id": "s-1", "message": "Sending it now."}}))
+    check("a Langflow end event in the documentation's flat shape is still the answer",
+          (_flat or {}).get("outputs", [{}])[0].get("outputs", [{}])[0].get("results", {})
+          .get("message", {}).get("text") == "Sending it now." and _flat.get("session_id") == "s-1",
+          repr(_flat))
+    _cut = _ls(langflow[:langflow.index('{"event": "end"')])
+    check("...and one cut before its end event is rebuilt from the chunks that came",
+          (_cut or {}).get("outputs", [{}])[0].get("outputs", [{}])[0].get("results", {})
+          .get("message", {}).get("text") == "Sending it now.", repr(_cut)[:200])
+    _v4 = _vs('a:{"toolCallId":"c1","result":"OUTPUT-MARK-77"}\n'
+              'e:{"finishReason":"stop"}\nd:{"finishReason":"stop"}\n')
+    check("an SDK 4 stream of letter frames alone is still read as SDK 4, not as empty SSE",
+          _v4 is not None and _v4.get("toolResults", [{}])[0].get("output") == "OUTPUT-MARK-77",
+          repr(_v4))
+    check("a Flowise usedTools entry read through a mapped path keeps its toolInput",
+          _pp(_used) == [("send_email", _j.dumps({"body": _canary}))], repr(_pp(_used)))
+    try:
+        _HT(url="http://127.0.0.1:9/x", name="a", request={"q": "{prompt}"},
+            response={"reply": "r"}, auth="Bearer x")
+        _said = ""
+    except SystemExit as e:
+        _said = str(e)
+    check("the hint for an `auth:` of the wrong kind is an example this adapter takes",
+          "type: sigv4" in _said and "type: bearer" not in _said, repr(_said)[:300])
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -3122,6 +3248,7 @@ def main():
     _history_turn(check)
     _session_slot(check)
     _dify_and_server_ids(check)
+    _flowise_and_langflow(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

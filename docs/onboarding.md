@@ -88,6 +88,8 @@ the same endpoint answers with streaming off, so the config written for that bod
 | Gemini `streamGenerateContent?alt=sse` | `candidates.0.content.parts.0.text`, `tool_calls: "candidates.0.content.parts"` |
 | Google's Interactions API | `steps.0.content.0.text`, `tool_calls: "steps"` |
 | Dify `/v1/chat-messages` (its agent apps only stream) | `answer`, `tool_calls: "tool_calls"`, `observations: "observations"` |
+| Flowise `/api/v1/prediction/<flow>` with `"streaming": true` | `text`, `tool_calls: "usedTools"` |
+| Langflow `/api/v1/run/<flow>?stream=true` | `outputs.0.outputs.0.results.message.text` |
 | Vercel AI SDK, either version | `text`, `tool_calls: "toolCalls"` |
 
 A call's arguments arrive in pieces and are joined; a stream cut at the size cap keeps what had

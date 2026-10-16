@@ -253,7 +253,9 @@ _CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input"
                         "toolUse", "toolCall",
                         # The Vercel AI SDK 4 UI part, `{"type": "tool-invocation",
                         # "toolInvocation": {"toolName": ..., "args": ...}}`.
-                        "toolInvocation"))
+                        "toolInvocation",
+                        # Flowise's `usedTools` entry, `{"tool", "toolInput", "toolOutput"}`.
+                        "toolInput"))
 # The keys that WRAP one call rather than name it: the call is the mapping inside.
 _CALL_WRAPPERS = ("functionCall", "function_call", "toolUse", "toolCall", "toolInvocation")
 # `tool-call` is the Vercel AI SDK's content part (`generateText`'s `toolCalls`, and every
@@ -354,8 +356,10 @@ def _pairs(raw):
             name = (item.get("name") or item.get("tool") or item.get("tool_name")
                     or item.get("toolName") or item.get("function") or _ui_tool_name(_kind)
                     or "")
-            args = item.get("arguments", item.get("args", item.get("input",
-                                                                    item.get("parameters", ""))))
+            # `toolInput` IS FLOWISE'S: its calls arrived with the name and an empty argument,
+            # and every detector that judges what was sent to a tool judged nothing.
+            args = item.get("arguments", item.get("args", item.get("input", item.get(
+                "parameters", item.get("toolInput", "")))))
             # THE ARGUMENTS LIVE WHERE THE NAME DOES. OpenAI's shape is
             # {"type": "function", "function": {"name": ..., "arguments": "{...}"}} — this read
             # the name out of the nested dict and the arguments off the top level, where there
@@ -683,6 +687,10 @@ def _charset_of(response):
 # A V4 DATA STREAM FRAME is one character and a colon in front of JSON: `0:"Hel"`, `9:{...}`.
 _V4_FRAME = re.compile(r"^([0-9a-k]):(.*)$")
 _SSE_FIELDS = ("event:", "id:", "retry:", ":")
+# ANY OTHER FIELD NAME IS IGNORED, as the SSE standard says of a field it does not know: Flowise
+# opens every event with a bare `message:` line, and refusing it refused the whole stream. A name
+# of letters only, because `0:"text"` and `9:{...}` are the Vercel AI SDK 4 frames.
+_SSE_OTHER_FIELD = re.compile(r"^[A-Za-z][A-Za-z_-]*:")
 
 
 def _stream_lines(text, cut=False):
@@ -712,7 +720,7 @@ def _sse_payloads(lines):
             if not isinstance(_p, dict):
                 return None
             out.append(_p)
-        elif not _l.startswith(_SSE_FIELDS):
+        elif not (_l.startswith(_SSE_FIELDS) or _SSE_OTHER_FIELD.match(_l)):
             return None
     return out
 
@@ -1148,6 +1156,107 @@ def dify_stream(text, cut=False):
     return out
 
 
+# What makes a stream Flowise's: `{"event": ..., "data": ...}` and nothing else, and one of these.
+_FLOWISE_EVENTS = frozenset(("start", "token", "metadata", "usedTools", "end", "sourceDocuments",
+                             "agentReasoning"))
+
+
+def flowise_stream(text, cut=False):
+    """A Flowise prediction streamed (`"streaming": true`) folded into the JSON it returns
+    without streaming, or None: `{"text", "chatId", "sessionId", "usedTools", ...}`, so `text`
+    and `tool_calls: "usedTools"` read both.
+
+    EACH EVENT IS `{"event", "data"}` on a `data:` line under a bare `message:` field: `token`
+    data joined in order, `metadata` carrying the chat and session ids, `usedTools` the calls
+    with their `toolInput`, `error` a string kept at `error`, `end` and `abort` the `[DONE]`
+    that closes it. A `thinking` event is kept apart at `thinking`, never in the answer.
+
+    RECOGNISED, NOT GUESSED: every event holds `event` and `data` and nothing beside them but a
+    thinking event's `duration`, and one is Flowise's.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    if (not payloads
+            or not all(isinstance(_p.get("event"), str) and "data" in _p
+                       and set(_p) <= {"event", "data", "duration"} for _p in payloads)
+            or not any(_p["event"] in _FLOWISE_EVENTS for _p in payloads)):
+        return None
+    out, text_out, thinking = {}, [], []
+    for _p in payloads:
+        ev, data = _p["event"], _p["data"]
+        if ev == "token" and isinstance(data, str):
+            text_out.append(data)
+        elif ev == "thinking" and isinstance(data, str):
+            thinking.append(data)
+        elif ev == "metadata" and isinstance(data, dict):
+            out.update(data)
+        elif ev in ("usedTools", "sourceDocuments", "agentReasoning", "artifacts") \
+                and isinstance(data, list):
+            out.setdefault(ev, []).extend(data)
+        elif ev == "error":
+            out["error"] = data
+    out["text"] = "".join(text_out)
+    if thinking:
+        out["thinking"] = "".join(thinking)
+    return out
+
+
+_LANGFLOW_EVENTS = frozenset(("add_message", "token", "end", "end_vertex", "error", "build_start",
+                              "build_end", "log"))
+
+
+def langflow_stream(text, cut=False):
+    """A Langflow run streamed (`/api/v1/run/<flow>?stream=true`) folded into the `RunResponse`
+    it returns without streaming, or None, so `outputs.0.outputs.0.results.message.text` reads
+    both.
+
+    NOT SERVER-SENT EVENTS: each event is a bare `{"event", "data"}` object followed by a blank
+    line. The `end` event's `result` is the whole run response, and the answer when it came; when
+    the stream was cut before it, or `result` carries only the flat `message` the documentation
+    shows, the response is rebuilt around the `token` chunks or that message. An `error` event's
+    `data.error` is kept at `error`.
+
+    RECOGNISED, NOT GUESSED: every line is a JSON object with `event` and `data`, one Langflow's.
+    """
+    lines = _stream_lines(text, cut)
+    if not lines:
+        return None
+    events = []
+    for _l in lines:
+        try:
+            _o = json.loads(_l)
+        except ValueError:
+            return None
+        if not (isinstance(_o, dict) and isinstance(_o.get("event"), str) and "data" in _o):
+            return None
+        events.append(_o)
+    if not any(_e["event"] in _LANGFLOW_EVENTS for _e in events):
+        return None
+    chunks, final, session, error = [], None, None, None
+    for _e in events:
+        ev, data = _e["event"], _e["data"] if isinstance(_e["data"], dict) else {}
+        if data.get("session_id"):
+            session = data["session_id"]
+        if ev == "token":
+            chunks.append(str(data.get("chunk") or ""))
+        elif ev == "end" and isinstance(data.get("result"), dict):
+            final = data["result"]
+        elif ev == "error":
+            error = data.get("error", _e["data"])
+    if isinstance(final, dict) and isinstance(final.get("outputs"), list):
+        out = dict(final)
+    else:
+        _said = (final or {}).get("message") if isinstance((final or {}).get("message"), str) \
+            else "".join(chunks)
+        session = (final or {}).get("session_id") or session
+        out = {"outputs": [{"outputs": [{"results": {"message": {"text": _said}}}]}]}
+        if session:
+            out["session_id"] = session
+    if error is not None:
+        out["error"] = error
+    return out
+
+
 def stream_kind(text):
     """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
     None. Only what the folds refused reaches this, so it decides nothing about the reply: it
@@ -1175,7 +1284,11 @@ def _folds():
             ("the OpenAI Responses API", responses_stream),
             ("Gemini (alt=sse)", gemini_stream),
             ("Google's Interactions API", interactions_stream),
+            # FLOWISE BEFORE DIFY: a Flowise `{"event": "error", "data": ...}` also carries a
+            # string `event` Dify knows, and read as Dify's it lost its message.
+            ("Flowise", flowise_stream),
             ("Dify", dify_stream),
+            ("Langflow", langflow_stream),
             ("Ollama", ollama_stream))
 
 
@@ -1233,7 +1346,9 @@ def vercel_stream(text, cut=False):
     if lines is None:
         return None
     payloads = _sse_payloads(lines)
-    if payloads is not None:
+    # NO DATA AT ALL IS NOT SSE: `a:{...}` and `e:{...}` are SDK 4 frames named with a letter, and
+    # a stream of only those reads as SSE fields carrying nothing.
+    if payloads:
         if not all(_ui_stream_part(_p.get("type")) for _p in payloads):
             return None
         parts = [("v5", _p) for _p in payloads]
@@ -1507,7 +1622,13 @@ class HttpConfiguredTarget(Target):
              "It is a mapping of header name to value, and every value may name a variable "
              "from `env:`."),
             ("auth", auth, dict,
-             "It is a mapping with a `type:`, e.g. `auth: {type: bearer, token: ${KEY}}`."),
+             # THE EXAMPLE IS ONE THIS ADAPTER TAKES: it said `{type: bearer, token: ${KEY}}`,
+             # and a reader who copied it was refused a second time, as "auth.type 'bearer'
+             # is not supported". A bearer token is a header.
+             "It is a mapping with a `type:`, e.g. `auth: {type: sigv4, service: bedrock, "
+             "region: us-east-1, access_key: ${AWS_ACCESS_KEY_ID}, secret_key: "
+             "${AWS_SECRET_ACCESS_KEY}}`. A bearer token is not `auth:`, it is a header: "
+             "`headers: {Authorization: \"Bearer ${KEY}\"}`."),
             # A STRING IS ITERABLE, WHICH IS WHY THIS ONE IS WORTH A SENTENCE OF ITS OWN.
             # `env: HOME` was ACCEPTED and became the allow-list ['H', 'O', 'M', 'E'], so
             # `${HOME}` in a header matched nothing, the header went out with the literal

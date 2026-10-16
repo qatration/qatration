@@ -67,6 +67,17 @@ chunks joined, an Agent app's closing `message` taken whole rather than appended
 with its own input, its error event an error. `onboard` refuses a `from_reply` path that found
 nothing in the reply.
 
+**Flowise and Langflow.** A Flowise tool call (`usedTools`, `{"tool", "toolInput", "toolOutput"}`)
+arrived with its name and an EMPTY argument, because `toolInput` was not a spelling the call
+reader knew, so every detector judging what was sent to a tool judged nothing. Flowise's stream
+was refused outright: it opens each event with a bare `message:` field, and fields the reader
+did not know refused the body, where the SSE standard says to ignore them. Both now read, its
+tokens joined, a `thinking` event kept out of the answer, and its error event not taken for
+Dify's. Langflow's stream is bare JSON objects between blank lines, not SSE; its `end` event's
+result is the run response, or the response is rebuilt from the chunks when the stream was cut.
+And the hint for an `auth:` of the wrong kind offered `{type: bearer, ...}`, a type the adapter
+then refused; it shows a `sigv4` block and says a bearer token is a header.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a
