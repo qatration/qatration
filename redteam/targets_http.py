@@ -1333,6 +1333,17 @@ WANTED_WORDS[str] = "a string"
 RESPONSE_KEYS = ("reply", "tool_calls", "resolved", "observations", "error")
 HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "insert_before",
                 "turn")
+# THE CONVERSATION'S OWN ID, for an endpoint that keeps the conversation on its server.
+SESSION_SLOT = "{session}"
+_REQUEST_SLOT = re.compile(r"\{(prompt|session)\}")
+
+
+def new_session():
+    """A conversation id nobody else has: `qat-` and 16 hex digits, fresh at every `reset`."""
+    import secrets as _secrets
+    return "qat-" + _secrets.token_hex(8)
+
+
 # WHAT A `history.turn` TEMPLATE IS FILLED WITH: the role (after `user:`/`assistant:`), the
 # turn's text, and its position, for an API that wants an id on every message.
 _TURN_SLOT = re.compile(r"\{(role|text|n)\}")
@@ -1490,6 +1501,14 @@ class HttpConfiguredTarget(Target):
         # list nothing expands: the config also chooses the URL, so an unrestricted `${VAR}`
         # is a way to name a secret and a place to send it in the same file.
         self.env_allowed = [str(v) for v in (env or []) if str(v).strip()]
+        # A CONVERSATION THE SERVER KEEPS, by an id the request carries. Fixed in the config,
+        # that id made every attack of a run one conversation on the server: a rule one attack
+        # planted was still in force for the next, and `reset` -- which does nothing here --
+        # could not end it. `{session}` in the request, the url or a header is a fresh id at
+        # every `reset`: one per trial, shared by the turns of one conversation.
+        self._session = new_session()
+        self.uses_session = (SESSION_SLOT in json.dumps(request or {}) or SESSION_SLOT in str(url)
+                             or any(SESSION_SLOT in str(v) for v in (headers or {}).values()))
         self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
                         for k, v in (headers or {}).items()}
         # IN ANY CASE: HTTP header names are case-insensitive, and a config's own
@@ -1758,6 +1777,13 @@ class HttpConfiguredTarget(Target):
             # from one the attacker wrote for it. That is the precondition for a Context
             # Compliance Attack and it is a fact about the API, not about the model.
             caps |= {"chain", "forged_history"}
+        elif self.uses_session:
+            # A SERVER THAT KEEPS THE CONVERSATION hears the earlier turns of a chain because
+            # they were sent in the same session, and only the turns that really happened:
+            # nobody can write its assistant's side, so `forged_history` is not on offer.
+            # Whether it does keep them is asked before the run (`runner.reads_history`).
+            caps.add("chain")
+        self.server_memory = bool(self.uses_session and not self.history)
         if self.calls_path:
             caps.add("tool_visibility")
         self.capabilities = caps
@@ -1768,7 +1794,10 @@ class HttpConfiguredTarget(Target):
             if isinstance(v, str):
                 if v == "{prompt}":
                     return prompt
-                return v.replace("{prompt}", prompt)
+                # IN ONE PASS, as `history.turn` is filled: an attack that quotes `{session}`
+                # is text, and filled after `{prompt}` it was rewritten into the session id.
+                return _REQUEST_SLOT.sub(
+                    lambda m: prompt if m.group(1) == "prompt" else self._session, v)
             if isinstance(v, dict):
                 return {k: fill(x) for k, x in v.items()}
             if isinstance(v, list):
@@ -1827,15 +1856,16 @@ class HttpConfiguredTarget(Target):
                          error=f"{_sg.NEVER_SENT}: this run's {limit} was spent before this "
                                f"probe; it was never sent")
         data = json.dumps(self._body(prompt, history)).encode("utf-8")
-        headers = dict(self.headers)
+        headers = {k: str(v).replace(SESSION_SLOT, self._session) for k, v in self.headers.items()}
+        url = str(self.url).replace(SESSION_SLOT, self._session)
         if self.auth:
             import signing
             headers.update(signing.authorization(
-                self.method, self.url, headers, data,
+                self.method, url, headers, data,
                 service=self.auth["service"], region=self.auth["region"],
                 access_key=self.auth["access_key"], secret_key=self.auth["secret_key"],
                 session_token=self.auth.get("session_token")))
-        req = urllib.request.Request(self.url, data=data, headers=headers,
+        req = urllib.request.Request(url, data=data, headers=headers,
                                      method=self.method)
         t0 = time.time()
         try:
@@ -2124,10 +2154,14 @@ class HttpConfiguredTarget(Target):
         return chain_probe(prompts, _step)
 
     def reset(self):
-        """Nothing to reset: each request carries its own history, or the API is stateless.
+        """A new conversation: a fresh `{session}` id where the config has one, and nothing to
+        do where it has none, because each request carries its own history or the API keeps
+        none.
 
         Said out loud because a reset that silently does nothing is the defect that
-        invalidates every rate this engine prints — recon probes for it, and a target whose
-        state lives server-side will fail that probe honestly rather than here.
+        invalidates every rate this engine prints -- recon probes for it, and a target whose
+        state lives server-side under an id the config fixed will fail that probe honestly.
         """
+        if self.uses_session:
+            self._session = new_session()
         return None

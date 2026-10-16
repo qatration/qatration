@@ -593,7 +593,15 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         if _rh is False:
             rep["capabilities"] = [c for c in rep["capabilities"]
                                    if c not in ("chain", "forged_history")]
+            # THE SESSION'S OWN WORDS for a server that keeps the conversation: it has no
+            # `history:` block to point anywhere, and that sentence sent its operator looking
+            # for one.
             rep["notes"].append(
+                "the request carries `{session}`, but the endpoint did not remember an earlier "
+                "turn of the same session: a case number given in the first turn did not come "
+                "back in the second. `run` will not send the multi-turn attacks to it. Put "
+                "`{session}` where your endpoint reads the conversation id, or remove it."
+                if getattr(target, "server_memory", False) else
                 "the `history:` block is set, but the endpoint did not read the transcript it "
                 "was handed: a case number planted in an earlier assistant turn did not come "
                 "back. `run` will not send the multi-turn attacks to it. Point `history.field` "

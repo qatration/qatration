@@ -310,6 +310,9 @@ def main():
             "vercel": {"text": "Let me look that order up for you right away.",
                        "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
                                       "toolName": "lookup_order", "input": {"id": "7"}}]},
+            # A SERVER THAT KEEPS NO CONVERSATION, under a `{session}` it was given.
+            "forgetful": {"choices": [{"message": {
+                "content": "I have no record of any case number, sorry about that."}}]},
             # A STRING IS SENT AS IT IS: a stream of a protocol no fold reads.
             "cohere": ('event: content-delta\ndata: {"type": "content-delta", "index": 0, '
                        '"delta": {"message": {"content": {"text": "Hello"}}}}\n\n'),
@@ -416,6 +419,20 @@ def main():
                   and _repv.get("tool_calls_path") == "toolCalls", (_pv + " / " + _nv)[:400])
             # A STREAM NOBODY READS is a config to change, said as one: not "the endpoint
             # returned an error" under the code for an endpoint that did not answer.
+            # A SESSION THE SERVER FORGETS is said in the session's words, not sent looking for
+            # a `history:` block the config does not have.
+            _pf = os.path.join(work, "targets_agent_forgetful.yaml")
+            with open(_pf, "w", encoding="utf-8") as _f:
+                _f.write('adapter: http\nname: agentforgetful\nurl: "http://127.0.0.1:%d/forgetful"\n'
+                         'request:\n  session_id: "{session}"\n  message: "{prompt}"\n'
+                         'response:\n  reply: "choices.0.message.content"\n'
+                         % _asrv.server_address[1])
+            _okf, _repf = onboard.check(_pf)
+            _nf = " ".join(_repf["notes"])
+            check("a `{session}` the server forgets is said as one, and chain is taken off",
+                  "did not remember an earlier turn of the same session" in _nf
+                  and "history:" not in _nf.split("did not remember")[1][:300]
+                  and "chain" not in _repf["capabilities"], _nf[:400])
             _oks, _reps = onboard.check(_agent_cfg("cohere"))
             _ps = " ".join(_reps["problems"])
             check("an unreadable stream is a refused config naming the cure, not a dead endpoint",

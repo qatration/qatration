@@ -1329,7 +1329,12 @@ def main():
         if _rh is False:
             target.capabilities = (set(target.capabilities)
                                    - {"chain", "forged_history"})
-            print("  ! this endpoint did not read a transcript it was handed: a case number "
+            print("  ! this endpoint did not remember an earlier turn of the same `{session}`: "
+                  "a case number given in the first turn did not come back in the second. Any "
+                  "multi-turn attack in this run is NOT SENT, because against it they would run "
+                  "as single turns and read as defended. Check where `{session}` sits in the "
+                  "config." if getattr(target, "server_memory", False) else
+                  "  ! this endpoint did not read a transcript it was handed: a case number "
                   "planted in an earlier assistant turn did not come back. Any multi-turn "
                   "attack in this run is NOT SENT, because against it they would run as single "
                   "turns and read as defended. Check the `history:` block in the config.",

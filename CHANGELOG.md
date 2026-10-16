@@ -49,6 +49,14 @@ broken JSON; it is now `UnreadableStream`, naming the kind of stream, its first 
 cure (`stream: false`), and `onboard` refuses the config on it (exit 2) instead of reporting an
 endpoint that did not answer (exit 3).
 
+**`{session}`: a bot that keeps the conversation on its server.** A fixed conversation id in the
+config made every attack of a run one conversation on the server, a rule one attack planted
+still in force for the next, and `reset` did nothing to end it. `{session}`, in the request, the
+url or a header, is a fresh id at every reset and one id across the turns of a conversation.
+Without a `history:` block it buys `chain` (the turns were really sent) and not `forged_history`
+(nobody can write a server's past), and the check that the target hears earlier turns asks such
+a server through two real turns of one session instead of a forged transcript it cannot take.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

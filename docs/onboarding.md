@@ -97,6 +97,27 @@ naming what came back and the cure, which is turning streaming off in `request:`
 refuses the config on it rather than calling the endpoint silent. Gemini's `streamGenerateContent`
 without `alt=sse` is not read either: neither the API reference nor Google's SDK shows that body.
 
+**A conversation the server keeps** is reached by `{session}`: put it wherever your endpoint
+reads the conversation id, in `request:`, in the `url` or in a header, and every request
+carries one id that is fresh at each reset, one per trial and shared by the turns of one
+conversation.
+
+```yaml
+url: "https://bot.example/conversations/{session}/messages"
+request:
+  conversation_id: "{session}"
+  message: "{prompt}"
+```
+
+A fixed id there made every attack of a run one conversation on the server: a rule one attack
+planted was still in force for the next, and the runs that followed were measuring each other.
+Without a `history:` block, `{session}` also buys `chain`, because the earlier turns of a
+conversation were really sent in it, and not `forged_history`, because nobody can write a
+server's past for it. Whether the server does keep them is asked before the run, through two
+real turns of one session (a case number given in the first, asked for in the second); where it
+comes back empty the multi-turn attacks are withheld, as they are for a `history:` block an
+endpoint ignores.
+
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in
 `parts`, and Gemini calls the assistant `model`:

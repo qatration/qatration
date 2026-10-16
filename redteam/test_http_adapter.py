@@ -923,6 +923,94 @@ def _gemini_stream(check):
           all(_n in _named for _n, _fn in _folds()), _named[:300])
 
 
+def _session_slot(check):
+    """`{session}`: a conversation the server keeps, under an id that is fresh at every reset and
+    shared by the turns of one conversation, in the body, the url and a header alike."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _mem, _seen, _mode = {}, [], {"forget": False}
+
+    class _H(_BH):
+        def do_POST(self):
+            b = _j.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+            _sid = b.get("session_id")
+            _seen.append((self.path.split("/")[2], _sid, self.headers.get("X-Conversation")))
+            if _mode["forget"]:
+                _said = "I have no record of any case number." if "case number did" in \
+                    b["message"] else "OK."
+            else:
+                _mem.setdefault(_sid, []).append(b["message"])
+                _said = "Earlier in this conversation you said: " + " | ".join(_mem[_sid])
+            out = _j.dumps({"reply": _said}).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url="http://127.0.0.1:%d/conversations/{session}/messages" % srv.server_address[1],
+                 name="sess", request={"session_id": "{session}", "message": "{prompt}"},
+                 headers={"X-Conversation": "{session}"}, response={"reply": "reply"},
+                 timeout_s=5)
+        check("`{session}` buys chain and not forged_history: nobody can write a server's past",
+              set(_t.capabilities) == {"chain"} and _t.server_memory, repr(_t.capabilities))
+        _t.reset()
+        _t.send("first")
+        _t.send("second")
+        check("...and one id goes in the url, the header and the body of every request",
+              all(_u == _b == _h and _u.startswith("qat-") for _u, _b, _h in _seen[-2:])
+              and _seen[-1][1] == _seen[-2][1], repr(_seen[-2:]))
+        _t.reset()
+        _p = _t.send("third")
+        check("...and a reset ends the conversation: the next request is a new one on the server",
+              _seen[-1][1] != _seen[-2][1] and "first" not in _p.output, repr((_seen[-2:], _p.output)))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what did I ask you to remember?"])
+        check("...while the turns of one conversation share it, so the server hears the first",
+              "PLUM-77" in _c.output and _seen[-1][1] == _seen[-2][1], repr(_c.output))
+        _q = _t.send("an attack that quotes {session} and {prompt}")
+        check("...and an attack that quotes `{session}` is sent as the text it is",
+              "quotes {session} and {prompt}" in _q.output, repr(_q.output))
+        _rh = _rn.reads_history(_t, "sess")[0]
+        check("reads_history asks a server that keeps the conversation through two real turns",
+              _rh is True, repr(_rh))
+        _mode["forget"] = True
+        _rh2 = _rn.reads_history(_t, "sess")[0]
+        check("...and says False for one that forgets between them", _rh2 is False, repr(_rh2))
+        _mode["forget"] = False
+    finally:
+        srv.shutdown()
+
+    # INSIDE A LONGER STRING, where the slots are substituted rather than replaced whole.
+    _wrapped = _HT(url="http://127.0.0.1:9/chat", name="w",
+                   request={"message": "[conv {session}] {prompt}"}, response={"reply": "reply"})
+    _wb = _wrapped._body("quote {session} here", None)["message"]
+    check("...and inside a longer template too: the session filled once, the quote left alone",
+          _wb == "[conv %s] quote {session} here" % _wrapped._session, repr(_wb))
+    _plain = _HT(url="http://127.0.0.1:9/chat", name="p", request={"message": "{prompt}"},
+                 response={"reply": "reply"})
+    _plain.reset()
+    check("without `{session}` there is no conversation to keep and nothing is claimed",
+          not _plain.uses_session and not _plain.server_memory and "chain" not in _plain.capabilities,
+          repr(_plain.capabilities))
+    _both = _HT(url="http://127.0.0.1:9/chat", name="b",
+                request={"conversation": "{session}", "messages": [{"role": "user",
+                                                                     "content": "{prompt}"}]},
+                response={"reply": "reply"},
+                history={"field": "messages", "mode": "splice", "insert_before": 1})
+    check("with a `history:` block as well, the transcript is the caller's and forged_history "
+          "is back", {"chain", "forged_history"} <= set(_both.capabilities)
+          and not _both.server_memory, repr(_both.capabilities))
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -2899,6 +2987,7 @@ def main():
     _vercel_ai_sdk(check)
     _openai_stream(check)
     _history_turn(check)
+    _session_slot(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)
