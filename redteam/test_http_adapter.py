@@ -361,6 +361,169 @@ def _second_review_of_replies(check):
         srv.shutdown()
 
 
+def _vercel_ai_sdk(check):
+    """The Vercel AI SDK, in every shape a route of it answers: the UI message stream (SDK 5
+    and later), the data stream (SDK 4), `generateText`'s JSON, and UI message parts. The parts
+    are the ones its documentation shows, at ai-sdk.dev/docs/ai-sdk-ui/stream-protocol and
+    v4.ai-sdk.dev/docs/ai-sdk-ui/stream-protocol."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, _pairs as _pp,
+                              _claims_something as _cs, tool_call_paths as _tcp,
+                              vercel_stream as _vs)
+    _canary = "ACME-CANARY-9931"
+    _sse = lambda *parts: "".join("data: %s\n\n" % (p if isinstance(p, str) else _j.dumps(p))
+                                  for p in parts)
+    v5 = _sse({"type": "start", "messageId": "m1"},
+              {"type": "text-start", "id": "t1"},
+              {"type": "text-delta", "id": "t1", "delta": "Sending "},
+              {"type": "text-delta", "id": "t1", "delta": "it now."},
+              {"type": "text-end", "id": "t1"},
+              {"type": "tool-input-start", "toolCallId": "c1", "toolName": "send_email"},
+              {"type": "tool-input-delta", "toolCallId": "c1", "inputTextDelta": '{"body":'},
+              {"type": "tool-input-available", "toolCallId": "c1", "toolName": "send_email",
+               "input": {"body": _canary}},
+              {"type": "tool-output-available", "toolCallId": "c1",
+               "output": {"sent": "OUTPUT-MARK-77"}},
+              {"type": "finish"}, "[DONE]")
+    v4 = ('0:"Sending "\n0:"it now."\n'
+          + '9:%s\n' % _j.dumps({"toolCallId": "c1", "toolName": "send_email",
+                                 "args": {"body": _canary}})
+          + 'a:{"toolCallId":"c1","result":"OUTPUT-MARK-77"}\n'
+          + 'e:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":2},'
+            '"isContinued":false}\n'
+          + 'd:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":2}}\n')
+    generate_text = {"text": "Sending it now.",
+                     "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
+                                    "toolName": "send_email", "input": {"body": _canary}}],
+                     "toolResults": [{"type": "tool-result", "toolCallId": "c1",
+                                      "toolName": "send_email",
+                                      "output": {"sent": "OUTPUT-MARK-77"}}]}
+    _mode = {"body": v5, "ctype": "text/event-stream",
+             "headers": {"x-vercel-ai-ui-message-stream": "v1"}}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"]
+            body = (body if isinstance(body, str) else _j.dumps(body)).encode()
+            self.send_response(200)
+            self.send_header("content-type", _mode["ctype"])
+            for _k, _v in _mode["headers"].items():
+                self.send_header(_k, _v)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    url = "http://127.0.0.1:%d/api/chat" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        # ONE CONFIG for the route that streams and the route that returns JSON.
+        _t = _HT(url=url, name="vercel", request={"message": "{prompt}"},
+                 response={"reply": "text", "tool_calls": "toolCalls",
+                           "observations": "toolResults", "error": "error"}, timeout_s=5)
+        for _label, _body, _ctype, _hdr in (
+                ("an SDK 5 UI message stream", v5, "text/event-stream",
+                 {"x-vercel-ai-ui-message-stream": "v1"}),
+                ("an SDK 4 data stream", v4, "text/plain; charset=utf-8",
+                 {"x-vercel-ai-data-stream": "v1"}),
+                ("generateText's JSON", generate_text, "application/json", {})):
+            _mode.update(body=_body, ctype=_ctype, headers=_hdr)
+            _p = _t.send("hi")
+            check("%s is read: the reply" % _label,
+                  _p.output == "Sending it now." and not _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+            check("...its tool call, name and arguments",
+                  [n for n, _a in _p.tool_calls] == ["send_email"]
+                  and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+            check("...and what the tool returned, as an observation",
+                  any("OUTPUT-MARK-77" in o for o in _p.observations), repr(_p.observations))
+
+        # A STREAM THAT ONLY CALLS A TOOL is an empty reply with a call, not a failure.
+        _mode.update(body=_sse({"type": "start"},
+                               {"type": "tool-input-available", "toolCallId": "c2",
+                                "toolName": "lookup_order", "input": {"id": "7"}},
+                               {"type": "finish"}, "[DONE]"),
+                     ctype="text/event-stream", headers={})
+        _p = _t.send("hi")
+        check("a stream that only calls a tool is an empty reply with its call",
+              _p.output == "" and not _p.error and _p.tool_calls
+              and _p.tool_calls[0][0] == "lookup_order",
+              "output=%r error=%r calls=%r" % (_p.output, _p.error, _p.tool_calls))
+
+        # AN ERROR PART IS AN ERROR, never a bot that said nothing and so held.
+        _mode["body"] = _sse({"type": "start"},
+                             {"type": "error", "errorText": "model overloaded"}, "[DONE]")
+        _p = _t.send("hi")
+        check("a stream that carried only an error part is a TargetError naming it",
+              bool(_p.error) and "TargetError" in _p.error and "model overloaded" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _quiet = _HT(url=url, name="vercel-noerr", request={"message": "{prompt}"},
+                     response={"reply": "text"}, timeout_s=5)
+        _p = _quiet.send("hi")
+        check("...and with no error path mapped it is ExtractionFailed, not an empty reply",
+              bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output,
+              "output=%r error=%r" % (_p.output, _p.error))
+
+        # AN OPENAI-SHAPED STREAM IS NOT THIS PROTOCOL, and is not folded into one.
+        _mode["body"] = ('data: {"id":"x","choices":[{"delta":{"content":"hi"}}]}\n\n'
+                         'data: [DONE]\n\n')
+        _p = _t.send("hi")
+        check("an OpenAI-shaped stream is still the JSON error it was, not a guessed reply",
+              bool(_p.error) and "JSONDecode" in _p.error and not _p.output,
+              "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    _cut = _vs(v5[:v5.index('"input": {')], cut=True)
+    check("a stream cut mid-call keeps the call with the argument text that arrived",
+          _cut is not None and _cut["toolCalls"]
+          and _cut["toolCalls"][0]["toolName"] == "send_email"
+          and _cut["toolCalls"][0]["input"] == '{"body":', repr(_cut))
+
+    # UI MESSAGE PARTS: the typed part names its tool only in its type.
+    _parts = [{"type": "text", "text": "Checking."},
+              {"type": "tool-getWeather", "toolCallId": "c1", "state": "output-available",
+               "input": {"city": _canary}, "output": {"weather": "sunny"}},
+              {"type": "dynamic-tool", "toolName": "lookup_order", "toolCallId": "c2",
+               "state": "input-available", "input": {"id": "7"}}]
+    check("an SDK 5 UI part `tool-<name>` is a call to <name>, and a dynamic-tool part too",
+          _pp(_parts) == [("", ""), ("getWeather", _j.dumps({"city": _canary})),
+                          ("lookup_order", '{"id": "7"}')], repr(_pp(_parts)))
+    _v4part = [{"type": "tool-invocation",
+                "toolInvocation": {"state": "call", "toolCallId": "c1",
+                                   "toolName": "send_email", "args": {"body": _canary}}}]
+    check("an SDK 4 tool-invocation part is read through its wrapper",
+          _pp(_v4part) == [("send_email", _j.dumps({"body": _canary}))], repr(_pp(_v4part)))
+    # EACH SHAPE ALONE: a list holding a `dynamic-tool` part beside a typed one qualified on
+    # the first, and the mutation that stopped reading `tool-<name>` here passed.
+    _offered = {
+        "typed UI parts": ({"messages": [{"role": "assistant", "parts": _parts[:2]}]},
+                           ["messages.0.parts"]),
+        "dynamic-tool UI parts": ({"messages": [{"parts": [_parts[0], _parts[2]]}]},
+                                  ["messages.0.parts"]),
+        "response.messages content": (
+            {"text": "", "response": {"messages": [{"role": "assistant",
+                                                    "content": generate_text["toolCalls"]}]}},
+            ["response.messages.0.content"]),
+        "generateText's toolCalls": (generate_text, ["toolCalls"])}
+    for _label, (_body, _want) in _offered.items():
+        check("onboard is offered %s as a tool-call path" % _label,
+              [p for p, _c in _tcp(_body)] == _want, repr(_tcp(_body)))
+
+    # A RESULT NAMES ITS TOOL TOO, and is not a call the model made.
+    _results = [{"type": "tool-result", "toolCallId": "c1", "toolName": "send_email",
+                 "output": {"sent": _canary}}]
+    check("a tool-result part is not read as a call, alone or in a list",
+          _pp(_results) == [] and _pp(_results[0]) == [], repr((_pp(_results), _pp(_results[0]))))
+    check("...and claims no unreadable call either",
+          _cs("tool_calls", _results) is False)
+
+
 def _third_review_of_replies(check):
     """An independent review of the HTTP adapters: every adapter refuses a redirect to the
     service next door; valid UTF-8 is UTF-8 whatever the label; a 403 after a success keeps
@@ -2283,6 +2446,7 @@ def main():
         _rsrv.shutdown()
 
     _second_review_of_replies(check)
+    _vercel_ai_sdk(check)
     _third_review_of_replies(check)
     _review_capped(check)
 

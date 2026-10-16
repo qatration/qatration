@@ -250,10 +250,43 @@ _CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input"
                         # neither readable nor unreadable, so nothing was said and a canary
                         # sent in the arguments read DEFENDED. Found by an independent review.
                         "tool_name", "parameters", "functionCall", "function_call",
-                        "toolUse", "toolCall"))
+                        "toolUse", "toolCall",
+                        # The Vercel AI SDK 4 UI part, `{"type": "tool-invocation",
+                        # "toolInvocation": {"toolName": ..., "args": ...}}`.
+                        "toolInvocation"))
 # The keys that WRAP one call rather than name it: the call is the mapping inside.
-_CALL_WRAPPERS = ("functionCall", "function_call", "toolUse", "toolCall")
-_CALL_TYPES = frozenset(("tool_use", "function", "function_call", "tool_call"))
+_CALL_WRAPPERS = ("functionCall", "function_call", "toolUse", "toolCall", "toolInvocation")
+# `tool-call` is the Vercel AI SDK's content part (`generateText`'s `toolCalls`, and every
+# assistant message in `response.messages`), `dynamic-tool` its UI part for a tool not known
+# when the app was built. The typed UI part, `tool-<name>`, is matched by `_ui_tool_name`.
+_CALL_TYPES = frozenset(("tool_use", "function", "function_call", "tool_call",
+                         "tool-call", "dynamic-tool", "tool-invocation"))
+# AND THE ONES THAT ARE NOT CALLS although they name a tool. A `tool-result` part carries
+# `toolName` beside the tool's OUTPUT, so read as a call it records a call the model never made,
+# with an argument string that is really what the tool returned -- and every argument detector
+# then judges a reply from the target's own backend as something the model chose to send.
+_NOT_CALL_TYPES = frozenset(("tool-result", "tool-error"))
+# The `tool-` types that belong to the SDK rather than to one tool: the stream protocol's own
+# parts. `tool-input-available` is not a tool called `input-available`.
+_SDK_TOOL_PREFIXES = ("tool-input-", "tool-output-", "tool-approval-")
+
+
+def _ui_tool_name(kind):
+    """The tool a Vercel AI SDK 5 UI part names in its TYPE, or "".
+
+    `{"type": "tool-getWeather", "toolCallId": ..., "state": "input-available", "input": {...}}`:
+    the name is not in any field, only after `tool-`, so every name key this module reads came
+    up empty and the call was dropped as nameless.
+    """
+    if not isinstance(kind, str) or not kind.startswith("tool-") or len(kind) <= 5:
+        return ""
+    if kind in _CALL_TYPES or kind in _NOT_CALL_TYPES or kind.startswith(_SDK_TOOL_PREFIXES):
+        return ""
+    return kind[5:]
+
+
+def _is_call_type(kind):
+    return kind in _CALL_TYPES or bool(_ui_tool_name(kind))
 
 
 def _claims_something(channel, raw):
@@ -268,7 +301,7 @@ def _claims_something(channel, raw):
         return True
     for _x in raw:
         if isinstance(_x, dict):
-            if (set(_x) & _CALL_KEYS) or _x.get("type") in _CALL_TYPES:
+            if (set(_x) & _CALL_KEYS) or _is_call_type(_x.get("type")):
                 return True
         elif _x not in (None, ""):
             return True
@@ -288,7 +321,8 @@ def _pairs(raw):
     # ONE CALL OBJECT IS ONE CALL. `{"name": "send_email", "arguments": {...}}` was read as a
     # name -> arguments map and came out as two tools called `name` and `arguments`, counted
     # as a channel that worked. Found by an independent review.
-    if isinstance(raw, dict) and ((set(raw) & _CALL_KEYS) or raw.get("type") in _CALL_TYPES):
+    if isinstance(raw, dict) and ((set(raw) & _CALL_KEYS) or _is_call_type(raw.get("type"))
+                                  or raw.get("type") in _NOT_CALL_TYPES):
         raw = [raw]
     elif isinstance(raw, dict):
         raw = [{"name": k, "arguments": v} for k, v in raw.items()]
@@ -308,12 +342,18 @@ def _pairs(raw):
         if isinstance(item, (list, tuple)) and len(item) >= 2:
             out.append((str(item[0]), str(item[1])))
         elif isinstance(item, dict):
+            if item.get("type") in _NOT_CALL_TYPES:
+                continue
+            _kind = item.get("type")
             for _w in _CALL_WRAPPERS:
                 if isinstance(item.get(_w), dict):
                     item = item[_w]
                     break
+            # `toolName` is the Vercel AI SDK's spelling, in every one of its shapes but the
+            # typed UI part, which names the tool only in its type.
             name = (item.get("name") or item.get("tool") or item.get("tool_name")
-                    or item.get("function") or "")
+                    or item.get("toolName") or item.get("function") or _ui_tool_name(_kind)
+                    or "")
             args = item.get("arguments", item.get("args", item.get("input",
                                                                     item.get("parameters", ""))))
             # THE ARGUMENTS LIVE WHERE THE NAME DOES. OpenAI's shape is
@@ -378,7 +418,7 @@ def tool_call_paths(raw, _prefix="", _depth=0, _out=None):
         path = "%s.%s" % (_prefix, k) if _prefix else str(k)
         named = isinstance(k, str) and k.lower().replace("_", "") in _CALL_PATH_NAMES
         typed = isinstance(v, list) and any(
-            isinstance(x, dict) and (x.get("type") in _CALL_TYPES - {"function"}
+            isinstance(x, dict) and ((x.get("type") != "function" and _is_call_type(x.get("type")))
                                      or any(isinstance(x.get(w), dict) for w in _CALL_WRAPPERS))
             for x in v)
         if named or typed:
@@ -638,6 +678,139 @@ def _charset_of(response):
     except LookupError:
         return None
     return "utf-8-sig" if name == "utf-8" else cs
+
+
+# A V4 DATA STREAM FRAME is one character and a colon in front of JSON: `0:"Hel"`, `9:{...}`.
+_V4_FRAME = re.compile(r"^([0-9a-k]):(.*)$")
+_SSE_FIELDS = ("event:", "id:", "retry:", ":")
+
+
+def vercel_stream(text, cut=False):
+    """A Vercel AI SDK stream folded into the object `generateText` returns, or None.
+
+    `{"text": ..., "toolCalls": [{toolCallId, toolName, input}],
+      "toolResults": [{toolCallId, toolName, output}], "error": ...}`
+
+    THE DEFAULT SHAPE OF A VERCEL CHAT ENDPOINT IS A STREAM, NOT JSON. `useChat` talks to a
+    route that returns `toUIMessageStreamResponse()`: server-sent events, one `data: {...}`
+    part per line (SDK 5 and later), or `0:"text"` / `9:{...}` frames (SDK 4). `json.loads`
+    refused both, so every probe was a JSONDecodeError and the run measured nothing -- the
+    reply and the tool calls alike. Folded into `generateText`'s own field names, one config
+    reads the JSON route and the streaming route of the same app.
+
+    RECOGNISED, NOT GUESSED: every line must be an SSE line whose data is a typed part (or
+    `[DONE]`), or a v4 frame, and at least one part must be the SDK's. An OpenAI-shaped stream
+    has no `type` on its chunks and comes back None, so the caller's JSON error stands.
+
+    `text` IS THERE ONLY WHEN THE STREAM SAID SOMETHING, a text part or a tool call. A stream
+    that carried nothing but an error part would otherwise read as an empty reply, and an
+    empty reply scores as a bot that held. `cut` means the body stopped at the size cap: the
+    last line may be half a part, and is dropped rather than failing the whole fold.
+
+    A CALL WHOSE INPUT NEVER ARRIVED is kept with the argument text that did. A stream cut in
+    the middle of a call is a model that started sending a canary, and the deltas are where
+    it is.
+    """
+    if not isinstance(text, str):
+        return None
+    lines = [_l.rstrip("\r") for _l in text.split("\n")]
+    if cut and lines:
+        lines = lines[:-1]
+    parts, kinds = [], set()
+    for _l in lines:
+        if not _l.strip():
+            continue
+        if _l.startswith("data:"):
+            _d = _l[5:].strip()
+            if _d == "[DONE]":
+                continue
+            try:
+                _p = json.loads(_d)
+            except ValueError:
+                return None
+            if not isinstance(_p, dict) or not _ui_stream_part(_p.get("type")):
+                return None
+            parts.append(("v5", _p))
+            kinds.add("v5")
+        elif _l.startswith(_SSE_FIELDS):
+            continue
+        else:
+            _m = _V4_FRAME.match(_l)
+            if not _m:
+                return None
+            try:
+                parts.append(("v4:" + _m.group(1), json.loads(_m.group(2))))
+            except ValueError:
+                return None
+            kinds.add("v4")
+    if not parts or len(kinds) > 1:
+        return None
+    text_out, said, calls, results, errors = [], False, {}, [], []
+
+    def _call(cid, name=None):
+        c = calls.setdefault(cid if cid is not None else "#%d" % len(calls),
+                             {"toolCallId": cid, "toolName": "", "input": None, "_delta": []})
+        if name:
+            c["toolName"] = name
+        return c
+
+    for kind, p in parts:
+        if kind == "v5":
+            t = p["type"]
+            if t == "text-delta":
+                text_out.append(str(p.get("delta", "")))
+                said = True
+            elif t == "tool-input-start":
+                _call(p.get("toolCallId"), p.get("toolName"))
+            elif t == "tool-input-delta":
+                _call(p.get("toolCallId"))["_delta"].append(str(p.get("inputTextDelta", "")))
+            elif t.startswith("tool-input-") and "input" in p:     # -available, -error
+                _call(p.get("toolCallId"), p.get("toolName"))["input"] = p["input"]
+            elif t == "tool-output-available":
+                results.append({"toolCallId": p.get("toolCallId"), "output": p.get("output")})
+            elif t == "error":
+                errors.append(str(p.get("errorText", "")))
+        elif not isinstance(p, (dict, str)):
+            continue
+        elif kind == "v4:0" and isinstance(p, str):
+            text_out.append(p)
+            said = True
+        elif kind == "v4:9" and isinstance(p, dict):
+            _call(p.get("toolCallId"), p.get("toolName"))["input"] = p.get("args")
+        elif kind == "v4:b" and isinstance(p, dict):
+            _call(p.get("toolCallId"), p.get("toolName"))
+        elif kind == "v4:c" and isinstance(p, dict):
+            _call(p.get("toolCallId"))["_delta"].append(str(p.get("argsTextDelta", "")))
+        elif kind == "v4:a" and isinstance(p, dict):
+            results.append({"toolCallId": p.get("toolCallId"), "output": p.get("result")})
+        elif kind == "v4:3":
+            errors.append(str(p))
+    names = {c["toolCallId"]: c["toolName"] for c in calls.values()}
+    out = {}
+    tool_calls = []
+    for c in calls.values():
+        _in = c["input"] if c["input"] is not None else "".join(c["_delta"])
+        tool_calls.append({"toolCallId": c["toolCallId"], "toolName": c["toolName"],
+                           "input": _in})
+    if said or tool_calls:
+        out["text"] = "".join(text_out)
+    out["toolCalls"] = tool_calls
+    out["toolResults"] = [dict(r, toolName=names.get(r["toolCallId"], "")) for r in results]
+    if errors:
+        out["error"] = " ".join(errors)
+    return out
+
+
+# The UI message stream's part types: the `text-`/`tool-`/`data-`/`reasoning-` families and
+# these. A chunk typed anything else is not this protocol.
+_UI_STREAM_TYPES = frozenset(("start", "finish", "start-step", "finish-step", "abort",
+                              "error", "message-metadata", "source-url", "source-document",
+                              "file"))
+
+
+def _ui_stream_part(kind):
+    return isinstance(kind, str) and (kind in _UI_STREAM_TYPES or kind.startswith(
+        ("text-", "tool-", "data-", "reasoning-")))
 
 
 class RateLimit:
@@ -1211,7 +1384,11 @@ class HttpConfiguredTarget(Target):
                     print(f"  ! {self.name}: the reply was {_over:,} bytes; the first "
                           f"{MAX_REPLY:,} were read through the response paths.",
                           file=sys.stderr)
-                    raw = parse_capped(_decoded(_body, r))
+                    # A STREAM IS READ AS FAR AS IT GOT, part by part, which is the cut done
+                    # right for a body with no closing brace to repair.
+                    raw = vercel_stream(_decoded(_body, r), cut=True)
+                    if raw is None:
+                        raw = parse_capped(_decoded(_body, r))
                     if raw is None:
                         return Probe(prompt=prompt, output="", reply_bytes=_over,
                                      error=("ExtractionFailed: the reply was %s bytes, over "
@@ -1228,7 +1405,14 @@ class HttpConfiguredTarget(Target):
                 # read as UTF-8 became a reply of replacement characters, judged as text
                 # and said nowhere. Found by an independent review.
                 if raw is None:
-                    raw = json.loads(_decoded(_body, r))
+                    _text = _decoded(_body, r)
+                    try:
+                        raw = json.loads(_text)
+                    except ValueError:
+                        # A Vercel AI SDK stream, or the JSON error it was.
+                        raw = vercel_stream(_text)
+                        if raw is None:
+                            raise
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
             # would send the operator to re-map a path that is correct.

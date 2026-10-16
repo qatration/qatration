@@ -8,6 +8,18 @@ What changed, in the project's own words, newest first.
 
 ## Unreleased
 
+**A Vercel AI SDK route is read at all.** Its default answer is a stream, server-sent typed
+parts (SDK 5 and later) or `0:`/`9:` frames (SDK 4), and every probe against one was a
+JSONDecodeError: nothing measured, reply and tool calls alike. Both are now folded into the
+fields `generateText` returns (`text`, `toolCalls`, `toolResults`, `error`), so one config reads
+the streaming route and the JSON one. The SDK's call shapes are read wherever a path points:
+`toolName`, the typed UI part `tool-<name>`, `dynamic-tool`, SDK 4's `tool-invocation`, and a
+`tool-result` part is not taken for a call. A stream with only an error part is an error, not an
+empty reply; a stream cut mid-call keeps the argument text that arrived; an OpenAI-shaped stream
+is not folded into a guess. `onboard` offers the SDK's tool-call paths from evidence, and a
+reply path that missed `text` beside `toolCalls` is told both lines rather than "the bot
+answered with a tool call instead of text", which left the reply path wrong for a second round.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

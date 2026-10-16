@@ -307,6 +307,9 @@ def main():
                 {"type": "text", "text": "Let me look that order up for you right away."},
                 {"type": "tool_use", "id": "t1", "name": "lookup_order",
                  "input": {"id": "7"}}]},
+            "vercel": {"text": "Let me look that order up for you right away.",
+                       "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
+                                      "toolName": "lookup_order", "input": {"id": "7"}}]},
         }
 
         class _Agent(Bot):
@@ -399,6 +402,15 @@ def main():
             check("a reply path pointed at a container is not diagnosed as a tool-call reply",
                   not _okc and "instead of text" not in _pc and "tool_calls_path" not in _repc,
                   _pc[:300])
+            # TEXT ONE KEY AWAY is not a tool-call reply either: a Vercel AI SDK body holds
+            # `text` beside `toolCalls`, and both lines are what the operator needs.
+            _okv, _repv = onboard.check(_agent_cfg("vercel"))
+            _pv, _nv = " ".join(_repv["problems"]), " ".join(_repv["notes"])
+            check("a reply path that missed text beside the calls is told both lines, not "
+                  "\"a tool call instead of text\"",
+                  not _okv and "instead of text" not in _pv
+                  and 'response.reply: "text"' in _nv and 'tool_calls: "toolCalls"' in _nv
+                  and _repv.get("tool_calls_path") == "toolCalls", (_pv + " / " + _nv)[:400])
         finally:
             _asrv.shutdown()
 

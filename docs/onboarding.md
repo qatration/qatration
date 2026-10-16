@@ -55,6 +55,27 @@ failed tool call or a model timeout in the body with a 200 status leaves `reply`
 empty reply is a bot that said nothing, which scores as a bot that held — so if your API does
 that, map `error:` and those probes come back as errors rather than as defences.
 
+**A Vercel AI SDK route is read as it answers**, and that is usually a stream rather than
+JSON: `useChat` talks to a route returning `toUIMessageStreamResponse()`, server-sent events
+with one typed part per line (SDK 5 and later), or `0:"text"` and `9:{...}` frames (SDK 4). The
+adapter folds either into the object `generateText` returns, so one mapping reads the streaming
+route and the JSON one:
+
+```yaml
+response:
+  reply: "text"
+  tool_calls: "toolCalls"
+  observations: "toolResults"               # what each tool returned
+  error: "error"                            # an `error` part in the stream
+```
+
+A stream that carried only an error part has no `text`, so without `error:` mapped it comes
+back as `ExtractionFailed` rather than as an empty reply that scores as a bot that held. UI
+message parts are read too (`tool-<name>`, `dynamic-tool`, SDK 4's `tool-invocation`), and a
+`tool-result` part is never taken for a call the model made. Not covered: reasoning parts are
+not read, and `history:` writes `{role, content}` turns, so a route that wants the SDK's
+`parts` in every message is tested one turn at a time.
+
 **A key this adapter does not read is refused, at every level.** `respones:` at the top,
 `tool_call:` inside `response:`, `feild:` inside `history:` — all three used to build a target
 that ran the whole arsenal and reported a clean bill, because the mapping they were meant to

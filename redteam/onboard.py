@@ -416,7 +416,13 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # offered left the real problem for a second round. Found by an independent review.
         _calls = (_unmapped_calls(raw, cfg)
                   if "nothing at response.reply" in (probe.error or "") else None)
-        if _calls:
+        # AND ONLY WHERE THE BODY HOLDS NO TEXT. A Vercel AI SDK reply carries `text` beside
+        # `toolCalls`, so a reply path left at OpenAI's spelling found nothing while the answer
+        # sat one key away, and "the bot answered with a tool call instead of text" sent the
+        # operator to map the calls and left the reply path wrong for a second round.
+        _text_at = next((p2 for p2 in COMMON if isinstance(dig(raw, p2), str)
+                         and _prose(dig(raw, p2))), None) if raw is not None else None
+        if _calls and not _text_at:
             rep["problems"].append(
                 f"`response.reply: {path!r}` holds nothing in this reply because the bot "
                 f"answered with a tool call instead of text ({_calls[1]}). Without a "
@@ -438,6 +444,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
                     break
             for p2, v in _strings(raw)[:4]:
                 rep["notes"].append(f"  {p2} = {v[:70]!r}")
+        if _calls and _calls[0]:
+            rep["notes"].append("and it holds tool calls (%s): %s" % (_calls[1], _calls[2]))
+            rep["tool_calls_path"] = _calls[0]
         return False, rep
 
     if probe is None or probe.error:
