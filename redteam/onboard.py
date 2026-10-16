@@ -449,6 +449,13 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
             rep["tool_calls_path"] = _calls[0]
         return False, rep
 
+    # A STREAM NO FOLD READS IS AN ANSWER IN THE WRONG FORM, not a silent endpoint: the cure is
+    # in the config (`stream: false`), so it is a refused config (2), and "the endpoint returned
+    # an error" with the code for an endpoint that did not answer (3) named the wrong side.
+    if probe is not None and (probe.error or "").startswith("UnreadableStream"):
+        rep["problems"].append(probe.error.split(": ", 1)[-1])
+        return False, rep
+
     if probe is None or probe.error:
         # AND THE HEADER MUST NOT SAY "answered". `render` prints the elapsed time under
         # that word whenever a probe came back at all, so a refused connection printed

@@ -478,14 +478,27 @@ def _vercel_ai_sdk(check):
               bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output
               and _vs(_mode["body"]) is None,
               "output=%r error=%r" % (_p.output, _p.error))
-        # AND A STREAM NOBODY FOLDS is still the JSON error it was, not a guessed reply:
-        # Gemini's `alt=sse` chunks, which no fold here reads.
-        _mode["body"] = ('data: {"candidates":[{"content":{"parts":[{"text":"hi"}],'
-                         '"role":"model"}}]}\n\n')
+        # AND A STREAM NOBODY FOLDS is not a guessed reply, and is said to be a stream: Cohere's
+        # v2 events, which no fold here reads.
+        _mode["body"] = ('event: content-delta\n'
+                         'data: {"type":"content-delta","index":0,'
+                         '"delta":{"message":{"content":{"text":"hi"}}}}\n\n')
         _p = _t.send("hi")
-        check("a stream of another protocol is still the JSON error it was",
-              bool(_p.error) and "JSONDecode" in _p.error and not _p.output,
+        check("a stream of another protocol is an UnreadableStream naming its kind and the cure",
+              bool(_p.error) and "UnreadableStream" in _p.error and not _p.output
+              and "server-sent events" in _p.error and "content-delta" in _p.error
+              and "stream: false" in _p.error,
               "output=%r error=%r" % (_p.output, _p.error))
+        _mode.update(body='{"token": "Hel"}\n{"token": "lo"}\n', ctype="application/x-ndjson")
+        _p = _t.send("hi")
+        check("...and so is newline-delimited JSON nobody folds",
+              bool(_p.error) and "UnreadableStream" in _p.error
+              and "newline-delimited JSON" in _p.error, "error=%r" % _p.error)
+        _mode.update(body="Hello there, this is plain text.", ctype="text/plain")
+        _p = _t.send("hi")
+        check("...while a body that is no stream at all is still the JSON error it was",
+              bool(_p.error) and "JSONDecode" in _p.error, "error=%r" % _p.error)
+        _mode["ctype"] = "text/event-stream"
     finally:
         srv.shutdown()
 
@@ -788,6 +801,126 @@ def _three_more_streams(check):
           repr(_gen))
     check("...and a line that is not Ollama's makes the body not Ollama's",
           _ol(_line(model="m", response="x", done=False) + _line(hello="world")) is None)
+
+
+def _gemini_stream(check):
+    """Gemini's `streamGenerateContent?alt=sse`, folded into the response `generateContent`
+    returns, and Google's Interactions API streamed. The chunk fields are the API reference's;
+    the error object is the one Google's SDK checks every chunk for."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, gemini_stream as _gs,
+                              interactions_stream as _is, _folds, unreadable_stream as _us)
+    _canary = "ACME-CANARY-9931"
+
+    def _chunk(parts, finish=None):
+        _cand = {"content": {"parts": parts, "role": "model"}, "index": 0}
+        if finish:
+            _cand["finishReason"] = finish
+        return {"candidates": [_cand], "modelVersion": "gemini-x", "responseId": "r1"}
+
+    chunks = [_chunk([{"text": "Let me think.", "thought": True}]),
+              _chunk([{"text": "Sending "}]), _chunk([{"text": "it now."}]),
+              _chunk([{"functionCall": {"name": "send_email", "args": {"body": _canary}}}],
+                     "STOP")]
+    _sse_text = "".join("data: %s\r\n\r\n" % _j.dumps(_c) for _c in chunks)
+    _mode = {"body": "", "ctype": "text/event-stream"}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", _mode["ctype"])
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+
+    def _iev(kind, **fields):
+        return "event: %s\ndata: %s\n\n" % (kind, _j.dumps(dict(fields, event_type=kind)))
+
+    interactions = (
+        _iev("interaction.created", interaction={"id": "v1_1", "status": "in_progress",
+                                                 "model": "gemini-x"})
+        + _iev("step.start", index=0, step={"type": "model_output"})
+        + _iev("step.delta", index=0, delta={"type": "text", "text": "Sending "})
+        + _iev("step.delta", index=0, delta={"type": "text", "text": "it now."})
+        + _iev("step.stop", index=0)
+        + _iev("step.start", index=1, step={"type": "function_call", "name": "send_email",
+                                            "id": "fc1"})
+        + _iev("step.delta", index=1, delta={"type": "arguments_delta",
+                                             "arguments": '{"body": "%s' % _canary[:8]})
+        + _iev("step.delta", index=1, delta={"type": "arguments_delta",
+                                             "arguments": '%s"}' % _canary[8:]})
+        + _iev("step.stop", index=1)
+        + _iev("interaction.completed", interaction={"id": "v1_1", "status": "requires_action"})
+        + "event: done\ndata: [DONE]\n\n")
+    try:
+        _ti = _HT(url="http://127.0.0.1:%d/v1beta/interactions" % srv.server_address[1],
+                  name="inter", request={"model": "gemini-x", "input": "{prompt}", "stream": True},
+                  response={"reply": "steps.0.content.0.text", "tool_calls": "steps",
+                            "error": "error"}, timeout_s=5)
+        _mode["body"] = interactions
+        _p = _ti.send("hi")
+        check("an Interactions API stream is read with its unstreamed config: the reply",
+              _p.output == "Sending it now." and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...and its function_call step, arguments joined from their pieces",
+              [n for n, _a in _p.tool_calls] == ["send_email"]
+              and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+        _mode["body"] = (_iev("interaction.created", interaction={"id": "v1_2"})
+                         + _iev("error", error={"code": "not_found", "message": "Result not found."}))
+        _p = _ti.send("hi")
+        check("...and its error event is a TargetError naming it",
+              bool(_p.error) and "TargetError" in _p.error and "not found" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _t = _HT(url="http://127.0.0.1:%d/v1beta/models/g:streamGenerateContent"
+                 % srv.server_address[1], name="gem",
+                 request={"contents": [{"role": "user", "parts": [{"text": "{prompt}"}]}]},
+                 response={"reply": "candidates.0.content.parts.1.text",
+                           "tool_calls": "candidates.0.content.parts", "error": "error"},
+                 timeout_s=5)
+        _mode["body"] = _sse_text
+        _p = _t.send("hi")
+        check("Gemini's alt=sse stream is read with the generateContent config: the reply",
+              _p.output == "Sending it now." and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...and its functionCall part, the canary whole",
+              [n for n, _a in _p.tool_calls] == ["send_email"]
+              and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+        # AFTER A CHUNK, so it is Gemini's fold that reads it: an error object alone is read
+        # by the OpenAI-shaped one too, at the same `error`.
+        _mode["body"] = ("data: %s\r\n\r\n" % _j.dumps(chunks[1]) + "data: %s\r\n\r\n" % _j.dumps(
+            {"error": {"code": 503, "message": "The model is overloaded.", "status": "UNAVAILABLE"}}))
+        _p = _t.send("hi")
+        check("an error object in Gemini's stream is a TargetError naming it",
+              bool(_p.error) and "TargetError" in _p.error and "overloaded" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    _f = _gs(_sse_text)
+    check("a thought is joined onto the thought and never onto the answer",
+          [(_x.get("thought", False), _x.get("text")) for _x in
+           _f["candidates"][0]["content"]["parts"][:2]]
+          == [(True, "Let me think."), (False, "Sending it now.")], repr(_f)[:300])
+    _done = _is(interactions.replace(
+        '"status": "requires_action"}', '"status": "completed", "steps": [{"type": '
+        '"model_output", "content": [{"type": "text", "text": "From the completed event."}]}]}'))
+    check("an interaction.completed that carries its steps is the answer",
+          (_done or {}).get("steps", [{}])[0].get("content", [{}])[0].get("text")
+          == "From the completed event.", repr(_done)[:300])
+    check("...and a stream of chunks that are not Gemini's is not read as Gemini's",
+          _gs('data: {"id": 1}\n\ndata: {"id": 2}\n\n') is None and _gs("") is None)
+    _named = _us("server-sent events", "data: {}")
+    check("the unreadable-stream message names every stream a fold reads, from the one list",
+          all(_n in _named for _n, _fn in _folds()), _named[:300])
 
 
 def _history_turn(check):
@@ -2767,6 +2900,7 @@ def main():
     _openai_stream(check)
     _history_turn(check)
     _three_more_streams(check)
+    _gemini_stream(check)
     _third_review_of_replies(check)
     _review_capped(check)
 

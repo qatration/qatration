@@ -85,12 +85,17 @@ the same endpoint answers with streaming off, so the config written for that bod
 | Anthropic Messages | `content.0.text`, `tool_calls: "content"` |
 | OpenAI Responses API | `output.0.content.0.text`, `tool_calls: "output"` |
 | Ollama's own `/api/chat` (it streams unless told not to) | `message.content`, `tool_calls: "message.tool_calls"` |
+| Gemini `streamGenerateContent?alt=sse` | `candidates.0.content.parts.0.text`, `tool_calls: "candidates.0.content.parts"` |
+| Google's Interactions API | `steps.0.content.0.text`, `tool_calls: "steps"` |
 | Vercel AI SDK, either version | `text`, `tool_calls: "toolCalls"` |
 
 A call's arguments arrive in pieces and are joined; a stream cut at the size cap keeps what had
 arrived, half an argument included; an error in the stream is at `error`, for `error: "error"`
-to read. Each fold recognises its own protocol and refuses every other, and a stream none of
-them knows (Gemini's `alt=sse`, for one) is not guessed at: it stays the JSON error it was.
+to read. Each fold recognises its own protocol and refuses every other. A stream none of them
+knows (Cohere's events, for one) is not guessed at: the probe is an `UnreadableStream` error
+naming what came back and the cure, which is turning streaming off in `request:`, and `onboard`
+refuses the config on it rather than calling the endpoint silent. Gemini's `streamGenerateContent`
+without `alt=sse` is not read either: neither the API reference nor Google's SDK shows that body.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in

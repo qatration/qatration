@@ -310,6 +310,9 @@ def main():
             "vercel": {"text": "Let me look that order up for you right away.",
                        "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
                                       "toolName": "lookup_order", "input": {"id": "7"}}]},
+            # A STRING IS SENT AS IT IS: a stream of a protocol no fold reads.
+            "cohere": ('event: content-delta\ndata: {"type": "content-delta", "index": 0, '
+                       '"delta": {"message": {"content": {"text": "Hello"}}}}\n\n'),
         }
 
         class _Agent(Bot):
@@ -318,9 +321,9 @@ def main():
                 _asked = self.rfile.read(_n).decode("utf-8", "replace")
                 # ASKED FOR WORDS, an agent gives words: what lets the second probe check a
                 # reply path the first one, answered with a call alone, never reached.
-                _o = json.dumps(
-                    {"choices": [{"message": {"content": "I can help with orders and returns."}}]}
-                    if onboard.TEXT_PROBE in _asked else _BODIES[self.path.strip("/")]).encode()
+                _b = ({"choices": [{"message": {"content": "I can help with orders and returns."}}]}
+                      if onboard.TEXT_PROBE in _asked else _BODIES[self.path.strip("/")])
+                _o = (_b if isinstance(_b, str) else json.dumps(_b)).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(_o)))
@@ -411,6 +414,14 @@ def main():
                   not _okv and "instead of text" not in _pv
                   and 'response.reply: "text"' in _nv and 'tool_calls: "toolCalls"' in _nv
                   and _repv.get("tool_calls_path") == "toolCalls", (_pv + " / " + _nv)[:400])
+            # A STREAM NOBODY READS is a config to change, said as one: not "the endpoint
+            # returned an error" under the code for an endpoint that did not answer.
+            _oks, _reps = onboard.check(_agent_cfg("cohere"))
+            _ps = " ".join(_reps["problems"])
+            check("an unreadable stream is a refused config naming the cure, not a dead endpoint",
+                  not _oks and "stream: false" in _ps and "server-sent events" in _ps
+                  and _reps.get("exit") in (None, 2) and _reps.get("answered") is not False,
+                  "exit=%r answered=%r %s" % (_reps.get("exit"), _reps.get("answered"), _ps[:300]))
         finally:
             _asrv.shutdown()
 

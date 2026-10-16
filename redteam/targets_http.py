@@ -968,11 +968,161 @@ def ollama_stream(text, cut=False):
     return out
 
 
+def gemini_stream(text, cut=False):
+    """Gemini's `streamGenerateContent?alt=sse`, one `GenerateContentResponse` chunk per `data:`
+    line, folded into the one response `generateContent` returns, or None.
+
+    `{"candidates": [{"content": {"role": "model", "parts": [...]}, "finishReason"}], ...}`
+
+    EACH CHUNK CARRIES THE NEXT PIECE, so the parts of a candidate are joined in order: a text
+    part onto the text part before it, a thought (`"thought": true`) onto the thought before it
+    and never onto the answer, and a `functionCall` part kept as the part it is. So
+    `candidates.0.content.parts.0.text` and `tool_calls: "candidates.0.content.parts"` read the
+    streamed reply as they read the unstreamed one. An `error` object is kept at `error`.
+
+    ONLY `alt=sse`. Without it the endpoint is said to answer a JSON array of the same chunks,
+    but neither the API reference nor Google's own SDK (which always asks for `alt=sse`) shows
+    that body, and a fold for a shape nobody documented is a guess.
+    """
+    lines = _stream_lines(text, cut)
+    chunks = _sse_payloads(lines) if lines is not None else None
+    if not chunks or not all(isinstance(_c, dict) and (isinstance(_c.get("candidates"), list)
+                                                       or "error" in _c
+                                                       or "promptFeedback" in _c)
+                             for _c in chunks):
+        return None
+    out, cands = {}, {}
+    for _c in chunks:
+        if "error" in _c and not isinstance(_c.get("candidates"), list):
+            out["error"] = _c["error"]
+            continue
+        out.update({k: v for k, v in _c.items() if k != "candidates"})
+        for _pos, _cand in enumerate(_c.get("candidates") or []):
+            if not isinstance(_cand, dict):
+                continue
+            _acc = cands.setdefault(_cand.get("index", _pos), {"parts": [], "rest": {}})
+            _acc["rest"].update({k: v for k, v in _cand.items() if k != "content"})
+            _content = _cand.get("content") if isinstance(_cand.get("content"), dict) else {}
+            if _content.get("role"):
+                _acc["role"] = _content["role"]
+            for _part in _content.get("parts") or []:
+                if not isinstance(_part, dict):
+                    continue
+                _prev = _acc["parts"][-1] if _acc["parts"] else None
+                if (isinstance(_part.get("text"), str) and _prev is not None
+                        and isinstance(_prev.get("text"), str)
+                        and bool(_prev.get("thought")) == bool(_part.get("thought"))):
+                    _prev["text"] += _part["text"]
+                    _prev.update({k: v for k, v in _part.items() if k != "text"})
+                else:
+                    _acc["parts"].append(dict(_part))
+    _order = lambda k: (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+    if cands:
+        out["candidates"] = [
+            dict(cands[_k]["rest"], content={"role": cands[_k].get("role", "model"),
+                                             "parts": cands[_k]["parts"]})
+            for _k in sorted(cands, key=_order)]
+    return out
+
+
+def interactions_stream(text, cut=False):
+    """Google's Interactions API (`POST /v1beta/interactions` with `stream: true`) folded into the
+    interaction it returns unstreamed, or None: `{"steps": [...], "status", ...}`, so
+    `steps.0.content.0.text` and `tool_calls: "steps"` read both.
+
+    THE STEPS ARE BUILT FROM THEIR EVENTS, by `index`: `step.start` gives a step its type (and
+    whatever else it carries), a `text` delta goes onto its content, `arguments_delta` pieces are
+    joined and parsed into the call's `arguments` when the stream is over. The documentation says
+    `interaction.completed` carries the steps only "if included in this event", so its steps are
+    used when it has them and the rebuilt ones when it does not. An `error` event is at `error`.
+
+    RECOGNISED, NOT GUESSED: every event carries an `event_type`.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    if not payloads or not all(isinstance(_p.get("event_type"), str) for _p in payloads):
+        return None
+    out, steps, args, error = {}, {}, {}, None
+    for _p in payloads:
+        t = _p["event_type"]
+        if t in ("interaction.created", "interaction.completed")                 and isinstance(_p.get("interaction"), dict):
+            out.update(_p["interaction"])
+        elif t == "interaction.status_update" and _p.get("status"):
+            out["status"] = _p["status"]
+        elif t == "step.start" and isinstance(_p.get("step"), dict):
+            steps[_p.get("index", len(steps))] = dict(_p["step"])
+        elif t == "step.delta" and isinstance(_p.get("delta"), dict):
+            _i = _p.get("index", 0)
+            _st = steps.setdefault(_i, {})
+            _d = _p["delta"]
+            if _d.get("type") == "text":
+                _content = _st.setdefault("content", [])
+                if not (_content and isinstance(_content[-1], dict)
+                        and _content[-1].get("type") == "text"):
+                    _content.append({"type": "text", "text": ""})
+                _content[-1]["text"] = str(_content[-1].get("text") or "") + str(_d.get("text", ""))
+            elif _d.get("type") == "arguments_delta":
+                args.setdefault(_i, []).append(str(_d.get("arguments", "")))
+        elif t == "error":
+            error = _p.get("error", _p)
+    for _i, _parts in args.items():
+        steps.setdefault(_i, {})["arguments"] = _json_or_text("".join(_parts))
+    if not isinstance(out.get("steps"), list) and steps:
+        _order = lambda k: (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+        out["steps"] = [steps[_k] for _k in sorted(steps, key=_order)]
+    if error is not None:
+        out["error"] = error
+    return out
+
+
+def stream_kind(text):
+    """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
+    None. Only what the folds refused reaches this, so it decides nothing about the reply: it
+    names the problem."""
+    lines = _stream_lines(text)
+    if not lines:
+        return None
+    if all(_l.startswith(("data:",) + _SSE_FIELDS) for _l in lines):
+        return "server-sent events"
+    if len(lines) > 1:
+        try:
+            if all(isinstance(json.loads(_l), dict) for _l in lines):
+                return "newline-delimited JSON"
+        except ValueError:
+            pass
+    return None
+
+
+def _folds():
+    """Every stream this adapter reads, by name: the one list `_fold_stream` walks and the
+    message for an unreadable stream names, so neither can claim a protocol the other lacks."""
+    return (("the Vercel AI SDK", vercel_stream),
+            ("OpenAI-compatible chat completions", openai_stream),
+            ("Anthropic Messages", anthropic_stream),
+            ("the OpenAI Responses API", responses_stream),
+            ("Gemini (alt=sse)", gemini_stream),
+            ("Google's Interactions API", interactions_stream),
+            ("Ollama", ollama_stream))
+
+
+def unreadable_stream(kind, text):
+    """The error for a stream of a protocol no fold reads: what it is, the first line of it in
+    the remote's own words (bounded, never parsed again), and the cure."""
+    # THE FIRST LINE THAT SAYS SOMETHING: `event: x` names the event, `data:` shows it.
+    _lines = _stream_lines(text) or []
+    _first = " ".join(next((_l for _l in _lines if _l.startswith("data:")),
+                           _lines[0] if _lines else "").split())[:120]
+    return ("UnreadableStream: the endpoint answered with %s (%r), of a protocol this adapter "
+            "does not read. It reads the streams of %s. Turn streaming off in `request:` if the "
+            "endpoint allows it (`stream: false`, or the endpoint's own spelling); nothing else "
+            "in the config can make this body readable." % (kind, _first,
+                                                ", ".join(_n for _n, _f in _folds())))
+
+
 def _fold_stream(text, cut=False):
     """A streamed body as the JSON object its route answers without streaming, or None. Each
     fold recognises its own protocol and refuses every other, so at most one of them answers."""
-    for _fold in (vercel_stream, openai_stream, anthropic_stream, responses_stream,
-                  ollama_stream):
+    for _name, _fold in _folds():
         _got = _fold(text, cut)
         if _got is not None:
             return _got
@@ -1744,6 +1894,14 @@ class HttpConfiguredTarget(Target):
                         # A stream this adapter can fold, or the JSON error it was.
                         raw = _fold_stream(_text)
                         if raw is None:
+                            # A STREAM NOBODY FOLDS, SAID AS ONE. "JSONDecodeError: Expecting
+                            # value: line 1 column 1" over a body of `data:` lines sent the
+                            # operator to look for broken JSON, when the cure is a flag.
+                            _kind = stream_kind(_text)
+                            if _kind:
+                                return Probe(prompt=prompt, output="",
+                                             error=unreadable_stream(_kind, _text),
+                                             seconds=round(time.time() - t0, 1))
                             raise
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
             # legitimately empty and `ExtractionFailed` would name the wrong problem -- it

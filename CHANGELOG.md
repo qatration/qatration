@@ -40,6 +40,15 @@ Ollama's lines joined. An error mid-stream is an error in all three. And the exa
 ARGUMENTS as a map of tools, so `{"to": ..., "body": ...}` became two tools called `to` and
 `body`; it now says `content`.
 
+**Gemini and Google's Interactions API streamed, and a stream nobody reads said as one.**
+Gemini's `alt=sse` chunks are joined part by part into the response `generateContent` returns, a
+thought onto the thought and never onto the answer; the Interactions API's steps are rebuilt
+from their events, function arguments joined from their pieces. A stream of any other protocol
+was "JSONDecodeError: Expecting value: line 1 column 1", which sent the operator looking for
+broken JSON; it is now `UnreadableStream`, naming the kind of stream, its first line and the
+cure (`stream: false`), and `onboard` refuses the config on it (exit 2) instead of reporting an
+endpoint that did not answer (exit 3).
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a
