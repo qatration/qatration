@@ -57,6 +57,16 @@ Without a `history:` block it buys `chain` (the turns were really sent) and not 
 (nobody can write a server's past), and the check that the target hears earlier turns asks such
 a server through two real turns of one session instead of a forged transcript it cannot take.
 
+**A conversation id the server assigns, and Dify.** `session.from_reply` reads the id a server
+names in its reply and sends it back on the next turn of that conversation, empty again after
+every reset: Dify and the hosted bots built like it issue their own, and an id
+minted here opened a new conversation every turn. Dify's stream is folded into its blocking
+response, and its agent apps, which only stream, were out of reach before: `agent_message`
+chunks joined, an Agent app's closing `message` taken whole rather than appended, a
+`message_replace` replacing what came before, each tool an `agent_thought` names its own call
+with its own input, its error event an error. `onboard` refuses a `from_reply` path that found
+nothing in the reply.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

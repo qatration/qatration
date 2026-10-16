@@ -573,6 +573,18 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         rep["notes"].append(
             f"the reply is {reply[:40]!r}, which does not read like an answer — but nothing else in the response does either, so this may simply be a terse endpoint. If a sweep comes back with everything DEFENDED, check `response.reply` first.")
 
+    # A CONVERSATION ID THE REPLY NEVER CARRIED: every turn would go out as a new conversation,
+    # and the check below would say "did not remember" about a path, not about the server.
+    if getattr(target, "session_from", None) and not getattr(target, "session_named", 0):
+        _rk = getattr(target, "_last_raw", None)
+        rep["problems"].append(
+            "`session.from_reply: %r` found no conversation id in this reply%s, so every turn "
+            "would open a conversation of its own and a multi-turn attack would be a row of "
+            "single turns. Point it at the field your endpoint's reply names the conversation in."
+            % (target.session_from, " (its keys: %s)" % sorted(_rk)[:8]
+               if isinstance(_rk, dict) else ""))
+        return False, rep
+
     rep["capabilities"] = sorted(getattr(target, "capabilities", ()) or ())
 
     # Capabilities are DERIVED, and their absence deletes whole classes of attack silently.

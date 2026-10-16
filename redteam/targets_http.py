@@ -1075,6 +1075,79 @@ def interactions_stream(text, cut=False):
     return out
 
 
+# The events that make a stream Dify's: what a chat, agent or chatflow app answers with.
+_DIFY_EVENTS = frozenset(("message", "agent_message", "agent_thought", "message_end",
+                          "message_replace", "message_file", "error", "workflow_started",
+                          "workflow_finished", "node_started", "node_finished"))
+
+
+def dify_stream(text, cut=False):
+    """A Dify app's `response_mode: streaming` reply (`POST /v1/chat-messages`) folded into the
+    blocking response, or None: `{"answer", "conversation_id", "message_id", "metadata"}`, plus
+    what an agent did -- `tool_calls`, `observations` and the raw `agent_thoughts`.
+
+    AN AGENT APP ONLY STREAMS: "a `blocking` request fails with 400", so a Dify agent was out of
+    reach entirely. `message` and `agent_message` chunks are joined in order, except that an
+    Agent app's closing `message` after its `agent_message` chunks IS the whole answer, and a
+    `message_replace` (output moderation) replaces what came before it. An `agent_thought` names
+    its tools `;`-joined, with `tool_input` a JSON object keyed by tool name, so each becomes its
+    own call; the thought is sent again as it gains its `observation`, and is merged by `id`.
+    `conversation_id` is on every chunk, where `session.from_reply` reads it. An `error` event
+    ends the stream with HTTP still 200, and is kept at `error`.
+
+    RECOGNISED, NOT GUESSED: every chunk carries a string `event`, and one of them is Dify's.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    if (not payloads or not all(isinstance(_p.get("event"), str) for _p in payloads)
+            or not any(_p["event"] in _DIFY_EVENTS for _p in payloads)):
+        return None
+    out, answer, agent_said, thoughts = {}, [], False, {}
+    for _p in payloads:
+        ev = _p["event"]
+        for _k in ("conversation_id", "message_id", "task_id", "mode"):
+            if _p.get(_k):
+                out[_k] = _p[_k]
+        if ev == "agent_message":
+            answer.append(str(_p.get("answer") or ""))
+            agent_said = True
+        elif ev == "message":
+            # AN AGENT'S CLOSING `message` is the answer whole: appended, it doubled every reply.
+            if agent_said:
+                answer = [str(_p.get("answer") or "")]
+            else:
+                answer.append(str(_p.get("answer") or ""))
+        elif ev == "message_replace":
+            answer = [str(_p.get("answer") or "")]
+        elif ev == "agent_thought":
+            _key = _p.get("id") or _p.get("position") or len(thoughts)
+            thoughts.setdefault(_key, {}).update(
+                {k: v for k, v in _p.items() if k not in ("event", "task_id", "created_at")
+                 and v not in (None, "")})
+        elif ev == "message_end" and isinstance(_p.get("metadata"), dict):
+            out["metadata"] = _p["metadata"]
+        elif ev == "error":
+            out["error"] = {k: _p[k] for k in ("status", "code", "message") if k in _p}
+    out["event"] = "message"
+    out["answer"] = "".join(answer)
+    calls, observations = [], []
+    for _t in thoughts.values():
+        _names = [n for n in str(_t.get("tool") or "").split(";") if n.strip()]
+        _inputs = _json_or_text(str(_t.get("tool_input") or ""))
+        for _n in _names:
+            _args = _inputs.get(_n, {}) if isinstance(_inputs, dict) else _inputs
+            calls.append({"name": _n, "arguments": _args})
+        if _t.get("observation"):
+            observations.append(str(_t["observation"]))
+    if thoughts:
+        out["agent_thoughts"] = list(thoughts.values())
+    if calls:
+        out["tool_calls"] = calls
+    if observations:
+        out["observations"] = observations
+    return out
+
+
 def stream_kind(text):
     """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
     None. Only what the folds refused reaches this, so it decides nothing about the reply: it
@@ -1102,6 +1175,7 @@ def _folds():
             ("the OpenAI Responses API", responses_stream),
             ("Gemini (alt=sse)", gemini_stream),
             ("Google's Interactions API", interactions_stream),
+            ("Dify", dify_stream),
             ("Ollama", ollama_stream))
 
 
@@ -1391,7 +1465,7 @@ class HttpConfiguredTarget(Target):
 
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
-                 auth=None, env=None, proxy=None, **unknown):
+                 auth=None, env=None, proxy=None, session=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -1446,6 +1520,9 @@ class HttpConfiguredTarget(Target):
              "expand -- every request would go out with the placeholder still in it."),
             ("rate", rate, dict,
              "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("session", session, dict,
+             "It is a mapping: `session: {from_reply: conversation_id}` names where the "
+             "server's reply carries the conversation id it assigned."),
             ("request", request, dict,
              "The body is built by walking a mapping, and history splicing has nothing to "
              "splice into without one."),
@@ -1509,6 +1586,35 @@ class HttpConfiguredTarget(Target):
         self._session = new_session()
         self.uses_session = (SESSION_SLOT in json.dumps(request or {}) or SESSION_SLOT in str(url)
                              or any(SESSION_SLOT in str(v) for v in (headers or {}).values()))
+        # A CONVERSATION ID THE SERVER ASSIGNS. Dify, and the hosted bots built like it, name
+        # the conversation in their first reply and expect that name back:
+        # an id we minted is one they never issued, so every turn opened a conversation of its
+        # own and a chain attack was a row of single turns. `session.from_reply` is where the
+        # reply carries it; `{session}` is `first` (empty by default, the usual "new
+        # conversation") until a reply names one, and again after every reset.
+        session = dict(session or {})
+        _bad_s = sorted(k for k in session if k not in ("from_reply", "first"))
+        if _bad_s or (session and not isinstance(session.get("from_reply"), str)) \
+                or (session and not str(session.get("from_reply") or "").strip()) \
+                or not isinstance(session.get("first", ""), str):
+            raise SystemExit(
+                "targets_http: `session:` for %r must be `{from_reply: <path in the reply>}`, "
+                "with an optional `first:` string (what `{session}` is before the server names "
+                "one, \"\" by default)%s." % (name, "; it also names %s, which this adapter does "
+                                              "not read" % ", ".join(map(repr, _bad_s))
+                                              if _bad_s else ""))
+        if session and not self.uses_session:
+            raise SystemExit(
+                "targets_http: `session.from_reply` for %r reads the conversation id the server "
+                "assigns, and nothing in `request:`, the `url` or a header carries `{session}` "
+                "to send it back: every turn would still open a conversation of its own. Put "
+                "`{session}` where your endpoint reads the conversation id." % name)
+        self.session_from = session.get("from_reply") or None
+        self._session_first = session.get("first", "")
+        if self.session_from:
+            self._session = self._session_first
+        # How often a reply carried the id at `from_reply`, for `onboard` to say when it never did.
+        self.session_named = 0
         self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
                         for k, v in (headers or {}).items()}
         # IN ANY CASE: HTTP header names are case-insensitive, and a config's own
@@ -2023,6 +2129,12 @@ class HttpConfiguredTarget(Target):
                     pass
                 return bad
             self._seen_success = True
+            # THE ID THE SERVER JUST NAMED is the one the next turn of this conversation sends.
+            if self.session_from:
+                _sid = dig(raw, self.session_from)
+                if isinstance(_sid, (str, int)) and not isinstance(_sid, bool) and str(_sid).strip():
+                    self._session = str(_sid)
+                    self.session_named += 1
             _rawcalls = dig(raw, self.calls_path) if self.calls_path else None
             _rawres = dig(raw, self.resolved_path) if self.resolved_path else None
             _rawobs = dig(raw, self.observations_path) if self.observations_path else None
@@ -2162,6 +2274,8 @@ class HttpConfiguredTarget(Target):
         invalidates every rate this engine prints -- recon probes for it, and a target whose
         state lives server-side under an id the config fixed will fail that probe honestly.
         """
-        if self.uses_session:
+        if self.session_from:
+            self._session = self._session_first
+        elif self.uses_session:
             self._session = new_session()
         return None

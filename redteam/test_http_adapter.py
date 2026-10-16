@@ -1011,6 +1011,139 @@ def _session_slot(check):
           and not _both.server_memory, repr(_both.capabilities))
 
 
+def _dify_and_server_ids(check):
+    """Dify's `/v1/chat-messages`, streamed as its docs show it, and `session.from_reply`: the
+    conversation id a server assigns, sent back on the next turn of that conversation only."""
+    import json as _j, threading as _th, secrets as _sec
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, dify_stream as _ds
+    import runner as _rn
+    _canary = "ACME-CANARY-9931"
+
+    def _ev(**k):
+        return "data: %s\n\n" % _j.dumps(k)
+
+    _tin = _j.dumps({"lookup_order": {"id": "7"}, "send_email": {"body": _canary}})
+    legacy = (_ev(event="agent_thought", id="t1", position=1, thought="Look it up and mail it.",
+                  tool="lookup_order;send_email", tool_input=_tin, conversation_id="c1",
+                  message_id="m1", task_id="k")
+              + _ev(event="agent_thought", id="t1", position=1, conversation_id="c1",
+                    observation=_j.dumps({"lookup_order": "OUTPUT-MARK-77"}), message_id="m1")
+              + "event: ping\n\n"
+              + _ev(event="agent_message", answer="Sending ", conversation_id="c1", message_id="m1")
+              + _ev(event="agent_message", answer="it now.", conversation_id="c1", message_id="m1")
+              + _ev(event="message_end", conversation_id="c1", message_id="m1",
+                    metadata={"usage": {"total_tokens": 9}}))
+    _mem, _seen, _mode = {}, [], {"stream": True}
+
+    class _H(_BH):
+        def do_POST(self):
+            b = _j.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+            _cid = b.get("conversation_id") or ""
+            _seen.append(_cid)
+            if _cid not in _mem:
+                _cid = "conv-" + _sec.token_hex(4)
+                _mem[_cid] = []
+            _mem[_cid].append(b["query"])
+            _said = "Earlier you said: " + " | ".join(_mem[_cid])
+            if _mode["stream"]:
+                body = (_ev(event="message", answer=_said[:10], conversation_id=_cid)
+                        + _ev(event="message", answer=_said[10:], conversation_id=_cid)
+                        + _ev(event="message_end", conversation_id=_cid)).encode()
+                ctype = "text/event-stream"
+            else:
+                body = _j.dumps({"event": "message", "answer": _said,
+                                 "conversation_id": _cid}).encode()
+                ctype = "application/json"
+            self.send_response(200)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url="http://127.0.0.1:%d/v1/chat-messages" % srv.server_address[1], name="dify",
+                 request={"query": "{prompt}", "inputs": {}, "user": "qatration",
+                          "response_mode": "streaming", "conversation_id": "{session}"},
+                 response={"reply": "answer", "error": "error"},
+                 session={"from_reply": "conversation_id"}, timeout_s=5)
+        # THE VERY FIRST REQUEST, before any reset -- `onboard`'s probe is one -- opens a
+        # conversation too: an id minted here is one the server never issued, and Dify answers
+        # it "Conversation Not Exists".
+        _t.send("hello")
+        check("session.from_reply: a target's very first request sends no id of ours",
+              _seen[-1] == "", repr(_seen[-1:]))
+        for _label, _stream in (("streamed", True), ("blocking", False)):
+            _mode["stream"] = _stream
+            _t.reset()
+            _c = _t.send_chain(["remember PLUM-77", "what did I ask you to remember?"])
+            check("session.from_reply (%s): the first turn opens a conversation, the second "
+                  "sends back the id the server named" % _label,
+                  _seen[-2] == "" and _seen[-1].startswith("conv-") and "PLUM-77" in _c.output,
+                  repr((_seen[-2:], _c.output)))
+        _t.reset()
+        _t.send("a new trial")
+        check("...and a reset starts the next conversation empty again, not in the last one",
+              _seen[-1] == "", repr(_seen[-3:]))
+        check("...and reads_history hears the server keep it",
+              _rn.reads_history(_t, "dify")[0] is True)
+    finally:
+        srv.shutdown()
+
+    _f = _ds(legacy)
+    check("a Dify agent's stream is its answer, joined from its agent_message chunks",
+          (_f or {}).get("answer") == "Sending it now.", repr(_f)[:300])
+    check("...and each tool an agent_thought names is its own call, with its own input",
+          [(c["name"], c["arguments"]) for c in _f.get("tool_calls", [])]
+          == [("lookup_order", {"id": "7"}), ("send_email", {"body": _canary})],
+          repr(_f.get("tool_calls")))
+    check("...and the thought sent again with its observation is one thought, observation kept",
+          len(_f.get("agent_thoughts", [])) == 1
+          and any("OUTPUT-MARK-77" in o for o in _f.get("observations", [])), repr(_f)[:400])
+    check("...and the conversation id is there for session.from_reply",
+          _f.get("conversation_id") == "c1")
+    _closing = _ds(_ev(event="agent_message", answer="Sending ", conversation_id="c")
+                   + _ev(event="agent_message", answer="it now.", conversation_id="c")
+                   + _ev(event="message", answer="Sending it now.", conversation_id="c")
+                   + _ev(event="message_end", conversation_id="c"))
+    check("an Agent app's closing message is the answer whole, not appended to its chunks",
+          (_closing or {}).get("answer") == "Sending it now.", repr(_closing))
+    _mod = _ds(_ev(event="message", answer="The key is ACME-", conversation_id="c")
+               + _ev(event="message_replace", answer="[removed by moderation]", conversation_id="c")
+               + _ev(event="message_end", conversation_id="c"))
+    check("a message_replace replaces what came before it, as the user sees it",
+          (_mod or {}).get("answer") == "[removed by moderation]", repr(_mod))
+    _err = _ds(_ev(event="message", answer="Hel", conversation_id="c")
+               + _ev(event="error", status=400, code="invalid_param", message="boom",
+                     conversation_id="c"))
+    check("a Dify error event is kept at `error`, beside what was said before it",
+          (_err or {}).get("error", {}).get("code") == "invalid_param", repr(_err))
+    for _bad, _why in (({"from_reply": ""}, "an empty path"),
+                       ({"from_reply": "c", "frist": ""}, "a misspelled key"),
+                       ({"from_reply": "c", "first": 0}, "a `first` that is not a string")):
+        try:
+            _HT(url="http://127.0.0.1:9/x", name="b", request={"q": "{prompt}", "c": "{session}"},
+                response={"reply": "a"}, session=_bad)
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("`session:` with %s is refused when the config is read" % _why,
+              "session" in _said, repr(_said)[:160])
+    try:
+        _HT(url="http://127.0.0.1:9/x", name="b", request={"q": "{prompt}"},
+            response={"reply": "a"}, session={"from_reply": "conversation_id"})
+        _said = ""
+    except SystemExit as e:
+        _said = str(e)
+    check("...and so is session.from_reply with no `{session}` to send the id back in",
+          "{session}" in _said, repr(_said)[:160])
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -2988,6 +3121,7 @@ def main():
     _openai_stream(check)
     _history_turn(check)
     _session_slot(check)
+    _dify_and_server_ids(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

@@ -87,6 +87,7 @@ the same endpoint answers with streaming off, so the config written for that bod
 | Ollama's own `/api/chat` (it streams unless told not to) | `message.content`, `tool_calls: "message.tool_calls"` |
 | Gemini `streamGenerateContent?alt=sse` | `candidates.0.content.parts.0.text`, `tool_calls: "candidates.0.content.parts"` |
 | Google's Interactions API | `steps.0.content.0.text`, `tool_calls: "steps"` |
+| Dify `/v1/chat-messages` (its agent apps only stream) | `answer`, `tool_calls: "tool_calls"`, `observations: "observations"` |
 | Vercel AI SDK, either version | `text`, `tool_calls: "toolCalls"` |
 
 A call's arguments arrive in pieces and are joined; a stream cut at the size cap keeps what had
@@ -117,6 +118,32 @@ server's past for it. Whether the server does keep them is asked before the run,
 real turns of one session (a case number given in the first, asked for in the second); where it
 comes back empty the multi-turn attacks are withheld, as they are for a `history:` block an
 endpoint ignores.
+
+**An id the server assigns** is read back with `session.from_reply`. Dify, and the hosted bots
+built like it, name the conversation in their first reply and expect that name on the next
+turn, so an id minted here is one they never issued. A server that wants its conversation
+created by a call of its own first (OpenAI's Assistants threads, for one) is not covered. For
+Dify:
+
+```yaml
+url: "https://api.dify.ai/v1/chat-messages"
+request:
+  query: "{prompt}"
+  inputs: {}
+  user: "qatration"
+  response_mode: streaming
+  conversation_id: "{session}"
+response:
+  reply: "answer"
+  tool_calls: "tool_calls"
+  error: "error"
+session:
+  from_reply: "conversation_id"
+```
+
+`{session}` is empty (or `session.first`) until a reply names a conversation, then that name
+until the next reset. `onboard` refuses a config whose `from_reply` path found nothing in the
+reply, because every turn of it would open a conversation of its own.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in

@@ -433,6 +433,19 @@ def main():
                   "did not remember an earlier turn of the same session" in _nf
                   and "history:" not in _nf.split("did not remember")[1][:300]
                   and "chain" not in _repf["capabilities"], _nf[:400])
+            # AN ID THE REPLY NEVER CARRIES: every turn a new conversation, said before the run.
+            _pn = os.path.join(work, "targets_agent_noid.yaml")
+            with open(_pn, "w", encoding="utf-8") as _f:
+                _f.write('adapter: http\nname: agentnoid\nurl: "http://127.0.0.1:%d/forgetful"\n'
+                         'request:\n  conversation_id: "{session}"\n  message: "{prompt}"\n'
+                         'response:\n  reply: "choices.0.message.content"\n'
+                         'session:\n  from_reply: "conversation_id"\n'
+                         % _asrv.server_address[1])
+            _okn2, _repn2 = onboard.check(_pn)
+            _pn2 = " ".join(_repn2["problems"])
+            check("session.from_reply that finds no id in the reply is a problem naming the path",
+                  not _okn2 and "found no conversation id" in _pn2 and "'choices'" in _pn2,
+                  _pn2[:300])
             _oks, _reps = onboard.check(_agent_cfg("cohere"))
             _ps = " ".join(_reps["problems"])
             check("an unreadable stream is a refused config naming the cure, not a dead endpoint",
