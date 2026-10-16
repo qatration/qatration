@@ -248,6 +248,58 @@ def _value_checks():
           in " ".join(_plant.split()), _plant)
 
 
+def _vercel_shape():
+    """`init --shape vercel`: the body `useChat` sends, the stream's folded fields, and every
+    earlier turn in `parts`, built by the adapter the way `onboard` builds it."""
+    _v = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                           verify="QAT-VERIFY-X", shape="vercel"))
+    try:
+        _t = HttpConfiguredTarget(**{k: x for k, x in _v.items() if k not in CONFIG_ONLY_KEYS})
+        _why = ""
+    except SystemExit as e:
+        _t, _why = None, str(e)
+    check("init --shape vercel writes a config the adapter builds", _t is not None, _why)
+    if _t is None:
+        return
+    _b = _t._body("ATTACK", [{"role": "user", "content": "plant"},
+                             {"role": "assistant", "content": "noted"}])
+    check("...whose earlier turns and attack turn are all UI messages with `parts`",
+          [(m.get("role"), m["parts"][0]["text"]) for m in _b["messages"]]
+          == [("user", "plant"), ("assistant", "noted"), ("user", "ATTACK")]
+          and all("content" not in m for m in _b["messages"])
+          and [m["id"] for m in _b["messages"]] == ["h0", "h1", "q"], repr(_b)[:300])
+    check("...and which buys the multi-turn deliveries",
+          {"chain", "forged_history"} <= set(_t.capabilities), repr(_t.capabilities))
+    check("...and reads the stream's folded fields, an error part included",
+          _v["response"] == {"reply": "text", "error": "error"}, repr(_v["response"]))
+    check("...and carries no `model`, which a Vercel route picks on the server",
+          "model" not in (_v.get("request") or {}), repr(_v.get("request")))
+    check("...and is not accused of a placeholder it does not have",
+          init_config.placeholders_left(_v) == [], repr(init_config.placeholders_left(_v)))
+    with tempfile.TemporaryDirectory() as d:
+        _r = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--shape",
+                             "vercel", "--url", "http://localhost:9/api/chat", "--out",
+                             os.path.join(d, "v.yaml")],
+                            capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=HERE))
+        check("`qatration init --shape vercel` writes the file and names no placeholder that "
+              "is not in it", _r.returncode == 0 and "request.model" not in _r.stdout
+              and "Still yours to set" not in _r.stdout
+              and os.path.exists(os.path.join(d, "v.yaml")), (_r.stdout + _r.stderr)[-300:])
+        # THE FILE, not only the words: `--shape` parsed and then not handed to `render` wrote
+        # the OpenAI shape under a message that named nothing wrong with it.
+        _w = (yaml.safe_load(io.open(os.path.join(d, "v.yaml"), encoding="utf-8"))
+              if os.path.exists(os.path.join(d, "v.yaml")) else {}) or {}
+        check("...and the file it writes is the Vercel shape",
+              (_w.get("response") or {}).get("reply") == "text"
+              and "turn" in (_w.get("history") or {}), repr(_w.get("response")))
+        _bad = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--shape",
+                               "graphql", "--out", os.path.join(d, "g.yaml")],
+                              capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=HERE))
+        check("...and a shape it does not write is refused, with nothing written",
+              _bad.returncode == 2 and not os.path.exists(os.path.join(d, "g.yaml")),
+              "exit %s %s" % (_bad.returncode, _bad.stderr[-200:]))
+
+
 def main():
     _placeholder_checks()
     _value_checks()
@@ -548,6 +600,8 @@ def main():
           (_oc.get("oracle_context") or {}).get("system_prompt", "").startswith(_odd)
           and _oc.get("url") == "http://x.test/\x80" and (_oc.get("request") or {}).get("model")
           == "m\x85", repr((_oc.get("oracle_context") or {}).get("system_prompt", "")[:60]))
+
+    _vercel_shape()
 
     print("\n%d/%d passed" % (checks - len(fails), checks))
     for f in fails:

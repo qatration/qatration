@@ -72,15 +72,41 @@ response:
 A stream that carried only an error part has no `text`, so without `error:` mapped it comes
 back as `ExtractionFailed` rather than as an empty reply that scores as a bot that held. UI
 message parts are read too (`tool-<name>`, `dynamic-tool`, SDK 4's `tool-invocation`), and a
-`tool-result` part is never taken for a call the model made. Not covered: reasoning parts are
-not read, and `history:` writes `{role, content}` turns, so a route that wants the SDK's
-`parts` in every message is tested one turn at a time.
+`tool-result` part is never taken for a call the model made. `qatration init --shape vercel`
+writes all of this, the request `useChat` sends and the history below included. Not covered:
+reasoning parts are not read.
+
+**An OpenAI-compatible `stream: true` is read the same way.** The chunks are folded into the
+body the endpoint answers without streaming, so `choices.0.message.content` and
+`choices.0.message.tool_calls` read both; a call's arguments arrive in pieces and are joined,
+and an `error` object in the stream is at `error`. A stream of any other protocol (Anthropic's
+events, the Responses API's) is not guessed at: it stays the JSON error it was.
+
+**A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
+`{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in
+`parts`, and Gemini calls the assistant `model`:
+
+```yaml
+history:
+  field: messages
+  mode: splice
+  insert_before: 1
+  turn:
+    id: "h{n}"
+    role: "{role}"
+    parts:
+      - type: text
+        text: "{text}"
+```
+
+It replaces `role_key` and `text_key` rather than joining them, and a template with no
+`{text}` is refused: every earlier turn of a multi-turn attack would go out empty.
 
 **A key this adapter does not read is refused, at every level.** `respones:` at the top,
 `tool_call:` inside `response:`, `feild:` inside `history:` — all three used to build a target
 that ran the whole arsenal and reported a clean bill, because the mapping they were meant to
-set was simply never set. The five response channels above and the seven history keys --
-`field`, `mode`, `role_key`, `text_key`, `user`, `assistant`, `insert_before` -- are the whole
+set was simply never set. The five response channels above and the eight history keys --
+`field`, `mode`, `role_key`, `text_key`, `user`, `assistant`, `insert_before`, `turn` -- are the whole
 list; anything else stops the run before the first probe, naming what it does accept.
 
 **A request budget does not bound TIME**, and on a shared endpoint that is the gap that

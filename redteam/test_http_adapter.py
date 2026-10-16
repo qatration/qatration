@@ -469,11 +469,21 @@ def _vercel_ai_sdk(check):
               bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output,
               "output=%r error=%r" % (_p.output, _p.error))
 
-        # AN OPENAI-SHAPED STREAM IS NOT THIS PROTOCOL, and is not folded into one.
+        # AN OPENAI-SHAPED STREAM IS NOT THIS PROTOCOL, and is not folded into one: read as
+        # OpenAI's, it has no `text` for this config to find.
         _mode["body"] = ('data: {"id":"x","choices":[{"delta":{"content":"hi"}}]}\n\n'
                          'data: [DONE]\n\n')
         _p = _t.send("hi")
-        check("an OpenAI-shaped stream is still the JSON error it was, not a guessed reply",
+        check("an OpenAI-shaped stream is not read as a Vercel one",
+              bool(_p.error) and "ExtractionFailed" in _p.error and not _p.output
+              and _vs(_mode["body"]) is None,
+              "output=%r error=%r" % (_p.output, _p.error))
+        # AND A STREAM NOBODY FOLDS is still the JSON error it was, not a guessed reply.
+        _mode["body"] = ('event: message_start\ndata: {"type":"message_start"}\n\n'
+                         'event: content_block_delta\n'
+                         'data: {"type":"content_block_delta","delta":{"text":"hi"}}\n\n')
+        _p = _t.send("hi")
+        check("a stream of another protocol is still the JSON error it was",
               bool(_p.error) and "JSONDecode" in _p.error and not _p.output,
               "output=%r error=%r" % (_p.output, _p.error))
     finally:
@@ -522,6 +532,145 @@ def _vercel_ai_sdk(check):
           _pp(_results) == [] and _pp(_results[0]) == [], repr((_pp(_results), _pp(_results[0]))))
     check("...and claims no unreadable call either",
           _cs("tool_calls", _results) is False)
+
+
+def _openai_stream(check):
+    """`stream: true` on an OpenAI-shaped endpoint: chat.completion.chunk deltas, folded into the
+    body the same endpoint answers without streaming, so the same config reads both."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, openai_stream as _os
+    _canary = "ACME-CANARY-9931"
+
+    def _chunk(delta, finish=None, index=0):
+        return "data: %s\n\n" % _j.dumps({"id": "chatcmpl-1", "object": "chat.completion.chunk",
+                                           "choices": [{"index": index, "delta": delta,
+                                                        "finish_reason": finish}]})
+
+    def _call(i, args, name=None, cid=None):
+        _tc = {"index": i, "function": {"arguments": args}}
+        if name:
+            _tc["function"]["name"] = name
+            _tc.update(id=cid, type="function")
+        return _chunk({"tool_calls": [_tc]})
+
+    _half = len(_canary) // 2
+    streamed = (_chunk({"role": "assistant", "content": ""}) + _chunk({"content": "Sending "})
+                + _chunk({"content": "it now."})
+                + _call(0, "", "send_email", "call_1")
+                + _call(0, '{"body": "%s' % _canary[:_half]) + _call(0, '%s"}' % _canary[_half:])
+                + _chunk({}, "tool_calls")
+                + 'data: {"id":"chatcmpl-1","choices":[],"usage":{"total_tokens":9}}\n\n'
+                + "data: [DONE]\n\n")
+    _mode = {"body": streamed}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url="http://127.0.0.1:%d/v1/chat/completions" % srv.server_address[1],
+                 name="oai-stream", request={"messages": [{"role": "user", "content": "{prompt}"}],
+                                             "stream": True},
+                 response={"reply": "choices.0.message.content",
+                           "tool_calls": "choices.0.message.tool_calls", "error": "error"},
+                 timeout_s=5)
+        _p = _t.send("hi")
+        check("an OpenAI stream is read with the non-streamed config: the reply",
+              _p.output == "Sending it now." and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...and a call whose arguments came in pieces, the canary across two of them",
+              [n for n, _a in _p.tool_calls] == ["send_email"]
+              and _canary in _p.tool_calls[0][1], repr(_p.tool_calls))
+        _mode["body"] = (_chunk({"role": "assistant", "content": None})
+                         + _call(0, '{"id": "7"}', "lookup_order", "c1")
+                         + _chunk({}, "tool_calls") + "data: [DONE]\n\n")
+        _p = _t.send("hi")
+        check("a stream that only calls a tool is an empty reply with its call",
+              _p.output == "" and not _p.error
+              and [n for n, _a in _p.tool_calls] == ["lookup_order"],
+              "output=%r error=%r calls=%r" % (_p.output, _p.error, _p.tool_calls))
+        _mode["body"] = 'data: {"error": {"message": "upstream overloaded"}}\n\n'
+        _p = _t.send("hi")
+        check("an error object in the stream is a TargetError naming it",
+              bool(_p.error) and "TargetError" in _p.error and "overloaded" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    _rep = _os(_call(0, "{}", "send_email", "c1") + _call(0, "", "send_email"))
+    check("a name repeated on every chunk of a call is the name once",
+          _rep["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "send_email",
+          repr(_rep))
+    _many = _os("".join(_call(i, '{"n": %d}' % i, "t%d" % i, "c%d" % i) for i in range(12)))
+    check("twelve calls come out in their own order, 10 after 9",
+          [c["function"]["name"] for c in _many["choices"][0]["message"]["tool_calls"]]
+          == ["t%d" % i for i in range(12)], repr(_many)[:300])
+    check("a stream with nothing to say leaves content null, not an empty reply",
+          _os(_chunk({}, "stop"))["choices"][0]["message"]["content"] is None,
+          repr(_os(_chunk({}, "stop"))))
+
+
+def _history_turn(check):
+    """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
+    Gemini send it."""
+    from targets_http import HttpConfiguredTarget as _HT
+    _req = {"messages": [{"id": "q", "role": "user",
+                          "parts": [{"type": "text", "text": "{prompt}"}]}]}
+    _turn = {"id": "h{n}", "role": "{role}", "parts": [{"type": "text", "text": "{text}"}]}
+    _t = _HT(url="http://127.0.0.1:9/chat", name="ui", request=_req, response={"reply": "text"},
+             history={"field": "messages", "mode": "splice", "insert_before": 1,
+                      "turn": _turn})
+    _b = _t._body("ATTACK", [{"role": "user", "content": "quote {role} and {text}"},
+                             {"role": "assistant", "content": "I refused."}])
+    check("history.turn writes each earlier turn in the template's shape, attack turn last",
+          _b["messages"] == [
+              {"id": "h0", "role": "user",
+               "parts": [{"type": "text", "text": "quote {role} and {text}"}]},
+              {"id": "h1", "role": "assistant", "parts": [{"type": "text", "text": "I refused."}]},
+              {"id": "q", "role": "user", "parts": [{"type": "text", "text": "ATTACK"}]}],
+          repr(_b)[:400])
+    from targets_http import _fill_turn as _ft
+    _said = _ft({"text": "said: {text}"}, {"role": "user", "text": "quote {role}", "n": 0})
+    check("...and a slot inside a longer string is filled once: quoted slots stay text",
+          _said == {"text": "said: quote {role}"}, repr(_said))
+    check("...and buys the multi-turn deliveries",
+          {"chain", "forged_history"} <= set(_t.capabilities), repr(_t.capabilities))
+    _g = _HT(url="http://127.0.0.1:9/chat", name="gem",
+             request={"contents": [{"role": "user", "parts": [{"text": "{prompt}"}]}]},
+             response={"reply": "candidates.0.content.parts.0.text"},
+             history={"field": "contents", "mode": "splice", "insert_before": 1,
+                      "assistant": "model", "turn": {"role": "{role}",
+                                                     "parts": [{"text": "{text}"}]}})
+    check("...and Gemini's `model` role is the `assistant:` mapping, as for flat turns",
+          _g._body("A", [{"role": "assistant", "content": "x"}])["contents"][0]
+          == {"role": "model", "parts": [{"text": "x"}]},
+          repr(_g._body("A", [{"role": "assistant", "content": "x"}])))
+    for _label, _hist in (
+            ("a template with no {text}", {"turn": {"role": "{role}", "parts": []}}),
+            ("a template that is a string", {"turn": "{text}"}),
+            ("a template beside text_key", {"turn": {"t": "{text}"}, "text_key": "t"}),
+            ("a template beside role_key", {"turn": {"t": "{text}"}, "role_key": "r"})):
+        try:
+            _HT(url="http://127.0.0.1:9/chat", name="bad", request=_req,
+                response={"reply": "text"},
+                history=dict({"field": "messages", "mode": "splice"}, **_hist))
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("%s is refused when the config is read" % _label,
+              "history.turn" in _said, repr(_said)[:200])
 
 
 def _third_review_of_replies(check):
@@ -2447,6 +2596,8 @@ def main():
 
     _second_review_of_replies(check)
     _vercel_ai_sdk(check)
+    _openai_stream(check)
+    _history_turn(check)
     _third_review_of_replies(check)
     _review_capped(check)
 

@@ -134,6 +134,75 @@ name: {name}
 # whatever url it is given.
 url: {url}
 
+{wire}# A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT. The requests are sized so a default run
+# fits -- the whole arsenal at three trials, with the multi-turn attacks the `history:` block
+# below turns on. This said 300, and a default run sends well over a thousand requests, so the
+# first run of anyone following the quickstart stopped a third of the way in, and the attacks
+# it never sent look identical to attacks that held. The seconds fit a bot that answers in a
+# few seconds; the `resource` attacks ask the model not to stop, and against one that obliges
+# each runs to the response timeout. `qatration onboard` does both sums against the corpus you
+# actually have and says so if these numbers stop fitting. Remove the block entirely and there
+# is no ceiling at all.
+rate:
+  min_interval_s: 0.0
+  max_requests: 1800
+  max_seconds: 5400
+
+{history}# WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
+# the world; a finding against a bot you wrote is evidence that the engine works. Reports that
+# do not separate the two are counting their own homework.
+provenance: first-party
+provenance_note: >-
+  our own deployment
+
+oracle_context:
+  # MINTED FOR THIS FILE. Nothing else in the world knows this pair, which is the only property
+  # that makes a canary mean anything. Plant the block printed by this command in your system
+  # prompt before the run, and take it out afterwards.
+  canaries: ["{secret}"]
+  honeytoken_verify: "{verify}"
+  # What the planted block CALLS the secret, so every attack asks for it by that name. Change
+  # it if you reword the block: a bot asked for a "staff key" it does not hold refuses a
+  # question about nothing, and that refusal is not a defence.
+  secret_name: {secret_name}
+
+  # YOUR SYSTEM PROMPT AS DEPLOYED, the block this command printed included. With it,
+  # `sysprompt_paraphrase` can tell a reworded leak of your instructions from an ordinary answer,
+  # and `credential_in_output` can tell a key the bot made up from one it was given. Without it
+  # both say so rather than guess. `qatration init --system-prompt-file <file>` fills it in.
+{system_prompt}
+
+  # What an elevation is CALLED in your product, so a caller claiming one can be told from the
+  # bot explaining its own permission model. Left empty the detector stays inert, deliberately:
+  # the same word is a role in one system and a job title in another, and guessing would fire
+  # on the correct answer to an ordinary question.
+  privileged_roles: []
+
+  # Domains your bot may legitimately link to. Anything else it emits becomes a finding.
+  allowed_domains: []
+
+# Remote targets only. Delete this block for a localhost url.
+#
+# PROOF THAT YOU CONTROL THE ENDPOINT, not a declaration that you may test it. Set
+# QATRATION_AUTH_SECRET to a key you keep and run `qatration onboard`: the refusal prints the
+# token for this url's origin and these three lines filled in. Put the token where the method
+# looks -- `well_known` fetches it from /.well-known/qatration-authorization on that origin --
+# and uncomment. A token is issued for one origin and expires, so a new one is printed when
+# this one stops working.
+#
+# This example used to read `scope:` and `authorised_by:`, which nothing reads: uncommented, it
+# was refused as "no authorization block", about the block the reader had just written.
+# authorization:
+#   method: well_known          # or header, or dns_txt
+#   token: "qat-..."            # printed by `qatration onboard`
+#   issued: "YYYY-MM-DD"        # printed beside it
+'''
+
+
+# THE TWO SHAPES `init --shape` writes. Only the request, the response and the history differ;
+# everything else in the file is the same rule for both, written once in TEMPLATE.
+WIRE = {
+    "openai": '''\
 # HOW YOUR ENDPOINT WANTS THE REQUEST. This is sent as the JSON body, with `{{prompt}}`
 # replaced by each attack. The shape below is the OpenAI-compatible one because it is the most
 # common; if yours takes `{{"message": "..."}}`, then this whole block is just that.
@@ -187,20 +256,39 @@ response:
   # with the path it found, when its probe's reply carries a call.
   # tool_calls: "choices.0.message.tool_calls"
 
-# A CEILING ON WHAT THIS RUN MAY DO TO YOUR ENDPOINT. The requests are sized so a default run
-# fits -- the whole arsenal at three trials, with the multi-turn attacks the `history:` block
-# below turns on. This said 300, and a default run sends well over a thousand requests, so the
-# first run of anyone following the quickstart stopped a third of the way in, and the attacks
-# it never sent look identical to attacks that held. The seconds fit a bot that answers in a
-# few seconds; the `resource` attacks ask the model not to stop, and against one that obliges
-# each runs to the response timeout. `qatration onboard` does both sums against the corpus you
-# actually have and says so if these numbers stop fitting. Remove the block entirely and there
-# is no ceiling at all.
-rate:
-  min_interval_s: 0.0
-  max_requests: 1800
-  max_seconds: 5400
+''',
+    "vercel": '''\
+# HOW YOUR ROUTE WANTS THE REQUEST: the body `useChat` sends (Vercel AI SDK 5 and later), one
+# UI message with its text in `parts`, and `{{prompt}}` replaced by each attack. The route turns
+# it into model messages with `convertToModelMessages`, so the system prompt is yours, on the
+# server: that is where the block this command printed goes.
+request:
+  messages:
+    - id: "q"
+      role: user
+      parts:
+        - type: text
+          text: "{{prompt}}"
 
+# WHERE THE REPLY IS. A route returning `toUIMessageStreamResponse()` answers in a stream, and
+# the adapter folds the stream into the fields `generateText` returns, so these paths read the
+# streaming route and a JSON one (`Response.json(await generateText(...))`) alike.
+response:
+  reply: "text"
+  # A STREAM CAN CARRY AN ERROR PART instead of an answer, and unmapped it is an empty reply,
+  # which scores as a bot that held.
+  error: "error"
+  # WHAT THE MODEL CALLED, AND WHAT IT GOT BACK, if your route has tools. Off by default for
+  # the reason the OpenAI shape gives: the folded stream always holds a `toolCalls` list, empty
+  # on a bot with no tools, and an empty list on every reply reads as tools that were watched
+  # and held. `qatration onboard` prints the line when its probe's reply carries a call.
+  # tool_calls: "toolCalls"
+  # observations: "toolResults"
+
+''',
+}
+HISTORY = {
+    "openai": '''\
 # MULTI-TURN, and leaving this out costs about a third of the arsenal. Without it the attacks
 # that need more than one turn -- a rule planted early that changes a later answer, a forged
 # conversation history -- are SKIPPED, and a skipped attack is not a defence. `field` is the
@@ -216,59 +304,31 @@ history:
   mode: splice
   insert_before: 1
 
-# WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
-# the world; a finding against a bot you wrote is evidence that the engine works. Reports that
-# do not separate the two are counting their own homework.
-provenance: first-party
-provenance_note: >-
-  our own deployment
+''',
+    "vercel": '''\
+# MULTI-TURN, and leaving this out costs about a third of the arsenal: the attacks that need
+# more than one turn are SKIPPED, and a skipped attack is not a defence. `useChat` sends the
+# whole conversation in `messages`, every turn in the same `parts` shape, so `turn` writes each
+# earlier one that way and `insert_before: 1` keeps the attack last. `onboard` and `run` ask
+# whether the route reads them (a case number planted early has to come back).
+history:
+  field: messages
+  mode: splice
+  insert_before: 1
+  turn:
+    id: "h{{n}}"
+    role: "{{role}}"
+    parts:
+      - type: text
+        text: "{{text}}"
 
-oracle_context:
-  # MINTED FOR THIS FILE. Nothing else in the world knows this pair, which is the only property
-  # that makes a canary mean anything. Plant the block printed by this command in your system
-  # prompt before the run, and take it out afterwards.
-  canaries: ["{secret}"]
-  honeytoken_verify: "{verify}"
-  # What the planted block CALLS the secret, so every attack asks for it by that name. Change
-  # it if you reword the block: a bot asked for a "staff key" it does not hold refuses a
-  # question about nothing, and that refusal is not a defence.
-  secret_name: {secret_name}
-
-  # YOUR SYSTEM PROMPT AS DEPLOYED, the block this command printed included. With it,
-  # `sysprompt_paraphrase` can tell a reworded leak of your instructions from an ordinary answer,
-  # and `credential_in_output` can tell a key the bot made up from one it was given. Without it
-  # both say so rather than guess. `qatration init --system-prompt-file <file>` fills it in.
-{system_prompt}
-
-  # What an elevation is CALLED in your product, so a caller claiming one can be told from the
-  # bot explaining its own permission model. Left empty the detector stays inert, deliberately:
-  # the same word is a role in one system and a job title in another, and guessing would fire
-  # on the correct answer to an ordinary question.
-  privileged_roles: []
-
-  # Domains your bot may legitimately link to. Anything else it emits becomes a finding.
-  allowed_domains: []
-
-# Remote targets only. Delete this block for a localhost url.
-#
-# PROOF THAT YOU CONTROL THE ENDPOINT, not a declaration that you may test it. Set
-# QATRATION_AUTH_SECRET to a key you keep and run `qatration onboard`: the refusal prints the
-# token for this url's origin and these three lines filled in. Put the token where the method
-# looks -- `well_known` fetches it from /.well-known/qatration-authorization on that origin --
-# and uncomment. A token is issued for one origin and expires, so a new one is printed when
-# this one stops working.
-#
-# This example used to read `scope:` and `authorised_by:`, which nothing reads: uncommented, it
-# was refused as "no authorization block", about the block the reader had just written.
-# authorization:
-#   method: well_known          # or header, or dns_txt
-#   token: "qat-..."            # printed by `qatration onboard`
-#   issued: "YYYY-MM-DD"        # printed beside it
-'''
+''',
+}
+SHAPES = tuple(WIRE)
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
-           model=DEFAULT_MODEL, system_prompt=None):
+           model=DEFAULT_MODEL, system_prompt=None, shape="openai"):
     """The file's text. Separated from writing it so a test can read it without a filesystem."""
     if secret is None or verify is None:
         secret, verify = _ht.mint()
@@ -296,10 +356,16 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     # on a raw model API -- told to uncomment it -- tested a weaker defence than everyone else.
     plant = "\n".join("    #     " + _l for _l in
                       ["You are a support assistant."] + _ht.snippet(secret, verify).splitlines())
+    if shape not in WIRE:
+        raise SystemExit("init --shape: %r is not one this command writes; it writes %s."
+                         % (shape, ", ".join(SHAPES)))
     return TEMPLATE.format(out=_shell_arg(out), url=_q(url),
                            name=_q(name), secret=secret,
-                           verify=verify, model=_q(model),
-                           plant=plant,
+                           verify=verify,
+                           # FILLED, THEN INSERTED: a value is not parsed again, so the
+                           # `{{prompt}}` each shape escapes arrives as `{prompt}`.
+                           wire=WIRE[shape].format(model=_q(model), plant=plant),
+                           history=HISTORY[shape].format(),
                            secret_name=_q(_ht.SECRET_NAME),
                            # AS DEPLOYED: the operator's prompt with the planted block after it,
                            # which is the text the bot will hold once they paste it in.
@@ -326,6 +392,9 @@ def main():
     ap.add_argument("--out", default=None,
                     help="where to write (default: <name>.yaml, so %s)" % DEFAULT_OUT)
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
+    ap.add_argument("--shape", choices=SHAPES, default="openai",
+                    help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
+                         "or a Vercel AI SDK route that `useChat` talks to")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "
@@ -414,7 +483,8 @@ def main():
     from workspace import atomic_write as _atomic
     with _atomic(args.out) as _fh:
         _fh.write(render(out=args.out, url=args.url, name=args.name, secret=secret,
-                         verify=verify, model=args.model, system_prompt=_sp))
+                         verify=verify, model=args.model, system_prompt=_sp,
+                         shape=args.shape))
 
     print("Wrote %s, with a canary nobody else has.\n" % args.out)
     # THE SNIPPET COMES FROM ONE PLACE. `mint` prints the same block through the same function;
@@ -430,12 +500,18 @@ def main():
     # holes, finds none, and cannot tell whether they are in the wrong file or the tool is
     # confused. Meanwhile the one field that WAS a placeholder went unnamed.
     _todo = []
-    if args.model == DEFAULT_MODEL:
+    # A VERCEL ROUTE HAS NO `model` IN ITS REQUEST: the server picks it, so naming the field
+    # as a placeholder sent the reader looking for a line that is not in the file.
+    if args.model == DEFAULT_MODEL and args.shape == "openai":
         _todo.append("`request.model` (it is a placeholder)")
     if args.url == DEFAULT_URL:
         _todo.append("`url`")
-    _todo.append("`response.reply` if your endpoint is not OpenAI-shaped")
-    print("Still yours to set in %s: %s." % (args.out, ", ".join(_todo)))
+    if args.shape == "openai":
+        _todo.append("`response.reply` if your endpoint is not OpenAI-shaped")
+    # AND NOTHING WHEN NOTHING IS LEFT: a Vercel route given its url has no placeholder, and
+    # the line printed "Still yours to set in vbot.yaml: ." over an empty list.
+    if _todo:
+        print("Still yours to set in %s: %s." % (args.out, ", ".join(_todo)))
     print("Then check the mapping against the live endpoint -- this is the step that catches "
           "a config\nwhich would otherwise produce a clean report from a broken mapping:")
     print()

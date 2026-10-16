@@ -20,6 +20,15 @@ is not folded into a guess. `onboard` offers the SDK's tool-call paths from evid
 reply path that missed `text` beside `toolCalls` is told both lines rather than "the bot
 answered with a tool call instead of text", which left the reply path wrong for a second round.
 
+**Connecting your own bot: a stream, a turn in another shape, and a Vercel config in one command.**
+An OpenAI-compatible `stream: true` reply was a JSONDecodeError on every probe; its chunks are
+now folded into the body the endpoint answers without streaming, so the ordinary config reads
+it, a call's arguments joined across chunks. `history.turn` writes each earlier turn from a
+template (`{role}`, `{text}`, `{n}`), for an API whose messages are not `{role, content}`:
+`useChat` puts the text in `parts`, and a route like that could only be tested one turn at a
+time. `qatration init --shape vercel` writes the whole config for a Vercel AI SDK route, and
+`init` no longer prints "Still yours to set in vbot.yaml: ." when nothing is.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

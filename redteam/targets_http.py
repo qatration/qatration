@@ -685,6 +685,112 @@ _V4_FRAME = re.compile(r"^([0-9a-k]):(.*)$")
 _SSE_FIELDS = ("event:", "id:", "retry:", ":")
 
 
+def _stream_lines(text, cut=False):
+    """The non-blank lines of a streamed body, or None. `cut` means the body stopped at the size
+    cap: the last line may be half a part, and is dropped rather than failing the whole fold."""
+    if not isinstance(text, str):
+        return None
+    lines = [_l.rstrip("\r") for _l in text.split("\n")]
+    if cut and lines:
+        lines = lines[:-1]
+    return [_l for _l in lines if _l.strip()]
+
+
+def _sse_payloads(lines):
+    """-> the JSON object on every `data:` line, or None when the body is not server-sent events
+    of JSON objects. `[DONE]`, comments and the other SSE fields carry nothing to read."""
+    out = []
+    for _l in lines:
+        if _l.startswith("data:"):
+            _d = _l[5:].strip()
+            if _d == "[DONE]":
+                continue
+            try:
+                _p = json.loads(_d)
+            except ValueError:
+                return None
+            if not isinstance(_p, dict):
+                return None
+            out.append(_p)
+        elif not _l.startswith(_SSE_FIELDS):
+            return None
+    return out
+
+
+def openai_stream(text, cut=False):
+    """An OpenAI-shaped `stream: true` reply folded into the body it answers without streaming,
+    or None.
+
+    `{"choices": [{"message": {"role", "content", "tool_calls": [...]}, "finish_reason"}]}`
+
+    A SELF-HOSTED BOT USUALLY STREAMS. vLLM, LM Studio, llama.cpp, LiteLLM, OpenRouter and
+    every app that proxies one pass `stream: true` through, and a probe against any of them
+    was a JSONDecodeError: nothing measured. Folded into the non-streamed shape, the config
+    written for that shape (`choices.0.message.content`, `...tool_calls`) reads both.
+
+    THE ARGUMENTS ARRIVE IN PIECES, keyed by the call's `index`, and only the first piece
+    carries the name: joined per index, or a canary split across two chunks is in neither.
+    `content` stays null when no chunk carried any, as the API itself answers a reply that
+    only calls a tool. An `error` object mid-stream is kept at the top level, where a config's
+    `error: "error"` reads it.
+
+    RECOGNISED, NOT GUESSED: every data line must carry `choices` (a list) or `error`.
+    """
+    lines = _stream_lines(text, cut)
+    payloads = _sse_payloads(lines) if lines is not None else None
+    if not payloads or not all(isinstance(_p.get("choices"), list) or "error" in _p
+                               for _p in payloads):
+        return None
+    choices, error = {}, None
+    for _p in payloads:
+        if "error" in _p and not isinstance(_p.get("choices"), list):
+            error = _p["error"]
+            continue
+        for _c in _p["choices"]:
+            if not isinstance(_c, dict):
+                continue
+            _ch = choices.setdefault(_c.get("index", 0), {"content": None, "calls": {},
+                                                          "finish_reason": None})
+            _d = _c.get("delta") if isinstance(_c.get("delta"), dict) else {}
+            if isinstance(_d.get("content"), str):
+                _ch["content"] = (_ch["content"] or "") + _d["content"]
+            for _tc in _d.get("tool_calls") or []:
+                if not isinstance(_tc, dict):
+                    continue
+                _call = _ch["calls"].setdefault(_tc.get("index", len(_ch["calls"])),
+                                                {"id": None, "type": "function",
+                                                 "function": {"name": "", "arguments": ""}})
+                _fn = _tc.get("function") if isinstance(_tc.get("function"), dict) else {}
+                if _tc.get("id"):
+                    _call["id"] = _tc["id"]
+                # THE NAME ONCE: some servers repeat it on every chunk of the call, and joined
+                # it became `send_emailsend_email`, a tool nobody has.
+                if _fn.get("name") and not _call["function"]["name"]:
+                    _call["function"]["name"] = str(_fn["name"])
+                if isinstance(_fn.get("arguments"), str):
+                    _call["function"]["arguments"] += _fn["arguments"]
+            if _c.get("finish_reason"):
+                _ch["finish_reason"] = _c["finish_reason"]
+    # IN NUMERIC ORDER: sorted as strings, call 10 came before call 2.
+    _order = lambda k: (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+    out = {"choices": []}
+    for _i in sorted(choices, key=_order):
+        _ch = choices[_i]
+        _msg = {"role": "assistant", "content": _ch["content"]}
+        if _ch["calls"]:
+            _msg["tool_calls"] = [_ch["calls"][_k] for _k in sorted(_ch["calls"], key=_order)]
+        out["choices"].append({"index": _i, "message": _msg,
+                               "finish_reason": _ch["finish_reason"]})
+    if error is not None:
+        out["error"] = error
+    return out
+
+
+def _fold_stream(text, cut=False):
+    """A streamed body as the JSON object its route answers without streaming, or None."""
+    return vercel_stream(text, cut) or openai_stream(text, cut)
+
+
 def vercel_stream(text, cut=False):
     """A Vercel AI SDK stream folded into the object `generateText` returns, or None.
 
@@ -700,7 +806,7 @@ def vercel_stream(text, cut=False):
 
     RECOGNISED, NOT GUESSED: every line must be an SSE line whose data is a typed part (or
     `[DONE]`), or a v4 frame, and at least one part must be the SDK's. An OpenAI-shaped stream
-    has no `type` on its chunks and comes back None, so the caller's JSON error stands.
+    has no `type` on its chunks and comes back None, for `openai_stream` to read.
 
     `text` IS THERE ONLY WHEN THE STREAM SAID SOMETHING, a text part or a tool call. A stream
     that carried nothing but an error part would otherwise read as an empty reply, and an
@@ -711,30 +817,17 @@ def vercel_stream(text, cut=False):
     the middle of a call is a model that started sending a canary, and the deltas are where
     it is.
     """
-    if not isinstance(text, str):
+    lines = _stream_lines(text, cut)
+    if lines is None:
         return None
-    lines = [_l.rstrip("\r") for _l in text.split("\n")]
-    if cut and lines:
-        lines = lines[:-1]
-    parts, kinds = [], set()
-    for _l in lines:
-        if not _l.strip():
-            continue
-        if _l.startswith("data:"):
-            _d = _l[5:].strip()
-            if _d == "[DONE]":
-                continue
-            try:
-                _p = json.loads(_d)
-            except ValueError:
-                return None
-            if not isinstance(_p, dict) or not _ui_stream_part(_p.get("type")):
-                return None
-            parts.append(("v5", _p))
-            kinds.add("v5")
-        elif _l.startswith(_SSE_FIELDS):
-            continue
-        else:
+    payloads = _sse_payloads(lines)
+    if payloads is not None:
+        if not all(_ui_stream_part(_p.get("type")) for _p in payloads):
+            return None
+        parts = [("v5", _p) for _p in payloads]
+    else:
+        parts = []
+        for _l in lines:
             _m = _V4_FRAME.match(_l)
             if not _m:
                 return None
@@ -742,8 +835,7 @@ def vercel_stream(text, cut=False):
                 parts.append(("v4:" + _m.group(1), json.loads(_m.group(2))))
             except ValueError:
                 return None
-            kinds.add("v4")
-    if not parts or len(kinds) > 1:
+    if not parts:
         return None
     text_out, said, calls, results, errors = [], False, {}, [], []
 
@@ -901,7 +993,35 @@ WANTED_WORDS[str] = "a string"
 # does the scan instead and fails if these tuples and the `.get()` calls above disagree --
 # the derivation belongs where a mismatch is a red build, not where it is a broken install.
 RESPONSE_KEYS = ("reply", "tool_calls", "resolved", "observations", "error")
-HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "insert_before")
+HISTORY_KEYS = ("field", "mode", "role_key", "text_key", "user", "assistant", "insert_before",
+                "turn")
+# WHAT A `history.turn` TEMPLATE IS FILLED WITH: the role (after `user:`/`assistant:`), the
+# turn's text, and its position, for an API that wants an id on every message.
+_TURN_SLOT = re.compile(r"\{(role|text|n)\}")
+
+
+def _fill_turn(template, values):
+    """`history.turn` with its slots filled, in ONE pass over each string: a transcript that
+    quotes `{role}` is text, not a slot to fill a second time."""
+    if isinstance(template, str):
+        if template in ("{role}", "{text}", "{n}"):
+            return values[template[1:-1]]
+        return _TURN_SLOT.sub(lambda m: str(values[m.group(1)]), template)
+    if isinstance(template, dict):
+        return {k: _fill_turn(v, values) for k, v in template.items()}
+    if isinstance(template, list):
+        return [_fill_turn(v, values) for v in template]
+    return template
+
+
+def _has_slot(template, slot):
+    if isinstance(template, str):
+        return ("{%s}" % slot) in template
+    if isinstance(template, dict):
+        return any(_has_slot(v, slot) for v in template.values())
+    if isinstance(template, list):
+        return any(_has_slot(v, slot) for v in template)
+    return False
 
 CONFIG_ONLY_KEYS = ("adapter", "skip_in_fleet", "oracle_context", "authorization",
                     "provenance", "provenance_note", "caveat", "expect_build",
@@ -1140,6 +1260,21 @@ class HttpConfiguredTarget(Target):
                     "not applied by us: the transcript goes to the default field in the "
                     "default mode, and a third of the arsenal runs against a shape nobody "
                     "chose." % (name, ", ".join(repr(k) for k in _bad), ", ".join(HISTORY_KEYS)))
+            # `turn` IS THE WHOLE SHAPE OF A TURN, so the flat keys beside it would be a second
+            # rule for the same thing, one of them silently ignored. And a template with no
+            # `{text}` sends every prior turn empty: the chain attacks would go out as a
+            # transcript of blank messages and be judged as if the setup had been delivered.
+            if "turn" in history:
+                _t = history["turn"]
+                _both = sorted(k for k in ("role_key", "text_key") if k in history)
+                if not isinstance(_t, dict) or not _has_slot(_t, "text") or _both:
+                    raise SystemExit(
+                        "targets_http: `history.turn` for %r must be a mapping that holds "
+                        "\"{text}\" somewhere (and \"{role}\" where the role goes), and it "
+                        "replaces `role_key`/`text_key` rather than joining them%s. Without "
+                        "`{text}` every earlier turn of a multi-turn attack goes out empty."
+                        % (name, " (this config also sets %s)" % ", ".join(_both)
+                           if _both else ""))
         self.history = history or None
         # `mode` DECIDES WHETHER THE ATTACK IS IN THE REQUEST, so an unrecognised value cannot
         # fall through to a default. `replace` overwrites the request's message list with the
@@ -1307,10 +1442,19 @@ class HttpConfiguredTarget(Target):
             return body
         h = self.history
         field = h.get("field", "history")
-        turns = [{h.get("role_key", "role"): (h.get("user", "user") if t["role"] == "user"
-                                              else h.get("assistant", "assistant")),
-                  h.get("text_key", "content"): t["content"]}
-                 for t in history]
+        _role = lambda t: (h.get("user", "user") if t["role"] == "user"
+                           else h.get("assistant", "assistant"))
+        # A TURN THAT IS NOT `{role, content}`. The Vercel AI SDK's `useChat` sends every
+        # message as `{"role": ..., "parts": [{"type": "text", "text": ...}]}`, Gemini as
+        # `{"role": "model", "parts": [{"text": ...}]}`; flat keys cannot say either, so a
+        # route like that could be tested one turn at a time and no other way.
+        if h.get("turn") is not None:
+            turns = [_fill_turn(h.get("turn"), {"role": _role(t), "text": t["content"], "n": i})
+                     for i, t in enumerate(history)]
+        else:
+            turns = [{h.get("role_key", "role"): _role(t),
+                      h.get("text_key", "content"): t["content"]}
+                     for t in history]
         # TWO SHAPES, and the second is the one almost every deployment has. A bespoke API takes
         # the transcript in a field of its own; an OpenAI-compatible one has a single
         # `messages` list where the system turn comes first and the new user turn comes last,
@@ -1386,7 +1530,7 @@ class HttpConfiguredTarget(Target):
                           file=sys.stderr)
                     # A STREAM IS READ AS FAR AS IT GOT, part by part, which is the cut done
                     # right for a body with no closing brace to repair.
-                    raw = vercel_stream(_decoded(_body, r), cut=True)
+                    raw = _fold_stream(_decoded(_body, r), cut=True)
                     if raw is None:
                         raw = parse_capped(_decoded(_body, r))
                     if raw is None:
@@ -1409,8 +1553,8 @@ class HttpConfiguredTarget(Target):
                     try:
                         raw = json.loads(_text)
                     except ValueError:
-                        # A Vercel AI SDK stream, or the JSON error it was.
-                        raw = vercel_stream(_text)
+                        # A stream this adapter can fold, or the JSON error it was.
+                        raw = _fold_stream(_text)
                         if raw is None:
                             raise
             # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
