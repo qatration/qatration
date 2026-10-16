@@ -1334,6 +1334,129 @@ def _every_item(check):
           _rs('{"recipient_id": "u", "text": "a"}\n{"text": "b"}\n') is None)
 
 
+def _oauth_client_credentials(check):
+    """`auth: oauth2_client_credentials`: a token from the identity provider, by RFC 6749 4.4,
+    kept until it runs out, fetched again on a 401, and every failure said as one."""
+    import json as _j, threading as _th, base64 as _b64, os as _os, time as _tm
+    from urllib.parse import parse_qs as _pq
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    _st = {"issued": 0, "ttl": 3600, "valid": set(), "idp": 200, "forms": [], "auths": []}
+
+    class _H(_BH):
+        def _send(self, code, obj):
+            body = _j.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+            if self.path == "/token":
+                _st["forms"].append({k: v[0] for k, v in _pq(raw.decode()).items()})
+                _st["auths"].append(self.headers.get("Authorization"))
+                if _st["idp"] != 200:
+                    return self._send(_st["idp"], {"error": "invalid_client"})
+                _st["issued"] += 1
+                tok = "tok-%d" % _st["issued"]
+                _st["valid"].add(tok)
+                return self._send(200, {"access_token": tok, "token_type": "Bearer",
+                                        "expires_in": _st["ttl"]})
+            tok = (self.headers.get("Authorization") or "").replace("Bearer ", "")
+            if tok not in _st["valid"]:
+                return self._send(401, {"error": "invalid token"})
+            return self._send(200, {"reply": "Hello with " + tok})
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _os.environ["QAT_TEST_CID"], _os.environ["QAT_TEST_CSEC"] = "bot client", "s3cr:et"
+    _auth = {"type": "oauth2_client_credentials", "token_url": base + "/token",
+             "client_id": "${QAT_TEST_CID}", "client_secret": "${QAT_TEST_CSEC}",
+             "scope": "api://bot/.default"}
+    try:
+        _t = _HT(url=base + "/chat", name="oauth", request={"message": "{prompt}"},
+                 response={"reply": "reply"}, auth=dict(_auth),
+                 env=["QAT_TEST_CID", "QAT_TEST_CSEC"], timeout_s=5)
+        _p1, _p2 = _t.send("hi"), _t.send("again")
+        check("a token is fetched by the client-credentials grant and sent as a bearer",
+              _p1.output == "Hello with tok-1" and not _p1.error
+              and _st["forms"][0] == {"grant_type": "client_credentials",
+                                      "scope": "api://bot/.default"},
+              "output=%r error=%r form=%r" % (_p1.output, _p1.error, _st["forms"][:1]))
+        check("...with the client authenticated by HTTP Basic, each half form-encoded first "
+              "(RFC 6749 2.3.1)", _st["auths"][0] == "Basic " + _b64.b64encode(
+                  b"bot%20client:s3cr%3Aet").decode(), repr(_st["auths"][:1]))
+        check("...and kept for the next request, not fetched again",
+              _p2.output == "Hello with tok-1" and _st["issued"] == 1, repr((_p2.output, _st["issued"])))
+        _st["valid"].clear()
+        _p3 = _t.send("revoked")
+        check("a 401 with a fetched token fetches a new one, once, and the probe is answered",
+              _p3.output == "Hello with tok-2" and _st["issued"] == 2 and not _p3.error,
+              "output=%r error=%r" % (_p3.output, _p3.error))
+        _st["ttl"] = 30
+        _t._token = None
+        _t.send("short-lived")
+        _issued = _st["issued"]
+        _t.send("after the minute")
+        check("a token with under a minute to live is fetched again before it is sent",
+              _st["issued"] == _issued + 1, repr((_issued, _st["issued"])))
+        _st["idp"] = 401
+        _t._token = None
+        _p4 = _t.send("hi")
+        check("an identity provider that refuses is AuthFailed in its own words, nothing sent",
+              bool(_p4.error) and _p4.error.startswith("AuthFailed") and "invalid_client" in _p4.error
+              and not _p4.output, "error=%r" % _p4.error)
+        _st["idp"] = 200
+        _post = _HT(url=base + "/chat", name="oauth-post", request={"message": "{prompt}"},
+                    response={"reply": "reply"}, auth=dict(_auth, client_auth="post"),
+                    env=["QAT_TEST_CID", "QAT_TEST_CSEC"], timeout_s=5)
+        _post.send("hi")
+        check("...and `client_auth: post` sends the client in the form, not a Basic header",
+              _st["forms"][-1].get("client_secret") == "s3cr:et" and _st["auths"][-1] is None,
+              repr((_st["forms"][-1], _st["auths"][-1])))
+    finally:
+        srv.shutdown()
+        _os.environ.pop("QAT_TEST_CID", None)
+        _os.environ.pop("QAT_TEST_CSEC", None)
+
+    # EACH REFUSED FOR ITS OWN REASON, with the variables set: unset, every one of these was
+    # refused for the unset variable, and the checks passed with the rules deleted.
+    _os.environ["QAT_TEST_CID"], _os.environ["QAT_TEST_CSEC"] = "a", "b"
+    try:
+        for _label, _a, _h, _says in (
+                ("a token url that is plain http off this machine",
+                 dict(_auth, token_url="http://login.example.com/token"), None, "not https"),
+                ("a missing client_secret",
+                 {k: v for k, v in _auth.items() if k != "client_secret"}, None,
+                 "missing client_secret"),
+                ("a misspelled key", dict(_auth, scopes="x"), None, "'scopes'"),
+                ("an Authorization header beside it", dict(_auth), {"Authorization": "Bearer x"},
+                 "sets `Authorization` in `headers:`"),
+                ("an unknown client_auth", dict(_auth, client_auth="jwt"), None, "client_auth")):
+            try:
+                _HT(url="http://127.0.0.1:9/chat", name="o", request={"message": "{prompt}"},
+                    response={"reply": "r"}, auth=_a, headers=_h,
+                    env=["QAT_TEST_CID", "QAT_TEST_CSEC"])
+                _said = ""
+            except SystemExit as e:
+                _said = str(e)
+            check("%s is refused when the config is read, for that reason" % _label,
+                  _says in _said, repr(_said)[:200])
+        _ok = _HT(url="http://127.0.0.1:9/chat", name="o", request={"message": "{prompt}"},
+                  response={"reply": "r"}, auth=dict(_auth), env=["QAT_TEST_CID", "QAT_TEST_CSEC"])
+        check("...while the same config with none of those builds",
+              _ok.auth["client_id"] == "a" and _ok.auth["client_secret"] == "b")
+    finally:
+        _os.environ.pop("QAT_TEST_CID", None)
+        _os.environ.pop("QAT_TEST_CSEC", None)
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -3314,6 +3437,7 @@ def main():
     _dify_and_server_ids(check)
     _flowise_and_langflow(check)
     _every_item(check)
+    _oauth_client_credentials(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

@@ -167,6 +167,27 @@ history:
 It replaces `role_key` and `text_key` rather than joining them, and a template with no
 `{text}` is refused: every earlier turn of a multi-turn attack would go out empty.
 
+**A bot behind an identity provider** takes a bearer token that lives about an hour, and a
+sweep outlives it: pasted into `headers:`, every request after the hour is a 401 and the rest
+of the run is unmeasured. `auth:` fetches it by the client-credentials grant (RFC 6749, 4.4),
+keeps it until a minute before `expires_in`, and fetches a new one once on a 401:
+
+```yaml
+env: [IDP_CLIENT_ID, IDP_CLIENT_SECRET]
+auth:
+  type: oauth2_client_credentials
+  token_url: "https://login.example.com/oauth2/v2.0/token"
+  client_id: "${IDP_CLIENT_ID}"
+  client_secret: "${IDP_CLIENT_SECRET}"
+  scope: "api://my-bot/.default"     # or audience:, as the provider wants
+  # client_auth: post                 # the secret in the form; HTTP Basic by default
+```
+
+The token url must be https unless it is on this machine, because the secret travels to it; a
+config that also sets `Authorization` in `headers:` is refused; an identity provider that
+gives no token makes the probe `AuthFailed`, with its own words, and nothing is sent to the
+target. On the hosted service the token url is held to the same network policy as `url:`.
+
 **`*` in a path is every item of a list.** A bot that answers in several messages is read
 whole: Rasa's REST channel returns `[{"text": ...}, {"text": ...}]`, and `reply: "*.text"`
 joins them all, where `0.text` read the first and dropped the rest (a list item with no text,

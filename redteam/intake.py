@@ -218,6 +218,13 @@ def submit(root, body, policy=None, wake=None):
         # Refused BEFORE the queue, so a job that cannot legally run is never accepted. A queue
         # full of jobs that will abort is a queue whose depth means nothing.
         return _problem(422, f"refusing {url!r}: {why}")
+    # AND THE TOKEN ENDPOINT, which this service would POST to as well: a submitted
+    # `auth.token_url` at the metadata address is the same SSRF as a `url:` there.
+    _auth = cfg.get("auth") if isinstance(cfg.get("auth"), dict) else {}
+    if _auth.get("token_url"):
+        why = policy(str(_auth["token_url"]))
+        if why:
+            return _problem(422, f"refusing auth.token_url {_auth['token_url']!r}: {why}")
 
     # NO DEFAULT. This read `cfg.get("name") or "target"`, so a submission with no name was
     # silently renamed rather than refused — and `targets_http` then refused it anyway, on the

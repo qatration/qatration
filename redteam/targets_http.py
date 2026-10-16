@@ -1680,11 +1680,12 @@ class HttpConfiguredTarget(Target):
             ("auth", auth, dict,
              # THE EXAMPLE IS ONE THIS ADAPTER TAKES: it said `{type: bearer, token: ${KEY}}`,
              # and a reader who copied it was refused a second time, as "auth.type 'bearer'
-             # is not supported". A bearer token is a header.
+             # is not supported". A fixed bearer token is a header.
              "It is a mapping with a `type:`, e.g. `auth: {type: sigv4, service: bedrock, "
              "region: us-east-1, access_key: ${AWS_ACCESS_KEY_ID}, secret_key: "
-             "${AWS_SECRET_ACCESS_KEY}}`. A bearer token is not `auth:`, it is a header: "
-             "`headers: {Authorization: \"Bearer ${KEY}\"}`."),
+             "${AWS_SECRET_ACCESS_KEY}}`, or `type: oauth2_client_credentials` with a "
+             "token_url, client_id and client_secret. A fixed bearer token is not `auth:`, it "
+             "is a header: `headers: {Authorization: \"Bearer ${KEY}\"}`."),
             # A STRING IS ITERABLE, WHICH IS WHY THIS ONE IS WORTH A SENTENCE OF ITS OWN.
             # `env: HOME` was ACCEPTED and became the allow-list ['H', 'O', 'M', 'E'], so
             # `${HOME}` in a header matched nothing, the header went out with the literal
@@ -2036,13 +2037,17 @@ class HttpConfiguredTarget(Target):
         # is why it needs no entry here — and why `_seen_success` does, since that token expires
         # in about an hour and a sweep can outlive it.
         self.auth = dict(auth or {})
-        if self.auth:
+        self._token, self._token_until, self._token_retry = None, 0.0, False
+        if self.auth and str(self.auth.get("type") or "").lower() == "oauth2_client_credentials":
+            self.auth["type"] = "oauth2_client_credentials"
+            self._oauth_config(name)
+        elif self.auth:
             kind = str(self.auth.get("type") or "").lower()
             if kind != "sigv4":
                 raise SystemExit(
-                    "targets_http: auth.type %r is not supported. The only computed credential "
-                    "here is `sigv4`; everything else belongs in `headers:` as ${ENV}."
-                    % self.auth.get("type"))
+                    "targets_http: auth.type %r is not supported. The computed credentials "
+                    "here are `sigv4` and `oauth2_client_credentials`; a fixed token belongs in "
+                    "`headers:` as ${ENV}." % self.auth.get("type"))
             for need in ("service", "region", "access_key", "secret_key"):
                 if not self.auth.get(need):
                     raise SystemExit("targets_http: auth.%s is required for sigv4" % need)
@@ -2124,6 +2129,106 @@ class HttpConfiguredTarget(Target):
             body[field] = turns
         return body
 
+    # --- a token from the caller's identity provider ----------------------------------------
+    _OAUTH_KEYS = ("type", "token_url", "client_id", "client_secret", "scope", "audience",
+                   "client_auth")
+
+    def _oauth_config(self, name):
+        """`auth: {type: oauth2_client_credentials, token_url, client_id, client_secret}`.
+
+        A BOT BEHIND AN IDENTITY PROVIDER takes a bearer token that lives an hour (Azure AD,
+        Okta, Auth0), and a sweep outlives it: pasted into `headers:`, every request after the
+        hour was a 401 and half the arsenal came back unmeasured. The token is fetched here by
+        the client-credentials grant (RFC 6749, 4.4), kept until shortly before `expires_in`
+        runs out, and fetched again once on a 401.
+
+        THE SECRET GOES ONLY WHERE IT IS NAMED. `client_id` and `client_secret` expand from
+        `env:` alone; the token url must be https unless it is this machine, because the
+        secret travels in the request; and a config that also sets `Authorization` in
+        `headers:` is refused, because two rules would write one header.
+        """
+        import authorization as _az
+        _bad = sorted(k for k in self.auth if k not in self._OAUTH_KEYS)
+        _miss = [k for k in ("token_url", "client_id", "client_secret")
+                 if not str(self.auth.get(k) or "").strip()]
+        if _bad or _miss:
+            raise SystemExit(
+                "targets_http: auth for %r is oauth2_client_credentials, which takes token_url, "
+                "client_id and client_secret (and optionally scope, audience and client_auth: "
+                "basic|post)%s%s." % (
+                    name, "; it is missing %s" % ", ".join(_miss) if _miss else "",
+                    "; it also names %s, which this adapter does not read"
+                    % ", ".join(map(repr, _bad)) if _bad else ""))
+        _tu = str(self.auth["token_url"])
+        _why = _az.url_problem(_tu)
+        if _why or not (_tu.lower().startswith("https://") or _az.is_local(_tu)):
+            raise SystemExit(
+                "targets_http: auth.token_url %r for %r %s." % (
+                    _tu, name, _why or "is not https, and the client secret would travel to it "
+                                       "in the clear; only a token endpoint on this machine may "
+                                       "be plain http"))
+        if str(self.auth.get("client_auth") or "basic").lower() not in ("basic", "post"):
+            raise SystemExit("targets_http: auth.client_auth for %r is %r; it is `basic` (the "
+                             "default, RFC 6749 2.3.1) or `post`." % (name, self.auth["client_auth"]))
+        if any(str(k).lower() == "authorization" for k in self.headers):
+            raise SystemExit(
+                "targets_http: %r sets `Authorization` in `headers:` and fetches a token with "
+                "`auth:` as well. One of them would overwrite the other on every request; keep "
+                "the one you mean." % name)
+        for k in ("client_id", "client_secret"):
+            self.auth[k] = expand_env(self.auth[k], "auth.%s" % k, self.env_allowed)
+
+    def _bearer(self):
+        """-> a token that has not run out, fetched when there is none. Raises RuntimeError with
+        the identity provider's own words (bounded, never parsed again) when it gives none."""
+        import base64 as _b64
+        import urllib.parse as _up
+        if self._token and time.time() < self._token_until:
+            return self._token
+        a = self.auth
+        form = {"grant_type": "client_credentials"}
+        for k in ("scope", "audience"):
+            if a.get(k):
+                form[k] = str(a[k])
+        hdrs = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
+        if str(a.get("client_auth") or "basic").lower() == "post":
+            form.update(client_id=a["client_id"], client_secret=a["client_secret"])
+        else:
+            # RFC 6749 2.3.1: each half form-urlencoded, then joined and base64'd.
+            _pair = "%s:%s" % (_up.quote(a["client_id"], safe=""),
+                               _up.quote(a["client_secret"], safe=""))
+            hdrs["Authorization"] = "Basic " + _b64.b64encode(_pair.encode()).decode()
+        req = urllib.request.Request(str(a["token_url"]), method="POST", headers=hdrs,
+                                     data=_up.urlencode(form).encode())
+        try:
+            with self._opener.open(req, timeout=self.timeout) as r:
+                body, _over = read_capped(r, limit=64 * 1024, seconds=self.timeout)
+            got = json.loads(_decoded(body, r))
+        except urllib.error.HTTPError as e:
+            try:
+                said = (e.read(MAX_ERROR_BODY) or b"").decode("utf-8", "replace")
+            except Exception:
+                said = ""
+            raise RuntimeError("the token endpoint answered HTTP %d (%s)"
+                               % (e.code, " ".join(said.split())[:200]))
+        except Exception as e:
+            raise RuntimeError("the token endpoint could not be read: %s: %s"
+                               % (type(e).__name__, str(e)[:200]))
+        tok = got.get("access_token") if isinstance(got, dict) else None
+        if not isinstance(tok, str) or not tok.strip():
+            raise RuntimeError("the token endpoint answered without an access_token (keys: %s)"
+                               % (sorted(got)[:8] if isinstance(got, dict) else type(got).__name__))
+        _ttl = got.get("expires_in")
+        try:
+            _ttl = float(_ttl)
+        except (TypeError, ValueError):
+            _ttl = None
+        # A MINUTE EARLY, so a token is not sent in the second it runs out; with no `expires_in`
+        # it is kept until a 401 says otherwise.
+        self._token = tok
+        self._token_until = time.time() + max(0.0, _ttl - 60) if _ttl else float("inf")
+        return tok
+
     def send(self, prompt, history=None):
         prompt = payload(prompt)
         if not self.rate.take():
@@ -2141,7 +2246,16 @@ class HttpConfiguredTarget(Target):
         data = json.dumps(self._body(prompt, history)).encode("utf-8")
         headers = {k: str(v).replace(SESSION_SLOT, self._session) for k, v in self.headers.items()}
         url = str(self.url).replace(SESSION_SLOT, self._session)
-        if self.auth:
+        if self.auth.get("type") == "oauth2_client_credentials":
+            try:
+                headers["Authorization"] = "Bearer " + self._bearer()
+            except RuntimeError as _e_tok:
+                # NOT A DEFENCE AND NOT A TARGET ERROR: nothing reached the target, and the
+                # sentence says which half of the setup failed.
+                return Probe(prompt=prompt, output="",
+                             error="AuthFailed: no token, so nothing was sent to the target: %s"
+                                   % _e_tok)
+        elif self.auth:
             import signing
             headers.update(signing.authorization(
                 self.method, url, headers, data,
@@ -2353,6 +2467,15 @@ class HttpConfiguredTarget(Target):
                          observations=obs, resolved=resolved, reply_bytes=_over or None,
                          seconds=round(time.time() - t0, 1))
         except Exception as e:
+            # A TOKEN THE TARGET NO LONGER TAKES is fetched again, once: revoked or rotated
+            # before its `expires_in`, it would otherwise turn every probe after it into a 401.
+            if (isinstance(e, urllib.error.HTTPError) and e.code == 401 and self._token
+                    and not self._token_retry):
+                self._token, self._token_retry = None, True
+                try:
+                    return self.send(prompt, history)
+                finally:
+                    self._token_retry = False
             detail = ""
             if isinstance(e, urllib.error.HTTPError):
                 detail = f" {e.code}"

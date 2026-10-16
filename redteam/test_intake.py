@@ -341,6 +341,16 @@ def main():
             code, obj = intake.submit(root, body(cfg={"url": bad}))
             check(f"hosted: {bad} is refused", code in (400, 422), f"{code} {obj}")
 
+        # THE TOKEN ENDPOINT IS AN ADDRESS THE SERVICE REACHES TOO, and judged by the same
+        # policy: a target url that passes does not carry a token url that would not.
+        def _only_metadata_refused(u):
+            return "the metadata address" if "169.254." in str(u) else None
+        code, obj = intake.submit(root, body(cfg={"auth": {
+            "type": "oauth2_client_credentials", "token_url": "http://169.254.169.254/token",
+            "client_id": "a", "client_secret": "b"}}), policy=_only_metadata_refused)
+        check("hosted: an auth.token_url the policy refuses is refused, by name",
+              code == 422 and "auth.token_url" in json.dumps(obj), f"{code} {obj}")
+
         # An SSRF refusal must happen BEFORE the queue. A queue full of jobs that cannot
         # legally run is a queue that reads as demand, and each one still costs a worker a
         # claim and a release.

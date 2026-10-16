@@ -93,6 +93,15 @@ response's message, every Rasa message), the API key each wants as the header it
 conversation the app keeps under `{session}`, or under the id Dify names, so the multi-turn
 attacks are sent as real turns of one conversation per trial.
 
+**A bot behind an identity provider: `auth: oauth2_client_credentials`.** A bearer token from
+Azure AD, Okta or Auth0 lives about an hour, and pasted into `headers:` it ran out mid-sweep and
+left the rest of the run unmeasured. The adapter now fetches it by the client-credentials grant,
+keeps it until a minute before it expires, and fetches a new one once on a 401. The secret only
+expands from `env:`, travels only to an https token url (or one on this machine), never beside
+an `Authorization` header of the config's own, and on the hosted service the token url is held
+to the network policy `url:` is. A provider that gives no token is `AuthFailed` in its own words,
+with nothing sent to the target.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a
