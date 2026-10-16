@@ -99,24 +99,50 @@ def _unmapped_calls(raw, cfg):
     # LangGraph's `{"messages": [human, ai, tool, ai, tool, final]}` -- holds calls in some of
     # its items, and which ones moves from reply to reply; `messages.1.tool_calls` pasted in
     # reads the first turn's call and never the later one that carried the canary, and the
-    # channel reads as working because it found something. Offered only when every list index
-    # on the path is the only item of its list (OpenAI's `choices.0`). Found by an
-    # independent review.
-    from targets_http import dig
+    # channel reads as working because it found something. Found by an independent review.
+    #
+    # SO THE INDEX BECOMES `*`, every item: this said no single path covered the shape and sent
+    # the operator to write a Python adapter, until `*` made one path that does. An index into
+    # a list of one (OpenAI's `choices.0`) stays the index it is.
+    from targets_http import dig, _pairs as _pp, _probe_pair as _keep
     parts = path.split(".")
     for i, seg in enumerate(parts):
         if seg.isdigit():
             above = dig(raw, ".".join(parts[:i])) if i else raw
             if isinstance(above, list) and len(above) > 1:
-                where = ".".join(parts[:i]) or "the body"
-                return (None, said,
-                        "These calls sit in item %s of a list of %d (`%s`), and a path names "
-                        "one item: mapped as `%s`, a run would read that item and never the "
-                        "others, which hold different calls on different replies. No single "
-                        "`tool_calls` path covers this shape; a Python adapter that collects "
-                        "the calls from every item does."
-                        % (seg, len(above), where, path))
+                parts[i] = "*"
+    if "*" in parts:
+        path = ".".join(parts)
+        calls = [x for x in _pp(dig(raw, path)) if _keep(x) is not None]
+        said = ", ".join("%s(%s)" % (n, str(a)[:30]) for n, a in calls[:3])
     return (path, said, "Add this line under `response:`:\n            tool_calls: \"%s\"" % path)
+
+
+def _reply_hint(raw):
+    """The `response.reply` worth trying in a body whose configured path found nothing, or None.
+
+    A BODY THAT IS A LIST OF MESSAGES is every message: a Rasa bot answers
+    `[{"text": ...}, {"text": ...}]`, and the strings listed under the problem offered `0.text`,
+    which reads the first message and drops the one after it, where a leak may well sit.
+    """
+    if isinstance(raw, list) and len([x for x in dig(raw, "*.text") or []
+                                      if isinstance(x, str) and x.strip()]) > 1:
+        return "*.text", "every message's text"
+    for p2 in COMMON:
+        v = dig(raw, p2)
+        if isinstance(v, str) and v.strip():
+            return p2, "it holds text"
+    return None
+
+
+def _reply_notes(raw):
+    """What `onboard` says under a reply path that found nothing: the path worth trying, and the
+    strings the body does hold. One rule for both places a reply comes back empty."""
+    if raw is None:
+        return []
+    _hint = _reply_hint(raw)
+    return (([f'try `response.reply: "{_hint[0]}"` — {_hint[1]}'] if _hint else [])
+            + [f"  {p} = {v[:70]!r}" for p, v in _strings(raw)[:4]])
 
 
 def _prose(s):
@@ -436,14 +462,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
             f"a mapping problem rather than a connectivity one — and it would not have failed "
             f"the run: an unmapped reply is an empty reply, and an empty reply scores as a "
             f"target that held.")
-        if raw is not None:
-            for p2 in COMMON:
-                v = dig(raw, p2)
-                if isinstance(v, str) and v.strip():
-                    rep["notes"].append(f'try `response.reply: "{p2}"` — it holds text')
-                    break
-            for p2, v in _strings(raw)[:4]:
-                rep["notes"].append(f"  {p2} = {v[:70]!r}")
+        rep["notes"] += _reply_notes(raw)
         if _calls and _calls[0]:
             rep["notes"].append("and it holds tool calls (%s): %s" % (_calls[1], _calls[2]))
             rep["tool_calls_path"] = _calls[0]
@@ -479,7 +498,6 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # The important branch. An empty reply is not an error anywhere downstream — it is a
         # bot that said nothing, which every detector scores as a bot that held.
         raw = getattr(probe, "raw", None)
-        found = _strings(raw) if raw is not None else []
         path = (cfg.get("response") or {}).get("reply")
         # THE SAME AGENT, on an endpoint that writes `content: ""` beside the call: the reply
         # resolves, to nothing, and a run would score the call it cannot see as silence.
@@ -499,13 +517,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
             f"a mapping problem, not a connectivity one — and it would NOT have failed the run: "
             f"an empty reply scores as a target that said nothing, which scores as a target that "
             f"held.")
-        if raw is not None:
-            for p in COMMON:
-                if isinstance(dig(raw, p), str) and dig(raw, p).strip():
-                    rep["notes"].append(f"try `response.reply: \"{p}\"` — it holds text")
-                    break
-            for p, v in found[:4]:
-                rep["notes"].append(f"  {p} = {v[:70]!r}")
+        rep["notes"] += _reply_notes(raw)
         return False, rep
 
     rep["reply"] = reply[:200] or "(a tool call: %s)" % ", ".join(n for n, _a in _acted[:3])

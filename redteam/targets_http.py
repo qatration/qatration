@@ -185,8 +185,34 @@ def dig(data, path):
     genuinely empty are different facts, and the caller turns the first into an error rather
     than into a bot that said nothing.
     """
-    cur = data
-    for step in str(path).split("."):
+    return _dig(data, str(path).split("."))
+
+
+def _dig(cur, steps):
+    """`dig` over a list of steps, where `*` is EVERY item of a list.
+
+    `*` COLLECTS: the rest of the path is read in each item, the items that lack it are skipped,
+    and what was found comes back as one list, a list found in an item spread into it. A bot
+    that answers in several messages (`[{"text": ...}, {"text": ...}]`) is `*.text`, every one
+    of them, where `0.text` read the first and dropped the rest; a transcript that carries calls
+    in several of its turns is `messages.*.tool_calls`, where one index read one turn's calls.
+    A list that held nothing at that path is an empty list, not None: the path worked and the
+    reply had nothing there, which is a reply with no call, not a mapping that missed.
+    """
+    for i, step in enumerate(steps):
+        if step == "*":
+            if not isinstance(cur, list):
+                return None
+            got = []
+            for item in cur:
+                v = _dig(item, steps[i + 1:])
+                if v is None:
+                    continue
+                if isinstance(v, list):
+                    got.extend(v)
+                else:
+                    got.append(v)
+            return got
         if isinstance(cur, list):
             if not step.lstrip("-").isdigit():
                 return None
@@ -1257,6 +1283,30 @@ def langflow_stream(text, cut=False):
     return out
 
 
+def rasa_stream(text, cut=False):
+    """A Rasa REST channel answered with `?stream=true`, folded into the list it returns
+    without it, or None: `[{"recipient_id", "text"}, ...]`, so `*.text` reads both.
+
+    NOT SERVER-SENT EVENTS AND NOT TOKENS: each line is one whole bot message, the same object
+    the unstreamed list holds, so the fold is the list of them.
+
+    RECOGNISED, NOT GUESSED: every line is a JSON object carrying `recipient_id`.
+    """
+    lines = _stream_lines(text, cut)
+    if not lines:
+        return None
+    messages = []
+    for _l in lines:
+        try:
+            _o = json.loads(_l)
+        except ValueError:
+            return None
+        if not (isinstance(_o, dict) and "recipient_id" in _o):
+            return None
+        messages.append(_o)
+    return messages
+
+
 def stream_kind(text):
     """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
     None. Only what the folds refused reaches this, so it decides nothing about the reply: it
@@ -1289,6 +1339,7 @@ def _folds():
             ("Flowise", flowise_stream),
             ("Dify", dify_stream),
             ("Langflow", langflow_stream),
+            ("Rasa (stream=true)", rasa_stream),
             ("Ollama", ollama_stream))
 
 
@@ -1528,9 +1579,14 @@ _REQUEST_SLOT = re.compile(r"\{(prompt|session)\}")
 
 
 def new_session():
-    """A conversation id nobody else has: `qat-` and 16 hex digits, fresh at every `reset`."""
-    import secrets as _secrets
-    return "qat-" + _secrets.token_hex(8)
+    """A conversation id nobody else has, fresh at every `reset`: a UUID4.
+
+    A UUID, NOT A PREFIXED TOKEN: `qat-` and hex is an id a server that validates its ids
+    refuses, and LangGraph's thread id, for one, is a UUID. Every server that takes a string
+    takes this one too.
+    """
+    import uuid as _uuid
+    return str(_uuid.uuid4())
 
 
 # WHAT A `history.turn` TEMPLATE IS FILLED WITH: the role (after `user:`/`assistant:`), the

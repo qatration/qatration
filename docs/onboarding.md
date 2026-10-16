@@ -167,6 +167,18 @@ history:
 It replaces `role_key` and `text_key` rather than joining them, and a template with no
 `{text}` is refused: every earlier turn of a multi-turn attack would go out empty.
 
+**`*` in a path is every item of a list.** A bot that answers in several messages is read
+whole: Rasa's REST channel returns `[{"text": ...}, {"text": ...}]`, and `reply: "*.text"`
+joins them all, where `0.text` read the first and dropped the rest (a list item with no text,
+an image, is skipped). A transcript with calls in several turns is one path too: LangGraph's
+`/runs/wait` returns the run's `{"messages": [...]}`, read with `reply: "messages.-1.content"`
+and `tool_calls: "messages.*.tool_calls"`, every turn's calls. `onboard` offers both from
+evidence. A LangGraph thread is a conversation the server keeps: `url:
+".../threads/{session}/runs/wait"` with `if_not_exists: create` in the request makes one thread
+per trial, the turns of a chain in the same one; `{session}` is a UUID, which a thread id must
+be. Rasa's `?stream=true`, a line per whole message, is read as the list it streams.
+LangServe's `/stream` is not read: the project is deprecated, and its `/invoke` answers JSON.
+
 **A key this adapter does not read is refused, at every level.** `respones:` at the top,
 `tool_call:` inside `response:`, `feild:` inside `history:` — all three used to build a target
 that ran the whole arsenal and reported a clean bill, because the mapping they were meant to

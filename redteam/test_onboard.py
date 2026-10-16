@@ -310,6 +310,9 @@ def main():
             "vercel": {"text": "Let me look that order up for you right away.",
                        "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
                                       "toolName": "lookup_order", "input": {"id": "7"}}]},
+            # A BOT THAT ANSWERS IN SEVERAL MESSAGES, as Rasa's REST channel does.
+            "rasa": [{"recipient_id": "u1", "text": "Let me look that order up for you."},
+                     {"recipient_id": "u1", "text": "Order 7 shipped yesterday, by courier."}],
             # A SERVER THAT KEEPS NO CONVERSATION, under a `{session}` it was given.
             "forgetful": {"choices": [{"message": {
                 "content": "I have no record of any case number, sorry about that."}}]},
@@ -387,9 +390,23 @@ def main():
             # would read the first turn's call and never the later one.
             _okx, _repx = onboard.check(_agent_cfg("transcript", reply="messages.5.content"))
             _nx = " ".join(_repx["notes"])
+            # ...BUT EVERY ITEM IS: `*` collects the calls of every turn in one path.
+            check("a transcript-shaped body is offered `*`, the calls of every turn, by name",
+                  _repx.get("tool_calls_path") == "messages.*.tool_calls"
+                  and "lookup_order(" in _nx and "send_email(" in _nx, _nx[:300])
             check("a transcript-shaped body is not offered a path pinned to one of its items",
-                  _okx and "tool_calls_path" not in _repx
-                  and "No single `tool_calls` path covers" in _nx, _nx[:300])
+                  _okx and not any(_seg.isdigit() for _seg in
+                                   str(_repx.get("tool_calls_path", "")).split(".")),
+                  repr(_repx.get("tool_calls_path")))
+            # AND THE LINE, PASTED IN, IS ONE A RUN READS: both turns' calls, not the first.
+            _mx = _agent_cfg("transcript", reply="messages.5.content",
+                             extra='  tool_calls: "messages.*.tool_calls"')
+            _cfg_x = _yaml_t.safe_load(io.open(_mx, encoding="utf-8"))
+            _pb_x = _HCT_t(**{k: v for k, v in _cfg_x.items()
+                              if k not in onboard.CONFIG_ONLY_KEYS}).send("hello there")
+            check("...and the `*` line, pasted in, records every turn's call",
+                  [n for n, _a in (_pb_x.tool_calls or [])] == ["lookup_order", "send_email"],
+                  repr(_pb_x.tool_calls)[:200])
             # MAPPING THE CALLS DOES NOT SWITCH OFF THE WRONG-FIELD CHECK.
             _okw, _repw = onboard.check(_agent_cfg("both", reply="id", extra="  " + _line))
             check("a reply path pointed at `id` is refused even when tool calls are mapped",
@@ -446,6 +463,10 @@ def main():
             check("session.from_reply that finds no id in the reply is a problem naming the path",
                   not _okn2 and "found no conversation id" in _pn2 and "'choices'" in _pn2,
                   _pn2[:300])
+            _okr, _repr_ = onboard.check(_agent_cfg("rasa"))
+            _nr = " ".join(_repr_["notes"])
+            check("a reply that is a list of messages is offered `*.text`, every one of them",
+                  not _okr and 'response.reply: "*.text"' in _nr, _nr[:300])
             _oks, _reps = onboard.check(_agent_cfg("cohere"))
             _ps = " ".join(_reps["problems"])
             check("an unreadable stream is a refused config naming the cure, not a dead endpoint",

@@ -930,6 +930,14 @@ def _session_slot(check):
     from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
     from targets_http import HttpConfiguredTarget as _HT
     import runner as _rn
+    import uuid as _uu
+
+    def _is_uuid(v):
+        # A UUID, which a server that validates its ids (LangGraph's thread id) accepts.
+        try:
+            return str(_uu.UUID(str(v))) == str(v)
+        except ValueError:
+            return False
     _mem, _seen, _mode = {}, [], {"forget": False}
 
     class _H(_BH):
@@ -966,7 +974,7 @@ def _session_slot(check):
         _t.send("first")
         _t.send("second")
         check("...and one id goes in the url, the header and the body of every request",
-              all(_u == _b == _h and _u.startswith("qat-") for _u, _b, _h in _seen[-2:])
+              all(_u == _b == _h and _is_uuid(_u) for _u, _b, _h in _seen[-2:])
               and _seen[-1][1] == _seen[-2][1], repr(_seen[-2:]))
         _t.reset()
         _p = _t.send("third")
@@ -1268,6 +1276,62 @@ def _flowise_and_langflow(check):
         _said = str(e)
     check("the hint for an `auth:` of the wrong kind is an example this adapter takes",
           "type: sigv4" in _said and "type: bearer" not in _said, repr(_said)[:300])
+
+
+def _every_item(check):
+    """`*` in a path, every item of a list: a bot that answers in several messages (Rasa's REST
+    channel, as its source collects them) and a transcript with calls in several turns."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, dig as _dg, rasa_stream as _rs
+    _msgs = [{"recipient_id": "u1", "text": "Your order shipped."},
+             {"recipient_id": "u1", "image": "https://bot.example/map.png"},
+             {"recipient_id": "u1", "text": "The key is ACME-CANARY-9931."}]
+    check("`*.text` reads the text of every message, skipping one that has none",
+          _dg(_msgs, "*.text") == ["Your order shipped.", "The key is ACME-CANARY-9931."],
+          repr(_dg(_msgs, "*.text")))
+    _tr = {"messages": [{"tool_calls": [{"name": "a"}]}, {"content": "x"},
+                        {"tool_calls": [{"name": "b"}, {"name": "c"}]}]}
+    check("...and a list found in each item is spread into one list, an item without it skipped",
+          [c["name"] for c in _dg(_tr, "messages.*.tool_calls")] == ["a", "b", "c"],
+          repr(_dg(_tr, "messages.*.tool_calls")))
+    check("...and a list where no item has the path is an empty list, not a path that missed",
+          _dg({"messages": [{"content": "x"}]}, "messages.*.tool_calls") == []
+          and _dg({"messages": "x"}, "messages.*.tool_calls") is None)
+    _mode = {"body": _j.dumps(_msgs), "ctype": "application/json"}
+
+    class _H(_BH):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", _mode["ctype"])
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url="http://127.0.0.1:%d/webhooks/rest/webhook" % srv.server_address[1],
+                 name="rasa", request={"sender": "{session}", "message": "{prompt}"},
+                 response={"reply": "*.text"}, timeout_s=5)
+        for _label, _body, _ctype in (
+                ("its list", _j.dumps(_msgs), "application/json"),
+                ("its stream=true lines", "".join(_j.dumps(m) + "\n" for m in _msgs),
+                 "text/event-stream")):
+            _mode.update(body=_body, ctype=_ctype)
+            _p = _t.send("hi")
+            check("a Rasa bot's reply is every text message in %s, the second one included"
+                  % _label, _p.output == "Your order shipped.\nThe key is ACME-CANARY-9931."
+                  and not _p.error, "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+    check("...and a line that is not a Rasa message makes the body not Rasa's",
+          _rs('{"recipient_id": "u", "text": "a"}\n{"text": "b"}\n') is None)
 
 
 def _history_turn(check):
@@ -3249,6 +3313,7 @@ def main():
     _session_slot(check)
     _dify_and_server_ids(check)
     _flowise_and_langflow(check)
+    _every_item(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

@@ -78,6 +78,15 @@ result is the run response, or the response is rebuilt from the chunks when the 
 And the hint for an `auth:` of the wrong kind offered `{type: bearer, ...}`, a type the adapter
 then refused; it shows a `sigv4` block and says a bearer token is a header.
 
+**`*` in a path: every message, every turn.** A Rasa bot answers with a list of messages, and a
+reply path could name one of them: `0.text` read the first and dropped the second, where the
+leak may sit. `*.text` reads every one, joined; Rasa's `?stream=true` lines are read as that
+list. A transcript with calls in several turns had no path at all, and `onboard` said so and
+pointed at writing a Python adapter; it now offers `messages.*.tool_calls`, every turn's calls,
+which a run reads as offered. `onboard` offers `*.text` for a reply that is a list of messages.
+`{session}` is now a UUID4 rather than `qat-` and hex digits, so a server that validates its
+conversation ids takes it: LangGraph's thread id is a UUID.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a
