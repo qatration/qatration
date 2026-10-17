@@ -311,6 +311,7 @@ def main():
                        "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
                                       "toolName": "lookup_order", "input": {"id": "7"}}]},
             # A BOT THAT ANSWERS IN SEVERAL MESSAGES, as Rasa's REST channel does.
+            "rasa1": [{"recipient_id": "u1", "text": "Let me look that order up for you."}],
             "rasa": [{"recipient_id": "u1", "text": "Let me look that order up for you."},
                      {"recipient_id": "u1", "text": "Order 7 shipped yesterday, by courier."}],
             # A SERVER THAT KEEPS NO CONVERSATION, under a `{session}` it was given.
@@ -463,6 +464,14 @@ def main():
             check("session.from_reply that finds no id in the reply is a problem naming the path",
                   not _okn2 and "found no conversation id" in _pn2 and "'choices'" in _pn2,
                   _pn2[:300])
+            _ok1, _rep1 = onboard.check(_agent_cfg("rasa1"))
+            check("...and so is a reply of one message, which the next reply's two would outgrow",
+                  'response.reply: "*.text"' in " ".join(_rep1["notes"]),
+                  " ".join(_rep1["notes"])[:300])
+            _okl, _repl = onboard.check(_agent_cfg("transcript", reply="messages.9.content"))
+            _nl_ = " ".join(_repl["notes"])
+            check("a transcript is offered its LAST message as the reply, not the user's own first",
+                  'response.reply: "messages.-1.content"' in _nl_, _nl_[:300])
             _okr, _repr_ = onboard.check(_agent_cfg("rasa"))
             _nr = " ".join(_repr_["notes"])
             check("a reply that is a list of messages is offered `*.text`, every one of them",

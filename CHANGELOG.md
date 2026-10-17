@@ -111,6 +111,26 @@ writes it, an error event with no message said as one; `session_hash: "{session}
 for the turns of a conversation; `init --shape gradio` writes the config. On the way, an
 OpenAI-shaped stream no longer claims a body whose `error` is null.
 
+**What three independent reviews of the above found.** Twenty-three defects, each reproduced
+before it was fixed. The ones that reported a gap as a measurement: an OpenRouter error sent
+beside `choices` was dropped, so a reply the provider cut off was judged whole and scored
+DEFENDED; `*` with a typo after it (`messages.*.toolcalls`) returned an empty list rather than
+nothing, so the run's "this path never resolved" could not fire and every tool attack was judged
+on no calls; a `{name: arguments}` map read through `*` was dropped; Flowise's `error` event alone,
+Dify's without its fields and the Anthropic or Responses API error claimed by the Vercel fold all
+lost their words. The ones that sent something somewhere: an identity provider that echoes its
+form put the client secret in the probe's error and from there in the results, now redacted in
+every spelling it travelled in; a 401 on a followup re-sent the attack, now only the followup is
+fetched again; a conversation id the server names went into the url unquoted, so the target chose
+the next path, and `{session}` in the host or port let it choose the next service, now refused.
+And the smaller: a retry into a spent budget called a delivered attack "never sent", the
+server-memory history check was priced at one request where it sends two, the followup origin was
+a second rule beside `authorization.origin_of`, `onboard` offered a transcript's FIRST message (the
+user's own) as the reply and `*.text` only for two messages or more, and never offered Flowise's
+`usedTools`, a Gradio config written with the default url named one of its two urls, a tool's
+result step was read as a call. What a STREAM said before its error now travels with the error,
+for `judge` to read; a JSON body reporting an error beside a reply field still does not.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

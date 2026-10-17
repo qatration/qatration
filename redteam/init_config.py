@@ -646,7 +646,9 @@ def main():
     if args.model == DEFAULT_MODEL and "{model}" in WIRE[args.shape]:
         _todo.append("`request.model` (it is a placeholder)")
     if args.url == DEFAULT_URL:
-        _todo.append("`url`")
+        # AND THE FOLLOWUP'S, which repeats it: changed alone, the target refused the config
+        # as a followup off its own origin. Found by an independent review.
+        _todo.append("`url` and `followup.url`" if "followup:" in WIRE[args.shape] else "`url`")
     if args.shape == "openai":
         _todo.append("`response.reply` if your endpoint is not OpenAI-shaped")
     # AND NOTHING WHEN NOTHING IS LEFT: a Vercel route given its url has no placeholder, and

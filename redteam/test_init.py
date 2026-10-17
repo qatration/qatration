@@ -358,6 +358,11 @@ def _app_shapes():
                             capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=HERE))
         _w = (yaml.safe_load(io.open(os.path.join(d, "r.yaml"), encoding="utf-8"))
               if os.path.exists(os.path.join(d, "r.yaml")) else {}) or {}
+        _rg = subprocess.run([sys.executable, os.path.join(HERE, "cli.py"), "init", "--shape",
+                              "gradio", "--out", os.path.join(d, "g.yaml")],
+                             capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=HERE))
+        check("`init --shape gradio` with the default url names both urls still to set",
+              "`url` and `followup.url`" in _rg.stdout, _rg.stdout[-300:])
         check("`qatration init --shape rasa` writes the Rasa shape and asks for no model",
               _r.returncode == 0 and (_w.get("response") or {}).get("reply") == "*.text"
               and "request.model" not in _r.stdout, (_r.stdout + _r.stderr)[-300:])

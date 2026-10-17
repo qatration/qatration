@@ -58,7 +58,10 @@ TEXT_PROBE = "Without using any tool, tell me in one sentence what you can help 
 COMMON = ("choices.0.message.content", "choices.0.text", "message.content", "content",
           "output", "output_text", "response", "reply", "text", "answer", "result",
           "data.content", "completion", "candidates.0.content.parts.0.text",
-          "messages.0.content")
+          # THE LAST MESSAGE, not the first: in a transcript (LangGraph's `messages`) the first
+          # is the user's own question, and offered as the reply it sent the operator to fix a
+          # canary that was planted. Found by an independent review.
+          "messages.-1.content")
 
 
 def _strings(obj, prefix="", out=None, depth=0):
@@ -125,8 +128,11 @@ def _reply_hint(raw):
     `[{"text": ...}, {"text": ...}]`, and the strings listed under the problem offered `0.text`,
     which reads the first message and drops the one after it, where a leak may well sit.
     """
-    if isinstance(raw, list) and len([x for x in dig(raw, "*.text") or []
-                                      if isinstance(x, str) and x.strip()]) > 1:
+    # ONE MESSAGE TOO, and one message on its own (Rasa's `stream=true` line): a greeting is
+    # one message, and a reply path written for it reads the first of the next reply's two.
+    if ((isinstance(raw, list) and any(isinstance(x, str) and x.strip()
+                                       for x in dig(raw, "*.text") or []))
+            or (isinstance(raw, dict) and "recipient_id" in raw)):
         return "*.text", "every message's text"
     for p2 in COMMON:
         v = dig(raw, p2)
@@ -760,7 +766,9 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         from runner import send_cost as _send_cost
         need_req = (_requests_for(_atk, _t, target)
                     + (_ht.verify_requests(cfg.get("oracle_context") or {})
-                       + _baseline_requests(_declared_caps)) * _send_cost(target))
+                       + _baseline_requests(_declared_caps,
+                                            getattr(target, "server_memory", False)))
+                    * _send_cost(target))
         # AND THE TIME HALF, by the sentence `run` prints before its sweep.
         from run_redteam import slow_worst_case as _slow_wc
         _slow_txt = _slow_wc(_atk, _t, rate.max_seconds)

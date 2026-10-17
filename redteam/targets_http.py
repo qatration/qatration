@@ -196,23 +196,31 @@ def _dig(cur, steps):
     that answers in several messages (`[{"text": ...}, {"text": ...}]`) is `*.text`, every one
     of them, where `0.text` read the first and dropped the rest; a transcript that carries calls
     in several of its turns is `messages.*.tool_calls`, where one index read one turn's calls.
-    A list that held nothing at that path is an empty list, not None: the path worked and the
-    reply had nothing there, which is a reply with no call, not a mapping that missed.
+    WHERE NO ITEM HAS THE REST OF THE PATH, NOTHING WAS FOUND: None, as for any path that
+    missed. It was an empty list, so `messages.*.toolcalls` -- one letter wrong -- read as a
+    tool-call channel that worked on every reply, the run-level "this path never resolved"
+    could not fire, and every tool attack was judged on no calls at all. An EMPTY list is still
+    an empty list: the path worked and there was nothing in it. Found by an independent review.
     """
     for i, step in enumerate(steps):
         if step == "*":
+            # A LONE OBJECT IS A LIST OF ONE: Rasa's `stream=true` with a single message is that
+            # message, valid JSON on its own, and `*.text` read it as a path that missed.
+            if isinstance(cur, dict):
+                cur = [cur]
             if not isinstance(cur, list):
                 return None
-            got = []
+            got, hit = [], False
             for item in cur:
                 v = _dig(item, steps[i + 1:])
                 if v is None:
                     continue
+                hit = True
                 if isinstance(v, list):
                     got.extend(v)
                 else:
                     got.append(v)
-            return got
+            return got if hit or not cur else None
         if isinstance(cur, list):
             if not step.lstrip("-").isdigit():
                 return None
@@ -293,7 +301,10 @@ _CALL_TYPES = frozenset(("tool_use", "function", "function_call", "tool_call",
 # `toolName` beside the tool's OUTPUT, so read as a call it records a call the model never made,
 # with an argument string that is really what the tool returned -- and every argument detector
 # then judges a reply from the target's own backend as something the model chose to send.
-_NOT_CALL_TYPES = frozenset(("tool-result", "tool-error"))
+_NOT_CALL_TYPES = frozenset(("tool-result", "tool-error",
+                             # Google's Interactions `function_result` step and LangChain's tool
+                             # message, `{"type": "tool", "name": ...}`: a name beside a RESULT.
+                             "function_result", "tool"))
 # The `tool-` types that belong to the SDK rather than to one tool: the stream protocol's own
 # parts. `tool-input-available` is not a tool called `input-available`.
 _SDK_TOOL_PREFIXES = ("tool-input-", "tool-output-", "tool-approval-")
@@ -372,6 +383,14 @@ def _pairs(raw):
         elif isinstance(item, dict):
             if item.get("type") in _NOT_CALL_TYPES:
                 continue
+            # A {name: arguments} MAP IN A LIST, which `*` makes of the map shape the top of
+            # this function reads: no call key, no type, every value an argument mapping. Read
+            # as one nameless call it was dropped, where the same map unwrapped was two calls.
+            # Found by an independent review.
+            if (item and "type" not in item and not (set(item) & _CALL_KEYS)
+                    and all(isinstance(v, dict) for v in item.values())):
+                out.extend((str(k), json.dumps(v, ensure_ascii=False)) for k, v in item.items())
+                continue
             _kind = item.get("type")
             for _w in _CALL_WRAPPERS:
                 if isinstance(item.get(_w), dict):
@@ -413,7 +432,9 @@ def _pairs(raw):
 # offers the model, and an endpoint that echoes them would read here as a bot that called
 # every tool it has.
 _CALL_PATH_NAMES = frozenset(("toolcalls", "toolcall", "functioncall", "functioncalls",
-                              "tooluse", "tooluses"))
+                              "tooluse", "tooluses",
+                              # Flowise's prediction answer, `usedTools: [{tool, toolInput}]`.
+                              "usedtools"))
 
 
 def tool_call_paths(raw, _prefix="", _depth=0, _out=None):
@@ -716,7 +737,10 @@ _SSE_FIELDS = ("event:", "id:", "retry:", ":")
 # ANY OTHER FIELD NAME IS IGNORED, as the SSE standard says of a field it does not know: Flowise
 # opens every event with a bare `message:` line, and refusing it refused the whole stream. A name
 # of letters only, because `0:"text"` and `9:{...}` are the Vercel AI SDK 4 frames.
-_SSE_OTHER_FIELD = re.compile(r"^[A-Za-z][A-Za-z_-]*:")
+_SSE_OTHER_FIELD = re.compile(r"^[A-Za-z][A-Za-z_-]*:\s*$")
+# AND ONLY WHEN IT CARRIES NOTHING, as Flowise's does. `Error: upstream request timed out` is a
+# line of the same shape, and skipped as a field it made a reply cut short read as a whole one;
+# refused, the body is a stream nobody reads, which is an error and says so. Found by a review.
 
 
 def _stream_lines(text, cut=False):
@@ -780,8 +804,13 @@ def openai_stream(text, cut=False):
         return None
     choices, error = {}, None
     for _p in payloads:
-        if "error" in _p and not isinstance(_p.get("choices"), list):
+        # AN ERROR BESIDE `choices` IS STILL AN ERROR: OpenRouter ends a stream that failed
+        # mid-reply with `{"error": {...}, "choices": [{"finish_reason": "error", ...}]}`, and
+        # read only when `choices` was absent, the reply cut short was judged as the whole
+        # answer -- DEFENDED, about half a reply. Found by an independent review.
+        if _p.get("error") is not None:
             error = _p["error"]
+        if not isinstance(_p.get("choices"), list):
             continue
         for _c in _p["choices"]:
             if not isinstance(_c, dict):
@@ -927,7 +956,9 @@ def responses_stream(text, cut=False):
             items[_p.get("output_index", len(items))] = dict(_p["item"])
         elif t == "response.output_text.delta":
             _it = items.setdefault(_p.get("output_index", 0), {"type": "message", "content": []})
-            _content = _it.setdefault("content", [])
+            if not isinstance(_it.get("content"), list):
+                _it["content"] = []
+            _content = _it["content"]
             _ci = _p.get("content_index", 0)
             while isinstance(_ci, int) and len(_content) <= _ci:
                 _content.append({"type": "output_text", "text": ""})
@@ -1082,8 +1113,12 @@ def interactions_stream(text, cut=False):
     out, steps, args, error = {}, {}, {}, None
     for _p in payloads:
         t = _p["event_type"]
-        if t in ("interaction.created", "interaction.completed")                 and isinstance(_p.get("interaction"), dict):
-            out.update(_p["interaction"])
+        if t in ("interaction.created", "interaction.completed") and isinstance(
+                _p.get("interaction"), dict):
+            # THE STEPS ONLY FROM THE END: `interaction.created` may carry an empty `steps`, and
+            # taken as the answer it outranked the steps the stream then built.
+            out.update({k: v for k, v in _p["interaction"].items()
+                        if k != "steps" or t == "interaction.completed"})
         elif t == "interaction.status_update" and _p.get("status"):
             out["status"] = _p["status"]
         elif t == "step.start" and isinstance(_p.get("step"), dict):
@@ -1164,7 +1199,10 @@ def dify_stream(text, cut=False):
         elif ev == "message_end" and isinstance(_p.get("metadata"), dict):
             out["metadata"] = _p["metadata"]
         elif ev == "error":
-            out["error"] = {k: _p[k] for k in ("status", "code", "message") if k in _p}
+            # THE WHOLE EVENT WHEN IT CARRIES NONE OF DIFY'S THREE FIELDS: `{}` reads as no
+            # error at all, and the reply it stood for read as empty.
+            out["error"] = ({k: _p[k] for k in ("status", "code", "message") if k in _p}
+                            or {k: v for k, v in _p.items() if k != "event"} or "error")
     out["event"] = "message"
     out["answer"] = "".join(answer)
     calls, observations = [], []
@@ -1187,7 +1225,7 @@ def dify_stream(text, cut=False):
 
 # What makes a stream Flowise's: `{"event": ..., "data": ...}` and nothing else, and one of these.
 _FLOWISE_EVENTS = frozenset(("start", "token", "metadata", "usedTools", "end", "sourceDocuments",
-                             "agentReasoning"))
+                             "agentReasoning", "error"))
 
 
 def flowise_stream(text, cut=False):
@@ -1366,7 +1404,8 @@ def stream_kind(text):
     lines = _stream_lines(text)
     if not lines:
         return None
-    if all(_l.startswith(("data:",) + _SSE_FIELDS) for _l in lines):
+    if all(_l.startswith(("data:",) + _SSE_FIELDS) or _SSE_OTHER_FIELD.match(_l)
+           for _l in lines):
         return "server-sent events"
     if len(lines) > 1:
         try:
@@ -1455,7 +1494,11 @@ def vercel_stream(text, cut=False):
     # NO DATA AT ALL IS NOT SSE: `a:{...}` and `e:{...}` are SDK 4 frames named with a letter, and
     # a stream of only those reads as SSE fields carrying nothing.
     if payloads:
-        if not all(_ui_stream_part(_p.get("type")) for _p in payloads):
+        # AN `error` WITHOUT `errorText` IS NOT THE SDK'S: Anthropic's and the Responses API's
+        # error events are typed `error` too, and claimed here they lost their message to an
+        # empty `errorText`. Found by an independent review.
+        if not all(_ui_stream_part(_p.get("type"))
+                   and (_p["type"] != "error" or "errorText" in _p) for _p in payloads):
             return None
         parts = [("v5", _p) for _p in payloads]
     else:
@@ -1581,6 +1624,10 @@ class RateLimit:
         if self.max_seconds is not None and self.elapsed >= self.max_seconds:
             return "time"
         return ""
+
+    def has_room(self):
+        """Would `take` allow one more request? Asked without spending it."""
+        return not self.exhausted
 
     def take(self):
         if self._started is None:
@@ -1845,6 +1892,14 @@ class HttpConfiguredTarget(Target):
                 "assigns, and nothing in `request:`, the `url` or a header carries `{session}` "
                 "to send it back: every turn would still open a conversation of its own. Put "
                 "`{session}` where your endpoint reads the conversation id." % name)
+        # NOR IN THE TARGET'S OWN HOST: `http://127.0.0.1:{session}/` let the reply pick the
+        # port of the next request, a different service on the same machine. Found by a review.
+        import urllib.parse as _ups
+        if "{" in _ups.urlsplit(str(url)).netloc:
+            raise SystemExit(
+                "targets_http: %r has `{session}` in the scheme, host or port of its url. It may "
+                "sit in the path or the query; in the host, a value the target names would choose "
+                "where the next request goes." % name)
         self.session_from = session.get("from_reply") or None
         self.followup = self._followup_config(followup, name, url, auth)
         # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
@@ -2218,13 +2273,20 @@ class HttpConfiguredTarget(Target):
                 "<a url holding {id}>, method: GET|POST}`%s." % (
                     name, "; it also names %s, which this adapter does not read"
                     % ", ".join(map(repr, _bad)) if _bad else ""))
-        _o = lambda u: (_up.urlsplit(str(u)).scheme.lower(), _up.urlsplit(str(u)).hostname,
-                        _up.urlsplit(str(u)).port)
-        if _o(f["url"].replace("{id}", "x").replace(SESSION_SLOT, "x")) != _o(url):
+        import authorization as _az
+        # ONE ORIGIN RULE, `authorization.origin_of`: a second one here refused `:80` beside
+        # an url that left the default port unwritten. A SLOT IN THE HOST, the port or the user
+        # part fails it as well, because the slot is filled with a character no host carries:
+        # filled with a letter, it could spell the target's own host and pass, and the value
+        # the server names later would choose the origin. Found by an independent review.
+        _never = "\x00"
+        if (_az.origin_of(str(f["url"]).replace("{id}", _never).replace(SESSION_SLOT, _never))
+                != _az.origin_of(url)):
             raise SystemExit(
                 "targets_http: followup.url %r for %r is not on the target's own origin (%s). "
                 "It carries the target's headers and credentials, and the proof of ownership is "
-                "for that origin alone." % (f["url"], name, "%s://%s:%s" % _o(url)))
+                "for that origin alone; a slot may sit in its path, never in its host."
+                % (f["url"], name, _az.origin_of(url)))
         if str((auth or {}).get("type") or "").lower() == "sigv4":
             raise SystemExit("targets_http: `followup:` for %r cannot be signed with sigv4, which "
                              "signs one request's body; use one or the other." % name)
@@ -2245,18 +2307,30 @@ class HttpConfiguredTarget(Target):
                                "response (it had %s), so the answer behind it was never fetched"
                                % (self.followup["id_from"], sorted(got)[:8] if isinstance(got, dict)
                                   else type(got).__name__))
+        self._following = True
         if not self.rate.take():
             import signing as _sg
             return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
                          error="%s: this run's budget ran out between the request and the "
                                "followup that fetches its answer" % _sg.NEVER_SENT)
         url2 = (self.followup["url"].replace("{id}", _up.quote(str(_id), safe=""))
-                .replace(SESSION_SLOT, self._session))
+                .replace(SESSION_SLOT, _up.quote(str(self._session), safe="")))
         req2 = urllib.request.Request(url2, method=self.followup["method"],
                                       headers={k: v for k, v in headers.items()
                                                if k.lower() != "content-type"},
                                       data=b"" if self.followup["method"] == "POST" else None)
-        r2 = self._opener.open(req2, timeout=self.timeout)
+        # THE ATTACK WAS DELIVERED BY NOW, so a 401 here is the token, not the attack: a new
+        # token fetches this answer again, and the request that carried the attack is not sent
+        # a second time. Retried whole, one probe delivered the attack twice. Found by a review.
+        try:
+            r2 = self._opener.open(req2, timeout=self.timeout)
+        except urllib.error.HTTPError as e:
+            if not (e.code == 401 and self._token and self.rate.has_room()):
+                raise
+            self._token = None
+            req2.headers["Authorization"] = "Bearer " + self._bearer()
+            self.rate.take()
+            r2 = self._opener.open(req2, timeout=self.timeout)
         try:
             body2, over2 = read_capped(r2, seconds=self.timeout)
         finally:
@@ -2334,6 +2408,20 @@ class HttpConfiguredTarget(Target):
             hdrs["Authorization"] = "Basic " + _b64.b64encode(_pair.encode()).decode()
         req = urllib.request.Request(str(a["token_url"]), method="POST", headers=hdrs,
                                      data=_up.urlencode(form).encode())
+
+        # THE SECRET IN EVERY SPELLING IT TRAVELLED IN, taken out of anything said back: an
+        # identity provider that echoes the form it got put `client_secret` in the probe's
+        # error, and from there in the results and the report. Found by an independent review.
+        _hide = sorted({str(a["client_secret"]), _up.quote(str(a["client_secret"]), safe=""),
+                        _up.quote_plus(str(a["client_secret"]))}
+                       | ({hdrs["Authorization"].split(" ", 1)[1]} if "Authorization" in hdrs
+                          else set()), key=len, reverse=True)
+
+        def _clean(text):
+            for _h in _hide:
+                if _h:
+                    text = text.replace(_h, "[client secret]")
+            return text
         try:
             with self._opener.open(req, timeout=self.timeout) as r:
                 body, _over = read_capped(r, limit=64 * 1024, seconds=self.timeout)
@@ -2344,10 +2432,10 @@ class HttpConfiguredTarget(Target):
             except Exception:
                 said = ""
             raise RuntimeError("the token endpoint answered HTTP %d (%s)"
-                               % (e.code, " ".join(said.split())[:200]))
+                               % (e.code, _clean(" ".join(said.split()))[:200]))
         except Exception as e:
             raise RuntimeError("the token endpoint could not be read: %s: %s"
-                               % (type(e).__name__, str(e)[:200]))
+                               % (type(e).__name__, _clean(str(e))[:200]))
         tok = got.get("access_token") if isinstance(got, dict) else None
         if not isinstance(tok, str) or not tok.strip():
             raise RuntimeError("the token endpoint answered without an access_token (keys: %s)"
@@ -2379,7 +2467,11 @@ class HttpConfiguredTarget(Target):
                                f"probe; it was never sent")
         data = json.dumps(self._body(prompt, history)).encode("utf-8")
         headers = {k: str(v).replace(SESSION_SLOT, self._session) for k, v in self.headers.items()}
-        url = str(self.url).replace(SESSION_SLOT, self._session)
+        # A SEGMENT, NOT A URL: a server-named id of `abc/../../admin?x=1#` moved the next
+        # request to another path, and the system under test chose where it went. Quoted, as
+        # `{id}` is, and the origin checked again once filled. Found by an independent review.
+        import urllib.parse as _upq
+        url = str(self.url).replace(SESSION_SLOT, _upq.quote(str(self._session), safe=""))
         if self.auth.get("type") == "oauth2_client_credentials":
             try:
                 headers["Authorization"] = "Bearer " + self._bearer()
@@ -2398,6 +2490,8 @@ class HttpConfiguredTarget(Target):
                 session_token=self.auth.get("session_token")))
         req = urllib.request.Request(url, data=data, headers=headers,
                                      method=self.method)
+        self._following = False
+        _streamed = False
         t0 = time.time()
         try:
             with self._opener.open(req, timeout=self.timeout) as r:
@@ -2436,6 +2530,7 @@ class HttpConfiguredTarget(Target):
                     # A STREAM IS READ AS FAR AS IT GOT, part by part, which is the cut done
                     # right for a body with no closing brace to repair.
                     raw = _fold_stream(_decoded(_body, r), cut=True)
+                    _streamed = raw is not None
                     if raw is None:
                         raw = parse_capped(_decoded(_body, r))
                     if raw is None:
@@ -2460,6 +2555,7 @@ class HttpConfiguredTarget(Target):
                     except ValueError:
                         # A stream this adapter can fold, or the JSON error it was.
                         raw = _fold_stream(_text)
+                        _streamed = raw is not None
                         if raw is None:
                             # A STREAM NOBODY FOLDS, SAID AS ONE. "JSONDecodeError: Expecting
                             # value: line 1 column 1" over a body of `data:` lines sent the
@@ -2481,7 +2577,17 @@ class HttpConfiguredTarget(Target):
                 # The remote's own words, bounded and never parsed: this is text from a target
                 # we do not trust, on the same footing as the HTTPError body below.
                 _said = " ".join(str(_err).split())[:300]
-                return Probe(prompt=prompt, output="",
+                # AND WHAT A STREAM HAD SAID BEFORE ITS ERROR. Streamed, that text reached the
+                # user before the failure did, so it is an observation: a leak in it was never
+                # judged when the probe carried the failure alone, and `judge` scores a breach
+                # seen beside an error while leaving silence ERROR. NOT A JSON BODY'S: one that
+                # reports an error beside a reply field is a failure its client shows as one,
+                # and judging that field would invent a finding. Found by an independent review.
+                _before = dig(raw, self.reply_path) if _streamed else None
+                return Probe(prompt=prompt,
+                             output=_before if isinstance(_before, str) else "",
+                             tool_calls=(_pairs(dig(raw, self.calls_path))
+                                         if self.calls_path and _streamed else []),
                              error="TargetError: the endpoint answered 200 and reported an "
                                    "error at response.error=%r (%s)" % (self.error_path, _said),
                              seconds=round(time.time() - t0, 1))
@@ -2510,6 +2616,17 @@ class HttpConfiguredTarget(Target):
             # and the error below already knows how to say which path holds the text.
             if isinstance(reply, list) and reply and all(isinstance(x, str) for x in reply):
                 reply = "\n".join(reply)
+            # NO ITEM HAD TEXT: a list of messages none of which spoke (`[]`, or an image alone).
+            # Said as that, not as the "repr of a whole branch" a container reply earns.
+            elif isinstance(reply, list) and not reply and "*" in str(self.reply_path).split("."):
+                _none = Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                              error="ExtractionFailed: response.reply=%r found no text in any "
+                                    "item of the reply" % self.reply_path)
+                try:
+                    object.__setattr__(_none, "raw", raw)
+                except Exception:
+                    pass
+                return _none
             # AND A FLAG OR A NUMBER: a path mapped to `ok` or `status` read `True` or `0` as
             # the bot's reply, and every attack against it scored DEFENDED on that. Found by
             # an independent review.
@@ -2609,8 +2726,12 @@ class HttpConfiguredTarget(Target):
         except Exception as e:
             # A TOKEN THE TARGET NO LONGER TAKES is fetched again, once: revoked or rotated
             # before its `expires_in`, it would otherwise turn every probe after it into a 401.
+            # NOT AFTER THE FOLLOWUP, whose own 401 is retried where it happened, and NOT
+            # WITHOUT BUDGET: retried into an empty budget, a delivered attack was recorded as
+            # "never sent". Found by an independent review.
             if (isinstance(e, urllib.error.HTTPError) and e.code == 401 and self._token
-                    and not self._token_retry):
+                    and not self._token_retry and not self._following
+                    and self.rate.has_room()):
                 self._token, self._token_retry = None, True
                 try:
                     return self.send(prompt, history)

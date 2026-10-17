@@ -206,13 +206,14 @@ def _invoke_with_timeout(fn, timeout):
     return box["probe"]
 
 
-def baseline_requests(capabilities):
+def baseline_requests(capabilities, server_memory=False):
     """-> requests a sweep spends before its first attack: one tool-baseline probe where the
-    target reports its tool calls, and one `reads_history` probe where it takes a transcript.
-    ONE rule for `run`'s budget check and `onboard`'s."""
+    target reports its tool calls, and the `reads_history` check where it takes a transcript --
+    one forged turn, or TWO real ones for a server that keeps the conversation. ONE rule for
+    `run`'s budget check and `onboard`'s."""
     caps = set(capabilities or ())
     return ((1 if "tool_visibility" in caps else 0)
-            + (1 if {"chain", "forged_history"} & caps else 0))
+            + ((2 if server_memory else 1) if {"chain", "forged_history"} & caps else 0))
 
 
 def start_trial(target, last_probe, label):

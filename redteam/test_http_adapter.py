@@ -1295,9 +1295,26 @@ def _every_item(check):
     check("...and a list found in each item is spread into one list, an item without it skipped",
           [c["name"] for c in _dg(_tr, "messages.*.tool_calls")] == ["a", "b", "c"],
           repr(_dg(_tr, "messages.*.tool_calls")))
-    check("...and a list where no item has the path is an empty list, not a path that missed",
-          _dg({"messages": [{"content": "x"}]}, "messages.*.tool_calls") == []
+    # A LIST WHERE NO ITEM HAS THE PATH IS A PATH THAT MISSED, and said so: as an empty list,
+    # `messages.*.toolcalls` (one letter wrong) read as a working channel on every reply.
+    check("...and a list where no item has the path is a path that missed; an empty list is empty",
+          _dg({"messages": [{"content": "x"}]}, "messages.*.tool_calls") is None
+          and _dg({"messages": [{"tool_calls": []}]}, "messages.*.tool_calls") == []
+          and _dg({"messages": []}, "messages.*.tool_calls") == []
           and _dg({"messages": "x"}, "messages.*.tool_calls") is None)
+    _m = {"messages": [{"tool_calls": {"send_email": {"body": "CANARY-123"}}}, {"content": "x"}]}
+    from targets_http import _pairs as _pp3
+    check("...and a {name: arguments} map in each item is read as the calls it names",
+          _pp3(_dg(_m, "messages.*.tool_calls")) == [("send_email", '{"body": "CANARY-123"}')],
+          repr(_pp3(_dg(_m, "messages.*.tool_calls"))))
+    check("a tool's result step and a tool message are not calls, though they carry a name",
+          _pp3([{"type": "function_result", "call_id": "c1", "name": "send_email", "result": {}},
+                {"type": "tool", "name": "send_email", "content": "sent"}]) == [])
+    from targets_http import tool_call_paths as _tcp3
+    check("Flowise's usedTools is offered as a tool-call path from evidence",
+          [p for p, _c in _tcp3({"text": "Done", "usedTools": [
+              {"tool": "send_email", "toolInput": {"body": "C"}, "toolOutput": "sent"}]})]
+          == ["usedTools"])
     _mode = {"body": _j.dumps(_msgs), "ctype": "application/json"}
 
     class _H(_BH):
@@ -1328,6 +1345,25 @@ def _every_item(check):
             check("a Rasa bot's reply is every text message in %s, the second one included"
                   % _label, _p.output == "Your order shipped.\nThe key is ACME-CANARY-9931."
                   and not _p.error, "output=%r error=%r" % (_p.output, _p.error))
+        # A TYPO AFTER `*` IS A PATH THAT NEVER RESOLVED, named by the run as one.
+        _mode.update(body=_j.dumps({"messages": [
+            {"type": "human", "content": "hi"},
+            {"type": "ai", "content": "", "tool_calls": [{"name": "send_email",
+                                                         "args": {"body": "ACME"}}]},
+            {"type": "ai", "content": "Sent."}]}), ctype="application/json")
+        _typo = _HT(url="http://127.0.0.1:%d/webhooks/rest/webhook" % srv.server_address[1],
+                    name="typo", request={"message": "{prompt}"},
+                    response={"reply": "messages.-1.content",
+                              "tool_calls": "messages.*.toolcalls"}, timeout_s=5)
+        _typo.send("hi")
+        _typo.send("again")
+        from run_redteam import _unresolved as _unr
+        check("a tool-call path one letter wrong after `*` is named by the run as never resolved",
+              any("toolcalls" in u for u in _unr(_typo)), repr(_unr(_typo)))
+        _mode.update(body="[]")
+        _p = _t.send("hi")
+        check("a reply list with no text in it is said as that, not as a container's repr",
+              bool(_p.error) and "found no text in any item" in _p.error, "error=%r" % _p.error)
     finally:
         srv.shutdown()
     check("...and a line that is not a Rasa message makes the body not Rasa's",
@@ -1574,6 +1610,223 @@ def _gradio_followup(check):
             _said = str(e)
         check("a followup %s is refused when the config is read, for that reason" % _label,
               _says in _said, repr(_said)[:200])
+
+
+def _review_of_the_streams(check):
+    """What two independent reviews of the folds, the session ids, `followup:` and the OAuth
+    grant found, each driven through the code that had it."""
+    import json as _j, threading as _th, os as _os, base64 as _b64
+    from urllib.parse import parse_qs as _pq
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, _fold_stream as _fs, stream_kind as _sk,
+                              openai_stream as _os_, dig as _dg, flowise_stream as _fls,
+                              dify_stream as _dys, responses_stream as _rss,
+                              interactions_stream as _ins)
+    import runner as _rn
+    _sse = lambda *ps: "".join("data: %s\n\n" % _j.dumps(p) for p in ps)
+
+    # --- the folds -------------------------------------------------------------------------
+    _or = _os_(_sse({"choices": [{"index": 0, "delta": {"content": "Sure, the code is "}}]},
+                    {"error": {"code": 502, "message": "Provider returned error"},
+                     "choices": [{"index": 0, "delta": {"content": ""},
+                                  "finish_reason": "error"}]}))
+    check("an OpenAI-shaped error sent beside `choices` (OpenRouter's) is kept, with the half reply",
+          (_or or {}).get("error", {}).get("message") == "Provider returned error"
+          and _or["choices"][0]["message"]["content"] == "Sure, the code is ", repr(_or)[:300])
+    _ant_err = 'event: error\ndata: {"type": "error", "error": {"type": "overloaded_error", ' \
+               '"message": "Overloaded"}}\n\n'
+    check("an Anthropic error event alone is Anthropic's, its message kept, not an empty Vercel one",
+          (_fs(_ant_err) or {}).get("error", {}).get("message") == "Overloaded", repr(_fs(_ant_err)))
+    _fl_err = 'message:\ndata:{"event":"error","data":"401 Incorrect API key provided"}\n\n'
+    check("a Flowise stream that is only its error event is Flowise's, its words kept",
+          _fls(_fl_err) is not None and (_fs(_fl_err) or {}).get("error")
+          == "401 Incorrect API key provided", repr(_fs(_fl_err)))
+    _dy = _dys(_sse({"event": "message", "answer": "Hi"}, {"event": "error", "detail": "boom"}))
+    check("a Dify error event without its three fields is kept whole, not as an empty `{}`",
+          bool((_dy or {}).get("error")) and "boom" in _j.dumps(_dy["error"]), repr(_dy))
+    _rn_ = _rss(_sse({"type": "response.output_item.added", "output_index": 0,
+                      "item": {"type": "message", "content": None}},
+                     {"type": "response.output_text.delta", "output_index": 0,
+                      "content_index": 0, "delta": "Hello"}))
+    check("a Responses item whose content is null still gets its text",
+          (_rn_ or {}).get("output", [{}])[0].get("content", [{}])[0].get("text") == "Hello",
+          repr(_rn_))
+    _ie = lambda kind, **f: "event: %s\ndata: %s\n\n" % (kind, _j.dumps(dict(f, event_type=kind)))
+    _in = _ins(_ie("interaction.created", interaction={"id": "x", "steps": []})
+               + _ie("step.start", index=0, step={"type": "model_output"})
+               + _ie("step.delta", index=0, delta={"type": "text", "text": "Hello"})
+               + _ie("interaction.completed", interaction={"id": "x", "status": "completed"}))
+    check("an empty `steps` on interaction.created does not outrank the steps the stream built",
+          (_in or {}).get("steps", [{}])[0].get("content", [{}])[0].get("text") == "Hello", repr(_in))
+    _cut = _sse({"choices": [{"index": 0, "delta": {"content": "Sure"}}]}) \
+        + "Error: upstream request timed out\n"
+    check("a bare `Error: ...` line is not skipped as an SSE field: the cut reply is not read whole",
+          _fs(_cut) is None, repr(_fs(_cut)))
+    _af = 'message:\ndata: {"event": "agentFlowEvent", "data": "x"}\n\n'
+    check("a stream nobody folds, with an empty `message:` field, is still named as a stream",
+          _sk(_af) == "server-sent events", repr(_sk(_af)))
+    check("`*` over a lone object is that object: one Rasa message is a list of one",
+          _dg({"recipient_id": "u", "text": "I cannot share that."}, "*.text")
+          == ["I cannot share that."])
+
+    # --- end to end ------------------------------------------------------------------------
+    _st = {"body": "", "ctype": "text/event-stream", "log": [], "valid": set(), "issued": 0,
+           "idp": None, "get401": False, "sid": "c1"}
+
+    class _H(_BH):
+        def _send(self, code, body, ctype="application/json"):
+            body = body.encode() if isinstance(body, str) else _j.dumps(body).encode()
+            self.send_response(code)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _any(self, m):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0)).decode()
+            _st["log"].append((m, self.path, raw[:60]))
+            tok = (self.headers.get("Authorization") or "").replace("Bearer ", "")
+            if self.path == "/token":
+                if _st["idp"]:
+                    return self._send(400, {"error": "invalid_client",
+                                            "received": {k: v[0] for k, v in _pq(raw).items()}})
+                _st["issued"] += 1
+                _st["valid"].add("tok-%d" % _st["issued"])
+                return self._send(200, {"access_token": "tok-%d" % _st["issued"],
+                                        "expires_in": 3600})
+            if self.path.startswith("/call"):
+                if m == "POST":
+                    return self._send(200, {"event_id": "e1"})
+                if (_st["get401"] == "always") or (_st["get401"] and tok == "tok-1"):
+                    return self._send(401, {"error": "expired"})
+                return self._send(200, {"reply": "answer via " + tok})
+            if self.path.startswith("/conv"):
+                return self._send(200, {"reply": "ok", "conversation_id": _st["sid"]})
+            if self.path.startswith("/chat") and tok and tok not in _st["valid"]:
+                return self._send(401, {"error": "invalid token"})
+            return self._send(200, _st["body"], _st["ctype"])
+
+        def do_POST(self):
+            self._any("POST")
+
+        def do_GET(self):
+            self._any("GET")
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _os.environ["QAT_REV_CID"], _os.environ["QAT_REV_SEC"] = "cid", "SUPER-SECRET-VALUE"
+    _oauth = {"type": "oauth2_client_credentials", "token_url": base + "/token",
+              "client_id": "${QAT_REV_CID}", "client_secret": "${QAT_REV_SEC}"}
+    try:
+        # A LEAK BEFORE THE ERROR is judged with it.
+        _st.update(body='event: content_block_delta\ndata: {"type": "content_block_delta", '
+                        '"index": 0, "delta": {"type": "text_delta", "text": "the key is C-1"}}'
+                        '\n\nevent: error\ndata: {"type": "error", "error": '
+                        '{"type": "overloaded_error", "message": "Overloaded"}}\n\n')
+        _a = _HT(url=base + "/chat", name="ant", request={"m": "{prompt}"},
+                 response={"reply": "content.0.text", "error": "error"}, timeout_s=5)
+        _p = _a.send("hi")
+        check("what a stream said before its error travels with the TargetError, for judge to read",
+              bool(_p.error) and "TargetError" in _p.error and _p.output == "the key is C-1",
+              "output=%r error=%r" % (_p.output, _p.error))
+        _st.update(body=_j.dumps({"recipient_id": "u", "text": "I cannot share that."}) + "\n")
+        _r = _HT(url=base + "/chat", name="rasa1", request={"message": "{prompt}"},
+                 response={"reply": "*.text"}, timeout_s=5)
+        _p = _r.send("hi")
+        check("a Rasa reply of one message is read like a reply of two",
+              _p.output == "I cannot share that." and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        # THE SECRET is never said back.
+        _st["idp"] = True
+        _t = _HT(url=base + "/chat", name="o", request={"m": "{prompt}"}, response={"reply": "r"},
+                 auth=dict(_oauth, client_auth="post"), env=["QAT_REV_CID", "QAT_REV_SEC"],
+                 timeout_s=5)
+        _p = _t.send("x")
+        _t2 = _HT(url=base + "/chat", name="o2", request={"m": "{prompt}"}, response={"reply": "r"},
+                  auth=dict(_oauth), env=["QAT_REV_CID", "QAT_REV_SEC"], timeout_s=5)
+        _p2 = _t2.send("x")
+        check("an identity provider that echoes the form never puts the client secret in an error",
+              "SUPER-SECRET-VALUE" not in (_p.error or "") and "[client secret]" in (_p.error or "")
+              and "SUPER-SECRET-VALUE" not in (_p2.error or ""), "error=%r" % _p.error)
+        _st["idp"] = None
+        # A 401 ON THE FOLLOWUP fetches the answer again, not the attack.
+        _g = _HT(url=base + "/call/fn", name="g", request={"data": ["{prompt}"]},
+                 response={"reply": "reply"}, followup={"id_from": "event_id",
+                                                         "url": base + "/call/fn/{id}"},
+                 auth=dict(_oauth), env=["QAT_REV_CID", "QAT_REV_SEC"], timeout_s=5)
+        _g.send("warm")
+        _st["get401"], _st["log"] = True, []
+        _p = _g.send("ATTACK-PAYLOAD")
+        _st["get401"] = False
+        check("a 401 on the followup fetches a new token and the answer, the attack sent once",
+              _p.output.startswith("answer via tok-") and not _p.error
+              and sum(1 for m, pth, raw in _st["log"] if "ATTACK-PAYLOAD" in raw) == 1,
+              "output=%r error=%r log=%r" % (_p.output, _p.error, _st["log"]))
+        # AND A FOLLOWUP THAT KEEPS ANSWERING 401: the attack is still not sent again.
+        _st["get401"], _st["log"] = "always", []
+        _p = _g.send("ATTACK-TWICE")
+        _st["get401"] = False
+        check("...and a followup that refuses every token is an error, the attack still sent once",
+              bool(_p.error) and sum(1 for m, pth, raw in _st["log"] if "ATTACK-TWICE" in raw) == 1,
+              "error=%r log=%r" % (_p.error, _st["log"]))
+        # NO BUDGET FOR THE RETRY: the 401 the target gave, not "never sent".
+        _b = _HT(url=base + "/chat", name="ob", request={"m": "{prompt}"}, response={"reply": "r"},
+                 auth=dict(_oauth), env=["QAT_REV_CID", "QAT_REV_SEC"],
+                 rate={"max_requests": 2}, timeout_s=5)
+        _st.update(body=_j.dumps({"r": "ok"}), ctype="application/json")
+        _b.send("one")
+        _st["valid"].clear()
+        _p = _b.send("ATTACK-PAYLOAD")
+        check("a 401 with no budget left to retry is the rejection it was, not an attack never sent",
+              bool(_p.error) and "never sent" not in _p.error and "401" in _p.error,
+              "error=%r" % _p.error)
+        # A SERVER-NAMED ID IS ONE PATH SEGMENT.
+        _st["sid"], _st["log"] = "abc/../../admin?x=1#", []
+        _s = _HT(url=base + "/conv/{session}/messages", name="s", request={"m": "{prompt}"},
+                 response={"reply": "reply"}, session={"from_reply": "conversation_id"},
+                 timeout_s=5)
+        _s.send_chain(["one", "two"])
+        check("a conversation id the server names is quoted into one path segment",
+              _st["log"][-1][1] == "/conv/abc%2F..%2F..%2Fadmin%3Fx%3D1%23/messages",
+              repr(_st["log"][-1]))
+    finally:
+        srv.shutdown()
+        _os.environ.pop("QAT_REV_CID", None)
+        _os.environ.pop("QAT_REV_SEC", None)
+
+    for _label, _kw, _says in (
+            ("`{session}` in the target's port",
+             dict(url="http://127.0.0.1:{session}/s"), "scheme, host or port"),
+            ("a followup slot in the host",
+             dict(url="http://127.0.0.1:9/c", followup={"id_from": "e",
+                                                         "url": "http://{id}.127.0.0.1:9/r"}),
+             "never in its host"),
+            ("a followup with a user part",
+             dict(url="http://127.0.0.1:9/c", followup={"id_from": "e",
+                                                         "url": "http://u@127.0.0.1:9/r/{id}"}),
+             "never in its host")):
+        try:
+            _HT(name="x", request={"m": "{prompt}"}, response={"reply": "r"}, **_kw)
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("%s is refused when the config is read, and the refusal says where" % _label,
+              _says in _said, repr(_said)[:200])
+    try:
+        _HT(url="http://127.0.0.1/c", name="d", request={"m": "{prompt}"}, response={"reply": "r"},
+            followup={"id_from": "e", "url": "http://127.0.0.1:80/r/{id}"})
+        _said = ""
+    except SystemExit as e:
+        _said = str(e)
+    check("a followup that writes out the default port is on the same origin (one origin rule)",
+          _said == "", repr(_said)[:200])
+    check("the server-memory history check is priced at its two turns",
+          _rn.baseline_requests({"chain"}, server_memory=True) == 2
+          and _rn.baseline_requests({"chain"}) == 1)
 
 
 def _history_turn(check):
@@ -3558,6 +3811,7 @@ def main():
     _every_item(check)
     _oauth_client_credentials(check)
     _gradio_followup(check)
+    _review_of_the_streams(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)
