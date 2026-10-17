@@ -757,8 +757,10 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # honeytoken check and a tool-call baseline. Priced without them, a run needing exactly
         # the budget was "ready" and stopped with its last trial unsent. Found by a review.
         from runner import baseline_requests as _baseline_requests
-        need_req = (_requests_for(_atk, _t) + _ht.verify_requests(cfg.get("oracle_context") or {})
-                    + _baseline_requests(_declared_caps))
+        from runner import send_cost as _send_cost
+        need_req = (_requests_for(_atk, _t, target)
+                    + (_ht.verify_requests(cfg.get("oracle_context") or {})
+                       + _baseline_requests(_declared_caps)) * _send_cost(target))
         # AND THE TIME HALF, by the sentence `run` prints before its sweep.
         from run_redteam import slow_worst_case as _slow_wc
         _slow_txt = _slow_wc(_atk, _t, rate.max_seconds)
@@ -778,7 +780,7 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
         # against 1,200 and stopped with 24 attacks never sent. The docs and the `init`
         # template both say this command checks a default run.
         elif scope == "quick" and rate.max_requests:
-            _full_req = _requests_for(_full_atk, _t)
+            _full_req = _requests_for(_full_atk, _t, target)
             if rate.max_requests < _full_req:
                 rep["notes"].append(
                     f"a default `qatration run` (the whole arsenal: {len(_full_atk)} attacks x "

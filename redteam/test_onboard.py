@@ -476,6 +476,49 @@ def main():
         finally:
             _asrv.shutdown()
 
+        # AN ANSWER FETCHED BY A SECOND REQUEST COSTS TWO, and the budget note prices it so:
+        # the same config with and without `followup:`, both over a budget of one, and the
+        # followup one's request count is twice the other's.
+        class _Gr(Bot):
+            def _out(self, code, body, ctype):
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+                self._out(200, json.dumps({"event_id": "e1", "reply":
+                                           "I can help with orders and returns."}).encode(),
+                          "application/json")
+
+            def do_GET(self):
+                self._out(200, ('event: complete\ndata: ["I can help with orders and returns."]'
+                                '\n\n').encode(), "text/event-stream")
+
+        _gsrv = ThreadingHTTPServer(("127.0.0.1", 0), _Gr)
+        threading.Thread(target=_gsrv.serve_forever, daemon=True).start()
+        try:
+            _gurl = "http://127.0.0.1:%d/gradio_api/call/chat" % _gsrv.server_address[1]
+            _need = {}
+            for _kind, _extra in (("plain", 'response:\n  reply: "reply"\n'),
+                                  ("followup", 'followup:\n  id_from: "event_id"\n  url: "%s/{id}"\n'
+                                               'response:\n  reply: "0"\n' % _gurl)):
+                _pg = os.path.join(work, "targets_cost_%s.yaml" % _kind)
+                with open(_pg, "w", encoding="utf-8") as _f:
+                    _f.write('adapter: http\nname: cost%s\nurl: "%s"\nrequest:\n  data: ["{prompt}"]\n'
+                             # ENOUGH FOR ONBOARD'S OWN PROBE, two requests with a followup,
+                             # and far short of any run.
+                             '%srate:\n  max_requests: 10\n' % (_kind, _gurl, _extra))
+                _okg, _repg = onboard.check(_pg)
+                _m = re.search(r"sends about (\d+) requests", " ".join(_repg["notes"]))
+                _need[_kind] = int(_m.group(1)) if _m else None
+            check("onboard prices an answer fetched by a second request at two requests a send",
+                  _need["plain"] and _need["followup"] == 2 * _need["plain"], repr(_need))
+        finally:
+            _gsrv.shutdown()
+
         # AND THE BODY STAYS OFF THE PROBE. `targets_http` attaches the raw response to a
         # FAILED probe on purpose and to nothing else: "a raw payload the oracle could read
         # would be a second, unaudited channel into every judgement in this repo". The body

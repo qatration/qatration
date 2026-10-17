@@ -102,6 +102,15 @@ an `Authorization` header of the config's own, and on the hosted service the tok
 to the network policy `url:` is. A provider that gives no token is `AuthFailed` in its own words,
 with nothing sent to the target.
 
+**Gradio, and an answer behind an id: `followup:`.** A Gradio app, the commonest shape of a demo
+bot, answers its API call with an `event_id` and streams the answer from a second url, so every
+probe read the id as the reply. `followup: {id_from, url}` fetches it, on the target's own
+origin only and out of the same request budget, every send priced at two requests by `onboard`,
+`run` and the budget `init` writes; Gradio's event stream is read as its source
+writes it, an error event with no message said as one; `session_hash: "{session}"` keeps the chat
+for the turns of a conversation; `init --shape gradio` writes the config. On the way, an
+OpenAI-shaped stream no longer claims a body whose `error` is null.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

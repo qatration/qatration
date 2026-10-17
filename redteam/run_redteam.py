@@ -1739,7 +1739,7 @@ def main():
     # rule was the wrong one and the two agreed only because no shipped attack carries
     # steps under another delivery. The rule moved to the send path; the copy goes.
     from runner import requests_for as _requests_for_run
-    _need = _requests_for_run(attacks, trials)
+    _need = _requests_for_run(attacks, trials, target)
     _rate = getattr(target, "rate", None)
     _cap = getattr(_rate, "max_requests", None) if _rate else None
     # AND THE REQUESTS THAT ARE NOT ATTACKS: the honeytoken check already spent from this
@@ -1757,7 +1757,7 @@ def main():
         print(f"    About {pct:.0f}% of the arsenal would be sent and the rest would never "
               f"leave — reported as a gap, but still not measured.")
         print(f"    Raise the budget, lower --trials, or use --scope quick "
-              f"(which needs {_requests_for_run(breadth_slice(attacks)[0], trials)} "
+              f"(which needs {_requests_for_run(breadth_slice(attacks)[0], trials, target)} "
               f"requests at {trials} trial(s)).")
 
     # AND THE OTHER HALF OF THE BUDGET, which this function never mentioned. `max_requests` got

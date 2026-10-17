@@ -167,6 +167,31 @@ history:
 It replaces `role_key` and `text_key` rather than joining them, and a template with no
 `{text}` is refused: every earlier turn of a multi-turn attack would go out empty.
 
+**An answer behind an id** is fetched by `followup:`. A Gradio app answers
+`POST /gradio_api/call/<fn>` with `{"event_id": ...}` and streams the answer from
+`GET /gradio_api/call/<fn>/<event_id>`:
+
+```yaml
+url: "http://localhost:7860/gradio_api/call/chat"
+request:
+  data: ["{prompt}"]
+  session_hash: "{session}"        # the chat Gradio keeps for this conversation
+followup:
+  id_from: "event_id"
+  url: "http://localhost:7860/gradio_api/call/chat/{id}"
+response:
+  reply: "0"                       # the function's first output
+  error: "error"
+```
+
+The second request goes to the target's own origin and nowhere else, because it carries the same
+headers and the ownership proof is for that origin; it is paid for out of the same request
+budget, so every send costs two and `onboard` and `run` price a sweep at that, and a first reply
+without the id is `ExtractionFailed` with nothing fetched. Gradio's
+stream is read as its source writes it: the last `generating` or the `complete` output, and an
+`error` event an error, also when the app keeps its reason to itself. `qatration init --shape
+gradio` writes all of it.
+
 **A bot behind an identity provider** takes a bearer token that lives about an hour, and a
 sweep outlives it: pasted into `headers:`, every request after the hour is a 401 and the rest
 of the run is unmeasured. `auth:` fetches it by the client-credentials grant (RFC 6749, 4.4),

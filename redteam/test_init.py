@@ -307,7 +307,8 @@ def _app_shapes():
     _want = {"dify": ("answer", "conversation_id"),
              "flowise": ("text", None),
              "langflow": ("outputs.0.outputs.0.results.message.text", None),
-             "rasa": ("*.text", None)}
+             "rasa": ("*.text", None),
+             "gradio": ("0", None)}
     check("init writes every app shape this suite knows, and knows every one it writes",
           set(_want) | {"openai", "vercel"} == set(init_config.SHAPES), repr(init_config.SHAPES))
     _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k"}
@@ -327,11 +328,21 @@ def _app_shapes():
             check("init --shape %s writes a config the adapter builds" % _sh, _t is not None, _why)
             if _t is None:
                 continue
+            if _sh != "gradio":
+                check("...and whose budget is the ordinary one", (_c.get("rate") or {})
+                      .get("max_requests") == 1800, repr(_c.get("rate")))
             check("...whose reply is read where %s puts it" % _sh,
                   (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))
             check("...and whose conversation is the app's own, under `{session}`: chain, and no "
                   "forged_history", _t.server_memory and set(_t.capabilities) == {"chain"}
                   and _t.session_from == _from, repr((_t.capabilities, _t.session_from)))
+            if _sh == "gradio":
+                check("...and whose budget is sized for two requests a send",
+                      (_c.get("rate") or {}).get("max_requests") == 3600, repr(_c.get("rate")))
+                check("...and whose answer is fetched from the same url with the event id after it",
+                      (_c.get("followup") or {}) == {"id_from": "event_id",
+                                                     "url": "http://localhost:9/x/{id}"},
+                      repr(_c.get("followup")))
             check("...and which names no placeholder of the OpenAI shape",
                   init_config.placeholders_left(_c) == [], repr(init_config.placeholders_left(_c)))
     finally:

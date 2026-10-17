@@ -1457,6 +1457,125 @@ def _oauth_client_credentials(check):
         _os.environ.pop("QAT_TEST_CSEC", None)
 
 
+def _gradio_followup(check):
+    """`followup:` and Gradio: `POST .../call/<fn>` answers an `event_id`, the answer streams from
+    `GET .../call/<fn>/<event_id>` as its source writes it, and `session_hash` keeps the chat."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, gradio_stream as _gs
+    import runner as _rn
+    _st = {"events": {}, "mem": {}, "n": 0, "fail": None, "gets": 0}
+
+    def _frame(event, data):
+        return "event: %s\ndata: %s\n\n" % (event, _j.dumps(data))
+
+    class _H(_BH):
+        def _send(self, code, body, ctype="application/json"):
+            body = body.encode()
+            self.send_response(code)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            b = _j.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+            _st["n"] += 1
+            eid = "ev%d" % _st["n"]
+            _sh = b.get("session_hash")
+            _st["mem"].setdefault(_sh, []).append(b["data"][0])
+            _st["events"][eid] = "Earlier you said: " + " | ".join(_st["mem"][_sh])
+            self._send(200, _j.dumps({"event_id": eid}))
+
+        def do_GET(self):
+            _st["gets"] += 1
+            eid = self.path.rsplit("/", 1)[-1]
+            said = _st["events"].get(eid, "")
+            if _st["fail"] is not None:
+                return self._send(200, _frame("error", _st["fail"]), "text/event-stream")
+            self._send(200, _frame("generating", [said[:8]]) + _frame("heartbeat", None)
+                       + _frame("generating", [said[:16]]) + _frame("complete", [said]),
+                       "text/event-stream")
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d/gradio_api/call/chat" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url=base, name="gradio",
+                 request={"data": ["{prompt}"], "session_hash": "{session}"},
+                 followup={"id_from": "event_id", "url": base + "/{id}"},
+                 response={"reply": "0", "error": "error"}, timeout_s=5)
+        _t.reset()
+        _p = _t.send("hello there")
+        check("a Gradio answer is fetched by the event_id the first reply carries, and read whole",
+              _p.output == "Earlier you said: hello there" and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what did I ask you to remember?"])
+        check("...and `session_hash: {session}` keeps one chat across the turns of a chain",
+              "PLUM-77" in _c.output, repr(_c.output))
+        check("...which reads_history hears", _rn.reads_history(_t, "gradio")[0] is True)
+        # TWO REQUESTS A SEND, and the budget is priced that way: at one, a run was "ready"
+        # and stopped halfway with the rest never sent.
+        check("a followup target costs two requests a send, and a sweep is priced at that",
+              _t.requests_per_send == 2
+              and _rn.requests_for([{"id": "a"}, {"id": "b", "delivery": "chain",
+                                                  "steps": ["x", "y"]}], 3, _t) == 18
+              and _rn.requests_for([{"id": "a"}], 3) == 3,
+              repr((_t.requests_per_send, _rn.requests_for([{"id": "a"}], 3, _t))))
+        for _fail, _says in (({"error": None}, "show_error"), ({"error": "quota exceeded"},
+                                                               "quota exceeded"),
+                             ("Server stopped unexpectedly.", "Server stopped")):
+            _st["fail"] = _fail
+            _p = _t.send("hi")
+            check("a Gradio error event (%s) is a TargetError, its words or that it gave none"
+                  % _j.dumps(_fail), bool(_p.error) and "TargetError" in _p.error and _says in _p.error,
+                  "error=%r" % _p.error)
+        _st["fail"] = None
+        _noid = _HT(url=base, name="gradio-noid", request={"data": ["{prompt}"]},
+                    followup={"id_from": "id", "url": base + "/{id}"},
+                    response={"reply": "0"}, timeout_s=5)
+        _gets = _st["gets"]
+        _p = _noid.send("hi")
+        check("a followup whose id is not in the first reply is ExtractionFailed, nothing fetched",
+              bool(_p.error) and "followup.id_from" in _p.error and _st["gets"] == _gets,
+              "error=%r" % _p.error)
+        _one = _HT(url=base, name="gradio-budget", request={"data": ["{prompt}"]},
+                   followup={"id_from": "event_id", "url": base + "/{id}"},
+                   response={"reply": "0"}, rate={"max_requests": 1}, timeout_s=5)
+        _p = _one.send("hi")
+        check("...and one the budget cannot pay for is never sent, and said so",
+              bool(_p.error) and "budget" in _p.error and "followup" in _p.error, "error=%r" % _p.error)
+    finally:
+        srv.shutdown()
+
+    check("a Gradio stream cut before `complete` is its last `generating`, which is whole",
+          _gs(_frame("generating", ["Hel"]) + _frame("generating", ["Hello"])) == ["Hello"])
+    check("...and data that follows no event line is not Gradio's",
+          _gs('data: ["x"]\n\n') is None)
+    from targets_http import openai_stream as _os2
+    check("a body whose only `error` is null is not an OpenAI-shaped stream either",
+          _os2('data: {"error": null}\n\n') is None
+          and _os2('data: {"error": {"message": "x"}}\n\n') is not None)
+    for _label, _f, _says in (
+            ("on another origin", {"id_from": "event_id", "url": "http://evil.example/{id}"},
+             "not on the target's own origin"),
+            ("without {id}", {"id_from": "event_id", "url": "http://127.0.0.1:9/x"}, "{id}"),
+            ("with a misspelled key", {"id_from": "event_id", "url": "http://127.0.0.1:9/{id}",
+                                       "metod": "GET"}, "'metod'")):
+        try:
+            _HT(url="http://127.0.0.1:9/x", name="f", request={"q": "{prompt}"},
+                response={"reply": "r"}, followup=_f)
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("a followup %s is refused when the config is read, for that reason" % _label,
+              _says in _said, repr(_said)[:200])
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -3438,6 +3557,7 @@ def main():
     _flowise_and_langflow(check)
     _every_item(check)
     _oauth_client_credentials(check)
+    _gradio_followup(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

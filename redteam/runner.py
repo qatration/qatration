@@ -442,9 +442,19 @@ def turns(attack):
     return len(steps) if isinstance(steps, list) and steps else 1
 
 
-def requests_for(attacks, trials):
-    """Requests one sweep of these attacks costs, before any retry."""
-    return sum(turns(a) for a in attacks) * int(trials)
+def requests_for(attacks, trials, target=None):
+    """Requests one sweep of these attacks costs, before any retry: every turn of every trial,
+    times what one send costs the target (`requests_per_send`, two for an answer fetched by a
+    second request)."""
+    return sum(turns(a) for a in attacks) * int(trials) * send_cost(target)
+
+
+def send_cost(target):
+    """-> the requests one send spends against this target's budget."""
+    try:
+        return max(1, int(getattr(target, "requests_per_send", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
 
 
 def retries_in(records):

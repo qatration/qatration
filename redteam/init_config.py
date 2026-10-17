@@ -145,7 +145,7 @@ url: {url}
 # is no ceiling at all.
 rate:
   min_interval_s: 0.0
-  max_requests: 1800
+  max_requests: {max_requests}
   max_seconds: 5400
 
 {history}# WHOSE SOFTWARE THIS IS. A finding against somebody else's code is evidence about software in
@@ -352,6 +352,29 @@ response:
   error: "error"
 
 ''',
+    "gradio": '''\
+# A GRADIO APP, a `gr.ChatInterface` among them, through its HTTP API. The url names the app's
+# function, e.g. `http://localhost:7860/gradio_api/call/chat` (the app's "Use via API" page
+# says which); the answer is not in that reply but behind the `event_id` it carries, fetched
+# from the same url with the id after it. A private Space wants the token on both requests:
+# env:
+#   - HF_TOKEN
+# headers:
+#   Authorization: "Bearer ${{HF_TOKEN}}"
+request:
+  data: ["{{prompt}}"]
+  session_hash: "{{session}}"
+followup:
+  id_from: "event_id"
+  url: {followup_url}
+
+# THE FIRST OUTPUT of the function. A ChatInterface that answers with a message rather than a
+# string holds its text one level down: `0.content`.
+response:
+  reply: "0"
+  error: "error"
+
+''',
     "rasa": '''\
 # A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
 # `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
@@ -433,6 +456,9 @@ session:
 
 ''',
 }
+# GRADIO KEEPS ITS CONVERSATION THE WAY RASA DOES, under the `session_hash` it is given: the same
+# sentence, not a copy of it.
+HISTORY["gradio"] = HISTORY["rasa"]
 SHAPES = tuple(WIRE)
 
 
@@ -473,8 +499,13 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                            verify=verify,
                            # FILLED, THEN INSERTED: a value is not parsed again, so the
                            # `{{prompt}}` each shape escapes arrives as `{prompt}`.
-                           wire=WIRE[shape].format(model=_q(model), plant=plant),
+                           wire=WIRE[shape].format(
+                               model=_q(model), plant=plant,
+                               # GRADIO'S ANSWER IS AT THE SAME URL, WITH THE ID AFTER IT.
+                               followup_url=_q(str(url).rstrip("/") + "/{id}")),
                            history=HISTORY[shape].format(),
+                           # TWO REQUESTS A SEND where the answer is fetched by a second one.
+                           max_requests=1800 * (2 if "followup:" in WIRE[shape] else 1),
                            secret_name=_q(_ht.SECRET_NAME),
                            # AS DEPLOYED: the operator's prompt with the planted block after it,
                            # which is the text the bot will hold once they paste it in.
@@ -504,7 +535,7 @@ def main():
     ap.add_argument("--shape", choices=SHAPES, default="openai",
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
-                         "Langflow or Rasa app")
+                         "Langflow, Gradio or Rasa app")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "

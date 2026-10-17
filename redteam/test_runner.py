@@ -772,6 +772,16 @@ def main():
         _state_sw["tools"] = False
         check("...and does not count it twice: a budget with room for both is not warned",
               "CANNOT FINISH INSIDE ITS BUDGET" not in _o7, _o7[-600:])
+        # AN ANSWER FETCHED BY A SECOND REQUEST COSTS TWO: three sends at one trial need six,
+        # and a budget of four, enough at one a send, is warned before the first attack.
+        _fu = _cfg_sw("followup", _nl.join([
+            "followup:", '  id_from: "reply"',
+            '  url: "http://127.0.0.1:%d/chat/{id}"' % _srv_sw.server_address[1],
+            "rate:", "  max_requests: 4", "  min_interval_s: 0.0"]))
+        _rcf, _of, _df = _sweep(_fu, _arsenal_sw("threef", sum((_direct(i) for i in range(3)),
+                                                               [])), "--trials", "1")
+        check("the budget pre-flight prices a followup target at two requests a send",
+              "CANNOT FINISH INSIDE ITS BUDGET" in _of and "need 6 requests" in _of, _of[-600:])
         # AN EXCLUSION THAT MATCHES NOTHING is said, not silently ignored.
         _ex = _cfg_sw("ex", "exclude_attacks: [\"a_1\"]")
         _rce, _oe, _de = _sweep(_ex, _arsenal_sw("one", _direct(1)), "--trials", "1")

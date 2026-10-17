@@ -772,7 +772,10 @@ def openai_stream(text, cut=False):
     """
     lines = _stream_lines(text, cut)
     payloads = _sse_payloads(lines) if lines is not None else None
-    if not payloads or not all(isinstance(_p.get("choices"), list) or "error" in _p
+    # A NULL `error` IS NOT AN ERROR, and not this protocol's: Gradio's failure event is
+    # `{"error": null}` when the app keeps its reason to itself, and read here it became an
+    # OpenAI body with no reply and no error, ExtractionFailed about the wrong path.
+    if not payloads or not all(isinstance(_p.get("choices"), list) or _p.get("error") is not None
                                for _p in payloads):
         return None
     choices, error = {}, None
@@ -1307,6 +1310,55 @@ def rasa_stream(text, cut=False):
     return messages
 
 
+_GRADIO_EVENTS = frozenset(("generating", "complete", "error", "heartbeat"))
+
+
+def gradio_stream(text, cut=False):
+    """A Gradio app's answer, `GET /gradio_api/call/<fn>/<event_id>`, folded into its outputs:
+    the `data` array, one item per output component, so `0` is the first output.
+
+    THE EVENT NAME IS ON ITS OWN LINE and the data can be any JSON -- an array, `null`, a string
+    -- which the other folds do not read: `event: complete` / `data: ["Bonjour"]`. A `generating`
+    event carries the WHOLE output so far, so the last one stands for an answer cut before its
+    `complete`. An `error` event is `{"error": <message or null>}`, or a string when the stream
+    itself failed; it is kept at `error`, and a null message is said as one rather than as an
+    empty reply, because an app with `show_error` off raises without saying why.
+
+    RECOGNISED, NOT GUESSED: every data line follows an event line, and every event is Gradio's.
+    """
+    lines = _stream_lines(text, cut)
+    if not lines:
+        return None
+    events, name = [], None
+    for _l in lines:
+        if _l.startswith("event:"):
+            name = _l[6:].strip()
+        elif _l.startswith("data:"):
+            if name is None:
+                return None
+            try:
+                events.append((name, json.loads(_l[5:].strip())))
+            except ValueError:
+                return None
+            name = None
+        elif not (_l.startswith(":") or _SSE_OTHER_FIELD.match(_l)):
+            return None
+    if (not events or any(_n not in _GRADIO_EVENTS for _n, _d in events)
+            or not any(_n != "heartbeat" for _n, _d in events)):
+        return None
+    final, error, failed = None, None, False
+    for _n, _d in events:
+        if _n in ("generating", "complete") and isinstance(_d, list):
+            final = _d
+        elif _n == "error":
+            failed = True
+            error = _d.get("error") if isinstance(_d, dict) else _d
+    if failed:
+        return {"error": error or "the app raised an error and did not say which (its "
+                                  "`show_error` is off)"}
+    return final
+
+
 def stream_kind(text):
     """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
     None. Only what the folds refused reaches this, so it decides nothing about the reply: it
@@ -1329,6 +1381,9 @@ def _folds():
     """Every stream this adapter reads, by name: the one list `_fold_stream` walks and the
     message for an unreadable stream names, so neither can claim a protocol the other lacks."""
     return (("the Vercel AI SDK", vercel_stream),
+            # GRADIO EARLY, AND IT IS THE STRICTEST: its every data line follows an event line
+            # naming one of four events, which no other protocol here writes.
+            ("Gradio", gradio_stream),
             ("OpenAI-compatible chat completions", openai_stream),
             ("Anthropic Messages", anthropic_stream),
             ("the OpenAI Responses API", responses_stream),
@@ -1636,7 +1691,7 @@ class HttpConfiguredTarget(Target):
 
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
-                 auth=None, env=None, proxy=None, session=None, **unknown):
+                 auth=None, env=None, proxy=None, session=None, followup=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -1698,6 +1753,9 @@ class HttpConfiguredTarget(Target):
              "expand -- every request would go out with the placeholder still in it."),
             ("rate", rate, dict,
              "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("followup", followup, dict,
+             "It is a mapping: `followup: {id_from: event_id, url: \".../{id}\"}` names where "
+             "the first reply carries the id the answer is fetched by."),
             ("session", session, dict,
              "It is a mapping: `session: {from_reply: conversation_id}` names where the "
              "server's reply carries the conversation id it assigned."),
@@ -1788,6 +1846,11 @@ class HttpConfiguredTarget(Target):
                 "to send it back: every turn would still open a conversation of its own. Put "
                 "`{session}` where your endpoint reads the conversation id." % name)
         self.session_from = session.get("from_reply") or None
+        self.followup = self._followup_config(followup, name, url, auth)
+        # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
+        # request. Priced at one, a run against a Gradio app was "ready" and stopped halfway
+        # through the arsenal with the rest never sent.
+        self.requests_per_send = 2 if self.followup else 1
         self._session_first = session.get("first", "")
         if self.session_from:
             self._session = self._session_first
@@ -2129,6 +2192,77 @@ class HttpConfiguredTarget(Target):
             body[field] = turns
         return body
 
+    # --- an answer fetched by a second request ----------------------------------------------
+    @staticmethod
+    def _followup_config(followup, name, url, auth):
+        """`followup: {id_from, url, method}`: the reply is not in the first response but behind
+        an id it carries, fetched by a second request. Gradio answers `POST .../call/<fn>` with
+        `{"event_id": ...}` and streams the answer from `GET .../call/<fn>/<event_id>`, so
+        without this every probe read `event_id` as the reply, or nothing.
+
+        THE SECOND REQUEST GOES WHERE THE FIRST DID: same scheme, host and port as `url`. It
+        carries the same headers, the credentials among them, and the ownership proof is for
+        that origin; a followup anywhere else would send both somewhere nobody authorised.
+        `{id}` must be in its url, or every probe would fetch the same answer.
+        """
+        import urllib.parse as _up
+        if not followup:
+            return None
+        f = dict(followup)
+        _bad = sorted(k for k in f if k not in ("id_from", "url", "method"))
+        _method = str(f.get("method") or "GET").upper()
+        if (_bad or not str(f.get("id_from") or "").strip() or "{id}" not in str(f.get("url") or "")
+                or _method not in ("GET", "POST")):
+            raise SystemExit(
+                "targets_http: `followup:` for %r is `{id_from: <path in the first reply>, url: "
+                "<a url holding {id}>, method: GET|POST}`%s." % (
+                    name, "; it also names %s, which this adapter does not read"
+                    % ", ".join(map(repr, _bad)) if _bad else ""))
+        _o = lambda u: (_up.urlsplit(str(u)).scheme.lower(), _up.urlsplit(str(u)).hostname,
+                        _up.urlsplit(str(u)).port)
+        if _o(f["url"].replace("{id}", "x").replace(SESSION_SLOT, "x")) != _o(url):
+            raise SystemExit(
+                "targets_http: followup.url %r for %r is not on the target's own origin (%s). "
+                "It carries the target's headers and credentials, and the proof of ownership is "
+                "for that origin alone." % (f["url"], name, "%s://%s:%s" % _o(url)))
+        if str((auth or {}).get("type") or "").lower() == "sigv4":
+            raise SystemExit("targets_http: `followup:` for %r cannot be signed with sigv4, which "
+                             "signs one request's body; use one or the other." % name)
+        f["method"] = _method
+        return f
+
+    def _follow(self, first_body, first, headers, prompt, t0):
+        """-> (body, over, response) of the second request, or a Probe saying why there is none."""
+        import urllib.parse as _up
+        try:
+            got = json.loads(_decoded(first_body, first))
+        except ValueError:
+            got = None
+        _id = dig(got, self.followup["id_from"]) if got is not None else None
+        if isinstance(_id, bool) or not isinstance(_id, (str, int)) or not str(_id).strip():
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error="ExtractionFailed: followup.id_from=%r found no id in the first "
+                               "response (it had %s), so the answer behind it was never fetched"
+                               % (self.followup["id_from"], sorted(got)[:8] if isinstance(got, dict)
+                                  else type(got).__name__))
+        if not self.rate.take():
+            import signing as _sg
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error="%s: this run's budget ran out between the request and the "
+                               "followup that fetches its answer" % _sg.NEVER_SENT)
+        url2 = (self.followup["url"].replace("{id}", _up.quote(str(_id), safe=""))
+                .replace(SESSION_SLOT, self._session))
+        req2 = urllib.request.Request(url2, method=self.followup["method"],
+                                      headers={k: v for k, v in headers.items()
+                                               if k.lower() != "content-type"},
+                                      data=b"" if self.followup["method"] == "POST" else None)
+        r2 = self._opener.open(req2, timeout=self.timeout)
+        try:
+            body2, over2 = read_capped(r2, seconds=self.timeout)
+        finally:
+            r2.close()
+        return body2, over2, r2
+
     # --- a token from the caller's identity provider ----------------------------------------
     _OAUTH_KEYS = ("type", "token_url", "client_id", "client_secret", "scope", "audience",
                    "client_auth")
@@ -2268,6 +2402,12 @@ class HttpConfiguredTarget(Target):
         try:
             with self._opener.open(req, timeout=self.timeout) as r:
                 _body, _over = read_capped(r, seconds=self.timeout)
+                # THE ANSWER IS BEHIND AN ID: everything below reads the second response.
+                if self.followup:
+                    _f = self._follow(_body, r, headers, prompt, t0)
+                    if isinstance(_f, Probe):
+                        return _f
+                    _body, _over, r = _f
                 if _over:
                     # A REPLY OVER THE CAP IS A FINDING, NOT A PARSE FAILURE. Truncated JSON
                     # does not parse, so the first version of this returned an empty probe with
