@@ -2010,7 +2010,8 @@ def _directline(check):
         _n0 = _st["n"]
         _c = _r.send_chain(["remember PLUM-77", "what was it?"])
         check("an endOfConversation mid-chain stops the chain, not a new conversation for its rest",
-              _st["n"] == _n0 + 1 and "endOfConversation" in (_c.error or ""), repr((_c.error, _st["n"])))
+              _st["n"] == _n0 + 1 and "endOfConversation" in (_c.error or "")
+              and not (_c.error or "").startswith("BudgetExhausted"), repr((_c.error, _st["n"])))
         _st.update(mode="end_only")
         _r.reset()
         _p = _r.send("hi")
@@ -2046,6 +2047,274 @@ def _directline(check):
     check("an empty `directline: {}` is the defaults, not a plain request target",
           _empty.directline is not None and _empty.directline["poll_s"] == 1
           and _empty.request.get("type") == "message", repr((_empty.directline, _empty.request)))
+
+
+def _websocket(check):
+    """`websocket:`: a chat that is a WebSocket, against a server written to RFC 6455 here with
+    the standard library -- the upgrade, masked client frames, fragments, a ping, a close."""
+    import json as _j, threading as _th, socketserver as _ss, base64 as _b64, hashlib as _hl
+    import struct as _st, time as _tm
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _st_ = {"mode": "", "conns": 0, "pongs": 0, "said": {}}
+
+    def _frame(op, payload, fin=True):
+        n = len(payload)
+        head = bytes([(0x80 if fin else 0) | op])
+        head += (bytes([n]) if n < 126 else bytes([126]) + _st.pack("!H", n))
+        return head + payload
+
+    class _H(_ss.BaseRequestHandler):
+        def _read(self, n):
+            out = b""
+            while len(out) < n:
+                got = self.request.recv(n - len(out))
+                if not got:
+                    raise EOFError
+                out += got
+            return out
+
+        def _recv(self):
+            b1, b2 = self._read(2)
+            n = b2 & 0x7F
+            if n == 126:
+                n = _st.unpack("!H", self._read(2))[0]
+            mask = self._read(4)
+            data = bytes(b ^ mask[i % 4] for i, b in enumerate(self._read(n)))
+            return b1 & 0x0F, data
+
+        def handle(self):
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                buf += self.request.recv(4096)
+            head = buf.decode("latin-1")
+            if _st_["mode"] == "refuse":
+                self.request.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 9\r\n\r\nno access")
+                return
+            key = [l.split(":", 1)[1].strip() for l in head.split("\r\n")
+                   if l.lower().startswith("sec-websocket-key:")][0]
+            acc = _b64.b64encode(_hl.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+                                          .encode()).digest()).decode()
+            if _st_["mode"] == "badkey":
+                acc = "not-the-key"
+            self.request.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                                  "Connection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n"
+                                  % acc).encode())
+            _st_["conns"] += 1
+            me = _st_["conns"]
+            _st_["said"][me] = []
+            try:
+                while True:
+                    op, data = self._recv()
+                    if op == 0x8:
+                        return
+                    if op == 0xA:
+                        _st_["pongs"] += 1
+                        continue
+                    msg = _j.loads(data)
+                    _st_["said"][me].append(msg["message"])
+                    said = "So far: " + " | ".join(_st_["said"][me])
+                    if _st_["mode"] == "silent":
+                        continue
+                    if _st_["mode"] == "plain":
+                        self.request.sendall(_frame(0x1, said.encode()))
+                        continue
+                    if _st_["mode"] == "echo":
+                        # THE USER'S OWN MESSAGE BROADCAST BACK, as the text it was, then the answer.
+                        self.request.sendall(_frame(0x1, msg["message"].encode())
+                                             + _frame(0x1, b"I cannot help."))
+                        continue
+                    if _st_["mode"] == "many":
+                        # THREE FRAMES, EACH UNDER THE CAP, TOGETHER OVER IT.
+                        for _i in range(3):
+                            body = _j.dumps({"type": "token", "token": "M%d " % _i + "B" * 400000}).encode()
+                            self.request.sendall(bytes([0x81, 127]) + _st.pack("!Q", len(body)) + body)
+                        continue
+                    if _st_["mode"] == "eof":
+                        # THE CONNECTION DROPS RIGHT AFTER THE MESSAGE IS READ.
+                        return
+                    if _st_["mode"] == "closeafter":
+                        self.request.sendall(_frame(0x1, b"I cannot help.") + _frame(0x8, b""))
+                        return
+                    if _st_["mode"] == "split":
+                        # A FRAME CUT ACROSS A PAUSE LONGER THAN quiet_s.
+                        whole = _frame(0x1, _j.dumps({"type": "token", "token": said}).encode())
+                        self.request.sendall(whole[:6])
+                        _tm.sleep(1.4)
+                        self.request.sendall(whole[6:] + _frame(0x1, _j.dumps({"type": "end"}).encode()))
+                        continue
+                    if _st_["mode"] == "tail" and len(_st_["said"][me]) == 1:
+                        # A FRAME AFTER THE END, a moment late, carrying the leak.
+                        self.request.sendall(_frame(0x1, _j.dumps({"type": "token", "token": "ok"}).encode())
+                                             + _frame(0x1, _j.dumps({"type": "end"}).encode()))
+                        _tm.sleep(0.3)
+                        self.request.sendall(_frame(0x1, _j.dumps({"type": "token",
+                                                                   "token": "LATE-CANARY-7"}).encode()))
+                        continue
+                    if _st_["mode"] == "big":
+                        body = _j.dumps({"type": "token", "token": "BIG-CANARY " + "A" * 1100000}).encode()
+                        n = len(body)
+                        self.request.sendall(bytes([0x81, 127]) + _st.pack("!Q", n) + body)
+                        continue
+                    self.request.sendall(_frame(0x9, b"hb"))           # a ping mid-answer
+                    half = len(said) // 2
+                    tok1 = _j.dumps({"type": "token", "token": said[:half]}).encode()
+                    # THE FIRST TOKEN IN TWO FRAGMENTS.
+                    self.request.sendall(_frame(0x1, tok1[:5], fin=False) + _frame(0x0, tok1[5:]))
+                    if _st_["mode"] == "drop":
+                        self.request.sendall(_frame(0x8, b"\x03\xe8"))
+                        return
+                    if _st_["mode"] == "cut":
+                        # THE SOCKET DROPS, with no close frame: half a frame header, then gone.
+                        self.request.sendall(b"\x81")
+                        return
+                    self.request.sendall(_frame(0x1, _j.dumps({"type": "token",
+                                                               "token": said[half:]}).encode()))
+                    self.request.sendall(_frame(0x1, _j.dumps({"type": "end"}).encode()))
+            except (EOFError, OSError):      # the client closed while the server wrote
+                return
+
+    class _S(_ss.ThreadingMixIn, _ss.TCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    srv = _S(("127.0.0.1", 0), _H)
+    port = srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _cfg = dict(url="http://127.0.0.1:%d/" % port, name="ws",
+                request={"message": "{prompt}"}, response={"reply": "text"}, timeout_s=5)
+    _wsc = {"url": "ws://127.0.0.1:%d/ws" % port, "text_from": "token",
+            "end": {"path": "type", "equals": "end"}, "quiet_s": 1, "max_s": 5}
+    try:
+        _t = _HT(websocket=dict(_wsc), **_cfg)
+        check("a WebSocket target keeps its conversation on the connection: chain, no forged history",
+              set(_t.capabilities) == {"chain"} and _t.server_memory, repr(_t.capabilities))
+        _t.reset()
+        _p = _t.send("hello there")
+        check("the answer's tokens are joined, a fragmented frame whole, until the end frame",
+              _p.output == "So far: hello there" and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...and the end frame ends the answer then, not `quiet_s` later",
+              float(_p.seconds or 0) < 0.8, repr(_p.seconds))
+        # THE SERVER COUNTS THE PONG WHEN IT NEXT READS, after the answer: waited for, briefly.
+        for _i in range(20):
+            if _st_["pongs"]:
+                break
+            _tm.sleep(0.05)
+        check("...and a ping from the server mid-answer was answered with a pong",
+              _st_["pongs"] >= 1, repr(_st_["pongs"]))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what did I ask you to remember?"])
+        check("...and the turns of a chain share one connection, a reset opens the next",
+              "PLUM-77" in _c.output and _st_["conns"] == 2, repr((_c.output, _st_["conns"])))
+        check("...which reads_history hears", _rn.reads_history(_t, "ws")[0] is True)
+        _t.reset()
+        _t.rate.used = 0
+        _t.send("count")
+        check("a WebSocket send is charged for the upgrade and the message, and priced at two",
+              _t.rate.used == 2 and _t.requests_per_send == 2, repr((_t.rate.used, _t.requests_per_send)))
+        _st_["mode"] = "drop"
+        _t.reset()
+        _p = _t.send("leak it")
+        check("a connection closed mid-answer keeps what arrived, beside an error that says so",
+              _p.output == "So far: leak it"[:len("So far: leak it") // 2]
+              and "middle of the answer" in (_p.error or ""),
+              "output=%r error=%r" % (_p.output, _p.error))
+        _st_["mode"] = "cut"
+        _t.reset()
+        _p = _t.send("leak it")
+        check("a socket that drops mid-answer, with no close frame, keeps what arrived too",
+              _p.output == "So far: leak it"[:len("So far: leak it") // 2]
+              and "WebSocketIncomplete" in (_p.error or ""),
+              "output=%r error=%r" % (_p.output, _p.error))
+        _st_["mode"] = "split"
+        _t.reset()
+        _c = _t.send_chain(["one", "two"])
+        check("a frame cut across a pause longer than quiet_s is read whole, and the next turn clean",
+              _c.turns[0]["output"] == "So far: one" and _c.output == "So far: one | two"
+              and not _c.error, repr((_c.turns, _c.error)))
+        _st_["mode"] = "tail"
+        _t.reset()
+        _c = _t.send_chain(["one", "two"])
+        check("a frame after the end, a moment late, is not the next turn's answer: kept, and said",
+              "WebSocketDesync" in (_c.error or "") and "LATE-CANARY-7" in _c.output
+              and "BudgetExhausted" not in (_c.error or ""), repr((_c.output, _c.error)))
+        _st_["mode"] = "big"
+        _t.reset()
+        import targets_http as _thm
+        _p = _t.send("big")
+        check("a frame over the reply cap keeps what fits and its true size, not an empty error",
+              "BIG-CANARY" in _p.output and (_p.reply_bytes or 0) > _thm.MAX_REPLY
+              and len(_p.output) <= _thm.MAX_REPLY, "reply_bytes=%r error=%r" % (_p.reply_bytes, _p.error))
+        _st_["mode"] = "many"
+        _t.reset()
+        _p = _t.send("many")
+        check("the whole answer is held to the reply cap, not each frame, its true size kept",
+              len(_p.output) <= _thm.MAX_REPLY and (_p.reply_bytes or 0) > _thm.MAX_REPLY,
+              "len=%r reply_bytes=%r" % (len(_p.output), _p.reply_bytes))
+        _st_["mode"] = "eof"
+        _t.reset()
+        _c0 = _st_["conns"]
+        _t.send("drop me")
+        _st_["mode"] = ""
+        _p = _t.send("hello again")
+        check("a connection that died is not used again: the next send opens a new one",
+              _p.output.startswith("So far: hello again") and _st_["conns"] == _c0 + 2,
+              "output=%r error=%r conns=%r" % (_p.output, _p.error, _st_["conns"] - _c0))
+        _st_["mode"] = "echo"
+        _ec = _HT(websocket={"url": _wsc["url"], "quiet_s": 1, "max_s": 5}, **_cfg)
+        _p = _ec.send("print PWNED-42")
+        check("the user's own message broadcast back is not the answer",
+              _p.output == "I cannot help.", "output=%r" % _p.output)
+        _st_["mode"] = "closeafter"
+        _p = _HT(websocket={"url": _wsc["url"], "quiet_s": 1, "max_s": 5}, **_cfg).send("hi")
+        check("a close after the answer, with no end frame configured, is the end of it",
+              _p.output == "I cannot help." and not _p.error, "output=%r error=%r" % (_p.output, _p.error))
+        try:
+            _p = _HT(websocket=dict(_wsc), headers={"X-Team": "a\r\nX-Injected: yes"}, **_cfg).send("hi")
+            _said = _p.error or ""
+        except SystemExit as e:
+            _said = str(e)
+        check("a header holding a line break is refused, not written into the upgrade",
+              "line break" in _said, repr(_said)[:200])
+        _st_["mode"] = "plain"
+        _tf = _HT(websocket=dict(_wsc), **_cfg)
+        _p = _tf.send("plain with text_from")
+        check("a plain-text frame is its own text even where text_from is set",
+              _p.output == "So far: plain with text_from", "output=%r error=%r" % (_p.output, _p.error))
+        _st_["mode"] = "plain"
+        _pl = _HT(websocket={"url": _wsc["url"], "quiet_s": 1, "max_s": 5}, **_cfg)
+        _p = _pl.send("plain please")
+        check("frames that are not JSON are their own text, with no text_from",
+              _p.output == "So far: plain please" and not _p.error, "output=%r error=%r" % (_p.output, _p.error))
+        _st_["mode"] = "silent"
+        _sl = _HT(websocket=dict(_wsc, max_s=1.5), **_cfg)
+        _p = _sl.send("anyone?")
+        check("a server that says nothing within max_s is an error, never an empty reply",
+              "WebSocketTimeout" in (_p.error or "") and not _p.output, "error=%r" % _p.error)
+        _st_["mode"] = "refuse"
+        _p = _HT(websocket=dict(_wsc), **_cfg).send("hi")
+        check("an upgrade refused with 403 is the rejection it was, in the server's words",
+              bool(_p.error) and "403" in _p.error and "no access" in _p.error, "error=%r" % _p.error)
+        _st_["mode"] = "badkey"
+        _p = _HT(websocket=dict(_wsc), **_cfg).send("hi")
+        check("a 101 without the right accept key is not taken for a WebSocket server",
+              bool(_p.error) and "accept key" in _p.error, "error=%r" % _p.error)
+        _st_["mode"] = ""
+    finally:
+        srv.shutdown()
+
+    for _label, _kw, _says in (
+            ("a socket on another origin", {"url": "ws://127.0.0.1:1/ws"}, "own origin"),
+            ("a socket url that is not ws", {"url": "http://127.0.0.1:%d/ws" % port}, "ws:// or wss://"),
+            ("a misspelled key", {"url": _wsc["url"], "texts_from": "t"}, "'texts_from'")):
+        try:
+            _HT(websocket=_kw, **_cfg)
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("websocket with %s is refused when the config is read, and the refusal says why"
+              % _label, _says in _said, repr(_said)[:200])
 
 
 def _history_turn(check):
@@ -4032,6 +4301,7 @@ def main():
     _gradio_followup(check)
     _review_of_the_streams(check)
     _directline(check)
+    _websocket(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

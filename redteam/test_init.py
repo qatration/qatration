@@ -309,7 +309,8 @@ def _app_shapes():
              "langflow": ("outputs.0.outputs.0.results.message.text", None),
              "rasa": ("*.text", None),
              "gradio": ("0", None),
-             "directline": ("text", None)}
+             "directline": ("text", None),
+             "websocket": ("text", None)}
     check("init writes every app shape this suite knows, and knows every one it writes",
           set(_want) | {"openai", "vercel"} == set(init_config.SHAPES), repr(init_config.SHAPES))
     _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k",
@@ -335,13 +336,18 @@ def _app_shapes():
             if _sh != "gradio":
                 check("...and whose budget is sized by what one of its sends costs",
                       (_c.get("rate") or {}).get("max_requests") == 1800 * _t.requests_per_send
-                      and _t.requests_per_send == (7 if _sh == "directline" else 1),
+                      and _t.requests_per_send == {"directline": 7, "websocket": 2}.get(_sh, 1),
                       repr((_c.get("rate"), _t.requests_per_send)))
             check("...whose reply is read where %s puts it" % _sh,
                   (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))
             check("...and whose conversation is the app's own, under `{session}`: chain, and no "
                   "forged_history", _t.server_memory and set(_t.capabilities) == {"chain"}
                   and _t.session_from == _from, repr((_t.capabilities, _t.session_from)))
+            if _sh == "websocket":
+                check("...and whose socket is the --url's server over ws, its http url the origin",
+                      (_c.get("websocket") or {}).get("url") == "ws://localhost:9/x"
+                      and _c.get("url") == "http://localhost:9/x", repr((_c.get("url"),
+                                                                       _c.get("websocket"))))
             if _sh == "gradio":
                 check("...and whose budget is sized for two requests a send",
                       (_c.get("rate") or {}).get("max_requests") == 3600, repr(_c.get("rate")))

@@ -201,6 +201,12 @@ def submit(root, body, policy=None, wake=None):
     if "proxy" in cfg:
         return _problem(400, "a submitted config may not name a `proxy:`; the service "
                              "connects to the target itself")
+    # NOR A WEBSOCKET: its socket is opened outside the HTTP connections the address checks
+    # are made on, so the policy could not see where it went.
+    if "websocket" in cfg:
+        return _problem(400, "a submitted config may not use `websocket:`; the service checks "
+                             "addresses on its HTTP connections, and a socket opened beside "
+                             "them would not be checked")
     if "env" in cfg or "${" in json.dumps(cfg, default=str):
         return _problem(400, "a submitted config may not name environment variables (`env:` "
                              "or `${...}`): they would be read on this service's host. Put "

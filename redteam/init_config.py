@@ -405,6 +405,32 @@ response:
   reply: "text"
 
 ''',
+    "websocket": '''\
+# A CHAT WHOSE BACKEND IS A WEBSOCKET. `url` above is the same server over http(s), the origin
+# the proof of ownership is for; the socket below must be on it (`ws` beside `http`, `wss`
+# beside `https`). One connection is one conversation: each trial opens its own.
+#
+# THE MESSAGE is this mapping, sent as one JSON text frame -- write it the way your chat UI does.
+request:
+  message: "{{prompt}}"
+
+# THE ANSWER is every frame after it until one says it is the end, or `quiet_s` passes with
+# none. `text_from` is where a frame holds its text (a token, for a streamed answer); a frame
+# that is not JSON is its own text. Delete `end` if your server marks no end.
+websocket:
+  url: {ws_url}
+  text_from: "token"
+  end:
+    path: "type"
+    equals: "end"
+  quiet_s: 2
+  max_s: 60
+
+response:
+  reply: "text"
+  # tool_calls: "frames.*.tool_calls"   # if a frame carries the calls the agent made
+
+''',
     "rasa": '''\
 # A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
 # `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
@@ -492,6 +518,7 @@ HISTORY["gradio"] = HISTORY["rasa"]
 # DIRECT LINE KEEPS ITS CONVERSATION ITSELF, one per trial; the block above says so, and there is
 # no id for the request to carry.
 HISTORY["directline"] = ""
+HISTORY["websocket"] = ""
 SHAPES = tuple(WIRE)
 
 
@@ -502,8 +529,8 @@ def _send_cost(shape):
     from targets_http import requests_per_send as _rps
     _w = _y.safe_load(WIRE[shape].replace("{{", "{").replace("}}", "}")
                       .replace("{model}", '"m"').replace("{plant}", "").replace(
-                          "{followup_url}", '"x"')) or {}
-    return _rps(_w.get("followup"), _w.get("directline"))
+                          "{followup_url}", '"x"').replace("{ws_url}", '"ws://x"')) or {}
+    return _rps(_w.get("followup"), _w.get("directline"), _w.get("websocket"))
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
@@ -538,6 +565,11 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     if shape not in WIRE:
         raise SystemExit("init --shape: %r is not one this command writes; it writes %s."
                          % (shape, ", ".join(SHAPES)))
+    # A WEBSOCKET URL GIVEN AS --url IS THE SOCKET, and the target's url is the same server
+    # over http(s): the address the ownership proof is checked for.
+    ws_url = None
+    if shape == "websocket" and re.match(r"^wss?://", str(url), re.I):
+        ws_url, url = url, re.sub(r"^ws", "http", str(url), flags=re.I)
     return TEMPLATE.format(out=_shell_arg(out), url=_q(url),
                            name=_q(name), secret=secret,
                            verify=verify,
@@ -546,7 +578,9 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                            wire=WIRE[shape].format(
                                model=_q(model), plant=plant,
                                # GRADIO'S ANSWER IS AT THE SAME URL, WITH THE ID AFTER IT.
-                               followup_url=_q(str(url).rstrip("/") + "/{id}")),
+                               followup_url=_q(str(url).rstrip("/") + "/{id}"),
+                               ws_url=_q(ws_url or re.sub(r"^http", "ws", str(url),
+                                                           flags=re.I))),
                            history=HISTORY[shape].format(),
                            # TWO REQUESTS A SEND where the answer is fetched by a second one.
                            max_requests=1800 * _send_cost(shape),
@@ -579,7 +613,8 @@ def main():
     ap.add_argument("--shape", choices=SHAPES, default="openai",
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
-                         "Langflow, Gradio or Rasa app, or a Copilot Studio agent over Direct Line")
+                         "Langflow, Gradio or Rasa app, a Copilot Studio agent over Direct "
+                         "Line, or a chat whose backend is a WebSocket")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "
@@ -636,7 +671,8 @@ def main():
     # AND THE URL THROUGH THE RULE THE GATE APPLIES, for the same reason: a config whose url
     # has no scheme was written, and the next command called it a remote target to authorise.
     from authorization import url_problem as _url_problem
-    _bad_url = _url_problem(args.url)
+    _bad_url = _url_problem(re.sub(r"^ws", "http", args.url, flags=re.I)
+                            if args.shape == "websocket" else args.url)
     if _bad_url:
         raise SystemExit("init --url: %r is not a URL a target can be reached at: %s. Nothing "
                          "was written." % (args.url, _bad_url))

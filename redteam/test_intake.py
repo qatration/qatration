@@ -350,6 +350,10 @@ def main():
             "client_id": "a", "client_secret": "b"}}), policy=_only_metadata_refused)
         check("hosted: an auth.token_url the policy refuses is refused, by name",
               code == 422 and "auth.token_url" in json.dumps(obj), f"{code} {obj}")
+        code, obj = intake.submit(root, body(cfg={"websocket": {"url": "ws://127.0.0.1:1/ws"}}),
+                                  policy=_only_metadata_refused)
+        check("hosted: a websocket target is refused at the door, by name",
+              code == 400 and "websocket" in json.dumps(obj), f"{code} {obj}")
         code, obj = intake.submit(root, body(cfg={"directline": {
             "token_url": "http://169.254.169.254/token"}}), policy=_only_metadata_refused)
         check("hosted: a directline.token_url the policy refuses is refused, by name",

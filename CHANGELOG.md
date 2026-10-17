@@ -149,6 +149,28 @@ stamped with another id, could be read as the bot's; an `endOfConversation` mid-
 rest of the chain into a new conversation; and a send was charged one request that never left
 while being priced at half of what it sent.
 
+**A chat whose backend is a WebSocket: `websocket:`.** The adapter spoke HTTP alone, and a chat
+UI whose backend is `ws://.../ws` could not be pointed at. It now carries an RFC 6455 client in the
+standard library (the engine still installs with PyYAML and nothing else): the message is one text
+frame, the answer every frame after it until an end frame or `quiet_s` of quiet, a token stream
+joined from `text_from`; fragments joined, pings answered, a refused upgrade the rejection it was,
+an upgrade without the accept key refused, no redirect followed. One connection is one
+conversation. The socket must be on the target's own origin (`ws` beside `http`), and is refused
+on the hosted service and through a proxy, where the address checks would not see it. `init
+--shape websocket` writes the config.
+An independent review of the client found eleven defects before it was committed, fixed with
+it: a quiet timeout in the middle of a frame threw away the bytes already read, so an answer cut
+short read as complete and the next turn parsed the rest as a header; a frame arriving after the
+end, or after a pause longer than `quiet_s`, was read as the next turn's answer; a frame over the
+reply cap became an empty error instead of a kept prefix with its size, and the cap was per frame
+rather than per answer; `max_s` was not held inside a frame; a close after a complete answer was
+called a cut one; a plain-text frame was dropped where `text_from` was set; the user's own
+message echoed back was read as the answer; a line break in a header was written into the
+upgrade; a dead connection was used again; a refusal's body in a second packet was lost; and
+`init` derived `ws` from an `HTTPS://` url only in lower case. And two "this turn was not sent"
+cases, a Direct Line conversation the bot ended and a WebSocket tail, now say so in their own
+words rather than as `BudgetExhausted`, which `run` counts as rows the budget cut short.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

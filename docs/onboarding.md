@@ -226,6 +226,41 @@ bot answers and the looks until it is quiet), and `onboard`, `run` and the budge
 directline` writes are priced at that. Not covered: the WebSocket stream, and `typing` (which the
 protocol only sends over it).
 
+**A chat whose backend is a WebSocket** is reached with `websocket:`. The adapter carries its own
+RFC 6455 client, in the standard library alone, so nothing is installed for it:
+
+```yaml
+url: "http://localhost:8000/"          # the same server over http(s): the origin the proof is for
+request:
+  message: "{prompt}"                  # sent as one JSON text frame
+websocket:
+  url: "ws://localhost:8000/ws"        # ws beside http, wss beside https, the same host and port
+  text_from: "token"                   # where a frame holds its text; a non-JSON frame is its own
+  end: {path: "type", equals: "end"}   # the frame that ends an answer, if your server sends one
+  quiet_s: 2                           # otherwise the answer ends after this long with no frame
+  max_s: 60
+response:
+  reply: "text"                        # the frames' text, joined
+  # tool_calls: "frames.*.tool_calls"
+```
+
+One connection is one conversation: each trial opens its own and the turns of a chain share it,
+so the multi-turn attacks are sent as real turns. A fragmented message is joined, a ping is
+answered, an upgrade refused with 401 or 403 is the rejection it was, an upgrade that answers 101
+without the accept key is not taken for a WebSocket server, and no redirect is followed.
+
+Quiet is only between frames: a frame that has started is read to its end, against `max_s`, so a
+pause inside one does not cut the answer short. Before the next turn on the same connection there
+must be `quiet_s` of silence; a frame that arrives in it is the last turn's tail, kept as what
+arrived, and that turn is not sent rather than having the tail read as its answer. A connection
+the server closes in the middle of an answer keeps what had arrived, beside an error saying so (a
+close after the answer, where no `end` frame is configured, is simply its end); a server that
+sends nothing within `max_s` is an error. The user's own message echoed back is not the answer,
+and the whole answer is held to the reply cap, its true size kept. Not on the hosted service, and
+not through a proxy: the address checks there are made on HTTP connections, which this is not.
+`qatration init --shape websocket --url ws://...` writes it. Not covered: socket.io (Chainlit's
+transport), which frames its messages in a protocol of its own.
+
 **A bot behind an identity provider** takes a bearer token that lives about an hour, and a
 sweep outlives it: pasted into `headers:`, every request after the hour is a 401 and the rest
 of the run is unmeasured. `auth:` fetches it by the client-credentials grant (RFC 6749, 4.4),

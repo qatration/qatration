@@ -1397,7 +1397,7 @@ def gradio_stream(text, cut=False):
     return final
 
 
-def requests_per_send(followup=None, directline=None):
+def requests_per_send(followup=None, directline=None, websocket=None):
     """-> the requests one send spends: one; two where the answer is fetched by a second request;
     and over Direct Line the message, the first look and the looks until it has gone quiet, the
     conversation each trial opens aside. ONE rule, for the target and the budget `init` writes."""
@@ -1410,7 +1410,195 @@ def requests_per_send(followup=None, directline=None):
         _poll = float(directline.get("poll_s", 1))
         return (1 + (1 if directline.get("token_url") else 0) + 1 + 2
                 + int(_m.ceil(float(directline.get("quiet_s", 3)) / _poll)))
-    return 2 if followup else 1
+    # A WEBSOCKET: the message, and the upgrade each conversation opens with.
+    return 2 if (followup or websocket) else 1
+
+
+class _WebSocketStall(OSError):
+    """A frame that had started and did not finish before the deadline: the stream is cut."""
+
+
+class _WebSocket:
+    """A WebSocket client (RFC 6455) in the standard library alone: the engine installs with
+    PyYAML and nothing else, and no chat bot is worth a second dependency.
+
+    Text and binary messages, fragments joined, pings answered, a close said as one. The
+    handshake is checked (`Sec-WebSocket-Accept`), a refused upgrade is raised as the HTTP error
+    it was so the adapter's own rejection rules read it, and no redirect is followed: an
+    upgrade that answers 3xx is refused, because where it points was not authorised.
+
+    QUIET IS ONLY BETWEEN FRAMES. A timeout used to fire wherever a read was waiting, in the
+    middle of a frame too: the bytes already read were thrown away, the answer read as complete
+    without its last word, and the next turn parsed the rest of that frame as a header. `wait`
+    asks whether a frame has STARTED, consuming nothing; once one has, it is read to its end
+    against an absolute deadline, and a frame that cannot finish by then is `_WebSocketStall`,
+    after which the connection is not used again. Found by an independent review.
+    """
+    GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+    def __init__(self, url, headers, timeout):
+        import base64 as _b64, hashlib as _hl, os as _o, socket as _so, ssl as _ssl
+        import email.parser as _ep
+        # NO CR OR LF IN A HEADER: written raw into the upgrade, one in a value was a header of
+        # the target's choosing. urllib refuses it on the HTTP path; so does this.
+        for _k, _v in headers.items():
+            if any(c in str(_k) + str(_v) for c in "\r\n"):
+                raise ValueError("header %r holds a line break, which would write a header of "
+                                 "its own into the WebSocket upgrade" % _k)
+        u = urllib.parse.urlsplit(url)
+        port = u.port or (443 if u.scheme == "wss" else 80)
+        self.deadline = time.time() + timeout
+        sock = _so.create_connection((u.hostname, port), timeout=timeout)
+        if u.scheme == "wss":
+            sock = _ssl.create_default_context().wrap_socket(sock, server_hostname=u.hostname)
+        self.sock, self.timeout, self.closed, self._pending = sock, timeout, False, b""
+        key = _b64.b64encode(_o.urandom(16)).decode()
+        path = (u.path or "/") + ("?" + u.query if u.query else "")
+        hdrs = {"Host": u.netloc.rsplit("@", 1)[-1], "Upgrade": "websocket",
+                "Connection": "Upgrade", "Sec-WebSocket-Key": key, "Sec-WebSocket-Version": "13"}
+        hdrs.update({k: v for k, v in headers.items() if k.lower() not in
+                     ("host", "upgrade", "connection", "content-type", "content-length")
+                     and not k.lower().startswith("sec-websocket-")})
+        req = "GET %s HTTP/1.1\r\n%s\r\n" % (path, "".join("%s: %s\r\n" % kv for kv in hdrs.items()))
+        sock.sendall(req.encode("latin-1"))
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            buf += self._recv_some(self.deadline)
+            if len(buf) > 65536:
+                raise OSError("the WebSocket upgrade answer is over 64 KB of headers")
+        head, self._pending = buf.split(b"\r\n\r\n", 1)
+        status_line, _, rest = head.decode("latin-1").partition("\r\n")
+        parts = status_line.split(" ", 2)
+        code = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+        msg = _ep.Parser().parsestr(rest)
+        if code != 101:
+            # THE WHOLE REFUSAL, as far as it says how long it is: a body in a second packet was
+            # lost, and the error said "403" without the server's reason.
+            try:
+                _want = min(int(msg.get("Content-Length") or 0), MAX_ERROR_BODY)
+            except ValueError:
+                _want = 0
+            try:
+                while len(self._pending) < _want:
+                    self._pending += self._recv_some(min(self.deadline, time.time() + 2))
+            except OSError:
+                pass
+            self.sock.close()
+            raise urllib.error.HTTPError(url, code or 502, (parts[2] if len(parts) > 2 else ""),
+                                         msg, io_bytes(self._pending[:MAX_ERROR_BODY]))
+        want = _b64.b64encode(_hl.sha1((key + self.GUID).encode()).digest()).decode()
+        if (msg.get("Sec-WebSocket-Accept") or "").strip() != want:
+            self.sock.close()
+            raise OSError("the WebSocket upgrade answered 101 without the accept key the "
+                          "protocol requires, so it is not a WebSocket server")
+
+    def _recv_some(self, deadline):
+        _left = deadline - time.time()
+        if _left <= 0:
+            raise _WebSocketStall("the deadline passed in the middle of a WebSocket read")
+        self.sock.settimeout(_left)
+        try:
+            got = self.sock.recv(65536)
+        except OSError as e:
+            import socket as _so
+            if isinstance(e, _so.timeout):
+                raise _WebSocketStall("the deadline passed in the middle of a WebSocket read")
+            raise
+        if not got:
+            raise OSError("the WebSocket connection was closed mid-frame")
+        return got
+
+    def _read(self, n, deadline):
+        while len(self._pending) < n:
+            self._pending += self._recv_some(deadline)
+        out, self._pending = self._pending[:n], self._pending[n:]
+        return out
+
+    def _skip(self, n, deadline):
+        """Read and discard `n` bytes, without holding them."""
+        while n > 0:
+            if not self._pending:
+                self._pending = self._recv_some(deadline)
+            k = min(n, len(self._pending))
+            self._pending, n = self._pending[k:], n - k
+
+    def wait(self, timeout):
+        """Has a frame started within `timeout`? Consumes nothing."""
+        import select as _sel
+        if self._pending or (hasattr(self.sock, "pending") and self.sock.pending()):
+            return True
+        if timeout <= 0:
+            timeout = 0
+        r, _w, _x = _sel.select([self.sock], [], [], timeout)
+        return bool(r)
+
+    def _frame(self, opcode, payload):
+        import os as _o, struct as _st
+        mask = _o.urandom(4)
+        n = len(payload)
+        head = bytes([0x80 | opcode])
+        head += (bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + _st.pack("!H", n)
+                 if n < 65536 else bytes([0x80 | 127]) + _st.pack("!Q", n))
+        return head + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+
+    def send_text(self, text):
+        self.sock.sendall(self._frame(0x1, text.encode("utf-8")))
+
+    def recv(self, deadline, room):
+        """-> (text, over) for the next whole message, read to its end by `deadline`, or
+        (None, 0) at a close. `room` is how many more bytes the answer may hold: a message
+        larger is kept up to it, and `over` is the size it declared, after which the connection
+        is closed rather than read on (the rest would be the next turn's garbage)."""
+        import struct as _st
+        parts, size = [], 0
+        while True:
+            b1, b2 = self._read(2, deadline)
+            fin, opcode, n = b1 & 0x80, b1 & 0x0F, b2 & 0x7F
+            if n == 126:
+                n = _st.unpack("!H", self._read(2, deadline))[0]
+            elif n == 127:
+                n = _st.unpack("!Q", self._read(8, deadline))[0]
+            mask = self._read(4, deadline) if b2 & 0x80 else None
+            if opcode in (0x0, 0x1, 0x2) and size + n > room:
+                # OVER THE CAP: what fits is kept as the evidence, and its true size travels.
+                data = self._read(max(0, room - size), deadline)
+                if mask:
+                    data = bytes(c ^ mask[i % 4] for i, c in enumerate(data))
+                parts.append(data)
+                self.close()
+                return b"".join(parts).decode("utf-8", "replace"), size + n
+            data = self._read(n, deadline)
+            if mask:
+                data = bytes(c ^ mask[i % 4] for i, c in enumerate(data))
+            if opcode == 0x8:
+                self.closed = True
+                return None, 0
+            if opcode == 0x9:                              # ping: answered, not a message
+                self.sock.sendall(self._frame(0xA, data))
+                continue
+            if opcode == 0xA:
+                continue
+            parts.append(data)
+            size += n
+            if fin:
+                return b"".join(parts).decode("utf-8", "replace"), 0
+
+    def close(self):
+        try:
+            if not self.closed:
+                self.sock.sendall(self._frame(0x8, b"\x03\xe8"))
+        except Exception:
+            pass
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+        self.closed = True
+
+
+def io_bytes(b):
+    import io as _io
+    return _io.BytesIO(b)
 
 
 class _BudgetGone(Exception):
@@ -1781,7 +1969,7 @@ class HttpConfiguredTarget(Target):
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
                  auth=None, env=None, proxy=None, session=None, followup=None,
-                 directline=None, **unknown):
+                 directline=None, websocket=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -1843,6 +2031,9 @@ class HttpConfiguredTarget(Target):
              "expand -- every request would go out with the placeholder still in it."),
             ("rate", rate, dict,
              "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("websocket", websocket, dict,
+             "It is a mapping: `websocket: {url: wss://<the target's host>/ws, text_from: token, "
+             "end: {path: type, equals: end}}`."),
             ("directline", directline, dict,
              "It is a mapping: `directline: {user: dl_qatration, poll_s: 1, quiet_s: 3}`, and "
              "`url` is the Direct Line base, e.g. https://directline.botframework.com/v3/directline."),
@@ -1951,10 +2142,14 @@ class HttpConfiguredTarget(Target):
         self.directline = self._directline_config(directline, name, history, followup, session,
                                                   auth)
         self._dl, self._dl_ended = None, False
+        self.websocket = self._websocket_config(websocket, name, url, history, followup, session,
+                                                directline, auth, proxy)
+        self._ws = None
         # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
         # request. Priced at one, a run against a Gradio app was "ready" and stopped halfway
         # through the arsenal with the rest never sent.
-        self.requests_per_send = requests_per_send(self.followup, self.directline)
+        self.requests_per_send = requests_per_send(self.followup, self.directline,
+                                                   self.websocket)
         self._session_first = session.get("first", "")
         if self.session_from:
             self._session = self._session_first
@@ -2238,13 +2433,14 @@ class HttpConfiguredTarget(Target):
             # from one the attacker wrote for it. That is the precondition for a Context
             # Compliance Attack and it is a fact about the API, not about the model.
             caps |= {"chain", "forged_history"}
-        elif self.uses_session or self.directline:
+        elif self.uses_session or self.directline or self.websocket:
             # A SERVER THAT KEEPS THE CONVERSATION hears the earlier turns of a chain because
             # they were sent in the same session, and only the turns that really happened:
             # nobody can write its assistant's side, so `forged_history` is not on offer.
             # Whether it does keep them is asked before the run (`runner.reads_history`).
             caps.add("chain")
-        self.server_memory = bool((self.uses_session or self.directline) and not self.history)
+        self.server_memory = bool((self.uses_session or self.directline or self.websocket)
+                                  and not self.history)
         if self.calls_path:
             caps.add("tool_visibility")
         self.capabilities = caps
@@ -2301,6 +2497,188 @@ class HttpConfiguredTarget(Target):
         else:
             body[field] = turns
         return body
+
+    # --- a bot that answers over a WebSocket -------------------------------------------------
+    @staticmethod
+    def _websocket_config(ws, name, url, history, followup, session, directline, auth, proxy):
+        """`websocket: {url, text_from, end, quiet_s, max_s}`: a chat that is a WebSocket.
+
+        A BOT BEHIND A SOCKET WAS OUT OF REACH: the adapter spoke HTTP alone, and a chat UI whose
+        backend is `ws://.../ws` could not be pointed at. Here the message is the request
+        template as one text frame, and the answer is every frame after it until a frame says
+        it is the end (`end: {path, equals}`), or `quiet_s` passes with none, or `max_s`. Each
+        frame's text is at `text_from` (a frame that is not JSON is its own text), so a
+        token-by-token answer is joined; `frames` keeps them all for the other paths. One
+        connection is one conversation: a trial opens its own, the turns of a chain share it.
+
+        ON THE TARGET'S OWN ORIGIN: `url` stays the http(s) address the ownership proof is for,
+        and `websocket.url` must be the same host and port, `ws` beside `http` and `wss` beside
+        `https`. Not through a proxy, and not on the hosted service, whose address checks are
+        made on the HTTP connections this does not use.
+        """
+        if ws is None:
+            return None
+        import authorization as _az
+        w = dict(ws)
+        _bad = sorted(k for k in w if k not in ("url", "text_from", "end", "quiet_s", "max_s"))
+        try:
+            w["quiet_s"] = float(w.get("quiet_s", 2))
+            w["max_s"] = float(w.get("max_s", 60))
+        except (TypeError, ValueError):
+            _bad.append("a number that is not one")
+        _end = w.get("end")
+        if _end is not None and not (isinstance(_end, dict) and set(_end) == {"path", "equals"}):
+            _bad.append("end (it is {path: ..., equals: ...})")
+        if _bad or not str(w.get("url") or "").lower().startswith(("ws://", "wss://")) \
+                or w["quiet_s"] <= 0 or w["max_s"] < w["quiet_s"]:
+            raise SystemExit(
+                "targets_http: `websocket:` for %r takes url (ws:// or wss://), text_from, end: "
+                "{path, equals}, quiet_s and max_s (at least quiet_s)%s." % (
+                    name, "; it also names %s" % ", ".join(map(repr, _bad)) if _bad else ""))
+        _as_http = re.sub(r"^ws", "http", str(w["url"]), flags=re.I)
+        if _az.origin_of(_as_http) != _az.origin_of(url):
+            raise SystemExit(
+                "targets_http: websocket.url %r for %r is not on the target's own origin (%s): "
+                "the ownership proof is for that origin, so the socket must be on it too, `ws` "
+                "beside `http` and `wss` beside `https`." % (w["url"], name, _az.origin_of(url)))
+        if history or followup or session or directline or auth or proxy:
+            raise SystemExit(
+                "targets_http: `websocket:` for %r keeps its conversation on the connection, so "
+                "`history:`, `followup:`, `session:`, `directline:`, `auth:` and `proxy:` beside it "
+                "are not read; remove them." % name)
+        if _az_pin.hosted():
+            raise SystemExit(
+                "targets_http: `websocket:` is not available on the hosted service, whose address "
+                "checks are made on HTTP connections and would not see this one.")
+        return w
+
+    def _websocket_send(self, prompt, data, t0, headers):
+        """The message as one text frame, and every frame of the answer.
+
+        WHAT WAS READ STAYS READ, AND STAYS WITH ITS TURN. Frames still waiting when the next
+        turn is about to be sent are the last turn's tail, arriving late: read as this turn's
+        answer, a leak in turn one was filed under turn two and turn two's own answer pushed
+        later. So the connection is closed and this turn not sent, said as that. A failure, a
+        stall mid-frame or a close in the middle of an answer keeps what had arrived beside the
+        error, and the connection is not used again. Found by an independent review.
+
+        The user's own message echoed back by the server is not the answer; a close after an
+        answer, where no `end` frame is configured, is the end of it; a plain-text frame is its
+        own text whether or not `text_from` is set; and the whole answer, not each frame, is
+        held to the reply cap, its true size kept for `unbounded_output`.
+        """
+        w = self.websocket
+        frames, texts, _err, _sent, _over, _size = [], [], None, False, 0, 0
+        _text = data.decode("utf-8")
+        _deadline = t0 + w["max_s"]
+        import signing as _sg
+        try:
+            # A FULL `quiet_s` OF SILENCE BEFORE THE NEXT TURN on the same connection: a tail that
+            # arrives a moment after the last turn ended -- after its end frame, or after a pause
+            # longer than `quiet_s` -- would otherwise land after this turn's message and be read
+            # as its answer. Checked without waiting, a frame a few hundred ms late slipped by.
+            if (self._ws is not None and not self._ws.closed
+                    and self._ws.wait(min(w["quiet_s"], max(0.0, _deadline - time.time())))):
+                # THE TAIL IS READ AND KEPT: it is what the server said in this conversation,
+                # a leak in it is a leak, and dropped it was evidence nobody saw. It travels on
+                # this turn, which was not sent, under its own word -- not the budget's.
+                _tail = []
+                try:
+                    while self._ws.wait(min(w["quiet_s"], max(0.0, _deadline - time.time()))):
+                        _m, _b = self._ws.recv(_deadline, MAX_REPLY - sum(map(len, _tail)))
+                        if _m is None:
+                            break
+                        _tail.append(_m)
+                        if _b:
+                            break
+                except Exception:
+                    pass
+                self._ws.close()
+                self._ws = None
+                return Probe(prompt=prompt, output="\n".join(_tail),
+                             seconds=round(time.time() - t0, 1),
+                             error="WebSocketDesync: frames of the previous turn were still "
+                                   "arriving when this turn was due, so the connection was closed "
+                                   "and the turn not sent; the late frames are kept as what "
+                                   "arrived (raise websocket.quiet_s if the server pauses inside "
+                                   "an answer)")
+            if self._ws is None or self._ws.closed:
+                if not self.rate.take():
+                    raise _BudgetGone()
+                self._ws = _WebSocket(str(w["url"]), headers, self.timeout)
+            if not self.rate.take():
+                raise _BudgetGone()
+            self._ws.send_text(_text)
+            _sent = True
+            while True:
+                _left = _deadline - time.time()
+                if _left <= 0:
+                    break
+                if not self._ws.wait(min(w["quiet_s"], _left) if frames else _left):
+                    break                           # quiet between frames: the answer is over
+                msg, _big = self._ws.recv(_deadline, MAX_REPLY - _size)
+                if msg is None:
+                    self._ws.close()
+                    self._ws = None
+                    if not frames:
+                        _err = "WebSocketClosed: the server closed the connection before answering"
+                    elif w.get("end"):
+                        _err = ("WebSocketClosed: the server closed the connection in the middle "
+                                "of the answer, before its end frame")
+                    break
+                _size += len(msg.encode("utf-8"))
+                # THE USER'S OWN MESSAGE, broadcast back, is not the bot saying it.
+                if msg.strip() in (_text.strip(), str(prompt).strip()):
+                    continue
+                try:
+                    frame = json.loads(msg)
+                except ValueError:
+                    frame = msg
+                frames.append(frame)
+                if isinstance(frame, str):
+                    _t = frame
+                elif w.get("text_from"):
+                    _t = dig(frame, w["text_from"])
+                else:
+                    _t = None
+                if isinstance(_t, str):
+                    texts.append(_t)
+                if _big:
+                    _over = _big + _size - len(msg.encode("utf-8"))
+                    self._ws = None
+                    break
+                _end = w.get("end")
+                if _end and not isinstance(frame, str) and dig(frame, _end["path"]) == _end["equals"]:
+                    break
+        except _BudgetGone:
+            if not _sent:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error="%s: the budget ran out before the message was sent"
+                                   % _sg.NEVER_SENT)
+        except urllib.error.HTTPError:
+            raise
+        except Exception as e:
+            if self._ws is not None:
+                self._ws.close()
+                self._ws = None
+            if not frames:
+                raise
+            _err = ("WebSocketIncomplete: %s while the answer was still arriving; what had "
+                    "arrived is kept" % " ".join(("%s: %s" % (type(e).__name__, e)).split())[:200])
+        if not frames:
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error=_err or ("WebSocketTimeout: no frame answered the message within "
+                                        "%gs (websocket.max_s)" % w["max_s"]))
+        # TOKENS ARE JOINED AS THEY CAME; whole messages are lines.
+        _joined = "".join(texts) if w.get("text_from") else "\n".join(texts)
+        raw = {"text": _joined, "frames": frames}
+        p = self._probe_from(raw, prompt, t0, _over or None)
+        if _err and not p.error:
+            try:
+                object.__setattr__(p, "error", _err)
+            except Exception:
+                pass
+        return p
 
     # --- Microsoft Bot Framework Direct Line (Copilot Studio, Azure AI Bot Service) -----------
     @staticmethod
@@ -2391,10 +2769,11 @@ class HttpConfiguredTarget(Target):
         if self._dl_ended:
             # THE BOT ENDED THE CONVERSATION a turn ago, and the turns after it would go to a
             # new one with no context, recorded as turns of this one. Not sent; said.
-            import signing as _sg
+            # ITS OWN WORD, NOT THE BUDGET'S: `BudgetExhausted` is what `run` counts as rows
+            # the budget cut short, and this one was cut by the bot.
             return Probe(prompt=prompt, output="", seconds=0.0,
-                         error="%s: the bot ended the conversation (endOfConversation) before "
-                               "this turn, so the turn was not sent" % _sg.NEVER_SENT)
+                         error="DirectLineEnded: the bot ended the conversation "
+                               "(endOfConversation) before this turn, so the turn was not sent")
         try:
             if self._dl is None:
                 _auth = _secret
@@ -2870,7 +3249,7 @@ class HttpConfiguredTarget(Target):
         prompt = payload(prompt)
         # DIRECT LINE PAYS PER REQUEST in `_dl_request`, for the requests it really sends; a
         # take here as well charged one request that never left. Found by an independent review.
-        if not self.directline and not self.rate.take():
+        if not (self.directline or self.websocket) and not self.rate.take():
             # Said as a gap, not as a property of the target.
             # THROUGH THE PREFIX, because it is a contract between modules and this was the
             # only place it was spelled: `signing.NEVER_SENT` carries the argument.
@@ -2913,6 +3292,8 @@ class HttpConfiguredTarget(Target):
         try:
             if self.directline:
                 return self._directline_send(prompt, data, t0)
+            if self.websocket:
+                return self._websocket_send(prompt, data, t0, headers)
             with self._opener.open(req, timeout=self.timeout) as r:
                 _body, _over = read_capped(r, seconds=self.timeout)
                 # THE ANSWER IS BEHIND AN ID: everything below reads the second response.
@@ -3105,4 +3486,8 @@ class HttpConfiguredTarget(Target):
             self._session = new_session()
         # A DIRECT LINE CONVERSATION ENDS HERE: the next send opens another.
         self._dl, self._dl_ended = None, False
+        # AND A WEBSOCKET CONNECTION, which is the conversation on most servers that use one.
+        if self._ws is not None:
+            self._ws.close()
+            self._ws = None
         return None
