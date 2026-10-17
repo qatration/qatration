@@ -1402,7 +1402,14 @@ def requests_per_send(followup=None, directline=None):
     and over Direct Line the message, the first look and the looks until it has gone quiet, the
     conversation each trial opens aside. ONE rule, for the target and the budget `init` writes."""
     if directline:
-        return 2 + int(float(directline.get("quiet_s", 3)) // float(directline.get("poll_s", 1)))
+        # OPENING THE CONVERSATION (and the token, where there is a token url), THE MESSAGE, THE
+        # LOOKS WHILE THE BOT IS STILL ANSWERING, AND THE LOOKS UNTIL IT HAS GONE QUIET. Priced
+        # at the quiet looks alone it was half of what a run sent, and a budget sized by it
+        # stopped part way. Found by an independent review.
+        import math as _m
+        _poll = float(directline.get("poll_s", 1))
+        return (1 + (1 if directline.get("token_url") else 0) + 1 + 2
+                + int(_m.ceil(float(directline.get("quiet_s", 3)) / _poll)))
     return 2 if followup else 1
 
 
@@ -1943,7 +1950,7 @@ class HttpConfiguredTarget(Target):
         self.followup = self._followup_config(followup, name, url, auth)
         self.directline = self._directline_config(directline, name, history, followup, session,
                                                   auth)
-        self._dl = None
+        self._dl, self._dl_ended = None, False
         # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
         # request. Priced at one, a run against a Gradio app was "ready" and stopped halfway
         # through the arsenal with the rest never sent.
@@ -2365,10 +2372,29 @@ class HttpConfiguredTarget(Target):
             return json.loads(_decoded(got, r) or "{}")
 
     def _directline_send(self, prompt, data, t0):
-        """The message as one activity on this trial's conversation, and the bot's answer."""
+        """The message as one activity on this trial's conversation, and the bot's answer.
+
+        WHAT WAS READ STAYS READ. A failure after the answer arrived -- a 502 on the poll that
+        only checked for quiet, a 429, the budget running out -- returned an empty probe, the
+        runner retried into a new conversation, and the retry's refusal became the verdict over
+        a leak already seen. The answer read so far now travels with the error, which `judge`
+        scores as a breach seen beside an error. Found by an independent review.
+
+        THIS TURN'S ANSWER ONLY: an activity is the bot's when it says so (`role: bot`) or when
+        it replies to the message just sent, and it counts only if it replies to that message.
+        The user's own activity (the id the post was acknowledged with) is never the answer, and
+        an earlier turn's late message without a `replyToId` is not this turn's.
+        """
         d, base = self.directline, str(self.url).rstrip("/")
         _secret = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
-        _sent = False
+        _sent, replies, _err = False, [], None
+        if self._dl_ended:
+            # THE BOT ENDED THE CONVERSATION a turn ago, and the turns after it would go to a
+            # new one with no context, recorded as turns of this one. Not sent; said.
+            import signing as _sg
+            return Probe(prompt=prompt, output="", seconds=0.0,
+                         error="%s: the bot ended the conversation (endOfConversation) before "
+                               "this turn, so the turn was not sent" % _sg.NEVER_SENT)
         try:
             if self._dl is None:
                 _auth = _secret
@@ -2386,11 +2412,10 @@ class HttpConfiguredTarget(Target):
             dl = self._dl
             _conv = base + "/conversations/" + urllib.parse.quote(dl["id"], safe="")
             _act = json.loads(data.decode("utf-8"))
-            _me = str(((_act.get("from") or {}).get("id")) or d["user"])
             _ack = self._dl_request("POST", _conv + "/activities", dl["auth"], _act)
             _sent = True
             _aid = _ack.get("id")
-            replies, _last_new, _done = [], None, False
+            _last_new, _done, _ended = None, False, False
             _deadline = t0 + d["max_s"]
             time.sleep(min(0.3, d["poll_s"]))       # the protocol's "shortly after" first look
             while True:
@@ -2401,13 +2426,21 @@ class HttpConfiguredTarget(Target):
                 if _page.get("watermark"):
                     dl["watermark"] = str(_page["watermark"])
                 for _a in _page.get("activities") or []:
-                    if not isinstance(_a, dict) or _a.get("id") in dl["seen"]:
+                    if not isinstance(_a, dict):
                         continue
-                    dl["seen"].add(_a.get("id"))
-                    _from = _a.get("from") or {}
-                    _bot = _from.get("role") == "bot" or (_from.get("id") not in (None, _me)
-                                                          and _from.get("role") != "user")
-                    if not _bot or (_aid and _a.get("replyToId") not in (None, _aid)):
+                    _id = _a.get("id")
+                    if _id is not None and _id in dl["seen"]:
+                        continue
+                    if _id is not None:
+                        dl["seen"].add(_id)
+                    # ONE RULE: THE ANSWER REPLIES TO THE MESSAGE JUST SENT. That excludes the
+                    # user's own activity, under whatever id the service stamps on it, and an
+                    # earlier turn's late message, which replies to nothing or to its own turn.
+                    # Only when the post was acknowledged without an id is `role: bot` asked.
+                    if _aid is not None:
+                        if _a.get("replyToId") != _aid:
+                            continue
+                    elif (_a.get("from") or {}).get("role") != "bot":
                         continue
                     if _a.get("type") == "message":
                         replies.append(_a)
@@ -2415,21 +2448,36 @@ class HttpConfiguredTarget(Target):
                         if _a.get("inputHint") in ("acceptingInput", "expectingInput"):
                             _done = True
                     elif _a.get("type") == "endOfConversation":
-                        _done = True
-                        self._dl = None
+                        _done = _ended = True
+                if _ended:
+                    self._dl, self._dl_ended = None, True
                 if _done or (replies and time.time() - _last_new >= d["quiet_s"]):
                     break
                 if time.time() + d["poll_s"] > _deadline:
                     break
                 time.sleep(d["poll_s"])
+            if _ended and not replies:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error="DirectLineEnded: the bot ended the conversation without "
+                                   "answering the message")
         except _BudgetGone:
             import signing as _sg
-            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
-                         error=("%s: the budget ran out before the message was sent"
-                                % _sg.NEVER_SENT) if not _sent else
-                               ("DirectLineIncomplete: the message WAS sent, and the request "
-                                "budget ran out before the bot's answer was read"))
+            if not _sent:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error="%s: the budget ran out before the message was sent"
+                                   % _sg.NEVER_SENT)
+            _err = ("DirectLineIncomplete: the message WAS sent, and the request budget ran out "
+                    "while the answer was still being read%s" % (
+                        "; what had arrived is kept" if replies else ""))
+        except Exception as e:
+            if not replies:
+                raise
+            _err = ("DirectLineIncomplete: %s while the answer was still being read; what had "
+                    "arrived is kept" % " ".join(("%s: %s" % (type(e).__name__, e)).split())[:200])
         if not replies:
+            if _err:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error=_err)
             # SILENCE IS NOT AN ANSWER: a bot that said nothing in `max_s` has not been measured.
             return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
                          error="DirectLineTimeout: no bot activity answered the message within "
@@ -2441,9 +2489,15 @@ class HttpConfiguredTarget(Target):
             # WHAT A CARD SHOWS IS SAID TOO: an Adaptive Card's text blocks reach the user as
             # surely as a message's text, and a leak in one was otherwise never read.
             texts.extend(_card_texts(_a.get("attachments")))
-        raw = {"text": "\n".join(texts), "activities": replies, "conversationId": self._dl and
-               self._dl["id"]}
-        return self._probe_from(raw, prompt, t0)
+        raw = {"text": "\n".join(texts), "activities": replies,
+               "conversationId": self._dl and self._dl["id"]}
+        p = self._probe_from(raw, prompt, t0)
+        if _err and not p.error:
+            try:
+                object.__setattr__(p, "error", _err)
+            except Exception:
+                pass
+        return p
 
     # --- an answer fetched by a second request ----------------------------------------------
     @staticmethod
@@ -2814,7 +2868,9 @@ class HttpConfiguredTarget(Target):
 
     def send(self, prompt, history=None):
         prompt = payload(prompt)
-        if not self.rate.take():
+        # DIRECT LINE PAYS PER REQUEST in `_dl_request`, for the requests it really sends; a
+        # take here as well charged one request that never left. Found by an independent review.
+        if not self.directline and not self.rate.take():
             # Said as a gap, not as a property of the target.
             # THROUGH THE PREFIX, because it is a contract between modules and this was the
             # only place it was spelled: `signing.NEVER_SENT` carries the argument.
@@ -3048,5 +3104,5 @@ class HttpConfiguredTarget(Target):
         elif self.uses_session:
             self._session = new_session()
         # A DIRECT LINE CONVERSATION ENDS HERE: the next send opens another.
-        self._dl = None
+        self._dl, self._dl_ended = None, False
         return None

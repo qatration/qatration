@@ -335,7 +335,7 @@ def _app_shapes():
             if _sh != "gradio":
                 check("...and whose budget is sized by what one of its sends costs",
                       (_c.get("rate") or {}).get("max_requests") == 1800 * _t.requests_per_send
-                      and _t.requests_per_send == (5 if _sh == "directline" else 1),
+                      and _t.requests_per_send == (7 if _sh == "directline" else 1),
                       repr((_c.get("rate"), _t.requests_per_send)))
             check("...whose reply is read where %s puts it" % _sh,
                   (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))

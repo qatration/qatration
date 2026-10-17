@@ -216,8 +216,13 @@ Each trial opens its own conversation, and the turns of a chain stay in it, so t
 attacks are sent as real turns (no forged history: nobody can write the agent's past). The answer
 is the agent's activities that reply to the message, ended by one saying it is listening again,
 by the end of the conversation, or by `quiet_s` of quiet; an Adaptive Card's text blocks are part
-of it, because the user reads them. Every request is paid for out of the budget, so a send costs
-about `2 + quiet_s / poll_s` requests, and `onboard`, `run` and the budget `init --shape
+of it, because the user reads them. Only an activity that replies to the message just sent is
+its answer: the user's own message, echoed back under whatever id the service stamps on it, and
+an earlier turn's late message are not. A failure after the answer arrived keeps what was read,
+beside the error; a bot that ends the conversation mid-chain stops the chain there rather than
+sending its later turns into a new one. Every request is paid for out of the budget, so a send
+costs about `4 + quiet_s / poll_s` requests (the conversation, the message, the looks while the
+bot answers and the looks until it is quiet), and `onboard`, `run` and the budget `init --shape
 directline` writes are priced at that. Not covered: the WebSocket stream, and `typing` (which the
 protocol only sends over it).
 

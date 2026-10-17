@@ -141,6 +141,13 @@ silence for `max_s` is an error, a budget that runs out after the message went s
 every poll is priced in the budget `onboard`, `run` and `init --shape directline` use. The part of
 `send` that reads a response is now one method, `_probe_from`, used by both paths, so they cannot
 disagree about what a reply is. An empty `directline: {}` is the defaults, not no block.
+An independent review of it then found five defects, fixed before it was released: a failure on
+a poll after the answer arrived threw the answer away, and the runner's retry into a new
+conversation made the refusal there the verdict over a leak already seen; an earlier turn's late
+message without a `replyToId` was taken as the next turn's answer; the user's own activity,
+stamped with another id, could be read as the bot's; an `endOfConversation` mid-chain sent the
+rest of the chain into a new conversation; and a send was charged one request that never left
+while being priced at half of what it sent.
 
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the

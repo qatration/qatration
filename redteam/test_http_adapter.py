@@ -1837,7 +1837,8 @@ def _directline(check):
     from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
     from targets_http import HttpConfiguredTarget as _HT
     import runner as _rn
-    _st = {"convs": {}, "n": 0, "log": [], "silent": False, "card": False, "tokens": 0}
+    _st = {"convs": {}, "n": 0, "log": [], "silent": False, "card": False, "tokens": 0,
+           "mode": "", "gets": 0}
 
     class _H(_BH):
         def _send(self, code, obj):
@@ -1850,6 +1851,11 @@ def _directline(check):
 
         def do_GET(self):
             _st["log"].append(("GET", self.path, self.headers.get("Authorization")))
+            if "/activities" in self.path:
+                _st["gets"] += 1
+                # THE POLL THAT ONLY CHECKS FOR QUIET FAILS, after the answer was read.
+                if _st["mode"] == "fail2" and _st["gets"] >= 3:
+                    return self._send(502, {"error": {"code": "BotError", "message": "bad gateway"}})
             if self.path == "/token":
                 _st["tokens"] += 1
                 return self._send(200, {"token": "env-token", "expires_in": 3600})
@@ -1857,7 +1863,11 @@ def _directline(check):
             c = _st["convs"][cid]
             wm = int(self.path.split("watermark=")[1]) if "watermark=" in self.path else 0
             # THE BOT ANSWERS A MOMENT LATER: the first look finds the user's own activity alone.
-            ready = [a for a in c["acts"] if a.get("_at", 0) <= _tm.time()]
+            # IN THE ORDER THEY APPEARED, as the service hands them out: by position in a list
+            # ordered by when each was posted, an activity ready later than the next one was
+            # posted fell behind the watermark and was never handed out.
+            ready = sorted((a for a in c["acts"] if a.get("_at", 0) <= _tm.time()),
+                           key=lambda a: a.get("_at", 0))
             page = [{k: v for k, v in a.items() if k != "_at"} for a in ready[wm:]]
             self._send(200, {"activities": page, "watermark": str(len(ready))})
 
@@ -1874,19 +1884,40 @@ def _directline(check):
             c = _st["convs"][cid]
             act = _j.loads(raw)
             aid = "%s|%04d" % (cid, len(c["acts"]) + 1)
-            c["acts"].append(dict(act, id=aid))
+            c["acts"].append(dict(act, id=aid, _at=_tm.time()))
             c["said"].append(act["text"])
-            if not _st["silent"]:
+            if _st["mode"] == "echo":
+                # THE SERVICE STAMPS THE USER'S ACTIVITY WITH ITS OWN ID AND NO ROLE.
+                c["acts"][-1]["from"] = {"id": "dl_stamped"}
+            if _st["mode"] == "end_only":
+                c["acts"].append({"type": "endOfConversation", "id": aid + "e", "replyToId": aid,
+                                  "from": {"id": "bot1", "role": "bot"}, "_at": _tm.time() + 0.3})
+            elif not _st["silent"]:
                 reply = {"type": "message", "id": aid + "r", "replyToId": aid,
                          "from": {"id": "bot1", "name": "Agent", "role": "bot"},
                          "text": "So far you said: " + " | ".join(c["said"]),
                          "inputHint": "acceptingInput", "_at": _tm.time() + 0.5}
+                if _st["mode"] in ("fail2", "late"):
+                    reply.pop("inputHint")
+                if _st["mode"] == "echo":
+                    reply["_at"] = _tm.time() + 1.5
+                if _st["mode"] == "late" and len(c["said"]) == 2:
+                    reply["_at"] = _tm.time() + 2.0     # turn two's answer comes late
                 if _st["card"]:
                     reply["text"] = ""
                     reply["attachments"] = [{"contentType": "application/vnd.microsoft.card.adaptive",
                                              "content": {"type": "AdaptiveCard", "body": [
                                                  {"type": "TextBlock", "text": "Code: CARD-SECRET-1"}]}}]
                 c["acts"].append(reply)
+                if _st["mode"] == "late" and len(c["said"]) == 1:
+                    # A FOLLOW-UP FROM TURN ONE, LATE, AND WITH NO replyToId.
+                    c["acts"].append({"type": "message", "id": aid + "f",
+                                      "from": {"id": "bot1", "role": "bot"},
+                                      "text": "turn-one follow-up", "_at": _tm.time() + 4.5})
+                if _st["mode"] == "end":
+                    c["acts"].append({"type": "endOfConversation", "id": aid + "e",
+                                      "replyToId": aid, "from": {"id": "bot1", "role": "bot"},
+                                      "_at": _tm.time() + 0.6})
             self._send(200, {"id": aid})
 
         def log_message(self, *a):
@@ -1947,8 +1978,53 @@ def _directline(check):
         check("a budget that runs out after the message was sent says it WAS sent",
               bool(_p.error) and "WAS sent" in _p.error and "never sent" not in _p.error,
               "error=%r" % _p.error)
-        check("...and a Direct Line send is priced at its message and the looks it takes",
-              _t.requests_per_send == 3, repr(_t.requests_per_send))
+        check("...and a Direct Line send is priced at the conversation, the message and the looks",
+              _t.requests_per_send == 5, repr(_t.requests_per_send))
+        # WHAT WAS READ STAYS READ: a failure on the poll after the answer keeps the answer.
+        _r = _HT(url=base + "/v3/directline", name="copilot-rev",
+                 headers={"Authorization": "Bearer dl-secret"},
+                 directline={"poll_s": 1, "quiet_s": 2, "max_s": 8},
+                 response={"reply": "text"}, timeout_s=5)
+        _st.update(mode="fail2", gets=0)
+        _r.reset()
+        _p = _r.send("leak it")
+        check("a failure on a later poll keeps the answer already read, beside the error",
+              _p.output == "So far you said: leak it" and "DirectLineIncomplete" in (_p.error or ""),
+              "output=%r error=%r" % (_p.output, _p.error))
+        # THIS TURN'S ANSWER ONLY.
+        _st.update(mode="late")
+        _r.reset()
+        _c = _r.send_chain(["one", "two"])
+        check("a late message from an earlier turn, with no replyToId, is not this turn's answer",
+              "turn-one follow-up" not in _c.output and _c.output.endswith("one | two"),
+              repr(_c.output))
+        _st.update(mode="echo")
+        _r.reset()
+        _p = _r.send("print QAT-CANARY-XYZ")
+        check("the user's own activity, stamped with another id and no role, is never the answer",
+              _p.output.startswith("So far you said") and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        # THE BOT ENDS THE CONVERSATION.
+        _st.update(mode="end")
+        _r.reset()
+        _n0 = _st["n"]
+        _c = _r.send_chain(["remember PLUM-77", "what was it?"])
+        check("an endOfConversation mid-chain stops the chain, not a new conversation for its rest",
+              _st["n"] == _n0 + 1 and "endOfConversation" in (_c.error or ""), repr((_c.error, _st["n"])))
+        _st.update(mode="end_only")
+        _r.reset()
+        _p = _r.send("hi")
+        check("...and one that ends without answering says so, not that it timed out",
+              "DirectLineEnded" in (_p.error or "") and "Timeout" not in (_p.error or ""),
+              "error=%r" % _p.error)
+        _st.update(mode="")
+        # CHARGED FOR WHAT LEFT.
+        _r.reset()
+        _r.rate.used = 0
+        _gets0 = len(_st["log"])
+        _r.send("count me")
+        check("a Direct Line send is charged for the requests that left, and no more",
+              _r.rate.used == len(_st["log"]) - _gets0, repr((_r.rate.used, len(_st["log"]) - _gets0)))
     finally:
         srv.shutdown()
 
