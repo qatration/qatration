@@ -350,6 +350,10 @@ def main():
             "client_id": "a", "client_secret": "b"}}), policy=_only_metadata_refused)
         check("hosted: an auth.token_url the policy refuses is refused, by name",
               code == 422 and "auth.token_url" in json.dumps(obj), f"{code} {obj}")
+        code, obj = intake.submit(root, body(cfg={"directline": {
+            "token_url": "http://169.254.169.254/token"}}), policy=_only_metadata_refused)
+        check("hosted: a directline.token_url the policy refuses is refused, by name",
+              code == 422 and "directline.token_url" in json.dumps(obj), f"{code} {obj}")
 
         # An SSRF refusal must happen BEFORE the queue. A queue full of jobs that cannot
         # legally run is a queue that reads as demand, and each one still costs a worker a

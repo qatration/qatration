@@ -1829,6 +1829,149 @@ def _review_of_the_streams(check):
           and _rn.baseline_requests({"chain"}) == 1)
 
 
+def _directline(check):
+    """`directline:`: a Copilot Studio or Azure Bot Service agent over Direct Line 3.0, as its
+    documentation describes it -- a conversation per trial, the message as an activity, the
+    answer polled for, the user's own activity among it."""
+    import json as _j, threading as _th, time as _tm
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _st = {"convs": {}, "n": 0, "log": [], "silent": False, "card": False, "tokens": 0}
+
+    class _H(_BH):
+        def _send(self, code, obj):
+            body = _j.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            _st["log"].append(("GET", self.path, self.headers.get("Authorization")))
+            if self.path == "/token":
+                _st["tokens"] += 1
+                return self._send(200, {"token": "env-token", "expires_in": 3600})
+            cid = self.path.split("/conversations/")[1].split("/")[0]
+            c = _st["convs"][cid]
+            wm = int(self.path.split("watermark=")[1]) if "watermark=" in self.path else 0
+            # THE BOT ANSWERS A MOMENT LATER: the first look finds the user's own activity alone.
+            ready = [a for a in c["acts"] if a.get("_at", 0) <= _tm.time()]
+            page = [{k: v for k, v in a.items() if k != "_at"} for a in ready[wm:]]
+            self._send(200, {"activities": page, "watermark": str(len(ready))})
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+            _st["log"].append(("POST", self.path, self.headers.get("Authorization")))
+            if self.path.endswith("/conversations"):
+                _st["n"] += 1
+                cid = "conv%d" % _st["n"]
+                _st["convs"][cid] = {"acts": [], "said": []}
+                return self._send(201, {"conversationId": cid, "token": "conv-token-%d" % _st["n"],
+                                        "expires_in": 1800})
+            cid = self.path.split("/conversations/")[1].split("/")[0]
+            c = _st["convs"][cid]
+            act = _j.loads(raw)
+            aid = "%s|%04d" % (cid, len(c["acts"]) + 1)
+            c["acts"].append(dict(act, id=aid))
+            c["said"].append(act["text"])
+            if not _st["silent"]:
+                reply = {"type": "message", "id": aid + "r", "replyToId": aid,
+                         "from": {"id": "bot1", "name": "Agent", "role": "bot"},
+                         "text": "So far you said: " + " | ".join(c["said"]),
+                         "inputHint": "acceptingInput", "_at": _tm.time() + 0.5}
+                if _st["card"]:
+                    reply["text"] = ""
+                    reply["attachments"] = [{"contentType": "application/vnd.microsoft.card.adaptive",
+                                             "content": {"type": "AdaptiveCard", "body": [
+                                                 {"type": "TextBlock", "text": "Code: CARD-SECRET-1"}]}}]
+                c["acts"].append(reply)
+            self._send(200, {"id": aid})
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _t = _HT(url=base + "/v3/directline", name="copilot",
+                 headers={"Authorization": "Bearer dl-secret"},
+                 directline={"poll_s": 1, "quiet_s": 1, "max_s": 6},
+                 response={"reply": "text"}, timeout_s=5)
+        check("a Direct Line target keeps its conversation on the server: chain, no forged history",
+              set(_t.capabilities) == {"chain"} and _t.server_memory, repr(_t.capabilities))
+        _t.reset()
+        _p = _t.send("hello there")
+        check("the bot's answer is polled for and read, not the user's own activity",
+              _p.output == "So far you said: hello there" and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...over a conversation opened with the secret, and talked to with its token",
+              _st["log"][0][2] == "Bearer dl-secret" and _st["log"][1][2] == "Bearer conv-token-1",
+              repr(_st["log"][:2]))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what did I ask you to remember?"])
+        check("...and the turns of a chain stay in one conversation, a reset opens the next",
+              "PLUM-77" in _c.output and _st["n"] == 2, repr((_c.output, _st["n"])))
+        check("...which reads_history hears", _rn.reads_history(_t, "dl")[0] is True)
+        _st["card"] = True
+        _t.reset()
+        _p = _t.send("show me the card")
+        _st["card"] = False
+        check("what an Adaptive Card shows is read as the bot saying it",
+              "CARD-SECRET-1" in _p.output, "output=%r error=%r" % (_p.output, _p.error))
+        _st["silent"] = True
+        _t2 = _HT(url=base + "/v3/directline", name="copilot-silent",
+                  headers={"Authorization": "Bearer dl-secret"},
+                  directline={"poll_s": 1, "quiet_s": 1, "max_s": 2},
+                  response={"reply": "text"}, timeout_s=5)
+        _p = _t2.send("hi")
+        _st["silent"] = False
+        check("a bot that says nothing within max_s is an error, never an empty reply",
+              bool(_p.error) and "DirectLineTimeout" in _p.error and not _p.output,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _tk = _HT(url=base + "/v3/directline", name="copilot-token",
+                  directline={"token_url": base + "/token", "poll_s": 1, "quiet_s": 1, "max_s": 6},
+                  response={"reply": "text"}, timeout_s=5)
+        _st["log"] = []
+        _p = _tk.send("hi")
+        check("Copilot Studio's token endpoint gives the token the conversation is opened with",
+              _p.output.startswith("So far you said") and _st["tokens"] == 1
+              and _st["log"][1][2] == "Bearer env-token", repr(_st["log"][:2]))
+        _b = _HT(url=base + "/v3/directline", name="copilot-budget",
+                 headers={"Authorization": "Bearer dl-secret"},
+                 directline={"poll_s": 1, "quiet_s": 1, "max_s": 6},
+                 response={"reply": "text"}, rate={"max_requests": 3}, timeout_s=5)
+        _p = _b.send("hi")
+        check("a budget that runs out after the message was sent says it WAS sent",
+              bool(_p.error) and "WAS sent" in _p.error and "never sent" not in _p.error,
+              "error=%r" % _p.error)
+        check("...and a Direct Line send is priced at its message and the looks it takes",
+              _t.requests_per_send == 3, repr(_t.requests_per_send))
+    finally:
+        srv.shutdown()
+
+    for _label, _kw, _says in (
+            ("a poll_s under a second", {"directline": {"poll_s": 0.2}}, "at least 1"),
+            ("a history block beside it", {"directline": {}, "history": {"field": "messages"}},
+             "second rule"),
+            ("a plain-http token url off this machine",
+             {"directline": {"token_url": "http://login.example.com/token"}}, "not https")):
+        try:
+            _HT(url="http://127.0.0.1:9/v3/directline", name="d", response={"reply": "text"}, **_kw)
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("directline with %s is refused when the config is read, and the refusal says why"
+              % _label, _says in _said, repr(_said)[:200])
+    _empty = _HT(url="http://127.0.0.1:9/v3/directline", name="d0", response={"reply": "text"},
+                 directline={})
+    check("an empty `directline: {}` is the defaults, not a plain request target",
+          _empty.directline is not None and _empty.directline["poll_s"] == 1
+          and _empty.request.get("type") == "message", repr((_empty.directline, _empty.request)))
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -3812,6 +3955,7 @@ def main():
     _oauth_client_credentials(check)
     _gradio_followup(check)
     _review_of_the_streams(check)
+    _directline(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

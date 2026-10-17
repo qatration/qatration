@@ -308,10 +308,12 @@ def _app_shapes():
              "flowise": ("text", None),
              "langflow": ("outputs.0.outputs.0.results.message.text", None),
              "rasa": ("*.text", None),
-             "gradio": ("0", None)}
+             "gradio": ("0", None),
+             "directline": ("text", None)}
     check("init writes every app shape this suite knows, and knows every one it writes",
           set(_want) | {"openai", "vercel"} == set(init_config.SHAPES), repr(init_config.SHAPES))
-    _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k"}
+    _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k",
+            "DIRECTLINE_SECRET": "k"}
     _old = {k: os.environ.get(k) for k in _env}
     os.environ.update(_env)
     try:
@@ -328,9 +330,13 @@ def _app_shapes():
             check("init --shape %s writes a config the adapter builds" % _sh, _t is not None, _why)
             if _t is None:
                 continue
+            # THE BUDGET IS PRICED BY WHAT A SEND COSTS THE TARGET THE CONFIG BUILDS: one request,
+            # two with a followup, about five over Direct Line's polling.
             if _sh != "gradio":
-                check("...and whose budget is the ordinary one", (_c.get("rate") or {})
-                      .get("max_requests") == 1800, repr(_c.get("rate")))
+                check("...and whose budget is sized by what one of its sends costs",
+                      (_c.get("rate") or {}).get("max_requests") == 1800 * _t.requests_per_send
+                      and _t.requests_per_send == (5 if _sh == "directline" else 1),
+                      repr((_c.get("rate"), _t.requests_per_send)))
             check("...whose reply is read where %s puts it" % _sh,
                   (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))
             check("...and whose conversation is the app's own, under `{session}`: chain, and no "

@@ -131,6 +131,17 @@ user's own) as the reply and `*.text` only for two messages or more, and never o
 result step was read as a call. What a STREAM said before its error now travels with the error,
 for `judge` to read; a JSON body reporting an error beside a reply field still does not.
 
+**Copilot Studio and Azure AI Bot Service: `directline:`.** Direct Line 3.0 opens a conversation,
+takes the message as an activity and hands the answer only to a client that polls for it, so a
+probe against one read the activity's id as the reply. `directline:` opens a conversation per
+trial (with the secret, or a token from Copilot Studio's token endpoint), posts the message, and
+polls once a second for the agent's activities that reply to it, until one says it is listening
+again or nothing new comes for `quiet_s`; an Adaptive Card's text is read as the agent saying it,
+silence for `max_s` is an error, a budget that runs out after the message went says it went, and
+every poll is priced in the budget `onboard`, `run` and `init --shape directline` use. The part of
+`send` that reads a response is now one method, `_probe_from`, used by both paths, so they cannot
+disagree about what a reply is. An empty `directline: {}` is the defaults, not no block.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

@@ -192,6 +192,35 @@ stream is read as its source writes it: the last `generating` or the `complete` 
 `error` event an error, also when the app keeps its reason to itself. `qatration init --shape
 gradio` writes all of it.
 
+**A Copilot Studio agent, or any Azure AI Bot Service bot,** speaks Direct Line 3.0, which is
+not a request and a reply: a conversation is opened, the message is posted as an activity, and
+the answer is handed out only to a client that polls for it, the user's own message among it and
+nothing marking the end. `directline:` holds that conversation:
+
+```yaml
+url: "https://directline.botframework.com/v3/directline"   # or europe., india.
+env: [DIRECTLINE_SECRET]
+headers:
+  Authorization: "Bearer ${DIRECTLINE_SECRET}"
+directline:
+  user: "dl_qatration"
+  poll_s: 1          # the protocol asks for no more than one poll a second
+  quiet_s: 3         # an answer is complete when nothing new comes for this long
+  max_s: 60          # and an agent that says nothing for this long is an error
+  # token_url: "..." # Copilot Studio's token endpoint, instead of the secret header
+response:
+  reply: "text"
+```
+
+Each trial opens its own conversation, and the turns of a chain stay in it, so the multi-turn
+attacks are sent as real turns (no forged history: nobody can write the agent's past). The answer
+is the agent's activities that reply to the message, ended by one saying it is listening again,
+by the end of the conversation, or by `quiet_s` of quiet; an Adaptive Card's text blocks are part
+of it, because the user reads them. Every request is paid for out of the budget, so a send costs
+about `2 + quiet_s / poll_s` requests, and `onboard`, `run` and the budget `init --shape
+directline` writes are priced at that. Not covered: the WebSocket stream, and `typing` (which the
+protocol only sends over it).
+
 **A bot behind an identity provider** takes a bearer token that lives about an hour, and a
 sweep outlives it: pasted into `headers:`, every request after the hour is a 401 and the rest
 of the run is unmeasured. `auth:` fetches it by the client-credentials grant (RFC 6749, 4.4),

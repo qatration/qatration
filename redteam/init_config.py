@@ -375,6 +375,36 @@ response:
   error: "error"
 
 ''',
+    "directline": '''\
+# A MICROSOFT COPILOT STUDIO AGENT, or an Azure AI Bot Service bot, over Direct Line 3.0. The url
+# is the Direct Line base: https://directline.botframework.com/v3/directline, or the regional
+# one your bot lives in (europe., india.). The agent's instructions are its own, in Copilot
+# Studio: that is where the block this command printed goes.
+#
+# THE CREDENTIAL, one of two. A Direct Line secret (Channels > Direct Line, or the web channel
+# security page) goes in the header:
+env:
+  - DIRECTLINE_SECRET
+headers:
+  Authorization: "Bearer ${{DIRECTLINE_SECRET}}"
+# ...or Copilot Studio's token endpoint (Channels > Mobile app > Token Endpoint), with the two
+# lines above deleted and this line under `directline:` instead:
+#   token_url: "https://<environment>.environment.api.powerplatform.com/powervirtualagents/..."
+
+# Each trial opens its own conversation; the message goes as an activity and the agent's answer
+# is polled for, once a second, until it says it is listening again or `quiet_s` passes with
+# nothing new. An agent that says nothing within `max_s` is an error, not an empty reply.
+directline:
+  user: "dl_qatration"
+  poll_s: 1
+  quiet_s: 3
+  max_s: 60
+
+# The agent's text, an Adaptive Card's text blocks included, every message of the answer.
+response:
+  reply: "text"
+
+''',
     "rasa": '''\
 # A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
 # `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
@@ -459,7 +489,21 @@ session:
 # GRADIO KEEPS ITS CONVERSATION THE WAY RASA DOES, under the `session_hash` it is given: the same
 # sentence, not a copy of it.
 HISTORY["gradio"] = HISTORY["rasa"]
+# DIRECT LINE KEEPS ITS CONVERSATION ITSELF, one per trial; the block above says so, and there is
+# no id for the request to carry.
+HISTORY["directline"] = ""
 SHAPES = tuple(WIRE)
+
+
+def _send_cost(shape):
+    """What one send costs the budget in the config this shape writes, by the adapter's own rule
+    (`targets_http.requests_per_send`) over the blocks the shape writes."""
+    import yaml as _y
+    from targets_http import requests_per_send as _rps
+    _w = _y.safe_load(WIRE[shape].replace("{{", "{").replace("}}", "}")
+                      .replace("{model}", '"m"').replace("{plant}", "").replace(
+                          "{followup_url}", '"x"')) or {}
+    return _rps(_w.get("followup"), _w.get("directline"))
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
@@ -505,7 +549,7 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                                followup_url=_q(str(url).rstrip("/") + "/{id}")),
                            history=HISTORY[shape].format(),
                            # TWO REQUESTS A SEND where the answer is fetched by a second one.
-                           max_requests=1800 * (2 if "followup:" in WIRE[shape] else 1),
+                           max_requests=1800 * _send_cost(shape),
                            secret_name=_q(_ht.SECRET_NAME),
                            # AS DEPLOYED: the operator's prompt with the planted block after it,
                            # which is the text the bot will hold once they paste it in.
@@ -535,7 +579,7 @@ def main():
     ap.add_argument("--shape", choices=SHAPES, default="openai",
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
-                         "Langflow, Gradio or Rasa app")
+                         "Langflow, Gradio or Rasa app, or a Copilot Studio agent over Direct Line")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "

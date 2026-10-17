@@ -36,7 +36,7 @@ decide how much the oracle can see:
     # proxy: "http://proxy.corp.example:3128"  # only if your network requires one: probes
     #                                           # never use a proxy named by the environment
 """
-import json, os, re, sys, time, urllib.request, urllib.error
+import json, os, re, sys, time, urllib.parse, urllib.request, urllib.error
 from target import Probe, Target, payload
 from target import _pair as _probe_pair
 
@@ -1397,6 +1397,41 @@ def gradio_stream(text, cut=False):
     return final
 
 
+def requests_per_send(followup=None, directline=None):
+    """-> the requests one send spends: one; two where the answer is fetched by a second request;
+    and over Direct Line the message, the first look and the looks until it has gone quiet, the
+    conversation each trial opens aside. ONE rule, for the target and the budget `init` writes."""
+    if directline:
+        return 2 + int(float(directline.get("quiet_s", 3)) // float(directline.get("poll_s", 1)))
+    return 2 if followup else 1
+
+
+class _BudgetGone(Exception):
+    """The request budget ran out in the middle of a conversation with the target."""
+
+
+def _card_texts(attachments, _depth=0):
+    """Every `text` an Adaptive Card (or any attachment's content) puts in front of the user."""
+    out = []
+
+    def _walk(v, depth):
+        if depth > 12:
+            return
+        if isinstance(v, dict):
+            if isinstance(v.get("text"), str) and v["text"].strip():
+                out.append(v["text"])
+            for _k, _x in v.items():
+                if _k != "text":
+                    _walk(_x, depth + 1)
+        elif isinstance(v, list):
+            for _x in v:
+                _walk(_x, depth + 1)
+    for _att in attachments or []:
+        if isinstance(_att, dict):
+            _walk(_att.get("content"), 0)
+    return out
+
+
 def stream_kind(text):
     """"server-sent events" or "newline-delimited JSON" when a body is plainly a stream, else
     None. Only what the folds refused reaches this, so it decides nothing about the reply: it
@@ -1738,7 +1773,8 @@ class HttpConfiguredTarget(Target):
 
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
-                 auth=None, env=None, proxy=None, session=None, followup=None, **unknown):
+                 auth=None, env=None, proxy=None, session=None, followup=None,
+                 directline=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -1800,6 +1836,9 @@ class HttpConfiguredTarget(Target):
              "expand -- every request would go out with the placeholder still in it."),
             ("rate", rate, dict,
              "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("directline", directline, dict,
+             "It is a mapping: `directline: {user: dl_qatration, poll_s: 1, quiet_s: 3}`, and "
+             "`url` is the Direct Line base, e.g. https://directline.botframework.com/v3/directline."),
             ("followup", followup, dict,
              "It is a mapping: `followup: {id_from: event_id, url: \".../{id}\"}` names where "
              "the first reply carries the id the answer is fetched by."),
@@ -1902,10 +1941,13 @@ class HttpConfiguredTarget(Target):
                 "where the next request goes." % name)
         self.session_from = session.get("from_reply") or None
         self.followup = self._followup_config(followup, name, url, auth)
+        self.directline = self._directline_config(directline, name, history, followup, session,
+                                                  auth)
+        self._dl = None
         # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
         # request. Priced at one, a run against a Gradio app was "ready" and stopped halfway
         # through the arsenal with the rest never sent.
-        self.requests_per_send = 2 if self.followup else 1
+        self.requests_per_send = requests_per_send(self.followup, self.directline)
         self._session_first = session.get("first", "")
         if self.session_from:
             self._session = self._session_first
@@ -1917,6 +1959,12 @@ class HttpConfiguredTarget(Target):
         # `content-type:` was overwritten by this default (urllib folds both to one key).
         if not any(str(k).lower() == "content-type" for k in self.headers):
             self.headers["Content-Type"] = "application/json"
+        # A DIRECT LINE ACTIVITY is the request when the config writes none: the protocol fixes
+        # its shape, and a config should not have to spell it to be right.
+        if directline is not None and request is None:
+            request = {"type": "message",
+                       "from": {"id": str((directline or {}).get("user") or "dl_qatration")},
+                       "text": "{prompt}"}
         self.request = request or {"message": "{prompt}"}
         # THE TEMPLATE MUST BE ABLE TO CARRY THE PAYLOAD. `fill()` substitutes the literal token
         # `{prompt}` and nothing else, so a template without it sends one constant body for every
@@ -2183,13 +2231,13 @@ class HttpConfiguredTarget(Target):
             # from one the attacker wrote for it. That is the precondition for a Context
             # Compliance Attack and it is a fact about the API, not about the model.
             caps |= {"chain", "forged_history"}
-        elif self.uses_session:
+        elif self.uses_session or self.directline:
             # A SERVER THAT KEEPS THE CONVERSATION hears the earlier turns of a chain because
             # they were sent in the same session, and only the turns that really happened:
             # nobody can write its assistant's side, so `forged_history` is not on offer.
             # Whether it does keep them is asked before the run (`runner.reads_history`).
             caps.add("chain")
-        self.server_memory = bool(self.uses_session and not self.history)
+        self.server_memory = bool((self.uses_session or self.directline) and not self.history)
         if self.calls_path:
             caps.add("tool_visibility")
         self.capabilities = caps
@@ -2246,6 +2294,156 @@ class HttpConfiguredTarget(Target):
         else:
             body[field] = turns
         return body
+
+    # --- Microsoft Bot Framework Direct Line (Copilot Studio, Azure AI Bot Service) -----------
+    @staticmethod
+    def _directline_config(dl, name, history, followup, session, auth):
+        """`directline: {user, poll_s, quiet_s, max_s, token_url}` beside a `url` that is the
+        Direct Line base (`https://directline.botframework.com/v3/directline`, or a regional one).
+
+        A COPILOT STUDIO AGENT IS NOT A REQUEST AND A REPLY. Direct Line 3.0 opens a conversation
+        (`POST /conversations`), takes the message as an activity (`POST .../activities`, which
+        answers with the activity's id), and hands the bot's answer out only to a client that
+        polls (`GET .../activities?watermark=`) -- the user's own message among it, and with no
+        mark that the bot has finished. None of that fits one request and one reply, so every
+        probe against such a bot read the activity id as the reply.
+
+        Each trial opens its own conversation. The bot's activities are the ones with
+        `from.role: bot` (or another `from.id`) that reply to the message sent (`replyToId`);
+        the answer is complete when one says it is accepting input again, when the
+        conversation ends, or after `quiet_s` with nothing new. A bot that says nothing within
+        `max_s` is an error, never an empty reply. `poll_s` is at least a second, which is the
+        protocol's own limit. With `token_url` (Copilot Studio's token endpoint) the
+        conversation's token is fetched there; otherwise `headers:` carries the secret.
+        """
+        # AN EMPTY BLOCK IS THE DEFAULTS, not no block: `directline: {}` built a plain request
+        # target that read the activity id as every reply.
+        if dl is None:
+            return None
+        d = dict(dl)
+        _bad = sorted(k for k in d if k not in ("user", "poll_s", "quiet_s", "max_s", "token_url"))
+        try:
+            d["poll_s"] = float(d.get("poll_s", 1))
+            d["quiet_s"] = float(d.get("quiet_s", 3))
+            d["max_s"] = float(d.get("max_s", 60))
+        except (TypeError, ValueError):
+            _bad.append("a number that is not one")
+        if _bad or d["poll_s"] < 1 or d["quiet_s"] < d["poll_s"] or d["max_s"] < d["quiet_s"]:
+            raise SystemExit(
+                "targets_http: `directline:` for %r takes user, poll_s (at least 1: the protocol "
+                "asks for no more than one poll a second), quiet_s (at least poll_s) and max_s (at "
+                "least quiet_s), and token_url%s." % (
+                    name, "; it also names %s" % ", ".join(map(repr, _bad)) if _bad else ""))
+        if history or followup or session or auth:
+            raise SystemExit(
+                "targets_http: `directline:` for %r keeps its own conversation and fetches its own "
+                "answer, so `history:`, `followup:`, `session:` and `auth:` beside it would be a "
+                "second rule for the same thing; remove them." % name)
+        if d.get("token_url"):
+            import authorization as _az
+            _tu = str(d["token_url"])
+            _why = _az.url_problem(_tu)
+            if _why or not (_tu.lower().startswith("https://") or _az.is_local(_tu)):
+                raise SystemExit("targets_http: directline.token_url %r for %r %s." % (
+                    _tu, name, _why or "is not https, and the token it hands out would travel in "
+                                       "the clear"))
+        d["user"] = str(d.get("user") or "dl_qatration")
+        return d
+
+    def _dl_request(self, method, url, auth, body=None):
+        """One Direct Line request, paid for out of the budget. -> the JSON it answered."""
+        if not self.rate.take():
+            raise _BudgetGone()
+        hdrs = {k: v for k, v in self.headers.items() if k.lower() != "authorization"}
+        if auth:
+            hdrs["Authorization"] = auth
+        req = urllib.request.Request(url, method=method, headers=hdrs,
+                                     data=json.dumps(body).encode("utf-8") if body is not None
+                                     else (b"" if method == "POST" else None))
+        with self._opener.open(req, timeout=self.timeout) as r:
+            got, _over = read_capped(r, seconds=self.timeout)
+            return json.loads(_decoded(got, r) or "{}")
+
+    def _directline_send(self, prompt, data, t0):
+        """The message as one activity on this trial's conversation, and the bot's answer."""
+        d, base = self.directline, str(self.url).rstrip("/")
+        _secret = next((v for k, v in self.headers.items() if k.lower() == "authorization"), None)
+        _sent = False
+        try:
+            if self._dl is None:
+                _auth = _secret
+                if d.get("token_url"):
+                    _tok = self._dl_request("GET", str(d["token_url"]), None)
+                    _auth = "Bearer " + str(_tok.get("token") or "")
+                _c = self._dl_request("POST", base + "/conversations", _auth)
+                if not _c.get("conversationId"):
+                    return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                                 error="ExtractionFailed: Direct Line opened no conversation "
+                                       "(it answered keys %s)" % sorted(_c)[:8])
+                self._dl = {"id": str(_c["conversationId"]),
+                            "auth": "Bearer " + str(_c["token"]) if _c.get("token") else _auth,
+                            "watermark": None, "seen": set()}
+            dl = self._dl
+            _conv = base + "/conversations/" + urllib.parse.quote(dl["id"], safe="")
+            _act = json.loads(data.decode("utf-8"))
+            _me = str(((_act.get("from") or {}).get("id")) or d["user"])
+            _ack = self._dl_request("POST", _conv + "/activities", dl["auth"], _act)
+            _sent = True
+            _aid = _ack.get("id")
+            replies, _last_new, _done = [], None, False
+            _deadline = t0 + d["max_s"]
+            time.sleep(min(0.3, d["poll_s"]))       # the protocol's "shortly after" first look
+            while True:
+                _q = "?watermark=" + urllib.parse.quote(dl["watermark"], safe="") \
+                    if dl["watermark"] else ""
+                _page = self._dl_request("GET", _conv + "/activities" + _q, dl["auth"])
+                # A NULL WATERMARK IS IGNORED, as the protocol says, never written over the last.
+                if _page.get("watermark"):
+                    dl["watermark"] = str(_page["watermark"])
+                for _a in _page.get("activities") or []:
+                    if not isinstance(_a, dict) or _a.get("id") in dl["seen"]:
+                        continue
+                    dl["seen"].add(_a.get("id"))
+                    _from = _a.get("from") or {}
+                    _bot = _from.get("role") == "bot" or (_from.get("id") not in (None, _me)
+                                                          and _from.get("role") != "user")
+                    if not _bot or (_aid and _a.get("replyToId") not in (None, _aid)):
+                        continue
+                    if _a.get("type") == "message":
+                        replies.append(_a)
+                        _last_new = time.time()
+                        if _a.get("inputHint") in ("acceptingInput", "expectingInput"):
+                            _done = True
+                    elif _a.get("type") == "endOfConversation":
+                        _done = True
+                        self._dl = None
+                if _done or (replies and time.time() - _last_new >= d["quiet_s"]):
+                    break
+                if time.time() + d["poll_s"] > _deadline:
+                    break
+                time.sleep(d["poll_s"])
+        except _BudgetGone:
+            import signing as _sg
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error=("%s: the budget ran out before the message was sent"
+                                % _sg.NEVER_SENT) if not _sent else
+                               ("DirectLineIncomplete: the message WAS sent, and the request "
+                                "budget ran out before the bot's answer was read"))
+        if not replies:
+            # SILENCE IS NOT AN ANSWER: a bot that said nothing in `max_s` has not been measured.
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error="DirectLineTimeout: no bot activity answered the message within "
+                               "%gs (directline.max_s)" % d["max_s"])
+        texts = []
+        for _a in replies:
+            if isinstance(_a.get("text"), str) and _a["text"].strip():
+                texts.append(_a["text"])
+            # WHAT A CARD SHOWS IS SAID TOO: an Adaptive Card's text blocks reach the user as
+            # surely as a message's text, and a leak in one was otherwise never read.
+            texts.extend(_card_texts(_a.get("attachments")))
+        raw = {"text": "\n".join(texts), "activities": replies, "conversationId": self._dl and
+               self._dl["id"]}
+        return self._probe_from(raw, prompt, t0)
 
     # --- an answer fetched by a second request ----------------------------------------------
     @staticmethod
@@ -2451,6 +2649,169 @@ class HttpConfiguredTarget(Target):
         self._token_until = time.time() + max(0.0, _ttl - 60) if _ttl else float("inf")
         return tok
 
+    def _probe_from(self, raw, prompt, t0, _over=None, _streamed=False):
+        """The probe a decoded response body makes: the error path, the reply, the tool
+        channels and their counts. ONE reading, for the request `send` makes and for the
+        conversation `directline` holds, so the two cannot disagree about what a reply is."""
+        # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
+        # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
+        # would send the operator to re-map a path that is correct.
+        _err = dig(raw, self.error_path) if self.error_path else None
+        # `False` too (and so 0): `"error": false` beside a good reply is an API saying
+        # nothing went wrong, and it turned every probe into a TargetError.
+        if _err not in (None, "", [], {}, False):
+            self._seen_success = True      # the credential worked; the request did not
+            # The remote's own words, bounded and never parsed: this is text from a target
+            # we do not trust, on the same footing as the HTTPError body below.
+            _said = " ".join(str(_err).split())[:300]
+            # AND WHAT A STREAM HAD SAID BEFORE ITS ERROR. Streamed, that text reached the
+            # user before the failure did, so it is an observation: a leak in it was never
+            # judged when the probe carried the failure alone, and `judge` scores a breach
+            # seen beside an error while leaving silence ERROR. NOT A JSON BODY'S: one that
+            # reports an error beside a reply field is a failure its client shows as one,
+            # and judging that field would invent a finding. Found by an independent review.
+            _before = dig(raw, self.reply_path) if _streamed else None
+            return Probe(prompt=prompt,
+                         output=_before if isinstance(_before, str) else "",
+                         tool_calls=(_pairs(dig(raw, self.calls_path))
+                                     if self.calls_path and _streamed else []),
+                         error="TargetError: the endpoint answered 200 and reported an "
+                               "error at response.error=%r (%s)" % (self.error_path, _said),
+                         seconds=round(time.time() - t0, 1))
+        # ON THE TARGET, NOT ON THE PROBE, and only when a caller asked. `onboard`
+        # needs the body to say WHICH path holds the answer when the configured one
+        # holds an identifier -- see `_prose` there -- and the failure branch below
+        # already attaches it for the same reason. Attaching it to a successful
+        # probe would be a second, unaudited channel into every judgement in this
+        # repo: a detector is handed a Probe and would then be able to read a
+        # payload nothing audits. A detector is never handed the TARGET, so this
+        # side is closed by construction, and it is off unless somebody sets it.
+        if getattr(self, "_keep_last_raw", False):
+            self._last_raw = raw
+        reply = dig(raw, self.reply_path)
+        # A CONTAINER IS NOT A REPLY, and this is the mapping mistake that MANUFACTURES
+        # a finding rather than hiding one. `response.reply: "choices"` resolves, and
+        # `str()` of it is a Python repr of the whole branch -- tool calls, arguments,
+        # metadata and all. A bot that answered `I cannot share that.` while a canary sat
+        # in a tool argument then has that canary inside its `output`, `canary_in_output`
+        # fires, and the report publishes a breach the target never committed. Every
+        # other misconfiguration in this file loses findings; this one invents them.
+        #
+        # A LIST OF STRINGS IS STILL A REPLY, delivered in parts, and joining it is the
+        # answer rather than a refusal. Anything else -- a dict, or a list of them, which
+        # is the Anthropic content shape -- means the path stopped one level too high,
+        # and the error below already knows how to say which path holds the text.
+        if isinstance(reply, list) and reply and all(isinstance(x, str) for x in reply):
+            reply = "\n".join(reply)
+        # NO ITEM HAD TEXT: a list of messages none of which spoke (`[]`, or an image alone).
+        # Said as that, not as the "repr of a whole branch" a container reply earns.
+        elif isinstance(reply, list) and not reply and "*" in str(self.reply_path).split("."):
+            _none = Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                          error="ExtractionFailed: response.reply=%r found no text in any "
+                                "item of the reply" % self.reply_path)
+            try:
+                object.__setattr__(_none, "raw", raw)
+            except Exception:
+                pass
+            return _none
+        # AND A FLAG OR A NUMBER: a path mapped to `ok` or `status` read `True` or `0` as
+        # the bot's reply, and every attack against it scored DEFENDED on that. Found by
+        # an independent review.
+        elif isinstance(reply, (dict, list, bool, int, float)):
+            _shape = ("a mapping with keys %s" % sorted(reply)[:6]
+                      if isinstance(reply, dict) else
+                      "a list of %d item(s)" % len(reply) if isinstance(reply, list) else
+                      "the %s %s" % (type(reply).__name__, json.dumps(reply)))
+            _bad2 = Probe(
+                prompt=prompt, output="",
+                error=("ExtractionFailed: response.reply=%r holds %s, not text. Reading it as a reply would hand the oracle a Python repr of that whole branch -- tool arguments and metadata included -- and a canary anywhere inside it would be scored as the target having leaked it." % (self.reply_path, _shape)),
+                seconds=round(time.time() - t0, 1))
+            try:
+                object.__setattr__(_bad2, "raw", raw)
+            except Exception:
+                pass
+            return _bad2
+        # A REPLY THAT ONLY CALLS A TOOL. OpenAI answers `content: null` beside
+        # `tool_calls`, and `dig` cannot tell a JSON null from a missing key, so the
+        # standard shape of an agent acting instead of talking was ExtractionFailed and
+        # its call was thrown away -- the most dangerous replies were the ones lost. A
+        # null reply with a tool call that can be read is an empty reply with a call.
+        # Found by an independent review.
+        if reply is None and self.calls_path:
+            _pre = _pairs(dig(raw, self.calls_path))
+            if any(_probe_pair(_x) is not None for _x in _pre):
+                reply = ""
+        if reply is None:
+            # The path is wrong or the API changed shape. A run of empty replies looks
+            # exactly like a bot that refuses everything, which is the most flattering
+            # possible misreading of the target.
+            err = (f"ExtractionFailed: nothing at response.reply={self.reply_path!r}; "
+                   f"the reply had keys {sorted(raw)[:8] if isinstance(raw, dict) else type(raw).__name__}")
+            if _over:
+                err = (f"ExtractionFailed: the reply was {_over:,} bytes, over the cap, and "
+                       f"response.reply={self.reply_path!r} is not inside its first "
+                       f"{MAX_REPLY:,}")
+            bad = Probe(prompt=prompt, output="", error=err, reply_bytes=_over or None,
+                        seconds=round(time.time() - t0, 1))
+            # The body travels with the failure so onboarding can say WHICH path holds the
+            # text, instead of asking the operator to guess a second time. Attached rather
+            # than a field, because it exists only on this branch and no detector should
+            # ever be able to reach it: a raw payload the oracle could read would be a
+            # second, unaudited channel into every judgement in this repo.
+            try:
+                object.__setattr__(bad, "raw", raw)
+            except Exception:
+                pass
+            return bad
+        self._seen_success = True
+        # THE ID THE SERVER JUST NAMED is the one the next turn of this conversation sends.
+        if self.session_from:
+            _sid = dig(raw, self.session_from)
+            if isinstance(_sid, (str, int)) and not isinstance(_sid, bool) and str(_sid).strip():
+                self._session = str(_sid)
+                self.session_named += 1
+        _rawcalls = dig(raw, self.calls_path) if self.calls_path else None
+        _rawres = dig(raw, self.resolved_path) if self.resolved_path else None
+        _rawobs = dig(raw, self.observations_path) if self.observations_path else None
+        # Counted before normalising: `_pairs` turns an unusable shape into [], and the
+        # question here is whether the PATH found anything, not whether it parsed.
+        if _rawcalls is not None:
+            self.resolutions["tool_calls"] += 1
+        if _rawres is not None:
+            self.resolutions["resolved"] += 1
+        if _rawobs is not None:
+            self.resolutions["observations"] += 1
+        calls = _pairs(_rawcalls) if self.calls_path else []
+        resolved = _pairs(_rawres) if self.resolved_path else []
+        obs = _observations(_rawobs) if self.observations_path else []
+        # SOMETHING THERE AND NOTHING READ: a non-empty value the normaliser could not
+        # turn into a single entry. An empty one is a reply with no tool call, which is
+        # ordinary and says nothing.
+        for _k, _raw, _got in (("tool_calls", _rawcalls, calls),
+                               ("resolved", _rawres, resolved),
+                               ("observations", _rawobs, obs)):
+            # READ MEANS WHAT `Probe` WILL KEEP. A call with no name comes out of `_pairs`
+            # as ("", ...) and `target._pair` drops it on the way into the probe, so
+            # counting it here as read let a reply whose every call was nameless pass as a
+            # channel that worked -- 0 calls recorded and nothing said.
+            if _k != "observations":
+                _got = [_x for _x in _got if _probe_pair(_x) is not None]
+            if _got:
+                self.readable[_k] += 1
+            elif _raw and _claims_something(_k, _raw):
+                self.unreadable[_k] += 1
+                self.unreadable_kind.setdefault(_k, type(_raw).__name__)
+            elif _over and _raw is None and getattr(self, {
+                    "tool_calls": "calls_path", "resolved": "resolved_path",
+                    "observations": "observations_path"}[_k], None):
+                # NOT REACHED IS NOT EMPTY: the cut came before this channel's path.
+                self.unreadable[_k] += 1
+                self.unreadable_kind.setdefault(_k, "cut at %s bytes" % format(MAX_REPLY, ","))
+        return Probe(prompt=prompt, output=str(reply), tool_calls=calls,
+                     observations=obs, resolved=resolved, reply_bytes=_over or None,
+                     seconds=round(time.time() - t0, 1))
+
+
     def send(self, prompt, history=None):
         prompt = payload(prompt)
         if not self.rate.take():
@@ -2494,6 +2855,8 @@ class HttpConfiguredTarget(Target):
         _streamed = False
         t0 = time.time()
         try:
+            if self.directline:
+                return self._directline_send(prompt, data, t0)
             with self._opener.open(req, timeout=self.timeout) as r:
                 _body, _over = read_capped(r, seconds=self.timeout)
                 # THE ANSWER IS BEHIND AN ID: everything below reads the second response.
@@ -2566,163 +2929,8 @@ class HttpConfiguredTarget(Target):
                                              error=unreadable_stream(_kind, _text),
                                              seconds=round(time.time() - t0, 1))
                             raise
-            # BEFORE THE REPLY IS EXTRACTED, because on this branch the reply path is
-            # legitimately empty and `ExtractionFailed` would name the wrong problem -- it
-            # would send the operator to re-map a path that is correct.
-            _err = dig(raw, self.error_path) if self.error_path else None
-            # `False` too (and so 0): `"error": false` beside a good reply is an API saying
-            # nothing went wrong, and it turned every probe into a TargetError.
-            if _err not in (None, "", [], {}, False):
-                self._seen_success = True      # the credential worked; the request did not
-                # The remote's own words, bounded and never parsed: this is text from a target
-                # we do not trust, on the same footing as the HTTPError body below.
-                _said = " ".join(str(_err).split())[:300]
-                # AND WHAT A STREAM HAD SAID BEFORE ITS ERROR. Streamed, that text reached the
-                # user before the failure did, so it is an observation: a leak in it was never
-                # judged when the probe carried the failure alone, and `judge` scores a breach
-                # seen beside an error while leaving silence ERROR. NOT A JSON BODY'S: one that
-                # reports an error beside a reply field is a failure its client shows as one,
-                # and judging that field would invent a finding. Found by an independent review.
-                _before = dig(raw, self.reply_path) if _streamed else None
-                return Probe(prompt=prompt,
-                             output=_before if isinstance(_before, str) else "",
-                             tool_calls=(_pairs(dig(raw, self.calls_path))
-                                         if self.calls_path and _streamed else []),
-                             error="TargetError: the endpoint answered 200 and reported an "
-                                   "error at response.error=%r (%s)" % (self.error_path, _said),
-                             seconds=round(time.time() - t0, 1))
-            # ON THE TARGET, NOT ON THE PROBE, and only when a caller asked. `onboard`
-            # needs the body to say WHICH path holds the answer when the configured one
-            # holds an identifier -- see `_prose` there -- and the failure branch below
-            # already attaches it for the same reason. Attaching it to a successful
-            # probe would be a second, unaudited channel into every judgement in this
-            # repo: a detector is handed a Probe and would then be able to read a
-            # payload nothing audits. A detector is never handed the TARGET, so this
-            # side is closed by construction, and it is off unless somebody sets it.
-            if getattr(self, "_keep_last_raw", False):
-                self._last_raw = raw
-            reply = dig(raw, self.reply_path)
-            # A CONTAINER IS NOT A REPLY, and this is the mapping mistake that MANUFACTURES
-            # a finding rather than hiding one. `response.reply: "choices"` resolves, and
-            # `str()` of it is a Python repr of the whole branch -- tool calls, arguments,
-            # metadata and all. A bot that answered `I cannot share that.` while a canary sat
-            # in a tool argument then has that canary inside its `output`, `canary_in_output`
-            # fires, and the report publishes a breach the target never committed. Every
-            # other misconfiguration in this file loses findings; this one invents them.
-            #
-            # A LIST OF STRINGS IS STILL A REPLY, delivered in parts, and joining it is the
-            # answer rather than a refusal. Anything else -- a dict, or a list of them, which
-            # is the Anthropic content shape -- means the path stopped one level too high,
-            # and the error below already knows how to say which path holds the text.
-            if isinstance(reply, list) and reply and all(isinstance(x, str) for x in reply):
-                reply = "\n".join(reply)
-            # NO ITEM HAD TEXT: a list of messages none of which spoke (`[]`, or an image alone).
-            # Said as that, not as the "repr of a whole branch" a container reply earns.
-            elif isinstance(reply, list) and not reply and "*" in str(self.reply_path).split("."):
-                _none = Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
-                              error="ExtractionFailed: response.reply=%r found no text in any "
-                                    "item of the reply" % self.reply_path)
-                try:
-                    object.__setattr__(_none, "raw", raw)
-                except Exception:
-                    pass
-                return _none
-            # AND A FLAG OR A NUMBER: a path mapped to `ok` or `status` read `True` or `0` as
-            # the bot's reply, and every attack against it scored DEFENDED on that. Found by
-            # an independent review.
-            elif isinstance(reply, (dict, list, bool, int, float)):
-                _shape = ("a mapping with keys %s" % sorted(reply)[:6]
-                          if isinstance(reply, dict) else
-                          "a list of %d item(s)" % len(reply) if isinstance(reply, list) else
-                          "the %s %s" % (type(reply).__name__, json.dumps(reply)))
-                _bad2 = Probe(
-                    prompt=prompt, output="",
-                    error=("ExtractionFailed: response.reply=%r holds %s, not text. Reading it as a reply would hand the oracle a Python repr of that whole branch -- tool arguments and metadata included -- and a canary anywhere inside it would be scored as the target having leaked it." % (self.reply_path, _shape)),
-                    seconds=round(time.time() - t0, 1))
-                try:
-                    object.__setattr__(_bad2, "raw", raw)
-                except Exception:
-                    pass
-                return _bad2
-            # A REPLY THAT ONLY CALLS A TOOL. OpenAI answers `content: null` beside
-            # `tool_calls`, and `dig` cannot tell a JSON null from a missing key, so the
-            # standard shape of an agent acting instead of talking was ExtractionFailed and
-            # its call was thrown away -- the most dangerous replies were the ones lost. A
-            # null reply with a tool call that can be read is an empty reply with a call.
-            # Found by an independent review.
-            if reply is None and self.calls_path:
-                _pre = _pairs(dig(raw, self.calls_path))
-                if any(_probe_pair(_x) is not None for _x in _pre):
-                    reply = ""
-            if reply is None:
-                # The path is wrong or the API changed shape. A run of empty replies looks
-                # exactly like a bot that refuses everything, which is the most flattering
-                # possible misreading of the target.
-                err = (f"ExtractionFailed: nothing at response.reply={self.reply_path!r}; "
-                       f"the reply had keys {sorted(raw)[:8] if isinstance(raw, dict) else type(raw).__name__}")
-                if _over:
-                    err = (f"ExtractionFailed: the reply was {_over:,} bytes, over the cap, and "
-                           f"response.reply={self.reply_path!r} is not inside its first "
-                           f"{MAX_REPLY:,}")
-                bad = Probe(prompt=prompt, output="", error=err, reply_bytes=_over or None,
-                            seconds=round(time.time() - t0, 1))
-                # The body travels with the failure so onboarding can say WHICH path holds the
-                # text, instead of asking the operator to guess a second time. Attached rather
-                # than a field, because it exists only on this branch and no detector should
-                # ever be able to reach it: a raw payload the oracle could read would be a
-                # second, unaudited channel into every judgement in this repo.
-                try:
-                    object.__setattr__(bad, "raw", raw)
-                except Exception:
-                    pass
-                return bad
-            self._seen_success = True
-            # THE ID THE SERVER JUST NAMED is the one the next turn of this conversation sends.
-            if self.session_from:
-                _sid = dig(raw, self.session_from)
-                if isinstance(_sid, (str, int)) and not isinstance(_sid, bool) and str(_sid).strip():
-                    self._session = str(_sid)
-                    self.session_named += 1
-            _rawcalls = dig(raw, self.calls_path) if self.calls_path else None
-            _rawres = dig(raw, self.resolved_path) if self.resolved_path else None
-            _rawobs = dig(raw, self.observations_path) if self.observations_path else None
-            # Counted before normalising: `_pairs` turns an unusable shape into [], and the
-            # question here is whether the PATH found anything, not whether it parsed.
-            if _rawcalls is not None:
-                self.resolutions["tool_calls"] += 1
-            if _rawres is not None:
-                self.resolutions["resolved"] += 1
-            if _rawobs is not None:
-                self.resolutions["observations"] += 1
-            calls = _pairs(_rawcalls) if self.calls_path else []
-            resolved = _pairs(_rawres) if self.resolved_path else []
-            obs = _observations(_rawobs) if self.observations_path else []
-            # SOMETHING THERE AND NOTHING READ: a non-empty value the normaliser could not
-            # turn into a single entry. An empty one is a reply with no tool call, which is
-            # ordinary and says nothing.
-            for _k, _raw, _got in (("tool_calls", _rawcalls, calls),
-                                   ("resolved", _rawres, resolved),
-                                   ("observations", _rawobs, obs)):
-                # READ MEANS WHAT `Probe` WILL KEEP. A call with no name comes out of `_pairs`
-                # as ("", ...) and `target._pair` drops it on the way into the probe, so
-                # counting it here as read let a reply whose every call was nameless pass as a
-                # channel that worked -- 0 calls recorded and nothing said.
-                if _k != "observations":
-                    _got = [_x for _x in _got if _probe_pair(_x) is not None]
-                if _got:
-                    self.readable[_k] += 1
-                elif _raw and _claims_something(_k, _raw):
-                    self.unreadable[_k] += 1
-                    self.unreadable_kind.setdefault(_k, type(_raw).__name__)
-                elif _over and _raw is None and getattr(self, {
-                        "tool_calls": "calls_path", "resolved": "resolved_path",
-                        "observations": "observations_path"}[_k], None):
-                    # NOT REACHED IS NOT EMPTY: the cut came before this channel's path.
-                    self.unreadable[_k] += 1
-                    self.unreadable_kind.setdefault(_k, "cut at %s bytes" % format(MAX_REPLY, ","))
-            return Probe(prompt=prompt, output=str(reply), tool_calls=calls,
-                         observations=obs, resolved=resolved, reply_bytes=_over or None,
-                         seconds=round(time.time() - t0, 1))
+            # ONE READING OF A RESPONSE, for every way of getting one (`_probe_from`).
+            return self._probe_from(raw, prompt, t0, _over, _streamed)
         except Exception as e:
             # A TOKEN THE TARGET NO LONGER TAKES is fetched again, once: revoked or rotated
             # before its `expires_in`, it would otherwise turn every probe after it into a 401.
@@ -2839,4 +3047,6 @@ class HttpConfiguredTarget(Target):
             self._session = self._session_first
         elif self.uses_session:
             self._session = new_session()
+        # A DIRECT LINE CONVERSATION ENDS HERE: the next send opens another.
+        self._dl = None
         return None
