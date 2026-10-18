@@ -2461,6 +2461,45 @@ def _star_where(check):
               "is not `*[key=value]`" in _said and "tool_calls" in _said, repr(_said)[:200])
 
 
+def _langflow_agent(check):
+    """A Langflow Agent's reply and stream, in the shapes a real Langflow 1.12 returned."""
+    from targets_http import (dig as _dg, _pairs as _pp, tool_call_paths as _tcp,
+                              langflow_stream as _ls)
+    import json as _j
+    _step = {"type": "tool_use", "duration": 1, "header": {"title": "Executed get_current_date"},
+             "name": "get_current_date", "tool_input": {"timezone": "Asia/Tokyo"},
+             "output": {"content": "Current date and time in Asia/Tokyo: 2026-10-19 01:57 JST",
+                        "type": "tool", "name": "get_current_date", "status": "success"},
+             "error": None}
+    _msg = {"text": "It is 01:57 in Tokyo.", "sender": "Machine", "content_blocks": [
+        {"title": "Agent Steps", "contents": [_step, {"type": "text", "text": "It is 01:57 in Tokyo."}]}]}
+    _raw = {"session_id": "s", "outputs": [{"inputs": {}, "outputs": [{"results": {"message": _msg}}]}]}
+    _base = "outputs.0.outputs.0.results.message.content_blocks.*.contents"
+    check("a Langflow agent's call is read with its arguments, from `tool_input`",
+          _pp(_dg(_raw, _base + ".*[type=tool_use]")) == [("get_current_date", '{"timezone": "Asia/Tokyo"}')]
+          and _dg(_raw, _base + ".*[type=tool_use].output.content") == [_step["output"]["content"]],
+          repr(_pp(_dg(_raw, _base + ".*[type=tool_use]"))))
+    _found = _tcp(_raw)
+    check("...and found nine levels down, so onboard can offer the line",
+          bool(_found) and _found[0][1][0][0] == "get_current_date", repr(_found)[:200])
+    _user = {"event": "add_message", "data": {"sender": "User", "text": "What time is it?",
+                                              "session_id": "s", "content_blocks": []}}
+    _part = {"event": "add_message", "data": {"sender": "Machine", "text": "", "session_id": "s",
+                                              "content_blocks": [], "properties": {"state": "partial"}}}
+    _log = {"event": "log", "data": {"name": "Chain Start", "message": {"type": "chain_start"},
+                                     "type": "text", "component_id": "Agent-1"}}
+    _tok = {"event": "token", "data": {"chunk": "It is 01:57", "id": "m1"}}
+    _end = {"event": "end", "data": {"result": _raw}}
+    _cut = "\n\n".join(_j.dumps(e) for e in (_user, _part, _log, _log)) + "\n\n"
+    _whole = "\n\n".join(_j.dumps(e) for e in (_user, _part, _log, _tok, _end)) + "\n\n"
+    _fc, _fw = _ls(_cut), _ls(_whole)
+    check("a Langflow stream closed before its `end` is an error, not an empty reply that held",
+          "before its `end`" in str((_fc or {}).get("error"))
+          and not (_fw or {}).get("error")
+          and _dg(_fw, "outputs.0.outputs.0.results.message.text") == "It is 01:57 in Tokyo.",
+          repr((_fc, (_fw or {}).get("error"))))
+
+
 def _responses_conversation(check):
     """`init --shape responses` against a server shaped as OpenAI's Responses API with its
     Conversations API: the walk a user takes, streamed and not."""
@@ -4951,6 +4990,7 @@ def main():
     _botpress(check)
     _chainlit(check)
     _star_where(check)
+    _langflow_agent(check)
     _responses_conversation(check)
     _three_more_streams(check)
     _gemini_stream(check)

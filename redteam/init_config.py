@@ -372,6 +372,11 @@ request:
 response:
   reply: "outputs.0.outputs.0.results.message.text"
   error: "error"
+  # WHAT AN AGENT CALLED, AND WHAT ITS TOOLS GAVE BACK, if your flow has an Agent with tools:
+  # its steps are the message's `content_blocks`. Off by default, for the reason the OpenAI
+  # shape gives (`qatration onboard` prints the line when a reply carries a call).
+  # tool_calls: "outputs.0.outputs.0.results.message.content_blocks.*.contents.*[type=tool_use]"
+  # observations: "outputs.0.outputs.0.results.message.content_blocks.*.contents.*[type=tool_use].output.content"
 
 ''',
     "gradio": '''\

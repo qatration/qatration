@@ -356,6 +356,25 @@ def _app_shapes():
                       (_c.get("websocket") or {}).get("url") == "ws://localhost:9/x"
                       and _c.get("url") == "http://localhost:9/x", repr((_c.get("url"),
                                                                        _c.get("websocket"))))
+            if _sh == "langflow":
+                # THE COMMENTED AGENT LINES, uncommented, read a real Langflow 1.12 agent body.
+                _txt = init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                          verify="QAT-VERIFY-X", shape=_sh,
+                                          url="http://localhost:9/x")
+                import re as _re
+                _un = yaml.safe_load(_re.sub(r"(?m)^  # (tool_calls|observations): ", r"  \1: ", _txt))
+                from targets_http import dig as _dg2, _pairs as _pp2
+                _body = {"outputs": [{"outputs": [{"results": {"message": {
+                    "text": "ok", "content_blocks": [{"title": "Agent Steps", "contents": [
+                        {"type": "tool_use", "name": "get_current_date",
+                         "tool_input": {"timezone": "UTC"},
+                         "output": {"content": "Current date: 2026-10-18"}},
+                        {"type": "text", "text": "ok"}]}]}}}]}]}
+                check("...and whose commented agent lines, uncommented, read its calls and results",
+                      _pp2(_dg2(_body, _un["response"]["tool_calls"])) == [
+                          ("get_current_date", '{"timezone": "UTC"}')]
+                      and _dg2(_body, _un["response"]["observations"]) == ["Current date: 2026-10-18"],
+                      repr(_un["response"]))
             if _sh == "responses":
                 _cr = yaml.safe_load(init_config.render(
                     secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X", shape=_sh,

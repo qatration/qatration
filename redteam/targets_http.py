@@ -328,7 +328,10 @@ _CALL_KEYS = frozenset(("name", "function", "tool", "arguments", "args", "input"
                         # "toolInvocation": {"toolName": ..., "args": ...}}`.
                         "toolInvocation",
                         # Flowise's `usedTools` entry, `{"tool", "toolInput", "toolOutput"}`.
-                        "toolInput"))
+                        "toolInput",
+                        # Langflow's agent step, `{"type": "tool_use", "name", "tool_input",
+                        # "output"}` in a message's `content_blocks`.
+                        "tool_input"))
 # The keys that WRAP one call rather than name it: the call is the mapping inside.
 _CALL_WRAPPERS = ("functionCall", "function_call", "toolUse", "toolCall", "toolInvocation")
 # `tool-call` is the Vercel AI SDK's content part (`generateText`'s `toolCalls`, and every
@@ -442,8 +445,10 @@ def _pairs(raw):
                     or "")
             # `toolInput` IS FLOWISE'S: its calls arrived with the name and an empty argument,
             # and every detector that judges what was sent to a tool judged nothing.
+            # `tool_input` IS LANGFLOW'S, found walking a real Langflow agent: its calls came
+            # out named and with no arguments.
             args = item.get("arguments", item.get("args", item.get("input", item.get(
-                "parameters", item.get("toolInput", "")))))
+                "parameters", item.get("toolInput", item.get("tool_input", ""))))))
             # THE ARGUMENTS LIVE WHERE THE NAME DOES. OpenAI's shape is
             # {"type": "function", "function": {"name": ..., "arguments": "{...}"}} — this read
             # the name out of the nested dict and the arguments off the top level, where there
@@ -496,7 +501,11 @@ def tool_call_paths(raw, _prefix="", _depth=0, _out=None):
     would. `function` alone is not a call type here, because a tool definition carries it too.
     """
     out = [] if _out is None else _out
-    if _depth > 6 or len(out) > 8:
+    # TEN LEVELS: a Langflow agent's calls sit nine down
+    # (`outputs.0.outputs.0.results.message.content_blocks.0.contents`), and six never reached
+    # them, so `onboard` offered no line for a bot whose every tool call was in the body.
+    # Found walking a real Langflow agent.
+    if _depth > 10 or len(out) > 8:
         return out
     if isinstance(raw, dict):
         items = list(raw.items())
@@ -1359,6 +1368,13 @@ def langflow_stream(text, cut=False):
         out = {"outputs": [{"outputs": [{"results": {"message": {"text": _said}}}]}]}
         if session:
             out["session_id"] = session
+    # A STREAM THAT NEVER REACHED ITS `end` IS AN ANSWER CUT SHORT. Langflow ends every run
+    # with one; walked against a real Langflow agent, a stream closed after the user's own
+    # message and a few log events, and the fold read an empty reply with no error, which is
+    # scored as a bot that held. What had arrived stays beside the error.
+    if error is None and not cut and not any(_e["event"] == "end" for _e in events):
+        error = ("the Langflow stream ended before its `end` event, so the answer is "
+                 "incomplete")
     if error is not None:
         out["error"] = error
     return out
