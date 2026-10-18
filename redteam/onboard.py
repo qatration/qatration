@@ -114,7 +114,8 @@ def _unmapped_calls(raw, cfg):
             above = dig(raw, ".".join(parts[:i])) if i else raw
             if isinstance(above, list) and len(above) > 1:
                 parts[i] = "*"
-    if "*" in parts:
+    from targets_http import is_star as _star
+    if any(_star(p) for p in parts):
         path = ".".join(parts)
         calls = [x for x in _pp(dig(raw, path)) if _keep(x) is not None]
         said = ", ".join("%s(%s)" % (n, str(a)[:30]) for n, a in calls[:3])
@@ -134,6 +135,12 @@ def _reply_hint(raw):
                                        for x in dig(raw, "*.text") or []))
             or (isinstance(raw, dict) and "recipient_id" in raw)):
         return "*.text", "every message's text"
+    # THE RESPONSES API'S MESSAGE, WHEREVER IT SITS: the strings below offered
+    # `output.1.content.0.text` on a reasoning model, which misses on the next reply without
+    # a reasoning item, and reads one that has a second.
+    _resp = "output.*[type=message].content.*[type=output_text].text"
+    if isinstance(raw, dict) and any(isinstance(x, str) and x.strip() for x in dig(raw, _resp) or []):
+        return _resp, "the assistant message's text, wherever it sits in `output`"
     for p2 in COMMON:
         v = dig(raw, p2)
         if isinstance(v, str) and v.strip():

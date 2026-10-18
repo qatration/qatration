@@ -312,11 +312,12 @@ def _app_shapes():
              "directline": ("text", None),
              "websocket": ("text", None),
              "botpress": ("text", None),
-             "chainlit": ("text", None)}
+             "chainlit": ("text", None),
+             "responses": ("output.*[type=message].content.*[type=output_text].text", None)}
     check("init writes every app shape this suite knows, and knows every one it writes",
           set(_want) | {"openai", "vercel"} == set(init_config.SHAPES), repr(init_config.SHAPES))
     _env = {"DIFY_API_KEY": "k", "LANGFLOW_API_KEY": "k", "FLOWISE_API_KEY": "k",
-            "DIRECTLINE_SECRET": "k"}
+            "DIRECTLINE_SECRET": "k", "OPENAI_API_KEY": "k"}
     _old = {k: os.environ.get(k) for k in _env}
     os.environ.update(_env)
     try:
@@ -339,7 +340,8 @@ def _app_shapes():
                 check("...and whose budget is sized by what one of its sends costs",
                       (_c.get("rate") or {}).get("max_requests") == 1800 * _t.requests_per_send
                       and _t.requests_per_send == {"directline": 7, "websocket": 2,
-                                                   "botpress": 12, "chainlit": 2}.get(_sh, 1),
+                                                   "botpress": 12, "chainlit": 2,
+                                                   "responses": 2}.get(_sh, 1),
                       repr((_c.get("rate"), _t.requests_per_send)))
             check("...whose reply is read where %s puts it" % _sh,
                   (_c.get("response") or {}).get("reply") == _reply, repr(_c.get("response")))
@@ -352,6 +354,13 @@ def _app_shapes():
                       (_c.get("websocket") or {}).get("url") == "ws://localhost:9/x"
                       and _c.get("url") == "http://localhost:9/x", repr((_c.get("url"),
                                                                        _c.get("websocket"))))
+            if _sh == "responses":
+                _cr = yaml.safe_load(init_config.render(
+                    secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X", shape=_sh,
+                    url="https://api.openai.com/v1/responses/"))
+                check("...and whose conversation is opened by the Conversations API beside it",
+                      (_cr.get("session") or {}).get("create", {}).get("url")
+                      == "https://api.openai.com/v1/conversations", repr(_cr.get("session")))
             if _sh == "gradio":
                 check("...and whose budget is sized for two requests a send",
                       (_c.get("rate") or {}).get("max_requests") == 3600, repr(_c.get("rate")))
@@ -359,8 +368,11 @@ def _app_shapes():
                       (_c.get("followup") or {}) == {"id_from": "event_id",
                                                      "url": "http://localhost:9/x/{id}"},
                       repr(_c.get("followup")))
-            check("...and which names no placeholder of the OpenAI shape",
-                  init_config.placeholders_left(_c) == [], repr(init_config.placeholders_left(_c)))
+            # THE RESPONSES API TAKES A MODEL, so its placeholder is the one thing left to set.
+            check("...and which names no placeholder of the OpenAI shape, but the model it takes",
+                  init_config.placeholders_left(_c) == (
+                      [("request.model", "YOUR-MODEL-ID")] if _sh == "responses" else []),
+                  repr(init_config.placeholders_left(_c)))
     finally:
         for k, v in _old.items():
             if v is None:

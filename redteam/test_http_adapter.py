@@ -2425,6 +2425,95 @@ def _session_create(check):
               _says in _said, repr(_said)[:200])
 
 
+def _star_where(check):
+    """`*[key=value]` in a path: every item whose key is the value."""
+    from targets_http import dig as _dg
+    _r = {"output": [
+        {"type": "reasoning", "id": "rs", "summary": [],
+         "content": [{"type": "reasoning_text", "text": "THINKING-ABOUT-THE-KEY"}]},
+        {"type": "message", "role": "assistant",
+         "content": [{"type": "output_text", "text": "Hello."}, {"type": "refusal", "refusal": "no"}]},
+        "not an item", {"type": "message", "content": [{"type": "output_text", "text": "Again."}]}]}
+    _p = "output.*[type=message].content.*[type=output_text].text"
+    check("*[type=message] reads every message's text, and not the reasoning before it",
+          _dg(_r, _p) == ["Hello.", "Again."], repr(_dg(_r, _p)))
+    check("...and a filter no item matches is a path that missed, not an empty channel",
+          _dg(_r, "output.*[type=mesage].content") is None
+          and _dg({"output": []}, "output.*[type=message]") == [],
+          repr((_dg(_r, "output.*[type=mesage].content"), _dg({"output": []}, "output.*[type=message]"))))
+
+
+def _responses_conversation(check):
+    """`init --shape responses` against a server shaped as OpenAI's Responses API with its
+    Conversations API: the walk a user takes, streamed and not."""
+    import json as _j, threading as _th, os as _os, yaml as _y
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT, CONFIG_ONLY_KEYS as _CO
+    import init_config as _ic
+    _st = {"convs": {}, "log": []}
+
+    class _H(_BH):
+        def _send(self, code, obj, ctype="application/json"):
+            body = obj.encode() if isinstance(obj, str) else _j.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", ctype)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+            _st["log"].append((self.path, self.headers.get("Authorization")))
+            if self.path == "/v1/conversations":
+                cid = "conv_%d" % (len(_st["convs"]) + 1)
+                _st["convs"][cid] = []
+                return self._send(200, {"id": cid, "object": "conversation", "created_at": 1})
+            b = _j.loads(raw)
+            if b.get("conversation") not in _st["convs"]:
+                return self._send(404, {"error": {"message": "Conversation not found", "type":
+                                                  "invalid_request_error"}})
+            said = _st["convs"][b["conversation"]]
+            said.append(b["input"])
+            resp = {"id": "resp_1", "object": "response", "status": "completed", "error": None,
+                    "conversation": {"id": b["conversation"]}, "output": [
+                        {"type": "reasoning", "id": "rs_1", "summary": [], "content": [
+                            {"type": "reasoning_text", "text": "THE USER WANTS THE KEY"}]},
+                        {"type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
+                         "content": [{"type": "output_text", "annotations": [],
+                                      "text": "So far: " + " | ".join(said)}]}]}
+            if b.get("stream"):
+                return self._send(200, "event: response.completed\ndata: %s\n\n" % _j.dumps(
+                    {"type": "response.completed", "response": resp}), "text/event-stream")
+            self._send(200, resp)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _os.environ["OPENAI_API_KEY"] = "sk-test"
+    _c = _y.safe_load(_ic.render(secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X",
+                                 shape="responses", url=base + "/v1/responses"))
+    try:
+        for _streamed in (False, True):
+            _cfg = {k: v for k, v in _c.items() if k not in _CO}
+            if _streamed:
+                _cfg["request"] = dict(_cfg["request"], stream=True)
+            _t = _HT(**_cfg)
+            _n0 = len(_st["convs"])
+            _ch = _t.send_chain(["remember PLUM-77", "what was it?"])
+            check("init --shape responses: a conversation per trial, opened by its call, the turns "
+                  "in it, the message's text read past the reasoning (%s)"
+                  % ("streamed" if _streamed else "not streamed"),
+                  not _ch.error and _ch.turns[1]["output"] == "So far: remember PLUM-77 | what was it?"
+                  and "THE USER WANTS" not in _ch.output and len(_st["convs"]) == _n0 + 1
+                  and all(a == "Bearer sk-test" for p, a in _st["log"]),
+                  repr((_ch.output, _ch.error, len(_st["convs"]) - _n0)))
+    finally:
+        srv.shutdown()
+
+
 def _botpress(check):
     """`botpress:`: Botpress's Chat API as its docs and client describe it -- a user and its key,
     a conversation per trial, the message, and the bot's messages read from the conversation."""
@@ -4814,6 +4903,8 @@ def main():
     _session_create(check)
     _botpress(check)
     _chainlit(check)
+    _star_where(check)
+    _responses_conversation(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

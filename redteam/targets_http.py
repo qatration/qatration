@@ -178,6 +178,14 @@ def read_capped(response, limit=None, seconds=None):
     return body[:limit], limit + 1 + extra
 
 
+_STAR_WHERE = re.compile(r"^\*\[([^=\]]+)=([^\]]*)\]$")
+
+
+def is_star(step):
+    """Is this step of a path `*` or `*[key=value]`: every item, or every item that matches?"""
+    return step == "*" or bool(_STAR_WHERE.match(step))
+
+
 def dig(data, path):
     """`choices.0.message.content` -> the value, or None if any step is missing.
 
@@ -201,15 +209,29 @@ def _dig(cur, steps):
     tool-call channel that worked on every reply, the run-level "this path never resolved"
     could not fire, and every tool attack was judged on no calls at all. An EMPTY list is still
     an empty list: the path worked and there was nothing in it. Found by an independent review.
+
+    `*[key=value]` IS EVERY ITEM WHOSE `key` IS `value`. The Responses API's `output` holds a
+    `reasoning` item before the assistant's `message` on a reasoning model and none on another,
+    so `output.0.content.0.text` missed the reply on one and read the other, and `output.*`
+    would read a model's own reasoning text (which an open model's server returns) as what it
+    said. `output.*[type=message].content.*[type=output_text].text` is the message's text,
+    wherever it sits.
     """
     for i, step in enumerate(steps):
-        if step == "*":
+        _only = _STAR_WHERE.match(step)
+        if step == "*" or _only:
             # A LONE OBJECT IS A LIST OF ONE: Rasa's `stream=true` with a single message is that
             # message, valid JSON on its own, and `*.text` read it as a path that missed.
             if isinstance(cur, dict):
                 cur = [cur]
             if not isinstance(cur, list):
                 return None
+            # A FILTER THAT MATCHED NO ITEM IS A PATH THAT MISSED, not an empty list: one letter
+            # wrong in `type=function_call` would read as a tool channel that saw no calls.
+            _had = cur
+            if _only:
+                cur = [x for x in cur if isinstance(x, dict)
+                       and str(x.get(_only.group(1))) == _only.group(2)]
             got, hit = [], False
             for item in cur:
                 v = _dig(item, steps[i + 1:])
@@ -220,7 +242,7 @@ def _dig(cur, steps):
                     got.extend(v)
                 else:
                     got.append(v)
-            return got if hit or not cur else None
+            return got if hit or not _had else None
         if isinstance(cur, list):
             if not step.lstrip("-").isdigit():
                 return None
@@ -927,7 +949,8 @@ def anthropic_stream(text, cut=False):
 
 def responses_stream(text, cut=False):
     """An OpenAI Responses API `stream: true` reply folded into the response it answers without
-    streaming, or None: `{"output": [items], "status", ...}`, so `output.0.content.0.text` and
+    streaming, or None: `{"output": [items], "status", ...}`, so
+    `output.*[type=message].content.*[type=output_text].text` and
     `tool_calls: "output"` read both.
 
     THE LAST EVENT CARRIES THE WHOLE RESPONSE: `response.completed` (or `.failed`,
@@ -2571,8 +2594,8 @@ class HttpConfiguredTarget(Target):
     def _create_config(create, name, url):
         """`session.create: {url, id_from, request, method}`: a server that opens a conversation
         with a call of its own and wants its id on every message, and answers the message
-        itself (or through `followup:`). Not OpenAI's Assistants threads, whose answer is a
-        separate run to start and poll; `botpress:` and `directline:` hold their own.
+        itself (or through `followup:`): OpenAI's Responses API with its Conversations API
+        (`POST /v1/conversations` -> `id`). `botpress:` and `directline:` hold their own.
 
         AN ID WE MINTED IS ONE THEY NEVER ISSUED, and an id read from a reply is one the first
         message already went without. So at the start of every conversation (every trial, after
@@ -3730,7 +3753,8 @@ class HttpConfiguredTarget(Target):
             reply = "\n".join(reply)
         # NO ITEM HAD TEXT: a list of messages none of which spoke (`[]`, or an image alone).
         # Said as that, not as the "repr of a whole branch" a container reply earns.
-        elif isinstance(reply, list) and not reply and "*" in str(self.reply_path).split("."):
+        elif isinstance(reply, list) and not reply and any(
+                is_star(s) for s in str(self.reply_path).split(".")):
             _none = Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
                           error="ExtractionFailed: response.reply=%r found no text in any "
                                 "item of the reply" % self.reply_path)

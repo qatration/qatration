@@ -68,7 +68,8 @@ it goes to the tracked `out/`: point `QATRATION_OUT` somewhere else for your own
 rather than leaving it as a step to remember. `qatration mint` still exists on its own, for a
 config you already have. Give it `--system-prompt-file prompt.txt` and the config also carries
 your prompt as deployed, which the checks that compare a reply with your instructions need.
-`--shape vercel` writes the config for a Vercel AI SDK route that `useChat` talks to: its
+`--shape responses` writes one for OpenAI's Responses API with the conversation its
+Conversations API keeps. `--shape vercel` writes the config for a Vercel AI SDK route that `useChat` talks to: its
 request, its streamed reply, and the conversation in its `parts` shape. `--shape dify`,
 `flowise`, `langflow`, `gradio` and `rasa` write one for an app built on those,
 `--shape directline` one for a Copilot Studio agent, `--shape botpress` one for a Botpress bot,
@@ -215,7 +216,7 @@ None of that needs taking on trust. The counts `test_readme.py` lists, in this R
 site, are recounted from the artifacts in `out/` by a test that fails the build when the two
 disagree. The site's other figures come from single dated runs and from the benchmark against
 garak and promptfoo, and are not recounted. No assertion
-in the suite is allowed to be one that cannot fail — 6,146 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 6,151 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

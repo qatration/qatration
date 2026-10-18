@@ -204,6 +204,17 @@ a slow bot's answer to one turn was read as the next turn's; and a send was pric
 Line's rate, under what a bot taking four seconds spends. And `session.create` went out without
 the token or signature `auth:` adds, a 401 every trial blamed on a credential never sent.
 
+**The Responses API's reply where it is, and its conversations: `*[key=value]`, `init --shape
+responses`.** The reply path the docs gave for the Responses API, `output.0.content.0.text`, read
+the first item of `output`, which on a reasoning model is the `reasoning` item: no reply, or, where
+the server returns reasoning text, the model's thinking read as what it said. A path step
+`*[key=value]` is now every item whose key is that value, so
+`output.*[type=message].content.*[type=output_text].text` is the message's text wherever it sits;
+a filter that matches nothing is a path that missed, not an empty list. `onboard` offers that path
+for a Responses body rather than an index. `init --shape responses` writes the config for the
+Responses API with a conversation per trial opened by the Conversations API (`session.create`),
+the successor of the Assistants API, which OpenAI shut down on 26 August 2026.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

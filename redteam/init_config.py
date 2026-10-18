@@ -431,6 +431,39 @@ response:
   # tool_calls: "frames.*.tool_calls"   # if a frame carries the calls the agent made
 
 ''',
+    "responses": '''\
+# OPENAI'S RESPONSES API, the conversation kept by its Conversations API (the successor of the
+# Assistants API, shut down on 26 August 2026). The url is `https://api.openai.com/v1/responses`.
+env:
+  - OPENAI_API_KEY
+headers:
+  Authorization: "Bearer ${{OPENAI_API_KEY}}"
+request:
+  model: {model}
+  input: "{{prompt}}"
+  conversation: "{{session}}"
+  # WHERE THE CANARY GOES IF THIS IS A BARE MODEL: `instructions` is the system prompt, sent
+  # with every request. If your product sends its own, plant the block this command printed in
+  # that instead, and leave this commented out.
+  # instructions: >-
+{plant}
+
+# A CONVERSATION PER TRIAL, opened by its own call, its id on every turn: the multi-turn
+# attacks are real turns, kept by OpenAI.
+session:
+  create:
+    url: {create_url}
+    id_from: "id"
+
+# THE ASSISTANT MESSAGE'S TEXT, WHEREVER IT SITS: a reasoning model puts a `reasoning` item
+# first in `output`, and the reply is not always the first item.
+response:
+  reply: "output.*[type=message].content.*[type=output_text].text"
+  error: "error.message"
+  # WHAT THE MODEL CALLED, if your request gives it tools.
+  # tool_calls: "output"
+
+''',
     "botpress": '''\
 # A BOTPRESS BOT through its Chat API. The url is https://chat.botpress.cloud/<webhook id>, the id
 # at the end of the Chat integration's webhook url. The bot's instructions are its own, in Botpress
@@ -565,7 +598,7 @@ HISTORY["gradio"] = HISTORY["rasa"]
 # no id for the request to carry.
 HISTORY["directline"] = ""
 HISTORY["websocket"] = ""
-HISTORY["botpress"] = HISTORY["chainlit"] = ""
+HISTORY["botpress"] = HISTORY["chainlit"] = HISTORY["responses"] = ""
 SHAPES = tuple(WIRE)
 
 
@@ -576,9 +609,11 @@ def _send_cost(shape):
     from targets_http import requests_per_send as _rps
     _w = _y.safe_load(WIRE[shape].replace("{{", "{").replace("}}", "}")
                       .replace("{model}", '"m"').replace("{plant}", "").replace(
-                          "{followup_url}", '"x"').replace("{ws_url}", '"ws://x"')) or {}
+                          "{followup_url}", '"x"').replace("{ws_url}", '"ws://x"').replace(
+                          "{create_url}", '"x"')) or {}
     return _rps(_w.get("followup"), _w.get("directline"),
-                _w.get("websocket") or _w.get("chainlit"), botpress=_w.get("botpress"))
+                _w.get("websocket") or _w.get("chainlit"),
+                (_w.get("session") or {}).get("create"), botpress=_w.get("botpress"))
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
@@ -628,7 +663,10 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                                # GRADIO'S ANSWER IS AT THE SAME URL, WITH THE ID AFTER IT.
                                followup_url=_q(str(url).rstrip("/") + "/{id}"),
                                ws_url=_q(ws_url or re.sub(r"^http", "ws", str(url),
-                                                           flags=re.I))),
+                                                           flags=re.I)),
+                               # THE CONVERSATIONS ENDPOINT BESIDE THE RESPONSES ONE.
+                               create_url=_q(re.sub(r"/responses/?$", "", str(url).rstrip("/"))
+                                             + "/conversations")),
                            history=HISTORY[shape].format(),
                            # TWO REQUESTS A SEND where the answer is fetched by a second one.
                            max_requests=1800 * _send_cost(shape),
@@ -660,6 +698,7 @@ def main():
     ap.add_argument("--force", action="store_true", help="overwrite an existing file")
     ap.add_argument("--shape", choices=SHAPES, default="openai",
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
+                         "OpenAI's Responses API with a conversation it keeps, "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
                          "Langflow, Gradio or Rasa app, a Copilot Studio agent over Direct "
                          "Line, a Botpress bot, a Chainlit app, or a chat whose backend is a "

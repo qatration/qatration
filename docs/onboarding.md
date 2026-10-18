@@ -83,7 +83,7 @@ the same endpoint answers with streaming off, so the config written for that bod
 |---|---|
 | OpenAI-compatible `stream: true` (vLLM, LM Studio, llama.cpp, LiteLLM, OpenRouter) | `choices.0.message.content`, `tool_calls: "choices.0.message.tool_calls"` |
 | Anthropic Messages | `content.0.text`, `tool_calls: "content"` |
-| OpenAI Responses API | `output.0.content.0.text`, `tool_calls: "output"` |
+| OpenAI Responses API | `output.*[type=message].content.*[type=output_text].text`, `tool_calls: "output"` |
 | Ollama's own `/api/chat` (it streams unless told not to) | `message.content`, `tool_calls: "message.tool_calls"` |
 | Gemini `streamGenerateContent?alt=sse` | `candidates.0.content.parts.0.text`, `tool_calls: "candidates.0.content.parts"` |
 | Google's Interactions API | `steps.0.content.0.text`, `tool_calls: "steps"` |
@@ -164,10 +164,35 @@ response:
 ```
 
 The call carries the target's headers, and the token or signature `auth:` adds to them, so it
-goes to the target's own origin and nowhere else, and it is paid for out of the request budget. An answer without the id is `ExtractionFailed`
-with no message sent. `session` takes `from_reply` or `create`, not both. Not covered: OpenAI's
-Assistants threads, whose answer is a run to start and poll rather than the reply to the
-message.
+goes to the target's own origin and nowhere else, and it is paid for out of the request budget.
+An answer without the id is `ExtractionFailed` with no message sent. `session` takes
+`from_reply` or `create`, not both.
+
+OpenAI's Responses API keeps a conversation this way, through its Conversations API (the
+successor of the Assistants API, which OpenAI shut down on 26 August 2026);
+`qatration init --shape responses --url https://api.openai.com/v1/responses` writes it:
+
+```yaml
+url: "https://api.openai.com/v1/responses"
+request:
+  model: "gpt-5"
+  input: "{prompt}"
+  conversation: "{session}"
+session:
+  create:
+    url: "https://api.openai.com/v1/conversations"
+    id_from: "id"
+response:
+  reply: "output.*[type=message].content.*[type=output_text].text"
+```
+
+**`*[key=value]` in a path is every item whose `key` is `value`.** A reasoning model puts a
+`reasoning` item before the assistant's `message` in `output`, and another model puts none, so
+`output.0.content.0.text` reads the reply from one and misses it on the other, and `output.*`
+reads the reasoning text an open model's server returns as if the bot had said it. A filter that
+matches no item is a path that missed, not an empty list, so a misspelt `type=` is said rather
+than read as a tool channel that saw no calls. Not read: a `refusal` part, which holds its words
+under `refusal` rather than `text`.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in

@@ -310,6 +310,11 @@ def main():
             "vercel": {"text": "Let me look that order up for you right away.",
                        "toolCalls": [{"type": "tool-call", "toolCallId": "c1",
                                       "toolName": "lookup_order", "input": {"id": "7"}}]},
+            # THE RESPONSES API ON A REASONING MODEL: the reasoning item first.
+            "responses": {"output": [
+                {"type": "reasoning", "id": "rs_1", "summary": []},
+                {"type": "message", "role": "assistant", "content": [
+                    {"type": "output_text", "text": "Let me look that order up for you right away."}]}]},
             # A BOT THAT ANSWERS IN SEVERAL MESSAGES, as Rasa's REST channel does.
             "rasa1": [{"recipient_id": "u1", "text": "Let me look that order up for you."}],
             "rasa": [{"recipient_id": "u1", "text": "Let me look that order up for you."},
@@ -472,6 +477,11 @@ def main():
             _nl_ = " ".join(_repl["notes"])
             check("a transcript is offered its LAST message as the reply, not the user's own first",
                   'response.reply: "messages.-1.content"' in _nl_, _nl_[:300])
+            _okq, _repq = onboard.check(_agent_cfg("responses", reply="output.0.content.0.text"))
+            _nq = " ".join(_repq["notes"])
+            check("a Responses API reply is offered the message's text wherever it sits, not an index",
+                  not _okq and 'response.reply: "output.*[type=message].content.*[type=output_text].text"'
+                  in _nq, _nq[:300])
             _okr, _repr_ = onboard.check(_agent_cfg("rasa"))
             _nr = " ".join(_repr_["notes"])
             check("a reply that is a list of messages is offered `*.text`, every one of them",
