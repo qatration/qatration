@@ -225,8 +225,9 @@ Conversations url after an Azure `?api-version=` query, and guessed one for a ur
 
 **Walking the real frameworks.** Every adapter above was written against the frameworks'
 documentation; this pointed `init`, `onboard` and a quick `run` at real local installs, each a
-support bot on a local model: Chainlit 2.12, Gradio 6.30 and Langflow 1.12. Chainlit and Gradio
-read as documented, the welcome left out and each `{session}` its own conversation. Langflow
+support bot on a local model: Chainlit 2.12, Gradio 6.30, Langflow 1.12 and Flowise 3.1. Chainlit,
+Gradio and Flowise read as documented, the welcome left out, each `{session}` its own conversation
+and a Flowise agent's calls read from `usedTools`, streamed or not. Langflow
 found five things. Its Agent puts a call's arguments in `tool_input`, which no call shape read,
 so its calls arrived named and empty; they sit nine levels down, past where `onboard` looked
 for a call to offer a line for; `init --shape langflow` named no path to them (it now writes the
@@ -234,8 +235,7 @@ two lines, commented, as the other shapes do); a stream that closed before its `
 folded into an empty reply with no error, which scores as a bot that held; and its Agent
 sometimes answers with an empty message, which in the last turn of a conversation was judged
 DEFENDED while the same empty reply sent alone is ERROR. A conversation whose last turn came back
-with nothing is now ERROR; no stored row moved. Flowise was not walked: it does not install on
-Node 24.
+with nothing is now ERROR; no stored row moved.
 
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
