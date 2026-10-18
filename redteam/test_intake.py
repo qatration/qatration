@@ -354,6 +354,9 @@ def main():
                                   policy=_only_metadata_refused)
         check("hosted: a websocket target is refused at the door, by name",
               code == 400 and "websocket" in json.dumps(obj), f"{code} {obj}")
+        code, obj = intake.submit(root, body(cfg={"chainlit": {}}), policy=_only_metadata_refused)
+        check("hosted: a chainlit target, a WebSocket underneath, is refused at the door too",
+              code == 400, f"{code} {obj}")
         code, obj = intake.submit(root, body(cfg={"directline": {
             "token_url": "http://169.254.169.254/token"}}), policy=_only_metadata_refused)
         check("hosted: a directline.token_url the policy refuses is refused, by name",

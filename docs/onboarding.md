@@ -123,9 +123,7 @@ endpoint ignores.
 
 **An id the server assigns** is read back with `session.from_reply`. Dify, and the hosted bots
 built like it, name the conversation in their first reply and expect that name on the next
-turn, so an id minted here is one they never issued. A server that wants its conversation
-created by a call of its own first (OpenAI's Assistants threads, for one) is not covered. For
-Dify:
+turn, so an id minted here is one they never issued. For Dify:
 
 ```yaml
 url: "https://api.dify.ai/v1/chat-messages"
@@ -146,6 +144,30 @@ session:
 `{session}` is empty (or `session.first`) until a reply names a conversation, then that name
 until the next reset. `onboard` refuses a config whose `from_reply` path found nothing in the
 reply, because every turn of it would open a conversation of its own.
+
+**A conversation opened by a call of its own** is `session.create`: the server wants an id it
+issued on the very first message, and issues it from another endpoint. At the start of every
+trial that call is made, the id it answers with is `{session}`, and the turns of the trial carry
+it:
+
+```yaml
+url: "https://bot.example/api/conversations/{session}/messages"
+request:
+  text: "{prompt}"
+session:
+  create:
+    url: "https://bot.example/api/conversations"   # the target's own origin, no slots
+    request: {channel: "qatration"}                # the body; method: POST, PUT or GET
+    id_from: "conversation.id"
+response:
+  reply: "reply.text"
+```
+
+The call carries the target's headers, and the token or signature `auth:` adds to them, so it
+goes to the target's own origin and nowhere else, and it is paid for out of the request budget. An answer without the id is `ExtractionFailed`
+with no message sent. `session` takes `from_reply` or `create`, not both. Not covered: OpenAI's
+Assistants threads, whose answer is a run to start and poll rather than the reply to the
+message.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,
 `{text}` and `{n}` (the turn's position) in it. `useChat` sends every message with its text in
@@ -258,8 +280,68 @@ close after the answer, where no `end` frame is configured, is simply its end); 
 sends nothing within `max_s` is an error. The user's own message echoed back is not the answer,
 and the whole answer is held to the reply cap, its true size kept. Not on the hosted service, and
 not through a proxy: the address checks there are made on HTTP connections, which this is not.
-`qatration init --shape websocket --url ws://...` writes it. Not covered: socket.io (Chainlit's
-transport), which frames its messages in a protocol of its own.
+`qatration init --shape websocket --url ws://...` writes it. socket.io frames its messages in a
+protocol of its own, so a socket.io app is not a `websocket:` target; Chainlit's is read by
+`chainlit:`, below.
+
+**A Botpress bot** is reached through its Chat API, where the answer is not in the reply to the
+message: `POST /messages` answers with the user's own message, and the bot's arrive later in the
+conversation. `botpress:` holds that conversation:
+
+```yaml
+url: "https://chat.botpress.cloud/<webhook id>"   # the id at the end of the Chat webhook url
+botpress:
+  poll_s: 1          # how often the conversation is read
+  quiet_s: 3         # the answer is complete when nothing new comes for this long
+  max_s: 60          # and a bot that says nothing for this long is an error
+response:
+  reply: "text"
+```
+
+Each trial opens its own conversation and the turns of a chain stay in it, so the multi-turn
+attacks are real turns. The answer is the messages from anyone but this user created after the
+message was sent: the user's own message and an earlier turn's late one are not part of it, and
+a card's title, subtitle and text are, because the user reads them. Every page of the
+conversation is read. Before a later turn there must be `quiet_s` with nothing new: a message in
+it is the last turn's tail, kept as what arrived, and that turn is not sent rather than having
+the tail read as its answer. The user is the
+`x-user-key` header when you set one (the integration's encryption mode, where you sign the
+key), or one the API makes on the first send and the run keeps (its shared-key mode). A 2xx
+answer carrying an error `code` is that error. Every request is paid for out of the budget, so a
+send costs about `3 + 3 × quiet_s / poll_s` of them (the user, the conversation, the message, and
+looks for three windows of quiet: while the bot starts, until it is quiet, before the next turn),
+priced in by `onboard` and `run`; a bot slower than `quiet_s` to start answering spends more. `qatration
+init --shape botpress` writes it.
+
+**A Chainlit app** has no request and reply either: its UI talks socket.io to the app, on a
+WebSocket at `<url>/ws/socket.io`. `chainlit:` speaks it, on the same standard-library client:
+
+```yaml
+url: "http://localhost:8000/"      # the app's own address
+chainlit:
+  quiet_s: 30        # an app that sends nothing for this long, mid-answer, is cut short
+  max_s: 120         # and the whole answer is held to this
+  settle_s: 2        # how long after connecting a welcome (on_chat_start) may take to start
+# An app with a login reads its access_token cookie:
+# headers:
+#   Cookie: "access_token=${CHAINLIT_TOKEN}"
+response:
+  reply: "text"
+  tool_calls: "tool_calls"   # the app's tool steps, by name and input
+```
+
+Each trial opens its own session, with a fresh `sessionId`, and the turns of a chain share it.
+The app's welcome, the `on_chat_start` task, is read to its end and left out; the answer is the
+assistant's messages between the `task_start` and the `task_end` of the handler the message
+started, streamed tokens joined and a final update taken whole, and an `ask` is the answer too
+(the app is now waiting for the user). Only assistant messages are: a tool step is a tool call,
+read by its name and input; an `llm` step, and any token marked as input, is the app's working
+and not what it said; a message marked `isError` is the app failing, an error rather than a
+reply. The user's own message echoed back is not part of it, and an answer over the reply cap is
+kept as far as the cap with its true size. A session the app refuses is the rejection
+it was, in the app's words, and an answer the app never ends is an error with what arrived kept
+beside it. Not on the hosted service and not through a proxy, for the WebSocket's reasons.
+`qatration init --shape chainlit` writes it.
 
 **A bot behind an identity provider** takes a bearer token that lives about an hour, and a
 sweep outlives it: pasted into `headers:`, every request after the hour is a 401 and the rest

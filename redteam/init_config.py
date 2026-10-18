@@ -431,6 +431,52 @@ response:
   # tool_calls: "frames.*.tool_calls"   # if a frame carries the calls the agent made
 
 ''',
+    "botpress": '''\
+# A BOTPRESS BOT through its Chat API. The url is https://chat.botpress.cloud/<webhook id>, the id
+# at the end of the Chat integration's webhook url. The bot's instructions are its own, in Botpress
+# Studio: that is where the block this command printed goes.
+#
+# THE USER: with no key here, one is made by the API for the run (its shared-key mode); with the
+# integration's encryption key set, sign a user key and put it in the header instead:
+# env:
+#   - BOTPRESS_USER_KEY
+# headers:
+#   x-user-key: "${{BOTPRESS_USER_KEY}}"
+
+# Each trial opens its own conversation; the message goes in it, and the conversation is read once
+# a second for the bot's messages until `quiet_s` passes with nothing new.
+botpress:
+  poll_s: 1
+  quiet_s: 3
+  max_s: 60
+
+# Every message of the bot's answer, a card's title and subtitle included.
+response:
+  reply: "text"
+
+''',
+    "chainlit": '''\
+# A CHAINLIT APP, through the socket.io session its UI uses. The url is the app's own address, e.g.
+# http://localhost:8000/. Its prompt is the app's own: that is where the block this command
+# printed goes.
+#
+# AN APP WITH A LOGIN reads its `access_token` cookie (POST /auth/jwt or /login gives it):
+# env:
+#   - CHAINLIT_TOKEN
+# headers:
+#   Cookie: "access_token=${{CHAINLIT_TOKEN}}"
+
+# Each trial opens its own session. The answer is the assistant's messages between the
+# `task_start` and the `task_end` the app emits around its handler; an `ask` ends it too.
+chainlit:
+  quiet_s: 30
+  max_s: 120
+
+response:
+  reply: "text"
+  tool_calls: "tool_calls"     # the app's tool steps, by name and input
+
+''',
     "rasa": '''\
 # A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
 # `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
@@ -519,6 +565,7 @@ HISTORY["gradio"] = HISTORY["rasa"]
 # no id for the request to carry.
 HISTORY["directline"] = ""
 HISTORY["websocket"] = ""
+HISTORY["botpress"] = HISTORY["chainlit"] = ""
 SHAPES = tuple(WIRE)
 
 
@@ -530,7 +577,8 @@ def _send_cost(shape):
     _w = _y.safe_load(WIRE[shape].replace("{{", "{").replace("}}", "}")
                       .replace("{model}", '"m"').replace("{plant}", "").replace(
                           "{followup_url}", '"x"').replace("{ws_url}", '"ws://x"')) or {}
-    return _rps(_w.get("followup"), _w.get("directline"), _w.get("websocket"))
+    return _rps(_w.get("followup"), _w.get("directline"),
+                _w.get("websocket") or _w.get("chainlit"), botpress=_w.get("botpress"))
 
 
 def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=None,
@@ -614,7 +662,8 @@ def main():
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
                          "Langflow, Gradio or Rasa app, a Copilot Studio agent over Direct "
-                         "Line, or a chat whose backend is a WebSocket")
+                         "Line, a Botpress bot, a Chainlit app, or a chat whose backend is a "
+                         "WebSocket")
     ap.add_argument("--system-prompt-file", default=None,
                     help="your bot's system prompt, read from a file and written into the "
                          "config with the canary block after it, so the checks that compare "

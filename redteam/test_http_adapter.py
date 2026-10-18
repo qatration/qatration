@@ -2317,6 +2317,515 @@ def _websocket(check):
               % _label, _says in _said, repr(_said)[:200])
 
 
+def _session_create(check):
+    """`session.create`: a conversation the server opens with a call of its own, once a trial,
+    its id sent on every message of that conversation."""
+    import json as _j, threading as _th, os as _os
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _st = {"threads": {}, "n": 0, "log": [], "create_code": 200, "noid": False}
+
+    class _H(_BH):
+        def _send(self, code, obj):
+            body = _j.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+            _st["log"].append((self.path, self.headers.get("Authorization")))
+            if self.path == "/token":
+                return self._send(200, {"access_token": "idp-tok", "token_type": "Bearer",
+                                        "expires_in": 3600})
+            if self.path == "/v1/threads":
+                if _st["create_code"] != 200:
+                    return self._send(_st["create_code"], {"error": {"message": "no threads for you"}})
+                if _st["noid"]:
+                    return self._send(200, {"object": "thread"})
+                _st["n"] += 1
+                tid = "thread_%d" % _st["n"]
+                _st["threads"][tid] = []
+                return self._send(200, {"id": tid, "object": "thread"})
+            tid = self.path.split("/")[3]
+            if tid not in _st["threads"]:
+                return self._send(404, {"error": {"message": "No thread found"}})
+            _st["threads"][tid].append(_j.loads(raw)["content"])
+            self._send(200, {"reply": "So far: " + " | ".join(_st["threads"][tid])})
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _cfg = dict(url=base + "/v1/threads/{session}/messages", name="threads",
+                headers={"Authorization": "Bearer k"},
+                request={"role": "user", "content": "{prompt}"}, response={"reply": "reply"},
+                session={"create": {"url": base + "/v1/threads", "id_from": "id"}}, timeout_s=5)
+    try:
+        _t = _HT(**_cfg)
+        check("session.create: chain without forged history, a send priced at the call too",
+              set(_t.capabilities) == {"chain"} and _t.server_memory and _t.requests_per_send == 2,
+              repr((_t.capabilities, _t.requests_per_send)))
+        _p = _t.send("hello there")
+        check("the conversation is opened by its call before the first message, with the headers",
+              _p.output == "So far: hello there" and not _p.error
+              and _st["log"][0] == ("/v1/threads", "Bearer k"), "output=%r log=%r" % (_p.output, _st["log"][:2]))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what was it?"])
+        check("...and once a trial: a reset opens the next, the turns of a chain share one",
+              "PLUM-77" in _c.output and _st["n"] == 2, repr((_c.output, _st["n"])))
+        check("...which reads_history hears", _rn.reads_history(_t, "threads")[0] is True)
+        _t.reset()
+        _t.rate.used = 0
+        _t.send("count")
+        check("...and the call is paid for out of the budget", _t.rate.used == 2, repr(_t.rate.used))
+        _st["noid"] = True
+        _t.reset()
+        _n0 = len(_st["log"])
+        _p = _t.send("hi")
+        _st["noid"] = False
+        check("an answer without the id is ExtractionFailed, and no message is sent",
+              "session.create.id_from" in (_p.error or "") and len(_st["log"]) == _n0 + 1,
+              "error=%r" % _p.error)
+        _st["create_code"] = 401
+        _t2 = _HT(**_cfg)
+        _p = _t2.send("hi")
+        _st["create_code"] = 200
+        check("a refused call is the rejection it was, and no message is sent",
+              bool(_p.error) and "401" in _p.error, "error=%r" % _p.error)
+        _os.environ["QAT_TEST_CR_SEC"] = "sec"
+        _t3 = _HT(**dict(_cfg, headers={}, env=["QAT_TEST_CR_SEC"], auth={
+            "type": "oauth2_client_credentials", "token_url": base + "/token",
+            "client_id": "cid", "client_secret": "${QAT_TEST_CR_SEC}"}))
+        _n0 = len(_st["log"])
+        _p = _t3.send("behind a token")
+        check("behind auth:, the call carries the token the messages carry",
+              _p.output == "So far: behind a token" and not _p.error
+              and [a for pth, a in _st["log"][_n0:] if pth != "/token"] == ["Bearer idp-tok"] * 2,
+              "output=%r log=%r" % (_p.output, _st["log"][_n0:]))
+    finally:
+        srv.shutdown()
+    for _label, _sess, _says in (
+            ("a create url on another origin", {"create": {"url": "http://127.0.0.1:1/t", "id_from": "id"}},
+             "own origin"),
+            ("both from_reply and create", {"from_reply": "id", "create": {"url": base + "/t", "id_from": "id"}},
+             "exactly one"),
+            ("a create without id_from", {"create": {"url": base + "/t"}}, "session.create")):
+        try:
+            _HT(**dict(_cfg, session=_sess))
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("%s is refused when the config is read, and the refusal says why" % _label,
+              _says in _said, repr(_said)[:200])
+
+
+def _botpress(check):
+    """`botpress:`: Botpress's Chat API as its docs and client describe it -- a user and its key,
+    a conversation per trial, the message, and the bot's messages read from the conversation."""
+    import json as _j, threading as _th, time as _tm, datetime as _dt
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _st = {"convs": {}, "n": 0, "users": 0, "log": [], "mode": ""}
+
+    def _now(off=0.0):
+        return (_dt.datetime.utcnow() + _dt.timedelta(seconds=off)).isoformat() + "Z"
+
+    class _H(_BH):
+        def _send(self, code, obj):
+            body = _j.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            _st["log"].append(("GET", self.path, self.headers.get("x-user-key")))
+            cid = self.path.split("/conversations/")[1].split("/")[0]
+            msgs = [m for m in _st["convs"][cid] if m["_at"] <= _tm.time()]
+            msgs = [{k: v for k, v in m.items() if k != "_at"} for m in msgs]
+            if _st["mode"] == "pages":
+                # PAGES OF TWO, THE OLDEST FIRST: from the second turn on, the reply is on a
+                # later page than the first.
+                _at = int(self.path.split("nextToken=p")[1]) if "nextToken=p" in self.path else 0
+                return self._send(200, {"messages": msgs[_at:_at + 2], "meta": {
+                    "nextToken": "p%d" % (_at + 2) if len(msgs) > _at + 2 else None}})
+            # IN NO PARTICULAR ORDER, as the docs leave it: the newest first here.
+            self._send(200, {"messages": list(reversed(msgs)), "meta": {}})
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length") or 0))
+            _st["log"].append(("POST", self.path, self.headers.get("x-user-key")))
+            if self.path.endswith("/users"):
+                _st["users"] += 1
+                return self._send(201, {"user": {"id": "user-1"}, "key": "made-key"})
+            if self.headers.get("x-user-key") not in ("made-key", "set-key"):
+                return self._send(401, {"code": 401, "message": "Unauthorized"})
+            if self.path.endswith("/conversations"):
+                _st["n"] += 1
+                cid = "conv_%d" % _st["n"]
+                _st["convs"][cid] = []
+                return self._send(201, {"conversation": {"id": cid}})
+            b = _j.loads(raw)
+            if _st["mode"] == "err200":
+                return self._send(200, {"code": 403, "type": "Forbidden", "message": "bot disabled"})
+            c = _st["convs"][b["conversationId"]]
+            mid = "m%d" % (len(c) + 1)
+            mine = {"id": mid, "userId": "user-1", "conversationId": b["conversationId"],
+                    "createdAt": _now(), "payload": b["payload"], "_at": _tm.time()}
+            c.append(mine)
+            said = [m["payload"].get("text") for m in c if m["userId"] == "user-1"]
+            payload = {"type": "text", "text": "So far: " + " | ".join(said)}
+            if _st["mode"] == "card":
+                payload = {"type": "card", "title": "Your code", "subtitle": "CARD-SECRET-2",
+                           "actions": []}
+            if _st["mode"] == "slow":
+                # A WAIT NODE: "One moment...", and the answer created when it is ready.
+                payload = {"type": "text", "text": "One moment..."}
+                _late = _tm.time() + 2.6
+                c.append({"id": mid + "s", "userId": "bot-9", "conversationId": b["conversationId"],
+                          "createdAt": _now(2.6), "payload": {"type": "text", "text": "ANSWER-TO "
+                                                              + said[-1]}, "_at": _late})
+            c.append({"id": mid + "b", "userId": "bot-9", "conversationId": b["conversationId"],
+                      "createdAt": _now(0.4), "payload": payload, "_at": _tm.time() + 0.4})
+            if _st["mode"] == "late" and len(said) == 1:
+                # A FOLLOW-UP FROM TURN ONE, created then, listed only later.
+                c.append({"id": mid + "f", "userId": "bot-9", "conversationId": b["conversationId"],
+                          "createdAt": _now(0.6), "payload": {"type": "text", "text": "TURN-ONE-LATE"},
+                          "_at": _tm.time() + 4.4})
+            self._send(201, {"message": {k: v for k, v in mine.items() if k != "_at"}})
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    base = "http://127.0.0.1:%d/hook-1" % srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _bp = {"poll_s": 1, "quiet_s": 1, "max_s": 6}
+    try:
+        _t = _HT(url=base, name="bp", botpress=dict(_bp), response={"reply": "text"}, timeout_s=5)
+        check("a Botpress target keeps its conversation: chain, no forged history",
+              set(_t.capabilities) == {"chain"} and _t.server_memory, repr(_t.capabilities))
+        _p = _t.send("hello there")
+        check("...and a send is priced at what a bot answering within quiet_s spends",
+              _t.requests_per_send == 6 and 0 < _t.rate.used <= _t.requests_per_send,
+              repr((_t.requests_per_send, _t.rate.used)))
+        check("the bot's message is read from the conversation, not the user's own",
+              _p.output == "So far: hello there" and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        check("...with a user made by POST /users once, its key on every request after",
+              _st["users"] == 1 and all(k == "made-key" for m, pth, k in _st["log"][1:]),
+              repr(_st["log"][:4]))
+        _t.reset()
+        _n0 = _st["n"]
+        _c = _t.send_chain(["remember PLUM-77", "what was it?"])
+        check("...and the turns of a chain share a conversation, a reset opens the next",
+              "PLUM-77" in _c.output and _c.turns[1]["output"].endswith("what was it?")
+              and _st["users"] == 1 and _st["n"] == _n0 + 1, repr((_c.output, _st["n"] - _n0)))
+        _st["mode"] = "late"
+        _t.reset()
+        _c = _t.send_chain(["one", "two"])
+        _st["mode"] = ""
+        check("a late message from an earlier turn is not the next turn's answer",
+              "TURN-ONE-LATE" not in _c.turns[1]["output"], repr(_c.turns[1]["output"]))
+        check("...which reads_history hears", _rn.reads_history(_t, "bp")[0] is True)
+        _st["mode"] = "pages"
+        _t.reset()
+        _c = _t.send_chain(["one", "two", "three"])
+        check("every page of the conversation is read: a reply on a later page is the answer",
+              len(_c.turns) == 3 and _c.turns[-1]["output"] == "So far: one | two | three"
+              and not _c.error, repr((_c.turns[-1:], _c.error)))
+        _st["mode"] = "slow"
+        _t.reset()
+        _n0 = sum(1 for m, pth, k in _st["log"] if pth.endswith("/messages") and m == "POST")
+        _c = _t.send_chain(["one", "two"])
+        _st["mode"] = ""
+        _sent = sum(1 for m, pth, k in _st["log"] if pth.endswith("/messages") and m == "POST") - _n0
+        check("a slow bot's answer to the last turn is kept as its tail, and the next turn not sent",
+              _c.turns[0]["output"] == "One moment..." and len(_c.turns) == 2
+              and "BotpressDesync" in (_c.turns[1].get("error") or _c.error or "")
+              and "ANSWER-TO one" in _c.turns[1]["output"] and _sent == 1,
+              repr((_c.turns, _c.error, _sent)))
+        _st["mode"] = "card"
+        _t.reset()
+        _p = _t.send("card please")
+        check("what a card shows is read as the bot saying it",
+              "CARD-SECRET-2" in _p.output and "Your code" in _p.output, "output=%r" % _p.output)
+        _st["mode"] = "err200"
+        _t.reset()
+        _p = _t.send("hi")
+        check("a 2xx carrying an error code is the error it says, not an empty reply",
+              bool(_p.error) and "bot disabled" in _p.error and not _p.output, "error=%r" % _p.error)
+        _st["mode"] = ""
+        _k = _HT(url=base, name="bp-key", botpress=dict(_bp), headers={"x-user-key": "set-key"},
+                 response={"reply": "text"}, timeout_s=5)
+        _u0 = _st["users"]
+        _p = _k.send("with my key")
+        check("a user key in the headers is used, and no user is made",
+              _p.output.startswith("So far") and _st["users"] == _u0, repr((_p.output, _st["users"])))
+    finally:
+        srv.shutdown()
+    try:
+        _HT(url=base, name="bp-bad", botpress={"poll_s": 0.5}, response={"reply": "text"})
+        _said = ""
+    except SystemExit as e:
+        _said = str(e)
+    check("botpress with a poll_s under a second is refused, and the refusal says why",
+          "at least 1" in _said, repr(_said)[:200])
+
+
+def _chainlit(check):
+    """`chainlit:`: a Chainlit app through its socket.io session, against a server speaking
+    Engine.IO 4 / Socket.IO 5 and Chainlit's own events as its source emits them."""
+    import json as _j, threading as _th, socketserver as _ss, base64 as _b64, hashlib as _hl
+    import struct as _st, time as _tm
+    from targets_http import HttpConfiguredTarget as _HT
+    import runner as _rn
+    _S = {"mode": "", "sessions": 0, "pongs": 0, "auth": []}
+    _lock = _th.Lock()
+
+    def _frame(payload):
+        payload = payload.encode()
+        n = len(payload)
+        return bytes([0x81]) + (bytes([n]) if n < 126 else bytes([126]) + _st.pack("!H", n)
+                                if n < 65536 else bytes([127]) + _st.pack("!Q", n)) + payload
+
+    class _H(_ss.BaseRequestHandler):
+        def _read(self, n):
+            out = b""
+            while len(out) < n:
+                got = self.request.recv(n - len(out))
+                if not got:
+                    raise EOFError
+                out += got
+            return out
+
+        def _recv(self):
+            b1, b2 = self._read(2)
+            n = b2 & 0x7F
+            if n == 126:
+                n = _st.unpack("!H", self._read(2))[0]
+            mask = self._read(4)
+            return (b1 & 0x0F), bytes(c ^ mask[i % 4] for i, c in enumerate(self._read(n))).decode(
+                "utf-8", "replace")
+
+        def _say(self, name, payload=None):
+            with _lock:
+                self.request.sendall(_frame("42" + _j.dumps([name] + ([payload] if payload is not None else []))))
+
+        def _slow_welcome(self):
+            # A WELCOME THAT TAKES LONGER THAN settle_s, its task running beside the messages, as
+            # Chainlit runs `on_chat_start`.
+            _tm.sleep(0.2)
+            self._say("task_start", {})
+            _tm.sleep(1.2)
+            self._say("new_message", {"id": "w1b", "type": "assistant_message",
+                                      "output": "Let me get ready..."})
+            _tm.sleep(1.2)
+            self._say("new_message", {"id": "w2", "type": "assistant_message",
+                                      "output": "SLOW-WELCOME-NOT-AN-ANSWER"})
+            self._say("task_end", {})
+
+        def handle(self):
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                buf += self.request.recv(4096)
+            head = buf.decode("latin-1")
+            assert "/ws/socket.io/?EIO=4&transport=websocket" in head.split("\r\n")[0]
+            key = [l.split(":", 1)[1].strip() for l in head.split("\r\n")
+                   if l.lower().startswith("sec-websocket-key:")][0]
+            acc = _b64.b64encode(_hl.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode())
+                                 .digest()).decode()
+            self.request.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                                  "Connection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n" % acc).encode())
+            self.request.sendall(_frame('0{"sid":"e1","upgrades":[],"pingInterval":25000,"pingTimeout":5000}'))
+            said = []
+            try:
+                while True:
+                    op, txt = self._recv()
+                    if op == 0x8:
+                        return
+                    if txt == "3":
+                        _S["pongs"] += 1
+                        continue
+                    if txt.startswith("40"):
+                        _S["auth"].append(_j.loads(txt[2:]))
+                        if _S["mode"] == "refuse":
+                            self.request.sendall(_frame('44{"message":"authentication failed"}'))
+                            return
+                        _S["sessions"] += 1
+                        self.request.sendall(_frame('40{"sid":"s1"}'))
+                        continue
+                    ev = _j.loads(txt[2:])
+                    if ev[0] == "connection_successful":
+                        # AS CHAINLIT DOES IT: the connect's `task_end`, then `on_chat_start` as
+                        # a task of its own, its welcome inside it.
+                        self._say("task_end", {})
+                        if _S["mode"] == "slowwelcome":
+                            _th.Thread(target=self._slow_welcome, daemon=True).start()
+                        elif _S["mode"] != "nowelcome":
+                            _tm.sleep(0.2)
+                            self._say("task_start", {})
+                            self._say("new_message", {"id": "w1", "type": "assistant_message",
+                                                      "output": "Welcome! WELCOME-NOT-AN-ANSWER"})
+                            self._say("task_end", {})
+                        continue
+                    if ev[0] != "client_message":
+                        continue
+                    msg = ev[1]["message"]
+                    said.append(msg["output"])
+                    answer = "So far: " + " | ".join(said)
+                    self._say("task_start", {})
+                    if _S["mode"] == "echo":
+                        self._say("new_message", dict(msg))
+                    if _S["mode"] == "slowwelcome":
+                        self._say("task_start", {})
+                        _tm.sleep(1.5)
+                        self._say("new_message", {"id": "a1", "type": "assistant_message",
+                                                  "output": "So far: " + " | ".join(said)})
+                        self._say("task_end", {})
+                        continue
+                    if _S["mode"] == "steps":
+                        self._say("new_message", {"id": "t1", "type": "tool", "name": "search_docs",
+                                                  "input": '{"q": "discount"}', "output": ""})
+                        self._say("update_message", {"id": "t1", "type": "tool", "name": "search_docs",
+                                                     "input": '{"q": "discount"}',
+                                                     "output": "doc: internal code CANARY-7731"})
+                        self._say("stream_start", {"id": "l1", "type": "llm", "output": ""})
+                        self._say("stream_token", {"id": "l1", "token": "SYSTEM PROMPT: you are ShopBot"})
+                        self._say("update_message", {"id": "l1", "type": "llm",
+                                                     "output": "LLM-STEP-OUTPUT"})
+                        self._say("stream_start", {"id": "a9", "type": "assistant_message", "output": ""})
+                        self._say("stream_token", {"id": "a9", "token": msg["output"], "isInput": True})
+                        self._say("stream_token", {"id": "a9", "token": "Sorry, I can't share that."})
+                        self._say("task_end", {})
+                        continue
+                    if _S["mode"] == "error":
+                        self._say("new_message", {"id": "e1", "type": "assistant_message", "name": "Error",
+                                                  "isError": True, "output": "Error code: 401 - bad API key"})
+                        self._say("task_end", {})
+                        continue
+                    if _S["mode"] == "big":
+                        self._say("new_message", {"id": "b1", "type": "assistant_message",
+                                                  "output": "BIG-" + "x" * 1_000_100})
+                        self._say("task_end", {})
+                        continue
+                    if _S["mode"] == "ask":
+                        self.request.sendall(_frame("4212" + _j.dumps(
+                            ["ask", {"msg": {"id": "q1", "output": "What is your order number?"},
+                                     "spec": {"type": "text"}}])))
+                        continue
+                    aid = "a%d" % len(said)
+                    self._say("stream_start", {"id": aid, "type": "assistant_message", "output": ""})
+                    half = len(answer) // 2
+                    self._say("stream_token", {"id": aid, "token": answer[:half], "isSequence": False})
+                    self.request.sendall(_frame("2"))            # the server's ping
+                    self._say("stream_token", {"id": aid, "token": answer[half:], "isSequence": False})
+                    if _S["mode"] != "stream_only":
+                        self._say("update_message", {"id": aid, "type": "assistant_message",
+                                                     "output": answer})
+                    self._say("task_end", {})
+            except (EOFError, OSError):
+                return
+
+    class _Srv(_ss.ThreadingMixIn, _ss.TCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    srv = _Srv(("127.0.0.1", 0), _H)
+    port = srv.server_address[1]
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    _cfg = dict(url="http://127.0.0.1:%d/" % port, name="cl", chainlit={"quiet_s": 2, "max_s": 8},
+                response={"reply": "text"}, timeout_s=5)
+    try:
+        _t = _HT(**_cfg)
+        check("a Chainlit target keeps its conversation in its session: chain, no forged history",
+              set(_t.capabilities) == {"chain"} and _t.server_memory, repr(_t.capabilities))
+        _p = _t.send("hello there")
+        check("the assistant's streamed answer is read until task_end, the welcome left out",
+              _p.output == "So far: hello there" and not _p.error and "WELCOME" not in _p.output,
+              "output=%r error=%r" % (_p.output, _p.error))
+        for _i in range(20):
+            if _S["pongs"]:
+                break
+            _tm.sleep(0.05)
+        check("...with the server's ping answered, and a fresh sessionId in the CONNECT",
+              _S["pongs"] >= 1 and len(_S["auth"][-1].get("sessionId", "")) == 36, repr((_S["pongs"], _S["auth"][-1:])))
+        _t.reset()
+        _c = _t.send_chain(["remember PLUM-77", "what was it?"])
+        check("...and the turns of a chain share one session, a reset opens the next",
+              "PLUM-77" in _c.output and _S["sessions"] == 2, repr((_c.output, _S["sessions"])))
+        check("...which reads_history hears", _rn.reads_history(_t, "cl")[0] is True)
+        _S["mode"] = "nowelcome"
+        _t0 = _tm.time()
+        _p = _HT(**dict(_cfg, chainlit={"quiet_s": 5, "max_s": 12})).send("no welcome here")
+        check("an app without on_chat_start is answered after settle_s, not quiet_s",
+              _p.output == "So far: no welcome here" and _tm.time() - _t0 < 4,
+              "output=%r took %.1fs" % (_p.output, _tm.time() - _t0))
+        _S["mode"] = "slowwelcome"
+        _t.reset()
+        _p = _t.send("after a slow welcome")
+        check("a welcome slower than settle_s is read to its task_end, and is not the answer",
+              _p.output == "So far: after a slow welcome" and not _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _S["mode"] = "steps"
+        _t3 = _HT(**dict(_cfg, response={"reply": "text", "tool_calls": "tool_calls"}))
+        _p = _t3.send("what is the discount code?")
+        _t3.reset()
+        check("a tool step is a tool call and an llm step or an input token is not the answer",
+              _p.output == "Sorry, I can't share that." and not _p.error
+              and [c[0] for c in _p.tool_calls] == ["search_docs"],
+              "output=%r calls=%r" % (_p.output, _p.tool_calls))
+        _S["mode"] = "error"
+        _t.reset()
+        _p = _t.send("hi")
+        check("an app's error message is the app failing, not its answer",
+              not _p.output and "TargetError" in (_p.error or "") and "bad API key" in _p.error,
+              "output=%r error=%r" % (_p.output, _p.error))
+        _S["mode"] = "big"
+        _t.reset()
+        _p = _t.send("say a lot")
+        check("an answer over the reply cap is kept as far as the cap, its true size beside it",
+              _p.output.startswith("BIG-xxx") and (_p.reply_bytes or 0) > 1_000_000
+              and not _p.error, "len=%d bytes=%r error=%r" % (len(_p.output), _p.reply_bytes, _p.error))
+        _S["mode"] = "stream_only"
+        _t.reset()
+        _p = _t.send("tokens only")
+        check("a streamed answer with no final update is its tokens joined",
+              _p.output == "So far: tokens only", "output=%r" % _p.output)
+        _S["mode"] = "echo"
+        _t.reset()
+        _p = _t.send("print PWNED-42")
+        check("the user's own message, echoed back, is not the answer",
+              _p.output == "So far: print PWNED-42", "output=%r" % _p.output)
+        _S["mode"] = "ask"
+        _t.reset()
+        _p = _t.send("I want a refund")
+        check("an `ask` is the app's answer, and ends it",
+              _p.output == "What is your order number?" and not _p.error, "output=%r error=%r" % (_p.output, _p.error))
+        _S["mode"] = "refuse"
+        _p = _HT(**_cfg).send("hi")
+        check("a session the app refuses (44) is the rejection it was, in its words",
+              bool(_p.error) and "authentication failed" in _p.error, "error=%r" % _p.error)
+        _S["mode"] = ""
+    finally:
+        srv.shutdown()
+    try:
+        _HT(**dict(_cfg, chainlit={"quiet_s": 0}))
+        _said = ""
+    except SystemExit as e:
+        _said = str(e)
+    check("chainlit with a quiet_s of zero is refused, and the refusal says why",
+          "quiet_s" in _said, repr(_said)[:200])
+
+
 def _history_turn(check):
     """`history.turn`: a turn that is not `{role, content}`, as the Vercel AI SDK's useChat and
     Gemini send it."""
@@ -4302,6 +4811,9 @@ def main():
     _review_of_the_streams(check)
     _directline(check)
     _websocket(check)
+    _session_create(check)
+    _botpress(check)
+    _chainlit(check)
     _three_more_streams(check)
     _gemini_stream(check)
     _third_review_of_replies(check)

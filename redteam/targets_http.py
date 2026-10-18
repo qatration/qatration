@@ -1397,10 +1397,20 @@ def gradio_stream(text, cut=False):
     return final
 
 
-def requests_per_send(followup=None, directline=None, websocket=None):
+def requests_per_send(followup=None, directline=None, websocket=None, create=None,
+                      botpress=None):
     """-> the requests one send spends: one; two where the answer is fetched by a second request;
     and over Direct Line the message, the first look and the looks until it has gone quiet, the
     conversation each trial opens aside. ONE rule, for the target and the budget `init` writes."""
+    if botpress:
+        # THE USER (once a run, priced on every send as a ceiling), THE CONVERSATION, THE
+        # MESSAGE, AND THREE WINDOWS OF `quiet_s` IN LOOKS: while the bot starts answering,
+        # until it has gone quiet, and the settle before a later turn. Priced as Direct Line
+        # was, a bot that took four seconds spent 11 against 7 and the run stopped part way.
+        # Found by an independent review. A bot slower than `quiet_s` to start spends more.
+        import math as _m
+        return 3 + 3 * int(_m.ceil(float(botpress.get("quiet_s", 3))
+                                   / float(botpress.get("poll_s", 1))))
     if directline:
         # OPENING THE CONVERSATION (and the token, where there is a token url), THE MESSAGE, THE
         # LOOKS WHILE THE BOT IS STILL ANSWERING, AND THE LOOKS UNTIL IT HAS GONE QUIET. Priced
@@ -1410,8 +1420,9 @@ def requests_per_send(followup=None, directline=None, websocket=None):
         _poll = float(directline.get("poll_s", 1))
         return (1 + (1 if directline.get("token_url") else 0) + 1 + 2
                 + int(_m.ceil(float(directline.get("quiet_s", 3)) / _poll)))
-    # A WEBSOCKET: the message, and the upgrade each conversation opens with.
-    return 2 if (followup or websocket) else 1
+    # A WEBSOCKET: the message, and the upgrade each conversation opens with. AND A
+    # CONVERSATION OPENED BY A CALL: the call, once a trial, priced on every send as a ceiling.
+    return (2 if (followup or websocket) else 1) + (1 if create else 0)
 
 
 class _WebSocketStall(OSError):
@@ -1596,35 +1607,70 @@ class _WebSocket:
         self.closed = True
 
 
+def _cut_output(packet):
+    """The `output` string of a socket.io packet cut at the reply cap, decoded as far as it
+    goes, or the packet itself when the cut came before it."""
+    m = re.search(r'"output"\s*:\s*"', packet)
+    if not m:
+        return packet
+    s, i = packet[m.end():], 0
+    while i < len(s) and s[i] != '"':
+        i += 2 if s[i] == "\\" else 1
+    piece = s[:i]
+    while piece:
+        try:
+            return json.loads('"' + piece + '"')
+        except ValueError:
+            piece = piece[:-1]                # a cut escape at the end
+    return ""
+
+
 def io_bytes(b):
     import io as _io
     return _io.BytesIO(b)
+
+
+class _NoToken(Exception):
+    """No bearer token could be fetched, so nothing was sent to the target."""
+
+    def probe(self, prompt):
+        # NOT A DEFENCE AND NOT A TARGET ERROR: nothing reached the target, and the sentence
+        # says which half of the setup failed.
+        return Probe(prompt=prompt, output="",
+                     error="AuthFailed: no token, so nothing was sent to the target: %s"
+                           % self.args[0])
 
 
 class _BudgetGone(Exception):
     """The request budget ran out in the middle of a conversation with the target."""
 
 
-def _card_texts(attachments, _depth=0):
-    """Every `text` an Adaptive Card (or any attachment's content) puts in front of the user."""
+def _texts_in(value, keys=("text",)):
+    """Every string under one of `keys`, anywhere in `value`, in order: what a card, a carousel
+    or a choice puts in front of the user. ONE walker, for Direct Line's Adaptive Cards and a
+    Botpress payload alike."""
     out = []
 
     def _walk(v, depth):
         if depth > 12:
             return
         if isinstance(v, dict):
-            if isinstance(v.get("text"), str) and v["text"].strip():
-                out.append(v["text"])
             for _k, _x in v.items():
-                if _k != "text":
+                if _k in keys and isinstance(_x, str):
+                    if _x.strip():
+                        out.append(_x)
+                else:
                     _walk(_x, depth + 1)
         elif isinstance(v, list):
             for _x in v:
                 _walk(_x, depth + 1)
-    for _att in attachments or []:
-        if isinstance(_att, dict):
-            _walk(_att.get("content"), 0)
+    _walk(value, 0)
     return out
+
+
+def _card_texts(attachments):
+    """Every `text` an Adaptive Card (or any attachment's content) puts in front of the user."""
+    return _texts_in([a.get("content") for a in (attachments or []) if isinstance(a, dict)])
 
 
 def stream_kind(text):
@@ -1969,7 +2015,7 @@ class HttpConfiguredTarget(Target):
     def __init__(self, url=None, name="http-target", method="POST", headers=None,
                  request=None, response=None, history=None, rate=None, timeout_s=300,
                  auth=None, env=None, proxy=None, session=None, followup=None,
-                 directline=None, websocket=None, **unknown):
+                 directline=None, websocket=None, botpress=None, chainlit=None, **unknown):
         # A KEY THIS ADAPTER DOES NOT KNOW IS A TYPO, AND A SWALLOWED TYPO IS A CLEAN REPORT.
         # This used to end in `**_`, so a config saying `respones:` built a target with no
         # response mapping at all: every reply read as empty, every attack scored DEFENDED,
@@ -2031,6 +2077,12 @@ class HttpConfiguredTarget(Target):
              "expand -- every request would go out with the placeholder still in it."),
             ("rate", rate, dict,
              "It is a mapping of budget keys: min_interval_s, max_requests, max_seconds."),
+            ("chainlit", chainlit, dict,
+             "It is a mapping: `chainlit: {quiet_s: 30, max_s: 120}`, and `url` is the app's own "
+             "address, e.g. http://localhost:8000/."),
+            ("botpress", botpress, dict,
+             "It is a mapping: `botpress: {poll_s: 1, quiet_s: 3, max_s: 60}`, and `url` is "
+             "https://chat.botpress.cloud/<webhook id>."),
             ("websocket", websocket, dict,
              "It is a mapping: `websocket: {url: wss://<the target's host>/ws, text_from: token, "
              "end: {path: type, equals: end}}`."),
@@ -2113,19 +2165,24 @@ class HttpConfiguredTarget(Target):
         # reply carries it; `{session}` is `first` (empty by default, the usual "new
         # conversation") until a reply names one, and again after every reset.
         session = dict(session or {})
-        _bad_s = sorted(k for k in session if k not in ("from_reply", "first"))
-        if _bad_s or (session and not isinstance(session.get("from_reply"), str)) \
-                or (session and not str(session.get("from_reply") or "").strip()) \
-                or not isinstance(session.get("first", ""), str):
+        _bad_s = sorted(k for k in session if k not in ("from_reply", "first", "create"))
+        # ONE OF TWO WAYS THE SERVER NAMES A CONVERSATION: in its first reply (`from_reply`), or
+        # in the answer to a call of its own that opens one (`create`). Both would be two rules.
+        _ways = [k for k in ("from_reply", "create") if k in session]
+        if session and len(_ways) != 1:
+            _bad_s.append("exactly one of from_reply and create")
+        if "from_reply" in session and not str(session.get("from_reply") or "").strip():
+            _bad_s.append("from_reply (a path)")
+        if _bad_s or not isinstance(session.get("first", ""), str):
             raise SystemExit(
-                "targets_http: `session:` for %r must be `{from_reply: <path in the reply>}`, "
-                "with an optional `first:` string (what `{session}` is before the server names "
-                "one, \"\" by default)%s." % (name, "; it also names %s, which this adapter does "
-                                              "not read" % ", ".join(map(repr, _bad_s))
-                                              if _bad_s else ""))
+                "targets_http: `session:` for %r must be `{from_reply: <path in the reply>}` "
+                "(with an optional `first:` string, what `{session}` is before the server names "
+                "one, \"\" by default), or `{create: {url, id_from, request, method}}`%s." % (
+                    name, "; it also names %s" % ", ".join(map(repr, _bad_s)) if _bad_s else ""))
+        self.session_create = self._create_config(session.get("create"), name, url)
         if session and not self.uses_session:
             raise SystemExit(
-                "targets_http: `session.from_reply` for %r reads the conversation id the server "
+                "targets_http: `session:` for %r reads the conversation id the server "
                 "assigns, and nothing in `request:`, the `url` or a header carries `{session}` "
                 "to send it back: every turn would still open a conversation of its own. Put "
                 "`{session}` where your endpoint reads the conversation id." % name)
@@ -2145,16 +2202,24 @@ class HttpConfiguredTarget(Target):
         self.websocket = self._websocket_config(websocket, name, url, history, followup, session,
                                                 directline, auth, proxy)
         self._ws = None
+        self.botpress = self._botpress_config(botpress, name, history, followup, session,
+                                              directline, websocket, auth)
+        self._bp, self._bp_key = None, None
+        self.chainlit = self._chainlit_config(chainlit, name, url, history, followup, session,
+                                              directline, websocket, botpress, auth, proxy)
+        self._cl = None
         # WHAT ONE SEND COSTS THE REQUEST BUDGET: two where the answer is fetched by a second
         # request. Priced at one, a run against a Gradio app was "ready" and stopped halfway
         # through the arsenal with the rest never sent.
         self.requests_per_send = requests_per_send(self.followup, self.directline,
-                                                   self.websocket)
+                                                   self.websocket or self.chainlit,
+                                                   self.session_create, self.botpress)
         self._session_first = session.get("first", "")
         if self.session_from:
             self._session = self._session_first
         # How often a reply carried the id at `from_reply`, for `onboard` to say when it never did.
         self.session_named = 0
+        self._session_made = False
         self.headers = {k: expand_env(v, f"headers.{k}", self.env_allowed)
                         for k, v in (headers or {}).items()}
         # IN ANY CASE: HTTP header names are case-insensitive, and a config's own
@@ -2163,6 +2228,8 @@ class HttpConfiguredTarget(Target):
             self.headers["Content-Type"] = "application/json"
         # A DIRECT LINE ACTIVITY is the request when the config writes none: the protocol fixes
         # its shape, and a config should not have to spell it to be right.
+        if botpress is not None and request is None:
+            request = {"payload": {"type": "text", "text": "{prompt}"}}
         if directline is not None and request is None:
             request = {"type": "message",
                        "from": {"id": str((directline or {}).get("user") or "dl_qatration")},
@@ -2433,14 +2500,15 @@ class HttpConfiguredTarget(Target):
             # from one the attacker wrote for it. That is the precondition for a Context
             # Compliance Attack and it is a fact about the API, not about the model.
             caps |= {"chain", "forged_history"}
-        elif self.uses_session or self.directline or self.websocket:
+        elif (self.uses_session or self.directline or self.websocket or self.botpress
+              or self.chainlit):
             # A SERVER THAT KEEPS THE CONVERSATION hears the earlier turns of a chain because
             # they were sent in the same session, and only the turns that really happened:
             # nobody can write its assistant's side, so `forged_history` is not on offer.
             # Whether it does keep them is asked before the run (`runner.reads_history`).
             caps.add("chain")
-        self.server_memory = bool((self.uses_session or self.directline or self.websocket)
-                                  and not self.history)
+        self.server_memory = bool((self.uses_session or self.directline or self.websocket
+                                   or self.botpress or self.chainlit) and not self.history)
         if self.calls_path:
             caps.add("tool_visibility")
         self.capabilities = caps
@@ -2497,6 +2565,530 @@ class HttpConfiguredTarget(Target):
         else:
             body[field] = turns
         return body
+
+    # --- a conversation opened by a call of its own ---------------------------------------
+    @staticmethod
+    def _create_config(create, name, url):
+        """`session.create: {url, id_from, request, method}`: a server that opens a conversation
+        with a call of its own and wants its id on every message, and answers the message
+        itself (or through `followup:`). Not OpenAI's Assistants threads, whose answer is a
+        separate run to start and poll; `botpress:` and `directline:` hold their own.
+
+        AN ID WE MINTED IS ONE THEY NEVER ISSUED, and an id read from a reply is one the first
+        message already went without. So at the start of every conversation (every trial, after
+        `reset`) the call is made, its answer's `id_from` is `{session}`, and the turns of the
+        conversation carry it. ON THE TARGET'S OWN ORIGIN, for the reason a followup is: it
+        carries the target's headers, and the ownership proof is for that origin.
+        """
+        if create is None:
+            return None
+        import authorization as _az
+        c = dict(create) if isinstance(create, dict) else {}
+        _bad = sorted(k for k in c if k not in ("url", "id_from", "request", "method"))
+        _method = str(c.get("method") or "POST").upper()
+        if (not isinstance(create, dict) or _bad or not str(c.get("url") or "").strip()
+                or not str(c.get("id_from") or "").strip() or _method not in ("POST", "PUT", "GET")
+                or not isinstance(c.get("request", {}), dict)):
+            raise SystemExit(
+                "targets_http: `session.create` for %r is `{url, id_from, request: {...}, method: "
+                "POST|PUT|GET}`%s." % (name, "; it also names %s" % ", ".join(map(repr, _bad))
+                                        if _bad else ""))
+        if "{" in str(c["url"]) or _az.origin_of(str(c["url"])) != _az.origin_of(url):
+            raise SystemExit(
+                "targets_http: session.create.url %r for %r is not on the target's own origin "
+                "(%s), or holds a slot: it carries the target's headers, and the proof of "
+                "ownership is for that origin alone." % (c["url"], name, _az.origin_of(url)))
+        c["method"] = _method
+        c["request"] = c.get("request") or {}
+        return c
+
+    def _authorized(self, method, url, headers, data):
+        """-> `headers` with what `auth:` adds to a request: the bearer token, or the request's
+        signature (which covers its method, url and body, so it is made per request). Raises
+        `_NoToken` when there is no token to send."""
+        if self.auth.get("type") == "oauth2_client_credentials":
+            try:
+                headers["Authorization"] = "Bearer " + self._bearer()
+            except RuntimeError as e:
+                raise _NoToken(e)
+        elif self.auth:
+            import signing
+            headers.update(signing.authorization(
+                method, url, headers, data,
+                service=self.auth["service"], region=self.auth["region"],
+                access_key=self.auth["access_key"], secret_key=self.auth["secret_key"],
+                session_token=self.auth.get("session_token")))
+        return headers
+
+    def _create_session(self, headers, prompt, t0):
+        """Open this trial's conversation. -> None, or a Probe saying why there is none."""
+        import signing as _sg
+        c = self.session_create
+        if not self.rate.take():
+            return Probe(prompt=prompt, output="", seconds=0.0,
+                         error="%s: the budget ran out before the conversation was opened"
+                               % _sg.NEVER_SENT)
+        _data = json.dumps(c["request"]).encode("utf-8") if c["method"] != "GET" else None
+        # AUTHENTICATED AS THE MESSAGES ARE: sent bare, the call was a 401 on every trial of a
+        # target behind `auth:`, said as the credential being wrong -- a credential that was
+        # never sent. Found by an independent review.
+        req = urllib.request.Request(
+            str(c["url"]), method=c["method"], data=_data,
+            headers=self._authorized(c["method"], str(c["url"]), dict(headers), _data))
+        with self._opener.open(req, timeout=self.timeout) as r:
+            body, _over = read_capped(r, limit=64 * 1024, seconds=self.timeout)
+        try:
+            got = json.loads(_decoded(body, r) or "{}")
+        except ValueError:
+            got = None
+        _id = dig(got, c["id_from"]) if got is not None else None
+        if isinstance(_id, bool) or not isinstance(_id, (str, int)) or not str(_id).strip():
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error="ExtractionFailed: session.create.id_from=%r found no "
+                               "conversation id in the answer (it had %s), so no message was "
+                               "sent" % (c["id_from"], sorted(got)[:8] if isinstance(got, dict)
+                                         else type(got).__name__))
+        self._session, self._session_made = str(_id), True
+        return None
+
+    # --- Chainlit, through its socket.io session ---------------------------------------------
+    @staticmethod
+    def _chainlit_config(cl, name, url, history, followup, session, directline, websocket,
+                         botpress, auth, proxy):
+        """`chainlit: {quiet_s, max_s, settle_s}` beside the app's own `url`.
+
+        A CHAINLIT APP HAS NO REQUEST AND REPLY: its UI talks socket.io (Engine.IO 4 over a
+        WebSocket at `<url>/ws/socket.io`). Each trial opens its own session -- the Socket.IO
+        CONNECT carries a fresh `sessionId` -- the message goes as `client_message` with a
+        UUID4 id, and the answer is the assistant's messages (`new_message`, `stream_start`,
+        `stream_token`, `update_message`) until `task_end`, which the app emits when its
+        handler has finished. An `ask` ends the answer too (the app is waiting for the user).
+        Only `assistant_message`s are the answer: a tool step is a tool call, an `llm` step
+        and its input tokens are the app's working, and an `isError` message is the app
+        failing. `settle_s` is how long after the connect a welcome task may take to start.
+        Server pings are answered. An app that needs a login reads its `access_token` cookie:
+        put it in `headers: {Cookie: "access_token=${CHAINLIT_TOKEN}"}`. Not on the hosted
+        service and not through a proxy, for the WebSocket's reasons.
+        """
+        if cl is None:
+            return None
+        d = dict(cl)
+        _bad = sorted(k for k in d if k not in ("quiet_s", "max_s", "settle_s"))
+        try:
+            d["quiet_s"] = float(d.get("quiet_s", 30))
+            d["max_s"] = float(d.get("max_s", 120))
+            d["settle_s"] = float(d.get("settle_s", 2))
+        except (TypeError, ValueError):
+            _bad.append("a number that is not one")
+        if _bad or d["quiet_s"] <= 0 or d["max_s"] < d["quiet_s"] or not 0 < d["settle_s"] <= d["max_s"]:
+            raise SystemExit(
+                "targets_http: `chainlit:` for %r takes quiet_s, max_s (at least quiet_s) and "
+                "settle_s (above 0, at most max_s)%s."
+                % (name, "; it also names %s" % ", ".join(map(repr, _bad)) if _bad else ""))
+        if history or followup or session or directline or websocket or botpress or auth or proxy:
+            raise SystemExit(
+                "targets_http: `chainlit:` for %r keeps its own session and reads its own answer, "
+                "so `history:`, `followup:`, `session:`, `directline:`, `websocket:`, `botpress:`, "
+                "`auth:` and `proxy:` beside it are not read; remove them." % name)
+        if _az_pin.hosted():
+            raise SystemExit("targets_http: `chainlit:` is not available on the hosted service, "
+                             "for the reason `websocket:` is not.")
+        _u = urllib.parse.urlsplit(str(url))
+        d["ws_url"] = urllib.parse.urlunsplit((
+            "wss" if _u.scheme == "https" else "ws", _u.netloc,
+            _u.path.rstrip("/") + "/ws/socket.io/", "EIO=4&transport=websocket", ""))
+        return d
+
+    def _cl_packet(self, deadline):
+        """-> the next socket.io packet as text, answering Engine.IO pings on the way. A packet
+        over the reply cap is its prefix, with its true size in `self._cl_cut`; the socket is
+        closed then, because what follows would be read as the next packet."""
+        self._cl_cut = 0
+        while True:
+            _left = deadline - time.time()
+            if _left <= 0 or not self._cl.wait(_left):
+                return None
+            msg, _big = self._cl.recv(deadline, MAX_REPLY)
+            if msg is None:
+                raise OSError("the Chainlit session was closed by the server")
+            if _big:
+                self._cl_cut = _big
+                return msg
+            if msg == "2":
+                self._cl.send_text("3")
+                continue
+            return msg
+
+    def _chainlit_send(self, prompt, t0, headers):
+        """The message as `client_message` in this trial's session, and the assistant's answer."""
+        import uuid as _uuid, datetime as _dtm
+        d = self.chainlit
+        order, out, _err, _sent, _mine = [], {}, None, False, str(_uuid.uuid4())
+        _types, tools, failed, _over = {}, [], [], None
+        _deadline = t0 + d["max_s"]
+        try:
+            if self._cl is None or self._cl.closed:
+                if not self.rate.take():
+                    raise _BudgetGone()
+                self._cl = _WebSocket(d["ws_url"], headers, self.timeout)
+                _open = self._cl_packet(_deadline)
+                if not (_open or "").startswith("0"):
+                    raise OSError("the socket.io handshake did not open (%r)" % (_open or "")[:80])
+                self._cl.send_text("40" + json.dumps({
+                    "clientType": "webapp", "sessionId": str(_uuid.uuid4()), "threadId": "",
+                    "userEnv": "{}", "chatProfile": ""}))
+                while True:
+                    _p = self._cl_packet(_deadline)
+                    if _p is None:
+                        raise OSError("the Chainlit session was never accepted")
+                    if _p.startswith("44"):
+                        raise urllib.error.HTTPError(d["ws_url"], 403, "socket.io CONNECT refused",
+                                                     {}, io_bytes(_p[2:].encode()[:MAX_ERROR_BODY]))
+                    if _p.startswith("40"):
+                        break
+                self._cl.send_text('42["connection_successful"]')
+                # THE WELCOME IS NOT THE ANSWER. The connect ends with a `task_end`, and then
+                # `on_chat_start`, where the app has one, runs as a task of its own between a
+                # `task_start` and a `task_end`. Waiting for the first `task_end` alone read the
+                # welcome as the first turn's answer, and every later turn read the one before
+                # it, with nothing flagged. Chainlit starts that task as soon as the connect's
+                # `task_end` is out, so none within `settle_s` is an app without one. Found by
+                # an independent review, against Chainlit's socket.py and callbacks.py.
+                _by = min(_deadline, time.time() + d["quiet_s"])
+                _phase = "connect"
+                while True:
+                    _p = self._cl_packet(_by)
+                    if self._cl_cut:
+                        raise OSError("a welcome packet over the reply cap closed the session "
+                                      "before the message was sent")
+                    if _p is None:
+                        if _phase == "welcome":
+                            raise OSError("the app's on_chat_start did not end within "
+                                          "chainlit.quiet_s, so the message was not sent")
+                        break
+                    if _phase == "connect" and _p.startswith('42["task_end"'):
+                        _phase, _by = "settle", min(_deadline, time.time() + d["settle_s"])
+                    elif _phase == "settle" and _p.startswith('42["task_start"'):
+                        _phase = "welcome"
+                    elif _phase == "welcome" and _p.startswith('42["task_end"'):
+                        break
+                    if _phase == "welcome":
+                        _by = min(_deadline, time.time() + d["quiet_s"])
+            if not self.rate.take():
+                raise _BudgetGone()
+            self._cl.send_text("42" + json.dumps(["client_message", {"message": {
+                "id": _mine, "threadId": "", "output": prompt,
+                "createdAt": _dtm.datetime.utcnow().isoformat() + "Z",
+                "type": "user_message", "name": "User"}, "fileReferences": []}]))
+            _sent = True
+            _started = False
+            while True:
+                _p = self._cl_packet(min(_deadline, time.time() + d["quiet_s"]))
+                if _p is not None and self._cl_cut:
+                    # OVER THE CAP: the prefix is the evidence and its size travels, as on every
+                    # other path; dropped, the finding read as a socket fault.
+                    self._cl, _over = None, self._cl_cut
+                    _ty = re.search(r'"type"\s*:\s*"([^"]*)"', _p)
+                    if _started and _p.startswith(("42[\"new_message\"", "42[\"stream_start\"",
+                                                   "42[\"update_message\"", "42[\"ask\"")) \
+                            and (_ty is None or _ty.group(1) == "assistant_message"):
+                        order.append("\x00cut")
+                        out["\x00cut"] = _cut_output(_p)
+                    else:
+                        _err = ("ChainlitIncomplete: a packet over the reply cap (%d bytes) closed "
+                                "the session before the answer was read" % _over)
+                    break
+                if _p is None:
+                    if order:
+                        _err = ("ChainlitIncomplete: no task_end within quiet_s of the last "
+                                "event; what had arrived is kept")
+                    break
+                if _p.startswith("41"):
+                    raise OSError("the Chainlit session was disconnected by the server")
+                if not _p.startswith("42"):
+                    continue
+                _rest = _p[2:].lstrip("0123456789")      # an ack id, when the server wants one
+                try:
+                    ev = json.loads(_rest)
+                except ValueError:
+                    continue
+                if not isinstance(ev, list) or not ev:
+                    continue
+                name, payload = ev[0], (ev[1] if len(ev) > 1 else None)
+                if name == "task_start":
+                    _started = True
+                elif name == "task_end" and _started:
+                    break
+                elif not _started:
+                    # THE ANSWER IS BRACKETED by the `task_start` and `task_end` the app emits
+                    # around its handler: a welcome `on_chat_start` sent late, after the first
+                    # `task_end`, was read as the answer to the first message.
+                    continue
+                elif name in ("new_message", "stream_start", "update_message") and isinstance(payload, dict):
+                    _id = payload.get("id")
+                    _types[_id] = _ty = payload.get("type")
+                    # ONLY WHAT THE ASSISTANT SAYS IS ITS ANSWER. A tool step's output is what the
+                    # tool returned (a retrieved document with a canary in it), an `llm` step
+                    # streams the prompt it was given, and both are shown by default: read as
+                    # the reply, a canary in a document and the attack's own words scored as the
+                    # bot saying them. A tool step is a tool call instead, and the user's own
+                    # message echoed back is a `user_message`. Found by an independent review.
+                    if _ty == "tool":
+                        _t = next((t for t in tools if t["id"] == _id), None)
+                        if _t is None:
+                            tools.append({"id": _id, "name": payload.get("name"),
+                                          "arguments": payload.get("input")})
+                        else:
+                            _t["name"] = payload.get("name") or _t["name"]
+                            _t["arguments"] = payload.get("input") or _t["arguments"]
+                        continue
+                    if _ty != "assistant_message":
+                        continue
+                    # AN APP THAT FAILED says so in an `ErrorMessage`; read as a reply, a bad LLM
+                    # key was a refusal-shaped answer to every attack.
+                    if payload.get("isError"):
+                        failed.append(" ".join(str(payload.get("output") or "").split())[:300])
+                        out.pop(_id, None)
+                        continue
+                    if _id not in out:
+                        order.append(_id)
+                    out[_id] = str(payload.get("output") or "")
+                elif name == "stream_token" and isinstance(payload, dict):
+                    _id = payload.get("id")
+                    if payload.get("isInput") or _types.get(_id) != "assistant_message":
+                        continue
+                    if _id not in out:
+                        order.append(_id)
+                        out[_id] = ""
+                    _tok = str(payload.get("token") or "")
+                    out[_id] = _tok if payload.get("isSequence") else out[_id] + _tok
+                elif name == "ask" and isinstance(payload, dict):
+                    _m = payload.get("msg") or {}
+                    if _m.get("id") not in out:
+                        order.append(_m.get("id"))
+                    out[_m.get("id")] = str(_m.get("output") or "")
+                    break
+        except _BudgetGone:
+            import signing as _sg
+            if not _sent:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error="%s: the budget ran out before the message was sent"
+                                   % _sg.NEVER_SENT)
+        except urllib.error.HTTPError:
+            if self._cl is not None:
+                self._cl.close()
+                self._cl = None
+            raise
+        except Exception as e:
+            if self._cl is not None:
+                self._cl.close()
+                self._cl = None
+            if not order:
+                raise
+            _err = ("ChainlitIncomplete: %s while the answer was still arriving; what had "
+                    "arrived is kept" % " ".join(("%s: %s" % (type(e).__name__, e)).split())[:200])
+        if failed:
+            _err = ("TargetError: the app answered with an error message (%s)%s" % (
+                failed[0], "; what it said besides is kept" if any(out.values()) else ""))
+        texts = [out[_i] for _i in order if out.get(_i)]
+        if not texts and not tools:
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error=_err or "ChainlitTimeout: no assistant message answered within "
+                                       "%gs (chainlit.quiet_s / max_s)" % d["quiet_s"])
+        raw = {"text": "\n".join(texts), "messages": [{"id": _i, "output": out[_i]} for _i in order],
+               "tool_calls": [{"name": t["name"], "arguments": t["arguments"]} for t in tools]}
+        p = self._probe_from(raw, prompt, t0, _over)
+        if _err and not p.error:
+            try:
+                object.__setattr__(p, "error", _err)
+            except Exception:
+                pass
+        return p
+
+    # --- Botpress, through its Chat API ----------------------------------------------------
+    @staticmethod
+    def _botpress_config(bp, name, history, followup, session, directline, websocket, auth):
+        """`botpress: {poll_s, quiet_s, max_s}` beside a `url` that is the Chat API's base,
+        `https://chat.botpress.cloud/<webhook id>`.
+
+        THE ANSWER IS NOT IN THE REPLY TO THE MESSAGE: `POST /messages` answers with the user's
+        own message, and the bot's arrives later, in `GET /conversations/<id>/messages`. Each
+        trial opens its own conversation (`POST /conversations`), the message goes in it, and
+        the conversation is read once a second for messages from anyone but this user, until
+        `quiet_s` passes with nothing new; a bot that says nothing within `max_s` is an error.
+        The user is `headers: {x-user-key: ...}`, or, without one, one made by `POST /users`
+        (the Chat API's shared-key mode) and kept for the run. A 2xx body carrying an error
+        `code` is the error it says, as the API's own client reads it.
+        """
+        if bp is None:
+            return None
+        d = dict(bp)
+        _bad = sorted(k for k in d if k not in ("poll_s", "quiet_s", "max_s"))
+        try:
+            d["poll_s"] = float(d.get("poll_s", 1))
+            d["quiet_s"] = float(d.get("quiet_s", 3))
+            d["max_s"] = float(d.get("max_s", 60))
+        except (TypeError, ValueError):
+            _bad.append("a number that is not one")
+        if _bad or d["poll_s"] < 1 or d["quiet_s"] < d["poll_s"] or d["max_s"] < d["quiet_s"]:
+            raise SystemExit(
+                "targets_http: `botpress:` for %r takes poll_s (at least 1), quiet_s (at least "
+                "poll_s) and max_s (at least quiet_s)%s." % (
+                    name, "; it also names %s" % ", ".join(map(repr, _bad)) if _bad else ""))
+        if history or followup or session or directline or websocket or auth:
+            raise SystemExit(
+                "targets_http: `botpress:` for %r keeps its own conversation and reads its own "
+                "answer, so `history:`, `followup:`, `session:`, `directline:`, `websocket:` and "
+                "`auth:` beside it are not read; remove them." % name)
+        return d
+
+    def _bp_request(self, method, path, body=None):
+        """One Chat API request, paid for out of the budget. -> the JSON it answered."""
+        if not self.rate.take():
+            raise _BudgetGone()
+        hdrs = dict(self.headers)
+        if self._bp_key and not any(k.lower() == "x-user-key" for k in hdrs):
+            hdrs["x-user-key"] = self._bp_key
+        req = urllib.request.Request(str(self.url).rstrip("/") + path, method=method, headers=hdrs,
+                                     data=json.dumps(body).encode("utf-8") if body is not None
+                                     else None)
+        with self._opener.open(req, timeout=self.timeout) as r:
+            got, _over = read_capped(r, seconds=self.timeout)
+            out = json.loads(_decoded(got, r) or "{}")
+        # A SUCCESS STATUS CARRYING AN ERROR, which the API's own client checks for.
+        if isinstance(out, dict) and isinstance(out.get("code"), int) and 400 <= out["code"] <= 599:
+            raise RuntimeError("the Chat API answered %s with error %d (%s)" % (
+                path, out["code"], " ".join(str(out.get("message") or out.get("type") or "").split())[:200]))
+        return out
+
+    def _bp_messages(self, cid):
+        """Every message of the conversation, page by page, each page paid for. One page was
+        read, and from the eleventh turn on the bot's reply was on the second: a timeout, on
+        a bot that had answered. Found by an independent review."""
+        import urllib.parse as _up
+        msgs, token = [], None
+        for _ in range(50):
+            path = "/conversations/%s/messages" % _up.quote(cid, safe="")
+            if token:
+                path += "?nextToken=" + _up.quote(str(token), safe="")
+            page = self._bp_request("GET", path)
+            page = page if isinstance(page, dict) else {}
+            msgs.extend(m for m in (page.get("messages") or []) if isinstance(m, dict))
+            meta = page.get("meta") if isinstance(page.get("meta"), dict) else {}
+            token = meta.get("nextToken")
+            if not token:
+                return msgs
+        raise RuntimeError("the conversation lists more than 50 pages of messages")
+
+    def _botpress_send(self, prompt, data, t0):
+        """The message in this trial's conversation, and the bot's messages after it."""
+        d = self.botpress
+        replies, _err, _sent = [], None, False
+        try:
+            if not any(k.lower() == "x-user-key" for k in self.headers) and not self._bp_key:
+                _u = self._bp_request("POST", "/users", {})
+                self._bp_key = _u.get("key")
+                if not self._bp_key:
+                    return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                                 error="ExtractionFailed: POST /users gave no user key (it answered "
+                                       "keys %s); set `headers: {x-user-key: ...}`" % sorted(_u)[:8])
+            if self._bp is None:
+                _c = self._bp_request("POST", "/conversations", {})
+                _cid = ((_c.get("conversation") or {}).get("id")) if isinstance(_c, dict) else None
+                if not _cid:
+                    return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                                 error="ExtractionFailed: Botpress opened no conversation (it "
+                                       "answered keys %s)" % sorted(_c)[:8])
+                self._bp = {"id": str(_cid), "seen": set(), "me": None, "turns": 0}
+            bp = self._bp
+            if bp["turns"]:
+                # THE LAST TURN'S TAIL IS NOT THIS TURN'S ANSWER. A turn ends after `quiet_s`
+                # with nothing new, and a bot that said "One moment..." and answered after a
+                # longer pause had that answer read as the next turn's, with nothing flagged.
+                # So `quiet_s` of quiet before a later turn, as on a WebSocket: a message in it
+                # is kept as what arrived, and this turn is not sent. Found by an independent
+                # review.
+                _tail, _until = [], time.time() + d["quiet_s"]
+                while time.time() < _until:
+                    time.sleep(d["poll_s"])
+                    for _m in self._bp_messages(bp["id"]):
+                        if _m.get("id") in bp["seen"]:
+                            continue
+                        bp["seen"].add(_m.get("id"))
+                        if _m.get("userId") != bp["me"]:
+                            _tail.append(_m)
+                if _tail:
+                    return Probe(
+                        prompt=prompt, output="\n".join(
+                            t for _m in _tail for t in _texts_in(
+                                _m.get("payload"), ("text", "markdown", "title", "subtitle"))),
+                        seconds=round(time.time() - t0, 1),
+                        error="BotpressDesync: messages of the previous turn were still arriving "
+                              "when this turn was due, so it was not sent; they are kept as what "
+                              "arrived (raise botpress.quiet_s if the bot pauses inside an answer)")
+            _body = json.loads(data.decode("utf-8"))
+            _body["conversationId"] = bp["id"]
+            _ack = self._bp_request("POST", "/messages", _body)
+            _sent = True
+            bp["turns"] += 1
+            _mine = (_ack.get("message") or {}) if isinstance(_ack, dict) else {}
+            _me, _since = _mine.get("userId"), str(_mine.get("createdAt") or "")
+            bp["me"] = _me
+            _deadline, _last_new = t0 + d["max_s"], None
+            time.sleep(min(0.3, d["poll_s"]))
+            while True:
+                for _m in sorted(self._bp_messages(bp["id"]),
+                                 key=lambda m: str(m.get("createdAt") or "")):
+                    if _m.get("id") in bp["seen"]:
+                        continue
+                    # THE BOT'S, AND AFTER THIS MESSAGE: not this user's, and not an earlier
+                    # turn's reply that a page lists again.
+                    if _m.get("userId") == _me or str(_m.get("createdAt") or "") < _since:
+                        bp["seen"].add(_m.get("id"))
+                        continue
+                    bp["seen"].add(_m.get("id"))
+                    replies.append(_m)
+                    _last_new = time.time()
+                if replies and time.time() - _last_new >= d["quiet_s"]:
+                    break
+                if time.time() + d["poll_s"] > _deadline:
+                    break
+                time.sleep(d["poll_s"])
+        except _BudgetGone:
+            import signing as _sg
+            if not _sent:
+                return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                             error="%s: the budget ran out before the message was sent"
+                                   % _sg.NEVER_SENT)
+            _err = ("BotpressIncomplete: the message WAS sent, and the request budget ran out "
+                    "while the answer was still being read%s" % (
+                        "; what had arrived is kept" if replies else ""))
+        except urllib.error.HTTPError:
+            if replies:
+                _err = "BotpressIncomplete: an HTTP error while the answer was still being read"
+            else:
+                raise
+        except Exception as e:
+            if not replies:
+                raise
+            _err = ("BotpressIncomplete: %s while the answer was still being read; what had "
+                    "arrived is kept" % " ".join(("%s: %s" % (type(e).__name__, e)).split())[:200])
+        if not replies:
+            return Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),
+                         error=_err or ("BotpressTimeout: no bot message answered within %gs "
+                                        "(botpress.max_s)" % d["max_s"]))
+        texts = []
+        for _m in replies:
+            texts.extend(_texts_in(_m.get("payload"), ("text", "markdown", "title", "subtitle")))
+        raw = {"text": "\n".join(texts), "messages": replies, "conversationId": self._bp and
+               self._bp["id"]}
+        p = self._probe_from(raw, prompt, t0)
+        if _err and not p.error:
+            try:
+                object.__setattr__(p, "error", _err)
+            except Exception:
+                pass
+        return p
 
     # --- a bot that answers over a WebSocket -------------------------------------------------
     @staticmethod
@@ -3249,7 +3841,8 @@ class HttpConfiguredTarget(Target):
         prompt = payload(prompt)
         # DIRECT LINE PAYS PER REQUEST in `_dl_request`, for the requests it really sends; a
         # take here as well charged one request that never left. Found by an independent review.
-        if not (self.directline or self.websocket) and not self.rate.take():
+        if not (self.directline or self.websocket or self.botpress or self.chainlit) \
+                and not self.rate.take():
             # Said as a gap, not as a property of the target.
             # THROUGH THE PREFIX, because it is a contract between modules and this was the
             # only place it was spelled: `signing.NEVER_SENT` carries the argument.
@@ -3261,6 +3854,25 @@ class HttpConfiguredTarget(Target):
             return Probe(prompt=prompt, output="",
                          error=f"{_sg.NEVER_SENT}: this run's {limit} was spent before this "
                                f"probe; it was never sent")
+        if self.session_create and not self._session_made:
+            # A CALL THAT FAILS IS THE ERROR IT WAS, through the same rules as any request.
+            try:
+                _no = self._create_session(
+                    {k: str(v) for k, v in self.headers.items()}, prompt, time.time())
+            except _NoToken as _e_tok:
+                return _e_tok.probe(prompt)
+            except urllib.error.HTTPError as e:
+                import signing as _sg
+                _note = _sg.rejection(e.code, self._seen_success)
+                return Probe(prompt=prompt, output="", seconds=0.0,
+                             error=_note or "SessionCreateFailed: HTTPError %d opening the "
+                                            "conversation; no message was sent" % e.code)
+            except Exception as e:
+                return Probe(prompt=prompt, output="", seconds=0.0,
+                             error="SessionCreateFailed: %s: %s; no message was sent"
+                                   % (type(e).__name__, str(e)[:200]))
+            if _no is not None:
+                return _no
         data = json.dumps(self._body(prompt, history)).encode("utf-8")
         headers = {k: str(v).replace(SESSION_SLOT, self._session) for k, v in self.headers.items()}
         # A SEGMENT, NOT A URL: a server-named id of `abc/../../admin?x=1#` moved the next
@@ -3268,22 +3880,10 @@ class HttpConfiguredTarget(Target):
         # `{id}` is, and the origin checked again once filled. Found by an independent review.
         import urllib.parse as _upq
         url = str(self.url).replace(SESSION_SLOT, _upq.quote(str(self._session), safe=""))
-        if self.auth.get("type") == "oauth2_client_credentials":
-            try:
-                headers["Authorization"] = "Bearer " + self._bearer()
-            except RuntimeError as _e_tok:
-                # NOT A DEFENCE AND NOT A TARGET ERROR: nothing reached the target, and the
-                # sentence says which half of the setup failed.
-                return Probe(prompt=prompt, output="",
-                             error="AuthFailed: no token, so nothing was sent to the target: %s"
-                                   % _e_tok)
-        elif self.auth:
-            import signing
-            headers.update(signing.authorization(
-                self.method, url, headers, data,
-                service=self.auth["service"], region=self.auth["region"],
-                access_key=self.auth["access_key"], secret_key=self.auth["secret_key"],
-                session_token=self.auth.get("session_token")))
+        try:
+            headers = self._authorized(self.method, url, headers, data)
+        except _NoToken as _e_tok:
+            return _e_tok.probe(prompt)
         req = urllib.request.Request(url, data=data, headers=headers,
                                      method=self.method)
         self._following = False
@@ -3294,6 +3894,10 @@ class HttpConfiguredTarget(Target):
                 return self._directline_send(prompt, data, t0)
             if self.websocket:
                 return self._websocket_send(prompt, data, t0, headers)
+            if self.botpress:
+                return self._botpress_send(prompt, data, t0)
+            if self.chainlit:
+                return self._chainlit_send(prompt, t0, headers)
             with self._opener.open(req, timeout=self.timeout) as r:
                 _body, _over = read_capped(r, seconds=self.timeout)
                 # THE ANSWER IS BEHIND AN ID: everything below reads the second response.
@@ -3484,8 +4088,16 @@ class HttpConfiguredTarget(Target):
             self._session = self._session_first
         elif self.uses_session:
             self._session = new_session()
+        # A CONVERSATION OPENED BY A CALL is opened again by the next send.
+        self._session_made = False
         # A DIRECT LINE CONVERSATION ENDS HERE: the next send opens another.
         self._dl, self._dl_ended = None, False
+        # A BOTPRESS CONVERSATION, the next send opening another.
+        self._bp = None
+        # A CHAINLIT SESSION is its socket.
+        if self._cl is not None:
+            self._cl.close()
+            self._cl = None
         # AND A WEBSOCKET CONNECTION, which is the conversation on most servers that use one.
         if self._ws is not None:
             self._ws.close()

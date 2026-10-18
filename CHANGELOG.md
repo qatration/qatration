@@ -171,6 +171,39 @@ upgrade; a dead connection was used again; a refusal's body in a second packet w
 cases, a Direct Line conversation the bot ended and a WebSocket tail, now say so in their own
 words rather than as `BudgetExhausted`, which `run` counts as rows the budget cut short.
 
+**A conversation opened by a call: `session.create`.** A server that issues its conversation id
+from an endpoint of its own, and wants it on the first message, could not be tested as a
+conversation: an id minted here is one it never issued, and `from_reply` sends the first message
+without one. The call is now made at the start of every trial, on the target's own origin and
+out of the budget, and the id it answers with is `{session}`; an answer without one is
+`ExtractionFailed` with nothing sent.
+
+**Botpress: `botpress:`.** The Chat API answers a message with the user's own message, and the
+bot's answer arrives later in the conversation, so a request-and-reply config read the prompt
+back as the reply. A conversation is now opened per trial, read until it is quiet, and the
+answer is what anyone but this user said after the message: not the user's own message, not an
+earlier turn's late one, with a card's texts read. The user is your signed `x-user-key`, or one
+made for the run. A 2xx carrying an error `code` is that error, not an empty reply. `init --shape
+botpress` writes it.
+
+**Chainlit: `chainlit:`.** A Chainlit app talks socket.io to its UI, which `websocket:` does not
+read. The adapter now speaks Engine.IO 4 and Socket.IO 5 over its own WebSocket client: a
+session per trial, the server's pings answered, the app's welcome left out, the answer bracketed
+by the `task_start` and `task_end` of the handler the message ran, streamed tokens joined, an
+`ask` read as the answer, the user's own echo skipped, a refused session the rejection it was in
+the app's words. Not on the hosted service or through a proxy. `init --shape chainlit` writes it.
+An independent review of the three, against Chainlit's source and the Botpress API, found eight
+defects before they were committed, fixed with them: Chainlit runs `on_chat_start` as a task of
+its own after the connect, so the welcome was the first turn's answer and every later turn read
+the one before it; a tool step's output and an `llm` step's prompt were read as the bot saying
+them (a canary in a retrieved document, and the attack's own words, scored as leaks), where a
+tool step is now a tool call; an app's error message read as its reply, so a bad LLM key looked
+like a refusal to every attack; and an answer over the reply cap was lost as a socket fault.
+Botpress read one page of the conversation, so from the eleventh turn the reply was a timeout;
+a slow bot's answer to one turn was read as the next turn's; and a send was priced at Direct
+Line's rate, under what a bot taking four seconds spends. And `session.create` went out without
+the token or signature `auth:` adds, a 401 every trial blamed on a credential never sent.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

@@ -203,7 +203,7 @@ def submit(root, body, policy=None, wake=None):
                              "connects to the target itself")
     # NOR A WEBSOCKET: its socket is opened outside the HTTP connections the address checks
     # are made on, so the policy could not see where it went.
-    if "websocket" in cfg:
+    if "websocket" in cfg or "chainlit" in cfg:
         return _problem(400, "a submitted config may not use `websocket:`; the service checks "
                              "addresses on its HTTP connections, and a socket opened beside "
                              "them would not be checked")
