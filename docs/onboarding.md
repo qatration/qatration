@@ -170,7 +170,9 @@ An answer without the id is `ExtractionFailed` with no message sent. `session` t
 
 OpenAI's Responses API keeps a conversation this way, through its Conversations API (the
 successor of the Assistants API, which OpenAI shut down on 26 August 2026);
-`qatration init --shape responses --url https://api.openai.com/v1/responses` writes it:
+`qatration init --shape responses --url https://api.openai.com/v1/responses` writes it, the
+Conversations url beside the Responses one with its query kept (Azure's `api-version`), or
+left for you to set when the url does not end in `/responses`:
 
 ```yaml
 url: "https://api.openai.com/v1/responses"
@@ -191,7 +193,9 @@ response:
 `output.0.content.0.text` reads the reply from one and misses it on the other, and `output.*`
 reads the reasoning text an open model's server returns as if the bot had said it. A filter that
 matches no item is a path that missed, not an empty list, so a misspelt `type=` is said rather
-than read as a tool channel that saw no calls. Not read: a `refusal` part, which holds its words
+than read as a tool channel that saw no calls. A value is matched as JSON spells it (`true`,
+`null`, `2`), a missing key matches nothing, and a step that is not `*[key=value]` (a value
+with a dot in it, a space around `=`) is refused when the config is read. Not read: a `refusal` part, which holds its words
 under `refusal` rather than `text`.
 
 **A turn that is not `{role, content}`** is written by `history.turn`, a template with `{role}`,

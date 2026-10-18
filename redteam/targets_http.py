@@ -178,7 +178,25 @@ def read_capped(response, limit=None, seconds=None):
     return body[:limit], limit + 1 + extra
 
 
-_STAR_WHERE = re.compile(r"^\*\[([^=\]]+)=([^\]]*)\]$")
+_STAR_WHERE = re.compile(r"^\*\[([^=\]\s]+)=([^\]\s]*)\]$")
+
+
+def _matches(item, key, value):
+    """Does `item[key]` read as `value`: a string as itself, anything else in its JSON spelling
+    (`true`, `null`, `1`), so `*[flag=true]` matches JSON `true` and Python's `True` spelling
+    matches nothing. A MISSING KEY MATCHES NOTHING: `str(None)` made `*[k=None]` every item
+    that lacked `k`. Found by an independent review."""
+    if not isinstance(item, dict) or key not in item:
+        return False
+    v = item[key]
+    return (v if isinstance(v, str) else json.dumps(v)) == value
+
+
+def bad_star_steps(path):
+    """-> the steps of `path` that start a filter and are not one: `*[url=a.b]` split at its
+    dot, `*[type = message]` with spaces. Each would match nothing, said only as a path that
+    found nothing, never as a filter that cannot be read."""
+    return [s for s in str(path).split(".") if s.startswith("*[") and not _STAR_WHERE.match(s)]
 
 
 def is_star(step):
@@ -230,8 +248,7 @@ def _dig(cur, steps):
             # wrong in `type=function_call` would read as a tool channel that saw no calls.
             _had = cur
             if _only:
-                cur = [x for x in cur if isinstance(x, dict)
-                       and str(x.get(_only.group(1))) == _only.group(2)]
+                cur = [x for x in cur if _matches(x, _only.group(1), _only.group(2))]
             got, hit = [], False
             for item in cur:
                 v = _dig(item, steps[i + 1:])
@@ -2324,6 +2341,13 @@ class HttpConfiguredTarget(Target):
                 "It maps: %s. A channel mapped to a key nothing reads is a channel that stays "
                 "empty, and an empty channel scores as a target that did not use it."
                 % (name, ", ".join(repr(k) for k in _bad), ", ".join(RESPONSE_KEYS)))
+        for _k in RESPONSE_KEYS:
+            if bad_star_steps(resp.get(_k) or ""):
+                raise SystemExit(
+                    "targets_http: response.%s=%r for %r has a filter step that is not "
+                    "`*[key=value]` (%s): a value cannot hold a dot or a bracket, and neither "
+                    "side a space, so this one would match nothing on every reply."
+                    % (_k, resp.get(_k), name, ", ".join(bad_star_steps(resp.get(_k)))))
         self.reply_path = resp.get("reply", "reply")
         self.calls_path = resp.get("tool_calls")
         self.resolved_path = resp.get("resolved")
@@ -2616,7 +2640,14 @@ class HttpConfiguredTarget(Target):
                 "targets_http: `session.create` for %r is `{url, id_from, request: {...}, method: "
                 "POST|PUT|GET}`%s." % (name, "; it also names %s" % ", ".join(map(repr, _bad))
                                         if _bad else ""))
-        if "{" in str(c["url"]) or _az.origin_of(str(c["url"])) != _az.origin_of(url):
+        # A PLACEHOLDER IS NOT A URL, and asking for its origin crashed the config read.
+        try:
+            _own = _az.origin_of(str(c["url"])) == _az.origin_of(url)
+        except ValueError:
+            raise SystemExit(
+                "targets_http: session.create.url %r for %r is not a url: set it to the "
+                "endpoint that opens a conversation." % (c["url"], name))
+        if "{" in str(c["url"]) or not _own:
             raise SystemExit(
                 "targets_http: session.create.url %r for %r is not on the target's own origin "
                 "(%s), or holds a slot: it carries the target's headers, and the proof of "
@@ -3719,6 +3750,11 @@ class HttpConfiguredTarget(Target):
             # reports an error beside a reply field is a failure its client shows as one,
             # and judging that field would invent a finding. Found by an independent review.
             _before = dig(raw, self.reply_path) if _streamed else None
+            # A `*` PATH FINDS A LIST, and only a string was kept: the leak a Responses stream
+            # printed before it died was dropped on the path the docs recommend. Joined, as a
+            # reply is. Found by an independent review.
+            if isinstance(_before, list) and _before and all(isinstance(x, str) for x in _before):
+                _before = "\n".join(_before)
             return Probe(prompt=prompt,
                          output=_before if isinstance(_before, str) else "",
                          tool_calls=(_pairs(dig(raw, self.calls_path))
@@ -3753,6 +3789,11 @@ class HttpConfiguredTarget(Target):
             reply = "\n".join(reply)
         # NO ITEM HAD TEXT: a list of messages none of which spoke (`[]`, or an image alone).
         # Said as that, not as the "repr of a whole branch" a container reply earns.
+        # A CALL BESIDE IT IS STILL AN ANSWER: `content: []` beside a `function_call` dropped
+        # the call with the empty message. Found by an independent review.
+        elif isinstance(reply, list) and not reply and self.calls_path and any(
+                _probe_pair(_x) is not None for _x in _pairs(dig(raw, self.calls_path))):
+            reply = ""
         elif isinstance(reply, list) and not reply and any(
                 is_star(s) for s in str(self.reply_path).split(".")):
             _none = Probe(prompt=prompt, output="", seconds=round(time.time() - t0, 1),

@@ -40,6 +40,24 @@ DEFAULT_URL = "http://localhost:8000/chat"
 # rather than the placeholder. This one cannot be mistaken for an answer.
 DEFAULT_MODEL = "YOUR-MODEL-ID"
 
+CONVERSATIONS_URL = "YOUR-CONVERSATIONS-URL"
+
+
+def _conversations_url(url):
+    """The Conversations API beside a Responses API url: `/responses` in the PATH becomes
+    `/conversations`, the query (Azure's `api-version`) kept. A url whose path does not end in
+    `/responses` has no such sibling to name, and gets the placeholder `placeholders_left`
+    reports: a guess was a create call to an endpoint that is not one. Found by an independent
+    review."""
+    import urllib.parse as _up
+    u = _up.urlsplit(str(url))
+    path = u.path.rstrip("/")
+    if not path.endswith("/responses"):
+        return CONVERSATIONS_URL
+    return _up.urlunsplit((u.scheme, u.netloc, path[:-len("/responses")] + "/conversations",
+                           u.query, ""))
+
+
 def placeholders_left(cfg):
     """-> [(where, what)] for the template's own words still sitting in a config.
 
@@ -66,6 +84,10 @@ def placeholders_left(cfg):
         return out
     if str(_req.get("model") or "").strip() == DEFAULT_MODEL:
         out.append(("request.model", DEFAULT_MODEL))
+    _cr = ((cfg or {}).get("session") or {}).get("create") if isinstance(
+        (cfg or {}).get("session"), dict) else None
+    if isinstance(_cr, dict) and str(_cr.get("url") or "").strip() == CONVERSATIONS_URL:
+        out.append(("session.create.url", CONVERSATIONS_URL))
     return out
 
 
@@ -665,8 +687,7 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                                ws_url=_q(ws_url or re.sub(r"^http", "ws", str(url),
                                                            flags=re.I)),
                                # THE CONVERSATIONS ENDPOINT BESIDE THE RESPONSES ONE.
-                               create_url=_q(re.sub(r"/responses/?$", "", str(url).rstrip("/"))
-                                             + "/conversations")),
+                               create_url=_q(_conversations_url(url))),
                            history=HISTORY[shape].format(),
                            # TWO REQUESTS A SEND where the answer is fetched by a second one.
                            max_requests=1800 * _send_cost(shape),

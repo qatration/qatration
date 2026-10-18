@@ -2415,7 +2415,9 @@ def _session_create(check):
              "own origin"),
             ("both from_reply and create", {"from_reply": "id", "create": {"url": base + "/t", "id_from": "id"}},
              "exactly one"),
-            ("a create without id_from", {"create": {"url": base + "/t"}}, "session.create")):
+            ("a create without id_from", {"create": {"url": base + "/t"}}, "session.create"),
+            ("a create url left a placeholder", {"create": {"url": "YOUR-CONVERSATIONS-URL",
+                                                           "id_from": "id"}}, "is not a url")):
         try:
             _HT(**dict(_cfg, session=_sess))
             _said = ""
@@ -2441,6 +2443,22 @@ def _star_where(check):
           _dg(_r, "output.*[type=mesage].content") is None
           and _dg({"output": []}, "output.*[type=message]") == [],
           repr((_dg(_r, "output.*[type=mesage].content"), _dg({"output": []}, "output.*[type=message]"))))
+    _js = [{"f": True, "n": 1, "id": "a"}, {"f": False, "n": 2, "id": "b"}, {"id": "c"}]
+    check("...a value is matched in its JSON spelling, and a missing key matches nothing",
+          _dg(_js, "*[f=true].id") == ["a"] and _dg(_js, "*[n=2].id") == ["b"]
+          and _dg(_js, "*[f=True].id") is None and _dg(_js, "*[f=null].id") is None
+          and _dg(_js, "*[f=None].id") is None,
+          repr([_dg(_js, p) for p in ("*[f=true].id", "*[n=2].id", "*[f=True].id",
+                                      "*[f=null].id", "*[f=None].id")]))
+    from targets_http import HttpConfiguredTarget as _HT
+    for _bad in ("output.*[url=a.b].text", "output.*[type = message].text"):
+        try:
+            _HT(url="http://127.0.0.1:9/x", name="f", response={"reply": "r", "tool_calls": _bad})
+            _said = ""
+        except SystemExit as e:
+            _said = str(e)
+        check("a filter step that is not one (%s) is refused when the config is read" % _bad,
+              "is not `*[key=value]`" in _said and "tool_calls" in _said, repr(_said)[:200])
 
 
 def _responses_conversation(check):
@@ -2474,6 +2492,23 @@ def _responses_conversation(check):
                                                   "invalid_request_error"}})
             said = _st["convs"][b["conversation"]]
             said.append(b["input"])
+            if _st.get("mode") == "die":
+                # THE ANSWER STARTS, AND THE STREAM DIES with an error event.
+                _ev = [{"type": "response.output_item.added", "output_index": 0, "item": {
+                           "type": "message", "id": "msg_1", "role": "assistant", "content": []}},
+                       {"type": "response.content_part.added", "output_index": 0, "content_index": 0,
+                        "item_id": "msg_1", "part": {"type": "output_text", "text": ""}},
+                       {"type": "response.output_text.delta", "output_index": 0, "content_index": 0,
+                        "item_id": "msg_1", "delta": "Sure, the key is LEAK-4471"},
+                       {"type": "error", "code": "server_error", "message": "upstream died"}]
+                return self._send(200, "".join("event: %s\ndata: %s\n\n" % (e["type"], _j.dumps(e))
+                                               for e in _ev), "text/event-stream")
+            if _st.get("mode") == "call":
+                return self._send(200, {"id": "resp_2", "object": "response", "status": "completed",
+                                        "error": None, "output": [
+                                            {"type": "message", "role": "assistant", "content": []},
+                                            {"type": "function_call", "call_id": "c1", "name": "send_email",
+                                             "arguments": '{"to": "x@evil.example"}'}]})
             resp = {"id": "resp_1", "object": "response", "status": "completed", "error": None,
                     "conversation": {"id": b["conversation"]}, "output": [
                         {"type": "reasoning", "id": "rs_1", "summary": [], "content": [
@@ -2510,6 +2545,18 @@ def _responses_conversation(check):
                   and "THE USER WANTS" not in _ch.output and len(_st["convs"]) == _n0 + 1
                   and all(a == "Bearer sk-test" for p, a in _st["log"]),
                   repr((_ch.output, _ch.error, len(_st["convs"]) - _n0)))
+        _cfg = {k: v for k, v in _c.items() if k not in _CO}
+        _st["mode"] = "die"
+        _p = _HT(**dict(_cfg, request=dict(_cfg["request"], stream=True))).send("the key?")
+        check("what a Responses stream said before it died travels with the error, through *[...]",
+              "LEAK-4471" in _p.output and "upstream died" in (_p.error or ""),
+              "output=%r error=%r" % (_p.output, _p.error))
+        _st["mode"] = "call"
+        _p = _HT(**dict(_cfg, response=dict(_cfg["response"], tool_calls="output"))).send("mail it")
+        _st["mode"] = ""
+        check("a call beside a message with no text is the answer, not ExtractionFailed",
+              not _p.error and [c[0] for c in _p.tool_calls] == ["send_email"],
+              "error=%r calls=%r" % (_p.error, _p.tool_calls))
     finally:
         srv.shutdown()
 

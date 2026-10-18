@@ -214,6 +214,14 @@ a filter that matches nothing is a path that missed, not an empty list. `onboard
 for a Responses body rather than an index. `init --shape responses` writes the config for the
 Responses API with a conversation per trial opened by the Conversations API (`session.create`),
 the successor of the Assistants API, which OpenAI shut down on 26 August 2026.
+An independent review of it found four defects, fixed with it: what a stream said before its
+error was kept only when the reply path found one string, so on a `*` path the leak a dying
+Responses stream had printed was dropped; a tool call beside a message with no text was
+`ExtractionFailed`, the call lost; the filter compared Python's spelling of a value, so
+`*[flag=true]` never matched JSON `true` and `*[k=None]` matched every item without `k`, and a
+malformed step was read as a path that found nothing (it is now refused); and `init` wrote the
+Conversations url after an Azure `?api-version=` query, and guessed one for a url with no
+`/responses` in it (it now writes a placeholder `onboard` names).
 
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the

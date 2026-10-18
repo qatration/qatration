@@ -324,7 +324,9 @@ def _app_shapes():
         for _sh, (_reply, _from) in _want.items():
             _c = yaml.safe_load(init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
                                                    verify="QAT-VERIFY-X", shape=_sh,
-                                                   url="http://localhost:9/x"))
+                                                   url="http://localhost:9/x" + (
+                                                       "/v1/responses" if _sh == "responses"
+                                                       else "")))
             try:
                 _t = HttpConfiguredTarget(**{k: x for k, x in _c.items()
                                              if k not in CONFIG_ONLY_KEYS})
@@ -361,6 +363,18 @@ def _app_shapes():
                 check("...and whose conversation is opened by the Conversations API beside it",
                       (_cr.get("session") or {}).get("create", {}).get("url")
                       == "https://api.openai.com/v1/conversations", repr(_cr.get("session")))
+                _az = yaml.safe_load(init_config.render(
+                    secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X", shape=_sh,
+                    url="https://x.openai.azure.com/openai/v1/responses?api-version=preview"))
+                _gw = yaml.safe_load(init_config.render(
+                    secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X", shape=_sh,
+                    url="https://gw.example.com/v1/chat"))
+                check("...its query kept, and a url with no /responses to replace named as unset",
+                      _az["session"]["create"]["url"]
+                      == "https://x.openai.azure.com/openai/v1/conversations?api-version=preview"
+                      and ("session.create.url", "YOUR-CONVERSATIONS-URL")
+                      in init_config.placeholders_left(_gw),
+                      repr((_az["session"], init_config.placeholders_left(_gw))))
             if _sh == "gradio":
                 check("...and whose budget is sized for two requests a send",
                       (_c.get("rate") or {}).get("max_requests") == 3600, repr(_c.get("rate")))
