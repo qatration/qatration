@@ -235,7 +235,12 @@ two lines, commented, as the other shapes do); a stream that closed before its `
 folded into an empty reply with no error, which scores as a bot that held; and its Agent
 sometimes answers with an empty message, which in the last turn of a conversation was judged
 DEFENDED while the same empty reply sent alone is ERROR. A conversation whose last turn came back
-with nothing is now ERROR; no stored row moved.
+with nothing is now ERROR; no stored row moved. A Vercel AI SDK 7 route (`streamText` with a tool,
+`toUIMessageStreamResponse()`) and Ollama's own Responses API read as documented too, and the AI
+SDK showed one more: a tool's structured output was kept in Python's spelling
+(`{'status': 'shipped'}`), not the JSON the agent read, so a reply quoting it did not match it.
+Observations are JSON now, and `init --shape vercel` offers `toolResults.*.output`, the output
+alone.
 
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the

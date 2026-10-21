@@ -216,7 +216,7 @@ None of that needs taking on trust. The counts `test_readme.py` lists, in this R
 site, are recounted from the artifacts in `out/` by a test that fails the build when the two
 disagree. The site's other figures come from single dated runs and from the benchmark against
 garak and promptfoo, and are not recounted. No assertion
-in the suite is allowed to be one that cannot fail — 6,160 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 6,162 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.

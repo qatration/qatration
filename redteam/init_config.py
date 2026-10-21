@@ -305,7 +305,7 @@ response:
   # on a bot with no tools, and an empty list on every reply reads as tools that were watched
   # and held. `qatration onboard` prints the line when its probe's reply carries a call.
   # tool_calls: "toolCalls"
-  # observations: "toolResults"
+  # observations: "toolResults.*.output"
 
 ''',
     "dify": '''\

@@ -2500,6 +2500,34 @@ def _langflow_agent(check):
           repr((_fc, (_fw or {}).get("error"))))
 
 
+def _ai_sdk_7(check):
+    """A Vercel AI SDK 7 route's stream, as a real `toUIMessageStreamResponse()` sent it: a
+    tool call, its result, then the text, read through the lines `init --shape vercel` offers."""
+    from targets_http import vercel_stream as _vs, dig as _dg, _pairs as _pp, _observations as _ob
+    _ev = [{"type": "start"}, {"type": "start-step"},
+           {"type": "tool-input-start", "toolCallId": "c1", "toolName": "lookupOrder"},
+           {"type": "tool-input-delta", "toolCallId": "c1", "inputTextDelta": "{\"orderId\":\"42\"}"},
+           {"type": "tool-input-available", "toolCallId": "c1", "toolName": "lookupOrder",
+            "input": {"orderId": "42"}},
+           {"type": "tool-output-available", "toolCallId": "c1",
+            "output": {"orderId": "42", "status": "shipped", "carrier": "Acme Express"}},
+           {"type": "finish-step"}, {"type": "start-step"}, {"type": "text-start", "id": "t0"},
+           {"type": "text-delta", "id": "t0", "delta": "Order 42 shipped."},
+           {"type": "text-end", "id": "t0"}, {"type": "finish-step"},
+           {"type": "finish", "finishReason": "stop"}]
+    import json as _j
+    _f = _vs("".join("data: %s\n\n" % _j.dumps(e) for e in _ev) + "data: [DONE]\n\n")
+    check("an AI SDK 7 stream: its text, its call, and what the tool returned in JSON as the agent read it",
+          _dg(_f, "text") == "Order 42 shipped."
+          and _pp(_dg(_f, "toolCalls")) == [("lookupOrder", '{"orderId": "42"}')]
+          and _ob(_dg(_f, "toolResults.*.output")) == [
+              '{"orderId": "42", "status": "shipped", "carrier": "Acme Express"}'],
+          repr((_dg(_f, "text"), _ob(_dg(_f, "toolResults.*.output")))))
+    check("...and a {tool: output} map keeps its name, the output in JSON",
+          _ob({"lookupOrder": {"ok": True, "note": None}}) == ['lookupOrder: {"ok": true, "note": null}'],
+          repr(_ob({"lookupOrder": {"ok": True, "note": None}})))
+
+
 def _responses_conversation(check):
     """`init --shape responses` against a server shaped as OpenAI's Responses API with its
     Conversations API: the walk a user takes, streamed and not."""
@@ -4991,6 +5019,7 @@ def main():
     _chainlit(check)
     _star_where(check)
     _langflow_agent(check)
+    _ai_sdk_7(check)
     _responses_conversation(check)
     _three_more_streams(check)
     _gemini_stream(check)

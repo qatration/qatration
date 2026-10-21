@@ -294,14 +294,26 @@ def _observations(raw):
     """
     if raw is None:
         return []
+
+    # A STRUCTURED OUTPUT IN THE SPELLING THE AGENT READ, JSON, as `_pairs` writes a call's
+    # arguments: Python's `str()` turned a Vercel AI SDK tool's `{"status": "shipped"}` into
+    # `{'status': 'shipped'}`, and a reply quoting what the tool returned no longer matched
+    # it. Found walking a real AI SDK route.
+    def _text(v):
+        if isinstance(v, (dict, list)):
+            try:
+                return json.dumps(v, ensure_ascii=False)
+            except (TypeError, ValueError):
+                return str(v)
+        return str(v)
     if isinstance(raw, dict):
         # The tool name travels with its output: a reader wants to know which call carried
         # the string, and `_pairs` keeps the same pairing for the call side.
-        return ["%s: %s" % (k, v) for k, v in raw.items()]
+        return ["%s: %s" % (k, _text(v)) for k, v in raw.items()]
     if isinstance(raw, (list, tuple)):
         # NOT A NULL: `str(None)` is the four letters `None`, which the Probe docstring says
         # must never become evidence, and it made an empty probe read as answered.
-        return [str(o) for o in raw if o is not None]
+        return [_text(o) for o in raw if o is not None]
     # EVERYTHING ELSE IS ONE OBSERVATION, and that includes a bare string: the point is that
     # a string is never ITERATED. An explicit branch for it above this line would be a line
     # that cannot fail -- deleting it changes nothing, because this is what catches it -- so

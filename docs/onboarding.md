@@ -65,7 +65,7 @@ route and the JSON one:
 response:
   reply: "text"
   tool_calls: "toolCalls"
-  observations: "toolResults"               # what each tool returned
+  observations: "toolResults.*.output"      # what each tool returned
   error: "error"                            # an `error` part in the stream
 ```
 
