@@ -2689,15 +2689,21 @@ def _botpress(check):
             if _st["mode"] == "card":
                 payload = {"type": "card", "title": "Your code", "subtitle": "CARD-SECRET-2",
                            "actions": []}
+            # THE BOT'S FIRST MESSAGE IS LISTED AT ONCE in the slow mode, so the first look (0.3 s)
+            # always sees it and the turn ends a fixed `quiet_s` later (1.3 s): the answer at
+            # 1.8 s is then always inside the settle before the next turn (1.3 to 2.3 s). Listed
+            # at 0.4 s, the first look caught it or not by timing, and on a CI runner where it
+            # did the answer fell past the settle and the check failed by chance.
+            _first = 0.0 if _st["mode"] == "slow" else 0.4
             if _st["mode"] == "slow":
                 # A WAIT NODE: "One moment...", and the answer created when it is ready.
                 payload = {"type": "text", "text": "One moment..."}
-                _late = _tm.time() + 2.6
+                _late = _tm.time() + 1.8
                 c.append({"id": mid + "s", "userId": "bot-9", "conversationId": b["conversationId"],
-                          "createdAt": _now(2.6), "payload": {"type": "text", "text": "ANSWER-TO "
+                          "createdAt": _now(1.8), "payload": {"type": "text", "text": "ANSWER-TO "
                                                               + said[-1]}, "_at": _late})
             c.append({"id": mid + "b", "userId": "bot-9", "conversationId": b["conversationId"],
-                      "createdAt": _now(0.4), "payload": payload, "_at": _tm.time() + 0.4})
+                      "createdAt": _now(_first), "payload": payload, "_at": _tm.time() + _first})
             if _st["mode"] == "late" and len(said) == 1:
                 # A FOLLOW-UP FROM TURN ONE, created then, listed only later.
                 c.append({"id": mid + "f", "userId": "bot-9", "conversationId": b["conversationId"],
