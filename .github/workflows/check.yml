@@ -40,7 +40,10 @@ jobs:
     # allows by default and reporting as 'cancelled', which names nothing at all.
     # 45, not 30: the healthy windows and 3.9 jobs had grown to 27 minutes, and two of them
     # crossed 30 on a green run and were cancelled with every suite still passing.
-    timeout-minutes: 45
+    # 60, not 45: the 3.9 job then ran 44:27 to 44:51 on every green run for a week, and
+    # crossed 45 on the last suite of a green run (bf75520), cancelled with all it had
+    # reached passing.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
