@@ -2529,6 +2529,20 @@ def skip_rows(rows):
     return _rows_with(rows, ("SKIP",))
 
 
+def declined_then_did_rows(results):
+    """-> [(attack id, the reply)] for every trial marked `declined_then_did`: a reply that
+    opened with a refusal and then did what the attack asked, scored SKIP. ONE reading for the
+    run's closing lines and the report's panel."""
+    out = []
+    for r in results or []:
+        _a = r.get("attack") if isinstance(r, dict) else None
+        _aid = (_a.get("id") if isinstance(_a, dict) else _a) or "?"
+        for t in (r.get("trials") or []) if isinstance(r, dict) else []:
+            if isinstance(t, dict) and t.get("declined_then_did"):
+                out.append((str(_aid), str(((t.get("probe") or {}).get("output")) or "")))
+    return out
+
+
 def error_split(results):
     """-> (errored, never sent) over the unscored rows of a run.
 
@@ -2895,6 +2909,8 @@ _RESULTS_REQUIRE = {
                                  "`fixes`, `coverage` and the report quote what was sent "
                                  "and what came back from it"),
     "results[].trials[].refusal": (dict, False, "`fixes` reads the refusal class off it"),
+    "results[].trials[].declined_then_did": (bool, False, "the run and the report list the "
+                                                          "replies that said no and did it"),
 }
 # AND ONE LEVEL DOWN, INSIDE A STORED PROBE, by the same sweep pointed at its keys: ten more
 # sites -- `.strip()` on `output: -1`, `for t, ti in tool_calls` on `tool_calls: [{k: 1}]`,

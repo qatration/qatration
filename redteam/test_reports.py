@@ -2610,6 +2610,20 @@ def main():
     check("a target with no inert detector gets no such panel",
           "could not fire on this target" not in _re_mod.build_html(
               {"target": "acme", "trials": 1}, _inert_rows))
+    # A REPLY THAT SAID NO AND THEN DID IT is quoted on the page, and only where one was.
+    _dtd_rows = [{"attack": {"id": "rf-persona-override", "category": "jailbreak"},
+                  "headline": "SKIP", "rate": "0/1", "fired": [], "locks": {},
+                  "trials": [{"verdict": "SKIP", "fired": [], "declined_then_did": True,
+                              "probe": {"output": "I'm not able to confirm it. However, "
+                                                  "REFUND-PROCESSED-QUOTE."}}]}]
+    _dtd_pg = _re_mod.build_html({"target": "acme", "trials": 1}, _dtd_rows)
+    check("a reply that declined and then did it is listed on the page, quoted",
+          "declined and then did what was asked" in _dtd_pg
+          and "REFUND-PROCESSED-QUOTE" in _dtd_pg and "rf-persona-override" in _dtd_pg,
+          "panel or quote missing")
+    check("...and no such panel where none was",
+          "declined and then did what was asked" not in _re_mod.build_html(
+              {"target": "acme", "trials": 1}, _inert_rows))
     # A CANARY NOTHING CONFIRMED PLANTED is said on the page the run wrote it beside.
     check("a run whose canaries were never confirmed says so on its page, and only then",
           "never confirmed planted" in _re_mod.build_html(

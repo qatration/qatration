@@ -218,6 +218,12 @@ def rescore(path, ctx, why=None):
                 v, fired = "ERROR", []
             t["verdict"], t["fired"] = v, fired
             t["refusal"] = classify(p, ctx)
+            # THE SAME MARK THE SWEEP WRITES (`oracle.declined_then_did`), set or cleared.
+            from oracle import declined_then_did as _dtd
+            if _dtd(p, judged_ctx(attack, ctx)):
+                t["declined_then_did"] = True
+            else:
+                t.pop("declined_then_did", None)
             recs.append({"verdict": v, "fired": fired, "probe": p})
         if not recs:
             continue
