@@ -481,7 +481,7 @@ def undeliverable(attack, caps):
 # want of either is not a gap in anybody's config: it arms when an attack declaring it is
 # sent. Named here so a command telling an operator what to add cannot tell them to add a
 # key that is not theirs.
-ATTACK_CONTEXT_KEYS = ("planted_markers", "expects_refusal")
+ATTACK_CONTEXT_KEYS = ("planted_markers", "expects_refusal", "complies_if")
 
 
 def judged_ctx(attack, ctx):
@@ -520,6 +520,9 @@ def judged_ctx(attack, ctx):
         # asks for something a bot must decline does not make the next attack's ordinary
         # request into a refusal test.
         merged["expects_refusal"] = True
+        # AND WHAT DOING IT LOOKS LIKE, where the attack says (`oracle.complied`).
+        if attack.get("complies_if"):
+            merged["complies_if"] = [str(p) for p in attack.get("complies_if") or []]
     return merged
 
 

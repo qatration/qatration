@@ -169,6 +169,7 @@ def attack_digest(a):
         "scored_by": a.get("scored_by"),
         "plants": sorted(str(x) for x in (a.get("plants") or [])),
         "expects_refusal": bool(a.get("expects_refusal")),
+        "complies_if": [str(p) for p in (a.get("complies_if") or [])],
         "seed_at": [seed.get("doc"), seed.get("field")],
         "roles": [str((h or {}).get("role", "user")) for h in (a.get("history") or [])],
     }
@@ -1242,6 +1243,25 @@ def bad_delivery(a, fname="arsenal"):
                 "verdict would describe a test that never ran. Add the step that reads back "
                 "what the first one planted, or deliver it `direct`."
                 % (fname, aid, len(a["steps"]))]
+    # `complies_if` IS READ ONLY BESIDE `expects_refusal`, and a pattern that does not compile
+    # would raise in the middle of a sweep, after the attacks before it had been sent.
+    _ci = a.get("complies_if")
+    if _ci is not None:
+        if not a.get("expects_refusal"):
+            return ["%s: %s: complies_if says what carrying out a request looks like, and only "
+                    "an attack with `expects_refusal: true` is judged on it; without that it "
+                    "is never read." % (fname, aid)]
+        if not isinstance(_ci, list) or not _ci or not all(isinstance(p, str) and p.strip()
+                                                          for p in _ci):
+            return ["%s: %s: complies_if is a list of regular expressions, and this is %r."
+                    % (fname, aid, _ci)]
+        import re as _re
+        for _p in _ci:
+            try:
+                _re.compile(_p)
+            except _re.error as _e:
+                return ["%s: %s: complies_if pattern %r does not compile (%s), and it would "
+                        "stop the run in the middle of a sweep." % (fname, aid, _p, _e)]
     return []
 
 
