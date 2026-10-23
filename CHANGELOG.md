@@ -240,7 +240,9 @@ with nothing is now ERROR; no stored row moved. A Vercel AI SDK 7 route (`stream
 SDK showed one more: a tool's structured output was kept in Python's spelling
 (`{'status': 'shipped'}`), not the JSON the agent read, so a reply quoting it did not match it.
 Observations are JSON now, and `init --shape vercel` offers `toolResults.*.output`, the output
-alone.
+alone. Rasa 3.6 read as documented as well: a reply of two messages is both, streamed or not, and
+its scripted bot, which keeps no earlier turn, is found to keep none, so the multi-turn attacks
+are withheld rather than sent.
 
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
