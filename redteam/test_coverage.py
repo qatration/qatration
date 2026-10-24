@@ -413,12 +413,20 @@ def main():
           not sorted(set(DETECTORS) - set(firing)), str(sorted(set(DETECTORS) - set(firing))))
 
     mute = []
-    for name in sorted(set(DETECTORS) - set(NEEDS_CONFIG)):
+    # GATED BY WHAT THE ADAPTER SEES, NOT BY CONFIG (`oracle.NEEDS_TOOL_VIEW`): silent without
+    # `tool_visibility` in the engine's own `_caps`, which `tool_only` reports to the sweep.
+    # Asked below with that capability, so the exemption cannot hide a detector that is mute.
+    from oracle import NEEDS_TOOL_VIEW as _ntv
+    for name in sorted(set(DETECTORS) - set(NEEDS_CONFIG) - set(_ntv)):
         cases = firing.get(name) or []
         if cases and not any(DETECTORS[name](probe, {}) for _label, probe in cases):
             mute.append(name)
     check("a detector that cannot fire without configuration is IN the table",
           not mute, f"config-gated in fact, undeclared: {mute}")
+    _view_mute = [n for n in sorted(_ntv) if not any(
+        DETECTORS[n](p, {"_caps": ["tool_visibility"]}) for _l, p in (firing.get(n) or []))]
+    check("...and one gated by the adapter's view fires once the view is there",
+          not _view_mute, f"mute even with tool_visibility: {_view_mute}")
 
     # ...AND THE CHECK IS SHOWN FAILING, in this process, because one that passes by examining
     # nothing looks identical to one that passes on the merits. A known-gated detector is

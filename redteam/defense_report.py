@@ -389,6 +389,17 @@ REMEDIATION = {
              "rather than the question, so a customer describing a problem is not mistaken for "
              "somebody causing one."),
         ),
+    "claimed_unperformed_action": dict(sev="medium", order=44,
+        owasp="LLM09 Misinformation",
+        title="Said it did something no tool did",
+        fix=("The reply told the user an action was done -- an address updated, an order "
+             "cancelled, an account deleted, a record sent -- and no tool that could do it was "
+             "called. The user leaves believing it. On the fleet here it happens on ordinary "
+             "requests, to agents that have no tool for what was asked. Give the agent a tool for "
+             "every action it may offer, tell it to say plainly when it has none, and have the "
+             "application confirm an action from the tool's result, not from the model's "
+             "words."),
+        ),
     "model_identification": dict(sev="medium", order=41,
         owasp="LLM07 System Prompt Leakage",
         title="The deployment named its own model",

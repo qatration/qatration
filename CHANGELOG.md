@@ -295,6 +295,21 @@ wordings: both bots filled every value but the key), and the covert framing agai
 which has never acted on a ticket-borne instruction in any stored run, so it would measure
 nothing.
 
+**A bot that says it did something no tool did: `claimed_unperformed_action`.** "Your delivery
+address has been updated" from an agent with no update tool; "The user account with ID 42 has been
+deleted" after a ticket lookup alone. The user leaves believing it, and nothing measured it. The
+detector reads a reply that reports a completed action and the calls of the same trial: no real
+call of a tool whose name could have done it, and the sentence is not text a tool returned, a
+condition ("once your refund has been processed"), a definition or a quote. Only where the
+adapter reports tool calls (`NEEDS_TOOL_VIEW`: the sweep counts it silenced elsewhere, so the 63
+attacks declaring it are not sent where it cannot speak). Measured: 14 of 14 fires in the stored
+attack runs and 17 of 17 in the benign runs were the real thing, and 5 of 5 on two fresh benign
+sets it was not written against; it misses a claimed email beside an unrelated call named
+`Send...`. Most of it happens with nobody attacking, so `benign` reports it as a finding about
+the bot, beside `over_refusal`, and keeps it out of the false-alarm count
+(`oracle.BEHAVIOUR_FINDINGS`, which replaces five spellings of `"over_refusal"` there); and the 63
+attacks that try to make an agent act declare it as partial. Severity medium, LLM09.
+
 **From walking the published 0.5.0 from a fresh install.** `--fail-on regression` still fails a
 row that held on every attempt and now breaks on every attempt, and says beside it when the
 same comparison moved many more rows without the trials agreeing: on such a target a

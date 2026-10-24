@@ -47,7 +47,7 @@ from target import payload, engine_version
 from workspace import measured_when, FILE_DATED
 # ONE SPELLING of `and N more`: see `workspace.named_or_more`.
 from workspace import named_or_more
-from oracle import DETECTORS, inert_for, visible_text, ATTACK_ARMED
+from oracle import DETECTORS, inert_for, visible_text, ATTACK_ARMED, BEHAVIOUR_FINDINGS
 from target import glob_in  # noqa: E402  one escape for every directory
 
 # ---------------------------------------------------------------------------------------
@@ -451,9 +451,13 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
             fired = fires_for_row(probe, ctx, cid)
             # over_refusal is a usability finding, not a false alarm: on a corpus with no
             # attacker in it, a refusal IS the correct thing to report.
-            noisy = [f for f in fired if f != "over_refusal"]
+            # AND AN ACTION THE BOT SAID IT TOOK AND DID NOT: a finding about the target on
+            # ordinary traffic, as a refusal is (`oracle.BEHAVIOUR_FINDINGS`).
+            noisy = [f for f in fired if f not in BEHAVIOUR_FINDINGS]
+            _claimed = "claimed_unperformed_action" in fired
             rows.append({"id": cid, "provokes": provokes, "prompt": text,
                          "fired": fired, "refused": "over_refusal" in fired,
+                         "claimed": _claimed,
                          # RECORDED HERE, WHERE THE PROBE IS, rather than inferred later from
                          # a missing field. The first version of this asked `summary()` to spot
                          # silence by looking for absent text, which cannot tell a target that
@@ -480,7 +484,7 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
                                    # positives the telemetry contract was built to kill.
                                    "resolved": getattr(probe, "resolved", []),
                                    "turns": getattr(probe, "turns", [])},
-                         "evidence": excerpt(probe) if noisy else "",
+                         "evidence": excerpt(probe) if (noisy or _claimed) else "",
                          # A candidate false positive is settled by looking at what the
                          # target actually said, and the excerpt is a headline: secretbot
                          # fired pii_in_output on a set of ticket instructions and the
@@ -489,9 +493,10 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
                          # stays small.
                          # The whole visible conversation, for the same reason `excerpt`
                          # shows it: this is the field an adjudication is read from.
-                         "full": visible_text(probe) if noisy else ""})
+                         "full": visible_text(probe) if (noisy or _claimed) else ""})
             if echo:
-                mark = "!" if noisy else ("r" if "over_refusal" in fired else ".")
+                mark = "!" if noisy else ("r" if "over_refusal" in fired
+                                          else "c" if "claimed_unperformed_action" in fired else ".")
                 print(f"  {mark} {cid:<{_wid}}{','.join(noisy) or '-'}")
     return rows
 
@@ -524,7 +529,7 @@ def summary(rows):
     per = collections.Counter()
     for r in rows:
         for f in (r.get("fired") or []):
-            if f != "over_refusal":
+            if f not in BEHAVIOUR_FINDINGS:
                 per[f] += 1
     # clean means the target simply answered: nothing fired at all, refusal included, and
     # no error. Counting a refusal as clean made the headline line non-additive, so
@@ -548,6 +553,7 @@ def summary(rows):
     return {"probes": len(rows), "clean": clean, "silent": silent,
             "skipped": sum(1 for r in rows if r.get("skipped")),
             "refused": sum(1 for r in rows if r.get("refused")),
+            "claimed": sum(1 for r in rows if r.get("claimed")),
             "errors": sum(1 for r in rows if r.get("error")),
             "per_detector": dict(per.most_common())}
 
@@ -595,9 +601,10 @@ def rejudge(path):
         if before != after:
             changed.append((r.get("id"), before, after))
         r["fired"], r["refused"] = after, "over_refusal" in after
-        noisy = [f for f in after if f != "over_refusal"]
-        r["evidence"] = excerpt(p) if noisy else ""
-        r["full"] = visible_text(p) if noisy else ""
+        r["claimed"] = "claimed_unperformed_action" in after
+        noisy = [f for f in after if f not in BEHAVIOUR_FINDINGS]
+        r["evidence"] = excerpt(p) if (noisy or r["claimed"]) else ""
+        r["full"] = visible_text(p) if (noisy or r["claimed"]) else ""
     d["meta"].update(summary(d["rows"]))
     # RE-JUDGED BY EVERY DETECTOR THERE IS NOW, which `baseline.rates` reads as measured.
     d["meta"]["detectors"] = sorted(DETECTORS)
@@ -832,7 +839,7 @@ def roll_up():
                 # redirect. Calling both a usability finding inflates the first by the second,
                 # and it silently ignored what the adjudication file already said about three
                 # targets. A verdict recorded and never read is the same as no verdict.
-                if f != "over_refusal" or adjudged.get((t, f), {}).get(
+                if f not in BEHAVIOUR_FINDINGS or adjudged.get((t, f), {}).get(
                         "verdict") == "false_positive":
                     per[f] += 1
                     seen[f].add(t)
@@ -1358,7 +1365,12 @@ def main():
     s = summary(rows)
     print(f"\n{s['clean']}/{s['probes']} clean · {s['refused']} refused · "
           f"{s['skipped']} skipped · {s['errors']} errors"
-          + (f" · {s['silent']} came back EMPTY" if s.get('silent') else ""))
+          + (f" · {s['silent']} came back EMPTY" if s.get('silent') else "")
+          + (f" · {s['claimed']} claimed an action no tool took" if s.get('claimed') else ""))
+    # AN ACTION THE BOT SAID IT TOOK AND DID NOT, quoted: on ordinary traffic it is the bot,
+    # not the tool, and the user believed it (`oracle.d_claimed_unperformed_action`).
+    for _r in [r for r in rows if r.get("claimed")][:8]:
+        print(f"    claimed, not done  {_r['id']}: {_r.get('evidence', '')[:160]}")
     for d, n in s["per_detector"].items():
         print(f"    {d:<26}{n}")
     # WHAT THE READER IS SUPPOSED TO DO WITH THAT NUMBER. Walked as a first-time user: the

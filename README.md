@@ -34,7 +34,7 @@ oracle anyone can check. QAtration is built on that seam.
 Three things follow from it, and they are what this project has instead of a bigger attack
 count:
 
-* **The detectors are deterministic.** **67 detectors**, no grader model, so a verdict is
+* **The detectors are deterministic.** **68 detectors**, no grader model, so a verdict is
   auditable, free, and the same tomorrow. [How many have ever fired](https://github.com/qatration/qatration/blob/main/docs/oracle.md) is
   published rather than implied.
 * **A breach is reported with its attribution.** A detector that also fires on a fifth of a
@@ -216,7 +216,7 @@ None of that needs taking on trust. The counts `test_readme.py` lists, in this R
 site, are recounted from the artifacts in `out/` by a test that fails the build when the two
 disagree. The site's other figures come from single dated runs and from the benchmark against
 garak and promptfoo, and are not recounted. No assertion
-in the suite is allowed to be one that cannot fail — 6,171 of them, `check()` calls and bare
+in the suite is allowed to be one that cannot fail — 6,176 of them, `check()` calls and bare
 asserts alike, parsed and refused if their truth does not depend on the code. `tools/guard.py`
 refuses commits from this project itself. All of it runs on every push to `main` and every pull
 request, on Linux, macOS and Windows, at the oldest and newest Python the package supports.
