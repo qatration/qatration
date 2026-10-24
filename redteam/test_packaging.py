@@ -1749,7 +1749,7 @@ def test_the_matched_condition_split():
 
 def test_the_overlap_tool_compares_against_the_corpus():
     """`tools/corpus_overlap.py` is the check behind a claim `docs/internals.md` publishes:
-    "The arsenal is 145 hand-written payloads". It reports the longest run of consecutive
+    "The arsenal is 146 hand-written payloads". It reports the longest run of consecutive
     words each of our prompts shares with a published jailbreak corpus, and a run of eight
     or more is the finding.
 

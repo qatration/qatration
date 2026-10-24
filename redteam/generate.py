@@ -1,7 +1,7 @@
 """
 Generate objectives for a target from what the target said about itself.
 
-The arsenal is 145 hand-written payloads and 139 of them are pinned to this repo's practice
+The arsenal is 146 hand-written payloads and 140 of them are pinned to this repo's practice
 bots with `applies_to`. On someone else's bot most of it simply does not apply, and that
 is the gap this module closes: generating test cases for the
 system under test instead of shipping a fixed list.

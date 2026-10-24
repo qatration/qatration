@@ -688,9 +688,9 @@ about what to send — an accident of which file something was written in. Gener
 attack ids already live in two files at once: the per-bot arsenals were split out of the main
 one by hand and both halves were then edited. A third hand-maintained copy would repeat it.
 
-The arsenal is **427 attacks across 60 categories** now. Against a plain chat endpoint (an
-`adapter: http` config that declares only a canary and maps no tool calls), **271 attacks in 44
-categories** actually run; one that carries a transcript gets **342 in 54**. What is held back is held back for a reason each time: `control` rows are
+The arsenal is **429 attacks across 60 categories** now. Against a plain chat endpoint (an
+`adapter: http` config that declares only a canary and maps no tool calls), **272 attacks in 44
+categories** actually run; one that carries a transcript gets **344 in 54**. What is held back is held back for a reason each time: `control` rows are
 per-target baselines and sending eighteen of them would pad the count with prompts that are not
 attacks, `seed:` rows need a corpus we can write to, and rows naming a practice bot's canary or
 tool would test a string that does not exist on anybody else's system.

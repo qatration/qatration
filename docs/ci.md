@@ -170,8 +170,8 @@ rather than a missing feature — see [nothing leaves your side](#nothing-leaves
 
 | scope | attacks | requests | at 2s a request | at 4s |
 |---|---|---|---|---|
-| `--scope full`, 3 trials (the default) | 427 | 1,650 | ~55 min | ~110 min |
-| `--scope full`, 1 trial | 427 | 550 | ~18 min | ~37 min |
+| `--scope full`, 3 trials (the default) | 429 | 1,659 | ~55 min | ~111 min |
+| `--scope full`, 1 trial | 429 | 553 | ~18 min | ~37 min |
 | `--scope quick`, 3 trials | 60 | 216 | ~7 min | ~14 min |
 | `--scope quick`, 1 trial | 60 | 72 | ~2 min | ~5 min |
 
@@ -260,14 +260,14 @@ million tokens, as of August 2026.
 | scope | your prompt is 422 chars | a realistic 4,000-char prompt |
 |---|---|---|
 | | haiku / sonnet / opus | haiku / sonnet / opus |
-| `full` x3 (the default) | $0.86 / $2.59 / $4.31 | $2.34 / $7.01 / $11.69 |
-| `full` x1 | $0.29 / $0.86 / $1.44 | $0.78 / $2.34 / $3.90 |
+| `full` x3 (the default) | $0.87 / $2.60 / $4.34 | $2.35 / $7.05 / $11.76 |
+| `full` x1 | $0.29 / $0.87 / $1.45 | $0.78 / $2.35 / $3.92 |
 | `quick` x3 | $0.11 / $0.34 / $0.57 | $0.31 / $0.92 / $1.53 |
 | `quick` x1 | $0.04 / $0.11 / $0.19 | $0.10 / $0.31 / $0.51 |
 
 **The dominant cost is your own system prompt, not the attacks.** An attack payload averages 46
 tokens; a production system prompt is easily a thousand, and a stateless API resends it on every
-single request. At 1,650 requests that is 1.6M input tokens of your own instructions, about
+single request. At 1,659 requests that is 1.7M input tokens of your own instructions, about
 **96% of the input tokens**, before a single attack payload is counted.
 
 Two consequences worth acting on:

@@ -408,7 +408,7 @@ fixture.
 
 ### Attacking it, and the false negative that turned up
 
-Six of the 145 attacks in `attacks.yaml` are generic; the other 139 name our own practice
+Six of the 146 attacks in `attacks.yaml` are generic; the other 140 name our own practice
 bots. Generation is supposed to close that gap and here it could not: it derives objectives
 from the prohibitions a bot states about itself, and this bot's prompt is a *framework's* —
 it says how to format a tool call, not what to protect. This repo's own bots say "never reveal the
