@@ -703,6 +703,30 @@ def _model_cyrillic(text):
     return out
 
 
+def tracked_replies():
+    """-> the model-written Cyrillic strings in every artifact git tracks under `out/`.
+
+    THE PAGE'S SOURCE IS NOT ALWAYS IN THE COMMIT. A page rebuilt by `rejudge --pages` quotes
+    the run's results file, which did not change and so is not staged: the staged scan read
+    the page and no artifact beside it, and refused a qwen reply quoted in
+    `report_foreign_qwen2.5-14b.html` that the same file had held, committed, for weeks. The
+    tree scan passed it. Found committing a data step."""
+    try:
+        listed = subprocess.run(["git", "-C", ROOT, "ls-files", "out"], capture_output=True,
+                                text=True, timeout=60).stdout.splitlines()
+    except Exception:
+        return set()
+    found = set()
+    for rel in listed:
+        if not ARTIFACT.search(rel):
+            continue
+        try:
+            found |= _model_cyrillic(io.open(os.path.join(ROOT, rel), encoding="utf-8").read())
+        except Exception:
+            continue
+    return found
+
+
 def quoted_runs(replies):
     """-> the maximal Cyrillic runs the recorded replies hold, whole."""
     lit_run = re.compile(LITERAL_CYRILLIC[0] + "+")
@@ -773,6 +797,9 @@ def scan_files(items, reader, refusals, path_of=None, partial=None):
             _t = reader(item)
             if isinstance(_t, str):
                 quoted |= _model_cyrillic(_t)
+    # AND WHAT THE REPOSITORY ALREADY HOLDS, where a page is in the scan (`tracked_replies`).
+    if any(REPORT_PAGE.search(to_path(i).replace("\\", "/").lstrip("./")) for i in items):
+        quoted |= tracked_replies()
     runs_quoted = quoted_runs(quoted)
     for item in items:
         path = to_path(item)

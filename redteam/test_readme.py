@@ -268,8 +268,8 @@ def claims(f):
          f"{f['rollup_reached']:,}"),
         ("...and how many of those reached the adjudication ledger",
          r"across them\.\s*(\d+) of those enter the ledger", str(f["rollup_fires"])),
-        ("...and how many were held back as usability findings",
-         r"the\s*other (\d+) are `over_refusal`",
+        ("...and how many were held back as findings about the bot",
+         r"the\s*other (\d+) are findings about the bot",
          str(f["rollup_reached"] - f["rollup_fires"])),
         ("the claim that nothing is left unadjudicated names the right total",
          # `\s+` and not a space: the sentence wraps between "30" and "targets", and a

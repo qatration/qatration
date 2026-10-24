@@ -135,6 +135,18 @@ def main():
     _both = []
     guard.scan_files(["out/results_x.json", "out/report_x.html"],
                      lambda p: _art if p.endswith(".json") else _pg, _both)
+    # AND WITHOUT IT IN THE SCAN, where the repository already tracks it: a page rebuilt from
+    # an unchanged results file is staged alone (`guard.tracked_replies`).
+    _real_tr = guard.tracked_replies
+    guard.tracked_replies = lambda: guard._model_cyrillic(_art)
+    try:
+        _alone = []
+        guard.scan_files(["out/report_x.html"],
+                         lambda p: {"out/report_x.html": _pg}[p], _alone)
+    finally:
+        guard.tracked_replies = _real_tr
+    check("...a page staged without the artifact it quotes passes when the repository tracks it",
+          not _alone, str(_alone))
     check("...and a report page quoting it passes beside the artifact it quotes", not _both,
           str(_both))
     _own = []
@@ -142,8 +154,14 @@ def main():
                      lambda p: _art if p.endswith(".json") else "<p>%s</p>" % _cy[::-1], _own)
     check("...while Cyrillic on a page that is in no recorded reply is still refused", bool(_own),
           "nothing refused")
-    check("...and the same page with no artifact beside it is refused",
-          bool(scan("out/report_x.html", _pg)), "nothing refused")
+    # NOTHING TRACKED holds it either: hermetic, since this repository does track a qwen reply.
+    guard.tracked_replies = lambda: set()
+    try:
+        _no_src = scan("out/report_x.html", _pg)
+    finally:
+        guard.tracked_replies = _real_tr
+    check("...and the same page with no artifact beside it, and none tracked, is refused",
+          bool(_no_src), "nothing refused")
     # A RUN THAT IS ONLY INSIDE A LONGER WORD OF A REPLY IS NOT A QUOTE of it: a sentence of
     # our own passed because every word sat inside some bot's longer word. Found by a review.
     _long = _cy + _cy[::-1] + _cy
