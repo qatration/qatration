@@ -68,8 +68,12 @@ jobs:
         # The classifier list follows on its own: `test_packaging` derives it from this matrix
         # and refuses a pyproject that does not name every version between the floor and the
         # newest leg here.
+        #
+        # THE FLOOR IS PINNED TO 24.04, because `ubuntu-latest` moved to 26.04 and
+        # `setup-python` has no 3.9 built for it: the job failed at setup, before a suite ran
+        # (d00f2ad). The floor stays tested on the newest Ubuntu that still has it.
         include:
-          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-24.04, python: "3.9" }
           - { os: ubuntu-latest, python: "3.14" }
           - { os: macos-latest, python: "3.14" }
           - { os: windows-latest, python: "3.14" }
