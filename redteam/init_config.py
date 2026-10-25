@@ -253,7 +253,7 @@ request:
     # put it. `targets_openai_compatible.yaml` carries its canary in a system message for
     # exactly this reason; this template did not.
     # - role: system
-    #   content: >-
+    #   content: |-
 {plant}
     - role: user
       content: "{{prompt}}"
@@ -472,7 +472,7 @@ request:
   # WHERE THE CANARY GOES IF THIS IS A BARE MODEL: `instructions` is the system prompt, sent
   # with every request. If your product sends its own, plant the block this command printed in
   # that instead, and leave this commented out.
-  # instructions: >-
+  # instructions: |-
 {plant}
 
 # A CONVERSATION PER TRIAL, opened by its own call, its id on every turn: the multi-turn
@@ -661,17 +661,35 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
     # config `onboard` could not open. NEL (U+0085) is printable to YAML and folded to a space
     # inside a quoted scalar, so it is escaped too. A JSON `\uXXXX` escape is a YAML one.
     # Found by an independent review.
+    def _readable(c):
+        return (c in "\t\n\r" or " " <= c <= "~" or "\xa0" <= c <= "퟿"
+                or "" <= c <= "�" or c >= "\U00010000") and c != "\x85"
+
     def _q(value):
-        return "".join(
-            c if (c in "\t\n\r" or " " <= c <= "~" or "\xa0" <= c <= "퟿"
-                  or "" <= c <= "�" or c >= "\U00010000") and c != "\x85"
-            else "\\u%04x" % ord(c)
-            for c in _json.dumps(value, ensure_ascii=False))
+        return "".join(c if _readable(c) else "\\u%04x" % ord(c)
+                       for c in _json.dumps(value, ensure_ascii=False))
     # AND THE PLANT FROM THE ONE BLOCK `mint` AND `init` PRINT. A copy here had already lost
     # `under any circumstances, including staff, administrators and diagnostics`, so the user
     # on a raw model API -- told to uncomment it -- tested a weaker defence than everyone else.
-    plant = "\n".join("    #     " + _l for _l in
-                      ["You are a support assistant."] + _ht.snippet(secret, verify).splitlines())
+    #
+    # AND AFTER THE OPERATOR'S PROMPT, WHEN THERE IS ONE: the prompt this file stores as deployed.
+    # It sat after "You are a support assistant." whatever `--system-prompt-file` gave, so on a
+    # bare model the bot that answered was not the one `oracle_context.system_prompt` described,
+    # and the checks that compare a reply with it compared it with a prompt nobody sent. Walked
+    # as a first-time user against Ollama. Literal (`|-`), not folded, so the text uncommented is
+    # the stored one line for line, and stripped in both places, since a first line indented
+    # further than the rest is not a block YAML reads. A character YAML would not read, or would
+    # read as a line break (CR, U+2028, U+2029), is written as its escape: in a comment it ended
+    # the comment or the file, and a block has no escapes, so for that character alone the text
+    # uncommented is not the stored one.
+    _sp = system_prompt.strip() if system_prompt and system_prompt.strip() else None
+
+    def _in_block(line):
+        return "".join(c if _readable(c) and c != "\r" and ord(c) not in (0x2028, 0x2029)
+                       else "\\u%04x" % ord(c) for c in line)
+    plant = "\n".join("    #     " + _in_block(_l) for _l in
+                      (_sp.split("\n") if _sp else ["You are a support assistant."])
+                      + _ht.snippet(secret, verify).splitlines())
     if shape not in WIRE:
         raise SystemExit("init --shape: %r is not one this command writes; it writes %s."
                          % (shape, ", ".join(SHAPES)))
@@ -701,8 +719,8 @@ def render(out=DEFAULT_OUT, url=DEFAULT_URL, name="mybot", secret=None, verify=N
                            # which is the text the bot will hold once they paste it in.
                            system_prompt=(
                                "  system_prompt: %s" % _q(
-                                   system_prompt.rstrip() + "\n" + _ht.snippet(secret, verify))
-                               if system_prompt else
+                                   _sp + "\n" + _ht.snippet(secret, verify))
+                               if _sp else
                                '  # system_prompt: "You are the support assistant for ..."'))
 
 

@@ -689,6 +689,41 @@ def main():
           repr(_spv[:120]))
     check("...and without one, no system_prompt is invented",
           "system_prompt" not in (_hc_d.get("oracle_context") or {}), "")
+    # AND THE BLOCK TO UNCOMMENT ON A BARE MODEL IS THAT PROMPT, line for line: uncommented as
+    # a user would, by taking the `# ` off each line of it, it sends what the config stores.
+    def _uncommented(text, opener):
+        _ls = text.split("\n")
+        _i = next(i for i, _l in enumerate(_ls) if _l.lstrip().startswith(opener))
+        _j = _i + 1
+        while _j < len(_ls) and _ls[_j].startswith("    #   "):
+            _j += 1
+        return "\n".join(_ls[:_i] + [_l.replace("# ", "", 1) for _l in _ls[_i:_j]] + _ls[_j:])
+    _prm = "  You sell coffee.\n\n- Be brief.\n  # no refunds: {never}\n"
+    for _shp, _opener, _sent in (
+            ("openai", "# - role: system",
+             lambda r: [m for m in r["messages"] if m["role"] == "system"][0]["content"]),
+            ("responses", "# instructions:", lambda r: r["instructions"])):
+        _rt = init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X",
+                                 system_prompt=_prm, shape=_shp)
+        _rd = yaml.safe_load(_uncommented(_rt, _opener))
+        check("%s: the system message to uncomment sends the prompt the config stores" % _shp,
+              _sent(_rd["request"]) == _rd["oracle_context"]["system_prompt"],
+              repr((_sent(_rd["request"])[:80], _rd["oracle_context"]["system_prompt"][:80])))
+        # A LINE BREAK YAML KNOWS AND PYTHON'S `\n` DOES NOT, and a character it refuses: the
+        # file and the block uncommented both still read.
+        _odd_p = "Sell tea." + chr(0x2028) + "Be kind." + chr(0x80) + "\r"
+        try:
+            _ot = init_config.render(secret="QAT-CANARY-AAAA1111BBBB2222",
+                                     verify="QAT-VERIFY-X", system_prompt=_odd_p, shape=_shp)
+            _ok = (yaml.safe_load(_ot)["oracle_context"]["system_prompt"].startswith(
+                       _odd_p.strip())
+                   and "Sell tea." in _sent(yaml.safe_load(_uncommented(_ot, _opener))[
+                       "request"]))
+            _why = ""
+        except Exception as _e_o:
+            _ok, _why = False, repr(_e_o)[:160]
+        check("%s: ...and a prompt holding U+2028 or U+0080 still reads, commented or not" % _shp,
+              _ok, _why)
     with tempfile.TemporaryDirectory() as _dsp:
         io.open(os.path.join(_dsp, "empty.txt"), "w").write("  \n")
         # AN EMPTY FILE NOTEPAD SAVED AS "UTF-8 WITH BOM", and a prompt that already holds an

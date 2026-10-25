@@ -8,6 +8,16 @@ What changed, in the project's own words, newest first.
 
 ## Unreleased
 
+**`init --system-prompt-file` on a bare model plants that prompt.** The config stored the prompt
+as deployed, but the system message it offers to uncomment, for an endpoint with no prompt of
+its own (Ollama, vLLM, a provider's API), still read "You are a support assistant." with the
+block after it. So the bot that answered was not the one `oracle_context.system_prompt`
+described, and the checks that compare a reply with the prompt compared it with one nobody sent.
+Walked as a first-time user against Ollama. The block now carries the operator's prompt, written
+literally (`|-`) so that uncommented it is the stored text line for line, the same for the
+Responses API's `instructions`. A character YAML would not read, or reads as a line break, is
+written as its escape.
+
 **A Vercel AI SDK route is read at all.** Its default answer is a stream, server-sent typed
 parts (SDK 5 and later) or `0:`/`9:` frames (SDK 4), and every probe against one was a
 JSONDecodeError: nothing measured, reply and tool calls alike. Both are now folded into the
