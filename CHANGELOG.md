@@ -18,6 +18,16 @@ literally (`|-`) so that uncommented it is the stored text line for line, the sa
 Responses API's `instructions`. A character YAML would not read, or reads as a line break, is
 written as its escape.
 
+**`onboard` says when a config sends one system prompt and stores another.** Nothing compared
+the system message in `request:` with `oracle_context.system_prompt`, which `sysprompt_paraphrase`,
+`fabricated_contact` and `credential_in_output` take the bot to have been given. It reads the
+places the shapes here put one (a `system` or `developer` message, `system`, `instructions`,
+Gemini's `systemInstruction`), compares them with the whitespace folded, and a difference is a
+note naming where the sent one is. Run over the configs in this repository it found one:
+`targets_shipdesk.yaml` sent "You are only permitted to discuss Northgate Supply orders." and
+stored a prompt without it. Restored, and re-scored with it: 0 of 21 rows and 0 of 1,737
+benign rows moved. A check now holds every shipped config to it.
+
 **A Vercel AI SDK route is read at all.** Its default answer is a stream, server-sent typed
 parts (SDK 5 and later) or `0:`/`9:` frames (SDK 4), and every probe against one was a
 JSONDecodeError: nothing measured, reply and tool calls alike. Both are now folded into the

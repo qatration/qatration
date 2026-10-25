@@ -218,6 +218,35 @@ def unread_context_keys(cfg):
     return _unread(cfg)
 
 
+def sent_system_prompt(request):
+    """-> (where, text): the system prompt this request body sends, or None when it sends none.
+
+    Where the shapes `init` and the copy-me configs write put it: a `system` or `developer`
+    message (OpenAI-shaped, Ollama), top-level `system` (Anthropic, Bedrock, Vertex, Ollama's
+    generate), `instructions` (the Responses API) and `systemInstruction` (Gemini). Text in
+    blocks (`[{"type": "text", "text": ...}]`, `{"parts": [{"text": ...}]}`) is joined."""
+    def _text(v):
+        if isinstance(v, str):
+            return v
+        if isinstance(v, dict):
+            return _text(v.get("text") if "text" in v else v.get("parts"))
+        if isinstance(v, list):
+            return "\n".join(t for t in (_text(x) for x in v) if t)
+        return ""
+    if not isinstance(request, dict):
+        return None
+    _msgs = request.get("messages")
+    if isinstance(_msgs, list):
+        for i, m in enumerate(_msgs):
+            if isinstance(m, dict) and m.get("role") in ("system", "developer") and _text(
+                    m.get("content")):
+                return "request.messages.%d" % i, _text(m.get("content"))
+    for k in ("system", "instructions", "systemInstruction", "system_instruction"):
+        if _text(request.get(k)):
+            return "request.%s" % k, _text(request.get(k))
+    return None
+
+
 def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
           verified=None, probe_ceiling=None, queued=False):
     """Returns (ok, report dict). Sends one request, and a second when the config declares
@@ -337,6 +366,22 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
     from honeytoken import weak_canaries as _weak
     for _c, _why in _weak(_oc):
         rep["notes"].append("canary %r %s" % (_c, _why))
+    # AND WHETHER THE PROMPT IT SENDS IS THE PROMPT IT STORES. `oracle_context.system_prompt`
+    # is what `sysprompt_paraphrase`, `fabricated_contact` and `credential_in_output` take the
+    # bot to have been given; a request carrying a different system message tests one prompt
+    # and judges by another, and nothing said so. Walked as a first-time user: `init` wrote
+    # its own system message beside the operator's prompt file, and this printed "ready".
+    # Compared with the whitespace folded, since `>-` turns each line break into a space.
+    _sent_sp = sent_system_prompt(cfg.get("request"))
+    _kept_sp = _oc.get("system_prompt")
+    if _sent_sp and isinstance(_kept_sp, str) and _kept_sp.strip() and (
+            " ".join(_sent_sp[1].split()) != " ".join(_kept_sp.split())):
+        rep["notes"].append(
+            "the system prompt this config sends (%s) is not `oracle_context.system_prompt`, "
+            "so the checks that compare a reply with your prompt would judge it by one the "
+            "bot was not given. Make the two the same text; sent %r, stored %r."
+            % (_sent_sp[0], " ".join(_sent_sp[1].split())[:60],
+               " ".join(_kept_sp.split())[:60]))
     # AND WHETHER THE TEMPLATE'S OWN WORDS ARE STILL IN IT. `init` writes `YOUR-MODEL-ID`
     # expecting the endpoint to reject it, which is true of an API that validates the field
     # and false of every local server that ignores it -- so the run goes out against

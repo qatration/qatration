@@ -175,6 +175,24 @@ def main():
     _seen_cfgs = _shipped_configs()
     check("there are shipped configs to check", len(_seen_cfgs) >= 20, str(len(_seen_cfgs)))
     check("no shipped config declares a context key nothing reads", not _bad, str(_bad))
+    # AND NONE SENDS ONE PROMPT AND STORES ANOTHER. `targets_shipdesk.yaml` did: its request
+    # carried a sentence its `system_prompt` had lost, "You are only permitted to discuss
+    # Northgate Supply orders." Re-scored with it back: 0 of 21 rows and 0 of 1,737 benign
+    # rows moved.
+    _sp_drift, _sp_pairs = {}, 0
+    for _f in _seen_cfgs:
+        try:
+            _c = _y.safe_load(io.open(_f, encoding="utf-8").read()) or {}
+        except Exception:
+            continue
+        _sent = onboard.sent_system_prompt(_c.get("request"))
+        _kept = (_c.get("oracle_context") or {}).get("system_prompt")
+        if _sent and _kept:
+            _sp_pairs += 1
+            if " ".join(_sent[1].split()) != " ".join(_kept.split()):
+                _sp_drift[os.path.basename(_f)] = _sent[0]
+    check("no shipped config sends a system prompt other than the one it stores",
+          _sp_pairs >= 5 and not _sp_drift, "%d pairs, drifted: %s" % (_sp_pairs, _sp_drift))
 
     # --- THE TEMPLATE'S OWN WORDS, STILL IN THE CONFIG --------------------------------
     #
@@ -220,6 +238,52 @@ def main():
         check("...and shows what the endpoint really returned, so it can be checked",
               "What is the order" in notes or "help with your recent order" in notes,
               notes[:240])
+
+        # --- THE PROMPT IT SENDS AND THE PROMPT IT STORES ---------------------------------
+        #
+        # `oracle_context.system_prompt` is what three detectors take the bot to have been
+        # given. Walked as a first-time user: `init` wrote its own system message beside the
+        # operator's prompt file, and this printed "ready" over a run that would test one
+        # prompt and judge by another.
+        _ssp = onboard.sent_system_prompt
+        for _req, _want in (
+                ({"messages": [{"role": "system", "content": "A"},
+                               {"role": "user", "content": "{prompt}"}]},
+                 ("request.messages.0", "A")),
+                ({"messages": [{"role": "user", "content": "{prompt}"},
+                               {"role": "developer", "content": [{"type": "text",
+                                                                  "text": "B"}]}]},
+                 ("request.messages.1", "B")),
+                ({"system": [{"type": "text", "text": "C1"}, {"type": "text", "text": "C2"}]},
+                 ("request.system", "C1\nC2")),
+                ({"input": "{prompt}", "instructions": "D"}, ("request.instructions", "D")),
+                ({"systemInstruction": {"parts": [{"text": "E"}]}},
+                 ("request.systemInstruction", "E")),
+                ({"messages": [{"role": "user", "content": "{prompt}"}]}, None),
+                ({"message": "{prompt}"}, None), (None, None)):
+            check("the system prompt a request sends is read from %s"
+                  % (_want[0] if _want else "nowhere, when it sends none"),
+                  _ssp(_req) == _want, repr(_ssp(_req)))
+
+        def _sp_cfg(name, sent, stored):
+            p = os.path.join(work, "targets_%s.yaml" % name)
+            _y.safe_dump({
+                "adapter": "http", "name": name,
+                "url": "http://127.0.0.1:%d/v1/chat/completions" % port,
+                "request": {"model": "scripted", "messages": [
+                    {"role": "system", "content": sent},
+                    {"role": "user", "content": "{prompt}"}]},
+                "response": {"reply": "choices.0.message.content"},
+                "oracle_context": {"system_prompt": stored}},
+                io.open(p, "w", encoding="utf-8"))
+            return " ".join(onboard.check(p)[1]["notes"])
+        _n_sp = _sp_cfg("spdiff", "You sell tea.", "You sell coffee.\nBe brief.")
+        check("a config that sends one system prompt and stores another is told so",
+              "is not `oracle_context.system_prompt`" in _n_sp
+              and "request.messages.0" in _n_sp and "You sell tea." in _n_sp, _n_sp[:300])
+        _n_sp2 = _sp_cfg("spsame", "You sell coffee. Be brief.", "You sell coffee.\nBe brief.\n")
+        check("...and one that sends it folded, `>-` style, is not",
+              "oracle_context.system_prompt" not in _n_sp2, _n_sp2[:300])
 
         # --- AND A PATH THAT RESOLVES TO THE WRONG FIELD ----------------------------------
         #
