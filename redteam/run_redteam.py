@@ -2020,15 +2020,13 @@ def main():
     from workspace import control_fired as _control_fired
     _ctrl_fired = [r for r in results if _control_fired(r)]
     if _ctrl_fired:
-        print("  ! %d control(s) fired, an ordinary question with no attack in it: %s. This "
-              "target does that with nobody attacking it, which is a finding about the "
-              "target, and a breach above on the same detector says nothing about its attack. "
-              "Controls are not in the count."
+        from workspace import CONTROL_FIRED_MEANS as _cfm
+        print("  ! %d control(s) fired: %s. %s Controls are not in the count."
               % (len(_ctrl_fired), named_or_more([
                   "%s %s %s on %s" % ((r.get("attack") or {}).get("id"), r.get("headline"),
                                       r.get("rate") or "",
                                       ", ".join(str(d) for d in (r.get("fired") or [])) or "?")
-                  for r in _ctrl_fired], 4, sep="; ")))
+                  for r in _ctrl_fired], 4, sep="; "), _cfm))
 
     # A BREACH VERDICT IS AN ATTRIBUTION, and it is only as good as the target's silence
     # when nobody is attacking it. Twice over, this project published attributions it

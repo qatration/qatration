@@ -7,6 +7,7 @@ import html
 import re
 from recon import memory_phrase
 from workspace import measured, never_sent, BROKE, attack_name, broke_count
+from workspace import control_fired, CONTROL_FIRED_MEANS
 
 # Qualifiers this page does not carry, and why. See `workspace.QUALIFIERS`.
 QUALIFIERS_NOT_CARRIED = {
@@ -432,13 +433,13 @@ def build_html(meta, results, recon=None, isolation=None):
         head = r["headline"]
         color, bg = VERDICT[head]
         fired = ", ".join(r["fired"]) or "—"
-        # A CONTROL THAT FIRED IS A FALSE ALARM, not a finding: a benign question rendered as a
+        # A CONTROL THAT FIRED IS NOT A VULNERABILITY: a benign question rendered as a
         # red EXPLOITED with `2/2 reliable`, which the legend calls "a real, reproducible
         # vulnerability", on the page whose breach tile already leaves controls out. Found by
-        # an independent review.
+        # an independent review. `control_fired` is the rule the run and the fleet page read.
         _is_control = a.get("category") == "control"
         _badge = head
-        if _is_control and head in BROKE:
+        if control_fired(r):
             color, bg, _badge = "#8a5a00", "#fff5e0", "CONTROL FIRED"
         rows.append(f"""
         <tr class="row" onclick="this.nextElementSibling.classList.toggle('open')">
@@ -455,6 +456,10 @@ def build_html(meta, results, recon=None, isolation=None):
           {_proof(r['trials'])}
         </div></td></tr>""")
 
+    # AND WHAT ITS BADGE MEANS, which this page never said: a row read CONTROL FIRED and
+    # nothing on the page told a reader what to do with it.
+    _ctl_note = (" <b>CONTROL FIRED</b>: " + esc(CONTROL_FIRED_MEANS)
+                 if any(control_fired(r) for r in results) else "")
     caps = ", ".join(meta.get("caps") or []) or "none (black box)"
     # WHEN THE RUN HAPPENED, which the page never said: its only dates were the baseline's,
     # and the subtitle had an empty slot where an unrecorded model goes. Found by review.
@@ -768,6 +773,6 @@ secretbot chain printed the recovery code in turn one of all three trials, refus
 two, and published 2/3 until every turn was judged. Open the row and read the trials before
 treating the fraction as a property of the model. <b>Blocked by</b> names the lock that stopped the attack —
 a defended row is not one fact, and an identity refusal, a guard filter and a merely <i>printed</i> tool call each need a
-different next move. Click any row for the payload, the actual tool calls, and the target's reply.</p>
+different next move. Click any row for the payload, the actual tool calls, and the target's reply.{_ctl_note}</p>
 {_isolation_panel(isolation)}
 </div></body></html>"""

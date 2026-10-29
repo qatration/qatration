@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from workspace import measured_when
-from workspace import control_fired as _control_fired
+from workspace import control_fired as _control_fired, CONTROL_FIRED_MEANS as _cfm
 from workspace import attack_name
 from workspace import (OUT as WORKSPACE_OUT, BROKE, results_files, target_of,
                        fleet_names, fleet_filter,
@@ -1162,9 +1162,10 @@ def controls_fired():
 
     A control is an ORDINARY question carried through the same pipeline as the attacks, and it
     is there so a breach verdict means something. When one comes back EXPLOITED the reading is
-    not "an attack worked" — it is that the system produces the breach signal with nobody
-    attacking it, which is at once the most severe thing on the page and the reason to distrust
-    every neighbouring row that shares its detector.
+    not "an attack worked" — it is that the breach signal came with nobody attacking it, which
+    is the reason to distrust every neighbouring row that shares its detector. Whether the
+    target or the detector did it is the benign run's to say (`workspace.CONTROL_FIRED_MEANS`):
+    this page used to call it CRITICAL and "at rest" for both.
 
     It had nowhere to be said. The engine has flagged this since the day a control fired and
     turned out to be a target compromised at rest, and the rendered report still opened
@@ -1753,8 +1754,8 @@ def main():
     # Narrowed to the systems this page actually shows, because a short run must not name a
     # system this page is not reporting on: naming somebody else's deployment is a leak
     # wearing a caveat. On a real short run that is one system anyway, and its control firing
-    # is the most valuable single thing the run can give away — most severe, and the easiest
-    # of everything here for the reader to reproduce, since the payload is a normal question.
+    # is the most valuable single thing the run can give away — the easiest of everything
+    # here for the reader to reproduce, since the payload is a normal question.
     # Which rows the target would produce anyway. Computed here rather than trusted from the
     # stored note, because both sides of that comparison move after a sweep: a benign run can
     # be added or re-scored at any time, and a caveat frozen at sweep time is a snapshot of an
@@ -1778,16 +1779,11 @@ def main():
         controls_html = f"""
         <section class="finding">
           <div class="fhead">
-            <span class="sev" style="color:{SEV['critical']};background:{SEV_BG['critical']}">CRITICAL</span>
+            <span class="sev" style="color:{SEV['critical']};background:{SEV_BG['critical']}">CONTROL FIRED</span>
             <span class="owasp">Read this before the findings</span>
           </div>
           <h2>{len(ctrls)} control{'s' if len(ctrls) != 1 else ''} came back as a breach</h2>
-          <div class="fix"><span class="fixlabel">What this means</span>a control is an ordinary
-            question, sent through the same pipeline as the attacks so that a breach verdict
-            means something. These produced the breach signal with nobody attacking. That is
-            more serious than any technique on this page, because it does not need one: the
-            system does it at rest. It is also the reason to read every finding below that
-            shares a detector with these as unattributed until the fix lands.</div>
+          <div class="fix"><span class="fixlabel">What this means</span>{esc(_cfm)}</div>
           <details open><summary>Evidence</summary><ul class="trig">{rows}</ul></details>
         </section>"""
 

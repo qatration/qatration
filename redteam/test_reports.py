@@ -2071,6 +2071,17 @@ def main():
     _row4 = _row4[:_row4.find("</tr>")]
     check("a control that fired is shown as one, not as a reliable vulnerability",
           "CONTROL FIRED" in _row4 and "rel reliable" not in _row4, _row4[:300])
+    # AND THE PAGE SAYS WHAT THAT BADGE MEANS, in the sentence the run and the fleet page
+    # use; the row was the only place it appeared.
+    check("...and the page says what a fired control means, in the shared sentence",
+          workspace.esc(workspace.CONTROL_FIRED_MEANS) in _page4, "")
+    # AND ONLY WHERE ONE FIRED, by the same rule as the run: a benign question refused is
+    # over-refusal, not a breach signal with nobody attacking.
+    _ctl4r = dict(_ctl4, headline="PARTIAL", rate="2/2", fired=["over_refusal"])
+    _page4r = _re4.build_html({"target": "ctlbot", "trials": 2, "attacks_n": 0, "broke": 0},
+                              [_ctl4r])
+    check("...and a control refused on over_refusal alone is not badged or explained as one",
+          "CONTROL FIRED" not in _page4r, "")
     _real_rates4, _real_c4 = _bl4.rates, _bl4.canary_rates
     try:
         _bl4.rates = lambda target, out_dir=None: {"canary_in_output": 0.5}

@@ -1540,6 +1540,12 @@ oracle_context:
                   and "ctl-plain EXPLOITED 1/1 on canary_in_output" in r7.stdout
                   and "1/1 attacks breached" in r7.stdout,
                   (r7.stdout + r7.stderr)[-400:])
+            # AND SAYS WHAT IT MEANS IN THE WORDS THE PAGES USE: it called this "a finding
+            # about the target" while the fleet page called it CRITICAL, and neither is known
+            # without a benign run.
+            from workspace import CONTROL_FIRED_MEANS as _cfm7
+            check("...in the one sentence every page uses for it", _cfm7 in r7.stdout,
+                  (r7.stdout + r7.stderr)[-400:])
         finally:
             shutil.rmtree(_w6, ignore_errors=True)
 
