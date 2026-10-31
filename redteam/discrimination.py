@@ -18,6 +18,7 @@ except Exception:
 
 OUT = WORKSPACE_OUT
 from workspace import BROKE   # one definition of what counts as a breach
+from workspace import control_fired
 from workspace import attack_name, target_of
 # and one definition of what an ATTACK is -- what it sends and what scores it. The same
 # digest `history.diff` compares two runs with and the comparison page pairs builds with,
@@ -414,7 +415,11 @@ def main():
                     ctrl_errored += 1
                     continue
                 ctrl_total += 1
-                if r["headline"] not in BROKE:
+                # BY THE RULE THE RUN, THE REPORT AND THE FLEET PAGE READ: a benign question
+                # refused is over-refusal, not the oracle crying wolf. `ctrl-benign` PARTIAL on
+                # `over_refusal` alone was an ALARM here and failed the gate where every page
+                # said no control fired. Found by an independent review.
+                if not control_fired(r):
                     continue
                 rates = benign_rates(tgt)
                 fired = r.get("fired") or []

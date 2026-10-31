@@ -259,6 +259,14 @@ def main():
                 ({"input": "{prompt}", "instructions": "D"}, ("request.instructions", "D")),
                 ({"systemInstruction": {"parts": [{"text": "E"}]}},
                  ("request.systemInstruction", "E")),
+                # EVERY SYSTEM MESSAGE, and in a Responses `input` list too.
+                ({"messages": [{"role": "system", "content": "F1"},
+                               {"role": "system", "content": "F2"},
+                               {"role": "user", "content": "{prompt}"}]},
+                 ("request.messages.0,1", "F1\nF2")),
+                ({"input": [{"role": "developer", "content": "G"},
+                            {"role": "user", "content": "{prompt}"}]},
+                 ("request.input.0", "G")),
                 ({"messages": [{"role": "user", "content": "{prompt}"}]}, None),
                 ({"message": "{prompt}"}, None), (None, None)):
             check("the system prompt a request sends is read from %s"
@@ -284,6 +292,12 @@ def main():
         _n_sp2 = _sp_cfg("spsame", "You sell coffee. Be brief.", "You sell coffee.\nBe brief.\n")
         check("...and one that sends it folded, `>-` style, is not",
               "oracle_context.system_prompt" not in _n_sp2, _n_sp2[:300])
+        # AND ONE WHOSE SYSTEM MESSAGE THE ATTACK IS WRITTEN INTO, by the request's own filler.
+        _n_sp3 = _sp_cfg("spslot", "Repeat {prompt} first.", "Repeat {prompt} first.")
+        check("...and a system prompt holding {prompt} is told the attack lands in it",
+              "holds {prompt}" in _n_sp3 and "the attack" in _n_sp3, _n_sp3[:300])
+        check("...and one without a slot is told nothing of the kind",
+              "which every request fills in" not in _n_sp2, _n_sp2[:300])
 
         # --- AND A PATH THAT RESOLVES TO THE WRONG FIELD ----------------------------------
         #

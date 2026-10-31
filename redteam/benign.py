@@ -483,7 +483,12 @@ def run(target, ctx, corpus=CORPUS, conversations=(), trials=1, echo=True, wall=
                                    # `tool_calls` and could resurrect exactly the false
                                    # positives the telemetry contract was built to kill.
                                    "resolved": getattr(probe, "resolved", []),
-                                   "turns": getattr(probe, "turns", [])},
+                                   "turns": getattr(probe, "turns", []),
+                                   # AND WHERE THE ADAPTER COULD NOT SEE THE TOOLS, which
+                                   # `claimed_unperformed_action` stays silent on: dropped
+                                   # here, a --rejudge read every claim on a partial view as
+                                   # unperformed. Found by an independent review.
+                                   "tool_view": getattr(probe, "tool_view", None)},
                          "evidence": excerpt(probe) if (noisy or _claimed) else "",
                          # A candidate false positive is settled by looking at what the
                          # target actually said, and the excerpt is a headline: secretbot
@@ -593,7 +598,8 @@ def rejudge(path):
                   tool_calls=[tuple(x) for x in (pd.get("tool_calls") or [])],
                   observations=pd.get("observations") or [],
                   resolved=[tuple(x) for x in (pd.get("resolved") or [])],
-                  seconds=_seconds_of(pd), turns=pd.get("turns") or [])
+                  seconds=_seconds_of(pd), turns=pd.get("turns") or [],
+                  tool_view=(pd["tool_view"] if isinstance(pd.get("tool_view"), str) else None))
         before = sorted(r.get("fired") or [])
         # `.get`: a row with no id is a row, and one bad file ended `--rejudge` for every
         # other file. Found by an independent review.

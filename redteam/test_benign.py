@@ -2258,6 +2258,28 @@ def main():
     check("...counted as a finding about the bot, not a candidate false alarm",
           _dc["meta"].get("claimed") == 1
           and "claimed_unperformed_action" not in _dc["meta"]["per_detector"], str(_dc["meta"]))
+    # AND NOT WHERE THE ADAPTER SAW ONLY PART OF THE TOOLS, as the run itself does not: the
+    # field was neither stored nor read back, so a replay marked it anyway.
+    _crow_p = dict(_crow, probe=dict(_crow["probe"], tool_view="partial"))
+    fd, path = _tmp.mkstemp(suffix=".json")
+    _os.close(fd)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            _json.dump({"meta": {"target": "portalagent", "probes": 1, "clean": 1, "refused": 0,
+                                 "skipped": 0, "errors": 0, "per_detector": {}},
+                        "rows": [_crow_p]}, f)
+        _bc._ctx_for = lambda n: ({}, {"_caps": ["tool_visibility"]})
+        try:
+            _dp, _ = _rejudge(path)
+        finally:
+            _bc._ctx_for = _real_c
+    finally:
+        _os.unlink(path)
+    check("...but not on a stored probe whose tool view was partial",
+          not _dp["rows"][0].get("claimed"), repr(_dp["rows"][0])[:300])
+    _src_bw = open(os.path.join(HERE, "benign.py"), encoding="utf-8").read()
+    check("...and the sweep stores that view for the replay to read",
+          '"tool_view": getattr(probe, "tool_view", None)' in _src_bw, "")
 
     # a row with no probe is skipped, not crashed on: older files predate the change
     old = {"id": "r0", "fired": [], "prompt": "x", "evidence": ""}

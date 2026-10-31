@@ -235,12 +235,20 @@ def sent_system_prompt(request):
         return ""
     if not isinstance(request, dict):
         return None
-    _msgs = request.get("messages")
-    if isinstance(_msgs, list):
-        for i, m in enumerate(_msgs):
-            if isinstance(m, dict) and m.get("role") in ("system", "developer") and _text(
-                    m.get("content")):
-                return "request.messages.%d" % i, _text(m.get("content"))
+    # EVERY SYSTEM MESSAGE, joined, and in `input` too: the first one alone was a false
+    # mismatch on a config that splits its prompt in two and no note at all on a second one
+    # that differs, and a Responses-shaped `input` list was never read. Found by an
+    # independent review.
+    for key in ("messages", "input"):
+        _msgs = request.get(key)
+        if not isinstance(_msgs, list):
+            continue
+        _hit = [(i, _text(m.get("content"))) for i, m in enumerate(_msgs)
+                if isinstance(m, dict) and m.get("role") in ("system", "developer")
+                and _text(m.get("content"))]
+        if _hit:
+            return ("request.%s.%s" % (key, ",".join(str(i) for i, _ in _hit)),
+                    "\n".join(t for _, t in _hit))
     for k in ("system", "instructions", "systemInstruction", "system_instruction"):
         if _text(request.get(k)):
             return "request.%s" % k, _text(request.get(k))
@@ -382,6 +390,18 @@ def check(cfg_path, probe_text=PROBE, attacks=None, trials=None, scope=None,
             "bot was not given. Make the two the same text; sent %r, stored %r."
             % (_sent_sp[0], " ".join(_sent_sp[1].split())[:60],
                " ".join(_kept_sp.split())[:60]))
+    # AND WHETHER THE ATTACK IS WRITTEN INTO IT. Every string in `request` has its `{prompt}`
+    # and `{session}` filled, the system message too: a prompt file reading "written {prompt}"
+    # put each attack in the system role, and the note above compared the unfilled text.
+    # The slot rule is the filler's own. Found by an independent review.
+    from targets_http import _REQUEST_SLOT as _slot_re
+    _slot = _slot_re.search(_sent_sp[1]) if _sent_sp else None
+    if _slot:
+        rep["notes"].append(
+            "the system prompt this config sends (%s) holds %s, which every request fills in, "
+            "so the bot is given %s in its system message. Write it some other way."
+            % (_sent_sp[0], _slot.group(0),
+               "the attack" if _slot.group(1) == "prompt" else "the session id"))
     # AND WHETHER THE TEMPLATE'S OWN WORDS ARE STILL IN IT. `init` writes `YOUR-MODEL-ID`
     # expecting the endpoint to reject it, which is true of an API that validates the field
     # and false of every local server that ignores it -- so the run goes out against
