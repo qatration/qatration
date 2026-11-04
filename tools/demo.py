@@ -162,7 +162,9 @@ def _fonts():
 def strip_path(text, work):
     """The working folder, however the session spelled it, shown as `~/shipdesk`."""
     for w in sorted({work, work.replace("\\", "/"), os.path.abspath(work)}, key=len, reverse=True):
-        text = text.replace(w + os.sep, "~/shipdesk/").replace(w + "/", "~/shipdesk/")
+        # BOTH SEPARATORS, not `os.sep`: the session may be recorded on Windows and rendered
+        # elsewhere, and CI caught exactly that on Linux and macOS.
+        text = text.replace(w + "\\", "~/shipdesk/").replace(w + "/", "~/shipdesk/")
         text = text.replace(w, "~/shipdesk")
     return text.replace("qatration-out\\", "qatration-out/")
 
