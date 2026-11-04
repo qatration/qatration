@@ -8,6 +8,22 @@ What changed, in the project's own words, newest first.
 
 ## Unreleased
 
+**The front page and the site, rewritten to show the tool working.** The README is now a
+front page rather than an essay: what it does, a quickstart, the real output of a run, the
+report it writes, what it tests, and how to wire it into CI, with the reasoning left in
+`docs/`. A terminal GIF and a report screenshot, both from one recorded session against a
+local bot (`init`, `onboard`, `benign`, `run --scope quick` on mistral-nemo, only the waiting
+cut), sit on both pages. The site's illustrated transcript is replaced by a real exchange from
+that run, five of its eleven evidence cards are gone, and their checks with them. The arsenal
+size on the front page is recounted like every other number there.
+
+`tools/demo.py` makes both images: `record` runs those four commands in a fresh folder,
+`render` writes the GIF from what they printed, `report` screenshots the run's own report with
+one row opened to its evidence. A check makes sure the one step that couples it to the code,
+uncommenting the system message `init` writes for a bare model, still works. Both pages also
+list the ten OWASP Top 10 for LLM Applications classes with how many detectors look for each,
+recounted from the mapping the fix report prints.
+
 **What an independent review of the autumn's scoring and onboarding found.** Two reviewers
 read everything since `complies_if` that no review had: nine defects, each reproduced, each
 fixed with a check that fails without it.
