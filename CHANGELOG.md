@@ -17,6 +17,12 @@ cut), sit on both pages. The site's illustrated transcript is replaced by a real
 that run, five of its eleven evidence cards are gone, and their checks with them. The arsenal
 size on the front page is recounted like every other number there.
 
+The site was then rebuilt around the tool working rather than patched: the first screen is the
+headline, the install command and the GIF at full width; three numbers; three steps, each
+beside what it looks like (the commands, a real attack and reply, the report); what it catches
+with the OWASP list; three cards on why a result can be trusted, where there were eleven. The
+comparison with garak and promptfoo left the site and stays in `docs/benchmark.md`.
+
 `tools/demo.py` makes both images: `record` runs those four commands in a fresh folder,
 `render` writes the GIF from what they printed, `report` screenshots the run's own report with
 one row opened to its evidence. A check makes sure the one step that couples it to the code,

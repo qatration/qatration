@@ -223,53 +223,25 @@ def main():
     check("...and neither is significant at 0.05, which is why the claim was withdrawn",
           pooled > 0.05 and plain_only > 0.05, "%.3f and %.3f" % (pooled, plain_only))
 
-    # --- AND THE FRONT PAGE, which is the one people actually read --------------------------
+    # --- THE FRONT PAGE NO LONGER CARRIES THE COMPARISON -----------------------------------
     #
-    # docs/ is the design record and the site is the shop window. A number that goes stale
-    # there costs more, not less, and this paragraph quotes three: the benign rate, the single
-    # breach on the guarded target, and what that target's rails cost in refused customers.
-    # Each is recounted here from the same artifacts rather than trusted to have been copied
-    # correctly.
-    site = io.open(os.path.join(ROOT, "site", "index.html"), encoding="utf-8").read()
-    para = "And beside two other tools, in public"
-    check("the front page carries the comparison paragraph", para in site,
-          "the section is gone, so nothing links the site to the page")
-    if para in site:
-        block = site[site.index(para):site.index(para) + 1400]
-        check("...and it links the page", "docs/benchmark.md" in block)
-        check("...and its benign rate is the artifact's",
-              "%d%% of benign probes" % round(rate * 100) in block,
-              "artifact says %.0f%%" % (rate * 100))
-
-        nemo = json.load(io.open(os.path.join(BENCH, "results_nemo.json"), encoding="utf-8"))
-        nres = nemo["results"]
-        nbreach = sum(1 for r in nres
-                      if r.get("headline") in ("EXPLOITED", "PARTIAL")
-                      and (r.get("attack") or {}).get("category") != "control")
-        # SCORED TRIALS, NOT TRIALS: a SKIP is a reply no declared detector could judge, and
-        # counted here it made "2 of 337" out of 16 trials that held nothing -- the gate
-        # locked in the inclusive figure the project's own rule forbids ("not a row that held,
-        # in every count"). Found by an independent review.
-        nreplies = sum(1 for r in nres for t in (r.get("trials") or [])
-                       if t.get("verdict") != "SKIP")
-        # Prose writes small numbers as words, so the accepted form is derived from the
-        # artifact rather than fixed: one breach may read "one", two must read "2". A check
-        # that only knew the digit would fail on correct English, and one that accepted any
-        # form would pass on a stale number.
-        forms = ["%d breach" % nbreach] + (["one breach"] if nbreach == 1 else [])
-        check("...and the page's guarded row states the same count over the same scored trials",
-              "**%d of %d breached**" % (nbreach, nreplies) in text,
-              "artifact says %d of %d" % (nbreach, nreplies))
-        check("...and the breach count on the guarded target is a recount",
-              any(f in block for f in forms) and str(nreplies) in block,
-              "artifact says %d in %d" % (nbreach, nreplies))
-
-        nben = json.load(io.open(os.path.join(BENCH, "benign_nemo.json"), encoding="utf-8"))
-        nrows = nben["rows"]
-        refused = sum(1 for r in nrows if r.get("refused"))
-        check("...and the refusal count the rails cost is a recount",
-              "%d of %d ordinary customer questions" % (refused, len(nrows)) in block,
-              "artifact says %d of %d" % (refused, len(nrows)))
+    # The site's card "And beside two other tools, in public" left the page on 2026-11-07, by
+    # the maintainer's call, with the checks that recounted its three figures. The comparison
+    # lives in docs/benchmark.md, and the row this page states about the guarded target is
+    # still recounted from the artifact.
+    nemo = json.load(io.open(os.path.join(BENCH, "results_nemo.json"), encoding="utf-8"))
+    nres = nemo["results"]
+    nbreach = sum(1 for r in nres
+                  if r.get("headline") in ("EXPLOITED", "PARTIAL")
+                  and (r.get("attack") or {}).get("category") != "control")
+    # SCORED TRIALS, NOT TRIALS: a SKIP is a reply no declared detector could judge, and
+    # counted here it made "2 of 337" out of 16 trials that held nothing. Found by an
+    # independent review.
+    nreplies = sum(1 for r in nres for t in (r.get("trials") or [])
+                   if t.get("verdict") != "SKIP")
+    check("the page's guarded row states the breach count over the scored trials",
+          "**%d of %d breached**" % (nbreach, nreplies) in text,
+          "artifact says %d of %d" % (nbreach, nreplies))
 
     # --- WHAT THE RAILS COST, as the page prices it ------------------------------------
     #

@@ -102,12 +102,15 @@ def build():
     mark = favicon.raster(96, favicon.GLYPHS)
     img.paste(mark, (pad, y), mark)
 
-    f_word_a = _font("Roboto-Black.ttf", 62)
-    f_word_b = _font("Roboto-Regular.ttf", 62)
+    # THE WORDMARK AS THE PAGE DRAWS IT: one weight, "QA" in the accent and the rest in ink
+    # (`.brand` and `.brand b` in site/index.html). It was white "QA" on grey "tration", the
+    # page's colours swapped, and a reader of the link preview saw a different logo.
+    f_word_a = _font("Roboto-Bold.ttf", 62)
+    f_word_b = _font("Roboto-Bold.ttf", 62)
     wx = pad + 96 + 26
-    d.text((wx, y + 8), WORD_A, font=f_word_a, fill=INK)
+    d.text((wx, y + 8), WORD_A, font=f_word_a, fill=ACCENT)
     wx += d.textlength(WORD_A, font=f_word_a)
-    d.text((wx, y + 8), WORD_B, font=f_word_b, fill=MUTED)
+    d.text((wx, y + 8), WORD_B, font=f_word_b, fill=INK)
 
     y += 96 + 54
 
