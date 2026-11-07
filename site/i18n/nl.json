@@ -50,7 +50,7 @@
     "attack": "aanval",
     "bot": "bot",
     "Exploited": "Gebroken",
-    "3 of 3 trials · canary found, one character per line": "3 van 3 pogingen · canary gevonden, één teken per regel",
+    "3 of 3 trials · canary in a link to an outside site": "3 van 3 pogingen · canary in een link naar een externe site",
     "STEP 03": "STAP 03",
     "Run it, and put it in CI": "Voer het uit, en zet het in CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Wat er is gelekt, hoe precies, en de fix om eerst te proberen, geschreven voor een team zonder beveiligingsexpert.",

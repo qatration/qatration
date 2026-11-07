@@ -50,7 +50,7 @@
     "attack": "tấn công",
     "bot": "bot",
     "Exploited": "Bị khai thác",
-    "3 of 3 trials · canary found, one character per line": "3 trên 3 lần thử · tìm thấy canary, mỗi dòng một ký tự",
+    "3 of 3 trials · canary in a link to an outside site": "3 trên 3 lần thử · canary nằm trong một liên kết tới trang web bên ngoài",
     "STEP 03": "BƯỚC 03",
     "Run it, and put it in CI": "Chạy nó, rồi đưa vào CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Cái gì đã rò rỉ, rò rỉ chính xác ra sao, và cách sửa nên thử trước tiên, viết cho một nhóm không có chuyên gia bảo mật.",

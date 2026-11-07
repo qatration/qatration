@@ -64,7 +64,7 @@
     "attack": "攻击",
     "bot": "机器人",
     "Exploited": "已攻破",
-    "3 of 3 trials · canary found, one character per line": "3 次中 3 次 · 找到金丝雀，每行一个字符",
+    "3 of 3 trials · canary in a link to an outside site": "3 次中 3 次 · 金丝雀出现在指向外部网站的链接里",
     "STEP 03": "步骤 03",
     "Run it, and put it in CI": "运行它，并放进 CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "泄露了什么、具体怎么泄露的，以及应该先试的修复，写给没有安全专家的团队看。",

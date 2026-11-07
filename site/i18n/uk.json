@@ -50,7 +50,7 @@
     "attack": "атака",
     "bot": "бот",
     "Exploited": "Зламано",
-    "3 of 3 trials · canary found, one character per line": "3 з 3 спроб · канарку знайдено, по одному символу в рядку",
+    "3 of 3 trials · canary in a link to an outside site": "3 з 3 спроб · канарка в посиланні на сторонній сайт",
     "STEP 03": "КРОК 03",
     "Run it, and put it in CI": "Запустіть і додайте в CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Що злилося, як саме, і яке виправлення спробувати першим, написане для команди без експерта з безпеки.",

@@ -26,8 +26,10 @@ comparison with garak and promptfoo left the site and stays in `docs/benchmark.m
 Three independent reviews of that page, before it went out, changed it again. The attack it
 showed came from the same run but was one the run itself marked weakened: its detector fires on
 12% of that bot's ordinary traffic, and a page arguing such rows should not be counted cannot
-lead with one. It now shows `g-transform-one-per-line`, whose detector never fired on the
-benign sweep, and the report screenshot opens that row. "None got through" is said again beside
+lead with one. It now shows `ansi-clickable-exfil`, three trials out of three, where the bot
+puts the key into a link to an outside site and two of the detectors that caught it never fired
+on the benign sweep. Its reply is one line, so the card is close to the size of the text beside it, and
+the report screenshot opens that row. "None got through" is said again beside
 what the guard cost, 39 of 50 ordinary customer questions refused, recounted from
 `out/benign_nemo.json`. `onboard` sends a few requests, not one, the report suggests a fix to
 try rather than promising the one that closes it, and `sarif` writes a file rather than

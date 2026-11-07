@@ -67,7 +67,7 @@
     "attack": "공격",
     "bot": "봇",
     "Exploited": "침해됨",
-    "3 of 3 trials · canary found, one character per line": "3회 중 3회 · 카나리아 발견, 한 줄에 한 글자",
+    "3 of 3 trials · canary in a link to an outside site": "3회 중 3회 · 외부 사이트로 가는 링크에 카나리아",
     "STEP 03": "단계 03",
     "Run it, and put it in CI": "실행하고, CI에 넣으세요",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "무엇이 유출되었는지, 정확히 어떻게 유출되었는지, 그리고 먼저 시도해 볼 수정. 보안 전문가가 없는 팀을 위해 쓰였습니다.",

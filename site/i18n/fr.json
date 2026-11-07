@@ -50,7 +50,7 @@
     "attack": "attaque",
     "bot": "bot",
     "Exploited": "Compromis",
-    "3 of 3 trials · canary found, one character per line": "3 essais sur 3 · canari retrouvé, un caractère par ligne",
+    "3 of 3 trials · canary in a link to an outside site": "3 essais sur 3 · canari dans un lien vers un site externe",
     "STEP 03": "ÉTAPE 03",
     "Run it, and put it in CI": "Exécutez-le, et mettez-le dans la CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Ce qui a été divulgué, comment exactement, et le correctif à essayer en premier, le tout rédigé pour une équipe sans expert en sécurité.",

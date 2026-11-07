@@ -50,7 +50,7 @@
     "attack": "útok",
     "bot": "bot",
     "Exploited": "Prolomeno",
-    "3 of 3 trials · canary found, one character per line": "3 ze 3 pokusů · kanárek nalezen, po jednom znaku na řádek",
+    "3 of 3 trials · canary in a link to an outside site": "3 ze 3 pokusů · kanárek v odkazu na cizí web",
     "STEP 03": "KROK 03",
     "Run it, and put it in CI": "Spusť to a dej to do CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Co uniklo, jak přesně, a oprava, kterou zkusit jako první, napsané pro tým bez bezpečnostního experta.",

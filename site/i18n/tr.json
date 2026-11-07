@@ -64,7 +64,7 @@
     "attack": "saldırı",
     "bot": "bot",
     "Exploited": "Ele geçirildi",
-    "3 of 3 trials · canary found, one character per line": "3 denemenin 3'ü · kanarya bulundu, her satırda bir karakter",
+    "3 of 3 trials · canary in a link to an outside site": "3 denemenin 3'ü · kanarya dış bir siteye giden bağlantıda",
     "STEP 03": "ADIM 03",
     "Run it, and put it in CI": "Çalıştırın ve CI'ya koyun",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Neyin sızdığı, tam olarak nasıl sızdığı ve önce denenecek düzeltme, güvenlik uzmanı olmayan bir ekip için yazıldı.",

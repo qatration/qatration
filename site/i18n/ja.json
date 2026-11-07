@@ -64,7 +64,7 @@
     "attack": "攻撃",
     "bot": "ボット",
     "Exploited": "突破",
-    "3 of 3 trials · canary found, one character per line": "3 回中 3 回 · カナリアを検出、一文字ずつ改行",
+    "3 of 3 trials · canary in a link to an outside site": "3 回中 3 回 · 外部サイトへのリンクにカナリア",
     "STEP 03": "手順 03",
     "Run it, and put it in CI": "実行し、CIに組み込む",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "何が漏れたか、どのように漏れたか、そして最初に試すべき修正を、セキュリティ専門家のいないチームに向けて書いています。",

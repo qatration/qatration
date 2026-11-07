@@ -50,7 +50,7 @@
     "attack": "serangan",
     "bot": "bot",
     "Exploited": "Ditembus",
-    "3 of 3 trials · canary found, one character per line": "3 dari 3 percobaan · canary ditemukan, satu karakter per baris",
+    "3 of 3 trials · canary in a link to an outside site": "3 dari 3 percobaan · canary di dalam tautan ke situs eksternal",
     "STEP 03": "LANGKAH 03",
     "Run it, and put it in CI": "Jalankan, lalu pasang di CI",
     "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Apa yang bocor, persisnya bagaimana, dan perbaikan yang perlu dicoba lebih dulu, ditulis untuk tim tanpa ahli keamanan.",
