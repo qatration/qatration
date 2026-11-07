@@ -111,7 +111,7 @@
     "The second time": "二度目",
     "Your AI feature changes weekly. One scan ages in days.": "AI機能は毎週変わります。一度のスキャンは数日で古くなります。",
     "Is this new, or have we had it a month?": "これは新しいのか、それとも一か月前からあるのか",
-    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third of the month is a fact about how a team responds to such findings, and it is the line that gets a fix scheduled.": "すべての実行が保存されるので、指摘には最初に現れた日付が付きます。「重大」は意見です。「重大、かつ三日から未解決」は、チームがそうした指摘にどう応じているかという事実であり、修正が計画に載るのはこの一行のおかげです。",
+    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third of the month is a fact about how a team responds to such findings, and it is the line that gets a fix scheduled.": "すべての実行が保存されるので、指摘には最初に現れた日付が付きます。「重大」は意見です。「重大、かつ今月三日から未解決」は、チームがそうした指摘にどう応じているかという事実であり、修正が計画に載るのはこの一行のおかげです。",
     "Did your fix hold?": "その修正は持ちこたえましたか",
     "A finding that comes back after you closed it is flagged as returned, not quietly counted alongside the new ones. A fix that did not hold is the worse of the two conversations, and merging them hides it.": "閉じたあとに戻ってきた指摘は「再発」として印を付け、新しいものと一緒に黙って数えたりはしません。持ちこたえなかった修正は二つの会話のうち厳しい方であり、混ぜてしまうとそれが隠れます。",
     "What we did not re-test": "再テストしていないもの",
