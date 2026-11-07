@@ -23,6 +23,17 @@ beside what it looks like (the commands, a real attack and reply, the report); w
 with the OWASP list; three cards on why a result can be trusted, where there were eleven. The
 comparison with garak and promptfoo left the site and stays in `docs/benchmark.md`.
 
+Three independent reviews of that page, before it went out, changed it again. The attack it
+showed came from the same run but was one the run itself marked weakened: its detector fires on
+12% of that bot's ordinary traffic, and a page arguing such rows should not be counted cannot
+lead with one. It now shows `g-transform-one-per-line`, whose detector never fired on the
+benign sweep, and the report screenshot opens that row. "None got through" is said again beside
+what the guard cost, 39 of 50 ordinary customer questions refused, recounted from
+`out/benign_nemo.json`. `onboard` sends a few requests, not one, the report suggests a fix to
+try rather than promising the one that closes it, and `sarif` writes a file rather than
+reaching into a tab. Japanese breaks lines at phrases instead of inside words, and fourteen
+translated strings were corrected.
+
 `tools/demo.py` makes both images: `record` runs those four commands in a fresh folder,
 `render` writes the GIF from what they printed, `report` screenshots the run's own report with
 one row opened to its evidence. A check makes sure the one step that couples it to the code,

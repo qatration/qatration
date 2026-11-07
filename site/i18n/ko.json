@@ -1,11 +1,15 @@
 {
   "language": "ko",
   "figures_differ": {
+    "attacks typed into the chat box of a guarded bot in one run: none got through. The same guard also refused 39 of 50 ordinary customer questions. Take its output filter off and": [
+      "50",
+      "39"
+    ],
     "5 of 7": [
       "7",
       "5"
     ],
-    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third is a fact about how a team responds to them, and it is the line that gets a fix scheduled.": [
+    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third of the month is a fact about how a team responds to such findings, and it is the line that gets a fix scheduled.": [
       "3"
     ],
     "Measured on the evidence shipped with this tool: 113 of 229 findings on targets that report tool calls do not appear at all when only the reply is read.": [
@@ -38,7 +42,7 @@
     "It sends real attacks at whatever URL you give it: prompt injection, data exfiltration, tool abuse. Your own deployment, or one whose owner gave you written permission in advance. Not a public chatbot you find interesting. Not a vendor&rsquo;s demo.": "이 도구는 당신이 지정하는 URL이면 어디로든 실제 공격을 보냅니다(프롬프트 인젝션, 데이터 유출, 도구 오용). 당신 자신의 배포이거나, 소유자가 사전에 서면으로 허가한 배포여야 합니다. 흥미로워 보이는 공개 챗봇이 아닙니다. 어느 업체의 데모도 아닙니다.",
     "Read AUTHORISED-USE.md": "AUTHORISED-USE.md",
     "first.": "문서를 첫 실행 전에 꼭 읽어 보십시오.",
-    "attacks typed into the chat box of a guarded bot in one run: none got through. Take its output filter off and": "건의 공격을 한 번의 실행에서 보호된 봇의 채팅창에 입력했습니다. 통과한 것은 없습니다. 그 출력 필터를 끄면,",
+    "attacks typed into the chat box of a guarded bot in one run: none got through. The same guard also refused 39 of 50 ordinary customer questions. Take its output filter off and": "건의 공격을 한 번의 실행에서 보호된 봇의 채팅창에 입력했습니다. 통과한 것은 없습니다. 같은 가드는 평범한 고객 질문 50개 중 39개도 거부했습니다. 그 출력 필터를 끄면,",
     "one": "한 건",
     "attack carried inside a retrieved document walks out every time. The input filter never saw it.": "의 공격이 검색된 문서 안에 실려 매번 밖으로 걸어 나갑니다. 입력 필터는 그것을 한 번도 본 적이 없습니다.",
     "5 of 7": "7대 중 5대",
@@ -51,8 +55,8 @@
     "No SDK. No code changes. A report your whole team can read.": "SDK 없음. 코드 변경 없음. 팀 전체가 읽을 수 있는 보고서.",
     "STEP 01": "단계 01",
     "Point it at your bot": "봇을 겨냥하세요",
-    "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "는 엔드포인트 URL로 설정을 작성하고, 시스템 프롬프트에 붙여 넣을 나만 아는 비밀을 함께 만듭니다.",
-    "checks both with one ordinary question before a single attack goes out.": "는 공격을 하나라도 보내기 전에 평범한 질문 하나로 둘 다 확인합니다.",
+    "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "는 엔드포인트 URL로 설정을 작성하고, 시스템 프롬프트에 붙여 넣을 당신만 아는 비밀을 함께 만듭니다.",
+    "checks both with a few ordinary questions before a single attack goes out.": "는 공격을 하나라도 보내기 전에 평범한 질문 몇 개로 둘 다 확인합니다.",
     "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI 호환 API, Anthropic, Bedrock, Vertex, 그리고 Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress, Copilot Studio로 만든 앱.",
     "STEP 02": "단계 02",
     "Attack it": "공격하세요",
@@ -63,12 +67,12 @@
     "attack": "공격",
     "bot": "봇",
     "Exploited": "침해됨",
-    "3 of 3 trials · canary matched in reply": "3회 중 3회 · 응답에서 카나리아 일치",
+    "3 of 3 trials · canary found, one character per line": "3회 중 3회 · 카나리아 발견, 한 줄에 한 글자",
     "STEP 03": "단계 03",
     "Run it, and put it in CI": "실행하고, CI에 넣으세요",
-    "What leaked, exactly how, and the one fix that closes it, written for a team without a security expert.": "무엇이 유출되었는지, 정확히 어떻게 유출되었는지, 그리고 그것을 막는 단 하나의 수정. 보안 전문가가 없는 팀을 위해 쓰였습니다.",
+    "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "무엇이 유출되었는지, 정확히 어떻게 유출되었는지, 그리고 먼저 시도해 볼 수정. 보안 전문가가 없는 팀을 위해 쓰였습니다.",
     "fails a build.": "는 빌드를 실패시키고,",
-    "puts the findings straight into your code-scanning tab.": "는 발견을 곧바로 code scanning 탭에 넣습니다.",
+    "writes the findings to a file your code-scanning tab reads.": "는 발견을 code scanning 탭이 읽는 파일로 씁니다.",
     "The HTML report of that run: 51 attacks measured, 35 breached, one row opened to its evidence": "그 실행의 HTML 보고서: 공격 51개 측정, 35개 돌파, 한 행을 증거까지 펼친 모습",
     "The report the same run wrote: what broke, how often, and which check caught it.": "같은 실행이 작성한 보고서: 무엇이 뚫렸는지, 얼마나 자주인지, 어떤 검사가 잡아냈는지.",
     "Coverage": "커버리지",
@@ -102,7 +106,7 @@
     "Every target gets a benign run first: ordinary questions, nobody attacking. On one of the bots here": "모든 대상은 먼저 무해한 실행을 거칩니다. 평범한 질문뿐이고 아무도 공격하지 않습니다. 여기 있는 봇 중 하나에서는",
     "fires on 88% of that ordinary traffic, so every finding resting on it alone is marked unattributable instead of counted.": "이 그 평범한 트래픽의 88%에서 발동합니다. 그래서 오직 거기에만 기대는 발견 사항은 집계하지 않고 귀속 불가로 표시됩니다.",
     "Why it held, not just that it held": "버텨냈다는 사실이 아니라, 버텨낸 이유",
-    "When an attack fails, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "공격이 실패하면 보고서는 무엇이 그것을 막았는지 지목합니다. 신원 확인, 콘텐츠 필터, 백엔드의 권한, 또는 출력만 되고 실제로는 실행되지 않은 도구 호출. 마지막 것은 기록상 침해처럼 읽히지만 아무 가치가 없습니다.",
+    "When an attack fails and the reply shows why, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "공격이 실패하고 그 이유가 응답에 드러나면 보고서는 무엇이 그것을 막았는지 지목합니다. 신원 확인, 콘텐츠 필터, 백엔드의 권한, 또는 출력만 되고 실제로는 실행되지 않은 도구 호출. 마지막 것은 기록상 침해처럼 읽히지만 아무 가치가 없습니다.",
     "A bigger model is not the fix": "더 큰 모델은 해결책이 아닙니다",
     "One bot, two models, 242 attacks each, 3 tries apiece. The smaller broke on 39, the larger on 34, and 28 of those are the same attacks, 25 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "봇 하나, 모델 둘, 각각 242건의 공격, 각각 3회 시도. 작은 쪽은 그중 39건에서 무너졌고 큰 쪽은 34건에서 무너졌으며, 그중 28건은 같은 공격이고 그 가운데 25건은 매 시도마다 두 모델을 모두 무너뜨립니다. 이 봇에서 더 큰 모델은 가장자리에서 어떤 공격이 통하는지를 다시 섞었을 뿐입니다. 구멍을 막지는 않습니다.",
     "And how much of it to believe": "그리고 그중 얼마나 믿을 수 있는가",
@@ -110,7 +114,7 @@
     "The second time": "두 번째로 돌릴 때",
     "Your AI feature changes weekly. One scan ages in days.": "AI 기능은 매주 바뀝니다. 한 번의 스캔은 며칠이면 낡습니다.",
     "Is this new, or have we had it a month?": "이건 새로 생긴 건가, 아니면 한 달 전부터 있던 건가?",
-    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third is a fact about how a team responds to them, and it is the line that gets a fix scheduled.": "모든 실행이 보관되므로 각 발견 사항에는 처음 나타난 날짜가 붙습니다. “심각”은 의견입니다. “심각하며 3일부터 미해결”은 팀이 그런 발견 사항에 어떻게 대응하는지에 관한 사실이고, 수정이 일정에 오르게 만드는 것은 바로 그 한 줄입니다.",
+    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third of the month is a fact about how a team responds to such findings, and it is the line that gets a fix scheduled.": "모든 실행이 보관되므로 각 발견 사항에는 처음 나타난 날짜가 붙습니다. “심각”은 의견입니다. “심각하며 3일부터 미해결”은 팀이 그런 발견 사항에 어떻게 대응하는지에 관한 사실이고, 수정이 일정에 오르게 만드는 것은 바로 그 한 줄입니다.",
     "Did your fix hold?": "그 수정, 버텼습니까?",
     "A finding that comes back after you closed it is flagged as returned, not quietly counted alongside the new ones. A fix that did not hold is the worse of the two conversations, and merging them hides it.": "닫은 뒤에 다시 나타난 발견 사항은 재발로 표시되며, 새로운 것들 옆에 조용히 함께 집계되지는 않습니다. 버티지 못한 수정은 두 대화 중 더 껄끄러운 쪽이고, 둘을 합치면 그것이 가려집니다.",
     "What we did not re-test": "우리가 다시 검사하지 않은 것",

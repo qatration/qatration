@@ -55,7 +55,7 @@ URL = "http://localhost:11434/v1/chat/completions"
 MODEL = "mistral-nemo"
 NAME = "shipdesk"
 # The row opened in the report screenshot: an attack that says what it wants in plain words.
-REPORT_ROW = "d-skeleton-audience"
+REPORT_ROW = "g-transform-one-per-line"
 
 
 # ---------------------------------------------------------------- record

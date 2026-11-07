@@ -1,6 +1,10 @@
 {
   "language": "tr",
   "figures_differ": {
+    "attacks typed into the chat box of a guarded bot in one run: none got through. The same guard also refused 39 of 50 ordinary customer questions. Take its output filter off and": [
+      "50",
+      "39"
+    ],
     "5 of 7": [
       "7",
       "5"
@@ -35,7 +39,7 @@
     "It sends real attacks at whatever URL you give it: prompt injection, data exfiltration, tool abuse. Your own deployment, or one whose owner gave you written permission in advance. Not a public chatbot you find interesting. Not a vendor&rsquo;s demo.": "Verdiğiniz her URL'ye gerçek saldırılar gönderir (prompt injection, veri sızdırma, araç kötüye kullanımı). Kendi dağıtımınız ya da sahibinin size önceden yazılı izin verdiği bir dağıtım olmalı. İlginç bulduğunuz herkese açık bir sohbet botu değil. Bir satıcının demosu da değil.",
     "Read AUTHORISED-USE.md": "AUTHORISED-USE.md dosyasını okuyun",
     "first.": "ilk çalıştırmadan önce.",
-    "attacks typed into the chat box of a guarded bot in one run: none got through. Take its output filter off and": "saldırı, tek bir çalıştırmada korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Onun çıktı filtresini kapatın ve",
+    "attacks typed into the chat box of a guarded bot in one run: none got through. The same guard also refused 39 of 50 ordinary customer questions. Take its output filter off and": "saldırı, tek bir çalıştırmada korumalı bir botun sohbet kutusuna yazıldı: hiçbiri geçemedi. Aynı koruma, sıradan 50 müşteri sorusunun 39'unu da reddetti. Onun çıktı filtresini kapatın ve",
     "one": "bir",
     "attack carried inside a retrieved document walks out every time. The input filter never saw it.": "saldırı, getirilen bir belgenin içinde taşındığında her seferinde dışarı çıkar. Girdi filtresi onu hiç görmedi.",
     "5 of 7": "7 bottan 5'i",
@@ -49,7 +53,7 @@
     "STEP 01": "ADIM 01",
     "Point it at your bot": "Botunuza yöneltin",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "uç noktanızın URL'sinden yapılandırmayı yazar ve sistem isteminize yapıştıracağınız, yalnızca sizin bildiğiniz bir sır üretir.",
-    "checks both with one ordinary question before a single attack goes out.": "tek bir saldırı gitmeden önce ikisini de sıradan bir soruyla kontrol eder.",
+    "checks both with a few ordinary questions before a single attack goes out.": "tek bir saldırı gitmeden önce ikisini de birkaç sıradan soruyla kontrol eder.",
     "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI uyumlu API'ler, Anthropic, Bedrock ve Vertex ile Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress veya Copilot Studio üzerine kurulmuş uygulamalar.",
     "STEP 02": "ADIM 02",
     "Attack it": "Saldırın",
@@ -60,12 +64,12 @@
     "attack": "saldırı",
     "bot": "bot",
     "Exploited": "Ele geçirildi",
-    "3 of 3 trials · canary matched in reply": "3 denemenin 3'ü · yanıtta kanarya eşleşti",
+    "3 of 3 trials · canary found, one character per line": "3 denemenin 3'ü · kanarya bulundu, her satırda bir karakter",
     "STEP 03": "ADIM 03",
     "Run it, and put it in CI": "Çalıştırın ve CI'ya koyun",
-    "What leaked, exactly how, and the one fix that closes it, written for a team without a security expert.": "Neyin sızdığı, tam olarak nasıl sızdığı ve bunu kapatan tek düzeltme, güvenlik uzmanı olmayan bir ekip için yazıldı.",
+    "What leaked, exactly how, and the fix to try first, written for a team without a security expert.": "Neyin sızdığı, tam olarak nasıl sızdığı ve önce denenecek düzeltme, güvenlik uzmanı olmayan bir ekip için yazıldı.",
     "fails a build.": "bir derlemeyi başarısız kılar.",
-    "puts the findings straight into your code-scanning tab.": "bulguları doğrudan code scanning sekmenize koyar.",
+    "writes the findings to a file your code-scanning tab reads.": "bulguları code scanning sekmenizin okuduğu bir dosyaya yazar.",
     "The HTML report of that run: 51 attacks measured, 35 breached, one row opened to its evidence": "O çalıştırmanın HTML raporu: 51 saldırı ölçüldü, 35'i savunmayı aştı, bir satır kanıtına kadar açık",
     "The report the same run wrote: what broke, how often, and which check caught it.": "Aynı çalıştırmanın yazdığı rapor: ne kırıldı, ne sıklıkla ve hangi kontrol yakaladı.",
     "Coverage": "Kapsam",
@@ -99,7 +103,7 @@
     "Every target gets a benign run first: ordinary questions, nobody attacking. On one of the bots here": "Her hedef önce zararsız bir çalıştırmadan geçer: sıradan sorular, saldıran kimse yok. Buradaki botlardan birinde",
     "fires on 88% of that ordinary traffic, so every finding resting on it alone is marked unattributable instead of counted.": "o sıradan trafiğin %88'inde tetikleniyor, bu yüzden yalnızca ona dayanan bir bulgu sayılmak yerine atfedilemez olarak işaretleniyor.",
     "Why it held, not just that it held": "Neden dayandığı, yalnızca dayandığı değil",
-    "When an attack fails, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "Bir saldırı başarısız olduğunda rapor onu neyin durdurduğunu adıyla söyler: kimlik denetimi, içerik filtresi, arka uçtaki bir yetki ya da yalnızca yazdırılmış olup hiç çalıştırılmamış bir araç çağrısı. Sonuncusu bir dökümde ihlal gibi okunur ve hiçbir değeri yoktur.",
+    "When an attack fails and the reply shows why, the report names what stopped it: the identity check, the content filter, a backend permission, or a tool call that was only printed and never actually ran. That last one reads like a breach in a transcript and is worth nothing.": "Bir saldırı başarısız olduğunda ve yanıt nedenini gösterdiğinde, rapor onu neyin durdurduğunu adıyla söyler: kimlik denetimi, içerik filtresi, arka uçtaki bir yetki ya da yalnızca yazdırılmış olup hiç çalıştırılmamış bir araç çağrısı. Sonuncusu bir dökümde ihlal gibi okunur ve hiçbir değeri yoktur.",
     "A bigger model is not the fix": "Daha büyük bir model çözüm değil",
     "One bot, two models, 242 attacks each, 3 tries apiece. The smaller broke on 39, the larger on 34, and 28 of those are the same attacks, 25 of them breaking on every single try of both. On this bot the larger model reshuffled which attacks land at the edges. It does not close the hole.": "Bir bot, iki model, her modele 242 saldırı, her saldırıya 3 deneme. Küçük olan bunların 39'unda kırıldı, büyük olan 34'ünde ve bunların 28'i aynı saldırılar, 25'i her tek denemede iki modeli birden kırıyor. Bu botta daha büyük model yalnızca, kenarlarda hangi saldırıların geçtiğini yeniden karıştırdı. Deliği kapatmaz.",
     "And how much of it to believe": "Ve bunun ne kadarına inanılır",
@@ -107,7 +111,7 @@
     "The second time": "İkinci kez",
     "Your AI feature changes weekly. One scan ages in days.": "Yapay zekâ özelliğiniz her hafta değişiyor. Tek bir tarama birkaç günde eskiyor.",
     "Is this new, or have we had it a month?": "Bu yeni mi, yoksa bir aydır bizde mi?",
-    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third is a fact about how a team responds to them, and it is the line that gets a fix scheduled.": "Her çalıştırma saklanır, bu yüzden her bulgu ilk göründüğü tarihi taşır. “Kritik” bir görüştür. “Kritik ve ayının üçünden beri açık” ise bir ekibin böyle bulgulara nasıl yanıt verdiğine dair bir olgudur ve bir düzeltmenin plana girmesini sağlayan tam da o satırdır.",
+    "Every run is kept, so each finding carries the date it first appeared. Critical is an opinion. Critical and open since the third of the month is a fact about how a team responds to such findings, and it is the line that gets a fix scheduled.": "Her çalıştırma saklanır, bu yüzden her bulgu ilk göründüğü tarihi taşır. “Kritik” bir görüştür. “Kritik ve ayının üçünden beri açık” ise bir ekibin böyle bulgulara nasıl yanıt verdiğine dair bir olgudur ve bir düzeltmenin plana girmesini sağlayan tam da o satırdır.",
     "Did your fix hold?": "Düzeltmeniz dayandı mı?",
     "A finding that comes back after you closed it is flagged as returned, not quietly counted alongside the new ones. A fix that did not hold is the worse of the two conversations, and merging them hides it.": "Kapattıktan sonra geri gelen bir bulgu, yenilerin yanında sessizce sayılmak yerine yeniden ortaya çıktı olarak işaretlenir. Dayanmayan bir düzeltme iki konuşmanın daha kötü olanıdır ve ikisini karıştırmak bunu gizler.",
     "What we did not re-test": "Yeniden test etmediklerimiz",

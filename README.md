@@ -27,7 +27,7 @@ reply gets the same verdict every time, and you can see why.
 pip install qatration
 
 qatration init --url https://your-bot.example.com/chat --model your-model-id   # writes mybot.yaml
-qatration onboard --target-config mybot.yaml   # one real request: the mapping and the canary
+qatration onboard --target-config mybot.yaml   # a few real requests: the mapping and the canary
 qatration benign  --target-config mybot.yaml   # what fires when NOBODY is attacking
 qatration run     --target-config mybot.yaml   # the attacks
 ```
