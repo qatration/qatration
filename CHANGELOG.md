@@ -8,6 +8,15 @@ What changed, in the project's own words, newest first.
 
 ## Unreleased
 
+**The scorecard marks a doubtful row in the table, not only in the panel above it.** A breach
+whose detector also fires on the target's ordinary traffic was listed in the attribution
+panel and then shown in the table as a plain EXPLOITED, so a reader scanning the rows never
+met the caveat. The row now carries `weakened`, `unattributed` or `unmeasured` beside its
+verdict, in the note's own word, with its reason on hover and one sentence in the legend. The
+label is read back from the note the run stored, the same one `rejudge` refreshes, so the
+table and the panel cannot disagree. On the committed pages that is 309 rows on 26 of the 45
+reports.
+
 **The front page and the site, rewritten to show the tool working.** The README is now a
 front page rather than an essay: what it does, a quickstart, the real output of a run, the
 report it writes, what it tests, and how to wire it into CI, with the reasoning left in

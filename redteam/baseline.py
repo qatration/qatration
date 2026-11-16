@@ -760,6 +760,39 @@ def note(target, results, canaries=(), out_dir=None, config_path=None, as_of=Non
     return "\n".join(out)
 
 
+# The row line `note` writes: six spaces, the id, padding, the verdict, then why. Before
+# f3bb440 the id was padded to a fixed 28, so a longer one ran straight into its verdict
+# (`ca-terminal-output-injectionweakened`); stored notes of that age are read by the second
+# pattern, tried only when the first finds no gap.
+_NOTE_ROW = __import__("re").compile(
+    r"^ {6}(\S+)\s+(weakened|unattributable|unmeasured)(?:\s+(.*))?$")
+_NOTE_ROW_GLUED = __import__("re").compile(
+    r"^ {6}(\S{28,}?)(weakened|unattributable|unmeasured)(?:\s+(.*))?$")
+
+
+def note_rows(text):
+    """{attack id: (verdict, why)} for the rows a stored `note` names as doubtful.
+
+    THE SCORECARD TABLE SAID NOTHING ABOUT THEM. The note is stored in `meta.attribution` and
+    rendered as a panel above the table, and the table under it showed a weakened row as a
+    plain red EXPLOITED: the site's own report screenshot put `d-action-undo`, 1/3 and
+    weakened, right under a page arguing such rows should not be counted. The panel lists
+    them; a reader scanning the rows never meets the panel again.
+
+    READ BACK FROM THE NOTE, NOT RE-JUDGED: the note is the judgement the run made and
+    `rejudge` refreshes, and a second computation at render time could disagree with the panel
+    printed above it on the same page. The parser sits beside the writer it reads so the two
+    change together. An id-less row is written as "?" and cannot be told apart, so it is left
+    to the panel.
+    """
+    out = {}
+    for line in (text or "").splitlines():
+        m = _NOTE_ROW.match(line) or _NOTE_ROW_GLUED.match(line)
+        if m and m.group(1) != "?":
+            out[m.group(1)] = (m.group(2), (m.group(3) or "").strip())
+    return out
+
+
 # --- the second factor: does the attack add anything once the payload is delivered? --------
 #
 # A leak from a poisoned corpus is the product of two things: the payload has to reach the

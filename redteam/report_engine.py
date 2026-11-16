@@ -427,10 +427,16 @@ def build_html(meta, results, recon=None, isolation=None):
     _unreached_card += (f'<div class="stat"><div class="n">{_budget_n}</div>'
                         f'<div class="l">never sent — the request budget ran out</div></div>'
                         if _budget_n else "")
+    # THE ROWS THE ATTRIBUTION NOTE DOUBTS, badged where the reader scans: see `note_rows`.
+    from baseline import note_rows as _note_rows
+    _doubt = _note_rows(meta.get("attribution"))
     rows = []
     for r in results:
         a = r["attack"]
         head = r["headline"]
+        _dv = _doubt.get(attack_name(a)) if head in BROKE else None
+        _doubt_chip = (f' <span class="rel doubt" title="{esc(_dv[1])}">'
+                       f'{esc(_dv[0])}</span>' if _dv else "")   # the note's own word
         color, bg = VERDICT[head]
         fired = ", ".join(r["fired"]) or "—"
         # A CONTROL THAT FIRED IS NOT A VULNERABILITY: a benign question rendered as a
@@ -446,7 +452,7 @@ def build_html(meta, results, recon=None, isolation=None):
           <td class="mono">{esc(attack_name(a))}</td>
           <td>{esc(a.get('category',''))}</td>
           <td class="mono dim">{esc(a.get('delivery','direct'))}</td>
-          <td><span class="badge" style="color:{color};background:{bg}">{_badge}</span></td>
+          <td><span class="badge" style="color:{color};background:{bg}">{_badge}</span>{_doubt_chip}</td>
           <td class="mono">{esc(r['rate'])} {"" if _is_control else _reliability(r['rate'], head, meta.get('trials') or len(r.get('trials') or []) or None)}</td>
           <td>{_locks_cell(r.get('locks'))}</td>
           <td class="mono dim">{esc(fired)}</td>
@@ -460,6 +466,13 @@ def build_html(meta, results, recon=None, isolation=None):
     # nothing on the page told a reader what to do with it.
     _ctl_note = (" <b>CONTROL FIRED</b>: " + esc(CONTROL_FIRED_MEANS)
                  if any(control_fired(r) for r in results) else "")
+    if any(r["headline"] in BROKE and attack_name(r["attack"]) in _doubt for r in results):
+        _ctl_note += (' <span class="rel doubt">weakened</span>, <span class="rel doubt">'
+                      'unattributable</span> or <span class="rel doubt">unmeasured</span> = the '
+                      'attribution note above names this row: a detector that caught it also '
+                      'fires on this target with nobody attacking, or could not be measured '
+                      'there, so the finding may be real and the attribution is not. The note '
+                      'gives the reason, and so does hovering the label.')
     caps = ", ".join(meta.get("caps") or []) or "none (black box)"
     # WHEN THE RUN HAPPENED, which the page never said: its only dates were the baseline's,
     # and the subtitle had an empty slot where an unrecorded model goes. Found by review.
@@ -716,7 +729,8 @@ pre{{white-space:pre-wrap;word-break:break-word;margin:0;font-family:ui-monospac
 .rel{{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:10px;text-transform:uppercase;letter-spacing:.03em;vertical-align:1px}}
 .rel.reliable{{color:#b3261e;background:#fdeceb}} .rel.flaky{{color:#8a5a00;background:#fff5e0}}
 .rel.once{{color:#5b5f66;background:#eceef1}}
-@media(prefers-color-scheme:dark){{.rel.reliable{{color:#ff6b6b;background:rgba(179,38,30,.18)}}.rel.flaky{{color:#e0a83a;background:rgba(138,90,0,.22)}}.rel.once{{color:#a8adb5;background:rgba(120,126,134,.20)}}}}
+.rel.doubt{{color:#5b5f66;background:transparent;border:1px dashed #9aa0a8;display:inline-block;margin-top:3px;cursor:help}}
+@media(prefers-color-scheme:dark){{.rel.reliable{{color:#ff6b6b;background:rgba(179,38,30,.18)}}.rel.flaky{{color:#e0a83a;background:rgba(138,90,0,.22)}}.rel.once{{color:#a8adb5;background:rgba(120,126,134,.20)}}.rel.doubt{{color:#a8adb5;border-color:#6b7178}}}}
 .note{{color:var(--dim);font-size:13px;margin-top:10px}}
 .panel{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}}
 .ptitle{{font-size:13px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;margin-bottom:12px}}

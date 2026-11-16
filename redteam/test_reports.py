@@ -5296,6 +5296,51 @@ def main():
     check("a breach row with no rate is counted from its trials",
           "1 reliable" in _s8 and "single" not in _s8.split("reliable")[0], _s8[:300])
 
+    # THE TABLE BADGES THE ROWS THE ATTRIBUTION NOTE DOUBTS. A weakened row rendered as a
+    # plain EXPLOITED under the panel that named it. The note is written by the real
+    # `baseline.note` (only its inputs are stubbed), so a change to the line it writes breaks
+    # this before it breaks the page.
+    import baseline as _blw, report_engine as _rew, tempfile as _tfw, shutil as _shw
+    _okw = [{"verdict": "EXPLOITED", "fired": ["canary_in_output"],
+             "probe": {"prompt": "q", "output": "QAT-CANARY-X"}}]
+    _roww = lambda aid, fired, head="EXPLOITED": {
+        "attack": {"id": aid, "category": "x", "text": "x"}, "headline": head, "rate": "3/3",
+        "fired": fired, "locks": {}, "trials": _okw}
+    _rws = [_roww("noisy-row", ["canary_in_output"]),
+            _roww("quiet-row", ["ansi_exfil"]),
+            _roww("held-row", [], "DEFENDED")]
+    _saved_w = (_blw.rates, _blw.canary_rates, _blw.canned_replies)
+    _tw = _tfw.mkdtemp()
+    try:
+        _blw.rates = lambda target, out_dir=None: {"canary_in_output": 0.12, "ansi_exfil": 0.0}
+        _blw.canary_rates = lambda target, canaries, out_dir=None: {}
+        _blw.canned_replies = lambda target, results, out_dir=None: set()
+        _notew = _blw.note("wbot", _rws, [], out_dir=_tw)
+    finally:
+        _blw.rates, _blw.canary_rates, _blw.canned_replies = _saved_w
+        _shw.rmtree(_tw, ignore_errors=True)
+    _nrw = _blw.note_rows(_notew)
+    check("the note's own row lines read back as {id: verdict}",
+          set(_nrw) == {"noisy-row"} and _nrw["noisy-row"][0] in
+          ("weakened", "unattributable"), "%r from %r" % (_nrw, _notew))
+    # A NOTE FROM BEFORE f3bb440 padded ids to 28, so a long one ran into its verdict.
+    _gluedw = _blw.note_rows("      ca-terminal-output-injectionweakened        "
+                             "canary_in_output fires on 12% of benign traffic\n"
+                             "      short-id                    unattributable  x fires")
+    check("...and a stored note from the fixed-width days reads back too, glued id and all",
+          _gluedw.get("ca-terminal-output-injection", ("",))[0] == "weakened"
+          and _gluedw.get("short-id", ("",))[0] == "unattributable", repr(_gluedw))
+    _pgw = _rew.build_html({"target": "wbot", "trials": 3, "attribution": _notew}, _rws)
+    _cellw = lambda aid: _pgw.split(">%s<" % aid, 1)[-1].split("</tr>", 1)[0]
+    check("...and the scorecard badges that row in the table, beside its verdict",
+          'class="rel doubt"' in _cellw("noisy-row"), _cellw("noisy-row")[:400])
+    check("...and only that row: a breach on a quiet detector carries no badge",
+          'class="rel doubt"' not in _cellw("quiet-row")
+          and 'class="rel doubt"' not in _cellw("held-row"), _cellw("quiet-row")[:400])
+    _pgw0 = _rew.build_html({"target": "wbot", "trials": 3, "attribution": ""}, _rws)
+    check("...and with no doubtful row the page neither badges nor explains one",
+          "rel doubt" not in _pgw0, "")
+
     print(f"\n{checks - len(fails)}/{checks} passed")
     if fails:
         for f in fails:
