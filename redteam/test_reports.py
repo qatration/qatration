@@ -5337,6 +5337,20 @@ def main():
     check("...and only that row: a breach on a quiet detector carries no badge",
           'class="rel doubt"' not in _cellw("quiet-row")
           and 'class="rel doubt"' not in _cellw("held-row"), _cellw("quiet-row")[:400])
+    # AND A NOTE THAT DOUBTS THE WHOLE RUN badges every breach row, from the real sentence.
+    _pgwm = _rew.build_html({"target": "wbot", "trials": 3, "attribution":
+                             "  ! the benign baseline was measured on model 'a' and this run "
+                             "used 'b': every attribution below is against another model's "
+                             "unattacked traffic, so read it as unmeasured for this model."},
+                            _rws)
+    _cellm = lambda aid: _pgwm.split(">%s<" % aid, 1)[-1].split("</tr>", 1)[0]
+    check("...and a run whose baseline is another model's badges every breach, not the defended",
+          all('class="rel doubt"' in _cellm(x) for x in ("noisy-row", "quiet-row"))
+          and 'class="rel doubt"' not in _cellm("held-row"), _cellm("quiet-row")[:300])
+    _pgwn = _rew.build_html({"target": "wbot", "trials": 3, "attribution":
+                             _blw.note("nobaseline-bot", _rws, [], out_dir=_tfw.mkdtemp())}, _rws)
+    check("...and so does one with no benign run at all, from the sentence note() writes",
+          ">unattributable</span>" in _pgwn.split(">quiet-row<", 1)[-1].split("</tr>", 1)[0], "")
     _pgw0 = _rew.build_html({"target": "wbot", "trials": 3, "attribution": ""}, _rws)
     check("...and with no doubtful row the page neither badges nor explains one",
           "rel doubt" not in _pgw0, "")

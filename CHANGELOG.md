@@ -15,7 +15,8 @@ met the caveat. The row now carries `weakened`, `unattributed` or `unmeasured` b
 verdict, in the note's own word, with its reason on hover and one sentence in the legend. The
 label is read back from the note the run stored, the same one `rejudge` refreshes, so the
 table and the panel cannot disagree. On the committed pages that is 309 rows on 26 of the 45
-reports.
+reports. A note that doubts the whole run, a baseline measured on another model or no
+readable baseline at all, now badges every breach row on that page rather than none.
 
 **The front page and the site, rewritten to show the tool working.** The README is now a
 front page rather than an essay: what it does, a quickstart, the real output of a run, the

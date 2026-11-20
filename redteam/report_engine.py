@@ -428,13 +428,19 @@ def build_html(meta, results, recon=None, isolation=None):
                         f'<div class="l">never sent — the request budget ran out</div></div>'
                         if _budget_n else "")
     # THE ROWS THE ATTRIBUTION NOTE DOUBTS, badged where the reader scans: see `note_rows`.
-    from baseline import note_rows as _note_rows
+    # AND EVERY ROW, when the note doubts the whole run (`note_whole_run`); a control is not a
+    # breach row and is never badged.
+    from baseline import note_rows as _note_rows, note_whole_run as _note_whole
     _doubt = _note_rows(meta.get("attribution"))
+    _whole = _note_whole(meta.get("attribution"))
+    _badged = 0
     rows = []
     for r in results:
         a = r["attack"]
         head = r["headline"]
-        _dv = _doubt.get(attack_name(a)) if head in BROKE else None
+        _dv = ((_doubt.get(attack_name(a)) or _whole)
+               if head in BROKE and a.get("category") != "control" else None)
+        _badged += bool(_dv)
         _doubt_chip = (f' <span class="rel doubt" title="{esc(_dv[1])}">'
                        f'{esc(_dv[0])}</span>' if _dv else "")   # the note's own word
         color, bg = VERDICT[head]
@@ -466,7 +472,7 @@ def build_html(meta, results, recon=None, isolation=None):
     # nothing on the page told a reader what to do with it.
     _ctl_note = (" <b>CONTROL FIRED</b>: " + esc(CONTROL_FIRED_MEANS)
                  if any(control_fired(r) for r in results) else "")
-    if any(r["headline"] in BROKE and attack_name(r["attack"]) in _doubt for r in results):
+    if _badged:
         _ctl_note += (' <span class="rel doubt">weakened</span>, <span class="rel doubt">'
                       'unattributable</span> or <span class="rel doubt">unmeasured</span> = the '
                       'attribution note above names this row: a detector that caught it also '
