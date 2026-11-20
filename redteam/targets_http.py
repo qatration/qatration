@@ -1416,6 +1416,70 @@ def rasa_stream(text, cut=False):
     return messages
 
 
+_N8N_CHUNKS = frozenset(("begin", "item", "end", "error"))
+
+
+def n8n_chunk(o):
+    """True for one n8n `StructuredChunk`: a `type` of the four and `metadata` naming a node by
+    a string id. A bare `{"type": "item"}` line is not one, whoever wrote it."""
+    return (isinstance(o, dict) and o.get("type") in _N8N_CHUNKS
+            and isinstance(o.get("metadata"), dict)
+            and isinstance(o["metadata"].get("nodeId"), str) and bool(o["metadata"]["nodeId"]))
+
+
+def n8n_stream(text, cut=False):
+    """An n8n Chat Trigger answering in its `streaming` response mode, folded into the JSON its
+    `lastNode` mode returns, or None: `{"output": ...}`, so `output` reads both.
+
+    NOT SERVER-SENT EVENTS, AND SENT AS `application/json`: each line is one `StructuredChunk`,
+    `{"type": "begin" | "item" | "end" | "error", "content", "metadata": {"nodeId", ...}}`.
+    `item` contents joined in order are the answer, and an agent that called a tool opens and
+    closes an empty begin/end pair first. An `error` chunk carries the failing node's
+    description, sometimes nothing, and is kept at `error` with the node named. Walked against
+    n8n 2.48.7, an AI Agent on Ollama.
+
+    THE STREAM CARRIES NO TOOL CALLS: `intermediateSteps` exists only in the `lastNode` answer.
+
+    RECOGNISED, NOT GUESSED: every line is a JSON object whose `type` is one of the four and
+    whose `metadata` names a node, which no other protocol here writes.
+    """
+    lines = _stream_lines(text, cut)
+    if not lines:
+        return None
+    chunks = []
+    for _l in lines:
+        try:
+            _o = json.loads(_l)
+        except ValueError:
+            return None
+        if not n8n_chunk(_o):
+            return None
+        chunks.append(_o)
+    # ONE PART PER NODE THAT SPOKE, a blank line between them: two agents in one workflow
+    # (a router, then the one that answers) were glued into one word, "AB". The chat widget
+    # shows each node's text as a message of its own, so every part is what the user saw.
+    parts = [[]]
+    for _c in chunks:
+        if _c["type"] == "begin" and parts[-1]:
+            parts.append([])
+        elif _c["type"] == "item":
+            parts[-1].append(str(_c.get("content") or ""))
+    out = {"output": "\n\n".join(p for p in ("".join(_p) for _p in parts) if p)}
+    _errs = [_c for _c in chunks if _c["type"] == "error"]
+    if _errs:
+        out["error"] = "; ".join(
+            "%s: %s" % (_c["metadata"].get("nodeName") or _c["metadata"]["nodeId"],
+                        _c.get("content") or "the node failed and said nothing more")
+            for _c in _errs)
+    # A NODE THAT BEGAN AND NEVER ENDED is an answer cut short, said rather than read as one
+    # that held.
+    elif not cut and (sum(_c["type"] == "begin" for _c in chunks)
+                      > sum(_c["type"] == "end" for _c in chunks)):
+        out["error"] = ("the n8n stream stopped inside a node (a `begin` with no `end`), so the "
+                        "answer is incomplete")
+    return out
+
+
 _GRADIO_EVENTS = frozenset(("generating", "complete", "error", "heartbeat"))
 
 
@@ -1778,6 +1842,7 @@ def _folds():
             ("Dify", dify_stream),
             ("Langflow", langflow_stream),
             ("Rasa (stream=true)", rasa_stream),
+            ("n8n (streaming)", n8n_stream),
             ("Ollama", ollama_stream))
 
 
@@ -4049,6 +4114,12 @@ class HttpConfiguredTarget(Target):
                     _text = _decoded(_body, r)
                     try:
                         raw = json.loads(_text)
+                        # A ONE-CHUNK n8n STREAM IS VALID JSON, and read as an envelope it had
+                        # no `output` and no `error`: a node that failed before it began said
+                        # its error to nobody. Found by an independent review.
+                        if n8n_chunk(raw):
+                            raw = n8n_stream(_text)
+                            _streamed = True
                     except ValueError:
                         # A stream this adapter can fold, or the JSON error it was.
                         raw = _fold_stream(_text)

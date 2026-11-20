@@ -54,7 +54,7 @@
     "Point it at your bot": "对准你的机器人",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "根据你的端点 URL 写出配置，并生成一个只有你知道的秘密，粘贴到你的系统提示词中。",
     "checks both with a few ordinary questions before a single attack goes out.": "在发出任何一次攻击之前，用几个普通问题把两者都检查一遍。",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "兼容 OpenAI 的 API、Anthropic、Bedrock 和 Vertex，以及基于 Vercel AI SDK、Dify、Flowise、Langflow、Gradio、Rasa、Chainlit、Botpress 或 Copilot Studio 构建的应用。",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "兼容 OpenAI 的 API、Anthropic、Bedrock 和 Vertex，以及基于 Vercel AI SDK、Dify、Flowise、Langflow、n8n、Gradio、Rasa、Chainlit、Botpress 或 Copilot Studio 构建的应用。",
     "STEP 02": "步骤 02",
     "Attack it": "发起攻击",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "真实的攻击，就是用户能打出来、文档能夹带进来的那种，每个回复都由确定性的检查打分：回复中的金丝雀、工具调用里的某个值。没有模型给另一个模型打分，所以同样的回复总是得到同样的判定。",

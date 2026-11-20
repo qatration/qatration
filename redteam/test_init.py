@@ -301,13 +301,14 @@ def _vercel_shape():
 
 
 def _app_shapes():
-    """`init --shape dify|flowise|langflow|rasa`: apps that keep the conversation themselves, each
+    """`init --shape dify|flowise|langflow|n8n|rasa`: apps that keep the conversation themselves, each
     written so the adapter builds it, reads its reply where the app puts it, and sends the
     conversation id where the app reads one."""
     _want = {"dify": ("answer", "conversation_id"),
              "flowise": ("text", None),
              "langflow": ("outputs.0.outputs.0.results.message.text", None),
              "rasa": ("*.text", None),
+             "n8n": ("output", None),
              "gradio": ("0", None),
              "directline": ("text", None),
              "websocket": ("text", None),

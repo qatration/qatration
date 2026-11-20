@@ -8,6 +8,16 @@ What changed, in the project's own words, newest first.
 
 ## Unreleased
 
+**n8n.** `init --shape n8n` writes the config for a workflow behind a Chat Trigger: the
+widget's own request (`action`, `sessionId`, `chatInput`), the reply at `output`, and the
+conversation kept by the workflow's memory node under the session id. Both response modes are
+read by that one config. When Last Node Finishes answers in JSON. Streaming answers with one
+chunk per line, sent as `application/json`, and the new `n8n_stream` fold reads it: each node
+that spoke is a part of the reply, an error chunk is an error that names its node, and a node
+that began and never ended is said to be cut short. An agent's tool calls are its
+`intermediateSteps`, in the JSON answer only. Walked against n8n 2.48.7
+with an AI Agent on Ollama, a calculator tool and a memory node, both modes.
+
 **The scorecard marks a doubtful row in the table, not only in the panel above it.** A breach
 whose detector also fires on the target's ordinary traffic was listed in the attribution
 panel and then shown in the table as a plain EXPLOITED, so a reader scanning the rows never

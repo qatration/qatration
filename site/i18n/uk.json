@@ -40,7 +40,7 @@
     "Point it at your bot": "Спрямуйте його на свого бота",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "пише конфіг за URL вашого ендпоінта і дає секрет, який знаєте лише ви: його треба вставити в системний промпт.",
     "checks both with a few ordinary questions before a single attack goes out.": "перевіряє і те, і те кількома звичайними питаннями, перш ніж піде хоч одна атака.",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "API, сумісні з OpenAI, Anthropic, Bedrock і Vertex, а також застосунки на Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress чи Copilot Studio.",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "API, сумісні з OpenAI, Anthropic, Bedrock і Vertex, а також застосунки на Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress чи Copilot Studio.",
     "STEP 02": "КРОК 02",
     "Attack it": "Атакуйте",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "Справжні атаки, такі, які може набрати користувач або принести документ, а кожну відповідь оцінює детермінована перевірка: канарка у відповіді, значення у виклику інструмента. Жодна модель не оцінює іншу модель, тож та сама відповідь завжди отримує той самий вердикт.",

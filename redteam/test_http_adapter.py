@@ -1278,6 +1278,109 @@ def _flowise_and_langflow(check):
           "type: sigv4" in _said and "type: bearer" not in _said, repr(_said)[:300])
 
 
+def _n8n(check):
+    """An n8n Chat Trigger in both response modes, read by the one config `init --shape n8n`
+    writes. The bodies are the ones n8n 2.48.7 sent an AI Agent with a calculator tool."""
+    import json as _j, threading as _th
+    from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS
+    from targets_http import (HttpConfiguredTarget as _HT, n8n_stream as _ns, _fold_stream as _fo,
+                              langflow_stream as _ls, rasa_stream as _rs)
+    _canary = "ACME-CANARY-9931"
+
+    def _ch(kind, content=None, node="AI Agent"):
+        # AS n8n WRITES A StructuredChunk: one JSON object per line, sent as application/json.
+        _c = {"type": kind, "metadata": {"nodeId": "a-1", "nodeName": node, "itemIndex": 0,
+                                         "runIndex": 0, "timestamp": 1}}
+        if content is not None:
+            _c["content"] = content
+        return _j.dumps(_c) + "\n"
+
+    # A TOOL TURN FIRST: the agent opens and closes an empty pair before it answers.
+    streamed = (_ch("begin") + _ch("end") + _ch("begin") + _ch("item", "The key is ")
+                + _ch("item", _canary + ".") + _ch("end"))
+    last = {"output": "The key is " + _canary + ".", "intermediateSteps": [
+        {"action": {"tool": "send_email", "toolInput": {"body": _canary}, "log": "Calling",
+                    "toolCallId": "c1", "type": "tool_call"},
+         "observation": "OUTPUT-MARK-77"}]}
+    _mode = {"body": streamed}
+
+    class _H(_BH):
+        def do_POST(self):
+            _mode["sent"] = _j.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+            body = _mode["body"].encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json; charset=utf-8")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = _TS(("127.0.0.1", 0), _H)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        import init_config as _ic, yaml as _y
+        from targets_http import CONFIG_ONLY_KEYS as _CO
+        _c = _y.safe_load(_ic.render(secret="QAT-CANARY-AAAA1111BBBB2222", verify="QAT-VERIFY-X",
+                                     shape="n8n", url="http://127.0.0.1:%d/webhook/w/chat"
+                                     % srv.server_address[1]))
+        _c["response"].update(tool_calls="intermediateSteps.*.action",
+                              observations="intermediateSteps.*.observation")
+        _t = _HT(**{k: v for k, v in _c.items() if k not in _CO})
+        for _label, _body in (("streamed", streamed), ("last-node", _j.dumps(last))):
+            _mode["body"] = _body
+            _p = _t.send("hi")
+            check("n8n %s is read with the config init writes: the reply" % _label,
+                  _p.output == "The key is %s." % _canary and not _p.error,
+                  "output=%r error=%r" % (_p.output, _p.error))
+        check("...and the last-node answer's intermediate steps are the calls, with their input",
+              [n for n, _a in _p.tool_calls] == ["send_email"] and _canary in _p.tool_calls[0][1]
+              and _p.observations == ["OUTPUT-MARK-77"], repr((_p.tool_calls, _p.observations)))
+        check("...and the request is the chat widget's: action, sessionId, chatInput",
+              _mode["sent"].get("action") == "sendMessage" and _mode["sent"].get("chatInput") == "hi"
+              and "sessionId" in _mode["sent"], repr(_mode["sent"]))
+        _mode["body"] = _ch("begin") + _ch("error", "Ollama is not reachable", "Ollama Chat Model")
+        _p = _t.send("hi")
+        check("an n8n error chunk is a TargetError naming the node and its words",
+              bool(_p.error) and "Ollama Chat Model" in _p.error
+              and "Ollama is not reachable" in _p.error, "output=%r error=%r" % (_p.output, _p.error))
+        # ONE CHUNK ALONE is valid JSON, so it never reaches the fold unless the adapter asks.
+        _mode["body"] = _ch("error", "Ollama is not reachable", "Ollama Chat Model")
+        _p = _t.send("hi")
+        check("...and so is an error chunk sent alone, which parses as plain JSON",
+              bool(_p.error) and "Ollama Chat Model" in _p.error
+              and "Ollama is not reachable" in _p.error, "output=%r error=%r" % (_p.output, _p.error))
+    finally:
+        srv.shutdown()
+
+    _cut = _ns(_ch("begin") + _ch("item", "The key"))
+    check("an n8n stream that stops inside a node is said to be incomplete, not read as held",
+          (_cut or {}).get("output") == "The key" and "incomplete" in str(_cut.get("error")),
+          repr(_cut))
+    check("...and a chunk with no words still names its node",
+          "AI Agent" in str((_ns(_ch("error")) or {}).get("error")), repr(_ns(_ch("error"))))
+    _two = (_ch("begin", node="Router") + _ch("item", "A") + _ch("end", node="Router")
+            + _ch("begin") + _ch("item", "B") + _ch("end"))
+    check("two n8n agents that both spoke are two parts, not one glued word",
+          (_ns(_two) or {}).get("output") == "A\n\nB", repr(_ns(_two)))
+    check("...and a node that began and ended saying nothing is an empty reply, not an error",
+          _ns(_ch("begin") + _ch("end")) == {"output": ""}, repr(_ns(_ch("begin") + _ch("end"))))
+    _bare = _j.dumps({"type": "item", "content": "x"}) + "\n" + _j.dumps({"type": "end"}) + "\n"
+    _null = _ch("begin").replace('"nodeId": "a-1"', '"nodeId": null') + _ch("end")
+    _notype = _ch("item", "x").replace('"type": "item"', '"type": "token"')
+    check("n8n's fold refuses a line without node metadata, a null node id, and a type of its own",
+          _ns(_bare) is None and _ns(_null) is None and _ns(_notype) is None,
+          repr((_ns(_bare), _ns(_null), _ns(_notype))))
+    _rasa = '{"recipient_id": "u1", "text": "hi"}\n{"recipient_id": "u1", "text": "there"}\n'
+    _lf = _j.dumps({"event": "end", "data": {"result": {}}}) + "\n\n"
+    check("n8n's fold refuses Rasa's and Langflow's lines, and theirs refuse n8n's",
+          _ns(_rasa) is None and _ns(_lf) is None and _rs(streamed) is None
+          and _ls(streamed) is None, "")
+    check("...and the adapter's one list of folds reads an n8n stream as n8n's",
+          (_fo(streamed) or {}).get("output") == "The key is %s." % _canary, repr(_fo(streamed)))
+
+
 def _every_item(check):
     """`*` in a path, every item of a list: a bot that answers in several messages (Rasa's REST
     channel, as its source collects them) and a transcript with calls in several turns."""
@@ -5014,6 +5117,7 @@ def main():
     _session_slot(check)
     _dify_and_server_ids(check)
     _flowise_and_langflow(check)
+    _n8n(check)
     _every_item(check)
     _oauth_client_credentials(check)
     _gradio_followup(check)

@@ -57,7 +57,7 @@
     "Point it at your bot": "봇을 겨냥하세요",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "는 엔드포인트 URL로 설정을 작성하고, 시스템 프롬프트에 붙여 넣을 당신만 아는 비밀을 함께 만듭니다.",
     "checks both with a few ordinary questions before a single attack goes out.": "는 공격을 하나라도 보내기 전에 평범한 질문 몇 개로 둘 다 확인합니다.",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI 호환 API, Anthropic, Bedrock, Vertex, 그리고 Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress, Copilot Studio로 만든 앱.",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI 호환 API, Anthropic, Bedrock, Vertex, 그리고 Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress, Copilot Studio로 만든 앱.",
     "STEP 02": "단계 02",
     "Attack it": "공격하세요",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "사용자가 입력하거나 문서가 실어 올 수 있는 실제 공격이며, 모든 응답은 결정론적 검사로 채점됩니다. 응답 속의 카나리아, 도구 호출 속의 값. 모델이 다른 모델을 채점하지 않으므로 같은 응답은 언제나 같은 판정을 받습니다.",

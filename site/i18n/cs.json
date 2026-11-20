@@ -40,7 +40,7 @@
     "Point it at your bot": "Namiřte ho na svého bota",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "zapíše konfiguraci podle URL vašeho endpointu, spolu s tajemstvím, které znáte jen vy a vložíte ho do systémového promptu.",
     "checks both with a few ordinary questions before a single attack goes out.": "obojí ověří několika běžnými otázkami dřív, než odejde jediný útok.",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "API kompatibilní s OpenAI, Anthropic, Bedrock a Vertex a aplikace postavené na Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress nebo Copilot Studio.",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "API kompatibilní s OpenAI, Anthropic, Bedrock a Vertex a aplikace postavené na Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress nebo Copilot Studio.",
     "STEP 02": "KROK 02",
     "Attack it": "Zaútočte",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "Skutečné útoky, takové, jaké může napsat uživatel nebo přinést dokument, a každá odpověď ohodnocená deterministickou kontrolou: kanárek v odpovědi, hodnota ve volání nástroje. Žádný model nehodnotí jiný model, takže stejná odpověď dostane vždy stejný verdikt.",

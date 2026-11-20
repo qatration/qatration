@@ -133,7 +133,7 @@ one for the rest:
 | `openai` (default) | OpenAI and everything shaped like it: Groq, Together, OpenRouter, Azure OpenAI, vLLM, LM Studio, Ollama |
 | `responses` | OpenAI's Responses API, with the conversation it keeps |
 | `vercel` | A Vercel AI SDK route that `useChat` talks to |
-| `dify`, `flowise`, `langflow`, `gradio`, `rasa`, `chainlit`, `botpress` | An app built on that framework |
+| `dify`, `flowise`, `langflow`, `n8n`, `gradio`, `rasa`, `chainlit`, `botpress` | An app built on that framework |
 | `directline` | A Copilot Studio agent |
 | `websocket` | A chat whose backend is a WebSocket |
 
@@ -211,7 +211,7 @@ chasing and the calls about what counts as evidence are mine.
 
 The counts on this page and on the site are recounted from the evidence in
 [`out/`](https://github.com/qatration/qatration/tree/main/out/) by a test that fails the build
-when the two disagree. No assertion in the suite is allowed to be one that cannot fail: 6,176
+when the two disagree. No assertion in the suite is allowed to be one that cannot fail: 6,205
 of them, `check()` calls and bare asserts alike. It all runs on every push, on Linux, macOS and
 Windows.
 

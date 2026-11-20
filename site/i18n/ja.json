@@ -54,7 +54,7 @@
     "Point it at your bot": "ボットに向ける",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "は、エンドポイントの URL から設定を書き出し、あなただけが知る秘密も用意します。これをシステムプロンプトに貼り付けてください。",
     "checks both with a few ordinary questions before a single attack goes out.": "は、最初の攻撃を送る前に、普通の質問をいくつか送って両方を確認します。",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI 互換 API、Anthropic、Bedrock、Vertex、そして Vercel AI SDK、Dify、Flowise、Langflow、Gradio、Rasa、Chainlit、Botpress、または Copilot Studio で作られたアプリ。",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI 互換 API、Anthropic、Bedrock、Vertex、そして Vercel AI SDK、Dify、Flowise、Langflow、n8n、Gradio、Rasa、Chainlit、Botpress、または Copilot Studio で作られたアプリ。",
     "STEP 02": "手順 02",
     "Attack it": "攻撃する",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "ユーザーが入力したり文書が運んだりできる、本物の攻撃です。すべての応答は決定論的なチェックで採点されます（応答内のカナリア、ツール呼び出しの値など）。モデルが別のモデルを採点することはないので、同じ応答には常に同じ判定が出ます。",

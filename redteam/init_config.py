@@ -537,6 +537,32 @@ response:
   tool_calls: "tool_calls"     # the app's tool steps, by name and input
 
 ''',
+    "n8n": '''\
+# AN N8N WORKFLOW behind a Chat Trigger, at its production chat url: the trigger's "Chat URL",
+# e.g. `http://localhost:5678/webhook/<webhook id>/chat`, with the workflow published. The
+# system prompt is the AI Agent node's System Message: that is where the block this command
+# printed goes. A trigger set to Basic Auth wants `user:password` base64-encoded. Uncomment both:
+# env:
+#   - N8N_CHAT_BASIC
+# headers:
+#   Authorization: "Basic ${{N8N_CHAT_BASIC}}"
+request:
+  action: sendMessage
+  sessionId: "{{session}}"
+  chatInput: "{{prompt}}"
+
+# THE AGENT'S ANSWER, in either response mode the trigger has: `When Last Node Finishes` returns
+# it as JSON, `Streaming` as a line per chunk, folded into the same `output`.
+response:
+  reply: "output"
+  error: "error"
+  # WHAT THE AGENT CALLED, AND WHAT ITS TOOLS GAVE BACK, if it has tools and its "Return
+  # Intermediate Steps" option is on. Only the `When Last Node Finishes` mode carries them, a
+  # streamed answer has none. Off by default, for the reason the OpenAI shape gives.
+  # tool_calls: "intermediateSteps.*.action"
+  # observations: "intermediateSteps.*.observation"
+
+''',
     "rasa": '''\
 # A RASA ASSISTANT on its REST channel (`/webhooks/rest/webhook`), e.g.
 # `http://localhost:5005/webhooks/rest/webhook`. The conversation is the `sender`'s, kept by Rasa.
@@ -608,6 +634,13 @@ session:
 # a fresh one for every trial and the same one for the turns of a conversation, so the attacks
 # that need more than one turn are sent as real turns. `onboard` and `run` ask first whether the
 # server does keep them (a case number given in one turn has to come back in the next).
+
+''',
+    "n8n": '''\
+# MULTI-TURN, kept by the workflow's memory node under the `sessionId` this sends, a fresh one
+# for every trial and the same one for the turns of a conversation. A workflow with no memory
+# node forgets every turn: `onboard` and `run` ask first whether it does keep them (a case
+# number given in one turn has to come back in the next).
 
 ''',
     "rasa": '''\
@@ -744,7 +777,7 @@ def main():
                     help="what your endpoint speaks: an OpenAI-compatible chat API (default), "
                          "OpenAI's Responses API with a conversation it keeps, "
                          "a Vercel AI SDK route that `useChat` talks to, or a Dify, Flowise, "
-                         "Langflow, Gradio or Rasa app, a Copilot Studio agent over Direct "
+                         "Langflow, n8n, Gradio or Rasa app, a Copilot Studio agent over Direct "
                          "Line, a Botpress bot, a Chainlit app, or a chat whose backend is a "
                          "WebSocket")
     ap.add_argument("--system-prompt-file", default=None,

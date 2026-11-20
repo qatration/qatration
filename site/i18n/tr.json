@@ -54,7 +54,7 @@
     "Point it at your bot": "Botunuza yöneltin",
     "writes the config from your endpoint's URL, with a secret only you know to paste into your system prompt.": "uç noktanızın URL'sinden yapılandırmayı yazar ve sistem isteminize yapıştıracağınız, yalnızca sizin bildiğiniz bir sır üretir.",
     "checks both with a few ordinary questions before a single attack goes out.": "tek bir saldırı gitmeden önce ikisini de birkaç sıradan soruyla kontrol eder.",
-    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI uyumlu API'ler, Anthropic, Bedrock ve Vertex ile Vercel AI SDK, Dify, Flowise, Langflow, Gradio, Rasa, Chainlit, Botpress veya Copilot Studio üzerine kurulmuş uygulamalar.",
+    "OpenAI-compatible APIs, Anthropic, Bedrock and Vertex, and apps built on the Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress or Copilot Studio.": "OpenAI uyumlu API'ler, Anthropic, Bedrock ve Vertex ile Vercel AI SDK, Dify, Flowise, Langflow, n8n, Gradio, Rasa, Chainlit, Botpress veya Copilot Studio üzerine kurulmuş uygulamalar.",
     "STEP 02": "ADIM 02",
     "Attack it": "Saldırın",
     "Real attacks, the kind a user can type or a document can carry, and every reply scored by a deterministic check: the canary in the reply, a value in a tool call. No model grades another model, so the same reply always gets the same verdict.": "Bir kullanıcının yazabileceği ya da bir belgenin taşıyabileceği türden gerçek saldırılar ve her yanıt deterministik bir kontrolle puanlanır: yanıttaki kanarya, bir araç çağrısındaki değer. Hiçbir model başka bir modeli puanlamaz, bu yüzden aynı yanıt her zaman aynı kararı alır.",

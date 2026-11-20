@@ -90,6 +90,7 @@ the same endpoint answers with streaming off, so the config written for that bod
 | Dify `/v1/chat-messages` (its agent apps only stream) | `answer`, `tool_calls: "tool_calls"`, `observations: "observations"` |
 | Flowise `/api/v1/prediction/<flow>` with `"streaming": true` | `text`, `tool_calls: "usedTools"` |
 | Langflow `/api/v1/run/<flow>?stream=true` | `outputs.0.outputs.0.results.message.text`, an Agent's calls `tool_calls: "outputs.0.outputs.0.results.message.content_blocks.*.contents.*[type=tool_use]"` (a stream that closes before its `end` event is an error) |
+| n8n Chat Trigger in its Streaming response mode (one JSON chunk per line, sent as `application/json`) | `output`, the same as its When Last Node Finishes answer, but only that answer carries the agent's calls, `tool_calls: "intermediateSteps.*.action"` (a node that begins and never ends is an error) |
 | Vercel AI SDK, either version | `text`, `tool_calls: "toolCalls"` |
 
 A call's arguments arrive in pieces and are joined; a stream cut at the size cap keeps what had
